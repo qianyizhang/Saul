@@ -6,6 +6,12 @@ export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   vite: () => ({
     plugins: [tailwindcss()],
+    server: {
+      headers: {
+        'Cross-Origin-Opener-Policy': 'same-origin',
+        'Cross-Origin-Embedder-Policy': 'require-corp',
+      },
+    },
   }),
   manifest: {
     name: 'Saul - AI Concept & Reading Explorer',
@@ -13,5 +19,8 @@ export default defineConfig({
     permissions: ['storage', 'unlimitedStorage', 'offscreen'],
     host_permissions: ['<all_urls>'],
     action: {},
+    content_security_policy: {
+      extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'",
+    },
   },
 });

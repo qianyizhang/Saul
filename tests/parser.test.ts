@@ -46,16 +46,24 @@ describe('TagStreamParser', () => {
     // Chunk 2: incomplete opening tag
     segments = parser.feed('<term note="A neural net');
     expect(segments).toHaveLength(2);
-    expect(segments[1].type).toBe('term');
-    expect(segments[1].note).toBe('A neural net');
-    expect(segments[1].complete).toBe(false);
+    const seg1 = segments[1];
+    if (seg1 && seg1.type === 'term') {
+      expect(seg1.note).toBe('A neural net');
+      expect(seg1.complete).toBe(false);
+    } else {
+      throw new Error('Expected term segment');
+    }
 
     // Chunk 3: opening tag finished, term content streaming
     segments = parser.feed('work layer">trans');
     expect(segments).toHaveLength(2);
-    expect(segments[1].type).toBe('term');
-    expect(segments[1].term).toBe('trans');
-    expect(segments[1].complete).toBe(false);
+    const seg2 = segments[1];
+    if (seg2 && seg2.type === 'term') {
+      expect(seg2.term).toBe('trans');
+      expect(seg2.complete).toBe(false);
+    } else {
+      throw new Error('Expected term segment');
+    }
 
     // Chunk 4: term content finished and closed
     segments = parser.feed('former</term> architecture.');
@@ -80,7 +88,9 @@ describe('TagStreamParser', () => {
       'Use <term note="Key 1">A</term> and <term note="Key 2">B</term> together.'
     );
     expect(segments).toHaveLength(5);
-    expect(segments[1].term).toBe('A');
-    expect(segments[3].term).toBe('B');
+    const segA = segments[1];
+    const segB = segments[3];
+    if (segA && segA.type === 'term') expect(segA.term).toBe('A');
+    if (segB && segB.type === 'term') expect(segB.term).toBe('B');
   });
 });

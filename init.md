@@ -736,8 +736,8 @@ src/
 │   │   └── main.ts
 │   │
 │   └── options/
-│   │   ├── index.html
-│   │   └── App.tsx
+│       ├── index.html
+│       └── App.tsx
 │
 ├── capture/
 │   ├── selection.ts

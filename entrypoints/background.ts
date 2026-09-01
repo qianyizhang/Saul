@@ -1,4 +1,5 @@
 import { getSettings, initStorageSecurity } from '../src/storage/settings';
+import { recordExplanationRun, ensureOffscreenDocument } from '../src/storage/client';
 import { renderExplainPrompt, DEFAULT_SYSTEM_PROMPT } from '../src/models/prompts';
 import { streamOpenAICompatible } from '../src/models/openai-compatible';
 import { streamChromeAi } from '../src/models/chrome-ai';
@@ -8,6 +9,9 @@ import type { PortRequest, PortResponse } from '../src/types';
 export default defineBackground(() => {
   console.log('[Saul] Background service worker initialized');
   initStorageSecurity();
+  ensureOffscreenDocument().catch((err) => {
+    console.warn('[Saul] Offscreen doc preload error:', err);
+  });
 
   // Handle streaming ports from content scripts or popup
   chrome.runtime.onConnect.addListener((port: chrome.runtime.Port) => {
@@ -47,6 +51,9 @@ export default defineBackground(() => {
           const userPrompt = renderExplainPrompt(msg.payload.context, msg.payload.customPrompt);
 
           let streamGenerator: AsyncGenerator<string, void, unknown>;
+          let activeProviderName = settings.activeProvider;
+          let activeModelName =
+            settings.activeProvider === 'chrome-ai' ? 'gemini-nano' : settings.openaiCompatible.model;
 
           if (settings.activeProvider === 'chrome-ai') {
             streamGenerator = streamChromeAi(
@@ -90,15 +97,33 @@ export default defineBackground(() => {
 
           if (!signal.aborted) {
             const latencyMs = Date.now() - startTime;
+            const fullRaw = parser.getRaw();
+            const segments = parser.getSegments();
+
             const doneResponse: PortResponse = {
               type: 'DONE',
               payload: {
-                fullText: parser.getRaw(),
-                segments: parser.getSegments(),
+                fullText: fullRaw,
+                segments,
                 usage: { latencyMs },
               },
             };
             port.postMessage(doneResponse);
+
+            // Persist run to SQLite WASM via Offscreen Worker
+            recordExplanationRun({
+              snapshot: msg.payload.snapshot,
+              context: msg.payload.context,
+              provider: activeProviderName,
+              model: activeModelName,
+              promptVersion: '1.0.0',
+              systemPrompt,
+              responseRaw: fullRaw,
+              segments,
+              latencyMs,
+            }).catch((dbErr) => {
+              console.error('[Saul] Failed to persist selection run to SQLite:', dbErr);
+            });
           }
         } catch (err: any) {
           if (!signal.aborted) {
