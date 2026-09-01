@@ -1,0 +1,4 @@
+interface:
+  display_name: "Grilling"
+  short_description: "Decision-interview primitive over unblocked frontiers"
+  default_prompt: "Use $grilling to run a decision interview on unresolved design choices before implementing."

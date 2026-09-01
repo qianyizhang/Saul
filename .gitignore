@@ -1,0 +1,39 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Dependencies and Build Outputs
+node_modules
+.output
+.wxt
+dist
+coverage
+
+# Web Extension
+web-ext.config.ts
+*.zip
+
+# Local SQLite databases / scratch
+*.sqlite
+*.sqlite3
+*.db
+
+# Environment and Secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Editor & OS
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
