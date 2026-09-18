@@ -17,6 +17,9 @@
     "native:install": "node native/install.mjs",
     "mcp": "node native/mcp.mjs",
     "postinstall": "wxt prepare",
+    "test:e2e": "pnpm build && playwright test",
+    "test:e2e:headed": "pnpm build && HEADED=1 playwright test",
+    "test:user": "pnpm build && node tests/e2e/manual.ts",
     "format": "prettier --write src entrypoints native tests *.ts *.json",
     "format:check": "prettier --check src entrypoints native tests *.ts *.json"
   },

@@ -31,3 +31,11 @@ Profiles retain separate endpoints, model names, and keys. Switching profiles pr
 Test Connection checks endpoint reachability. Test generation sends a short sample request with the current form values and verifies a text response. Provider tests have cancellation and a timeout. On-device preparation has a Stop control and allows time for the model download. Response language and context preferences apply to explanation requests. Keys remain in trusted extension storage.
 
 Chrome on-device AI now executes in the offscreen document rather than the background service worker. Preparation/download is user-triggered from Settings. The adapter supports modern delta streaming and legacy cumulative streaming, but hardware availability, model download, and real on-device generation still require verification on a supported browser/device. No live-provider or model-quality claims follow from mock-provider tests.
+
+## Verification
+
+Use [the testing runbook](testing.md) and its shared isolated profiles/local provider. `tests/e2e/product.spec.ts` covers bookmarks across browser restart, explanation search, pagination, a 1,005-record export, profile credential separation, tab preview/apply/undo/staleness, keyboard/pin/follow-up/bookmark flows, stopping a slow stream, navigation with unsaved drafts, and cancellation of on-device preparation. Existing persistence/concurrency/rollback tests remain in `extension.spec.ts`.
+
+Provider adapters and reconnect authorization have focused unit coverage. Live external providers, actual Chrome model downloads, and native-host registration are not exercised by these product browser tests.
+
+Verified on 2026-09-18 after cleanup: production build, app and harness TypeScript checks, formatting, 31 unit/transport tests, and all 9 browser scenarios passed. Browser cases used isolated profiles and a loopback model. Final screenshots were reviewed for library and settings layout; earlier hands-on inspection covered the explanation card and Reading home. The installed personal extension was not reloaded during this pass.

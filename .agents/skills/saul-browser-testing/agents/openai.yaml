@@ -1,0 +1,3 @@
+interface:
+  display_name: "Saul Browser Testing"
+  short_description: "Debug Saul with isolated browser fixtures"

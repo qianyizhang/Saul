@@ -25,3 +25,13 @@ pnpm compile
 pnpm format:check
 pnpm test
 ```
+
+## Browser testing
+
+```sh
+pnpm exec playwright install chromium
+pnpm test:e2e        # automated regressions
+pnpm test:user       # isolated hands-on sandbox
+```
+
+See [the testing runbook](docs/testing.md) for focused reruns, failure traces, and setup troubleshooting. Agents can use the repo-local [saul-browser-testing skill](.agents/skills/saul-browser-testing/SKILL.md).

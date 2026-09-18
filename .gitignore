@@ -37,3 +37,7 @@ web-ext.config.ts
 *.njsproj
 *.sln
 *.sw?
+
+# Browser test artifacts
+playwright-report/
+test-results/
