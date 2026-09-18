@@ -6,49 +6,38 @@ let creatingOffscreenPromise: Promise<void> | null = null;
 
 export async function ensureOffscreenDocument(): Promise<void> {
   if (typeof chrome === 'undefined' || !chrome.offscreen) {
-    return;
+    throw new Error('Offscreen storage requires Chrome with the offscreen API.');
   }
 
-  // Check if offscreen document already exists
-  try {
-    if (typeof chrome.offscreen.hasDocument === 'function') {
-      const hasDoc = await chrome.offscreen.hasDocument();
-      if (hasDoc) return;
-    }
-  } catch {
-    // hasDocument may not be available in older Chrome
-  }
+  if (creatingOffscreenPromise) return creatingOffscreenPromise;
 
-  if (creatingOffscreenPromise) {
-    return creatingOffscreenPromise;
-  }
-
+  // Lock the existence check as well as creation: hasDocument() can become
+  // true before the document's scripts have registered their message listener.
   creatingOffscreenPromise = (async () => {
-    try {
-      await chrome.offscreen.createDocument({
-        url: 'offscreen.html',
-        reasons: ['WORKERS', 'LOCAL_STORAGE'] as any,
-        justification: 'Saul SQLite local database operations',
-      });
-      console.log('[Saul] Offscreen document created');
-    } catch (err: any) {
-      // If already exists, ignore
-      if (!err.message?.includes('Only a single offscreen document may be created')) {
-        console.error('[Saul] Failed to create offscreen document:', err);
-      }
-    } finally {
-      creatingOffscreenPromise = null;
-    }
+    if (await chrome.offscreen.hasDocument()) return;
+    await chrome.offscreen.createDocument({
+      url: 'offscreen.html',
+      reasons: ['WORKERS'] as any,
+      justification: 'Saul SQLite local database operations',
+    });
   })();
-
-  return creatingOffscreenPromise;
+  try {
+    await creatingOffscreenPromise;
+  } finally {
+    creatingOffscreenPromise = null;
+  }
 }
 
 export async function sendDbMessage<T = any>(message: DbMessage): Promise<T> {
-  await ensureOffscreenDocument();
-
+  // runtime.sendMessage does not deliver to its own sender. Background calls
+  // must reach the offscreen document directly; popup calls go via background.
+  const fromBackground = typeof document === 'undefined';
+  if (fromBackground) await ensureOffscreenDocument();
+  const request = fromBackground
+    ? { ...message, target: 'saul-offscreen' }
+    : { target: 'saul-background', message };
   return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage(message, (response) => {
+    chrome.runtime.sendMessage(request, (response) => {
       if (chrome.runtime.lastError) {
         return reject(new Error(chrome.runtime.lastError.message));
       }
@@ -116,11 +105,12 @@ export async function recordExplanationRun(params: {
 export async function fetchHistory(
   limit = 50,
   offset = 0,
-  searchQuery?: string
+  searchQuery?: string,
+  bookmarksOnly = false,
 ): Promise<HistoryItem[]> {
   const res = await sendDbMessage<{ success: boolean; history: HistoryItem[] }>({
     type: 'DB_GET_HISTORY',
-    payload: { limit, offset, searchQuery },
+    payload: { limit, offset, searchQuery, bookmarksOnly },
   });
   return res.history || [];
 }
@@ -143,4 +133,8 @@ export async function exportKnowledgeMarkdown(): Promise<string> {
     type: 'DB_EXPORT_MARKDOWN',
   });
   return res.markdown || '';
+}
+
+export async function setHistoryBookmark(selectionId: string, bookmarked: boolean): Promise<void> {
+  await sendDbMessage({ type: 'DB_SET_BOOKMARK', payload: { selectionId, bookmarked } });
 }

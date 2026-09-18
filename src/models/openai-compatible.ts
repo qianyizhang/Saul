@@ -10,7 +10,7 @@ export async function* streamOpenAICompatible(
   config: OpenAICompatibleConfig,
   systemPrompt: string,
   userPrompt: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): AsyncGenerator<string, void, unknown> {
   const baseUrl = config.baseUrl.replace(/\/+$/, '');
   const url = baseUrl.endsWith('/chat/completions') ? baseUrl : `${baseUrl}/chat/completions`;

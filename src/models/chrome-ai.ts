@@ -1,85 +1,77 @@
 export interface ChromeAiConfig {
   temperature?: number;
   topK?: number;
+  outputLanguage?: string;
 }
-
-// Global declaration for Chrome built-in LanguageModel
-declare global {
-  interface Window {
-    ai?: {
-      languageModel?: {
-        capabilities?: () => Promise<{ available: string }>;
-        availability?: () => Promise<string>;
-        create?: (options?: any) => Promise<any>;
-      };
-    };
-    LanguageModel?: {
-      availability?: () => Promise<string>;
-      params?: () => Promise<any>;
-      create?: (options?: any) => Promise<any>;
-    };
-  }
-}
-
-export async function isChromeAiAvailable(): Promise<boolean> {
+const factory = () => (globalThis as any).LanguageModel || (globalThis as any).ai?.languageModel;
+export async function chromeAiAvailability(): Promise<string> {
   try {
-    if (typeof (globalThis as any).LanguageModel?.availability === 'function') {
-      const status = await (globalThis as any).LanguageModel.availability();
-      return status === 'readily' || status === 'after-download';
-    }
-
-    const ai = (globalThis as any).ai?.languageModel;
-    if (ai) {
-      if (typeof ai.availability === 'function') {
-        const status = await ai.availability();
-        return status === 'readily' || status === 'after-download';
-      }
-      if (typeof ai.capabilities === 'function') {
-        const caps = await ai.capabilities();
-        return caps.available === 'readily' || caps.available === 'after-download';
-      }
-    }
+    const lm = factory();
+    if (!lm) return 'unavailable';
+    const status = lm.availability
+      ? await lm.availability()
+      : (await lm.capabilities?.())?.available;
+    return status === 'readily'
+      ? 'available'
+      : status === 'after-download'
+        ? 'downloadable'
+        : status || 'unavailable';
   } catch {
-    // Chrome AI not available
+    return 'unavailable';
   }
-  return false;
 }
-
+export async function isChromeAiAvailable() {
+  return (await chromeAiAvailability()) === 'available';
+}
+export async function prepareChromeAi(signal?: AbortSignal, progress?: (fraction: number) => void) {
+  const lm = factory();
+  if (!lm?.create)
+    throw new Error(
+      'Chrome on-device AI is unavailable in this browser. Choose an OpenAI-compatible provider.',
+    );
+  const session = await lm.create({
+    signal,
+    monitor: (monitor: any) =>
+      monitor.addEventListener('downloadprogress', (event: any) => progress?.(event.loaded)),
+  });
+  session.destroy();
+}
 export async function* streamChromeAi(
   config: ChromeAiConfig,
   systemPrompt: string,
   userPrompt: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): AsyncGenerator<string, void, unknown> {
-  const lmFactory = (globalThis as any).LanguageModel || (globalThis as any).ai?.languageModel;
-
-  if (!lmFactory || typeof lmFactory.create !== 'function') {
-    throw new Error('Chrome Built-in Prompt API is not supported in this browser version.');
-  }
-
-  const session = await lmFactory.create({
-    systemPrompt,
+  const lm = factory();
+  if (!lm?.create)
+    throw new Error('Chrome on-device AI is unavailable. Choose a different provider in Settings.');
+  const availability = await chromeAiAvailability();
+  if (availability !== 'available')
+    throw new Error(
+      'Prepare the on-device model from Saul Settings first. Availability: ' + availability,
+    );
+  const modern = Boolean((globalThis as any).LanguageModel);
+  const session = await lm.create({
+    ...(modern
+      ? { initialPrompts: [{ role: 'system', content: systemPrompt }] }
+      : { systemPrompt }),
     temperature: config.temperature ?? 0.3,
     topK: config.topK ?? 3,
     signal,
+    ...(config.outputLanguage
+      ? { expectedOutputs: [{ type: 'text', languages: [config.outputLanguage] }] }
+      : {}),
   });
-
   try {
-    const stream = session.promptStreaming(userPrompt, { signal });
-    let previousText = '';
-
-    for await (const chunk of stream) {
-      if (signal?.aborted) break;
-      // Chrome Prompt API yields the cumulative text in each chunk
-      const delta = chunk.slice(previousText.length);
-      previousText = chunk;
-      if (delta) {
-        yield delta;
-      }
+    let previous = '';
+    for await (const chunk of session.promptStreaming(userPrompt, { signal })) {
+      if (signal?.aborted) return;
+      // Current LanguageModel streams deltas; the legacy window.ai API emitted cumulative text.
+      const delta = modern ? chunk : chunk.slice(previous.length);
+      previous = chunk;
+      if (delta) yield delta;
     }
   } finally {
-    if (typeof session.destroy === 'function') {
-      session.destroy();
-    }
+    session.destroy?.();
   }
 }

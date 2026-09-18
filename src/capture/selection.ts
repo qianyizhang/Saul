@@ -65,7 +65,7 @@ export function captureSelection(): {
 export function buildResolvedContext(
   snapshot: SelectionSnapshot,
   range: Range,
-  policy: ContextPolicy
+  policy: ContextPolicy,
 ): ResolvedContext {
   let paragraph: string | undefined;
   let heading: string | undefined;
@@ -106,7 +106,9 @@ function extractPrefixSuffix(range: Range): { prefix: string; suffix: string } {
     const index = blockText.indexOf(selectedText);
     if (index !== -1) {
       prefix = blockText.slice(Math.max(0, index - PREFIX_SUFFIX_LENGTH), index).trim();
-      suffix = blockText.slice(index + selectedText.length, index + selectedText.length + PREFIX_SUFFIX_LENGTH).trim();
+      suffix = blockText
+        .slice(index + selectedText.length, index + selectedText.length + PREFIX_SUFFIX_LENGTH)
+        .trim();
     }
   } catch {
     // Fallback gracefully
@@ -160,7 +162,16 @@ function extractPrecedingHeading(range: Range): string | undefined {
 function getClosestBlockElement(node: Node): HTMLElement | null {
   let current: Node | null = node.nodeType === Node.ELEMENT_NODE ? node : node.parentNode;
   const blockTags = new Set([
-    'P', 'DIV', 'ARTICLE', 'SECTION', 'BLOCKQUOTE', 'LI', 'TD', 'TH', 'MAIN', 'ASIDE'
+    'P',
+    'DIV',
+    'ARTICLE',
+    'SECTION',
+    'BLOCKQUOTE',
+    'LI',
+    'TD',
+    'TH',
+    'MAIN',
+    'ASIDE',
   ]);
 
   while (current && current !== document.body) {
@@ -190,7 +201,7 @@ function computeDomPath(node: Node): string {
       } else {
         const parent = el.parentElement;
         if (parent) {
-          const siblings = Array.from(parent.children).filter(c => c.tagName === el.tagName);
+          const siblings = Array.from(parent.children).filter((c) => c.tagName === el.tagName);
           if (siblings.length > 1) {
             const index = siblings.indexOf(el) + 1;
             selector += `:nth-of-type(${index})`;

@@ -34,7 +34,9 @@ export function renderExplainPrompt(context: ResolvedContext, customInstruction?
   if (customInstruction) {
     parts.push(`\nAdditional Instruction: ${customInstruction}`);
   } else {
-    parts.push(`\nPlease explain this concept clearly in context and annotate key sub-concepts with <term note="...">...</term>.`);
+    parts.push(
+      `\nPlease explain this concept clearly in context and annotate key sub-concepts with <term note="...">...</term>.`,
+    );
   }
 
   return parts.join('\n');

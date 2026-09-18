@@ -1,6 +1,6 @@
 # Technical Specification: Saul (AI Reading & Concept Explorer Extension)
 
-**Status:** Locked Architecture & Decision Record  
+**Status:** Original architecture and decision record. Current shipped behavior and implementation refinements are documented in [Reading and tabs](product.md).
 **Target Platform:** Chrome Extension Manifest V3 (MV3)  
 **Core Framework:** WXT + TypeScript + React + Tailwind CSS  
 **Package Manager:** pnpm  

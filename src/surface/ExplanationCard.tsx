@@ -1,147 +1,186 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { computePosition, offset, flip, shift } from '@floating-ui/dom';
-import { Sparkles, X, Copy, Check, RefreshCw, AlertCircle } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { X, Copy, Check, RefreshCw, Pin, Bookmark, Square } from 'lucide-react';
 import type { SelectionSnapshot, TagSegment } from '../types';
 import { AnnotatedTextView } from './AnnotatedTextView';
-
-interface ExplanationCardProps {
+import { useAnchoredPosition } from './useAnchoredPosition';
+export type ExplanationStatus =
+  | 'connecting'
+  | 'streaming'
+  | 'saving'
+  | 'saved'
+  | 'stopped'
+  | 'error';
+interface Props {
   range: Range;
   snapshot: SelectionSnapshot;
   segments: TagSegment[];
   isStreaming: boolean;
   error?: string | null;
   latencyMs?: number;
-  onRetry: () => void;
+  pinned: boolean;
+  bookmarked: boolean;
+  status: ExplanationStatus;
+  onRetry: (instruction?: string) => void;
   onClose: () => void;
+  onStop: () => void;
+  onPin: () => void;
+  onBookmark: () => void;
 }
-
-export const ExplanationCard: React.FC<ExplanationCardProps> = ({
+export function ExplanationCard({
   range,
   snapshot,
   segments,
   isStreaming,
   error,
   latencyMs,
+  pinned,
+  bookmarked,
+  status,
   onRetry,
   onClose,
-}) => {
-  const cardRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  onStop,
+  onPin,
+  onBookmark,
+}: Props) {
+  const ref = useRef<HTMLDivElement>(null);
+  const style = useAnchoredPosition(range, ref);
   const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    if (!cardRef.current) return;
-
-    const virtualElement = {
-      getBoundingClientRect: () => range.getBoundingClientRect(),
-    };
-
-    computePosition(virtualElement as any, cardRef.current, {
-      placement: 'bottom-start',
-      middleware: [
-        offset(8),
-        flip({ fallbackPlacements: ['top-start', 'bottom-end', 'top-end'] }),
-        shift({ padding: 16 }),
-      ],
-    }).then(({ x, y }) => {
-      setPos({ x, y });
-    });
-  }, [range]);
-
-  const handleCopy = () => {
-    const rawText = segments
-      .map((s) => (s.type === 'text' ? s.text : s.term))
-      .join('');
-    if (rawText) {
-      navigator.clipboard.writeText(rawText);
+  const [copyError, setCopyError] = useState('');
+  const iconClass =
+    'p-2 text-slate-500 hover:bg-slate-100 rounded-md focus-visible:outline-2 focus-visible:outline-indigo-600';
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(
+        segments.map((s) => (s.type === 'text' ? s.text : s.term)).join(''),
+      );
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setCopyError('');
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopyError('Could not copy. Select the explanation and copy it manually.');
     }
-  };
-
+  }
   return (
     <div
-      ref={cardRef}
-      style={{
-        position: 'fixed',
-        left: `${pos.x}px`,
-        top: `${pos.y}px`,
-        zIndex: 2147483647,
-      }}
+      ref={ref}
+      role="region"
+      aria-label="Saul explanation"
+      style={style}
       onClick={(e) => e.stopPropagation()}
-      className="w-96 max-w-[calc(100vw-32px)] bg-white/95 backdrop-blur-md rounded-xl border border-slate-200/80 shadow-2xl overflow-hidden transition-all duration-200 text-slate-800 font-sans"
+      className="w-96 max-w-[calc(100vw-24px)] max-h-[calc(100vh-24px)] flex flex-col bg-white rounded-xl border border-slate-200 shadow-xl text-slate-800 font-sans"
     >
-      {/* Header */}
-      <div className="flex items-center justify-between px-3.5 py-2.5 bg-slate-50/80 border-b border-slate-100">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <div className="p-1 rounded-md bg-indigo-100 text-indigo-600">
-            <Sparkles className="w-3.5 h-3.5" />
-          </div>
-          <span className="text-xs font-semibold text-slate-700 truncate">
-            {snapshot.text}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1">
-          {segments.length > 0 && !isStreaming && (
-            <button
-              onClick={handleCopy}
-              title="Copy explanation"
-              className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 rounded transition-colors"
-            >
-              {copied ? (
-                <Check className="w-3.5 h-3.5 text-emerald-600" />
-              ) : (
-                <Copy className="w-3.5 h-3.5" />
-              )}
-            </button>
-          )}
-
-          {!isStreaming && (
-            <button
-              onClick={onRetry}
-              title="Regenerate"
-              className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 rounded transition-colors"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-            </button>
-          )}
-
+      <header className="flex items-center justify-between p-2 border-b border-slate-100">
+        <span className="text-sm font-semibold truncate pl-2" title={snapshot.text}>
+          {snapshot.text}
+        </span>
+        <div className="flex shrink-0">
           <button
-            onClick={onClose}
-            title="Close"
-            className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 rounded transition-colors"
+            className={iconClass}
+            title={pinned ? 'Unpin explanation' : 'Pin explanation'}
+            aria-label={pinned ? 'Unpin explanation' : 'Pin explanation'}
+            aria-pressed={pinned}
+            onClick={onPin}
           >
-            <X className="w-3.5 h-3.5" />
+            <Pin size={16} fill={pinned ? 'currentColor' : 'none'} />
+          </button>
+          <button
+            className={iconClass}
+            title="Close"
+            aria-label="Close explanation"
+            onClick={onClose}
+          >
+            <X size={16} />
           </button>
         </div>
-      </div>
-
-      {/* Body */}
-      <div className="p-4 max-h-72 overflow-y-auto">
-        {error ? (
-          <div className="flex items-start gap-2 p-3 rounded-lg bg-rose-50 border border-rose-200/80 text-rose-700 text-xs leading-relaxed">
-            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium">Failed to explain</p>
-              <p className="mt-0.5 text-rose-600">{error}</p>
-            </div>
+      </header>
+      <div className="p-4 overflow-y-auto min-h-16">
+        {error && (
+          <div role="alert" className="text-sm text-rose-700 bg-rose-50 p-3 rounded-lg mb-3">
+            <strong>Failed to explain</strong>
+            <p>{error}</p>
           </div>
-        ) : segments.length === 0 && isStreaming ? (
-          <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
-            <div className="w-3.5 h-3.5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-            <span>Connecting to model...</span>
-          </div>
+        )}
+        {segments.length === 0 && isStreaming ? (
+          <p className="text-sm text-slate-500" role="status">
+            Connecting to model…
+          </p>
         ) : (
-          <AnnotatedTextView segments={segments} isStreaming={isStreaming} />
+          <AnnotatedTextView segments={segments} isStreaming={status === 'streaming'} />
+        )}
+        {copyError && (
+          <p role="alert" className="text-sm text-rose-700 mt-2">
+            {copyError}
+          </p>
         )}
       </div>
-
-      {/* Footer info */}
-      <div className="px-3.5 py-1.5 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
-        <span>Hover underlined terms for concept notes</span>
-        {latencyMs ? <span>{(latencyMs / 1000).toFixed(2)}s</span> : null}
+      <div className="px-3 pb-3 flex flex-wrap items-center gap-1">
+        {isStreaming ? (
+          <button
+            className={`${iconClass} flex items-center gap-1 text-sm`}
+            disabled={status === 'saving'}
+            onClick={onStop}
+          >
+            <Square size={14} />
+            {status === 'saving' ? 'Saving…' : 'Stop'}
+          </button>
+        ) : (
+          <>
+            <button
+              className={iconClass}
+              title="Regenerate"
+              aria-label="Regenerate"
+              onClick={() => onRetry()}
+            >
+              <RefreshCw size={16} />
+            </button>
+            {segments.length > 0 && (
+              <button
+                className={iconClass}
+                title="Copy explanation"
+                aria-label="Copy explanation"
+                onClick={copy}
+              >
+                {copied ? <Check size={16} /> : <Copy size={16} />}
+              </button>
+            )}
+            {status === 'saved' && (
+              <button
+                className={iconClass}
+                aria-label={bookmarked ? 'Remove bookmark' : 'Bookmark'}
+                aria-pressed={bookmarked}
+                onClick={onBookmark}
+              >
+                <Bookmark size={16} fill={bookmarked ? 'currentColor' : 'none'} />
+              </button>
+            )}
+            {segments.length > 0 &&
+              ['Simpler', 'Give an example', 'Go deeper'].map((label) => (
+                <button
+                  className="px-2 py-1 text-xs rounded-md border border-slate-200 hover:bg-indigo-50 focus-visible:outline-2 focus-visible:outline-indigo-600"
+                  key={label}
+                  onClick={() => onRetry(label)}
+                >
+                  {label}
+                </button>
+              ))}
+          </>
+        )}
       </div>
+      <footer className="px-4 py-2 bg-slate-50 rounded-b-xl text-xs text-slate-500 border-t border-slate-100">
+        <span role="status">
+          {status === 'saved'
+            ? 'Saved to history'
+            : status === 'saving'
+              ? 'Saving to history…'
+              : status === 'stopped'
+                ? 'Stopped · partial explanation not saved'
+                : status === 'error'
+                  ? 'Needs attention'
+                  : 'Explaining…'}
+        </span>
+        {latencyMs ? ` · ${(latencyMs / 1000).toFixed(1)}s` : ''}
+        <p className="mt-1">Hover, focus, or click underlined terms for notes.</p>
+      </footer>
     </div>
   );
-};
+}

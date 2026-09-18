@@ -82,7 +82,16 @@ export interface ModelConfig {
   maxTokens?: number;
 }
 
+export interface ProviderProfile {
+  id: string;
+  name: string;
+  config: UserSettings['openaiCompatible'];
+}
+
 export interface UserSettings {
+  profiles?: ProviderProfile[];
+  activeProfileId?: string;
+  responseLanguage?: string;
   activeProvider: ProviderType;
   openaiCompatible: {
     baseUrl: string;
@@ -116,6 +125,7 @@ export type PortRequest =
     };
 
 export type PortResponse =
+  | { type: 'SAVING' }
   | {
       type: 'CHUNK';
       payload: {

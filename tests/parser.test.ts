@@ -15,7 +15,9 @@ describe('TagStreamParser', () => {
 
   it('parses complete term tag', () => {
     const parser = new TagStreamParser();
-    const segments = parser.feed('The <term note="dynamic weighting">attention mechanism</term> is key.');
+    const segments = parser.feed(
+      'The <term note="dynamic weighting">attention mechanism</term> is key.',
+    );
     expect(segments).toHaveLength(3);
     expect(segments[0]).toEqual({
       id: 'seg-0',
@@ -85,7 +87,7 @@ describe('TagStreamParser', () => {
   it('handles multiple terms seamlessly', () => {
     const parser = new TagStreamParser();
     const segments = parser.feed(
-      'Use <term note="Key 1">A</term> and <term note="Key 2">B</term> together.'
+      'Use <term note="Key 1">A</term> and <term note="Key 2">B</term> together.',
     );
     expect(segments).toHaveLength(5);
     const segA = segments[1];

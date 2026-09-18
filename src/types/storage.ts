@@ -49,6 +49,7 @@ export interface InteractionRecord {
 }
 
 export interface HistoryItem {
+  bookmarked: boolean;
   selectionId: string;
   selectedText: string;
   pageTitle: string;
@@ -96,6 +97,7 @@ export type DbMessage =
         limit?: number;
         offset?: number;
         searchQuery?: string;
+        bookmarksOnly?: boolean;
       };
     }
   | {
@@ -104,6 +106,7 @@ export type DbMessage =
         selectionId: string;
       };
     }
+  | { type: 'DB_SET_BOOKMARK'; payload: { selectionId: string; bookmarked: boolean } }
   | {
       type: 'DB_CLEAR_HISTORY';
     }

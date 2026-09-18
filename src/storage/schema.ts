@@ -46,11 +46,11 @@ CREATE TABLE IF NOT EXISTS llm_run (
     created_at          INTEGER NOT NULL
 );
 
-CREATE VIRTUAL TABLE IF NOT EXISTS llm_run_fts USING fts5(
-    response_raw,
-    content='llm_run',
-    content_rowid='rowid'
-);
+-- Replace the legacy raw-markup index with readable text and concept notes.
+DROP TRIGGER IF EXISTS llm_run_ai;
+DROP TRIGGER IF EXISTS llm_run_ad;
+DROP TABLE IF EXISTS llm_run_fts;
+CREATE VIRTUAL TABLE IF NOT EXISTS explanation_fts USING fts5(body);
 
 CREATE TABLE IF NOT EXISTS interaction (
     id              TEXT PRIMARY KEY,
@@ -59,6 +59,11 @@ CREATE TABLE IF NOT EXISTS interaction (
     event_type      TEXT NOT NULL,
     event_data      TEXT,
     created_at      INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS bookmark (
+    selection_id TEXT PRIMARY KEY REFERENCES selection(id) ON DELETE CASCADE,
+    created_at INTEGER NOT NULL
 );
 
 -- Triggers to keep FTS tables synced with primary tables
@@ -70,11 +75,7 @@ CREATE TRIGGER IF NOT EXISTS selection_ad AFTER DELETE ON selection BEGIN
   INSERT INTO selection_fts(selection_fts, rowid, text) VALUES('delete', old.rowid, old.text);
 END;
 
-CREATE TRIGGER IF NOT EXISTS llm_run_ai AFTER INSERT ON llm_run BEGIN
-  INSERT INTO llm_run_fts(rowid, response_raw) VALUES (new.rowid, new.response_raw);
-END;
-
-CREATE TRIGGER IF NOT EXISTS llm_run_ad AFTER DELETE ON llm_run BEGIN
-  INSERT INTO llm_run_fts(llm_run_fts, rowid, response_raw) VALUES('delete', old.rowid, old.response_raw);
+CREATE TRIGGER IF NOT EXISTS explanation_ad AFTER DELETE ON llm_run BEGIN
+  DELETE FROM explanation_fts WHERE rowid = old.rowid;
 END;
 `;

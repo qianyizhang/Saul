@@ -2,15 +2,39 @@ import { getSettings, initStorageSecurity } from '../src/storage/settings';
 import { recordExplanationRun, ensureOffscreenDocument } from '../src/storage/client';
 import { renderExplainPrompt, DEFAULT_SYSTEM_PROMPT } from '../src/models/prompts';
 import { streamOpenAICompatible } from '../src/models/openai-compatible';
-import { streamChromeAi } from '../src/models/chrome-ai';
+import { streamChromeAiOffscreen } from '../src/models/chrome-ai-bridge';
 import { TagStreamParser } from '../src/parser/tag-stream-parser';
 import type { PortRequest, PortResponse } from '../src/types';
+import { initNativeBridge } from '../src/native/bridge';
+import { workspaceCall } from '../src/native/workspace';
 
 export default defineBackground(() => {
   console.log('[Saul] Background service worker initialized');
   initStorageSecurity();
-  ensureOffscreenDocument().catch((err) => {
-    console.warn('[Saul] Offscreen doc preload error:', err);
+  initNativeBridge();
+
+  chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+    if (request?.type === 'WORKSPACE_TABS') {
+      if (!_sender.url?.startsWith(chrome.runtime.getURL('/'))) {
+        sendResponse({ success: false, error: 'Extension pages only' });
+        return false;
+      }
+      workspaceCall(request).then(
+        (result) => sendResponse({ success: true, result }),
+        (error) => sendResponse({ success: false, error: error.message }),
+      );
+      return true;
+    }
+    if (request?.type === 'GET_CONTEXT_POLICY') {
+      getSettings().then((settings) => sendResponse({ contextPolicy: settings.contextPolicy }));
+      return true;
+    }
+    if (request?.target !== 'saul-background') return false;
+    (async () => {
+      await ensureOffscreenDocument();
+      return chrome.runtime.sendMessage({ ...request.message, target: 'saul-offscreen' });
+    })().then(sendResponse, (error) => sendResponse({ success: false, error: error.message }));
+    return true;
   });
 
   // Handle streaming ports from content scripts or popup
@@ -48,19 +72,27 @@ export default defineBackground(() => {
         try {
           const settings = await getSettings();
           const systemPrompt = settings.customPromptTemplate || DEFAULT_SYSTEM_PROMPT;
-          const userPrompt = renderExplainPrompt(msg.payload.context, msg.payload.customPrompt);
+          const language = settings.responseLanguage
+            ? `Respond in ${settings.responseLanguage}.`
+            : 'Respond in the language of the selected text.';
+          const userPrompt = renderExplainPrompt(
+            msg.payload.context,
+            [msg.payload.customPrompt, language].filter(Boolean).join('\n'),
+          );
 
           let streamGenerator: AsyncGenerator<string, void, unknown>;
           let activeProviderName = settings.activeProvider;
           let activeModelName =
-            settings.activeProvider === 'chrome-ai' ? 'gemini-nano' : settings.openaiCompatible.model;
+            settings.activeProvider === 'chrome-ai'
+              ? 'gemini-nano'
+              : settings.openaiCompatible.model;
 
           if (settings.activeProvider === 'chrome-ai') {
-            streamGenerator = streamChromeAi(
+            streamGenerator = streamChromeAiOffscreen(
               settings.chromeAi,
               systemPrompt,
               userPrompt,
-              signal
+              signal,
             );
           } else {
             if (
@@ -69,14 +101,14 @@ export default defineBackground(() => {
               !settings.openaiCompatible.baseUrl.includes('127.0.0.1')
             ) {
               throw new Error(
-                'API Key is missing. Please configure your API Key in Saul Settings (Extension Popup).'
+                'API Key is missing. Please configure your API Key in Saul Settings (Extension Popup).',
               );
             }
             streamGenerator = streamOpenAICompatible(
               settings.openaiCompatible,
               systemPrompt,
               userPrompt,
-              signal
+              signal,
             );
           }
 
@@ -100,18 +132,9 @@ export default defineBackground(() => {
             const fullRaw = parser.getRaw();
             const segments = parser.getSegments();
 
-            const doneResponse: PortResponse = {
-              type: 'DONE',
-              payload: {
-                fullText: fullRaw,
-                segments,
-                usage: { latencyMs },
-              },
-            };
-            port.postMessage(doneResponse);
-
+            port.postMessage({ type: 'SAVING' });
             // Persist run to SQLite WASM via Offscreen Worker
-            recordExplanationRun({
+            await recordExplanationRun({
               snapshot: msg.payload.snapshot,
               context: msg.payload.context,
               provider: activeProviderName,
@@ -122,8 +145,20 @@ export default defineBackground(() => {
               segments,
               latencyMs,
             }).catch((dbErr) => {
-              console.error('[Saul] Failed to persist selection run to SQLite:', dbErr);
+              throw new Error(
+                'Explanation generated, but history could not be saved: ' + dbErr.message,
+              );
             });
+
+            const doneResponse: PortResponse = {
+              type: 'DONE',
+              payload: {
+                fullText: fullRaw,
+                segments,
+                usage: { latencyMs },
+              },
+            };
+            port.postMessage(doneResponse);
           }
         } catch (err: any) {
           if (!signal.aborted) {
@@ -137,7 +172,7 @@ export default defineBackground(() => {
             port.postMessage(errorResponse);
           }
         } finally {
-          currentAbortController = null;
+          if (currentAbortController?.signal === signal) currentAbortController = null;
         }
       }
     });

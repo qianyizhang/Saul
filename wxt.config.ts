@@ -15,8 +15,17 @@ export default defineConfig({
   }),
   manifest: {
     name: 'Saul - AI Concept & Reading Explorer',
-    description: 'Local-first AI concept explorer with inline term tooltips and customizable models.',
-    permissions: ['storage', 'unlimitedStorage', 'offscreen'],
+    description:
+      'Local-first AI concept explorer with inline term tooltips and customizable models.',
+    permissions: [
+      'storage',
+      'unlimitedStorage',
+      'offscreen',
+      'nativeMessaging',
+      'tabs',
+      'tabGroups',
+      'alarms',
+    ],
     host_permissions: ['<all_urls>'],
     action: {},
     content_security_policy: {

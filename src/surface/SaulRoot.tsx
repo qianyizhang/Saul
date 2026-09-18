@@ -1,164 +1,193 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
-import type { SelectionSnapshot, TagSegment, PortResponse } from '../types';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import type { SelectionSnapshot, TagSegment, PortResponse, ResolvedContext } from '../types';
 import { captureSelection, buildResolvedContext } from '../capture/selection';
-import { getSettings } from '../storage/settings';
+import { setHistoryBookmark } from '../storage/client';
 import { FloatingTrigger } from './FloatingTrigger';
-import { ExplanationCard } from './ExplanationCard';
+import { ExplanationCard, type ExplanationStatus } from './ExplanationCard';
 
-type UIState = 'idle' | 'trigger' | 'explaining';
-
-export const SaulRoot: React.FC = () => {
-  const [uiState, setUiState] = useState<UIState>('idle');
-  const [currentSnapshot, setCurrentSnapshot] = useState<SelectionSnapshot | null>(null);
-  const [currentRange, setCurrentRange] = useState<Range | null>(null);
+export function SaulRoot() {
+  const [uiState, setUiState] = useState<'idle' | 'trigger' | 'explaining'>('idle');
+  const [snapshot, setSnapshot] = useState<SelectionSnapshot | null>(null);
+  const [range, setRange] = useState<Range | null>(null);
   const [segments, setSegments] = useState<TagSegment[]>([]);
-  const [isStreaming, setIsStreaming] = useState(false);
+  const [status, setStatus] = useState<ExplanationStatus>('connecting');
   const [error, setError] = useState<string | null>(null);
-  const [latencyMs, setLatencyMs] = useState<number | undefined>(undefined);
-
-  const portRef = useRef<chrome.runtime.Port | null>(null);
-
-  const cleanupStream = useCallback(() => {
-    if (portRef.current) {
-      try {
-        portRef.current.postMessage({ type: 'ABORT' });
-        portRef.current.disconnect();
-      } catch {
-        // Port already closed
-      }
-      portRef.current = null;
+  const [latencyMs, setLatencyMs] = useState<number>();
+  const [pinned, setPinned] = useState(false);
+  const [bookmarked, setBookmarked] = useState(false);
+  const port = useRef<chrome.runtime.Port | null>(null);
+  const revision = useRef(0);
+  const contextRef = useRef<{ id: string; context: ResolvedContext } | null>(null);
+  const cancel = useCallback(() => {
+    revision.current++;
+    try {
+      port.current?.postMessage({ type: 'ABORT' });
+      port.current?.disconnect();
+    } catch {
+      /* already closed */
     }
-    setIsStreaming(false);
+    port.current = null;
   }, []);
-
-  const handleDismiss = useCallback(() => {
-    cleanupStream();
+  useEffect(() => cancel, [cancel]);
+  const dismiss = useCallback(() => {
+    cancel();
     setUiState('idle');
-    setCurrentSnapshot(null);
-    setCurrentRange(null);
+    setSnapshot(null);
+    setRange(null);
     setSegments([]);
     setError(null);
     setLatencyMs(undefined);
-  }, [cleanupStream]);
-
-  // Listen for selection changes on page
-  useEffect(() => {
-    const handleMouseUp = (e: MouseEvent) => {
-      // Delay slightly to let selection settle
-      setTimeout(() => {
-        if (uiState === 'explaining') return;
-
-        const captured = captureSelection();
-        if (captured) {
-          setCurrentSnapshot(captured.snapshot);
-          setCurrentRange(captured.range);
-          setUiState('trigger');
-        } else if (uiState === 'trigger') {
-          handleDismiss();
-        }
-      }, 10);
-    };
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        handleDismiss();
-      }
-    };
-
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      // If clicking inside saul-root shadow DOM, ignore
-      if (target.closest('saul-root') || target.tagName?.toLowerCase() === 'saul-root') {
-        return;
-      }
-      if (uiState !== 'idle') {
-        handleDismiss();
-      }
-    };
-
-    document.addEventListener('mouseup', handleMouseUp);
-    document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('mousedown', handleClickOutside);
-
-    return () => {
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [uiState, handleDismiss]);
-
-  // Trigger explanation
-  const handleTriggerExplain = async () => {
-    if (!currentSnapshot || !currentRange) return;
-
+    setPinned(false);
+    setBookmarked(false);
+    contextRef.current = null;
+  }, [cancel]);
+  async function explain(
+    instruction?: string,
+    captured?: { snapshot: SelectionSnapshot; range: Range },
+  ) {
+    const selected = captured?.snapshot || snapshot,
+      selectedRange = captured?.range || range;
+    if (!selected || !selectedRange) return;
+    const previous = segments.map((s) => (s.type === 'text' ? s.text : s.term)).join('');
+    cancel();
+    const run = revision.current;
+    setSnapshot(selected);
+    setRange(selectedRange);
     setUiState('explaining');
     setSegments([]);
+    setStatus('connecting');
     setError(null);
-    setIsStreaming(true);
     setLatencyMs(undefined);
-
-    const settings = await getSettings();
-    const context = buildResolvedContext(currentSnapshot, currentRange, settings.contextPolicy);
-
-    cleanupStream();
-
-    const port = chrome.runtime.connect({ name: 'saul-stream' });
-    portRef.current = port;
-
-    port.onMessage.addListener((msg: PortResponse) => {
-      if (msg.type === 'CHUNK') {
-        setSegments(msg.payload.segments);
-      } else if (msg.type === 'DONE') {
-        setSegments(msg.payload.segments);
-        setIsStreaming(false);
-        if (msg.payload.usage?.latencyMs) {
-          setLatencyMs(msg.payload.usage.latencyMs);
-        }
-      } else if (msg.type === 'ERROR') {
-        setError(msg.payload.message);
-        setIsStreaming(false);
+    try {
+      let context: ResolvedContext;
+      if (contextRef.current?.id === selected.id) context = contextRef.current.context;
+      else {
+        const result = await chrome.runtime.sendMessage({ type: 'GET_CONTEXT_POLICY' });
+        if (!result?.contextPolicy)
+          throw new Error('Could not load reading preferences. Reload Saul and try again.');
+        if (run !== revision.current) return;
+        context = buildResolvedContext(selected, selectedRange, result.contextPolicy);
+        contextRef.current = { id: selected.id, context };
       }
-    });
-
-    port.onDisconnect.addListener(() => {
-      setIsStreaming(false);
-    });
-
-    port.postMessage({
-      type: 'START_EXPLAIN',
-      payload: {
-        snapshot: currentSnapshot,
-        context,
-      },
-    });
-  };
-
-  if (uiState === 'idle' || !currentRange || !currentSnapshot) {
-    return null;
+      if (run !== revision.current) return;
+      const channel = chrome.runtime.connect({ name: 'saul-stream' });
+      port.current = channel;
+      let finished = false;
+      channel.onMessage.addListener((message: PortResponse) => {
+        if (run !== revision.current) return;
+        if (message.type === 'CHUNK') {
+          setSegments(message.payload.segments);
+          setStatus('streaming');
+        } else if (message.type === 'SAVING') setStatus('saving');
+        else if (message.type === 'DONE') {
+          finished = true;
+          setSegments(message.payload.segments);
+          setLatencyMs(message.payload.usage?.latencyMs);
+          setStatus('saved');
+        } else if (message.type === 'ERROR') {
+          finished = true;
+          setError(message.payload.message);
+          setStatus('error');
+        }
+      });
+      channel.onDisconnect.addListener(() => {
+        if (run === revision.current && !finished) {
+          setError('Connection interrupted. Retry the explanation.');
+          setStatus('error');
+        }
+      });
+      channel.postMessage({
+        type: 'START_EXPLAIN',
+        payload: {
+          snapshot: selected,
+          context,
+          ...(instruction
+            ? {
+                customPrompt: `Previous explanation:\n${previous}\n\nFollow-up request: ${instruction}. Keep using the original selection and context.`,
+              }
+            : {}),
+        },
+      });
+    } catch (err) {
+      if (run === revision.current) {
+        setError((err as Error).message);
+        setStatus('error');
+      }
+    }
   }
-
-  return (
-    <>
-      {uiState === 'trigger' && (
-        <FloatingTrigger
-          range={currentRange}
-          onTrigger={handleTriggerExplain}
-          onDismiss={handleDismiss}
-        />
-      )}
-
-      {uiState === 'explaining' && (
-        <ExplanationCard
-          range={currentRange}
-          snapshot={currentSnapshot}
-          segments={segments}
-          isStreaming={isStreaming}
-          error={error}
-          latencyMs={latencyMs}
-          onRetry={handleTriggerExplain}
-          onClose={handleDismiss}
-        />
-      )}
-    </>
+  const explainRef = useRef(explain);
+  explainRef.current = explain;
+  useEffect(() => {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const inside = (e: Event) =>
+      e
+        .composedPath()
+        .some((node) => node instanceof HTMLElement && node.tagName.toLowerCase() === 'saul-root');
+    const editing = (e: Event) =>
+      e.target instanceof Element &&
+      Boolean(e.target.closest('input,textarea,[contenteditable="true"]'));
+    const capture = (e: MouseEvent) => {
+      if (inside(e) || editing(e) || uiState === 'explaining') return;
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        const captured = captureSelection();
+        if (captured) {
+          setSnapshot(captured.snapshot);
+          setRange(captured.range);
+          setUiState('trigger');
+        } else if (uiState === 'trigger') dismiss();
+      }, 10);
+    };
+    const keyboard = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && uiState !== 'idle') dismiss();
+      if (e.altKey && e.shiftKey && e.code === 'KeyE' && !editing(e)) {
+        const captured = captureSelection();
+        if (captured) {
+          clearTimeout(timeout);
+          e.preventDefault();
+          void explainRef.current(undefined, captured);
+        }
+      }
+    };
+    const outside = (e: MouseEvent) => {
+      if (!inside(e) && !pinned && uiState !== 'idle') dismiss();
+    };
+    document.addEventListener('mouseup', capture);
+    document.addEventListener('keydown', keyboard);
+    document.addEventListener('mousedown', outside);
+    return () => {
+      clearTimeout(timeout);
+      document.removeEventListener('mouseup', capture);
+      document.removeEventListener('keydown', keyboard);
+      document.removeEventListener('mousedown', outside);
+    };
+  }, [uiState, pinned, dismiss]);
+  if (uiState === 'idle' || !snapshot || !range) return null;
+  return uiState === 'trigger' ? (
+    <FloatingTrigger range={range} onTrigger={() => void explain()} onDismiss={dismiss} />
+  ) : (
+    <ExplanationCard
+      range={range}
+      snapshot={snapshot}
+      segments={segments}
+      status={status}
+      isStreaming={['connecting', 'streaming', 'saving'].includes(status)}
+      error={error}
+      latencyMs={latencyMs}
+      pinned={pinned}
+      bookmarked={bookmarked}
+      onPin={() => setPinned((v) => !v)}
+      onRetry={(instruction) => void explain(instruction)}
+      onClose={dismiss}
+      onStop={() => {
+        cancel();
+        setStatus('stopped');
+      }}
+      onBookmark={() => {
+        void setHistoryBookmark(snapshot.id, !bookmarked)
+          .then(() => setBookmarked((v) => !v))
+          .catch((err) => setError(err.message));
+      }}
+    />
   );
-};
+}

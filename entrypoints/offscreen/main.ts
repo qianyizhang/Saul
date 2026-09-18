@@ -1,52 +1,65 @@
-import { saulDb } from '../../src/storage/db';
+import DatabaseWorker from '../../src/storage/db-worker?worker';
 import type { DbMessage } from '../../src/types/storage';
 
-console.log('[Saul Offscreen] Initializing SQLite database runtime...');
+const worker = new DatabaseWorker();
+let nextId = 0;
+const pending = new Map<number, (response: unknown) => void>();
+let workerError: string | null = null;
 
-saulDb
-  .init()
-  .then(() => {
-    console.log('[Saul Offscreen] SQLite WASM Database ready');
-  })
-  .catch((err) => {
-    console.error('[Saul Offscreen] SQLite init error:', err);
-  });
+worker.onmessage = ({ data }) => {
+  pending.get(data.id)?.(data.response);
+  pending.delete(data.id);
+};
+worker.onerror = (event) => {
+  workerError = event.message || 'Database worker failed. Reload the extension to retry.';
+  for (const reply of pending.values()) reply({ success: false, error: workerError });
+  pending.clear();
+};
 
-// Handle DB messages from background or popup
-chrome.runtime.onMessage.addListener((message: DbMessage, sender, sendResponse) => {
-  if (!message || !message.type || !message.type.startsWith('DB_')) {
-    return false;
-  }
-
-  (async () => {
-    try {
-      if (message.type === 'DB_SAVE_RECORD') {
-        await saulDb.saveRecord(message.payload);
-        sendResponse({ success: true });
-      } else if (message.type === 'DB_GET_HISTORY') {
-        const history = await saulDb.getHistory(
-          message.payload.limit,
-          message.payload.offset,
-          message.payload.searchQuery
-        );
-        sendResponse({ success: true, history });
-      } else if (message.type === 'DB_DELETE_SELECTION') {
-        await saulDb.deleteSelection(message.payload.selectionId);
-        sendResponse({ success: true });
-      } else if (message.type === 'DB_CLEAR_HISTORY') {
-        await saulDb.clearAll();
-        sendResponse({ success: true });
-      } else if (message.type === 'DB_EXPORT_MARKDOWN') {
-        const markdown = await saulDb.exportToMarkdown();
-        sendResponse({ success: true, markdown });
-      } else {
-        sendResponse({ success: false, error: 'Unknown DB message type' });
-      }
-    } catch (err: any) {
-      console.error('[Saul Offscreen] Error executing DB action:', err);
-      sendResponse({ success: false, error: err.message });
+// Only the background routes requests here, after ensuring this document exists.
+chrome.runtime.onMessage.addListener(
+  (message: DbMessage & { target?: string }, _sender, sendResponse) => {
+    if (message?.target !== 'saul-offscreen') return false;
+    if (workerError) {
+      sendResponse({ success: false, error: workerError });
+      return false;
     }
-  })();
+    const id = ++nextId;
+    pending.set(id, sendResponse);
+    worker.postMessage({ id, message });
+    return true;
+  },
+);
 
-  return true; // Keep message channel open for async response
+// The Prompt API requires a document context; the service worker only routes it.
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== 'saul-local-model') return;
+  if (
+    port.sender?.tab ||
+    (port.sender?.url && !port.sender.url.startsWith(chrome.runtime.getURL('/')))
+  ) {
+    port.disconnect();
+    return;
+  }
+  const controller = new AbortController();
+  let started = false;
+  port.onDisconnect.addListener(() => controller.abort());
+  port.onMessage.addListener(async (request) => {
+    if (started) return;
+    started = true;
+    try {
+      const { streamChromeAi } = await import('../../src/models/chrome-ai');
+      for await (const text of streamChromeAi(
+        request.config,
+        request.systemPrompt,
+        request.userPrompt,
+        controller.signal,
+      ))
+        port.postMessage({ type: 'chunk', text });
+      if (!controller.signal.aborted) port.postMessage({ type: 'done' });
+    } catch (error) {
+      if (!controller.signal.aborted)
+        port.postMessage({ type: 'error', message: (error as Error).message });
+    }
+  });
 });
