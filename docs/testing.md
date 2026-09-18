@@ -22,6 +22,9 @@ pnpm test:user --smoke       # verify launcher/Explain/history, then clean up
 
 # Focused rerun of an already-built extension
 pnpm exec playwright test -g 'concurrent cold-start'
+pnpm exec playwright test tests/e2e/positioning.spec.ts # popup motion and selection tracking
+pnpm exec playwright test tests/e2e/multiline.spec.ts # multiline capture and placement
+SAUL_LIVE_GITHUB=1 pnpm exec playwright test -g 'live GitHub' # optional real-page layout, local model
 node tests/e2e/manual.ts --smoke  # reuse existing bundle
 pnpm exec tsc -p tests/e2e/tsconfig.json  # harness-only typecheck
 ```
@@ -36,6 +39,8 @@ Do not rebuild a shared checkout while another task is producing its bundle. Eac
 | `tests/e2e/fixtures.ts` | Playwright lifecycle and failure attachments |
 | `tests/e2e/extension.spec.ts` | Reader/history flow and concurrent storage regressions |
 | `tests/e2e/product.spec.ts` | Bookmarks, search/export, provider profiles, tab previews/undo, keyboard/follow-up/cancellation, navigation and draft protection |
+| `tests/e2e/positioning.spec.ts` | Instant Explain appearance, scroll/layout tracking, and captured selection stability |
+| `tests/e2e/multiline.spec.ts` | Forward/backward paragraph-to-list drags, line-aware placement with scrolling/viewport flips, preserved line breaks in capture/history, and opt-in live GitHub reproduction |
 | `tests/e2e/manual.ts` | Reusable hands-on sandbox and launcher smoke check |
 | `tests/e2e/tsconfig.json` | Independent typecheck while unrelated product edits are in progress |
 | `tests/storage.test.ts` | Fail visibly when persistence is unavailable; initialization retry |
@@ -70,6 +75,10 @@ Storage path: popup/content → background → offscreen document → dedicated 
 ## Hands-on checklist
 
 In `pnpm test:user`, select the article concept, click Explain, inspect layout and concept notes, regenerate, then open **Reading → Reading history** and verify the saved explanation. Check Settings/provider navigation, keyboard triggering, pin/follow-up/bookmark actions, and Tabs previews when those surfaces change. Automated smoke is not a substitute for observing these surfaces. Use the browser suite for restart/export/delete guarantees; do not exercise destructive tests in a personal profile.
+
+## Verification record — 2026-09-19
+
+Selection and popup fixes passed the production build, app/harness typechecks, formatting, 31 unit/transport tests, and 16 local browser scenarios. The opt-in live GitHub scenario also passed with the local model fixture. Coverage includes both drag directions, scroll/layout tracking, viewport flips, explanation-card alignment, preserved line breaks, and captured selection stability. Live-provider generation was not tested.
 
 ## Verification record — 2026-09-18
 

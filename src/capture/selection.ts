@@ -15,10 +15,12 @@ export function captureSelection(): {
     return null;
   }
 
-  const range = selection.getRangeAt(0);
-  const text = range.toString().trim();
+  // Keep the captured highlight independent of subsequent browser selection changes.
+  const range = selection.getRangeAt(0).cloneRange();
+  // Selection preserves rendered line breaks; Range concatenates DOM text nodes.
+  const text = selection.toString().trim();
 
-  if (!text || text.length === 0) {
+  if (!text) {
     return null;
   }
 

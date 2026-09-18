@@ -1,4 +1,4 @@
-import { chromium, type BrowserContext } from '@playwright/test';
+import { chromium, type BrowserContext, type Page } from '@playwright/test';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -42,6 +42,24 @@ export async function createFixtureServer(
         const timer = setTimeout(finish, options.chunkDelayMs);
         res.once('close', () => clearTimeout(timer));
       } else finish();
+    } else if (req.url === '/multiline') {
+      res.setHeader('Content-Type', 'text/html');
+      // Adjacent blocks deliberately have no source whitespace: capture must
+      // preserve rendered paragraph/list breaks, not rely on HTML formatting.
+      res.end(
+        [
+          '<!doctype html><title>Multiline reading fixture</title>',
+          '<style>body{font:16px Arial;padding:60px;line-height:1.6;min-height:2000px}article{width:560px}li{margin:8px 0}</style>',
+          '<article><h1>Saul</h1>',
+          '<p id="intro">A local-first Chrome reading assistant built with WXT, React and TypeScript.</p>',
+          '<ul>',
+          '<li><strong>Reading:</strong> explain a selection, ask for a simpler answer or example, and revisit automatically saved history with bookmarks and full-library export.</li>',
+          '<li><strong>Tabs:</strong><span id="ending"> preview sorting, grouping, and moving; undo an unchanged last sort.</span></li>',
+          '<li><strong>Settings:</strong> provider profiles and response language.</li>',
+          '</ul>',
+          '<p id="breaks">First line<br>Second line<br>Final line</p></article>',
+        ].join(''),
+      );
     } else if (req.url === '/' || req.url === '/article') {
       res.setHeader('Content-Type', 'text/html');
       res.end(
@@ -69,6 +87,17 @@ export async function createFixtureServer(
 }
 
 export type FixtureServer = Awaited<ReturnType<typeof createFixtureServer>>;
+
+export async function configureFixtureProvider(popup: Page, origin: string) {
+  await popup.evaluate(async (origin) => {
+    await chrome.storage.local.set({
+      saul_user_settings: {
+        activeProvider: 'openai-compatible',
+        openaiCompatible: { baseUrl: origin + '/v1', apiKey: '', model: 'test-model' },
+      },
+    });
+  }, origin);
+}
 
 export async function createSandbox(options: { headless?: boolean; artifactsDir?: string } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), 'saul-browser-'));

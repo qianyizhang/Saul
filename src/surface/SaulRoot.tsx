@@ -164,7 +164,7 @@ export function SaulRoot() {
   }, [uiState, pinned, dismiss]);
   if (uiState === 'idle' || !snapshot || !range) return null;
   return uiState === 'trigger' ? (
-    <FloatingTrigger range={range} onTrigger={() => void explain()} onDismiss={dismiss} />
+    <FloatingTrigger range={range} onTrigger={() => void explain()} />
   ) : (
     <ExplanationCard
       range={range}
