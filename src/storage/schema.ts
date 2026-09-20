@@ -1,4 +1,7 @@
-export const INIT_SCHEMA_SQL = `
+import type { Database } from '@sqlite.org/sqlite-wasm';
+import { TagStreamParser } from '../parser/tag-stream-parser';
+
+const LEGACY_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS page (
     id              TEXT PRIMARY KEY,
     url             TEXT NOT NULL UNIQUE,
@@ -79,3 +82,55 @@ CREATE TRIGGER IF NOT EXISTS explanation_ad AFTER DELETE ON llm_run BEGIN
   DELETE FROM explanation_fts WHERE rowid = old.rowid;
 END;
 `;
+
+export const SCHEMA_VERSION = 1;
+
+export function migrate(db: Database): void {
+  const version = Number(db.selectValue('PRAGMA user_version') || 0);
+  if (version > SCHEMA_VERSION)
+    throw new Error(
+      `Database version ${version} is newer than this Saul release. Downgrades are unsupported.`,
+    );
+  if (version === SCHEMA_VERSION) return;
+  // The unversioned release is version 0. DDL, backfill, and version advance
+  // share one transaction; a failed upgrade leaves the original database intact.
+  db.transaction(() => {
+    db.exec(LEGACY_SCHEMA_SQL);
+    db.exec(`
+      ALTER TABLE selection ADD COLUMN anchor_exact TEXT;
+      ALTER TABLE selection ADD COLUMN anchor_key TEXT;
+      ALTER TABLE llm_run ADD COLUMN submission_id TEXT;
+      ALTER TABLE llm_run ADD COLUMN input_json TEXT;
+      ALTER TABLE llm_run ADD COLUMN viewed_at INTEGER;
+      ALTER TABLE llm_run ADD COLUMN reason TEXT;
+      CREATE TABLE submission (id TEXT PRIMARY KEY, selection_id TEXT REFERENCES selection(id) ON DELETE SET NULL);
+      CREATE UNIQUE INDEX run_submission ON llm_run(submission_id);
+      CREATE INDEX selection_page ON selection(page_id);
+      CREATE UNIQUE INDEX selection_anchor ON selection(page_id, anchor_key);
+      CREATE INDEX selection_recent ON selection(created_at DESC, id DESC);
+      CREATE INDEX run_latest ON llm_run(selection_id, created_at DESC);
+      CREATE INDEX run_success ON llm_run(selection_id, created_at DESC) WHERE status = 'completed';
+      CREATE INDEX run_unread ON llm_run(status, viewed_at, selection_id);
+      UPDATE llm_run SET viewed_at = created_at WHERE status = 'completed';
+      UPDATE llm_run SET status = 'interrupted', reason = 'upgrade', error_message = 'Interrupted before upgrade. Retry explicitly.' WHERE status IN ('running', 'aborted');
+    `);
+    db.exec({
+      sql: 'SELECT rowid, response_raw FROM llm_run WHERE rowid NOT IN (SELECT rowid FROM explanation_fts)',
+      rowMode: 'object',
+      callback: (row) => {
+        db.exec({
+          sql: 'INSERT INTO explanation_fts(rowid, body) VALUES (?, ?)',
+          bind: [row.rowid, searchableResponse(String(row.response_raw || ''))],
+        });
+      },
+    });
+    db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+  });
+}
+
+export function searchableResponse(raw: string): string {
+  return new TagStreamParser()
+    .feed(raw)
+    .map((s) => (s.type === 'text' ? s.text : s.term + ' ' + s.note))
+    .join(' ');
+}

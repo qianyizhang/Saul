@@ -1,0 +1,280 @@
+{
+  "recordedAt": "2026-09-20T15:55:57.741Z",
+  "browser": "153.0.8010.12",
+  "cases": [
+    {
+      "rows": [
+        {
+          "selections": 10000,
+          "runs": 50000
+        }
+      ],
+      "sqlite": "3.53.0",
+      "history": {
+        "samplesMs": [
+          1.800000011920929,
+          0.9000000059604645,
+          0.7999999821186066,
+          0.7000000178813934,
+          0.7999999821186066
+        ],
+        "medianMs": 0.7999999821186066
+      },
+      "historyOffset": {
+        "samplesMs": [
+          13.900000005960464,
+          12.400000005960464,
+          12,
+          11.599999994039536,
+          11.699999988079071
+        ],
+        "medianMs": 12
+      },
+      "page": {
+        "samplesMs": [
+          1.9000000059604645,
+          1.7000000178813934,
+          1.5,
+          1.5,
+          1.5999999940395355
+        ],
+        "medianMs": 1.5999999940395355
+      },
+      "search": {
+        "samplesMs": [
+          1.4000000059604645,
+          0.7999999821186066,
+          2.2000000178813934
+        ],
+        "medianMs": 1.4000000059604645
+      },
+      "export": {
+        "samplesMs": [
+          741.5
+        ],
+        "medianMs": 741.5
+      },
+      "plan": [
+        {
+          "id": 6,
+          "parent": 0,
+          "notused": 215,
+          "detail": "SCAN s USING INDEX selection_recent"
+        },
+        {
+          "id": 9,
+          "parent": 0,
+          "notused": 45,
+          "detail": "SEARCH r USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN"
+        },
+        {
+          "id": 12,
+          "parent": 0,
+          "notused": 0,
+          "detail": "CORRELATED SCALAR SUBQUERY 1"
+        },
+        {
+          "id": 17,
+          "parent": 12,
+          "notused": 53,
+          "detail": "SEARCH llm_run USING COVERING INDEX run_latest (selection_id=?)"
+        },
+        {
+          "id": 39,
+          "parent": 12,
+          "notused": 0,
+          "detail": "USE TEMP B-TREE FOR LAST TERM OF ORDER BY"
+        }
+      ],
+      "previousQueryWithIndexes": {
+        "samplesMs": [
+          0.19999998807907104,
+          0,
+          0.20000001788139343
+        ],
+        "medianMs": 0.19999998807907104
+      },
+      "previousPlan": [
+        {
+          "id": 6,
+          "parent": 0,
+          "notused": 215,
+          "detail": "SCAN s USING INDEX sqlite_autoindex_selection_1"
+        },
+        {
+          "id": 9,
+          "parent": 0,
+          "notused": 45,
+          "detail": "SEARCH r USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN"
+        },
+        {
+          "id": 12,
+          "parent": 0,
+          "notused": 0,
+          "detail": "CORRELATED SCALAR SUBQUERY 1"
+        },
+        {
+          "id": 18,
+          "parent": 12,
+          "notused": 212,
+          "detail": "SCAN llm_run USING INDEX run_unread"
+        },
+        {
+          "id": 34,
+          "parent": 12,
+          "notused": 0,
+          "detail": "USE TEMP B-TREE FOR ORDER BY"
+        },
+        {
+          "id": 56,
+          "parent": 0,
+          "notused": 0,
+          "detail": "USE TEMP B-TREE FOR ORDER BY"
+        }
+      ],
+      "previousQueryWithoutIndexes": {
+        "samplesMs": [
+          19602.09999999404
+        ],
+        "medianMs": 19602.09999999404
+      }
+    },
+    {
+      "rows": [
+        {
+          "selections": 10000,
+          "runs": 100000
+        }
+      ],
+      "sqlite": "3.53.0",
+      "history": {
+        "samplesMs": [
+          1.9000000059604645,
+          0.7999999821186066,
+          0.800000011920929,
+          0.7999999821186066,
+          0.7000000178813934
+        ],
+        "medianMs": 0.7999999821186066
+      },
+      "historyOffset": {
+        "samplesMs": [
+          13.900000005960464,
+          12.199999988079071,
+          12.5,
+          12.099999994039536,
+          12
+        ],
+        "medianMs": 12.199999988079071
+      },
+      "page": {
+        "samplesMs": [
+          1.7000000178813934,
+          1.5999999940395355,
+          1.5,
+          1.300000011920929,
+          1.2999999821186066
+        ],
+        "medianMs": 1.5
+      },
+      "search": {
+        "samplesMs": [
+          1.5,
+          0.800000011920929,
+          0.699999988079071
+        ],
+        "medianMs": 0.800000011920929
+      },
+      "export": {
+        "samplesMs": [
+          1034.5
+        ],
+        "medianMs": 1034.5
+      },
+      "plan": [
+        {
+          "id": 6,
+          "parent": 0,
+          "notused": 215,
+          "detail": "SCAN s USING INDEX selection_recent"
+        },
+        {
+          "id": 9,
+          "parent": 0,
+          "notused": 45,
+          "detail": "SEARCH r USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN"
+        },
+        {
+          "id": 12,
+          "parent": 0,
+          "notused": 0,
+          "detail": "CORRELATED SCALAR SUBQUERY 1"
+        },
+        {
+          "id": 17,
+          "parent": 12,
+          "notused": 53,
+          "detail": "SEARCH llm_run USING COVERING INDEX run_latest (selection_id=?)"
+        },
+        {
+          "id": 39,
+          "parent": 12,
+          "notused": 0,
+          "detail": "USE TEMP B-TREE FOR LAST TERM OF ORDER BY"
+        }
+      ],
+      "previousQueryWithIndexes": {
+        "samplesMs": [
+          0.19999998807907104,
+          0.09999999403953552,
+          0.09999999403953552
+        ],
+        "medianMs": 0.09999999403953552
+      },
+      "previousPlan": [
+        {
+          "id": 6,
+          "parent": 0,
+          "notused": 215,
+          "detail": "SCAN s USING INDEX sqlite_autoindex_selection_1"
+        },
+        {
+          "id": 9,
+          "parent": 0,
+          "notused": 45,
+          "detail": "SEARCH r USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN"
+        },
+        {
+          "id": 12,
+          "parent": 0,
+          "notused": 0,
+          "detail": "CORRELATED SCALAR SUBQUERY 1"
+        },
+        {
+          "id": 18,
+          "parent": 12,
+          "notused": 212,
+          "detail": "SCAN llm_run USING INDEX run_unread"
+        },
+        {
+          "id": 34,
+          "parent": 12,
+          "notused": 0,
+          "detail": "USE TEMP B-TREE FOR ORDER BY"
+        },
+        {
+          "id": 56,
+          "parent": 0,
+          "notused": 0,
+          "detail": "USE TEMP B-TREE FOR ORDER BY"
+        }
+      ],
+      "previousQueryWithoutIndexes": {
+        "samplesMs": [
+          38841.69999998808
+        ],
+        "medianMs": 38841.69999998808
+      }
+    }
+  ]
+}

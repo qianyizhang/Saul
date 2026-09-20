@@ -3,5 +3,5 @@
   "compilerOptions": {
     "types": ["node", "chrome"]
   },
-  "include": ["./*.ts", "../../playwright.config.ts"]
+  "include": ["./*.ts", "../../playwright.config.ts", "../../src/types/assets.d.ts"]
 }

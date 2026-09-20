@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NativeBridge } from './NativeBridge';
 
-import type { TabSnapshot, WorkspaceRequest } from '../native/workspace';
+import type { TabSnapshot, WorkspaceRequest, WorkspaceResult } from '../native/workspace';
 
 export function Tabs() {
   const [snapshot, setSnapshot] = useState<TabSnapshot>({ windows: [], tabs: [], groups: [] });
@@ -11,12 +11,14 @@ export function Tabs() {
   const [title, setTitle] = useState('Research');
   const [color, setColor] = useState('blue');
   const [destination, setDestination] = useState<number>();
-  const [preview, setPreview] = useState<any>();
+  const [preview, setPreview] = useState<
+    WorkspaceResult & { method: string; args: Record<string, unknown> }
+  >();
   const [undo, setUndo] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  async function call(payload: object) {
+  async function call(payload: WorkspaceRequest): Promise<WorkspaceResult> {
     const result = await chrome.runtime.sendMessage({ type: 'WORKSPACE_TABS', ...payload });
     if (!result?.success)
       throw new Error(result?.error || 'Could not reach Saul. Reload the extension and try again.');
@@ -33,11 +35,11 @@ export function Tabs() {
       else {
         setPreview(undefined);
         setSnapshot(result.snapshot);
-        setUndo(result.canUndo);
+        setUndo(Boolean(result.canUndo));
         setWindow((current) =>
-          result.snapshot.windows.some((w: any) => w.id === current)
+          result.snapshot.windows.some((w) => w.id === current)
             ? current
-            : (result.snapshot.windows.find((w: any) => w.focused)?.id ??
+            : (result.snapshot.windows.find((w) => w.focused)?.id ??
               result.snapshot.windows[0]?.id),
         );
         select([]);
@@ -47,6 +49,7 @@ export function Tabs() {
           );
       }
     } catch (err) {
+      if (payload.action === 'apply' || payload.action === 'undo') setUndo(false);
       setError(
         (err as Error).message +
           (payload.action === 'apply' || payload.action === 'undo'
@@ -64,6 +67,7 @@ export function Tabs() {
   const tabs = snapshot.tabs.filter((t) => t.windowId === windowId);
   const draft = (method: string, args: Record<string, unknown>) =>
     perform({ action: 'preview', method, args });
+  const previewIds = preview?.plan && 'tabIds' in preview.plan ? preview.plan.tabIds : [];
   const groups = snapshot.groups.filter((g) => g.windowId === windowId);
   return (
     <div className="stack">
@@ -145,7 +149,7 @@ export function Tabs() {
             {preview.method === 'saul_tabs_sort'
               ? 'Proposed tab order'
               : preview.method === 'saul_tabs_group'
-                ? `Group ${preview.plan.tabIds?.length} selected tabs${preview.args.title ? ` as “${preview.args.title}”` : ''}`
+                ? `Group ${previewIds.length} selected tabs${preview.args.title ? ` as “${preview.args.title}”` : ''}`
                 : preview.method === 'saul_tabs_move'
                   ? `Move selected tabs to window ${preview.args.windowId}`
                   : preview.method === 'saul_groups_update'
@@ -154,14 +158,14 @@ export function Tabs() {
           </p>
           {preview.args.title !== undefined && (
             <p className="small muted">
-              Name: {preview.args.title || 'Unnamed group'} · Color:{' '}
-              {preview.args.color || 'unchanged'}
+              Name: {String(preview.args.title || 'Unnamed group')} · Color:{' '}
+              {String(preview.args.color || 'unchanged')}
             </p>
           )}
           <ol style={{ maxHeight: 260, overflow: 'auto', paddingLeft: 24 }}>
-            {(preview.plan.tabIds || []).map((id: number) => (
+            {previewIds.map((id: number) => (
               <li key={id}>
-                {preview.snapshot.tabs.find((t: any) => t.id === id)?.title || `Tab ${id}`}
+                {preview.snapshot.tabs.find((t) => t.id === id)?.title || `Tab ${id}`}
               </li>
             ))}
           </ol>
@@ -169,7 +173,7 @@ export function Tabs() {
             <button
               className="btn primary"
               disabled={busy}
-              onClick={() => perform({ action: 'apply', token: preview.token })}
+              onClick={() => perform({ action: 'apply', token: preview.token! })}
             >
               Apply changes
             </button>

@@ -69,7 +69,7 @@ export interface WidgetDefinition {
   contextPolicy: ContextPolicy;
 }
 
-export type ProviderType = 'openai-compatible' | 'chrome-ai' | 'anthropic' | 'gemini';
+export type ProviderType = 'openai-compatible' | 'chrome-ai';
 
 export interface ModelConfig {
   id: string;
@@ -106,50 +106,3 @@ export interface UserSettings {
   contextPolicy: ContextPolicy;
   customPromptTemplate?: string;
 }
-
-export type TriggerMode = 'fab' | 'auto';
-
-// Streaming Port Message Protocol
-export type PortRequest =
-  | {
-      type: 'START_EXPLAIN';
-      payload: {
-        snapshot: SelectionSnapshot;
-        context: ResolvedContext;
-        widgetId?: string;
-        customPrompt?: string;
-      };
-    }
-  | {
-      type: 'ABORT';
-    };
-
-export type PortResponse =
-  | { type: 'SAVING' }
-  | {
-      type: 'CHUNK';
-      payload: {
-        rawDelta: string;
-        accumulatedRaw: string;
-        segments: TagSegment[];
-      };
-    }
-  | {
-      type: 'DONE';
-      payload: {
-        fullText: string;
-        segments: TagSegment[];
-        usage?: {
-          inputTokens?: number;
-          outputTokens?: number;
-          latencyMs?: number;
-        };
-      };
-    }
-  | {
-      type: 'ERROR';
-      payload: {
-        message: string;
-        code?: string;
-      };
-    };

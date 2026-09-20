@@ -26,31 +26,31 @@ export function AnnotatedTextView({
             type="button"
             key={seg.id}
             aria-describedby={term?.id === seg.id ? tooltipId : undefined}
-            onMouseEnter={(e) =>
+            onMouseEnter={(e) => {
+              const el = e.currentTarget;
               setTerm((current) =>
-                current?.pinned
-                  ? current
-                  : { el: e.currentTarget, id: seg.id, term: seg.term, note: seg.note },
-              )
-            }
+                current?.pinned ? current : { el, id: seg.id, term: seg.term, note: seg.note },
+              );
+            }}
             onMouseLeave={() => setTerm((current) => (current?.pinned ? current : null))}
             onFocus={(e) =>
               setTerm({ el: e.currentTarget, id: seg.id, term: seg.term, note: seg.note })
             }
             onBlur={() => setTerm((current) => (current?.pinned ? current : null))}
-            onClick={(e) =>
+            onClick={(e) => {
+              const el = e.currentTarget;
               setTerm((current) =>
                 current?.id === seg.id && current.pinned
                   ? null
                   : {
-                      el: e.currentTarget,
+                      el,
                       id: seg.id,
                       term: seg.term,
                       note: seg.note,
                       pinned: true,
                     },
-              )
-            }
+              );
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Escape') {
                 e.stopPropagation();

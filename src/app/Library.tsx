@@ -7,8 +7,11 @@ import {
   clearAllHistory,
   exportKnowledgeMarkdown,
   setHistoryBookmark,
+  sendDbMessage,
+  request as runtimeRequest,
 } from '../storage/client';
-import type { HistoryItem } from '../types/storage';
+import { runLabel } from '../surface/ExplanationCard';
+import type { HistoryItem, RunResult } from '../types/storage';
 import { AnnotatedTextView } from '../surface/AnnotatedTextView';
 import { TagStreamParser } from '../parser/tag-stream-parser';
 import { downloadMarkdown, safeSource } from './format';
@@ -20,11 +23,13 @@ export function Library({ compact = false }: { compact?: boolean }) {
   const [page, setPage] = useState(0);
   const [more, setMore] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [runs, setRuns] = useState<RunResult[]>([]);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
   const [revision, refresh] = useState(0);
   const [actionBusy, setActionBusy] = useState(false);
   const request = useRef(0);
+  const expandedRequest = useRef(0);
   const size = compact ? 10 : 30;
   useRefreshOnFocus(useCallback(() => refresh((n) => n + 1), []));
   useEffect(() => {
@@ -57,6 +62,33 @@ export function Library({ compact = false }: { compact?: boolean }) {
       request.current++;
     };
   }, [query, bookmarks, page, revision, size]);
+  async function expand(item: HistoryItem) {
+    const revision = ++expandedRequest.current;
+    if (expanded === item.selectionId) {
+      setExpanded(null);
+      return;
+    }
+    setExpanded(item.selectionId);
+    setRuns([]);
+    try {
+      if (item.completed)
+        await sendDbMessage({
+          type: 'DB_VIEW',
+          payload: { selectionId: item.selectionId, runId: item.completed.id },
+        });
+      const runs = await sendDbMessage({
+        type: 'DB_RUNS',
+        payload: { selectionId: item.selectionId },
+      });
+      if (revision !== expandedRequest.current) return;
+      setRuns(runs);
+      setItems((rows) =>
+        rows.map((row) => (row.selectionId === item.selectionId ? { ...row, unread: false } : row)),
+      );
+    } catch (e) {
+      if (revision === expandedRequest.current) setError((e as Error).message);
+    }
+  }
   async function action(fn: () => Promise<unknown>) {
     setActionBusy(true);
     setError('');
@@ -141,11 +173,10 @@ export function Library({ compact = false }: { compact?: boolean }) {
                   <button
                     className="history-title grow"
                     aria-expanded={expanded === item.selectionId}
-                    onClick={() =>
-                      setExpanded(expanded === item.selectionId ? null : item.selectionId)
-                    }
+                    onClick={() => void expand(item)}
                   >
-                    "{item.selectedText}" <ChevronDown size={14} style={{ display: 'inline' }} />
+                    "{item.selectedText}" {item.unread && <span className="badge">New</span>}{' '}
+                    <ChevronDown size={14} style={{ display: 'inline' }} />
                   </button>
                   <button
                     className="btn icon"
@@ -170,10 +201,21 @@ export function Library({ compact = false }: { compact?: boolean }) {
                 </div>
                 <div className="row between small muted" style={{ marginTop: 8 }}>
                   {safeSource(item.pageUrl) ? (
-                    <a href={safeSource(item.pageUrl)} target="_blank" rel="noreferrer">
+                    <button
+                      className="btn"
+                      onClick={() =>
+                        void action(() =>
+                          runtimeRequest({
+                            target: 'saul-open-source',
+                            selectionId: item.selectionId,
+                          }),
+                        )
+                      }
+                      title="View source and explanation"
+                    >
                       {item.pageTitle || item.pageUrl}{' '}
                       <ExternalLink size={12} style={{ display: 'inline' }} />
-                    </a>
+                    </button>
                   ) : (
                     <span>{item.pageTitle || item.pageUrl}</span>
                   )}
@@ -181,7 +223,27 @@ export function Library({ compact = false }: { compact?: boolean }) {
                 </div>
                 {expanded === item.selectionId && (
                   <div className="answer">
+                    <p className="small muted">
+                      {runLabel(item.latest.status)}
+                      {item.completed && item.completed.id !== item.latest.id
+                        ? ' · Previous completed explanation shown'
+                        : ''}
+                    </p>
+                    {item.latest.error && <p className="notice error">{item.latest.error}</p>}
                     <AnnotatedTextView segments={new TagStreamParser().feed(item.responseRaw)} />
+                    {runs
+                      .filter((run) => run.id !== (item.completed || item.latest).id)
+                      .map((run) => (
+                        <details key={run.id}>
+                          <summary>
+                            {runLabel(run.status)} · {new Date(run.createdAt).toLocaleString()}
+                          </summary>
+                          {run.error && <p>{run.error}</p>}
+                          <AnnotatedTextView
+                            segments={new TagStreamParser().feed(run.responseRaw)}
+                          />
+                        </details>
+                      ))}
                     <p className="small muted" style={{ marginTop: 12 }}>
                       {item.model}
                       {item.latencyMs ? ` · ${(item.latencyMs / 1000).toFixed(1)}s` : ''}

@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid';
 import type { SelectionSnapshot, ResolvedContext, ContextPolicy } from '../types';
 
-const PREFIX_SUFFIX_LENGTH = 80;
+import { captureAnchor } from '../reading/anchors';
 
 /**
  * Capture selection and compute durable TextQuote anchor & context
@@ -29,7 +29,12 @@ export function captureSelection(): {
     return null;
   }
 
-  const { prefix, suffix } = extractPrefixSuffix(range);
+  let anchor: SelectionSnapshot['anchor'];
+  try {
+    anchor = captureAnchor(range);
+  } catch {
+    return null;
+  }
   const domPath = computeDomPath(range.commonAncestorContainer);
 
   const snapshot: SelectionSnapshot = {
@@ -42,9 +47,7 @@ export function captureSelection(): {
       favicon: getFaviconUrl(),
     },
     anchor: {
-      exact: text,
-      prefix,
-      suffix,
+      ...anchor,
       domPath,
     },
     viewport: {
@@ -93,30 +96,6 @@ export function buildResolvedContext(
     pageTitle: policy.includePageMetadata ? snapshot.page.title : '',
     pageUrl: policy.includePageMetadata ? snapshot.page.url : '',
   };
-}
-
-function extractPrefixSuffix(range: Range): { prefix: string; suffix: string } {
-  let prefix = '';
-  let suffix = '';
-
-  try {
-    const container = range.commonAncestorContainer;
-    const parentBlock = getClosestBlockElement(container) || document.body;
-    const blockText = parentBlock.textContent || '';
-    const selectedText = range.toString();
-
-    const index = blockText.indexOf(selectedText);
-    if (index !== -1) {
-      prefix = blockText.slice(Math.max(0, index - PREFIX_SUFFIX_LENGTH), index).trim();
-      suffix = blockText
-        .slice(index + selectedText.length, index + selectedText.length + PREFIX_SUFFIX_LENGTH)
-        .trim();
-    }
-  } catch {
-    // Fallback gracefully
-  }
-
-  return { prefix, suffix };
 }
 
 function extractContainingParagraph(range: Range): string | undefined {
@@ -197,7 +176,7 @@ function computeDomPath(node: Node): string {
       const el = current as HTMLElement;
       let selector = el.tagName.toLowerCase();
       if (el.id) {
-        selector += `#${el.id}`;
+        selector += `#${CSS.escape(el.id)}`;
         parts.unshift(selector);
         break;
       } else {

@@ -18,8 +18,9 @@ beforeEach(() => {
   ports = [];
   browser = {
     runtime: {
+      id: 'saul',
       onMessage: event(),
-      getURL: (p: string) => 'chrome-extension://saul' + p,
+      getURL: (p: string) => 'chrome-extension://saul/' + p.replace(/^\//, ''),
       connectNative: vi.fn(() => {
         const port = {
           onMessage: event(),
@@ -101,7 +102,7 @@ it('allows reconnect from an extension page and rejects webpage callers', async 
   const reply = vi.fn();
   browser.runtime.onMessage.fire(
     { type: 'NATIVE_RECONNECT' },
-    { url: 'chrome-extension://saul/popup.html' },
+    { id: browser.runtime.id, url: 'chrome-extension://saul/popup.html' },
     reply,
   );
   expect(reply).toHaveBeenCalledWith({ success: true });

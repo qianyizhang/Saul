@@ -47,7 +47,7 @@ export async function getSettings(): Promise<UserSettings> {
       };
     }
   } catch (err) {
-    console.error('Failed to load settings from storage:', err);
+    throw new Error('Could not load saved settings. Reload Saul and try again.', { cause: err });
   }
   return DEFAULT_SETTINGS;
 }

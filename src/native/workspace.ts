@@ -1,23 +1,18 @@
 import { handleTabCallUnlocked as handleTabCall, withTabLock } from './tabs';
 
-export type TabSnapshot = {
-  windows: { id: number; focused: boolean }[];
-  tabs: {
-    id: number;
-    windowId: number;
-    index: number;
-    title: string;
-    url: string;
-    pinned: boolean;
-    groupId: number;
-  }[];
-  groups: chrome.tabGroups.TabGroup[];
-};
+import type { TabSnapshot, ToolResults, BrowserTool } from '../../native/protocol.mjs';
+export type { TabSnapshot } from '../../native/protocol.mjs';
+export interface WorkspaceResult {
+  snapshot: TabSnapshot;
+  canUndo?: boolean;
+  token?: string;
+  plan?: ToolResults[BrowserTool];
+}
 export type WorkspaceRequest =
   | { action: 'list' | 'undo' }
   | { action: 'preview'; method: string; args: Record<string, unknown> }
   | { action: 'apply'; token: string };
-const list = () => handleTabCall('saul_tabs_list') as Promise<TabSnapshot>;
+const list = () => handleTabCall('saul_tabs_list');
 
 // The comparison deliberately ignores focus, audio and discarded state: those do
 // not change the organization being previewed. URLs and group metadata do.
@@ -51,8 +46,12 @@ let undo: { before: TabSnapshot; after: string; windowId: number } | undefined;
 export function workspaceCall(request: WorkspaceRequest) {
   return withTabLock(() => execute(request));
 }
-async function execute(request: WorkspaceRequest) {
-  if (request.action === 'list') return { snapshot: await list(), canUndo: Boolean(undo) };
+async function execute(request: WorkspaceRequest): Promise<WorkspaceResult> {
+  if (request.action === 'list') {
+    const snapshot = await list();
+    if (undo && fingerprint(snapshot) !== undo.after) undo = undefined;
+    return { snapshot, canUndo: Boolean(undo) };
+  }
   if (request.action === 'preview') {
     const before = await list();
     const args = { ...request.args, dryRun: true };

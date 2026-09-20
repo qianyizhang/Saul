@@ -41,3 +41,4 @@ web-ext.config.ts
 # Browser test artifacts
 playwright-report/
 test-results/
+test-results-*/

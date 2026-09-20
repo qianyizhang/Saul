@@ -2,7 +2,7 @@
 
 A local-first Chrome reading assistant built with WXT, React and TypeScript.
 
-- **Reading:** explain a selection, ask for a simpler answer or example, and revisit automatically saved history with bookmarks and full-library export.
+- **Reading:** select a term, click Explain and keep reading; return through quiet persistent underlines, completion cues and saved history.
 - **Tabs:** preview sorting, grouping, and moving; undo an unchanged last sort.
 - **Settings:** separate provider profiles, response language, context choices, and connection/generation checks.
 

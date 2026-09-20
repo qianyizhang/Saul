@@ -1,3 +1,4 @@
+import { workspaceSender } from '../contracts/reading';
 import { HOST_NAME } from '../../native/protocol.mjs';
 import { handleTabCall } from './tabs';
 
@@ -73,7 +74,7 @@ export function initNativeBridge() {
   });
   chrome.runtime.onMessage.addListener((message, sender, reply) => {
     if (message?.type !== 'NATIVE_RECONNECT') return false;
-    if (!sender.url?.startsWith(chrome.runtime.getURL('/'))) {
+    if (!workspaceSender(sender)) {
       reply({ success: false, error: 'Extension pages only' });
       return false;
     }

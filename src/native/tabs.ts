@@ -1,9 +1,15 @@
-import { validateCall } from '../../native/protocol.mjs';
+import {
+  validateCall,
+  type GroupMetadata,
+  type TabSnapshot,
+  type ToolResults,
+  type BrowserTool,
+} from '../../native/protocol.mjs';
 
-type Args = Record<string, any>;
+type Args = unknown;
 type Tab = chrome.tabs.Tab;
 const tabView = (tab: Tab) => ({
-  id: tab.id,
+  id: tab.id!,
   windowId: tab.windowId,
   index: tab.index,
   title: tab.title ?? '',
@@ -12,7 +18,7 @@ const tabView = (tab: Tab) => ({
   pinned: tab.pinned,
   groupId: tab.groupId,
   audible: tab.audible ?? false,
-  discarded: tab.discarded,
+  discarded: tab.discarded ?? false,
 });
 
 export function sortBlocks(tabs: Tab[], by: 'title' | 'domain', descending = false) {
@@ -55,34 +61,37 @@ export function handleTabCall(name: string, args: Args = {}) {
   return withTabLock(() => handleTabCallUnlocked(name, args));
 }
 // Shared by the native bridge and trusted extension workspace, never webpage callers.
-export async function handleTabCallUnlocked(name: string, args: Args = {}) {
-  validateCall(name, args);
+export function handleTabCallUnlocked(name: 'saul_tabs_list', args?: Args): Promise<TabSnapshot>;
+export function handleTabCallUnlocked(name: string, args?: Args): Promise<ToolResults[BrowserTool]>;
+export async function handleTabCallUnlocked(
+  name: string,
+  input: Args = {},
+): Promise<ToolResults[BrowserTool]> {
+  validateCall(name, input);
   const normalWindow = async (windowId: number) => {
     const window = await chrome.windows.get(windowId);
     if (window.incognito || window.type !== 'normal')
       throw new Error('Only non-incognito normal windows are supported');
     return window;
   };
-  const getTabs = async () => {
-    const tabs = await Promise.all((args.tabIds as number[]).map((id) => chrome.tabs.get(id)));
+  const getTabs = async (tabIds: number[]) => {
+    const tabs = await Promise.all(tabIds.map((id) => chrome.tabs.get(id)));
     for (const windowId of new Set(tabs.map((t) => t.windowId))) await normalWindow(windowId);
     if (tabs.some((t) => t.incognito)) throw new Error('Incognito tabs are excluded');
     return tabs;
   };
-  const group = async () => {
-    const value = await chrome.tabGroups.get(args.groupId);
+  const group = async (groupId: number) => {
+    const value = await chrome.tabGroups.get(groupId);
     await normalWindow(value.windowId);
     return value;
   };
-  const metadata = () =>
-    Object.fromEntries(
-      ['title', 'color', 'collapsed']
-        .filter((key) => args[key] !== undefined)
-        .map((key) => [key, args[key]]),
-    );
-  const dryRun = args.dryRun !== false;
-
+  const metadata = (args: GroupMetadata): GroupMetadata => ({
+    ...(args.title === undefined ? {} : { title: args.title }),
+    ...(args.color === undefined ? {} : { color: args.color }),
+    ...(args.collapsed === undefined ? {} : { collapsed: args.collapsed }),
+  });
   if (name === 'saul_tabs_list') {
+    const args = validateCall('saul_tabs_list', input);
     if (args.windowId !== undefined) await normalWindow(args.windowId);
     const windows = (await chrome.windows.getAll({ windowTypes: ['normal'] })).filter(
       (w) => !w.incognito && (args.windowId === undefined || w.id === args.windowId),
@@ -93,19 +102,21 @@ export async function handleTabCallUnlocked(name: string, args: Args = {}) {
     );
     const groups = (await chrome.tabGroups.query({})).filter((g) => windowIds.has(g.windowId));
     return {
-      windows: windows.map((w) => ({ id: w.id, focused: w.focused })),
+      windows: windows.map((w) => ({ id: w.id!, focused: w.focused })),
       groups,
       tabs: tabs.sort((a, b) => a.windowId - b.windowId || a.index - b.index).map(tabView),
     };
   }
   if (name === 'saul_tabs_sort') {
+    const args = validateCall('saul_tabs_sort', input);
+    const dryRun = args.dryRun !== false;
     await normalWindow(args.windowId);
     const tabs = await chrome.tabs.query({ windowId: args.windowId });
     const blocks = sortBlocks(tabs, args.by, args.descending);
     const pinned = tabs.filter((t) => t.pinned).sort((a, b) => a.index - b.index);
     const plan = {
       windowId: args.windowId,
-      tabIds: [...pinned, ...blocks.flat()].map((t) => t.id),
+      tabIds: [...pinned, ...blocks.flat()].map((t) => t.id!),
     };
     if (!dryRun) {
       let index = pinned.length;
@@ -118,43 +129,58 @@ export async function handleTabCallUnlocked(name: string, args: Args = {}) {
     return { dryRun, ...plan };
   }
   if (name === 'saul_groups_update') {
-    const before = await group();
-    if (Object.keys(metadata()).length === 0) throw new Error('Supply title, color or collapsed');
-    return {
-      dryRun,
-      before,
-      group: dryRun
-        ? { ...before, ...metadata() }
-        : await chrome.tabGroups.update(args.groupId, metadata()),
-    };
+    const args = validateCall('saul_groups_update', input);
+    const dryRun = args.dryRun !== false;
+    const before = await group(args.groupId!);
+    if (Object.keys(metadata(args)).length === 0)
+      throw new Error('Supply title, color or collapsed');
+    const updated = dryRun
+      ? { ...before, ...metadata(args) }
+      : await chrome.tabGroups.update(args.groupId, metadata(args));
+    if (!updated) throw new Error('The tab group no longer exists.');
+    return { dryRun, before, group: updated };
   }
   if (name === 'saul_tabs_group' || name === 'saul_tabs_ungroup' || name === 'saul_tabs_move') {
-    const tabs = await getTabs(); // Validate every ID before any mutation.
+    const selection = validateCall(name, input) as { tabIds: number[] };
+    const tabs = await getTabs(selection.tabIds); // Validate every ID before any mutation.
     if (name === 'saul_tabs_group') {
+      const args = validateCall('saul_tabs_group', input);
+      const dryRun = args.dryRun !== false;
       if (tabs.some((t) => t.pinned)) throw new Error('Pinned tabs cannot be grouped');
       if (new Set(tabs.map((t) => t.windowId)).size !== 1)
         throw new Error('Group tabs from one window at a time');
-      if (args.groupId !== undefined && (await group()).windowId !== tabs[0]!.windowId)
+      if (args.groupId !== undefined && (await group(args.groupId!)).windowId !== tabs[0]!.windowId)
         throw new Error('Group belongs to another window');
       let groupId = args.groupId;
       if (!dryRun) {
         groupId = await chrome.tabs.group({
-          tabIds: args.tabIds,
+          tabIds: args.tabIds as [number, ...number[]],
           ...(groupId === undefined ? {} : { groupId }),
         });
-        if (Object.keys(metadata()).length) await chrome.tabGroups.update(groupId, metadata());
+        if (Object.keys(metadata(args)).length)
+          await chrome.tabGroups.update(groupId, metadata(args));
       }
-      return { dryRun, tabIds: args.tabIds, windowId: tabs[0]!.windowId, groupId, ...metadata() };
+      return {
+        dryRun,
+        tabIds: args.tabIds,
+        windowId: tabs[0]!.windowId,
+        groupId,
+        ...metadata(args),
+      };
     }
     if (name === 'saul_tabs_ungroup') {
-      if (!dryRun) await chrome.tabs.ungroup(args.tabIds);
+      const args = validateCall('saul_tabs_ungroup', input);
+      const dryRun = args.dryRun !== false;
+      if (!dryRun) await chrome.tabs.ungroup(args.tabIds as [number, ...number[]]);
       return { dryRun, tabIds: args.tabIds };
     }
+    const args = validateCall('saul_tabs_move', input);
+    const dryRun = args.dryRun !== false;
     await normalWindow(args.windowId);
     if (tabs.some((t) => t.pinned || t.groupId >= 0))
       throw new Error('Move requires unpinned, ungrouped tabs; ungroup them first');
     const remaining = (await chrome.tabs.query({ windowId: args.windowId }))
-      .filter((t) => !args.tabIds.includes(t.id))
+      .filter((t) => !args.tabIds.includes(t.id!))
       .sort((a, b) => a.index - b.index);
     const index = args.index === -1 ? remaining.length : args.index;
     if (index > remaining.length || index < remaining.filter((t) => t.pinned).length)

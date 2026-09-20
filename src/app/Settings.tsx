@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
-import { getSettings, saveSettings, DEFAULT_SETTINGS } from '../storage/settings';
+import { useEffect, useState } from 'react';
+import { DEFAULT_SETTINGS } from '../storage/settings';
 import { DEFAULT_SYSTEM_PROMPT } from '../models/prompts';
-import { streamOpenAICompatible } from '../models/openai-compatible';
-import { chromeAiAvailability, prepareChromeAi } from '../models/chrome-ai';
-import type { ProviderProfile, UserSettings } from '../types';
+import type { UserSettings } from '../types';
+import { useSettingsDraft } from './useSettingsDraft';
+import { useProviderTest } from './useProviderTest';
 
 const presets = [
   { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
@@ -25,154 +25,27 @@ export function Settings({
   onSaved?: () => void;
   onDirty?: (dirty: boolean) => void;
 }) {
-  const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
-  const [loaded, setLoaded] = useState(false);
-  const [dirty, setDirty] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
-  const [testing, setTesting] = useState(false);
+  const draft = useSettingsDraft(onSaved, onDirty);
+  const { settings, loaded, dirty, saved, saving, profilesWithCurrent, save } = draft;
+  const providerTest = useProviderTest();
+  const { testing, notice, availability } = providerTest;
+  const error = draft.error || providerTest.error;
   const [visibleKey, setVisibleKey] = useState(false);
-  const [availability, setAvailability] = useState('Checking…');
-  const controller = useRef<AbortController | null>(null);
-  useEffect(() => {
-    getSettings()
-      .then((s) => {
-        const id = s.activeProfileId || 'default';
-        setSettings({
-          ...s,
-          activeProfileId: id,
-          profiles: s.profiles?.length
-            ? s.profiles
-            : [{ id, name: 'Default', config: s.openaiCompatible }],
-        });
-        setLoaded(true);
-      })
-      .catch((err) => setError(err.message));
-    chromeAiAvailability().then(setAvailability);
-    return () => controller.current?.abort();
-  }, []);
-  useEffect(() => {
-    onDirty?.(dirty);
-    const warn = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = '';
-    };
-    if (dirty) window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [dirty, onDirty]);
+  useEffect(() => setVisibleKey(false), [settings.activeProfileId, settings.activeProvider]);
   function update(patch: Partial<UserSettings>) {
-    setSettings((s) => ({ ...s, ...patch }));
-    setDirty(true);
-    setSaved(false);
-    setNotice('');
-    setError('');
+    if (patch.activeProfileId || patch.activeProvider) setVisibleKey(false);
+    draft.update(patch);
+    providerTest.clear();
   }
   function config(patch: Partial<UserSettings['openaiCompatible']>) {
     update({ openaiCompatible: { ...settings.openaiCompatible, ...patch } });
   }
-  function profilesWithCurrent(): ProviderProfile[] {
-    return (settings.profiles || []).map((p) =>
-      p.id === settings.activeProfileId ? { ...p, config: settings.openaiCompatible } : p,
-    );
-  }
   function switchProfile(id: string) {
-    const profiles = profilesWithCurrent();
-    const p = profiles.find((p) => p.id === id);
+    const profiles = profilesWithCurrent(),
+      p = profiles.find((p) => p.id === id);
     if (p) update({ profiles, activeProfileId: id, openaiCompatible: p.config });
   }
-  function validate() {
-    if (settings.activeProvider === 'chrome-ai') return;
-    let url: URL;
-    try {
-      url = new URL(settings.openaiCompatible.baseUrl);
-    } catch {
-      throw new Error('Enter a valid model endpoint URL.');
-    }
-    if (
-      !['http:', 'https:'].includes(url.protocol) ||
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash
-    )
-      throw new Error(
-        'Use an HTTP(S) endpoint without credentials, query parameters, or a fragment.',
-      );
-    if (!settings.openaiCompatible.model.trim())
-      throw new Error('Enter a model name available from this provider.');
-  }
-  async function save() {
-    setError('');
-    try {
-      validate();
-      const next = { ...settings, profiles: profilesWithCurrent() };
-      await saveSettings(next);
-      setSettings(next);
-      setDirty(false);
-      setSaved(true);
-      onSaved?.();
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }
-  async function test(mode: 'endpoint' | 'generation') {
-    setError('');
-    setNotice('');
-    setTesting(true);
-    const ac = new AbortController();
-    controller.current = ac;
-    // Model preparation can include a large download; the user can stop it.
-    const timeout =
-      settings.activeProvider === 'chrome-ai' ? undefined : setTimeout(() => ac.abort(), 20000);
-    try {
-      validate();
-      if (settings.activeProvider === 'chrome-ai') {
-        await prepareChromeAi(ac.signal, (progress) =>
-          setNotice(`Downloading model: ${Math.round(progress * 100)}%`),
-        );
-        setAvailability(await chromeAiAvailability());
-        setNotice('On-device model is ready.');
-      } else if (mode === 'endpoint') {
-        const base = settings.openaiCompatible.baseUrl
-          .replace(/\/+$/, '')
-          .replace(/\/chat\/completions$/, '');
-        const res = await fetch(`${base}/models`, {
-          signal: ac.signal,
-          headers: settings.openaiCompatible.apiKey
-            ? { Authorization: `Bearer ${settings.openaiCompatible.apiKey}` }
-            : {},
-        });
-        if (!res.ok)
-          throw new Error(
-            `Endpoint returned ${res.status}. Generation may still work if this server does not expose a model list.`,
-          );
-        setNotice('Endpoint reachable. Use Test generation to check the selected model.');
-      } else {
-        let answer = '';
-        for await (const part of streamOpenAICompatible(
-          { ...settings.openaiCompatible, maxTokens: 32 },
-          'Reply briefly.',
-          'Say hello.',
-          ac.signal,
-        ))
-          answer += part;
-        if (!answer.trim())
-          throw new Error('The model returned no text. Check the model and endpoint.');
-        setNotice(`Generation succeeded: ${answer.slice(0, 120)}`);
-      }
-    } catch (err) {
-      setError(
-        ac.signal.aborted
-          ? 'Test stopped or timed out. Try again when the provider is ready.'
-          : (err as Error).message,
-      );
-    } finally {
-      clearTimeout(timeout);
-      controller.current = null;
-      setTesting(false);
-    }
-  }
+  const test = (mode: 'endpoint' | 'generation') => providerTest.test(mode, settings);
   if (!loaded)
     return error ? (
       <p role="alert" className="notice error">
@@ -182,7 +55,7 @@ export function Settings({
       <p role="status">Loading settings…</p>
     );
   return (
-    <div className="stack settings-layout">
+    <fieldset className="stack settings-layout settings-fields" disabled={saving}>
       <div>
         <h2 style={{ margin: 0, fontSize: 20 }}>Settings</h2>
         <p className="small muted">Choose how Saul explains and what context it uses.</p>
@@ -362,7 +235,7 @@ export function Settings({
                 ? 'Preparing on-device model…'
                 : 'Testing provider…'}
             </span>
-            <button className="btn" onClick={() => controller.current?.abort()}>
+            <button className="btn" onClick={providerTest.stop}>
               Stop test
             </button>
           </div>
@@ -449,10 +322,10 @@ export function Settings({
               ? 'Saved on this device'
               : 'Settings stored on this device'}
         </span>
-        <button className="btn primary" disabled={testing} onClick={save}>
-          {saved ? 'Saved!' : 'Save Settings'}
+        <button className="btn primary" disabled={testing || saving} onClick={save}>
+          {saving ? 'Saving…' : saved ? 'Saved!' : 'Save Settings'}
         </button>
       </div>
-    </div>
+    </fieldset>
   );
 }

@@ -1,180 +1,234 @@
 import { getSettings, initStorageSecurity } from '../src/storage/settings';
-import { recordExplanationRun, ensureOffscreenDocument } from '../src/storage/client';
+import { runnerRequest } from '../src/storage/client';
 import { renderExplainPrompt, DEFAULT_SYSTEM_PROMPT } from '../src/models/prompts';
-import { streamOpenAICompatible } from '../src/models/openai-compatible';
-import { streamChromeAiOffscreen } from '../src/models/chrome-ai-bridge';
-import { TagStreamParser } from '../src/parser/tag-stream-parser';
-import type { PortRequest, PortResponse } from '../src/types';
 import { initNativeBridge } from '../src/native/bridge';
 import { workspaceCall } from '../src/native/workspace';
+import {
+  sourcePage,
+  validateReading,
+  workspaceSender,
+  id,
+  type ReadingRequest,
+  type ReadingResult,
+} from '../src/contracts/reading';
+import { validateWorkspace } from '../src/contracts/workspace';
+import type { DbCall, DbRequest, Passage, RunInput } from '../src/types/storage';
+import type { ResolvedContext, SelectionSnapshot } from '../src/types';
 
+const db: DbCall = (message) => runnerRequest({ operation: 'db', message: message as DbRequest });
+async function owned(selectionId: string, url: string): Promise<Passage> {
+  const p = await db({ type: 'DB_PASSAGE', payload: { selectionId } });
+  if (!p || p.snapshot.page.url !== url)
+    throw new Error('This passage is not on the current page.');
+  return p;
+}
+async function submit(
+  snapshot: SelectionSnapshot,
+  context: ResolvedContext,
+  submissionId: string,
+  regenerate: boolean,
+  instruction?: string,
+) {
+  const settings = await getSettings();
+  const { apiKey, ...remote } = settings.openaiCompatible;
+  if (settings.activeProvider !== 'chrome-ai') {
+    const url = new URL(remote.baseUrl);
+    if (
+      !['http:', 'https:'].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+    )
+      throw new Error('Configure a valid HTTP(S) model endpoint in Saul Settings.');
+    if (!apiKey && !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))
+      throw new Error('API key is missing. Configure it in Saul Settings.');
+  }
+  const language = settings.responseLanguage
+    ? `Respond in ${settings.responseLanguage}.`
+    : 'Respond in the language of the selected text.';
+  const input: RunInput = {
+    provider: settings.activeProvider,
+    remote,
+    local: settings.chromeAi,
+    context,
+    systemPrompt: settings.customPromptTemplate || DEFAULT_SYSTEM_PROMPT,
+    userPrompt: renderExplainPrompt(context, [instruction, language].filter(Boolean).join('\n')),
+  };
+  return runnerRequest<{ passageId: string; reused: boolean }>({
+    operation: 'submit',
+    submission: { snapshot, input, submissionId, regenerate },
+    credential: settings.activeProvider === 'chrome-ai' ? '' : apiKey,
+  });
+}
+async function reading(
+  request: ReadingRequest,
+  sender: chrome.runtime.MessageSender,
+): Promise<ReadingResult> {
+  const url = sourcePage(sender);
+  switch (request.action) {
+    case 'policy':
+      return { policy: (await getSettings()).contextPolicy };
+    case 'list':
+      return { passages: await db({ type: 'DB_PAGE', payload: { url } }) };
+    case 'submit': {
+      if (request.snapshot.page.url !== url)
+        throw new Error('The page changed. Select the passage again.');
+      const snapshot = { ...request.snapshot, page: { ...request.snapshot.page, url } };
+      const context = {
+        ...request.context,
+        selection: snapshot.text,
+        pageUrl: request.context.pageUrl ? url : '',
+      };
+      return submit(snapshot, context, request.submissionId, false);
+    }
+    default: {
+      const passage = await owned(request.selectionId, url);
+      switch (request.action) {
+        case 'regenerate': {
+          const context = await db({
+            type: 'DB_CONTEXT',
+            payload: { selectionId: request.selectionId },
+          });
+          const instruction = request.instruction
+            ? `Previous explanation:\n${passage.completed?.responseRaw || passage.latest.responseRaw}\n\nFollow-up request: ${request.instruction}`
+            : undefined;
+          return submit(passage.snapshot, context, request.submissionId, true, instruction);
+        }
+        case 'stop':
+          await runnerRequest({ operation: 'stop', selectionId: request.selectionId });
+          break;
+        case 'bookmark':
+          await db({
+            type: 'DB_SET_BOOKMARK',
+            payload: { selectionId: request.selectionId, bookmarked: request.bookmarked },
+          });
+          break;
+        case 'view':
+          await db({
+            type: 'DB_VIEW',
+            payload: { selectionId: request.selectionId, runId: request.runId },
+          });
+          break;
+        case 'runs':
+          return {
+            runs: await db({ type: 'DB_RUNS', payload: { selectionId: request.selectionId } }),
+          };
+      }
+      return {};
+    }
+  }
+}
+const sourceKey = (tabId: number) => `saul-source-${tabId}`;
+async function deliverSource(tabId: number) {
+  const key = sourceKey(tabId),
+    saved = await chrome.storage.session.get(key);
+  if (!saved[key]) return;
+  try {
+    const reply = await chrome.tabs.sendMessage(
+      tabId,
+      { type: 'SAUL_OPEN', selectionId: saved[key] },
+      { frameId: 0 },
+    );
+    if (reply?.received) await chrome.storage.session.remove(key);
+  } catch {
+    /* The page's content script will request delivery when mounted. */
+  }
+}
+async function openSource(selectionId: string) {
+  const p = await db({ type: 'DB_PASSAGE', payload: { selectionId } });
+  if (!p || !/^https?:/.test(p.snapshot.page.url)) throw new Error('This source is unavailable.');
+  const existing = (await chrome.tabs.query({})).find(
+    (t) => t.url === p.snapshot.page.url && !t.incognito,
+  );
+  const tab = existing || (await chrome.tabs.create({ url: p.snapshot.page.url }));
+  if (tab.id === undefined) throw new Error('Could not open the source page.');
+  await chrome.storage.session.set({ [sourceKey(tab.id)]: selectionId });
+  await chrome.tabs.update(tab.id, { active: true });
+  await chrome.windows.update(tab.windowId, { focused: true });
+  await deliverSource(tab.id);
+}
 export default defineBackground(() => {
-  console.log('[Saul] Background service worker initialized');
   initStorageSecurity();
   initNativeBridge();
-
-  chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
-    if (request?.type === 'WORKSPACE_TABS') {
-      if (!_sender.url?.startsWith(chrome.runtime.getURL('/'))) {
-        sendResponse({ success: false, error: 'Extension pages only' });
-        return false;
-      }
-      workspaceCall(request).then(
-        (result) => sendResponse({ success: true, result }),
-        (error) => sendResponse({ success: false, error: error.message }),
-      );
-      return true;
+  void db({ type: 'DB_UNREAD', payload: undefined })
+    .then((count) => chrome.action.setBadgeText({ text: count ? String(count) : '' }))
+    .catch((error) => console.warn('[Saul] Could not restore reading state', error));
+  const subscribers = new Map<chrome.runtime.Port, string>();
+  chrome.runtime.onConnect.addListener((port) => {
+    if (port.name !== 'saul-reading') return;
+    try {
+      subscribers.set(port, sourcePage(port.sender || {}));
+    } catch {
+      port.disconnect();
+      return;
     }
-    if (request?.type === 'GET_CONTEXT_POLICY') {
-      getSettings().then((settings) => sendResponse({ contextPolicy: settings.contextPolicy }));
-      return true;
-    }
-    if (request?.target !== 'saul-background') return false;
-    (async () => {
-      await ensureOffscreenDocument();
-      return chrome.runtime.sendMessage({ ...request.message, target: 'saul-offscreen' });
-    })().then(sendResponse, (error) => sendResponse({ success: false, error: error.message }));
-    return true;
+    port.onDisconnect.addListener(() => subscribers.delete(port));
   });
-
-  // Handle streaming ports from content scripts or popup
-  chrome.runtime.onConnect.addListener((port: chrome.runtime.Port) => {
-    if (port.name !== 'saul-stream') return;
-
-    let currentAbortController: AbortController | null = null;
-
-    port.onDisconnect.addListener(() => {
-      if (currentAbortController) {
-        currentAbortController.abort();
-        currentAbortController = null;
-      }
-    });
-
-    port.onMessage.addListener(async (msg: PortRequest) => {
-      if (msg.type === 'ABORT') {
-        if (currentAbortController) {
-          currentAbortController.abort();
-          currentAbortController = null;
-        }
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    void chrome.storage.session.remove(sourceKey(tabId));
+  });
+  chrome.runtime.onMessage.addListener((request, sender, reply) => {
+    if (
+      ![
+        'saul-reading',
+        'saul-workspace',
+        'saul-events',
+        'saul-open-source',
+        'saul-source-ready',
+      ].includes(request?.target) &&
+      request?.type !== 'WORKSPACE_TABS'
+    )
+      return false;
+    (async () => {
+      if (request.target === 'saul-events') {
+        if (
+          sender.id !== chrome.runtime.id ||
+          sender.url !== chrome.runtime.getURL('offscreen.html') ||
+          sender.tab
+        )
+          throw new Error('Runner only');
+        for (const [port, url] of subscribers)
+          if (request.url === '*' || request.url === url) {
+            try {
+              port.postMessage({ type: 'changed' });
+            } catch {
+              subscribers.delete(port);
+            }
+          }
+        const count = await db({ type: 'DB_UNREAD', payload: undefined });
+        await chrome.action.setBadgeText({ text: count ? String(count) : '' });
         return;
       }
-
-      if (msg.type === 'START_EXPLAIN') {
-        if (currentAbortController) {
-          currentAbortController.abort();
-        }
-        currentAbortController = new AbortController();
-        const signal = currentAbortController.signal;
-
-        const startTime = Date.now();
-        const parser = new TagStreamParser();
-
-        try {
-          const settings = await getSettings();
-          const systemPrompt = settings.customPromptTemplate || DEFAULT_SYSTEM_PROMPT;
-          const language = settings.responseLanguage
-            ? `Respond in ${settings.responseLanguage}.`
-            : 'Respond in the language of the selected text.';
-          const userPrompt = renderExplainPrompt(
-            msg.payload.context,
-            [msg.payload.customPrompt, language].filter(Boolean).join('\n'),
-          );
-
-          let streamGenerator: AsyncGenerator<string, void, unknown>;
-          let activeProviderName = settings.activeProvider;
-          let activeModelName =
-            settings.activeProvider === 'chrome-ai'
-              ? 'gemini-nano'
-              : settings.openaiCompatible.model;
-
-          if (settings.activeProvider === 'chrome-ai') {
-            streamGenerator = streamChromeAiOffscreen(
-              settings.chromeAi,
-              systemPrompt,
-              userPrompt,
-              signal,
-            );
-          } else {
-            if (
-              !settings.openaiCompatible.apiKey &&
-              !settings.openaiCompatible.baseUrl.includes('localhost') &&
-              !settings.openaiCompatible.baseUrl.includes('127.0.0.1')
-            ) {
-              throw new Error(
-                'API Key is missing. Please configure your API Key in Saul Settings (Extension Popup).',
-              );
-            }
-            streamGenerator = streamOpenAICompatible(
-              settings.openaiCompatible,
-              systemPrompt,
-              userPrompt,
-              signal,
-            );
-          }
-
-          for await (const chunk of streamGenerator) {
-            if (signal.aborted) break;
-
-            const segments = parser.feed(chunk);
-            const response: PortResponse = {
-              type: 'CHUNK',
-              payload: {
-                rawDelta: chunk,
-                accumulatedRaw: parser.getRaw(),
-                segments,
-              },
-            };
-            port.postMessage(response);
-          }
-
-          if (!signal.aborted) {
-            const latencyMs = Date.now() - startTime;
-            const fullRaw = parser.getRaw();
-            const segments = parser.getSegments();
-
-            port.postMessage({ type: 'SAVING' });
-            // Persist run to SQLite WASM via Offscreen Worker
-            await recordExplanationRun({
-              snapshot: msg.payload.snapshot,
-              context: msg.payload.context,
-              provider: activeProviderName,
-              model: activeModelName,
-              promptVersion: '1.0.0',
-              systemPrompt,
-              responseRaw: fullRaw,
-              segments,
-              latencyMs,
-            }).catch((dbErr) => {
-              throw new Error(
-                'Explanation generated, but history could not be saved: ' + dbErr.message,
-              );
-            });
-
-            const doneResponse: PortResponse = {
-              type: 'DONE',
-              payload: {
-                fullText: fullRaw,
-                segments,
-                usage: { latencyMs },
-              },
-            };
-            port.postMessage(doneResponse);
-          }
-        } catch (err: any) {
-          if (!signal.aborted) {
-            console.error('[Saul] Stream execution error:', err);
-            const errorResponse: PortResponse = {
-              type: 'ERROR',
-              payload: {
-                message: err.message || 'An unexpected error occurred during generation.',
-              },
-            };
-            port.postMessage(errorResponse);
-          }
-        } finally {
-          if (currentAbortController?.signal === signal) currentAbortController = null;
-        }
+      if (request.target === 'saul-source-ready') {
+        sourcePage(sender);
+        await deliverSource(sender.tab!.id!);
+        return;
       }
-    });
+      if (request.target === 'saul-reading') {
+        validateReading(request.message);
+        return reading(request.message, sender);
+      }
+      if (!workspaceSender(sender)) throw new Error('Extension workspace only');
+      if (request.type === 'WORKSPACE_TABS') return workspaceCall(request);
+      if (request.target === 'saul-open-source') {
+        if (!id(request.selectionId)) throw new Error('Invalid passage');
+        return openSource(request.selectionId);
+      }
+      validateWorkspace(request.message);
+      if (request.message.type === 'DB_DELETE_SELECTION')
+        return runnerRequest({
+          operation: 'delete',
+          selectionId: request.message.payload.selectionId,
+        });
+      if (request.message.type === 'DB_CLEAR_HISTORY')
+        return runnerRequest({ operation: 'delete' });
+      return db(request.message);
+    })().then(
+      (result) => reply({ success: true, result }),
+      (error) =>
+        reply({ success: false, error: error instanceof Error ? error.message : String(error) }),
+    );
+    return true;
   });
 });

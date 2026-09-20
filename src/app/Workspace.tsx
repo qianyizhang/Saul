@@ -5,7 +5,7 @@ import { Library } from './Library';
 import { Settings } from './Settings';
 import { Tabs } from './Tabs';
 import { getSettings } from '../storage/settings';
-import { fetchHistory } from '../storage/client';
+import { fetchHistory, sendDbMessage } from '../storage/client';
 import { plainExplanation } from './format';
 import type { HistoryItem } from '../types/storage';
 type View = 'reading' | 'history' | 'tabs' | 'settings';
@@ -17,6 +17,7 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
   const [view, setView] = useState<View>(viewFromHash);
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [model, setModel] = useState('');
+  const [unread, setUnread] = useState(0);
   const [recent, setRecent] = useState<HistoryItem[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -27,8 +28,12 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
     let cancelled = false;
     setError('');
     setLoading(true);
-    Promise.all([getSettings(), fetchHistory(3)])
-      .then(([settings, history]) => {
+    Promise.all([
+      getSettings(),
+      fetchHistory(3),
+      sendDbMessage({ type: 'DB_UNREAD', payload: undefined }),
+    ])
+      .then(([settings, history, unread]) => {
         if (cancelled) return;
         setModel(
           settings.activeProvider === 'chrome-ai'
@@ -36,6 +41,7 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
             : settings.openaiCompatible.model,
         );
         setRecent(history);
+        setUnread(unread);
       })
       .catch((err) => {
         if (!cancelled) setError(err.message);
@@ -118,15 +124,19 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
               Understand more.
             </h2>
             <p className="muted">
-              Select text on a webpage, then choose Explain. Your explanations save here
-              automatically.
+              Select text, choose Explain, and keep reading. Return through the underline or a ready
+              notification. Explanations stay saved on this device.
             </p>
             <p className="small muted">
               Shortcut: Alt+Shift+E · Model: {model || 'Choose in Settings'}
             </p>
             <div className="row" style={{ marginTop: 16 }}>
-              <button className="btn primary" onClick={() => navigate('history')}>
-                Reading history
+              <button
+                className="btn primary"
+                aria-label="Reading history"
+                onClick={() => navigate('history')}
+              >
+                Reading history{unread ? ` · ${unread} new` : ''}
               </button>
               {popup && (
                 <a

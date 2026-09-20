@@ -62,10 +62,16 @@ test('Explain stays next to the selection on a long positioned page while scroll
   await article.screenshot({ path: info.outputPath('scrolled-trigger.png') });
   const anchor = await selectionBox(article);
   await trigger.click();
+  await article.getByRole('button', { name: 'View', exact: true }).click();
   const card = article.getByRole('region', { name: 'Saul explanation' });
-  await expect(card.getByText('Saved to history', { exact: false })).toBeVisible();
+  await expect(card.getByText('Ready · saved on this device', { exact: false })).toBeVisible();
   const box = (await card.boundingBox())!;
-  expect(Math.abs(box.y - (anchor.y + anchor.height + 8))).toBeLessThan(2);
+  const currentAnchor = await article.locator('#concept').evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    return range.getBoundingClientRect().bottom;
+  });
+  expect(Math.abs(box.y - currentAnchor - 8)).toBeLessThan(2);
   await article.screenshot({ path: info.outputPath('scrolled-explanation.png') });
 });
 

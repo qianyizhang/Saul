@@ -14,16 +14,19 @@ it('rejects unavailable persistence instead of reporting success from a memory d
     installOpfsSAHPoolVfs: install,
   } as any);
   const db = new SaulDatabase();
-  await expect(db.getHistory()).rejects.toThrow(
+  await expect(db.execute({ type: 'DB_GET_HISTORY', payload: {} })).rejects.toThrow(
     'Persistent storage is unavailable. History was not saved. OPFS denied',
   );
   expect(memoryDb).not.toHaveBeenCalled();
   install.mockResolvedValue({
     OpfsSAHPoolDb: class {
       exec = exec;
+      selectValue = () => 1;
+      selectObjects = () => [];
+      close = vi.fn();
     },
   });
-  await expect(db.getHistory()).resolves.toEqual([]);
+  await expect(db.execute({ type: 'DB_GET_HISTORY', payload: {} })).resolves.toEqual([]);
   expect(install).toHaveBeenCalledTimes(2);
   expect(exec).toHaveBeenCalledWith('PRAGMA foreign_keys = ON');
 });
