@@ -4,6 +4,7 @@ import { DEFAULT_SYSTEM_PROMPT } from '../models/prompts';
 import type { UserSettings } from '../types';
 import { useSettingsDraft } from './useSettingsDraft';
 import { useProviderTest } from './useProviderTest';
+import { NotificationSettings } from './NotificationSettings';
 
 const presets = [
   { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
@@ -60,6 +61,7 @@ export function Settings({
         <h2 style={{ margin: 0, fontSize: 20 }}>Settings</h2>
         <p className="small muted">Choose how Saul explains and what context it uses.</p>
       </div>
+      <NotificationSettings />
       <section className="panel settings-section">
         <h3>Model</h3>
         <fieldset className="settings-fields" disabled={testing}>

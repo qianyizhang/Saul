@@ -18,6 +18,24 @@ export function SaulRoot() {
   const [busy, setBusy] = useState(false),
     [toast, setToast] = useState<{ text: string; id?: string; error?: boolean } | null>(null);
   const [, redraw] = useState(0);
+  const [errorsMuted, setErrorsMuted] = useState<boolean | null>(null);
+  const [muting, setMuting] = useState(false);
+  async function muteErrors() {
+    if (muting) return;
+    setMuting(true);
+    try {
+      await read({ action: 'mute-errors', muted: true });
+      setErrorsMuted(true);
+      setToast(null);
+    } catch {
+      setToast({
+        text: 'Could not save mute preference. Try again from Saul Settings.',
+        error: true,
+      });
+    } finally {
+      setMuting(false);
+    }
+  }
   const markers = useRef<PassageMarkers | null>(null),
     current = useRef(passages),
     activeRef = useRef(activeId);
@@ -72,6 +90,7 @@ export function SaulRoot() {
       port: chrome.runtime.Port | undefined,
       reconnect: ReturnType<typeof setTimeout> | undefined;
     let route = location.href;
+    let preferenceReceived = false;
     let readyTimer: ReturnType<typeof setTimeout> | undefined;
     const announced = new Set<string>();
     const summary = () => {
@@ -124,7 +143,15 @@ export function SaulRoot() {
       if (disposed) return;
       const connected = chrome.runtime.connect({ name: 'saul-reading' });
       port = connected;
-      connected.onMessage.addListener(() => void refresh());
+      connected.onMessage.addListener((message) => {
+        if (message.type === 'notifications') {
+          setErrorsMuted(message.muted === true);
+          // Never resurrect a previously suppressed error when unmuting.
+          if (preferenceReceived || message.muted === true)
+            setToast((current) => (current?.error ? null : current));
+          preferenceReceived = true;
+        } else void refresh();
+      });
       connected.onDisconnect.addListener(() => {
         if (!disposed && port === connected) reconnect = setTimeout(connect, 1000);
       });
@@ -385,13 +412,24 @@ export function SaulRoot() {
           </button>
         </div>
       )}
-      {toast && !list && (
+      {toast && !list && (!toast.error || errorsMuted === false) && (
         <div
           role={toast.error ? 'alert' : 'status'}
           className="fixed bottom-14 right-3 max-w-xs bg-white text-slate-700 font-sans text-sm border border-slate-200 rounded-lg shadow-lg px-3 py-2"
           style={{ zIndex: 2147483647 }}
         >
           <span>{toast.text}</span>
+          {toast.error && (
+            <button
+              className="ml-3 text-indigo-700 underline"
+              aria-label="Mute error notifications"
+              title="Mute error toasts on all pages. Turn them back on in Saul Settings."
+              disabled={muting}
+              onClick={() => void muteErrors()}
+            >
+              {muting ? 'Muting…' : 'Mute'}
+            </button>
+          )}
           {toast.id && (
             <button
               className="ml-3 text-indigo-700 underline"

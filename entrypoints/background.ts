@@ -1,4 +1,9 @@
 import { getSettings, initStorageSecurity } from '../src/storage/settings';
+import {
+  getErrorNotificationsMuted,
+  setErrorNotificationsMuted,
+  NOTIFICATION_STORAGE_KEY,
+} from '../src/storage/notifications';
 import { runnerRequest } from '../src/storage/client';
 import { renderExplainPrompt, DEFAULT_SYSTEM_PROMPT } from '../src/models/prompts';
 import { initNativeBridge } from '../src/native/bridge';
@@ -67,6 +72,9 @@ async function reading(
 ): Promise<ReadingResult> {
   const url = sourcePage(sender);
   switch (request.action) {
+    case 'mute-errors':
+      await setErrorNotificationsMuted(request.muted);
+      return {};
     case 'policy':
       return { policy: (await getSettings()).contextPolicy };
     case 'list':
@@ -155,6 +163,20 @@ export default defineBackground(() => {
     .then((count) => chrome.action.setBadgeText({ text: count ? String(count) : '' }))
     .catch((error) => console.warn('[Saul] Could not restore reading state', error));
   const subscribers = new Map<chrome.runtime.Port, string>();
+  let notificationRevision = 0;
+  function notifyPreference(port: chrome.runtime.Port, muted: boolean) {
+    try {
+      port.postMessage({ type: 'notifications', muted });
+    } catch {
+      subscribers.delete(port);
+    }
+  }
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !(NOTIFICATION_STORAGE_KEY in changes)) return;
+    notificationRevision++;
+    const muted = changes[NOTIFICATION_STORAGE_KEY]!.newValue === true;
+    for (const port of subscribers.keys()) notifyPreference(port, muted);
+  });
   chrome.runtime.onConnect.addListener((port) => {
     if (port.name !== 'saul-reading') return;
     try {
@@ -164,6 +186,16 @@ export default defineBackground(() => {
       return;
     }
     port.onDisconnect.addListener(() => subscribers.delete(port));
+    const revision = notificationRevision;
+    void getErrorNotificationsMuted().then(
+      (muted) => {
+        if (subscribers.has(port) && revision === notificationRevision)
+          notifyPreference(port, muted);
+      },
+      () => {
+        if (subscribers.has(port)) notifyPreference(port, false);
+      },
+    );
   });
   chrome.tabs.onRemoved.addListener((tabId) => {
     void chrome.storage.session.remove(sourceKey(tabId));

@@ -7,6 +7,22 @@ description: Debug and regression-test Saul's Chrome extension, persistence, mes
 
 Work from the Saul checkout containing this skill. Read [docs/testing.md](../../../docs/testing.md) for commands, the harness entry points, and symptom-specific diagnostics. Reuse that harness instead of creating temporary servers or browser launch scripts.
 
+## Choose the browser execution path before launch
+
+On this Mac, restricted command execution has caused Chrome startup registration
+aborts even when headless. Request approved execution outside the command sandbox
+for browser-launching commands from the outset (`sandbox_permissions: require_escalated`
+in Codex), scoped to the specific test command. Keep ordinary checks sandboxed and
+retain the disposable profiles. Do not disable sandboxing globally.
+
+The Playwright config runs a single startup probe before tests, including focused
+runs. Do not bypass it when diagnosing startup failures. Inspect its original error
+and retained diagnostics before retrying; do not repeat unchanged launches. Treat
+permission-related startup failures as blocked verification. If approved execution
+is unavailable, report the block. Headless mode and Chrome's `--no-sandbox` do not
+fix the outer command sandbox; do not use personal profiles, kill unrelated browser
+processes, or suppress crash notifications as workarounds.
+
 ## Choose the shortest useful check
 
 - For storage or message failures, reproduce through the built extension and its real worker. A mocked SQLite test alone does not establish persistence.

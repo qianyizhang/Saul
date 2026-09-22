@@ -3,6 +3,7 @@ import type { Passage, RunResult } from '../types/storage';
 
 export type ReadingRequest =
   | { action: 'list' | 'policy' }
+  | { action: 'mute-errors'; muted: boolean }
   | {
       action: 'submit';
       submissionId: string;
@@ -77,6 +78,9 @@ export function validateReading(v: unknown): asserts v is ReadingRequest {
       break;
     case 'submit':
       valid = id(v.submissionId) && validSnapshot(v.snapshot) && validContext(v.context);
+      break;
+    case 'mute-errors':
+      valid = typeof v.muted === 'boolean';
       break;
     case 'regenerate':
       valid =

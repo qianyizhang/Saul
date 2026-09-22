@@ -4,6 +4,31 @@ Use Node 22.18+ and pnpm. Tests use a disposable Chromium profile, a snapshot of
 
 ## Commands
 
+### macOS execution and startup failures
+
+On this Mac, restricted agent commands have caused Chrome and Chrome for Testing
+to abort during LaunchServices/WindowServer registration, even in headless mode.
+Run browser-launching commands through approved execution outside the command
+sandbox from the outset (in Codex, request `sandbox_permissions: require_escalated`
+for the specific command). Keep compilation and ordinary unit checks sandboxed.
+This does not require disabling the sandbox globally or changing personal Chrome.
+
+The Playwright config runs `tests/e2e/browser-preflight.ts` once before all tests,
+including focused runs, using the same isolated extension launcher and headed
+setting. It closes its disposable probe and aborts the suite on failure without
+retrying. Failure diagnostics are retained under `test-results/browser-preflight`
+(or the selected output directory). This limits startup crash cascades; it cannot
+prevent a later browser failure after a successful probe. The manual launcher
+already makes only one launch attempt.
+
+Inspect the first startup error before another attempt. Permission denials or an
+immediate registration abort are blocked verification, not failed app assertions.
+Do not repeat unchanged launches, switch to a personal profile, add `--no-sandbox`
+as a workaround for the outer command sandbox, or hide macOS crash notifications.
+If approved execution is unavailable, report the browser checks as blocked.
+
+### Available commands
+
 ```sh
 # First setup
 pnpm install
@@ -24,6 +49,7 @@ pnpm test:user --smoke       # verify launcher/Explain/history, then clean up
 pnpm exec playwright test tests/e2e/reading.spec.ts tests/e2e/annotations.spec.ts
 pnpm exec playwright test tests/e2e/positioning.spec.ts # popup motion and selection tracking
 pnpm exec playwright test tests/e2e/multiline.spec.ts # multiline capture and placement
+pnpm exec playwright test tests/e2e/notifications.spec.ts # error mute, live tabs, restart, unavailable storage
 SAUL_LIVE_GITHUB=1 pnpm exec playwright test -g 'live GitHub' # optional real-page layout, local model
 SAUL_SCALE=1 pnpm exec playwright test tests/e2e/database.spec.ts # OPFS and annotation measurements
 node tests/e2e/manual.ts --smoke  # reuse existing bundle
@@ -84,6 +110,12 @@ Storage path: popup/content → background → offscreen document → dedicated 
 ## Hands-on checklist
 
 In `pnpm test:user`, select the article concept and click Explain. Verify that the page stays readable without an open card, with a quiet underline and queued/ready cue. Click the underline, inspect the saved answer and concept notes, close the card, refresh, and reopen from the restored mark. Check unread counts, the page list (**Alt+Shift+L**) and library source navigation. When relevant, check Settings/save locks and provider Stop, keyboard/pin/follow-ups/bookmarks, and Tabs previews. Automated smoke is setup verification; observe actual layout and interactions too. Use isolated browser tests for restart/export/delete guarantees.
+
+### Error notification mute
+
+In Settings → Notifications, toggle **Mute error notifications** and reload the workspace to check persistence. It saves immediately, independently of provider drafts. On a page with an error toast, **Mute** applies the same device-wide preference. Check another open tab, restart the same sandbox, and turn it off again in Settings. Success notifications and inline explanation errors remain visible.
+
+The notification regression covers missing API credentials, an invalid unsaved endpoint draft, cross-tab updates, restart persistence, and an offscreen no-response failure. Muting must work without the reading database. The 2026-09-21 change passed both notification scenarios, the 10 existing product scenarios, 52 unit/transport checks, production build, app/harness typechecks, and changed-file formatting. Hands-on review verified the rebuilt toggle, persistence after reload, and unmuting in the disposable browser. The personal installed extension and live provider authentication were not exercised.
 
 ## Scale evidence — 2026-09-21
 

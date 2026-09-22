@@ -82,6 +82,8 @@ it('separates source pages, workspace and background capabilities', () => {
   expect(backgroundSender({ id: 'test', url: 'chrome-extension://test/popup.html' })).toBe(false);
 });
 it('rejects malformed requests and raw job writes from the workspace', () => {
+  expect(() => validateReading({ action: 'mute-errors', muted: true })).not.toThrow();
+  expect(() => validateReading({ action: 'mute-errors', muted: 'true' })).toThrow();
   expect(() =>
     validateReading({ action: 'bookmark', selectionId: 'id', bookmarked: 'yes' }),
   ).toThrow();
