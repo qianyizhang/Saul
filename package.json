@@ -52,7 +52,7 @@
     "marked": "^18.0.13",
     "prettier": "3.6.2",
     "tailwindcss": "^4.3.3",
-    "typescript": "^5.9.3",
+    "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.0",
     "vitest": "^4.1.11",
     "web-ext": "^10.5.0",
