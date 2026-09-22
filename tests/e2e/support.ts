@@ -1,4 +1,4 @@
-import { chromium, type BrowserContext, type Page } from '@playwright/test';
+import { chromium, type BrowserContext } from '@playwright/test';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -7,6 +7,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
+export { configureFixtureProvider } from './driver.ts';
+
 export const answer = 'A gradient points in the direction of steepest increase.';
 export const taggedAnswer =
   'A <term note="The direction of steepest increase.">gradient</term> describes how a function changes.';
@@ -14,10 +16,12 @@ const extensionBuild = fileURLToPath(new URL('../../.output/chrome-mv3', import.
 
 export async function createFixtureServer(
   response = answer,
-  options: { chunkDelayMs?: number; ending?: 'done' | 'eof' | 'length' } = {},
+  options: { gated?: boolean; ending?: 'done' | 'eof' | 'length' } = {},
 ) {
   const requests: { body: string }[] = [];
   let ending = options.ending || 'done';
+  let gated = options.gated ?? false;
+  const pending = new Set<() => void>();
   const server = createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -42,6 +46,7 @@ export async function createFixtureServer(
         `data: ${JSON.stringify({ choices: [{ delta: { content: response.slice(0, middle) } }] })}\n\n`,
       );
       const finish = () => {
+        pending.delete(finish);
         res.write(
           `data: ${JSON.stringify({ choices: [{ delta: { content: response.slice(middle) } }] })}\n\n`,
         );
@@ -49,9 +54,9 @@ export async function createFixtureServer(
           res.write('data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n\n');
         res.end(finishMode === 'eof' ? '' : 'data: [DONE]\n\n');
       };
-      if (options.chunkDelayMs) {
-        const timer = setTimeout(finish, options.chunkDelayMs);
-        res.once('close', () => clearTimeout(timer));
+      if (gated) {
+        pending.add(finish);
+        res.once('close', () => pending.delete(finish));
       } else finish();
     } else if (req.url === '/anchors') {
       res.setHeader('Content-Type', 'text/html');
@@ -103,6 +108,13 @@ export async function createFixtureServer(
     setEnding: (value: 'done' | 'eof' | 'length') => {
       ending = value;
     },
+    setGated: (value: boolean) => {
+      gated = value;
+    },
+    releaseAll: () => {
+      for (const finish of [...pending]) finish();
+    },
+    pendingCount: () => pending.size,
     close: () =>
       new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));
@@ -113,20 +125,14 @@ export async function createFixtureServer(
 
 export type FixtureServer = Awaited<ReturnType<typeof createFixtureServer>>;
 
-export async function configureFixtureProvider(popup: Page, origin: string) {
-  await popup.evaluate(async (origin) => {
-    await chrome.storage.local.set({
-      saul_user_settings: {
-        activeProvider: 'openai-compatible',
-        openaiCompatible: { baseUrl: origin + '/v1', apiKey: '', model: 'test-model' },
-      },
-    });
-  }, origin);
+export interface SandboxOptions {
+  headless?: boolean;
+  artifactsDir?: string;
+  databaseFixtures?: boolean;
+  handleProcessSignals?: boolean;
 }
 
-export async function createSandbox(
-  options: { headless?: boolean; artifactsDir?: string; databaseFixtures?: boolean } = {},
-) {
+export async function createSandbox(options: SandboxOptions = {}) {
   const root = await mkdtemp(path.join(tmpdir(), 'saul-browser-'));
   const extension = path.join(root, 'extension');
   const profile = path.join(root, 'profile');
@@ -193,6 +199,9 @@ export async function createSandbox(
       context = await chromium.launchPersistentContext(profile, {
         channel: 'chromium',
         headless: options.headless ?? true,
+        ...(options.handleProcessSignals === false
+          ? { handleSIGINT: false, handleSIGTERM: false }
+          : {}),
         args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`],
         viewport: { width: 1000, height: 800 },
       });

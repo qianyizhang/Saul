@@ -1,4 +1,6 @@
 import type { DbOperations, DbRequest, DbType, Reply, Submission } from '../types/storage';
+import type { ReadingRequest, ReadingResultFor } from '../contracts/reading';
+import type { WorkspaceRequest, WorkspaceResultFor } from '../native/workspace';
 
 let creatingOffscreen: Promise<void> | null = null;
 export async function ensureOffscreenDocument(): Promise<void> {
@@ -18,11 +20,24 @@ export async function ensureOffscreenDocument(): Promise<void> {
     creatingOffscreen = null;
   }
 }
-export async function request<T>(message: unknown): Promise<T> {
+async function request<T>(message: unknown): Promise<T> {
   const reply: Reply<T> | undefined = await chrome.runtime.sendMessage(message);
   if (!reply) throw new Error('Saul did not respond. Reload the extension and retry.');
   if (!reply.success) throw new Error(reply.error);
   return reply.result;
+}
+export function sendReadingMessage<T extends ReadingRequest>(
+  message: T,
+): Promise<ReadingResultFor<T>> {
+  return request({ target: 'saul-reading', message });
+}
+export async function openHistorySource(selectionId: string): Promise<void> {
+  await request({ target: 'saul-open-source', selectionId });
+}
+export function sendWorkspaceMessage<T extends WorkspaceRequest>(
+  message: T,
+): Promise<WorkspaceResultFor<T>> {
+  return request({ type: 'WORKSPACE_TABS', ...message });
 }
 export type RunnerRequest =
   | { operation: 'db'; message: DbRequest }

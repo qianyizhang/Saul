@@ -1,4 +1,9 @@
-import { getSettings, initStorageSecurity } from '../src/storage/settings';
+import {
+  getSettings,
+  initStorageSecurity,
+  isLoopbackEndpoint,
+  validateProviderSettings,
+} from '../src/storage/settings';
 import {
   getErrorNotificationsMuted,
   setErrorNotificationsMuted,
@@ -37,16 +42,8 @@ async function submit(
   const settings = await getSettings();
   const { apiKey, ...remote } = settings.openaiCompatible;
   if (settings.activeProvider !== 'chrome-ai') {
-    const url = new URL(remote.baseUrl);
-    if (
-      !['http:', 'https:'].includes(url.protocol) ||
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash
-    )
-      throw new Error('Configure a valid HTTP(S) model endpoint in Saul Settings.');
-    if (!apiKey && !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))
+    const endpoint = validateProviderSettings(settings)!;
+    if (!apiKey && !isLoopbackEndpoint(endpoint))
       throw new Error('API key is missing. Configure it in Saul Settings.');
   }
   const language = settings.responseLanguage

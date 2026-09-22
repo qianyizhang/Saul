@@ -1,6 +1,5 @@
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider } from './support.ts';
-import { mkdir, writeFile } from 'node:fs/promises';
 import type { Page } from '@playwright/test';
 async function select(page: Page, selector: string) {
   await page.locator(selector).dblclick();
@@ -12,7 +11,7 @@ const card = (page: Page) => page.getByRole('region', { name: 'Saul explanation'
 test('only the selected occurrence attaches; class reveal, layout movement, ambiguity, native links and source DOM remain safe', async ({
   sandbox,
   fixtureServer,
-}, info) => {
+}) => {
   const { popup, context } = await sandbox.launch();
   await configureFixtureProvider(popup, fixtureServer.origin);
   const page = await context.newPage();
@@ -43,7 +42,6 @@ test('only the selected occurrence attaches; class reveal, layout movement, ambi
     await page.locator('#term-two').click();
     await expect(card(page)).toBeVisible();
   }).toPass();
-  await page.screenshot({ path: info.outputPath('restored-marker.png') });
   await page.getByRole('button', { name: 'Close explanation' }).click();
   await page.locator('#two').evaluate((el) => el.after(el.cloneNode(true)));
   await page.getByRole('button', { name: 'Page explanations', exact: true }).click();
@@ -78,47 +76,15 @@ test('View source opens a new tab, restores below-fold location and opens the sa
   await expect.poll(() => source.evaluate(() => scrollY)).toBeGreaterThan(1500);
   await expect(source.locator('#concept')).toBeInViewport();
 });
-test('highlight API feasibility and native non-layout underlines in target Chrome', async ({
+test('native highlights leave source layout and markup unchanged', async ({
   sandbox,
   fixtureServer,
-}, info) => {
+}) => {
   const { context, popup } = await sandbox.launch();
   await configureFixtureProvider(popup, fixtureServer.origin);
   const page = await context.newPage();
   await page.goto(fixtureServer.origin + '/article');
   await expect(page.locator('saul-root')).toBeAttached();
-  const capability = await page.evaluate(() => {
-    const range = document.createRange();
-    range.selectNodeContents(document.querySelector('#concept')!);
-    const api = CSS as unknown as {
-      highlights?: Map<string, unknown> & { highlightsFromPoint?: unknown };
-    };
-    const Highlight = (globalThis as unknown as { Highlight?: new (range: Range) => unknown })
-      .Highlight;
-    if (!api.highlights || !Highlight) return { highlights: false };
-    api.highlights.set('feasibility', new Highlight(range));
-    const style = document.createElement('style');
-    style.textContent =
-      '::highlight(feasibility){text-decoration:underline;text-decoration-color:red;}';
-    document.head.append(style);
-    const decoration = getComputedStyle(
-      document.querySelector('#concept')!,
-      '::highlight(feasibility)',
-    ).textDecorationLine;
-    const hitTesting = typeof api.highlights.highlightsFromPoint === 'function';
-    api.highlights.delete('feasibility');
-    style.remove();
-    return { highlights: true, decoration, hitTesting };
-  });
-  await mkdir('docs/benchmarks', { recursive: true });
-  await writeFile(
-    'docs/benchmarks/rendering-capabilities.json',
-    JSON.stringify({ browser: context.browser()?.version(), ...capability }, null, 2) + '\n',
-  );
-  await info.attach('highlight-capability', {
-    body: JSON.stringify({ browser: context.browser()?.version(), ...capability }),
-    contentType: 'application/json',
-  });
   const before = await page.locator('#concept').boundingBox();
   const html = await page.locator('#concept').innerHTML();
   await page.locator('#concept').click({ clickCount: 3 });
@@ -131,7 +97,6 @@ test('highlight API feasibility and native non-layout underlines in target Chrom
   });
   await page.locator('#concept').click({ position: { x: 30, y: 15 } });
   await expect(card(page)).toBeVisible();
-  await page.screenshot({ path: info.outputPath('dark-zoom-marker.png') });
 });
 
 test('replaced text reattaches while unrelated content keeps mutating', async ({

@@ -5,12 +5,28 @@ import { handleTabCall } from './tabs';
 export const ENABLED_KEY = 'saul_native_enabled';
 export const STATUS_KEY = 'saul_native_status';
 const RETRY_ALARM = 'saul-native-retry';
+export type NativeBridgeState = 'disabled' | 'connecting' | 'connected' | 'disconnected';
+export interface NativeBridgeStatus {
+  state: NativeBridgeState;
+  error?: string;
+  updatedAt?: number;
+}
+export function isNativeBridgeStatus(value: unknown): value is NativeBridgeStatus {
+  if (typeof value !== 'object' || value === null) return false;
+  const status = value as Record<string, unknown>;
+  return (
+    typeof status.state === 'string' &&
+    ['disabled', 'connecting', 'connected', 'disconnected'].includes(status.state) &&
+    (status.error === undefined || typeof status.error === 'string') &&
+    (status.updatedAt === undefined || typeof status.updatedAt === 'number')
+  );
+}
 
 export function initNativeBridge() {
   let port: chrome.runtime.Port | undefined;
   let enabled = false;
   let queue = Promise.resolve();
-  const status = (state: string, error?: string) =>
+  const status = (state: NativeBridgeState, error?: string) =>
     chrome.storage.session.set({
       [STATUS_KEY]: { state, error, updatedAt: Date.now() },
     });

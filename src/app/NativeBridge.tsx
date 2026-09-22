@@ -1,17 +1,22 @@
 import { useEffect, useState } from 'react';
-import { ENABLED_KEY, STATUS_KEY } from '../native/bridge';
+import {
+  ENABLED_KEY,
+  STATUS_KEY,
+  isNativeBridgeStatus,
+  type NativeBridgeStatus,
+} from '../native/bridge';
 
 export function NativeBridge() {
   const [enabled, setEnabled] = useState(false);
-  const [status, setStatus] = useState<{ state: string; error?: string }>({ state: 'disabled' });
+  const [status, setStatus] = useState<NativeBridgeStatus>({ state: 'disabled' });
   const [copied, setCopied] = useState('');
   const [error, setError] = useState('');
   useEffect(() => {
     void chrome.storage.local
       .get(ENABLED_KEY)
       .then((data) => setEnabled(data[ENABLED_KEY] === true));
-    const readStatus = (value: any) => {
-      if (typeof value?.state === 'string') setStatus(value);
+    const readStatus = (value: unknown) => {
+      if (isNativeBridgeStatus(value)) setStatus(value);
     };
     void chrome.storage.session.get(STATUS_KEY).then((data) => readStatus(data[STATUS_KEY]));
     const listener = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {

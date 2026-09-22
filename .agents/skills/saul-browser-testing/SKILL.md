@@ -1,45 +1,35 @@
 ---
 name: saul-browser-testing
-description: Debug and regression-test Saul's Chrome extension, persistence, messaging, and reading UI using its isolated browser fixtures. Use for Saul E2E setup, browser failures, or hands-on user testing.
+description: Debug and regression-test Saul's Chrome extension, persistence, messaging, and reading UI with its isolated browser harness.
 ---
 
 # Saul browser testing
 
-Work from the Saul checkout containing this skill. Read [docs/testing.md](../../../docs/testing.md) for commands, the harness entry points, and symptom-specific diagnostics. Reuse that harness instead of creating temporary servers or browser launch scripts.
+Work from this Saul checkout. Read [the testing runbook](../../../docs/testing.md) and reuse `tests/e2e/`; do not create parallel browser launchers or fixture servers.
 
-## Choose the browser execution path before launch
+## Before launching a browser
 
-On this Mac, restricted command execution has caused Chrome startup registration
-aborts even when headless. Request approved execution outside the command sandbox
-for browser-launching commands from the outset (`sandbox_permissions: require_escalated`
-in Codex), scoped to the specific test command. Keep ordinary checks sandboxed and
-retain the disposable profiles. Do not disable sandboxing globally.
+On this Mac, restricted command execution can abort Chrome during LaunchServices/WindowServer registration, including headless launches. Request approved execution outside the command sandbox from the first browser-launching command, scoped to that command. Keep ordinary checks sandboxed and preserve the disposable profiles.
 
-The Playwright config runs a single startup probe before tests, including focused
-runs. Do not bypass it when diagnosing startup failures. Inspect its original error
-and retained diagnostics before retrying; do not repeat unchanged launches. Treat
-permission-related startup failures as blocked verification. If approved execution
-is unavailable, report the block. Headless mode and Chrome's `--no-sandbox` do not
-fix the outer command sandbox; do not use personal profiles, kill unrelated browser
-processes, or suppress crash notifications as workarounds.
+Do not bypass the Playwright startup probe. Inspect its first retained error and stop unchanged relaunches. Permission denials and immediate registration aborts mean browser verification is blocked; they are not application assertion failures. Chrome's `--no-sandbox` flag does not bypass the outer command sandbox. Never switch to a personal profile, kill unrelated browsers, or suppress crash notifications.
 
-## Choose the shortest useful check
+## Choose the smallest useful check
 
-- For storage or message failures, reproduce through the built extension and its real worker. A mocked SQLite test alone does not establish persistence.
-- For reading UI behavior, use the local model fixture and mouse/keyboard actions through the content script; direct DB seeding covers only storage contracts.
-- For layout or interaction review, run `pnpm test:user` and use available computer-use tools in that disposable browser. A successful smoke test is setup verification, not a hands-on review.
-- Use the existing build for a focused rerun only when it represents the intended code. Coordinate build ownership in a shared checkout; each sandbox snapshots the bundle once.
+- Storage or messaging: use the built extension and real database worker; mocked SQLite alone does not establish persistence.
+- Reading UI: use the local model fixture and page interactions; direct database seeding covers storage contracts only.
+- Layout or usability: run `pnpm test:user`; its smoke mode verifies setup, not hands-on quality.
+- Focused rerun: reuse a build only when it matches the intended source. Each sandbox snapshots the bundle once.
 
-## Preserve the meaningful invariants
+## Preserve invariants
 
-- Keep one profile and extension snapshot across browser relaunches when proving durability. A popup refresh is insufficient.
-- Route popup DB requests through background; background requests go directly to the offscreen document. Runtime messages do not return to their sender.
-- Offscreen existence and creation share one lock; SQLite stays in its dedicated worker with persistent storage. Do not restore a silent memory fallback to make tests pass.
-- Exercise selection → Explain → saved history and regeneration; synthetic record insertion misses UI and streaming failures.
-- Keep API keys out of fixtures. The default sandbox uses a loopback provider and does not require native-host installation or access to personal Chrome data.
+- Keep one disposable profile and extension snapshot across relaunches when proving durability.
+- Route popup/content through background; background calls offscreen directly.
+- Keep offscreen creation under one lock and SQLite in its dedicated OPFS worker; never add a silent in-memory fallback.
+- Exercise selection -> Explain -> saved history for reading changes.
+- Keep credentials out of fixtures. Do not require native-host installation or personal Chrome data.
 
-## Close the loop
+## Finish
 
-Inspect the earliest failed assertion and its retained trace/logs before rerunning. Add a regression at the layer that exposed the bug. Run the relevant checks once after the fix, expanding only for unresolved risk or changed behavior.
+Inspect the earliest failed assertion and retained trace/log before rerunning. Add coverage at the layer that exposed the bug, then run the focused gate once and expand only for remaining risk.
 
-Record the tested bundle/source scope, passed checks, and any untested live-provider behavior. Before updating an installed personal extension, preserve any still-live legacy in-memory records when relevant; do not infer their absence from an earlier session. Keep unrelated product edits and native-bridge work intact.
+Record the tested source/bundle, passed checks, and untested live-provider behavior. Preserve unrelated product and native-bridge work.

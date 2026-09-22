@@ -12,7 +12,7 @@ import {
 } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { HOST_NAME } from './protocol.mjs';
-import { secureDirectory } from './transport.mjs';
+import { errorMessage, secureDirectory } from './transport.mjs';
 
 export const shellQuote = (value) => `'${value.replaceAll("'", "'\\''")}'`;
 export function installationPlan({
@@ -136,7 +136,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   try {
     main();
   } catch (error) {
-    console.error(error.message);
+    console.error(errorMessage(error));
     process.exitCode = 1;
   }
 }

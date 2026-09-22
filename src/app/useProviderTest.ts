@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { UserSettings } from '../types';
 import { streamOpenAICompatible } from '../models/openai-compatible';
 import { chromeAiAvailability, prepareChromeAi } from '../models/chrome-ai';
-import { validateProvider } from './useSettingsDraft';
+import { validateProviderSettings } from '../storage/settings';
 export function useProviderTest() {
   const [testing, setTesting] = useState(false),
     [notice, setNotice] = useState(''),
@@ -31,7 +31,7 @@ export function useProviderTest() {
     const timeout =
       settings.activeProvider === 'chrome-ai' ? undefined : setTimeout(() => ac.abort(), 20000);
     try {
-      validateProvider(settings);
+      validateProviderSettings(settings);
       if (settings.activeProvider === 'chrome-ai') {
         await prepareChromeAi(ac.signal, (progress) => {
           if (mounted.current && !ac.signal.aborted)

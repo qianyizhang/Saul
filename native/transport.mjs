@@ -3,6 +3,10 @@ import { join, resolve } from 'node:path';
 import { mkdirSync, lstatSync, chmodSync } from 'node:fs';
 import { MAX_MESSAGE } from './protocol.mjs';
 
+export function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function runtimeDirectory() {
   return resolve(process.env.SAUL_RUNTIME_DIR || join(homedir(), '.saul', 'run'));
 }

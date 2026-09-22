@@ -1,21 +1,10 @@
-import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider, createFixtureServer, seedHistory } from './support.ts';
-
-const db = (page: Page, message: object): Promise<any> =>
-  page.evaluate(
-    (message) => chrome.runtime.sendMessage({ target: 'saul-workspace', message }),
-    message,
-  );
-const tabs = (page: Page, request: object): Promise<any> =>
-  page.evaluate(
-    (request) => chrome.runtime.sendMessage({ type: 'WORKSPACE_TABS', ...request }),
-    request,
-  );
+import { getFirstHistory, sendDb, sendWorkspace as tabs } from './driver.ts';
 test('library bookmarks, explanation search, punctuation and pagination survive restart', async ({
   sandbox,
   fixtureServer,
-}, info) => {
+}) => {
   const browser = await sandbox.launch();
   let { popup } = browser;
   await seedHistory(browser, fixtureServer.origin, 35);
@@ -42,7 +31,6 @@ test('library bookmarks, explanation search, punctuation and pagination survive 
   await popup.getByRole('heading', { name: 'Reading history', exact: true }).hover();
   await expect(popup.getByRole('tooltip')).toBeVisible();
   await expect(popup.getByRole('tooltip')).toContainText('Steepest increase');
-  await popup.screenshot({ path: info.outputPath('library.png') });
   ({ popup } = await sandbox.launch());
   await popup.getByRole('button', { name: 'Reading history', exact: true }).click();
   await popup.getByRole('button', { name: 'Bookmarks', exact: true }).click();
@@ -59,18 +47,18 @@ test('export includes more than 1000 records and readable concept notes', async 
     prefix: 'export',
     response: 'A <term note="Direction of change">gradient</term>.',
   });
-  const exported = await db(popup, { type: 'DB_EXPORT_MARKDOWN' });
-  expect(exported.result).toContain('Total Selections: 1005');
-  expect(exported.result).toContain('Selection export-0');
-  expect(exported.result).toContain('Selection export-1004');
-  expect(exported.result).toContain('**gradient:** Direction of change');
-  expect(exported.result).not.toContain('<term');
+  const exported = await sendDb(popup, { type: 'DB_EXPORT_MARKDOWN', payload: undefined });
+  expect(exported).toContain('Total Selections: 1005');
+  expect(exported).toContain('Selection export-0');
+  expect(exported).toContain('Selection export-1004');
+  expect(exported).toContain('**gradient:** Direction of change');
+  expect(exported).not.toContain('<term');
 });
 
 test('provider profiles preserve their own credentials and clear keys across origins', async ({
   sandbox,
   fixtureServer,
-}, info) => {
+}) => {
   const { popup } = await sandbox.launch();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await popup.getByLabel('Profile name', { exact: true }).fill('Local test');
@@ -96,13 +84,75 @@ test('provider profiles preserve their own credentials and clear keys across ori
   await expect(popup.getByPlaceholder('Optional for local models')).toHaveValue('fixture-key-one');
   await popup.getByRole('button', { name: 'Test generation', exact: true }).click();
   await expect(popup.getByText(/Generation succeeded:/)).toBeVisible();
-  await popup.screenshot({ path: info.outputPath('settings.png') });
+});
+
+test('missing and stale profile selections recover the current config and remain editable', async ({
+  sandbox,
+  fixtureServer,
+}) => {
+  const { popup } = await sandbox.launch();
+  for (const [storedActiveProfileId, recoveredId, model] of [
+    [undefined, 'recovered-current', 'recovered-missing'],
+    ['retired-profile', 'retired-profile', 'recovered-stale'],
+  ] as const) {
+    await popup.evaluate(
+      async ({ origin, storedActiveProfileId }) => {
+        await chrome.storage.local.set({
+          saul_user_settings: {
+            activeProvider: 'openai-compatible',
+            openaiCompatible: {
+              baseUrl: origin + '/v1',
+              apiKey: 'current-key',
+              model: 'current-model',
+              temperature: 0.3,
+            },
+            profiles: [
+              {
+                id: 'legacy',
+                name: 'Legacy',
+                config: {
+                  baseUrl: origin + '/v1',
+                  apiKey: 'legacy-key',
+                  model: 'legacy-model',
+                  temperature: 0.3,
+                },
+              },
+            ],
+            ...(storedActiveProfileId === undefined
+              ? {}
+              : { activeProfileId: storedActiveProfileId }),
+          },
+        });
+      },
+      { origin: fixtureServer.origin, storedActiveProfileId },
+    );
+    if (popup.url().includes('#settings')) await popup.reload();
+    else await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+
+    await expect(popup.getByLabel('Saved profile', { exact: true })).toHaveValue(recoveredId);
+    await expect(popup.getByLabel('Model name', { exact: true })).toHaveValue('current-model');
+    await popup.getByLabel('Model name', { exact: true }).fill(model);
+    await popup.getByRole('button', { name: 'Save Settings', exact: true }).click();
+    await expect(popup.getByRole('button', { name: 'Saved!', exact: true })).toBeVisible();
+    const saved = await popup.evaluate(async () => {
+      const { saul_user_settings: settings } = await chrome.storage.local.get('saul_user_settings');
+      return settings as {
+        activeProfileId: string;
+        profiles: { id: string; config: { model: string } }[];
+      };
+    });
+    expect(saved.activeProfileId).toBe(recoveredId);
+    expect(saved.profiles.find((profile) => profile.id === recoveredId)?.config.model).toBe(model);
+    expect(saved.profiles.find((profile) => profile.id === 'legacy')?.config.model).toBe(
+      'legacy-model',
+    );
+  }
 });
 
 test('tab previews do not mutate, sorting can undo, and stale previews are rejected', async ({
   sandbox,
   fixtureServer,
-}, info) => {
+}) => {
   const { popup, context } = await sandbox.launch();
   for (const title of ['Zulu', 'Alpha']) {
     const page = await context.newPage();
@@ -111,20 +161,20 @@ test('tab previews do not mutate, sorting can undo, and stale previews are rejec
   }
   await popup.getByRole('button', { name: 'Tabs', exact: true }).click();
   await expect(popup.getByText('Zulu', { exact: true })).toBeVisible();
-  const before = (await tabs(popup, { action: 'list' })).result.snapshot;
+  const before = (await tabs(popup, { action: 'list' })).snapshot;
   await popup.getByLabel('Sort by', { exact: true }).selectOption('title');
   await popup.getByRole('button', { name: 'Preview sort', exact: true }).click();
   await expect(popup.getByRole('region', { name: 'Tab change preview' })).toBeVisible();
-  expect(
-    (await tabs(popup, { action: 'list' })).result.snapshot.tabs.map((t: any) => t.id),
-  ).toEqual(before.tabs.map((t: any) => t.id));
+  expect((await tabs(popup, { action: 'list' })).snapshot.tabs.map((tab) => tab.id)).toEqual(
+    before.tabs.map((tab) => tab.id),
+  );
   await popup.getByRole('button', { name: 'Apply changes', exact: true }).click();
   await expect(popup.getByText('Changes applied.', { exact: true })).toBeVisible();
   await popup.getByRole('button', { name: 'Undo last sort', exact: true }).click();
   await expect(popup.getByText('Previous tab order restored.')).toBeVisible();
-  expect(
-    (await tabs(popup, { action: 'list' })).result.snapshot.tabs.map((t: any) => t.id),
-  ).toEqual(before.tabs.map((t: any) => t.id));
+  expect((await tabs(popup, { action: 'list' })).snapshot.tabs.map((tab) => tab.id)).toEqual(
+    before.tabs.map((tab) => tab.id),
+  );
   await popup.getByRole('button', { name: 'Preview sort', exact: true }).click();
   await expect(popup.getByRole('button', { name: 'Apply changes', exact: true })).toBeVisible();
   await context.newPage();
@@ -142,11 +192,10 @@ test('tab previews do not mutate, sorting can undo, and stale previews are rejec
   await popup.getByRole('button', { name: 'Preview group', exact: true }).click();
   await popup.getByRole('button', { name: 'Apply changes', exact: true }).click();
   await expect(popup.getByText('Changes applied.', { exact: true })).toBeVisible();
-  const grouped = (await tabs(popup, { action: 'list' })).result.snapshot;
+  const grouped = (await tabs(popup, { action: 'list' })).snapshot;
   expect(grouped.groups).toEqual(
     expect.arrayContaining([expect.objectContaining({ title: 'Research' })]),
   );
-  await popup.screenshot({ path: info.outputPath('tabs.png') });
 });
 
 test('empty model output stays a failed attempt without a completed answer', async ({
@@ -166,9 +215,7 @@ test('empty model output stays a failed attempt without a completed answer', asy
     await expect(article.getByText('Ready · saved on this device', { exact: false })).toHaveCount(
       0,
     );
-    expect((await db(popup, { type: 'DB_GET_HISTORY', payload: {} })).result[0].latest.status).toBe(
-      'failed',
-    );
+    expect((await getFirstHistory(popup)).latest.status).toBe('failed');
   } finally {
     await server.close();
   }
@@ -184,23 +231,48 @@ test('unreadable settings show an error instead of an editable default profile',
     };
   });
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await expect(popup.getByRole('alert')).toContainText('Could not load saved settings');
+  await expect(popup.getByRole('alert')).toContainText('Could not read saved settings');
   await expect(popup.getByRole('button', { name: 'Save Settings', exact: true })).toHaveCount(0);
+  await expect(popup.getByRole('button', { name: 'Back up and reset settings' })).toHaveCount(0);
+});
+
+test('malformed settings expose their field error and require explicit backup before reset', async ({
+  sandbox,
+}) => {
+  const { popup } = await sandbox.launch();
+  const invalid = { openaiCompatible: { temperature: 'warm' } };
+  await popup.evaluate(
+    async (settings) => chrome.storage.local.set({ saul_user_settings: settings }),
+    invalid,
+  );
+  await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(popup.getByRole('alert')).toContainText(
+    'Saved provider temperature must be a finite number',
+  );
+  await popup.getByRole('button', { name: 'Back up and reset settings', exact: true }).click();
+  await expect(popup.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+  await expect(
+    popup.getByText(
+      'Defaults restored. The previous saved settings remain in a local recovery backup.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  const stored = await popup.evaluate(async () =>
+    chrome.storage.local.get(['saul_user_settings', 'saul_user_settings_recovery_backup']),
+  );
+  expect(stored.saul_user_settings).toMatchObject({
+    activeProvider: 'openai-compatible',
+    openaiCompatible: { model: 'gpt-4o-mini' },
+  });
+  expect(stored.saul_user_settings_recovery_backup).toEqual(invalid);
 });
 
 test('keyboard explanation can pin, follow up, and bookmark', async ({
   sandbox,
   fixtureServer,
-}, info) => {
+}) => {
   const { popup, context } = await sandbox.launch();
-  await popup.evaluate(async (origin) => {
-    await chrome.storage.local.set({
-      saul_user_settings: {
-        activeProvider: 'openai-compatible',
-        openaiCompatible: { baseUrl: origin + '/v1', apiKey: '', model: 'test-model' },
-      },
-    });
-  }, fixtureServer.origin);
+  await configureFixtureProvider(popup, fixtureServer.origin);
   const article = await context.newPage();
   await article.goto(fixtureServer.origin + '/article');
   await expect(article.locator('saul-root')).toBeAttached();
@@ -225,10 +297,7 @@ test('keyboard explanation can pin, follow up, and bookmark', async ({
   await expect(article.getByText('Ready · saved on this device', { exact: false })).toBeVisible();
   await article.getByRole('button', { name: 'Bookmark', exact: true }).click();
   await expect(article.getByRole('button', { name: 'Remove bookmark', exact: true })).toBeVisible();
-  const history = await db(popup, { type: 'DB_GET_HISTORY', payload: {} });
-  expect(history.result).toHaveLength(1);
-  expect(history.result[0].bookmarked).toBe(true);
-  await article.screenshot({ path: info.outputPath('reading-card.png') });
+  expect((await getFirstHistory(popup)).bookmarked).toBe(true);
 });
 
 test('stopping a slow explanation retains partial text without saving a completed run', async ({
@@ -236,18 +305,11 @@ test('stopping a slow explanation retains partial text without saving a complete
 }) => {
   const server = await createFixtureServer(
     'A gradient describes how a function changes over time.',
-    { chunkDelayMs: 3000 },
+    { gated: true },
   );
   try {
     const { popup, context } = await sandbox.launch();
-    await popup.evaluate(async (origin) => {
-      await chrome.storage.local.set({
-        saul_user_settings: {
-          activeProvider: 'openai-compatible',
-          openaiCompatible: { baseUrl: origin + '/v1', apiKey: '', model: 'test-model' },
-        },
-      });
-    }, server.origin);
+    await configureFixtureProvider(popup, server.origin);
     const article = await context.newPage();
     await article.goto(server.origin + '/article');
     await expect(article.locator('saul-root')).toBeAttached();
@@ -257,12 +319,12 @@ test('stopping a slow explanation retains partial text without saving a complete
     await expect(article.getByText('A gradient describes how a', { exact: false })).toBeVisible();
     await article.getByRole('button', { name: 'Stop', exact: true }).click();
     await expect(article.getByText('Incomplete · stopped')).toBeVisible();
-    expect((await db(popup, { type: 'DB_GET_HISTORY', payload: {} })).result[0].latest.status).toBe(
-      'cancelled',
-    );
+    expect((await getFirstHistory(popup)).latest.status).toBe('cancelled');
+    server.setGated(false);
+    server.releaseAll();
     await article.getByRole('button', { name: 'Retry explanation', exact: true }).click();
     await expect(article.getByText('Ready · saved on this device', { exact: false })).toBeVisible();
-    expect((await db(popup, { type: 'DB_GET_HISTORY', payload: {} })).result).toHaveLength(1);
+    expect(await sendDb(popup, { type: 'DB_GET_HISTORY', payload: {} })).toHaveLength(1);
   } finally {
     await server.close();
   }
@@ -320,7 +382,7 @@ test('workspace navigation protects drafts and on-device preparation can be stop
 test('save locks the draft; provider tests lock only provider settings and remain cancellable', async ({
   sandbox,
 }) => {
-  const server = await createFixtureServer('Test response.', { chunkDelayMs: 10000 });
+  const server = await createFixtureServer('Test response.', { gated: true });
   try {
     const { popup } = await sandbox.launch();
     await configureFixtureProvider(popup, server.origin);

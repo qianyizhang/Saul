@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtempSync, rmSync, statSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, statSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { endianness } from 'node:os';
 import { encodeNative, nativeDecoder, lineDecoder } from '../native/transport.mjs';
@@ -59,8 +59,8 @@ async function host(
   });
   return child;
 }
-async function subprocess(script, args = [], input) {
-  const child = spawn(process.execPath, [script, ...args], { env: process.env });
+async function runProcess(command, args = [], input, options = {}) {
+  const child = spawn(command, args, { env: process.env, cwd: options.cwd });
   children.push(child);
   let stdout = '',
     stderr = '';
@@ -74,6 +74,9 @@ async function subprocess(script, args = [], input) {
   child.stdin.end(input);
   const [code] = await exited;
   return { code, stdout, stderr };
+}
+async function subprocess(script, args = [], input, options = {}) {
+  return runProcess(process.execPath, [resolve(script), ...args], input, options);
 }
 
 describe('native transport', () => {
@@ -186,7 +189,7 @@ describe('native transport', () => {
     expect(responses[3].result.isError).toBe(true);
     expect(responses[4].error.code).toBe(-32601);
   });
-  it('installs executable wrappers correctly even with spaces and quotes in paths', async () => {
+  it('installs a standalone CLI and MCP server that work outside the checkout', async () => {
     const installDir = join(directory, "Saul's files");
     const manifestDir = join(directory, 'Native Messaging');
     const result = await subprocess('native/install.mjs', [
@@ -201,15 +204,46 @@ describe('native transport', () => {
     const manifest = JSON.parse(readFileSync(join(manifestDir, 'com.saul.tabs.json'), 'utf8'));
     expect(manifest.allowed_origins).toEqual([`chrome-extension://${'a'.repeat(32)}/`]);
     expect(statSync(manifest.path).mode & 0o777).toBe(0o700);
-    const child = spawn(join(installDir, 'bin/saul'), ['sessions'], { env: process.env });
-    children.push(child);
-    let stdout = '';
-    child.stdout.on('data', (data) => {
-      stdout += data;
-    });
-    const [code] = await once(child, 'exit');
-    expect(code).toBe(0);
-    expect(JSON.parse(stdout)).toEqual({ sessions: [] });
+
+    const unrelatedCwd = join(directory, 'unrelated');
+    mkdirSync(unrelatedCwd);
+    const cli = join(installDir, 'bin/saul');
+    const help = await runProcess(cli, ['help'], undefined, { cwd: unrelatedCwd });
+    expect(help).toMatchObject({ code: 0, stderr: '' });
+    expect(help.stdout).toContain('groups-update');
+
+    const tools = await runProcess(cli, ['tools'], undefined, { cwd: unrelatedCwd });
+    expect(tools).toMatchObject({ code: 0, stderr: '' });
+    expect(JSON.parse(tools.stdout).map((tool) => tool.name)).toEqual([
+      'saul_sessions',
+      'saul_tabs_list',
+      'saul_tabs_sort',
+      'saul_tabs_group',
+      'saul_tabs_ungroup',
+      'saul_tabs_move',
+      'saul_groups_update',
+    ]);
+
+    const mcp = await subprocess(
+      join(installDir, 'bridge/mcp.mjs'),
+      [],
+      [
+        { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} },
+        { jsonrpc: '2.0', id: 2, method: 'tools/list' },
+      ]
+        .map((message) => JSON.stringify(message))
+        .join('\n') + '\n',
+      { cwd: unrelatedCwd },
+    );
+    expect(mcp).toMatchObject({ code: 0, stderr: '' });
+    const responses = mcp.stdout
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    expect(responses[1].result.tools).toEqual(JSON.parse(tools.stdout));
+
+    const sessionsResult = await runProcess(cli, ['sessions'], undefined, { cwd: unrelatedCwd });
+    expect(JSON.parse(sessionsResult.stdout)).toEqual({ sessions: [] });
     expect(() => installationPlan({ extensionId: '../bad' })).toThrow('32-letter');
   });
 });

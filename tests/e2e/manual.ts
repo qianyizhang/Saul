@@ -2,6 +2,7 @@ import { createFixtureServer, createSandbox, taggedAnswer } from './support.ts';
 
 // Uses Node's native TypeScript support (Node >=22.18); no extra runner needed.
 const smoke = process.argv.includes('--smoke');
+const headless = smoke || process.argv.includes('--headless');
 let sandbox: Awaited<ReturnType<typeof createSandbox>> | undefined;
 let server: Awaited<ReturnType<typeof createFixtureServer>> | undefined;
 let stop!: () => void;
@@ -12,7 +13,7 @@ process.once('SIGINT', stop);
 process.once('SIGTERM', stop);
 try {
   server = await createFixtureServer(taggedAnswer);
-  sandbox = await createSandbox({ headless: smoke });
+  sandbox = await createSandbox({ headless, handleProcessSignals: false });
   const { context, popup } = await sandbox.launch();
   context.once('close', stop);
   await popup.evaluate(async (origin) => {

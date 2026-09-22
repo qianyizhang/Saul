@@ -1,52 +1,58 @@
 import { useEffect, useRef, useState } from 'react';
-import { getSettings, saveSettings, DEFAULT_SETTINGS } from '../storage/settings';
+import {
+  backupAndResetInvalidSettings,
+  getSettings,
+  InvalidStoredSettingsError,
+  saveSettings,
+  DEFAULT_SETTINGS,
+  validateProviderSettings,
+} from '../storage/settings';
 import type { UserSettings, ProviderProfile } from '../types';
-export function validateProvider(settings: UserSettings) {
-  if (settings.activeProvider === 'chrome-ai') return;
-  let url: URL;
-  try {
-    url = new URL(settings.openaiCompatible.baseUrl);
-  } catch {
-    throw new Error('Enter a valid model endpoint URL.');
-  }
-  if (
-    !['http:', 'https:'].includes(url.protocol) ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash
-  )
-    throw new Error(
-      'Use an HTTP(S) endpoint without credentials, query parameters, or a fragment.',
-    );
-  if (!settings.openaiCompatible.model.trim())
-    throw new Error('Enter a model name available from this provider.');
+
+function settingsDraft(settings: UserSettings): UserSettings {
+  const activeProfileId = settings.activeProfileId || 'default';
+  return {
+    ...settings,
+    activeProfileId,
+    profiles: settings.profiles?.length
+      ? settings.profiles
+      : [
+          {
+            id: activeProfileId,
+            name: 'Default',
+            config: settings.openaiCompatible,
+          },
+        ],
+  };
 }
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Settings could not be loaded.';
+}
+
 export function useSettingsDraft(onSaved?: () => void, onDirty?: (dirty: boolean) => void) {
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [loaded, setLoaded] = useState(false),
     [dirty, setDirty] = useState(false),
     [saved, setSaved] = useState(false),
     [saving, setSaving] = useState(false),
-    [error, setError] = useState('');
+    [error, setError] = useState(''),
+    [canResetInvalidSettings, setCanResetInvalidSettings] = useState(false),
+    [resettingInvalidSettings, setResettingInvalidSettings] = useState(false),
+    [recoveryNotice, setRecoveryNotice] = useState('');
   const savingRef = useRef(false);
   useEffect(() => {
     let active = true;
     getSettings()
       .then((s) => {
         if (!active) return;
-        const id = s.activeProfileId || 'default';
-        setSettings({
-          ...s,
-          activeProfileId: id,
-          profiles: s.profiles?.length
-            ? s.profiles
-            : [{ id, name: 'Default', config: s.openaiCompatible }],
-        });
+        setSettings(settingsDraft(s));
         setLoaded(true);
       })
       .catch((e) => {
-        if (active) setError(e.message);
+        if (!active) return;
+        setError(errorMessage(e));
+        setCanResetInvalidSettings(e instanceof InvalidStoredSettingsError);
       });
     return () => {
       active = false;
@@ -67,6 +73,7 @@ export function useSettingsDraft(onSaved?: () => void, onDirty?: (dirty: boolean
     setDirty(true);
     setSaved(false);
     setError('');
+    setRecoveryNotice('');
   }
   function profilesWithCurrent(): ProviderProfile[] {
     return (settings.profiles || []).map((p) =>
@@ -79,7 +86,7 @@ export function useSettingsDraft(onSaved?: () => void, onDirty?: (dirty: boolean
     setSaving(true);
     setError('');
     try {
-      validateProvider(settings);
+      validateProviderSettings(settings);
       const next = { ...settings, profiles: profilesWithCurrent() };
       await saveSettings(next);
       setSettings(next);
@@ -87,11 +94,47 @@ export function useSettingsDraft(onSaved?: () => void, onDirty?: (dirty: boolean
       setSaved(true);
       onSaved?.();
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorMessage(e));
     } finally {
       savingRef.current = false;
       setSaving(false);
     }
   }
-  return { settings, loaded, dirty, saved, saving, error, update, profilesWithCurrent, save };
+  async function resetInvalidSettings() {
+    if (!canResetInvalidSettings || resettingInvalidSettings) return;
+    setResettingInvalidSettings(true);
+    try {
+      const recovered = await backupAndResetInvalidSettings();
+      setError('');
+      setSettings(settingsDraft(recovered.settings));
+      setLoaded(true);
+      setCanResetInvalidSettings(false);
+      setDirty(false);
+      setSaved(false);
+      setRecoveryNotice(
+        recovered.reset
+          ? 'Defaults restored. The previous saved settings remain in a local recovery backup.'
+          : 'Saved settings changed and now load without a reset.',
+      );
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setResettingInvalidSettings(false);
+    }
+  }
+  return {
+    settings,
+    loaded,
+    dirty,
+    saved,
+    saving,
+    error,
+    canResetInvalidSettings,
+    resettingInvalidSettings,
+    recoveryNotice,
+    update,
+    profilesWithCurrent,
+    save,
+    resetInvalidSettings,
+  };
 }

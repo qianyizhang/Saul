@@ -1,28 +1,11 @@
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider, createFixtureServer } from './support.ts';
-import type { Page } from '@playwright/test';
-const history = (page: Page) =>
-  page.evaluate(async () => {
-    const reply = await chrome.runtime.sendMessage({
-      target: 'saul-workspace',
-      message: { type: 'DB_GET_HISTORY', payload: {} },
-    });
-    if (!reply.success) throw new Error(reply.error);
-    return reply.result;
-  });
-async function explain(page: Page, selector = '#concept') {
-  await expect(page.locator('saul-root')).toBeAttached();
-  await page.locator(selector).click({ clickCount: 3 });
-  await page.getByRole('button', { name: 'Explain', exact: true }).click();
-}
-async function view(page: Page) {
-  await page.getByRole('button', { name: 'Page explanations', exact: true }).click();
-  await page
-    .getByRole('region', { name: 'Page explanations', exact: true })
-    .getByRole('button')
-    .first()
-    .click();
-}
+import {
+  explainSelection as explain,
+  getFirstHistory,
+  getHistory as history,
+  openFirstPageExplanation as view,
+} from './driver.ts';
 test('quiet queue, underline view, refresh and persistent unread explanations', async ({
   sandbox,
   fixtureServer,
@@ -36,7 +19,7 @@ test('quiet queue, underline view, refresh and persistent unread explanations', 
   await expect(page.getByRole('region', { name: 'Saul explanation' })).toHaveCount(0);
   await expect.poll(async () => (await history(browser.popup))[0]?.latest.status).toBe('completed');
   await expect(page.getByText('Explanation ready', { exact: true })).toBeVisible();
-  expect((await history(browser.popup))[0].unread).toBe(true);
+  expect((await getFirstHistory(browser.popup)).unread).toBe(true);
   expect(await page.locator('#concept').boundingBox()).toEqual(original);
   await page.locator('#concept').click({ position: { x: 30, y: 15 } });
   await expect(page.getByRole('region', { name: 'Saul explanation' })).toBeVisible();
@@ -55,7 +38,7 @@ test('dismiss, refresh and closing the source do not cancel; actual runner loss 
   sandbox,
 }) => {
   const server = await createFixtureServer('This answer survives leaving the page.', {
-    chunkDelayMs: 2000,
+    gated: true,
   });
   try {
     const { context, popup, worker } = await sandbox.launch();
@@ -67,11 +50,13 @@ test('dismiss, refresh and closing the source do not cancel; actual runner loss 
     await expect(page.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Close explanation' }).click();
     await page.reload();
+    server.releaseAll();
     await expect.poll(async () => (await history(popup))[0]?.latest.status).toBe('completed');
     await view(page);
     await page.getByRole('button', { name: 'Regenerate', exact: true }).click();
     await expect.poll(async () => (await history(popup))[0]?.latest.status).toBe('running');
     await page.close();
+    server.releaseAll();
     await expect.poll(async () => (await history(popup))[0]?.latest.status).toBe('completed');
     page = await context.newPage();
     await page.goto(server.origin + '/article');
@@ -82,8 +67,8 @@ test('dismiss, refresh and closing the source do not cancel; actual runner loss 
       .toBeGreaterThan(0);
     await worker.evaluate(() => chrome.offscreen.closeDocument());
     await expect.poll(async () => (await history(popup))[0]?.latest.status).toBe('interrupted');
-    const row = (await history(popup))[0];
-    expect(row.completed.responseRaw).toBe('This answer survives leaving the page.');
+    const row = await getFirstHistory(popup);
+    expect(row.completed?.responseRaw).toBe('This answer survives leaving the page.');
     expect(row.latest.responseRaw).toBeTruthy();
     await page.reload();
     await view(page);
@@ -96,7 +81,7 @@ test('dismiss, refresh and closing the source do not cancel; actual runner loss 
 test('queue limits, frozen configuration, repeated Explain, stop, and deletion during generation', async ({
   sandbox,
 }) => {
-  const server = await createFixtureServer('A retained answer.', { chunkDelayMs: 2500 });
+  const server = await createFixtureServer('A retained answer.', { gated: true });
   try {
     const { popup, context } = await sandbox.launch();
     await configureFixtureProvider(popup, server.origin);
@@ -112,26 +97,34 @@ test('queue limits, frozen configuration, repeated Explain, stop, and deletion d
     await explain(page, '#third');
     await expect.poll(async () => (await history(popup)).length).toBe(3);
     expect(server.requests).toHaveLength(2);
-    expect((await history(popup)).filter((p: any) => p.latest.status === 'queued')).toHaveLength(1);
+    expect(
+      (await history(popup)).filter((passage) => passage.latest.status === 'queued'),
+    ).toHaveLength(1);
     await popup.evaluate(async () => {
       const data = await chrome.storage.local.get('saul_user_settings');
       (data.saul_user_settings as { openaiCompatible: { model: string } }).openaiCompatible.model =
         'later-model';
       await chrome.storage.local.set(data);
     });
+    server.releaseAll();
     await expect.poll(() => server.requests.length).toBe(3);
     expect(JSON.parse(server.requests[2]!.body).model).toBe('test-model');
     // Deleting the last, running passage prevents its eventual terminal event recreating it.
-    const row = (await history(popup)).find((p: any) => p.selectedText === 'Learning rate');
+    const row = (await history(popup)).find((passage) => passage.selectedText === 'Learning rate');
+    if (!row) throw new Error('Expected the Learning rate passage in history');
     await popup.evaluate(async (id) => {
       await chrome.runtime.sendMessage({
         target: 'saul-workspace',
         message: { type: 'DB_DELETE_SELECTION', payload: { selectionId: id } },
       });
     }, row.selectionId);
+    server.setGated(false);
+    server.releaseAll();
     await expect.poll(async () => (await history(popup)).length).toBe(2);
     await expect
-      .poll(async () => (await history(popup)).every((p: any) => p.latest.status === 'completed'))
+      .poll(async () =>
+        (await history(popup)).every((passage) => passage.latest.status === 'completed'),
+      )
       .toBe(true);
     await page.reload();
     await expect(page.getByRole('button', { name: 'Page explanations' })).toContainText('Saul · 2');
@@ -143,7 +136,7 @@ test('queue limits, frozen configuration, repeated Explain, stop, and deletion d
 test('browser loss interrupts both running and unsent queued jobs without automatic replay', async ({
   sandbox,
 }) => {
-  const server = await createFixtureServer('Partial stream to recover.', { chunkDelayMs: 10000 });
+  const server = await createFixtureServer('Partial stream to recover.', { gated: true });
   try {
     let browser = await sandbox.launch();
     await configureFixtureProvider(browser.popup, server.origin);
@@ -155,12 +148,12 @@ test('browser loss interrupts both running and unsent queued jobs without automa
     await expect.poll(() => server.requests.length).toBe(2);
     browser = await sandbox.launch();
     await expect
-      .poll(async () => (await history(browser.popup)).map((p: any) => p.latest.status))
+      .poll(async () => (await history(browser.popup)).map((passage) => passage.latest.status))
       .toEqual(['interrupted', 'interrupted', 'interrupted']);
     expect(server.requests).toHaveLength(2);
     const rows = await history(browser.popup);
-    expect(rows.filter((p: any) => p.latest.responseRaw)).toHaveLength(2);
-    expect(rows.every((p: any) => !p.completed)).toBe(true);
+    expect(rows.filter((passage) => passage.latest.responseRaw)).toHaveLength(2);
+    expect(rows.every((passage) => !passage.completed)).toBe(true);
   } finally {
     await server.close();
   }
@@ -170,7 +163,7 @@ test('service-worker restart reconnects to the same runner and does not replay t
   sandbox,
 }) => {
   const server = await createFixtureServer('Completed across worker restart.', {
-    chunkDelayMs: 4000,
+    gated: true,
   });
   try {
     const { popup, context, worker } = await sandbox.launch();
@@ -194,6 +187,8 @@ test('service-worker restart reconnects to the same runner and does not replay t
       (v) => v.scriptURL === worker.url() && v.runningStatus === 'running',
     )!;
     await cdp.send('ServiceWorker.stopWorker', { versionId: version.versionId });
+    server.setGated(false);
+    server.releaseAll();
     await expect.poll(async () => (await history(popup))[0]?.latest.status).toBe('completed');
     expect(server.requests).toHaveLength(1);
     await view(page);
@@ -219,9 +214,9 @@ for (const ending of ['eof', 'length'] as const)
       server.setEnding(ending);
       await page.getByRole('button', { name: 'Regenerate', exact: true }).click();
       await expect.poll(async () => (await history(popup))[0]?.latest.status).toBe('interrupted');
-      const row = (await history(popup))[0];
+      const row = await getFirstHistory(popup);
       expect(row.latest.responseRaw).toBe('A useful explanation.');
-      expect(row.completed.responseRaw).toBe('A useful explanation.');
+      expect(row.completed?.responseRaw).toBe('A useful explanation.');
       expect(row.unread).toBe(false);
       await expect(page.getByRole('button', { name: 'Retry explanation' })).toBeVisible();
     } finally {
@@ -239,7 +234,7 @@ test('content capabilities reject global history, direct runner access and anoth
   await page.goto(fixtureServer.origin + '/article');
   await explain(page);
   await expect.poll(async () => (await history(popup))[0]?.latest.status).toBe('completed');
-  const row = (await history(popup))[0];
+  const row = await getFirstHistory(popup);
   await page.goto(fixtureServer.origin + '/anchors');
   await expect(page.locator('saul-root')).toBeAttached();
   const cdp = await context.newCDPSession(page),
@@ -375,7 +370,7 @@ test('submission and completion are idempotent; deletion makes late writes inert
 test('an old in-flight page refresh cannot strand the subscription after SPA navigation', async ({
   sandbox,
 }) => {
-  const server = await createFixtureServer('Ready on the new route.', { chunkDelayMs: 1600 });
+  const server = await createFixtureServer('Ready on the new route.');
   try {
     const { popup, context, worker } = await sandbox.launch();
     await configureFixtureProvider(popup, server.origin);
@@ -383,7 +378,7 @@ test('an old in-flight page refresh cannot strand the subscription after SPA nav
     await page.goto(server.origin + '/article');
     await explain(page);
     await expect(page.getByText('Explanation ready', { exact: true })).toBeVisible();
-    const row = (await history(popup))[0];
+    const row = await getFirstHistory(popup);
     // Hold one background-to-offscreen page response across a same-document navigation.
     await worker.evaluate(() => {
       const runtime = chrome.runtime;
@@ -436,9 +431,9 @@ test('an old in-flight page refresh cannot strand the subscription after SPA nav
     ).toContainText('Saul · 1');
     const rows = await history(popup);
     expect(rows).toHaveLength(2);
-    expect(
-      rows.find((p: { selectedText: string }) => p.selectedText === 'Learning rate').pageUrl,
-    ).toBe(server.origin + '/article#second-route');
+    expect(rows.find((passage) => passage.selectedText === 'Learning rate')?.pageUrl).toBe(
+      server.origin + '/article#second-route',
+    );
     expect(server.requests).toHaveLength(2);
   } finally {
     await server.close();

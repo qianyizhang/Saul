@@ -12,7 +12,7 @@ it('rejects unavailable persistence instead of reporting success from a memory d
   vi.mocked(sqlite3InitModule).mockResolvedValue({
     oo1: { DB: memoryDb },
     installOpfsSAHPoolVfs: install,
-  } as any);
+  } as unknown as Awaited<ReturnType<typeof sqlite3InitModule>>);
   const db = new SaulDatabase();
   await expect(db.execute({ type: 'DB_GET_HISTORY', payload: {} })).rejects.toThrow(
     'Persistent storage is unavailable. History was not saved. OPFS denied',

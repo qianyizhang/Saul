@@ -32,6 +32,7 @@ export interface ToolArgs {
 }
 export type ToolName = keyof ToolArgs;
 export type BrowserTool = Exclude<ToolName, 'saul_sessions'>;
+export const CLI_COMMANDS: Readonly<Record<string, ToolName>>;
 export interface TabView {
   id: number;
   windowId: number;

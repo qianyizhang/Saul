@@ -1,41 +1,46 @@
 import { useEffect, useState } from 'react';
 import { NativeBridge } from './NativeBridge';
+import { sendWorkspaceMessage } from '../storage/client';
 
-import type { TabSnapshot, WorkspaceRequest, WorkspaceResult } from '../native/workspace';
+import type {
+  TabSnapshot,
+  WorkspacePreviewArgs,
+  WorkspacePreviewRequest,
+  WorkspacePreviewResult,
+  WorkspaceRequest,
+  WorkspaceTool,
+} from '../native/workspace';
+
+type SortBy = WorkspacePreviewArgs<'saul_tabs_sort'>['by'];
+type GroupColor = NonNullable<WorkspacePreviewArgs<'saul_tabs_group'>['color']>;
+type PreviewState = WorkspacePreviewResult & { request: WorkspacePreviewRequest };
 
 export function Tabs() {
   const [snapshot, setSnapshot] = useState<TabSnapshot>({ windows: [], tabs: [], groups: [] });
   const [windowId, setWindow] = useState<number>();
   const [selected, select] = useState<number[]>([]);
-  const [by, setBy] = useState('domain');
+  const [by, setBy] = useState<SortBy>('domain');
   const [title, setTitle] = useState('Research');
-  const [color, setColor] = useState('blue');
+  const [color, setColor] = useState<GroupColor>('blue');
   const [destination, setDestination] = useState<number>();
-  const [preview, setPreview] = useState<
-    WorkspaceResult & { method: string; args: Record<string, unknown> }
-  >();
+  const [preview, setPreview] = useState<PreviewState>();
   const [undo, setUndo] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  async function call(payload: WorkspaceRequest): Promise<WorkspaceResult> {
-    const result = await chrome.runtime.sendMessage({ type: 'WORKSPACE_TABS', ...payload });
-    if (!result?.success)
-      throw new Error(result?.error || 'Could not reach Saul. Reload the extension and try again.');
-    return result.result;
-  }
   async function perform(payload: WorkspaceRequest) {
     setBusy(true);
     setError('');
     setNotice('');
     try {
-      const result = await call(payload);
-      if (payload.action === 'preview')
-        setPreview({ ...result, method: payload.method, args: payload.args });
-      else {
+      if (payload.action === 'preview') {
+        const result = await sendWorkspaceMessage(payload);
+        setPreview({ ...result, request: payload });
+      } else {
+        const result = await sendWorkspaceMessage(payload);
         setPreview(undefined);
         setSnapshot(result.snapshot);
-        setUndo(Boolean(result.canUndo));
+        setUndo(result.canUndo);
         setWindow((current) =>
           result.snapshot.windows.some((w) => w.id === current)
             ? current
@@ -65,9 +70,15 @@ export function Tabs() {
     void perform({ action: 'list' });
   }, []);
   const tabs = snapshot.tabs.filter((t) => t.windowId === windowId);
-  const draft = (method: string, args: Record<string, unknown>) =>
-    perform({ action: 'preview', method, args });
+  const draft = <K extends WorkspaceTool>(method: K, args: WorkspacePreviewArgs<NoInfer<K>>) =>
+    perform({ action: 'preview', method, args } as WorkspacePreviewRequest<K>);
   const previewIds = preview?.plan && 'tabIds' in preview.plan ? preview.plan.tabIds : [];
+  const previewTitle =
+    preview && 'title' in preview.request.args ? preview.request.args.title : undefined;
+  const previewColor =
+    preview && 'color' in preview.request.args ? preview.request.args.color : undefined;
+  const previewWindow =
+    preview && 'windowId' in preview.request.args ? preview.request.args.windowId : undefined;
   const groups = snapshot.groups.filter((g) => g.windowId === windowId);
   return (
     <div className="stack">
@@ -116,7 +127,11 @@ export function Tabs() {
           </label>
           <label className="field">
             Sort by
-            <select aria-label="Sort by" value={by} onChange={(e) => setBy(e.target.value)}>
+            <select
+              aria-label="Sort by"
+              value={by}
+              onChange={(e) => setBy(e.target.value as SortBy)}
+            >
               <option value="domain">Website</option>
               <option value="title">Title</option>
             </select>
@@ -126,7 +141,9 @@ export function Tabs() {
           <button
             className="btn"
             disabled={busy || !tabs.length}
-            onClick={() => draft('saul_tabs_sort', { windowId, by })}
+            onClick={() => {
+              if (windowId !== undefined) void draft('saul_tabs_sort', { windowId, by });
+            }}
           >
             Preview sort
           </button>
@@ -146,20 +163,19 @@ export function Tabs() {
         <section className="panel stack" aria-label="Tab change preview">
           <h3>Review changes</h3>
           <p>
-            {preview.method === 'saul_tabs_sort'
+            {preview.request.method === 'saul_tabs_sort'
               ? 'Proposed tab order'
-              : preview.method === 'saul_tabs_group'
-                ? `Group ${previewIds.length} selected tabs${preview.args.title ? ` as “${preview.args.title}”` : ''}`
-                : preview.method === 'saul_tabs_move'
-                  ? `Move selected tabs to window ${preview.args.windowId}`
-                  : preview.method === 'saul_groups_update'
+              : preview.request.method === 'saul_tabs_group'
+                ? `Group ${previewIds.length} selected tabs${previewTitle ? ` as “${previewTitle}”` : ''}`
+                : preview.request.method === 'saul_tabs_move'
+                  ? `Move selected tabs to window ${previewWindow}`
+                  : preview.request.method === 'saul_groups_update'
                     ? 'Update group details'
                     : 'Ungroup selected tabs'}
           </p>
-          {preview.args.title !== undefined && (
+          {previewTitle !== undefined && (
             <p className="small muted">
-              Name: {String(preview.args.title || 'Unnamed group')} · Color:{' '}
-              {String(preview.args.color || 'unchanged')}
+              Name: {previewTitle || 'Unnamed group'} · Color: {previewColor || 'unchanged'}
             </p>
           )}
           <ol style={{ maxHeight: 260, overflow: 'auto', paddingLeft: 24 }}>
@@ -173,7 +189,7 @@ export function Tabs() {
             <button
               className="btn primary"
               disabled={busy}
-              onClick={() => perform({ action: 'apply', token: preview.token! })}
+              onClick={() => perform({ action: 'apply', token: preview.token })}
             >
               Apply changes
             </button>
@@ -222,7 +238,11 @@ export function Tabs() {
           </label>
           <label className="field">
             Color
-            <select aria-label="Color" value={color} onChange={(e) => setColor(e.target.value)}>
+            <select
+              aria-label="Color"
+              value={color}
+              onChange={(e) => setColor(e.target.value as GroupColor)}
+            >
               {['blue', 'green', 'yellow', 'red', 'purple', 'pink', 'orange', 'cyan', 'grey'].map(
                 (c) => (
                   <option key={c}>{c}</option>
@@ -255,7 +275,10 @@ export function Tabs() {
               disabled={busy || !selected.length}
               onChange={(e) => {
                 if (e.target.value)
-                  draft('saul_tabs_group', { tabIds: selected, groupId: Number(e.target.value) });
+                  void draft('saul_tabs_group', {
+                    tabIds: selected,
+                    groupId: Number(e.target.value),
+                  });
               }}
             >
               <option value="">Choose group…</option>
@@ -286,9 +309,14 @@ export function Tabs() {
           <button
             className="btn"
             disabled={busy || !selected.length || destination === undefined}
-            onClick={() =>
-              draft('saul_tabs_move', { tabIds: selected, windowId: destination, index: -1 })
-            }
+            onClick={() => {
+              if (destination !== undefined)
+                void draft('saul_tabs_move', {
+                  tabIds: selected,
+                  windowId: destination,
+                  index: -1,
+                });
+            }}
           >
             Preview move
           </button>

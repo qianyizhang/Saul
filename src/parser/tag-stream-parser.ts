@@ -44,7 +44,6 @@ export class TagStreamParser {
   private parse(input: string): TagSegment[] {
     const result: TagSegment[] = [];
     let cursor = 0;
-    let segmentIndex = 0;
 
     while (cursor < input.length) {
       const openTagStart = input.indexOf('<term', cursor);
@@ -54,7 +53,7 @@ export class TagStreamParser {
         const text = input.slice(cursor);
         if (text) {
           result.push({
-            id: `seg-${segmentIndex++}`,
+            id: `seg-${result.length}`,
             type: 'text',
             text,
           });
@@ -67,7 +66,7 @@ export class TagStreamParser {
         const text = input.slice(cursor, openTagStart);
         if (text) {
           result.push({
-            id: `seg-${segmentIndex++}`,
+            id: `seg-${result.length}`,
             type: 'text',
             text,
           });
@@ -83,7 +82,7 @@ export class TagStreamParser {
         const note = noteMatch ? noteMatch[1] : '';
 
         result.push({
-          id: `seg-${segmentIndex++}`,
+          id: `seg-${result.length}`,
           type: 'term',
           term: '',
           note: note || '',
@@ -103,7 +102,7 @@ export class TagStreamParser {
         // Tag is open and content is still streaming
         const termContent = input.slice(contentStart);
         result.push({
-          id: `seg-${segmentIndex++}`,
+          id: `seg-${result.length}`,
           type: 'term',
           term: termContent,
           note: note || '',
@@ -114,7 +113,7 @@ export class TagStreamParser {
         // Tag is fully closed
         const termContent = input.slice(contentStart, closeTagStart);
         result.push({
-          id: `seg-${segmentIndex++}`,
+          id: `seg-${result.length}`,
           type: 'term',
           term: termContent,
           note: note || '',

@@ -1,0 +1,12 @@
+node_modules/
+.output/
+.wxt/
+.pnpm-store/
+playwright-report/
+test-results*/
+coverage/
+pnpm-lock.yaml
+docs/benchmarks/*.json
+# Imported generic skills are maintained outside this project.
+.agents/skills/grilling/
+.agents/skills/show-me/

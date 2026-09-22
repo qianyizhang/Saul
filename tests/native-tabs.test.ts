@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { handleTabCall, sortBlocks } from '../src/native/tabs';
 import { validateCall } from '../native/protocol.mjs';
+import type { TabSnapshot } from '../native/protocol.mjs';
 
 const tab = (id: number, index: number, title: string, extra = {}) =>
   ({
@@ -20,7 +21,36 @@ const tab = (id: number, index: number, title: string, extra = {}) =>
     ...extra,
   }) as chrome.tabs.Tab;
 let tabs: chrome.tabs.Tab[];
-let browser: any;
+const testBrowser = () => ({
+  windows: {
+    get: vi.fn(async (id: number) => ({ id, type: 'normal', incognito: id === 9 })),
+    getAll: vi.fn(async () => [
+      { id: 1, type: 'normal' },
+      { id: 9, type: 'normal', incognito: true },
+    ]),
+  },
+  tabs: {
+    query: vi.fn(async () => tabs),
+    get: vi.fn(async (id: number) => {
+      const found = tabs.find((item) => item.id === id);
+      if (!found) throw new Error('No tab with id');
+      return found;
+    }),
+    move: vi.fn(async () => undefined),
+    group: vi.fn(async () => 10),
+    ungroup: vi.fn(async () => undefined),
+  },
+  tabGroups: {
+    query: vi.fn(async () => [
+      { id: 8, windowId: 1 },
+      { id: 9, windowId: 9 },
+    ]),
+    get: vi.fn(async (id: number) => ({ id, windowId: id === 9 ? 9 : 1, title: 'Old' })),
+    move: vi.fn(async () => undefined),
+    update: vi.fn(async (id: number, values: object) => ({ id, ...values })),
+  },
+});
+let browser: ReturnType<typeof testBrowser>;
 beforeEach(() => {
   tabs = [
     tab(1, 0, 'Pinned', { pinned: true }),
@@ -29,44 +59,16 @@ beforeEach(() => {
     tab(4, 3, 'Alpha', { groupId: 8 }),
     tab(5, 4, 'Apple'),
   ];
-  browser = {
-    windows: {
-      get: vi.fn(async (id: number) => ({ id, type: 'normal', incognito: id === 9 })),
-      getAll: vi.fn(async () => [
-        { id: 1, type: 'normal' },
-        { id: 9, type: 'normal', incognito: true },
-      ]),
-    },
-    tabs: {
-      query: vi.fn(async () => tabs),
-      get: vi.fn(async (id: number) => {
-        const found = tabs.find((t) => t.id === id);
-        if (!found) throw new Error('No tab with id');
-        return found;
-      }),
-      move: vi.fn(async () => undefined),
-      group: vi.fn(async () => 10),
-      ungroup: vi.fn(async () => undefined),
-    },
-    tabGroups: {
-      query: vi.fn(async () => [
-        { id: 8, windowId: 1 },
-        { id: 9, windowId: 9 },
-      ]),
-      get: vi.fn(async (id: number) => ({ id, windowId: id === 9 ? 9 : 1, title: 'Old' })),
-      move: vi.fn(async () => undefined),
-      update: vi.fn(async (id: number, values: object) => ({ id, ...values })),
-    },
-  };
-  vi.stubGlobal('chrome', browser);
+  browser = testBrowser();
+  vi.stubGlobal('chrome', browser as unknown as typeof chrome);
 });
 afterEach(() => vi.unstubAllGlobals());
 
 describe('tab tools', () => {
   it('lists tab metadata and groups but excludes private windows', async () => {
     tabs.push(tab(9, 0, 'Private', { windowId: 9, incognito: true }));
-    const result = (await handleTabCall('saul_tabs_list')) as any;
-    expect(result.tabs.map((t: any) => t.id)).toEqual([1, 2, 3, 4, 5]);
+    const result = (await handleTabCall('saul_tabs_list')) as TabSnapshot;
+    expect(result.tabs.map((item) => item.id)).toEqual([1, 2, 3, 4, 5]);
     expect(result.groups).toEqual([{ id: 8, windowId: 1 }]);
     expect(result.tabs[0]).toMatchObject({
       title: 'Pinned',
@@ -173,7 +175,7 @@ describe('tab tools', () => {
       ['saul_tabs_sort', { windowId: 1, by: 'title', dryRun: 'false' }],
       ['saul_tabs_list', { evaluate: 'script' }],
     ] as const) {
-      expect(() => validateCall(name, args as any)).toThrow();
+      expect(() => validateCall(name, args)).toThrow();
     }
   });
 });

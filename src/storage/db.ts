@@ -48,6 +48,7 @@ export class SaulDatabase {
         throw new Error(
           'Persistent storage is unavailable. History was not saved. ' +
             (error instanceof Error ? error.message : String(error)),
+          { cause: error },
         );
       }
     })();

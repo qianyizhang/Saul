@@ -1,0 +1,28 @@
+minimum_pre_commit_version: '4.0.0'
+repos:
+  - repo: local
+    hooks:
+      - id: format
+        name: Format
+        entry: pnpm format:check
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: lint
+        name: Lint
+        entry: pnpm lint
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: types
+        name: Typecheck
+        entry: pnpm typecheck
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: links
+        name: Documentation links
+        entry: pnpm check:links
+        language: system
+        pass_filenames: false
+        always_run: true

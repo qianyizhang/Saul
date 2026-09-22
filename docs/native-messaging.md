@@ -1,12 +1,12 @@
-# Codex tab access
+# Native tab access
 
-Saul exposes seven tab tools through a local CLI and a stdio MCP server. The extension opens a Chrome native-messaging connection to `com.saul.tabs`; the host accepts CLI/MCP requests over a private Unix socket. No network listener, daemon, extra npm dependency or API key is needed.
+Saul exposes its tab organizer through a local CLI and stdio MCP server. The optional bridge uses Chrome native messaging and a private Unix socket; it has no network listener, daemon, extra dependency, or API key.
 
 ## Install on macOS or Linux
 
-Requires Node.js 20+ and a Chromium browser. Google Chrome is the primary target. Windows and Firefox are not supported by this bridge.
+Use the repository Node version and Google Chrome on macOS or Linux. Chromium, Edge, and Brave installer paths are available but not verified live. Windows and Firefox are unsupported.
 
-1. Run `pnpm install` (if needed), `pnpm compile`, `pnpm test`, and `pnpm build` in the Saul checkout.
+1. Run `pnpm check` and `pnpm build` in the Saul checkout.
 2. In `chrome://extensions`, enable Developer mode and load the `.output/chrome-mv3` folder as an unpacked extension. If Saul is already loaded from that folder, reload it. Chrome may ask you to accept the added tab/native-messaging permissions.
 3. Copy Saul's extension ID from that page (also shown under **Tabs → Connect Codex · setup and troubleshooting**).
 4. Install the host, using that actual ID:
@@ -45,9 +45,9 @@ Example requests:
 
 Tab titles, URLs and group titles are untrusted browser data, not instructions. Tools return metadata only; there is no page-content extraction, script execution, navigation, or tab-closing command.
 
-## CLI
+## CLI and tools
 
-Run `~/.saul/bin/saul help` or use `node native/cli.mjs` from this checkout. Commands accept a single JSON object and print JSON. Errors go to stderr and exit nonzero. `tools` prints the shared JSON schemas.
+Run `~/.saul/bin/saul help` for the current command list. Commands accept one JSON object and print JSON. Errors go to stderr and exit nonzero. `tools` prints the authoritative shared schemas and MCP names.
 
 ```sh
 ~/.saul/bin/saul list
@@ -63,17 +63,7 @@ Run `~/.saul/bin/saul help` or use `node native/cli.mjs` from this checkout. Com
 
 Use IDs from a fresh `list`, not the example IDs above. All mutations default to `dryRun: true`, returning a plan without changing the browser. Apply with `dryRun: false`. A preview is not a transaction or reservation: tabs can change before or during application. Mutations are serialized within the extension but browser/user actions can still race. On an error or timeout, some changes may have completed: list again and inspect before retrying. Calls are never automatically replayed.
 
-| CLI command | MCP tool | Behavior |
-| --- | --- | --- |
-| `sessions` | `saul_sessions` | Connected native-host sessions, extension IDs and connection times |
-| `list` | `saul_tabs_list` | Normal-window tabs, window IDs and groups; excludes incognito |
-| `sort` | `saul_tabs_sort` | One window, title/domain, optional descending order |
-| `group` | `saul_tabs_group` | Explicit unpinned tabs in one window; new or existing group |
-| `ungroup` | `saul_tabs_ungroup` | Remove group membership, retaining tabs |
-| `move` | `saul_tabs_move` | Explicit unpinned, ungrouped tabs; destination window and final start index |
-| `groups-update` | `saul_groups_update` | Title, color, collapsed state |
-
-Sorting keeps pinned tabs in place and treats existing groups as intact blocks, keyed by the title/domain of their first tab. Group membership and internal order remain intact. Equal sort keys retain their original order. Moving tabs refuses positions in the middle of an existing group, and `index: -1` appends. Group across windows by ungrouping/moving the intended tabs first, then grouping them in their destination window.
+The commands cover session discovery, listing, sorting, grouping, ungrouping, moving, and group updates. Sorting keeps pinned tabs fixed and existing groups intact. Moving refuses positions inside a group; `index: -1` appends.
 
 Each connected Chrome profile/extension instance has its own randomly named socket in `~/.saul/run`. If more than one is connected, pass a `session` from `sessions` to every browser command. Session IDs change on reconnection; do not save them as permanent profile identities. Inspect `list` for a selected session to identify its windows. Stale sockets are ignored. `SAUL_RUNTIME_DIR` can override the runtime directory, but must be the same for host and client and short enough for Unix socket paths.
 

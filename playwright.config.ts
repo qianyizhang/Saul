@@ -7,5 +7,7 @@ export default defineConfig({
   timeout: 60_000,
   expect: { timeout: 10_000 },
   workers: 1,
+  forbidOnly: Boolean(process.env.CI),
+  retries: 0,
   reporter: [['list'], ['html', { open: 'never' }]],
 });

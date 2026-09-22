@@ -85,6 +85,7 @@ export async function callTool(name, args = {}) {
       );
     session = active[0].session;
   }
-  const { session: ignored, ...params } = args;
+  const params = { ...args };
+  delete params.session;
   return request(session, name, params);
 }

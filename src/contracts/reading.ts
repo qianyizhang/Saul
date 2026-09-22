@@ -1,26 +1,55 @@
 import type { ContextPolicy, ResolvedContext, SelectionSnapshot } from '../types';
 import type { Passage, RunResult } from '../types/storage';
 
-export type ReadingRequest =
-  | { action: 'list' | 'policy' }
-  | { action: 'mute-errors'; muted: boolean }
-  | {
+type EmptyResult = Record<string, never>;
+export interface ReadingOperations {
+  list: { request: { action: 'list' }; result: { passages: Passage[] } };
+  policy: { request: { action: 'policy' }; result: { policy: ContextPolicy } };
+  'mute-errors': {
+    request: { action: 'mute-errors'; muted: boolean };
+    result: EmptyResult;
+  };
+  submit: {
+    request: {
       action: 'submit';
       submissionId: string;
       snapshot: SelectionSnapshot;
       context: ResolvedContext;
-    }
-  | { action: 'regenerate'; submissionId: string; selectionId: string; instruction?: string }
-  | { action: 'stop' | 'runs'; selectionId: string }
-  | { action: 'bookmark'; selectionId: string; bookmarked: boolean }
-  | { action: 'view'; selectionId: string; runId: string };
-export interface ReadingResult {
-  passages?: Passage[];
-  passageId?: string;
-  reused?: boolean;
-  policy?: ContextPolicy;
-  runs?: RunResult[];
+    };
+    result: { passageId: string; reused: boolean };
+  };
+  regenerate: {
+    request: {
+      action: 'regenerate';
+      submissionId: string;
+      selectionId: string;
+      instruction?: string;
+    };
+    result: { passageId: string; reused: boolean };
+  };
+  stop: { request: { action: 'stop'; selectionId: string }; result: EmptyResult };
+  runs: {
+    request: { action: 'runs'; selectionId: string };
+    result: { runs: RunResult[] };
+  };
+  bookmark: {
+    request: { action: 'bookmark'; selectionId: string; bookmarked: boolean };
+    result: EmptyResult;
+  };
+  view: {
+    request: { action: 'view'; selectionId: string; runId: string };
+    result: EmptyResult;
+  };
 }
+export type ReadingAction = keyof ReadingOperations;
+export type ReadingRequest<K extends ReadingAction = ReadingAction> =
+  ReadingOperations[K]['request'];
+export type ReadingResult<K extends ReadingAction = ReadingAction> = ReadingOperations[K]['result'];
+export type ReadingResultFor<T extends ReadingRequest> = T extends {
+  action: infer K extends ReadingAction;
+}
+  ? ReadingResult<K>
+  : never;
 
 export const record = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);

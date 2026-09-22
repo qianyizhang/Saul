@@ -74,11 +74,14 @@ test('no-response error can be muted even while reading storage is unavailable',
 }) => {
   const { context, worker, popup } = await sandbox.launch();
   await worker.evaluate(() => {
-    const send = chrome.runtime.sendMessage.bind(chrome.runtime);
-    chrome.runtime.sendMessage = ((message: any, ...args: any[]) => {
-      if (message?.target === 'saul-offscreen' && message.message?.type === 'DB_PAGE')
-        return Promise.resolve(undefined);
-      return (send as any)(message, ...args);
+    const send = chrome.runtime.sendMessage.bind(chrome.runtime) as (
+      message: unknown,
+    ) => Promise<unknown>;
+    chrome.runtime.sendMessage = (async (message: unknown) => {
+      const request = message as { target?: string; message?: { type?: string } };
+      if (request.target === 'saul-offscreen' && request.message?.type === 'DB_PAGE')
+        return undefined;
+      return send(message);
     }) as typeof chrome.runtime.sendMessage;
   });
   const page = await context.newPage();

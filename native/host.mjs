@@ -9,6 +9,7 @@ import {
   lineDecoder,
   runtimeDirectory,
   secureDirectory,
+  errorMessage,
 } from './transport.mjs';
 import { validateCall, MAX_MESSAGE } from './protocol.mjs';
 
@@ -85,7 +86,7 @@ const server = net.createServer((socket) => {
     try {
       decode(chunk);
     } catch (error) {
-      send(socket, { error: { message: error.message } });
+      send(socket, { error: { message: errorMessage(error) } });
     }
   });
 });
@@ -111,7 +112,7 @@ process.stdin.on('data', (chunk) => {
   try {
     decode(chunk);
   } catch (error) {
-    console.error(error.message);
+    console.error(errorMessage(error));
     shutdown(1);
   }
 });
@@ -121,7 +122,7 @@ process.stdout.on('error', () => shutdown(1));
 process.on('SIGTERM', () => shutdown());
 process.on('SIGINT', () => shutdown());
 server.on('error', (error) => {
-  console.error(error.message);
+  console.error(errorMessage(error));
   shutdown(1);
 });
 server.listen(socketPath, () => {

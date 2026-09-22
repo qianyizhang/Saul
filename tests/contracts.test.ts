@@ -1,5 +1,11 @@
 import { expect, it, vi, afterEach } from 'vitest';
-import { TOOLS, validateCall, type ToolArgs, type ToolName } from '../native/protocol.mjs';
+import {
+  CLI_COMMANDS,
+  TOOLS,
+  validateCall,
+  type ToolArgs,
+  type ToolName,
+} from '../native/protocol.mjs';
 import {
   validateReading,
   sourcePage,
@@ -42,6 +48,8 @@ const samples = {
 } satisfies ToolArgs;
 it('native declarations and executable schema cover the same tool and argument names', () => {
   expect(TOOLS.map((t) => t.name).sort()).toEqual(Object.keys(complete).sort());
+  expect(Object.values(CLI_COMMANDS).sort()).toEqual(TOOLS.map((tool) => tool.name).sort());
+  expect(new Set(Object.keys(CLI_COMMANDS)).size).toBe(TOOLS.length);
   for (const tool of TOOLS) {
     expect(Object.keys(tool.inputSchema.properties || {}).sort()).toEqual(
       [...fields[tool.name]].sort(),

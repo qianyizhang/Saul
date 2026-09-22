@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { TOOLS } from './protocol.mjs';
 import { callTool } from './client.mjs';
-import { lineDecoder } from './transport.mjs';
+import { errorMessage, lineDecoder } from './transport.mjs';
 
 const versions = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
 const send = (value) => process.stdout.write(JSON.stringify(value) + '\n');
@@ -40,7 +40,7 @@ async function dispatch(message) {
         const result = await callTool(message.params?.name, message.params?.arguments ?? {});
         reply({ content: [{ type: 'text', text: JSON.stringify(result) }] });
       } catch (error) {
-        reply({ isError: true, content: [{ type: 'text', text: error.message }] });
+        reply({ isError: true, content: [{ type: 'text', text: errorMessage(error) }] });
       }
       break;
     default:
@@ -53,13 +53,13 @@ async function dispatch(message) {
 }
 let queue = Promise.resolve();
 const decode = lineDecoder((message) => {
-  queue = queue.then(() => dispatch(message)).catch((error) => console.error(error.message));
+  queue = queue.then(() => dispatch(message)).catch((error) => console.error(errorMessage(error)));
 });
 process.stdin.on('data', (chunk) => {
   try {
     decode(chunk);
   } catch (error) {
-    send({ jsonrpc: '2.0', id: null, error: { code: -32700, message: error.message } });
+    send({ jsonrpc: '2.0', id: null, error: { code: -32700, message: errorMessage(error) } });
     process.stdin.destroy();
   }
 });

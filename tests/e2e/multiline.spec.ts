@@ -1,6 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider } from './support.ts';
+import { getFirstHistory } from './driver.ts';
 
 // Use actual drags across paragraph, bold inline text, and list boundaries.
 async function selectAcrossBlocks(
@@ -54,7 +55,7 @@ for (const backwards of [false, true]) {
   test(`multiline Explain follows the final selected line (${backwards ? 'backward' : 'forward'} drag)`, async ({
     sandbox,
     fixtureServer,
-  }, info) => {
+  }) => {
     const { context } = await sandbox.launch();
     const page = await context.newPage();
     await page.goto(fixtureServer.origin + '/multiline');
@@ -62,7 +63,6 @@ for (const backwards of [false, true]) {
     await selectAcrossBlocks(page, backwards);
     const trigger = page.getByRole('button', { name: 'Explain', exact: true });
     await expect(trigger).toBeVisible();
-    await page.screenshot({ path: info.outputPath('multiline-trigger.png') });
     await expectAtSelectionEnd(page, trigger);
     await page.mouse.wheel(0, 70);
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(50);
@@ -111,13 +111,7 @@ test('multiline capture preserves paragraph, list, and explicit line breaks in s
   expect(Math.abs(cardBox.y - end.bottom - 8)).toBeLessThan(2);
   expect(Math.abs(cardBox.x - lastLine!.x)).toBeLessThan(2);
   await expect(card.locator('header span')).toHaveAttribute('title', selectedText);
-  const history = await popup.evaluate(() =>
-    chrome.runtime.sendMessage({
-      target: 'saul-workspace',
-      message: { type: 'DB_GET_HISTORY', payload: {} },
-    }),
-  );
-  expect(history.result[0].selectedText).toBe(selectedText);
+  expect((await getFirstHistory(popup)).selectedText).toBe(selectedText);
   await card.getByRole('button', { name: 'Close explanation' }).click();
   const points = await page.locator('#breaks').evaluate((paragraph) => {
     const range = document.createRange();
@@ -149,7 +143,7 @@ test('multiline capture preserves paragraph, list, and explicit line breaks in s
 test('live GitHub multiline selection and explanation stay aligned while scrolling', async ({
   sandbox,
   fixtureServer,
-}, info) => {
+}) => {
   test.skip(!process.env.SAUL_LIVE_GITHUB, 'Opt-in check against the live GitHub layout');
   const { context, popup } = await sandbox.launch();
   await configureFixtureProvider(popup, fixtureServer.origin);
@@ -172,7 +166,6 @@ test('live GitHub multiline selection and explanation stay aligned while scrolli
     .poll(async () => (await lastSelectedCharacter(page)).bottom)
     .toBeLessThan(beforeScroll.bottom - 60);
   await expectAtSelectionEnd(page, trigger);
-  await page.screenshot({ path: info.outputPath('github-multiline-trigger.png') });
   const end = await lastSelectedCharacter(page);
   await trigger.click();
   await page.getByRole('button', { name: 'View', exact: true }).click();
@@ -180,5 +173,4 @@ test('live GitHub multiline selection and explanation stay aligned while scrolli
   await expect(card.getByText('Ready · saved on this device', { exact: false })).toBeVisible();
   expect(Math.abs((await card.boundingBox())!.y - end.bottom - 8)).toBeLessThan(2);
   await expect(card).toHaveCSS('transition-duration', '0s');
-  await page.screenshot({ path: info.outputPath('github-multiline-explanation.png') });
 });

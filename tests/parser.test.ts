@@ -89,10 +89,9 @@ describe('TagStreamParser', () => {
     const segments = parser.feed(
       'Use <term note="Key 1">A</term> and <term note="Key 2">B</term> together.',
     );
-    expect(segments).toHaveLength(5);
-    const segA = segments[1];
-    const segB = segments[3];
-    if (segA && segA.type === 'term') expect(segA.term).toBe('A');
-    if (segB && segB.type === 'term') expect(segB.term).toBe('B');
+    expect(segments.filter((segment) => segment.type === 'term')).toEqual([
+      { id: 'seg-1', type: 'term', term: 'A', note: 'Key 1', complete: true },
+      { id: 'seg-3', type: 'term', term: 'B', note: 'Key 2', complete: true },
+    ]);
   });
 });

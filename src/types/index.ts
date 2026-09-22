@@ -60,27 +60,7 @@ export type TagSegment =
       complete: boolean;
     };
 
-export interface WidgetDefinition {
-  id: string;
-  label: string;
-  icon?: string;
-  description: string;
-  promptTemplate: string;
-  contextPolicy: ContextPolicy;
-}
-
 export type ProviderType = 'openai-compatible' | 'chrome-ai';
-
-export interface ModelConfig {
-  id: string;
-  name: string;
-  provider: ProviderType;
-  baseUrl?: string;
-  apiKey?: string;
-  model: string;
-  temperature?: number;
-  maxTokens?: number;
-}
 
 export interface ProviderProfile {
   id: string;

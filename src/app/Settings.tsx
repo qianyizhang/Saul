@@ -49,9 +49,23 @@ export function Settings({
   const test = (mode: 'endpoint' | 'generation') => providerTest.test(mode, settings);
   if (!loaded)
     return error ? (
-      <p role="alert" className="notice error">
-        {error}
-      </p>
+      <div className="stack settings-layout">
+        <p role="alert" className="notice error">
+          {error}
+        </p>
+        {draft.canResetInvalidSettings && (
+          <button
+            type="button"
+            className="btn"
+            disabled={draft.resettingInvalidSettings}
+            onClick={draft.resetInvalidSettings}
+          >
+            {draft.resettingInvalidSettings
+              ? 'Backing up and resetting…'
+              : 'Back up and reset settings'}
+          </button>
+        )}
+      </div>
     ) : (
       <p role="status">Loading settings…</p>
     );
@@ -309,6 +323,11 @@ export function Settings({
       {error && (
         <p className="notice error" role="alert">
           {error}
+        </p>
+      )}
+      {draft.recoveryNotice && (
+        <p className="notice" role="status">
+          {draft.recoveryNotice}
         </p>
       )}
       {notice && (

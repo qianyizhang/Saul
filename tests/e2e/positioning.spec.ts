@@ -41,7 +41,7 @@ test('Explain appears immediately without movement animations', async ({
 test('Explain stays next to the selection on a long positioned page while scrolling', async ({
   sandbox,
   fixtureServer,
-}, info) => {
+}) => {
   const { context, popup } = await sandbox.launch();
   await configureFixtureProvider(popup, fixtureServer.origin);
   const article = await context.newPage();
@@ -59,8 +59,6 @@ test('Explain stays next to the selection on a long positioned page while scroll
   await article.mouse.wheel(0, 120);
   await expect.poll(async () => (await selectionBox(article)).y).toBeLessThan(beforeScroll.y - 60);
   await expectBelowSelection(article, trigger);
-  await article.screenshot({ path: info.outputPath('scrolled-trigger.png') });
-  const anchor = await selectionBox(article);
   await trigger.click();
   await article.getByRole('button', { name: 'View', exact: true }).click();
   const card = article.getByRole('region', { name: 'Saul explanation' });
@@ -72,7 +70,6 @@ test('Explain stays next to the selection on a long positioned page while scroll
     return range.getBoundingClientRect().bottom;
   });
   expect(Math.abs(box.y - currentAnchor - 8)).toBeLessThan(2);
-  await article.screenshot({ path: info.outputPath('scrolled-explanation.png') });
 });
 
 test('Explain follows text layout changes inside an unchanged container', async ({

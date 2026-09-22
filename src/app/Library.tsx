@@ -8,7 +8,7 @@ import {
   exportKnowledgeMarkdown,
   setHistoryBookmark,
   sendDbMessage,
-  request as runtimeRequest,
+  openHistorySource,
 } from '../storage/client';
 import { runLabel } from '../surface/ExplanationCard';
 import type { HistoryItem, RunResult } from '../types/storage';
@@ -203,14 +203,7 @@ export function Library({ compact = false }: { compact?: boolean }) {
                   {safeSource(item.pageUrl) ? (
                     <button
                       className="btn"
-                      onClick={() =>
-                        void action(() =>
-                          runtimeRequest({
-                            target: 'saul-open-source',
-                            selectionId: item.selectionId,
-                          }),
-                        )
-                      }
+                      onClick={() => void action(() => openHistorySource(item.selectionId))}
                       title="View source and explanation"
                     >
                       {item.pageTitle || item.pageUrl}{' '}

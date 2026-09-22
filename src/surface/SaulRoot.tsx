@@ -1,15 +1,13 @@
 import { useEffect, useState, useRef } from 'react';
 import { captureSelection, buildResolvedContext } from '../capture/selection';
-import { request } from '../storage/client';
-import type { ReadingRequest, ReadingResult } from '../contracts/reading';
+import { sendReadingMessage } from '../storage/client';
+import type { ReadingRequest } from '../contracts/reading';
 import type { Passage } from '../types/storage';
 import { PassageMarkers } from '../reading/markers';
 import { FloatingTrigger } from './FloatingTrigger';
 import { ExplanationCard, runLabel } from './ExplanationCard';
-const read = (message: ReadingRequest) =>
-  request<ReadingResult>({ target: 'saul-reading', message });
 type Captured = NonNullable<ReturnType<typeof captureSelection>>;
-export function SaulRoot() {
+export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) {
   const [passages, setPassages] = useState<Passage[]>([]),
     [captured, setCaptured] = useState<Captured | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null),
@@ -24,7 +22,7 @@ export function SaulRoot() {
     if (muting) return;
     setMuting(true);
     try {
-      await read({ action: 'mute-errors', muted: true });
+      await sendReadingMessage({ action: 'mute-errors', muted: true });
       setErrorsMuted(true);
       setToast(null);
     } catch {
@@ -94,7 +92,7 @@ export function SaulRoot() {
     let readyTimer: ReturnType<typeof setTimeout> | undefined;
     const announced = new Set<string>();
     const summary = () => {
-      if (document.visibilityState !== 'visible') return;
+      if (disposed || !isContextValid() || document.visibilityState !== 'visible') return;
       const unread = current.current.filter((p) => p.unread && p.snapshot.id !== activeRef.current);
       if (unread.length)
         setToast({
@@ -103,6 +101,7 @@ export function SaulRoot() {
         });
     };
     function refresh(): Promise<void> {
+      if (disposed || !isContextValid()) return Promise.resolve();
       if (inflight) {
         again = true;
         return inflight;
@@ -118,13 +117,13 @@ export function SaulRoot() {
         syncRoute();
         const url = route;
         try {
-          const result = await read({ action: 'list' });
-          if (disposed) return;
+          const result = await sendReadingMessage({ action: 'list' });
+          if (disposed || !isContextValid()) return;
           if (url !== location.href) {
             again = true;
             continue;
           }
-          const next = result.passages || [];
+          const next = result.passages;
           current.current = next;
           markers.current?.set(next);
           setPassages(next);
@@ -134,13 +133,14 @@ export function SaulRoot() {
             readyTimer = setTimeout(summary, 600);
           }
         } catch (error) {
-          if (!disposed) setToast({ text: (error as Error).message, error: true });
+          if (!disposed && isContextValid())
+            setToast({ text: (error as Error).message, error: true });
         }
       } while (again && !disposed);
     }
     refreshRef.current = refresh;
     function connectPort() {
-      if (disposed) return;
+      if (disposed || !isContextValid()) return;
       const connected = chrome.runtime.connect({ name: 'saul-reading' });
       port = connected;
       connected.onMessage.addListener((message) => {
@@ -153,7 +153,8 @@ export function SaulRoot() {
         } else void refresh();
       });
       connected.onDisconnect.addListener(() => {
-        if (!disposed && port === connected) reconnect = setTimeout(connect, 1000);
+        if (!disposed && isContextValid() && port === connected)
+          reconnect = setTimeout(connect, 1000);
       });
     }
     function connect() {
@@ -191,6 +192,7 @@ export function SaulRoot() {
       if (message.type !== 'SAUL_OPEN' || !message.selectionId) return false;
       const id = message.selectionId;
       void refresh().then(() => {
+        if (disposed || !isContextValid()) return;
         const received = current.current.some((p) => p.snapshot.id === id);
         if (received) openRef.current(id, true);
         reply({ received });
@@ -203,22 +205,26 @@ export function SaulRoot() {
     document.addEventListener('visibilitychange', visible);
     // pushState has no browser event; reset attachments/subscriptions when its URL changes.
     const routeTimer = setInterval(() => {
-      if (syncRoute()) void refresh();
+      // Reading WXT's validity flag triggers its registered UI teardown on reload.
+      if (isContextValid() && syncRoute()) void refresh();
     }, 750);
     return () => {
       disposed = true;
       clearInterval(routeTimer);
       clearTimeout(reconnect);
       clearTimeout(readyTimer);
-      port?.disconnect();
       document.removeEventListener('visibilitychange', visible);
-      chrome.runtime.onMessage.removeListener(source);
+      // Chrome already disconnected an invalidated context; its port methods now throw.
+      if (chrome.runtime?.id) {
+        port?.disconnect();
+        chrome.runtime.onMessage.removeListener(source);
+      }
     };
-  }, []);
+  }, [isContextValid]);
   useEffect(() => {
     const run = active?.completed;
     if (run && run.viewedAt === undefined)
-      void read({ action: 'view', selectionId: active!.snapshot.id, runId: run.id })
+      void sendReadingMessage({ action: 'view', selectionId: active!.snapshot.id, runId: run.id })
         .then(() => refreshRef.current())
         .catch((e) => setToast({ text: e.message, error: true }));
   }, [active?.snapshot.id, active?.completed?.id, active?.completed?.viewedAt]);
@@ -226,7 +232,7 @@ export function SaulRoot() {
     if (busy) return;
     setBusy(true);
     try {
-      const result = await read(message);
+      const result = await sendReadingMessage(message);
       await refreshRef.current();
       return result;
     } catch (error) {
@@ -251,11 +257,10 @@ export function SaulRoot() {
     }
     setBusy(true);
     try {
-      const { policy } = await read({ action: 'policy' });
-      if (!policy) throw new Error('Could not load reading preferences.');
+      const { policy } = await sendReadingMessage({ action: 'policy' });
       if (location.href !== selection.snapshot.page.url)
         throw new Error('The page changed. Select the passage again.');
-      const result = await read({
+      const result = await sendReadingMessage({
         action: 'submit',
         submissionId: selection.snapshot.id,
         snapshot: selection.snapshot,
@@ -364,7 +369,7 @@ export function SaulRoot() {
             })
           }
           loadRuns={async () =>
-            (await read({ action: 'runs', selectionId: active.snapshot.id })).runs || []
+            (await sendReadingMessage({ action: 'runs', selectionId: active.snapshot.id })).runs
           }
         />
       )}
