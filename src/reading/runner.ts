@@ -1,6 +1,5 @@
 import type { DbCall, Passage, RunResult, QueuedRun, Submission } from '../types/storage';
-import { streamOpenAICompatible } from '../models/openai-compatible';
-import { streamChromeAi } from '../models/chrome-ai';
+import { streamModel } from '../models/provider';
 import { IncompleteGeneration } from '../models/events';
 import { TagStreamParser } from '../parser/tag-stream-parser';
 
@@ -72,15 +71,7 @@ export class ReadingRunner {
       if (signal.aborted || !(await this.db({ type: 'DB_CLAIM', payload: { runId: task.id } })))
         return;
       const input = task.input;
-      const stream =
-        input.provider === 'chrome-ai'
-          ? streamChromeAi(input.local, input.systemPrompt, input.userPrompt, signal)
-          : streamOpenAICompatible(
-              { ...input.remote, apiKey: task.credential },
-              input.systemPrompt,
-              input.userPrompt,
-              signal,
-            );
+      const stream = streamModel(input, task.credential, signal);
       let completed = false,
         checkpoint = 0;
       for await (const event of stream) {

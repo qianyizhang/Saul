@@ -31,6 +31,7 @@ export interface RunInput {
   provider: UserSettings['activeProvider'];
   remote: Omit<UserSettings['openaiCompatible'], 'apiKey'>;
   local: UserSettings['chromeAi'];
+  plan?: UserSettings['chatgptPlan'];
   systemPrompt: string;
   userPrompt: string;
   context: ResolvedContext;

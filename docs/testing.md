@@ -33,6 +33,7 @@ Focused checks can reuse an already-built `.output/chrome-mv3` snapshot:
 ```sh
 pnpm exec playwright test tests/e2e/reading.spec.ts tests/e2e/annotations.spec.ts
 pnpm exec playwright test tests/e2e/product.spec.ts
+pnpm exec playwright test tests/e2e/chatgpt-plan.spec.ts
 pnpm exec playwright test tests/e2e/notifications.spec.ts
 pnpm exec playwright test tests/e2e/positioning.spec.ts tests/e2e/multiline.spec.ts
 pnpm exec tsc -p tests/e2e/tsconfig.json
@@ -99,3 +100,5 @@ A successful smoke run verifies setup only. Record the built source scope, passe
 The default browser suite uses deterministic local fixtures. It does not verify live provider credentials/output, actual Chrome on-device model download/generation, personal native-host registration, or other browsers. Benchmark reproduction and scope are documented in [benchmarks](benchmarks/README.md).
 
 Agent workflow: [saul-browser-testing skill](../.agents/skills/saul-browser-testing/SKILL.md).
+
+ChatGPT plan unit tests include a real loopback callback and temporary native-helper installation. Run socket-dependent tests with local binding permission. OAuth and inference endpoints are mocked; no real plan quota is consumed.

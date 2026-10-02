@@ -79,7 +79,7 @@ The native bridge is off by default. Turning it off disconnects the host and can
 - **Sandbox permission error:** Unix socket access may need approval in a sandboxed CLI environment. The MCP server runs as a separate registered local process. Do not expose the socket over TCP to work around this.
 - **Oversized list:** query a single `windowId`; messages are bounded to 1 MiB.
 
-To disable access, turn off **Codex tab access** in Tabs. To remove Codex registration, run `codex mcp remove saul-tabs`. To uninstall the host, remove only `com.saul.tabs.json` from the browser directory printed by the installer, then remove the installed `bridge`, `bin/saul`, and `bin/saul-native-host` files under the chosen installation directory. This does not remove Saul's reading history.
+To disable access, turn off **Codex tab access** in Tabs. To remove Codex registration, run `codex mcp remove saul-tabs`. To uninstall the host, remove only `com.saul.tabs.json` from the browser directory printed by the installer, then remove `bin/saul` and `bin/saul-native-host` under the chosen installation directory. Remove the shared `bridge` directory only if you do not also use the [ChatGPT plan helper](chatgpt-plan.md). This does not remove Saul's reading history.
 
 ## Verification and protocol references
 

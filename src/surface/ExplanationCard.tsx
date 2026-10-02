@@ -96,6 +96,19 @@ export function ExplanationCard({
             Source location unavailable on this page. Your explanation is still saved.
           </p>
         )}
+        {latest.provider === 'chatgpt-plan' && (
+          <p className="text-xs text-slate-500 mb-3">
+            {active ? 'Using ChatGPT plan' : 'ChatGPT plan'} ·{' '}
+            <a
+              href="https://chatgpt.com/settings/usage"
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+            >
+              Manage usage
+            </a>
+          </p>
+        )}
         {latest.error && (
           <p role="alert" className="text-sm text-rose-700 bg-rose-50 p-3 rounded-lg mb-3">
             {latest.error}

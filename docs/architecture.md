@@ -33,7 +33,7 @@ An answer is ready only after a provider completion signal, readable output, and
 
 - SQLite runs only in the dedicated worker. Production must not fall back silently to an in-memory database.
 - Schema changes are forward-only, versioned, and transactional. Unknown future schema versions are rejected; downgrades are unsupported.
-- Credentials remain in trusted extension storage or runner memory. They are excluded from page messages, stored run inputs, and exports.
+- API keys remain in trusted extension storage or runner memory; ChatGPT OAuth credentials remain in the native helper. They are excluded from page messages, stored run inputs, and exports.
 - A saved passage uses URL identity, quote context, and captured text offsets to restore one exact occurrence. Legacy metadata may remain stored but does not authorize a match.
 - Native CSS Custom Highlights mark exact, unambiguous occurrences without wrapping or replacing page text.
 - Missing or ambiguous passages remain accessible from the page list and library with location unavailable.
@@ -53,9 +53,11 @@ Runtime messages do not return to their sender. Content and popup requests there
 
 ## Model boundary
 
-`src/models/openai-compatible.ts` and `src/models/chrome-ai.ts` expose streamed events to the runner. The remote adapter handles SSE framing across UTF-8 chunks, CRLF/LF separators, multiline `data:` fields, provider errors, cancellation, and incomplete output. Chrome generation uses the modern `LanguageModel` API in the offscreen document.
+`src/models/provider.ts` is the single streaming facade used by the runner and generation tests. It dispatches to OpenAI-compatible, Chrome on-device, or ChatGPT plan adapters and returns the same delta/completion events. Both HTTP adapters reuse `native/sse.mjs` for bounded SSE framing across UTF-8 chunks, CRLF/LF separators, multiline `data:` fields, provider errors, cancellation, and incomplete output. Chrome generation uses the modern `LanguageModel` API in the offscreen document.
 
-Prompts and context are frozen when a job is submitted. Later settings edits do not change an in-flight job. Provider keys are associated with their endpoint origin and are not persisted with job inputs.
+Prompts and context are frozen when a job is submitted. Later settings edits do not change an in-flight job. Provider keys are associated with their endpoint origin and are not persisted with job inputs. ChatGPT plan jobs freeze a non-secret account registration ID and model; OAuth credentials stay in the native helper.
+
+The [ChatGPT plan helper](chatgpt-plan.md) uses a separate native host, `com.saul.chatgpt`, and a shared allowlisted protocol. The background validates extension-port senders and brokers requests from Settings and the offscreen runner. The native helper owns loopback OAuth, JWT verification, private credential persistence, serialized refresh, and the constrained Responses/SSE transport. It is independent of the tab bridge.
 
 ## Tab boundary
 

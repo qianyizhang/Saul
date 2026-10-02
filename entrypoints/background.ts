@@ -1,3 +1,4 @@
+import { initPlanBridge } from '../src/native/plan';
 import {
   getSettings,
   initStorageSecurity,
@@ -41,9 +42,9 @@ async function submit(
 ) {
   const settings = await getSettings();
   const { apiKey, ...remote } = settings.openaiCompatible;
-  if (settings.activeProvider !== 'chrome-ai') {
-    const endpoint = validateProviderSettings(settings)!;
-    if (!apiKey && !isLoopbackEndpoint(endpoint))
+  const endpoint = validateProviderSettings(settings);
+  if (settings.activeProvider === 'openai-compatible') {
+    if (!apiKey && !isLoopbackEndpoint(endpoint!))
       throw new Error('API key is missing. Configure it in Saul Settings.');
   }
   const language = settings.responseLanguage
@@ -53,6 +54,7 @@ async function submit(
     provider: settings.activeProvider,
     remote,
     local: settings.chromeAi,
+    ...(settings.activeProvider === 'chatgpt-plan' ? { plan: settings.chatgptPlan } : {}),
     context,
     systemPrompt: settings.customPromptTemplate || DEFAULT_SYSTEM_PROMPT,
     userPrompt: renderExplainPrompt(context, [instruction, language].filter(Boolean).join('\n')),
@@ -60,7 +62,7 @@ async function submit(
   return runnerRequest<{ passageId: string; reused: boolean }>({
     operation: 'submit',
     submission: { snapshot, input, submissionId, regenerate },
-    credential: settings.activeProvider === 'chrome-ai' ? '' : apiKey,
+    credential: settings.activeProvider === 'openai-compatible' ? apiKey : '',
   });
 }
 async function reading(
@@ -156,6 +158,7 @@ async function openSource(selectionId: string) {
 export default defineBackground(() => {
   initStorageSecurity();
   initNativeBridge();
+  initPlanBridge();
   void db({ type: 'DB_UNREAD', payload: undefined })
     .then((count) => chrome.action.setBadgeText({ text: count ? String(count) : '' }))
     .catch((error) => console.warn('[Saul] Could not restore reading state', error));

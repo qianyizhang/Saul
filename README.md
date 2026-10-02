@@ -6,7 +6,7 @@ Saul is a local-first Chrome extension for reading explanations and safe tab org
 
 - **Reading:** select text, queue an explanation, keep reading, and return through persistent underlines, notifications, or history.
 - **Library:** search saved passages and explanations, bookmark them, revisit sources, inspect attempts, and export Markdown.
-- **Models:** use an OpenAI-compatible endpoint or Chrome's on-device `LanguageModel` API.
+- **Models:** use your [ChatGPT plan](docs/chatgpt-plan.md), an OpenAI-compatible endpoint, or Chrome's on-device `LanguageModel` API.
 - **Tabs:** preview and apply sorting, grouping, ungrouping, and moving without disturbing pinned tabs or existing groups.
 - **Codex access:** opt in to a local native-messaging bridge that exposes the tab operations as CLI and MCP tools.
 
@@ -37,12 +37,13 @@ Browser tests use disposable profiles and a local model fixture. On macOS, read 
 
 ## Documentation
 
-| Document                                     | Purpose                                       |
-| -------------------------------------------- | --------------------------------------------- |
-| [Product](docs/product.md)                   | Shipped behavior and current limits           |
-| [Architecture](docs/architecture.md)         | Runtime boundaries, data flow, and invariants |
-| [Testing](docs/testing.md)                   | Quality gates, browser harness, and debugging |
-| [Native messaging](docs/native-messaging.md) | CLI/MCP setup and tab-tool safety             |
-| [Benchmarks](docs/benchmarks/README.md)      | Reproduction commands and evidence limits     |
+| Document                                     | Purpose                                                     |
+| -------------------------------------------- | ----------------------------------------------------------- |
+| [Product](docs/product.md)                   | Shipped behavior and current limits                         |
+| [Architecture](docs/architecture.md)         | Runtime boundaries, data flow, and invariants               |
+| [Testing](docs/testing.md)                   | Quality gates, browser harness, and debugging               |
+| [ChatGPT plan](docs/chatgpt-plan.md)         | OAuth setup, supported API surface and credential lifecycle |
+| [Native messaging](docs/native-messaging.md) | CLI/MCP setup and tab-tool safety                           |
+| [Benchmarks](docs/benchmarks/README.md)      | Reproduction commands and evidence limits                   |
 
 The native bridge is optional. See [Codex tab access](docs/native-messaging.md) for installation and removal.

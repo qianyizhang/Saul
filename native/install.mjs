@@ -9,8 +9,10 @@ import {
   chmodSync,
   existsSync,
   readFileSync,
+  cpSync,
 } from 'node:fs';
 import { parseArgs } from 'node:util';
+import { PLAN_HOST } from './plan-protocol.mjs';
 import { HOST_NAME } from './protocol.mjs';
 import { errorMessage, secureDirectory } from './transport.mjs';
 
@@ -22,6 +24,7 @@ export function installationPlan({
   manifestDir,
   platform = process.platform,
   home = homedir(),
+  chatgpt = false,
 }) {
   if (!/^[a-p]{32}$/.test(extensionId ?? ''))
     throw new Error('--extension-id must be the 32-letter ID shown in chrome://extensions');
@@ -46,7 +49,7 @@ export function installationPlan({
   const runtime = join(root, 'bridge');
   const manifestPath = join(
     resolve(manifestDir ?? join(home, browsers[platform][browser], 'NativeMessagingHosts')),
-    `${HOST_NAME}.json`,
+    `${chatgpt ? PLAN_HOST : HOST_NAME}.json`,
   );
   return {
     root,
@@ -54,9 +57,9 @@ export function installationPlan({
     runtime,
     manifestPath,
     manifest: {
-      name: HOST_NAME,
-      description: 'Saul local tab bridge',
-      path: join(bin, 'saul-native-host'),
+      name: chatgpt ? PLAN_HOST : HOST_NAME,
+      description: chatgpt ? 'Saul ChatGPT plan provider' : 'Saul local tab bridge',
+      path: join(bin, chatgpt ? 'saul-chatgpt-host' : 'saul-native-host'),
       type: 'stdio',
       allowed_origins: [`chrome-extension://${extensionId}/`],
     },
@@ -70,12 +73,13 @@ function main() {
       'install-dir': { type: 'string' },
       'manifest-dir': { type: 'string' },
       'dry-run': { type: 'boolean' },
+      chatgpt: { type: 'boolean' },
       help: { type: 'boolean' },
     },
   });
   if (values.help) {
     console.log(
-      'Usage: node native/install.mjs --extension-id <ID> [--browser chrome] [--dry-run]\nAdvanced: --install-dir <directory> --manifest-dir <NativeMessagingHosts directory>',
+      'Usage: node native/install.mjs --extension-id <ID> [--browser chrome] [--chatgpt] [--dry-run]\nAdvanced: --install-dir <directory> --manifest-dir <NativeMessagingHosts directory>',
     );
     return;
   }
@@ -84,6 +88,7 @@ function main() {
     browser: values.browser,
     installDir: values['install-dir'],
     manifestDir: values['manifest-dir'],
+    chatgpt: values.chatgpt,
   });
   if (values['dry-run']) {
     console.log(JSON.stringify(plan, null, 2));
@@ -91,7 +96,7 @@ function main() {
   }
   if (existsSync(plan.manifestPath)) {
     const existing = JSON.parse(readFileSync(plan.manifestPath, 'utf8'));
-    if (existing.path !== plan.manifest.path || existing.name !== HOST_NAME)
+    if (existing.path !== plan.manifest.path || existing.name !== plan.manifest.name)
       throw new Error(
         'Existing host registration belongs to another installation; refusing to overwrite',
       );
@@ -106,17 +111,35 @@ function main() {
   for (const name of [
     'protocol.mjs',
     'transport.mjs',
-    'host.mjs',
-    'client.mjs',
-    'cli.mjs',
-    'mcp.mjs',
+    ...(values.chatgpt
+      ? [
+          'plan-protocol.mjs',
+          'plan-host.mjs',
+          'plan-service.mjs',
+          'plan-auth.mjs',
+          'plan-store.mjs',
+          'responses.mjs',
+          'sse.mjs',
+        ]
+      : ['host.mjs', 'client.mjs', 'cli.mjs', 'mcp.mjs']),
   ]) {
     copyFileSync(join(source, name), join(plan.runtime, name));
     chmodSync(join(plan.runtime, name), 0o600);
   }
+  if (values.chatgpt) {
+    const joseRoot = dirname(fileURLToPath(import.meta.resolve('jose/package.json')));
+    cpSync(joseRoot, join(plan.runtime, 'node_modules', 'jose'), {
+      recursive: true,
+      dereference: true,
+    });
+  }
   for (const [name, script] of [
-    ['saul-native-host', 'host.mjs'],
-    ['saul', 'cli.mjs'],
+    ...(values.chatgpt
+      ? [['saul-chatgpt-host', 'plan-host.mjs']]
+      : [
+          ['saul-native-host', 'host.mjs'],
+          ['saul', 'cli.mjs'],
+        ]),
   ]) {
     const path = join(plan.bin, name);
     writeFileSync(
@@ -128,6 +151,12 @@ function main() {
   }
   mkdirSync(dirname(plan.manifestPath), { recursive: true });
   writeFileSync(plan.manifestPath, JSON.stringify(plan.manifest, null, 2) + '\n', { mode: 0o600 });
+  if (values.chatgpt) {
+    console.log(
+      `Installed ${plan.manifestPath}\nOpen Saul Settings → ChatGPT plan → Continue with ChatGPT.`,
+    );
+    return;
+  }
   console.log(
     `Installed ${plan.manifestPath}\nCLI: ${join(plan.bin, 'saul')}\nReload Saul and enable Codex tab access in its popup.\nRegister MCP:\ncodex mcp add saul-tabs -- ${shellQuote(process.execPath)} ${shellQuote(join(plan.runtime, 'mcp.mjs'))}`,
   );

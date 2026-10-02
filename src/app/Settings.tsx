@@ -1,3 +1,4 @@
+import { ChatGPTPlanSettings } from './ChatGPTPlanSettings';
 import { useEffect, useState } from 'react';
 import { DEFAULT_SETTINGS } from '../storage/settings';
 import { DEFAULT_SYSTEM_PROMPT } from '../models/prompts';
@@ -89,10 +90,19 @@ export function Settings({
               }
             >
               <option value="openai-compatible">OpenAI compatible</option>
+              <option value="chatgpt-plan">ChatGPT plan</option>
               <option value="chrome-ai">Chrome on-device AI</option>
             </select>
           </label>
-          {settings.activeProvider === 'chrome-ai' ? (
+          {settings.activeProvider === 'chatgpt-plan' ? (
+            <ChatGPTPlanSettings
+              saved={!dirty}
+              value={settings.chatgptPlan || { accountId: '', model: '' }}
+              onChange={(chatgptPlan) => update({ chatgptPlan })}
+              test={() => test('generation')}
+              testing={testing}
+            />
+          ) : settings.activeProvider === 'chrome-ai' ? (
             <div className="stack">
               <p className="muted">
                 Availability: {availability}. On-device setup may require a model download.

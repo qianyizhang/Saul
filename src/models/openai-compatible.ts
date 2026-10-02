@@ -1,3 +1,4 @@
+import { eventData } from '../../native/sse.mjs';
 import { IncompleteGeneration, type ModelEvent } from './events';
 export interface OpenAICompatibleConfig {
   baseUrl: string;
@@ -5,47 +6,6 @@ export interface OpenAICompatibleConfig {
   model: string;
   temperature?: number;
   maxTokens?: number;
-}
-
-// SSE data is delimited by blank lines, not network chunks. A data field may
-// omit the space after ':' or span multiple lines within one event.
-async function* readEventData(body: ReadableStream<Uint8Array>): AsyncGenerator<string> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let data: string[] = [];
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
-      let end: number;
-      while ((end = buffer.search(/[\r\n]/)) !== -1) {
-        // A CRLF pair can itself be split across reads.
-        if (!done && buffer[end] === '\r' && end === buffer.length - 1) break;
-        const line = buffer.slice(0, end);
-        buffer = buffer.slice(end + (buffer.slice(end, end + 2) === '\r\n' ? 2 : 1));
-        if (!line) {
-          if (data.length) yield data.join('\n');
-          data = [];
-        } else if (line === 'data' || line.startsWith('data:')) {
-          data.push(line.slice(5).replace(/^ /, ''));
-        }
-      }
-      if (done) {
-        if (data.length || /^data(?::|$)/.test(buffer))
-          throw new IncompleteGeneration(
-            'truncated-event',
-            'The model stream ended in an incomplete event. Please retry.',
-          );
-        return;
-      }
-    }
-  } finally {
-    // Stopping at [DONE], a provider error, or consumer cancellation must also
-    // close the response body; releasing a reader alone leaves it running.
-    await reader.cancel().catch(() => undefined);
-    reader.releaseLock();
-  }
 }
 
 export async function* streamOpenAICompatible(
@@ -93,7 +53,7 @@ export async function* streamOpenAICompatible(
   }
 
   let finished = false;
-  for await (const data of readEventData(response.body)) {
+  for await (const data of eventData(response.body)) {
     if (data.trim() === '[DONE]') {
       yield { type: 'complete' };
       return;

@@ -191,7 +191,11 @@ export class SaulDatabase {
           runId,
           selectionId,
           input.provider,
-          input.provider === 'chrome-ai' ? 'gemini-nano' : input.remote.model,
+          input.provider === 'chrome-ai'
+            ? 'gemini-nano'
+            : input.provider === 'chatgpt-plan'
+              ? input.plan?.model || 'ChatGPT'
+              : input.remote.model,
           input.systemPrompt,
           JSON.stringify(input.context),
           Date.now(),

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { UserSettings } from '../types';
-import { streamOpenAICompatible } from '../models/openai-compatible';
+import { streamModel } from '../models/provider';
 import { chromeAiAvailability, prepareChromeAi } from '../models/chrome-ai';
 import { validateProviderSettings } from '../storage/settings';
 export function useProviderTest() {
@@ -29,7 +29,9 @@ export function useProviderTest() {
     setNotice('');
     setTesting(true);
     const timeout =
-      settings.activeProvider === 'chrome-ai' ? undefined : setTimeout(() => ac.abort(), 20000);
+      settings.activeProvider === 'chrome-ai'
+        ? undefined
+        : setTimeout(() => ac.abort(), settings.activeProvider === 'chatgpt-plan' ? 120000 : 20000);
     try {
       validateProviderSettings(settings);
       if (settings.activeProvider === 'chrome-ai') {
@@ -43,7 +45,7 @@ export function useProviderTest() {
           setAvailability(availability);
           setNotice('On-device model is ready.');
         }
-      } else if (mode === 'endpoint') {
+      } else if (mode === 'endpoint' && settings.activeProvider === 'openai-compatible') {
         const base = settings.openaiCompatible.baseUrl
           .replace(/\/+$/, '')
           .replace(/\/chat\/completions$/, '');
@@ -61,11 +63,19 @@ export function useProviderTest() {
           setNotice('Endpoint reachable. Use Test generation to check the selected model.');
       } else {
         let answer = '';
-        for await (const event of streamOpenAICompatible(
-          { ...settings.openaiCompatible, maxTokens: 32 },
-          'Reply briefly.',
-          'Say hello.',
+        for await (const event of streamModel(
+          {
+            provider: settings.activeProvider,
+            remote: settings.openaiCompatible,
+            local: settings.chromeAi,
+            plan: settings.chatgptPlan,
+            systemPrompt: 'Reply briefly.',
+            userPrompt: 'Say hello.',
+            context: { selection: '', pageTitle: '', pageUrl: '' },
+          },
+          settings.activeProvider === 'openai-compatible' ? settings.openaiCompatible.apiKey : '',
           ac.signal,
+          { maxTokens: 32 },
         ))
           if (event.type === 'delta') answer += event.text;
         if (ac.signal.aborted) throw new Error('Stopped');

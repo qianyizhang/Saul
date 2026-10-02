@@ -60,7 +60,7 @@ export type TagSegment =
       complete: boolean;
     };
 
-export type ProviderType = 'openai-compatible' | 'chrome-ai';
+export type ProviderType = 'openai-compatible' | 'chrome-ai' | 'chatgpt-plan';
 
 export interface ProviderProfile {
   id: string;
@@ -79,6 +79,7 @@ export interface UserSettings {
     model: string;
     temperature: number;
   };
+  chatgptPlan?: { accountId: string; model: string };
   chromeAi: {
     temperature: number;
     topK: number;

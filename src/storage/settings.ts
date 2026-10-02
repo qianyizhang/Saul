@@ -86,7 +86,11 @@ function recoveredProfileId(profiles: UserSettings['profiles']): string {
 function normalizeSettings(value: unknown): UserSettings {
   const stored = record(value, 'settings');
   const activeProvider = stored.activeProvider ?? DEFAULT_SETTINGS.activeProvider;
-  if (activeProvider !== 'openai-compatible' && activeProvider !== 'chrome-ai')
+  if (
+    activeProvider !== 'openai-compatible' &&
+    activeProvider !== 'chrome-ai' &&
+    activeProvider !== 'chatgpt-plan'
+  )
     throw new Error('Saved provider is not supported.');
 
   const chromeAi =
@@ -136,6 +140,20 @@ function normalizeSettings(value: unknown): UserSettings {
     ...DEFAULT_SETTINGS,
     activeProvider,
     openaiCompatible,
+    ...(stored.chatgptPlan === undefined
+      ? {}
+      : {
+          chatgptPlan: {
+            accountId:
+              optionalString(
+                record(stored.chatgptPlan, 'ChatGPT plan').accountId,
+                'ChatGPT account',
+              ) ?? '',
+            model:
+              optionalString(record(stored.chatgptPlan, 'ChatGPT plan').model, 'ChatGPT model') ??
+              '',
+          },
+        }),
     chromeAi: {
       temperature:
         optionalNumber(chromeAi.temperature, 'Chrome AI temperature') ??
@@ -173,6 +191,11 @@ function normalizeSettings(value: unknown): UserSettings {
 
 export function validateProviderSettings(settings: UserSettings): URL | undefined {
   if (settings.activeProvider === 'chrome-ai') return undefined;
+  if (settings.activeProvider === 'chatgpt-plan') {
+    if (!settings.chatgptPlan?.accountId || !settings.chatgptPlan.model.trim())
+      throw new Error('Choose a ChatGPT account and model.');
+    return undefined;
+  }
   let endpoint: URL;
   try {
     endpoint = new URL(settings.openaiCompatible.baseUrl);
