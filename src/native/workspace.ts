@@ -4,7 +4,10 @@ import { validateCall } from '../../native/protocol.mjs';
 import { id, record } from '../contracts/reading';
 import type { TabSnapshot, ToolArgs, ToolResults, BrowserTool } from '../../native/protocol.mjs';
 export type { TabSnapshot } from '../../native/protocol.mjs';
-export type WorkspaceTool = Exclude<BrowserTool, 'saul_tabs_list'>;
+export type WorkspaceTool = Exclude<
+  BrowserTool,
+  'saul_tabs_list' | `saul_page_${string}` | 'saul_windows_create'
+>;
 export type WorkspacePreviewArgs<K extends WorkspaceTool> = Omit<ToolArgs[K], 'session' | 'dryRun'>;
 export type WorkspacePreviewRequest<K extends WorkspaceTool = WorkspaceTool> =
   K extends WorkspaceTool ? { action: 'preview'; method: K; args: WorkspacePreviewArgs<K> } : never;

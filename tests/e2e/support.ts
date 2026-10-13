@@ -129,6 +129,7 @@ export interface SandboxOptions {
   headless?: boolean;
   artifactsDir?: string;
   databaseFixtures?: boolean;
+  browserToolsFixtures?: boolean;
   handleProcessSignals?: boolean;
 }
 
@@ -140,13 +141,14 @@ export async function createSandbox(options: SandboxOptions = {}) {
   // relaunches and prevents later builds in a shared checkout changing the test.
   try {
     await cp(extensionBuild, extension, { recursive: true });
-    if (options.databaseFixtures) {
+    if (options.databaseFixtures || options.browserToolsFixtures) {
       const require = createRequire(import.meta.resolve('wxt'));
       const { build } = await import(require.resolve('vite'));
-      await writeFile(
-        path.join(extension, 'database-fixture.html'),
-        '<!doctype html><title>Saul database fixture</title>',
-      );
+      if (options.databaseFixtures)
+        await writeFile(
+          path.join(extension, 'database-fixture.html'),
+          '<!doctype html><title>Saul database fixture</title>',
+        );
       await build({
         configFile: false,
         publicDir: false,
@@ -154,8 +156,23 @@ export async function createSandbox(options: SandboxOptions = {}) {
         build: {
           lib: {
             entry: {
-              'database-fixture': fileURLToPath(new URL('./database-fixture.ts', import.meta.url)),
-              'marker-fixture': fileURLToPath(new URL('./marker-fixture.ts', import.meta.url)),
+              ...(options.browserToolsFixtures
+                ? {
+                    'browser-tools-fixture': fileURLToPath(
+                      new URL('./browser-tools-fixture.ts', import.meta.url),
+                    ),
+                  }
+                : {}),
+              ...(options.databaseFixtures
+                ? {
+                    'database-fixture': fileURLToPath(
+                      new URL('./database-fixture.ts', import.meta.url),
+                    ),
+                    'marker-fixture': fileURLToPath(
+                      new URL('./marker-fixture.ts', import.meta.url),
+                    ),
+                  }
+                : {}),
             },
             formats: ['es'],
             fileName: (_format: string, name: string) => name + '.js',

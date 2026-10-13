@@ -14,6 +14,19 @@ import {
 } from '../src/contracts/reading';
 import { validateWorkspace } from '../src/contracts/workspace';
 const fields = {
+  saul_windows_create: ['session', 'tabIds', 'focused', 'dryRun'],
+  saul_page_read: ['session', 'tabId'],
+  saul_page_act: [
+    'session',
+    'tabId',
+    'documentId',
+    'snapshotId',
+    'elementId',
+    'action',
+    'value',
+    'dryRun',
+  ],
+  saul_page_navigate: ['session', 'tabId', 'expectedUrl', 'url', 'dryRun'],
   saul_sessions: [],
   saul_tabs_list: ['session', 'windowId'],
   saul_tabs_sort: ['session', 'windowId', 'by', 'descending', 'dryRun'],
@@ -29,6 +42,10 @@ const complete: {
       ? true
       : never;
 } = {
+  saul_windows_create: true,
+  saul_page_read: true,
+  saul_page_act: true,
+  saul_page_navigate: true,
   saul_sessions: true,
   saul_tabs_list: true,
   saul_tabs_sort: true,
@@ -38,6 +55,20 @@ const complete: {
   saul_groups_update: true,
 };
 const samples = {
+  saul_windows_create: { tabIds: [1] },
+  saul_page_read: { tabId: 1 },
+  saul_page_act: {
+    tabId: 1,
+    documentId: 'doc',
+    snapshotId: 'snapshot',
+    elementId: 0,
+    action: 'click',
+  },
+  saul_page_navigate: {
+    tabId: 1,
+    expectedUrl: 'https://example.com/',
+    url: 'https://example.com/next',
+  },
   saul_sessions: {},
   saul_tabs_list: {},
   saul_tabs_sort: { windowId: 1, by: 'title' },

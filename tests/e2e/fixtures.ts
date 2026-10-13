@@ -9,7 +9,11 @@ import {
 } from './support.ts';
 
 export { expect } from '@playwright/test';
-export const test = base.extend<{ sandbox: ExtensionSandbox }, { fixtureServer: FixtureServer }>({
+export const test = base.extend<
+  { sandbox: ExtensionSandbox; browserToolsFixtures: boolean },
+  { fixtureServer: FixtureServer }
+>({
+  browserToolsFixtures: [false, { option: true }],
   fixtureServer: [
     async ({}, use) => {
       const server = await createFixtureServer();
@@ -21,9 +25,13 @@ export const test = base.extend<{ sandbox: ExtensionSandbox }, { fixtureServer: 
     },
     { scope: 'worker' },
   ],
-  sandbox: async ({}, use, info) => {
+  sandbox: async ({ browserToolsFixtures }, use, info) => {
     const artifactsDir = info.outputPath('browser');
-    const sandbox = await createSandbox({ headless: !process.env.HEADED, artifactsDir });
+    const sandbox = await createSandbox({
+      headless: !process.env.HEADED,
+      artifactsDir,
+      browserToolsFixtures,
+    });
     try {
       await use(sandbox);
     } finally {

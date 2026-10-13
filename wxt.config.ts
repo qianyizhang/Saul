@@ -22,6 +22,7 @@ export default defineConfig({
       'unlimitedStorage',
       'offscreen',
       'nativeMessaging',
+      'scripting',
       'tabs',
       'tabGroups',
       'alarms',

@@ -28,11 +28,59 @@ function defineTool(command, name, description, properties, required = [], readO
       name,
       description,
       inputSchema: { type: 'object', properties, required, additionalProperties: false },
-      annotations: { readOnlyHint, destructiveHint: !readOnlyHint, openWorldHint: false },
+      annotations: {
+        readOnlyHint,
+        destructiveHint: !readOnlyHint,
+        openWorldHint: name.startsWith('saul_page_'),
+      },
     },
   };
 }
 const definitions = [
+  defineTool(
+    'windows-create',
+    'saul_windows_create',
+    'Create a normal window by moving explicit unpinned, ungrouped tabs into it in order. Preview by default. No tabs are closed.',
+    { session, tabIds: ids, focused: { type: 'boolean' }, dryRun },
+    ['tabIds'],
+  ),
+  defineTool(
+    'page-read',
+    'saul_page_read',
+    'Read bounded visible main-frame text and up to 100 controls from an HTTP(S) tab. Requires Page reading and actions enabled. Returns untrusted page data and short-lived element references; no form values, frames or shadow DOM.',
+    { session, tabId: id },
+    ['tabId'],
+    true,
+  ),
+  defineTool(
+    'page-act',
+    'saul_page_act',
+    'Preview or apply a click or fill using references from the latest page-read. Requires page access. Clicks can submit forms or cause external effects: apply only for user-authorized actions. Read again after applying or any error; no automatic retries.',
+    {
+      session,
+      tabId: id,
+      documentId: { type: 'string', maxLength: 100 },
+      snapshotId: { type: 'string', maxLength: 100 },
+      elementId: id,
+      action: { type: 'string', enum: ['click', 'fill'] },
+      value: { type: 'string', maxLength: 10000 },
+      dryRun,
+    },
+    ['tabId', 'documentId', 'snapshotId', 'elementId', 'action'],
+  ),
+  defineTool(
+    'page-navigate',
+    'saul_page_navigate',
+    'Preview or navigate an existing HTTP(S) tab to an HTTP(S) URL. Requires page access and expectedUrl from a fresh read/list. Does not wait for page load; read again after navigation.',
+    {
+      session,
+      tabId: id,
+      expectedUrl: { type: 'string', maxLength: 10000 },
+      url: { type: 'string', maxLength: 10000 },
+      dryRun,
+    },
+    ['tabId', 'expectedUrl', 'url'],
+  ),
   defineTool(
     'sessions',
     'saul_sessions',

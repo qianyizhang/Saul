@@ -57,7 +57,7 @@ Concurrent suites must use separate `--output test-results-<scope>` directories;
 | Playwright     | Real extension contexts, SQLite-WASM/OPFS, page interaction, restart/loss, migrations, tabs, settings           |
 | Manual sandbox | Layout, reading flow, keyboard behavior, and interaction quality in a disposable browser                        |
 
-The browser harness is in `tests/e2e/support.ts` and `tests/e2e/fixtures.ts`. A sandbox snapshots the extension once and reuses the same profile across relaunches so restart tests prove persistence. Test-only database and marker fixtures are bundled only into disposable snapshots.
+The browser harness is in `tests/e2e/support.ts` and `tests/e2e/fixtures.ts`. A sandbox snapshots the extension once and reuses the same profile across relaunches so restart tests prove persistence. Test-only database, marker and browser-tool fixtures are explicitly enabled and bundled only into disposable snapshots.
 
 ## Artifacts and debugging
 

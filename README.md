@@ -8,7 +8,17 @@ Saul is a local-first Chrome extension for reading explanations and safe tab org
 - **Library:** search saved passages and explanations, bookmark them, revisit sources, inspect attempts, and export Markdown.
 - **Models:** use your [ChatGPT plan](docs/chatgpt-plan.md), an OpenAI-compatible endpoint, or Chrome's on-device `LanguageModel` API.
 - **Tabs:** preview and apply sorting, grouping, ungrouping, and moving without disturbing pinned tabs or existing groups.
-- **Codex access:** opt in to a local native-messaging bridge that exposes the tab operations as CLI and MCP tools.
+- **Codex access:** opt in to local CLI/MCP tools for tab organization and new windows. A separate switch enables page reading, clicks, text filling and navigation.
+
+## Install with Codex
+
+With Node 24, the pinned pnpm version, Chrome and Codex CLI available, run from this checkout:
+
+```sh
+node scripts/setup.mjs
+```
+
+The wizard builds Saul, installs its native helper, registers MCP and verifies a real tab inventory. It guides you through loading the extension and enabling access in Chrome. See [setup and agent instructions](docs/setup.md) for unattended use, upgrades and the helper lifecycle. Run `node scripts/setup.mjs --verify` to check an existing installation.
 
 ## Develop
 
@@ -39,6 +49,7 @@ Browser tests use disposable profiles and a local model fixture. On macOS, read 
 
 | Document                                     | Purpose                                                     |
 | -------------------------------------------- | ----------------------------------------------------------- |
+| [Setup](docs/setup.md)                       | One-command setup, agent instructions and helper lifecycle  |
 | [Product](docs/product.md)                   | Shipped behavior and current limits                         |
 | [Architecture](docs/architecture.md)         | Runtime boundaries, data flow, and invariants               |
 | [Testing](docs/testing.md)                   | Quality gates, browser harness, and debugging               |

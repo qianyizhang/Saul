@@ -10,6 +10,8 @@
   },
   "scripts": {
     "dev": "wxt",
+    "setup": "node scripts/setup.mjs",
+    "setup:verify": "node scripts/setup.mjs --verify",
     "build": "wxt build",
     "zip": "wxt zip",
     "compile": "pnpm typecheck",

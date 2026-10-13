@@ -23,6 +23,7 @@ const tab = (id: number, index: number, title: string, extra = {}) =>
 let tabs: chrome.tabs.Tab[];
 const testBrowser = () => ({
   windows: {
+    create: vi.fn(async () => ({ id: 20 })),
     get: vi.fn(async (id: number) => ({ id, type: 'normal', incognito: id === 9 })),
     getAll: vi.fn(async () => [
       { id: 1, type: 'normal' },
@@ -65,6 +66,32 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('tab tools', () => {
+  it('previews new windows and moves exactly the selected tabs in order', async () => {
+    expect(await handleTabCall('saul_windows_create', { tabIds: [5, 2] })).toEqual({
+      dryRun: true,
+      tabIds: [5, 2],
+    });
+    expect(browser.windows.create).not.toHaveBeenCalled();
+    expect(await handleTabCall('saul_windows_create', { tabIds: [5, 2], dryRun: false })).toEqual({
+      dryRun: false,
+      tabIds: [5, 2],
+      windowId: 20,
+    });
+    expect(browser.windows.create).toHaveBeenCalledWith({
+      tabId: 5,
+      type: 'normal',
+      focused: false,
+    });
+    expect(browser.tabs.move).toHaveBeenCalledWith(2, { windowId: 20, index: -1 });
+  });
+  it('rejects invalid, pinned, grouped and private selections before creating a window', async () => {
+    tabs.push(tab(9, 0, 'Private', { windowId: 9, incognito: true }));
+    for (const tabIds of [[2, 999], [1], [3], [9]])
+      await expect(
+        handleTabCall('saul_windows_create', { tabIds, dryRun: false }),
+      ).rejects.toThrow();
+    expect(browser.windows.create).not.toHaveBeenCalled();
+  });
   it('lists tab metadata and groups but excludes private windows', async () => {
     tabs.push(tab(9, 0, 'Private', { windowId: 9, incognito: true }));
     const result = (await handleTabCall('saul_tabs_list')) as TabSnapshot;

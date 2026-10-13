@@ -1,3 +1,4 @@
+import { verifyMcp } from '../scripts/setup.mjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -5,6 +6,7 @@ import { mkdirSync, mkdtempSync, rmSync, statSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path';
 import { endianness } from 'node:os';
 import { encodeNative, nativeDecoder, lineDecoder } from '../native/transport.mjs';
+import { TOOLS } from '../native/protocol.mjs';
 import { callTool, sessions } from '../native/client.mjs';
 import { installationPlan } from '../native/install.mjs';
 
@@ -80,6 +82,31 @@ async function subprocess(script, args = [], input, options = {}) {
 }
 
 describe('native transport', () => {
+  it('setup verification distinguishes an offline server from a complete MCP/browser round trip', async () => {
+    const transport = { command: process.execPath, args: [resolve('native/mcp.mjs')] };
+    expect(await verifyMcp(transport)).toMatchObject({
+      status: 'waiting-for-browser',
+      toolCount: TOOLS.length,
+      inventories: [],
+    });
+    await host(() => ({
+      result: {
+        tabs: [{ id: 1, title: 'PRIVATE TITLE', url: 'https://private.example/' }],
+        windows: [{ id: 2 }],
+        groups: [],
+      },
+    }));
+    const result = await verifyMcp(transport, 'a'.repeat(32));
+    expect(result).toMatchObject({
+      status: 'ready',
+      inventories: [{ tabs: 1, windows: 1, extensionId: 'a'.repeat(32) }],
+    });
+    expect(JSON.stringify(result)).not.toContain('PRIVATE');
+    expect(JSON.stringify(result)).not.toContain('private.example');
+    expect(await verifyMcp(transport, 'b'.repeat(32))).toMatchObject({
+      status: 'waiting-for-browser',
+    });
+  });
   it('decodes fragmented and concatenated UTF-8 native frames', () => {
     const values = [];
     const decode = nativeDecoder((value) => values.push(value));
@@ -181,13 +208,42 @@ describe('native transport', () => {
     const responses = mcp.stdout
       .trim()
       .split('\n')
-      .map((line) => JSON.parse(line));
+      .map((line) => JSON.parse(line))
+      .sort((a, b) => a.id - b.id);
     expect(responses.map((r) => r.id)).toEqual([1, 2, 3, 4, 5]);
     expect(responses[0].result.protocolVersion).toBe('2025-06-18');
-    expect(responses[1].result.tools).toHaveLength(7);
+    expect(responses[1].result.tools).toHaveLength(TOOLS.length);
     expect(JSON.parse(responses[2].result.content[0].text).method).toBe('saul_tabs_list');
     expect(responses[3].result.isError).toBe(true);
     expect(responses[4].error.code).toBe(-32601);
+  });
+  it('answers health and discovery while a browser call is stalled', async () => {
+    let received;
+    const incoming = new Promise((resolve) => {
+      received = resolve;
+    });
+    await host(() => {
+      received();
+      return null;
+    });
+    const child = spawn(process.execPath, ['native/mcp.mjs'], { env: process.env });
+    children.push(child);
+    const responses = [];
+    child.stdout.on(
+      'data',
+      lineDecoder((message) => responses.push(message)),
+    );
+    const send = (id, method, params) =>
+      child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
+    send(1, 'tools/call', { name: 'saul_tabs_list', arguments: {} });
+    await incoming;
+    send(2, 'ping', {});
+    send(3, 'tools/list', {});
+    send(4, 'tools/call', { name: 'saul_sessions', arguments: {} });
+    await vi.waitFor(() => expect(responses.map((r) => r.id).sort()).toEqual([2, 3, 4]), {
+      timeout: 2000,
+    });
+    expect(responses.find((r) => r.id === 3).result.tools).toHaveLength(TOOLS.length);
   });
   it('installs a standalone CLI and MCP server that work outside the checkout', async () => {
     const installDir = join(directory, "Saul's files");
@@ -215,6 +271,10 @@ describe('native transport', () => {
     const tools = await runProcess(cli, ['tools'], undefined, { cwd: unrelatedCwd });
     expect(tools).toMatchObject({ code: 0, stderr: '' });
     expect(JSON.parse(tools.stdout).map((tool) => tool.name)).toEqual([
+      'saul_windows_create',
+      'saul_page_read',
+      'saul_page_act',
+      'saul_page_navigate',
       'saul_sessions',
       'saul_tabs_list',
       'saul_tabs_sort',
@@ -239,7 +299,8 @@ describe('native transport', () => {
     const responses = mcp.stdout
       .trim()
       .split('\n')
-      .map((line) => JSON.parse(line));
+      .map((line) => JSON.parse(line))
+      .sort((a, b) => a.id - b.id);
     expect(responses[1].result.tools).toEqual(JSON.parse(tools.stdout));
 
     const sessionsResult = await runProcess(cli, ['sessions'], undefined, { cwd: unrelatedCwd });

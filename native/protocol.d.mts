@@ -22,6 +22,17 @@ interface Mutation extends Common {
   dryRun?: boolean;
 }
 export interface ToolArgs {
+  saul_windows_create: Mutation & { tabIds: number[]; focused?: boolean };
+  saul_page_read: Common & { tabId: number };
+  saul_page_act: Mutation & {
+    tabId: number;
+    documentId: string;
+    snapshotId: string;
+    elementId: number;
+    action: 'click' | 'fill';
+    value?: string;
+  };
+  saul_page_navigate: Mutation & { tabId: number; expectedUrl: string; url: string };
   saul_sessions: Record<string, never>;
   saul_tabs_list: Common & { windowId?: number };
   saul_tabs_sort: Mutation & { windowId: number; by: 'title' | 'domain'; descending?: boolean };
@@ -57,7 +68,21 @@ export interface TabSnapshot {
   tabs: TabView[];
   groups: GroupView[];
 }
+export interface PageSnapshot {
+  url: string;
+  title: string;
+  text: string;
+  truncated: boolean;
+  snapshotId: string;
+  documentId: string;
+  elements: { elementId: number; tag: string; label: string; type: string; href?: string }[];
+  elementsTruncated: boolean;
+}
 export interface ToolResults {
+  saul_windows_create: { dryRun: boolean; tabIds: number[]; windowId?: number };
+  saul_page_read: PageSnapshot;
+  saul_page_act: { dryRun: boolean; action: string; elementId: number; url: string };
+  saul_page_navigate: { dryRun: boolean; tabId: number; url: string };
   saul_sessions: {
     sessions: { session: string; extensionId: string; pid: number; connectedAt: string }[];
   };

@@ -1,3 +1,4 @@
+import { PAGE_ACCESS_KEY } from '../native/pages';
 import { useEffect, useState } from 'react';
 import {
   ENABLED_KEY,
@@ -7,20 +8,24 @@ import {
 } from '../native/bridge';
 
 export function NativeBridge() {
+  const [pageEnabled, setPageEnabled] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [status, setStatus] = useState<NativeBridgeStatus>({ state: 'disabled' });
   const [copied, setCopied] = useState('');
   const [error, setError] = useState('');
   useEffect(() => {
-    void chrome.storage.local
-      .get(ENABLED_KEY)
-      .then((data) => setEnabled(data[ENABLED_KEY] === true));
+    void chrome.storage.local.get([ENABLED_KEY, PAGE_ACCESS_KEY]).then((data) => {
+      setEnabled(data[ENABLED_KEY] === true);
+      setPageEnabled(data[PAGE_ACCESS_KEY] === true);
+    });
     const readStatus = (value: unknown) => {
       if (isNativeBridgeStatus(value)) setStatus(value);
     };
     void chrome.storage.session.get(STATUS_KEY).then((data) => readStatus(data[STATUS_KEY]));
     const listener = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
       if (area === 'session' && changes[STATUS_KEY]) readStatus(changes[STATUS_KEY].newValue);
+      if (area === 'local' && changes[PAGE_ACCESS_KEY])
+        setPageEnabled(changes[PAGE_ACCESS_KEY].newValue === true);
       if (area === 'local' && changes[ENABLED_KEY])
         setEnabled(changes[ENABLED_KEY].newValue === true);
     };
@@ -36,8 +41,7 @@ export function NativeBridge() {
       setError('Could not copy. Select the command and copy it manually.');
     }
   }
-  const install = `node native/install.mjs --extension-id ${chrome.runtime.id}`;
-  const mcp = 'codex mcp add saul-tabs -- node "$HOME/.saul/bridge/mcp.mjs"';
+  const install = `node scripts/setup.mjs --extension-id ${chrome.runtime.id}`;
   return (
     <section className="panel stack">
       <label className="toggle">
@@ -58,6 +62,29 @@ export function NativeBridge() {
       <p className="small muted">
         Let local tools read tab titles and URLs and organize tabs. Incognito is excluded. You can
         use the tab organizer below without enabling Codex access.
+      </p>
+      <label className="toggle">
+        <strong>Page reading and actions</strong>
+        <input
+          type="checkbox"
+          checked={pageEnabled}
+          onChange={async (e) => {
+            const next = e.target.checked;
+            setPageEnabled(next);
+            try {
+              await chrome.storage.local.set({ [PAGE_ACCESS_KEY]: next });
+              setError('');
+            } catch (err) {
+              setPageEnabled(!next);
+              setError(String(err));
+            }
+          }}
+        />
+      </label>
+      <p className="small muted">
+        Also let connected local tools read visible web page text, click controls, fill text fields,
+        and navigate tabs. Clicks may submit forms or change website data. Requires Codex tab
+        access.
       </p>
       <div className="row between">
         <span className="badge" role="status">
@@ -94,23 +121,19 @@ export function NativeBridge() {
         <summary>Connect Codex · setup and troubleshooting</summary>
         <div className="stack" style={{ marginTop: 12 }}>
           <p className="small muted">
-            1. From your Saul checkout, install the host for this extension:
+            1. From your Saul checkout, run this setup command. It builds Saul, installs the helper,
+            registers Codex and checks the connection:
           </p>
           <code className="code">{install}</code>
           <button className="btn" onClick={() => copy('install', install)}>
-            {copied === 'install' ? 'Copied install command' : 'Copy install command'}
+            {copied === 'install' ? 'Copied setup command' : 'Copy setup command'}
           </button>
           <p className="small muted">
-            2. Use the Codex registration command printed by the installer. For the default
-            installation, this also works when Node is on your shell PATH:
+            2. Reload Saul in Chrome after the build, enable access above and choose Reconnect. The
+            setup command will guide you through verification.
           </p>
-          <code className="code">{mcp}</code>
-          <button className="btn" onClick={() => copy('mcp', mcp)}>
-            {copied === 'mcp' ? 'Copied Codex command' : 'Copy Codex command'}
-          </button>
           <p className="small muted">
-            3. Enable access above, then start a new Codex task or reload its MCP connections. Ask
-            Codex to preview a tab sort.
+            3. Start a fresh Codex chat to load the tools. Ask Codex to preview a tab sort.
           </p>
           <p className="small muted">
             Host missing? Check that the installed extension ID matches this one. After updating

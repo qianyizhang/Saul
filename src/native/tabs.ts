@@ -1,3 +1,4 @@
+import { handlePageCall } from './pages';
 import {
   validateCall,
   type GroupMetadata,
@@ -68,6 +69,7 @@ export async function handleTabCallUnlocked(
   input: Args = {},
 ): Promise<ToolResults[BrowserTool]> {
   validateCall(name, input);
+  if (name.startsWith('saul_page_')) return handlePageCall(name, input);
   const normalWindow = async (windowId: number) => {
     const window = await chrome.windows.get(windowId);
     if (window.incognito || window.type !== 'normal')
@@ -90,6 +92,24 @@ export async function handleTabCallUnlocked(
     ...(args.color === undefined ? {} : { color: args.color }),
     ...(args.collapsed === undefined ? {} : { collapsed: args.collapsed }),
   });
+  if (name === 'saul_windows_create') {
+    const args = validateCall('saul_windows_create', input);
+    const tabs = await getTabs(args.tabIds);
+    if (tabs.some((tab) => tab.pinned || tab.groupId >= 0))
+      throw new Error('New windows require unpinned, ungrouped tabs; ungroup them first');
+    const dryRun = args.dryRun !== false;
+    if (dryRun) return { dryRun, tabIds: args.tabIds };
+    const created = await chrome.windows.create({
+      tabId: args.tabIds[0],
+      type: 'normal',
+      focused: args.focused ?? false,
+    });
+    if (created?.id === undefined)
+      throw new Error('Window creation returned no ID; list tabs before retrying');
+    for (const tabId of args.tabIds.slice(1))
+      await chrome.tabs.move(tabId, { windowId: created.id, index: -1 });
+    return { dryRun, tabIds: args.tabIds, windowId: created.id };
+  }
   if (name === 'saul_tabs_list') {
     const args = validateCall('saul_tabs_list', input);
     if (args.windowId !== undefined) await normalWindow(args.windowId);

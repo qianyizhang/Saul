@@ -60,7 +60,7 @@ The Tabs workspace can preview and apply:
 
 Pinned tabs remain fixed and existing groups move as intact blocks during sorting. Saul rejects stale previews before apply. Browser actions can still race with a multi-step mutation, so refresh and inspect after any error. **Undo last sort** is available only while the tab layout still matches the applied result; previews and undo state disappear when the service worker restarts.
 
-External CLI/MCP tab access is optional and disabled by default. See [native messaging](native-messaging.md).
+External CLI/MCP tab access is optional and disabled by default. It also supports creating windows from selected ungrouped tabs. A separate **Page reading and actions** switch enables bounded visible-page reads, referenced click/fill actions, and HTTP(S) navigation. Page mutations preview by default. See [native messaging](native-messaging.md).
 
 ## Compatibility
 

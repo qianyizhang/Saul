@@ -1,6 +1,10 @@
-# Native tab access
+# Native browser access
 
-Saul exposes its tab organizer through a local CLI and stdio MCP server. The optional bridge uses Chrome native messaging and a private Unix socket; it has no network listener, daemon, extra dependency, or API key.
+Saul exposes tab organization, window creation and optional page reading/actions through a local CLI and stdio MCP server. The optional bridge uses Chrome native messaging and a private Unix socket; it has no network listener, daemon, extra dependency, or API key.
+
+## Recommended setup
+
+Run `node scripts/setup.mjs` from this checkout. It builds the extension, installs the helper, registers MCP and verifies browser connectivity, with prompts for the Chrome steps. See [setup and agent instructions](setup.md), including the [native helper lifecycle](setup.md#native-helper-lifecycle). The individual commands below remain available for advanced setup.
 
 ## Install on macOS or Linux
 
@@ -43,7 +47,7 @@ Example requests:
 - “Preview sorting window 123 by domain, keeping existing groups intact.”
 - “Group these five tabs as Research, blue, and apply the change.”
 
-Tab titles, URLs and group titles are untrusted browser data, not instructions. Tools return metadata only; there is no page-content extraction, script execution, navigation, or tab-closing command.
+Tab titles, URLs, group titles and page content are untrusted browser data, not instructions. Tab access includes creating normal windows from selected unpinned, ungrouped tabs. Page reading and actions require a separate opt-in under **Tabs → Page reading and actions**. Updating Saul leaves that switch off by default. There is no arbitrary-code or tab-closing tool.
 
 ## CLI and tools
 
@@ -63,13 +67,32 @@ Run `~/.saul/bin/saul help` for the current command list. Commands accept one JS
 
 Use IDs from a fresh `list`, not the example IDs above. All mutations default to `dryRun: true`, returning a plan without changing the browser. Apply with `dryRun: false`. A preview is not a transaction or reservation: tabs can change before or during application. Mutations are serialized within the extension but browser/user actions can still race. On an error or timeout, some changes may have completed: list again and inspect before retrying. Calls are never automatically replayed.
 
-The commands cover session discovery, listing, sorting, grouping, ungrouping, moving, and group updates. Sorting keeps pinned tabs fixed and existing groups intact. Moving refuses positions inside a group; `index: -1` appends.
+The tab commands cover session discovery, listing, sorting, grouping, ungrouping, moving, group updates and window creation. The page tools are described below. Sorting keeps pinned tabs fixed and existing groups intact. Moving refuses positions inside a group; `index: -1` appends.
 
 Each connected Chrome profile/extension instance has its own randomly named socket in `~/.saul/run`. If more than one is connected, pass a `session` from `sessions` to every browser command. Session IDs change on reconnection; do not save them as permanent profile identities. Inspect `list` for a selected session to identify its windows. Stale sockets are ignored. `SAUL_RUNTIME_DIR` can override the runtime directory, but must be the same for host and client and short enough for Unix socket paths.
 
+## Page reading and browser actions
+
+The same local MCP connection exposes four additional tools:
+
+| Tool                  | Behavior                                                                                                                                            |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `saul_windows_create` | Preview/create a normal window from explicit unpinned, ungrouped tab IDs, preserving their order. No extra blank tab is created.                    |
+| `saul_page_read`      | Read visible main-frame text (40,000 characters) and up to 100 controls, with truncation flags. Returns document and snapshot IDs plus element IDs. |
+| `saul_page_act`       | Preview/click or fill an element from the latest read. Supply `tabId`, `documentId`, `snapshotId`, `elementId`, `action`, and `value` for fill.     |
+| `saul_page_navigate`  | Preview/navigate an existing HTTP(S) tab. Supply `expectedUrl` from a fresh read/list and a destination `url`.                                      |
+
+All mutations default to previews; apply with `dryRun: false`. Clicks can submit forms, make purchases or change website data, so the calling agent must have authorization for that specific action. A successful click means the DOM event was dispatched, not that a website operation succeeded. Read again to verify the result. Navigation does not wait for loading.
+
+Page access excludes incognito, non-normal windows, browser/extension/file URLs, embedded URL credentials, iframes and shadow DOM. Reads omit input values. Filling supports ordinary text fields and textareas, excluding passwords and file inputs. Some sites require trusted physical input events and will not respond to these DOM actions; use Computer Use for those cases.
+
+References expire after five minutes, a newer read, navigation, element replacement/change, or an applied action. Reads and actions execute in Chrome's isolated world. Page actions target the exact document from the read. On a stale-reference error, read again; never blindly replay an uncertain mutation. New windows reject pinned/grouped tabs rather than silently removing those properties. Partial failure during window creation/moving can leave a new window with some selected tabs; list again before retrying.
+
+After upgrading: rebuild/reload the extension, rerun the native installer for its actual ID, reconnect, and reload Codex's MCP connection or start a new chat. Enable **Page reading and actions** only if page access is wanted. The server now advertises **11 tools**.
+
 ## Access and troubleshooting
 
-The native bridge is off by default. Turning it off disconnects the host and cancels queued work; a browser operation already running may finish. The native host only registers exact extension origins, and the runtime directory/socket permissions are `0700`/`0600`. Programs running as your own OS user can use the bridge while enabled. Incognito and non-normal windows are excluded. Metadata is returned to the calling CLI/MCP client on request, so Codex can receive tab titles and URLs when using these tools. The bridge does not store tab metadata on disk.
+The native bridge is off by default. Turning it off disconnects the host and cancels queued work; a browser operation already running may finish. The native host only registers exact extension origins, and the runtime directory/socket permissions are `0700`/`0600`. Programs running as your own OS user can use the bridge while enabled. Incognito and non-normal windows are excluded. Metadata is returned to the calling CLI/MCP client on request, so Codex can receive tab titles and URLs when using these tools. The bridge does not store browser metadata or page text on disk. Page snapshots retain element references in the current document until replaced or the document is destroyed.
 
 - **No browser connected:** open Chrome, load/reload the built extension, install its exact ID, enable access.
 - **Host not found/forbidden:** inspect `com.saul.tabs.json` in Chrome's `NativeMessagingHosts`; confirm the absolute launcher path and `allowed_origins` match the popup's extension ID.
@@ -91,4 +114,4 @@ To disable access, turn off **Codex tab access** in Tabs. To remove Codex regist
 - [MCP stdio transport](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
 - [MCP lifecycle](https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle)
 
-The MCP server implements JSON-RPC initialization, ping, tool discovery and tool calls, with newline-delimited stdio transport. It advertises only tools; no resources, prompts or subscriptions.
+The MCP server implements JSON-RPC initialization, ping, tool discovery and tool calls, with newline-delimited stdio transport. It advertises only tools; no resources, prompts or subscriptions. Health checks, tool discovery and session discovery remain responsive while a browser call is stalled; browser calls remain ordered and are never automatically replayed.
