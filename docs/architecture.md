@@ -4,7 +4,8 @@
 
 | Component | Responsibility |
 | --- | --- |
-| `Sources/EZ/EZApp.swift` | Native window, sidebar, composer, answer, and settings |
+| `Sources/EZ/EZApp.swift` | Native window and app commands |
+| `ContentView` / `SettingsView` / `AppStyle` | Lookup interface, account settings, shared appearance |
 | `Sources/EZ/AppModel.swift` | User actions, selected account/model, task lifecycle, visible errors |
 | `ChatGPTAuth` | OAuth registration, validated identity, consent, refresh, logout |
 | `LoopbackListener` | Bounded HTTP callback listener bound only to 127.0.0.1 |
@@ -45,6 +46,10 @@ or unsupported preview fields are added. Completion requires a terminal
 - Clear tokens on terminal refresh failure, not on network/5xx errors. Logout
   attempts revocation; an unconfirmed remote revocation is shown explicitly.
 - OAuth URLs, codes, tokens, and raw auth diagnostics never enter chat history.
+
+See [Keychain access](keychain.md) for the exact stored item and development
+signing limitations. Model, effort, and Fast preferences persist when changed;
+they contain no credentials and remain separate from lookup history.
 
 ## Persistence contract
 

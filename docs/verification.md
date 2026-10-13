@@ -54,3 +54,16 @@ catalog discovery only; completed inference proves that request succeeded.
 
 These are local results, not hosted CI results. Remote CI, notarization,
 distribution on another Mac, and live token expiry/remote revocation are not verified.
+
+## Cleanup evidence — 2026-10-13
+
+- Formatting, debug compilation, and all **15 offline contract checks passed**
+  after splitting the views and polishing settings/preferences/warnings.
+- Release bundle built and ad-hoc signature verified.
+- Deliberately nonexistent signing identity caused packaging to fail as expected.
+  SHA-256 comparisons of every previous bundle file confirmed it was unchanged.
+  Both failed and successful packaging removed their temporary staging directories.
+- Settings now scrolls so expanded Keychain guidance remains reachable in a bounded
+  sheet. Its new layout and immediate preference saving have not been manually
+  rechecked in the running app. This pass did not repeat live account/inference
+  checks or approve any Keychain prompt; the earlier live evidence remains separate.

@@ -6,14 +6,19 @@ import EZCore
     @Published var query = ""
     @Published var mode: QueryMode = .dictionary
     @Published var models: [ModelOption] = []
-    @Published var selectedModel = UserDefaults.standard.string(forKey: "model") ?? ""
-    @Published var effort = UserDefaults.standard.string(forKey: "effort") ?? "low"
-    @Published var fast = UserDefaults.standard.bool(forKey: "fast")
+    @Published var selectedModel = UserDefaults.standard.string(forKey: "model") ?? "" {
+        didSet { UserDefaults.standard.set(selectedModel, forKey: "model") }
+    }
+    @Published var effort = UserDefaults.standard.string(forKey: "effort") ?? "low" {
+        didSet { UserDefaults.standard.set(effort, forKey: "effort") }
+    }
+    @Published var fast = UserDefaults.standard.bool(forKey: "fast") {
+        didSet { UserDefaults.standard.set(fast, forKey: "fast") }
+    }
     @Published var entries: [HistoryEntry] = []
     @Published var selection: UUID?
     @Published var search = ""
     @Published var connecting = false
-    @Published var accountLabel = "Not signed in"
     @Published var signedIn = false
     @Published var planEnabled = false
     @Published var profiles: [AccountProfile] = []
@@ -84,7 +89,6 @@ import EZCore
         accountID = auth.state.selectedID ?? ""
         signedIn = auth.selected?.credentials != nil
         planEnabled = auth.selected?.credentials?.canUsePlan == true
-        accountLabel = auth.selected?.label ?? "Not signed in"
     }
     private func loadModels() async throws {
         models = []
@@ -169,9 +173,6 @@ import EZCore
             self.error = "Query not sent: history could not be saved. \(error.localizedDescription)"
             return
         }
-        UserDefaults.standard.set(selectedModel, forKey: "model")
-        UserDefaults.standard.set(effort, forKey: "effort")
-        UserDefaults.standard.set(fast, forKey: "fast")
         active = entry
         entries.insert(entry, at: 0)
         selection = entry.id

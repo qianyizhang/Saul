@@ -23,6 +23,8 @@ macOS may ask whether **EZ** can access its Keychain item to save or restore you
 sign-in. EZ queries only its own credential record. Locally signed development
 rebuilds can trigger another prompt; refusing access keeps history available but
 prevents the saved sign-in from loading.
+See [Keychain access](docs/keychain.md) for the stored data, permission choices,
+and why a rebuild can ask again. The same explanation is available in Settings.
 
 ChatGPT plan access depends on account eligibility and rollout. The integration
 uses OAuth with explicit `chatgpt.tokens.use.direct` permission, then
@@ -35,7 +37,7 @@ settings to inspect your app allowance. No fallback API billing is configured.
 
 - Queries/answers: `~/Library/Application Support/EZ/history.jsonl`, owner-only.
 - Credentials, issued client IDs, and host ID: macOS Keychain (`local.ez.app.chatgpt`).
-- Model preferences: macOS preferences under bundle ID `local.ez.app`.
+- Model, effort, and Fast preferences: saved when changed under bundle ID `local.ez.app`.
 - Build products: ignored `.build/` and `dist/`; regenerate them with `make app`.
 
 History is append-only: a query is saved before sending, followed by a terminal

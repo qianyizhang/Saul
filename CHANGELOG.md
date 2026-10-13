@@ -7,3 +7,7 @@
 - Account model/effort discovery and capability-dependent Fast requests.
 - Local JSONL history, search, Markdown export, and cancellation recovery.
 - Swift package, offline contract checks, formatting, macOS CI, and contributor guidance.
+- Dedicated lookup/settings views, immediate preference saving, accessible action
+  labels, and correctly dismissible storage warnings.
+- In-app Keychain explanation and detailed credential/signing documentation.
+- Staged bundle packaging that preserves the previous app on signing failure.

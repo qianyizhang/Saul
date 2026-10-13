@@ -3,6 +3,12 @@
 `make app` generates `dist/EZ.app` from the Swift package and `Resources/Info.plist`.
 The default signature is ad-hoc, suitable for this Mac. Open the app from the same
 path between runs. macOS may request Keychain access again after an ad-hoc rebuild.
+See [Keychain access](keychain.md) for the reason and permission choices.
+
+Packaging creates, signs, and verifies a temporary bundle before replacing
+`dist/EZ.app`. A failure before replacement leaves the previous app intact;
+interrupted replacement attempts to restore it. Quit EZ before opening the new
+build so the existing process does not continue running an older version.
 
 For distribution:
 
