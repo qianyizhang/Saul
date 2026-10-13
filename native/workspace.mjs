@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { callTool } from './client.mjs';
 import { APP_URI, validateAppCall } from './app-protocol.mjs';
+import { createWindowLabels } from './window-labels.mjs';
+import { runtimeDirectory } from './transport.mjs';
 
 const fixed = (tab) => tab.pinned || tab.groupId >= 0;
 const ordered = (snapshot, windowId) =>
@@ -48,7 +50,10 @@ export function projectLayout(before, windows) {
   if (new Set(existing).size !== existing.length)
     throw new Error('An existing window may appear only once');
   for (const window of windows) {
-    if (window.windowId === undefined) continue;
+    if (window.windowId === undefined) {
+      if (!window.tabIds.length) throw new Error('A new window needs at least one tab');
+      continue;
+    }
     const original = ordered(before, window.windowId);
     if (!original.length) throw new Error('Unknown destination window');
     if (!original.some((t) => fixed(t) || window.tabIds.includes(t.id)))
@@ -71,7 +76,8 @@ export function projectLayout(before, windows) {
     const tabIds = ordered(before, window.id)
       .filter(fixed)
       .map((t) => t.id);
-    if (tabIds.length) projected.push({ id: window.id, title: `Window ${window.id}`, tabIds });
+    if (tabIds.length)
+      projected.push({ id: window.id, title: window.title || `Window ${window.id}`, tabIds });
   }
   return projected;
 }
@@ -89,11 +95,19 @@ export function movedSnapshot(before, tabId, destination) {
   return next;
 }
 
-export function createWorkspace({ call = callTool, now = Date.now } = {}) {
+export function createWorkspace({
+  call = callTool,
+  now = Date.now,
+  labels = createWindowLabels(call === callTool ? runtimeDirectory() : undefined),
+} = {}) {
   const plans = new Map(); // Ephemeral; no browser inventory or approval token written to disk.
   const ttl = 5 * 60 * 1000;
   const expire = () => {
-    for (const [session, plan] of plans) if (now() > plan.expiresAt) plans.delete(session);
+    for (const plan of plans.values())
+      if (plan.status === 'pending' && now() > plan.expiresAt) {
+        plan.status = 'expired';
+        delete plan.approvalToken;
+      }
   };
   const state = async (session) => {
     expire();
@@ -103,9 +117,13 @@ export function createWorkspace({ call = callTool, now = Date.now } = {}) {
     if (!sessions.some((s) => s.session === session))
       throw new Error('Browser session disconnected; refresh and select a connected session');
     const snapshot = await call('saul_tabs_list', { session });
+    const titles = labels.get(session);
+    for (const window of snapshot.windows)
+      if (titles[window.id] !== undefined) window.title = titles[window.id];
     const currentRevision = revision(snapshot);
     const plan = plans.get(session);
-    if (plan?.status === 'pending' && plan.revision !== currentRevision) plan.status = 'stale';
+    if (['pending', 'expired'].includes(plan?.status) && plan.revision !== currentRevision)
+      plan.status = 'stale';
     const proposal = { ...plan };
     delete proposal.approvalToken;
     return {
@@ -141,7 +159,14 @@ export function createWorkspace({ call = callTool, now = Date.now } = {}) {
           const old = current.snapshot.tabs.find((x) => x.id === t.id);
           return t.windowId !== old.windowId || t.index !== old.index;
         });
-      if (!changed.length) {
+      const renamed = args.windows.some(
+        (w) =>
+          w.windowId !== undefined &&
+          w.title !==
+            (current.snapshot.windows.find((x) => x.id === w.windowId)?.title ||
+              `Window ${current.snapshot.windows.findIndex((x) => x.id === w.windowId) + 1}`),
+      );
+      if (!changed.length && !renamed) {
         plans.delete(args.session);
         return response(await state(args.session), true);
       }
@@ -170,6 +195,7 @@ export function createWorkspace({ call = callTool, now = Date.now } = {}) {
     delete plan.approvalToken; // Consume before any side effect, including uncertain failures.
     let expected = current.snapshot;
     let completedMoves = 0;
+    const appliedWindows = [];
     const check = async () => {
       const actual = await call('saul_tabs_list', { session: args.session });
       if (revision(actual) !== revision(expected))
@@ -202,6 +228,7 @@ export function createWorkspace({ call = callTool, now = Date.now } = {}) {
             .map((t) => t.id),
           ...window.tabIds,
         ];
+        appliedWindows.push({ id: destination, title: window.title });
         if (
           JSON.stringify(ordered(expected, destination).map((t) => t.id)) ===
           JSON.stringify(desired)
@@ -221,6 +248,20 @@ export function createWorkspace({ call = callTool, now = Date.now } = {}) {
           await check();
         }
       }
+      const actual = await check();
+      const titles = labels.get(args.session);
+      for (const window of appliedWindows) titles[window.id] = window.title;
+      for (const id of Object.keys(titles))
+        if (!actual.windows.some((w) => w.id === Number(id))) delete titles[id];
+      labels.save(
+        args.session,
+        titles,
+        current.sessions.map((s) => s.session),
+      );
+      plan.projected = plan.projected.map((w, i) => ({
+        ...w,
+        id: appliedWindows[i]?.id ?? w.id,
+      }));
       plan.status = 'applied';
       plan.receipt = {
         completedMoves,

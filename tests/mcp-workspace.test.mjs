@@ -1,6 +1,10 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { createWorkspace, projectLayout, revision } from '../native/workspace.mjs';
 import { APP_TOOLS } from '../native/app-protocol.mjs';
+import { createWindowLabels } from '../native/window-labels.mjs';
+import { mkdtempSync, rmSync, readFileSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const session = 'a'.repeat(16);
 let snapshot, call, workspace, now;
@@ -173,11 +177,87 @@ it('does not select an arbitrary browser when multiple sessions exist', async ()
 it('returning to the current layout clears the previous approval without mutations', async () => {
   const original = await propose();
   const result = await propose([
-    { windowId: 1, title: 'Work', tabIds: [12] },
-    { windowId: 2, title: 'Reading', tabIds: [20, 21] },
+    { windowId: 1, title: 'Window 1', tabIds: [12] },
+    { windowId: 2, title: 'Window 2', tabIds: [20, 21] },
   ]);
   expect(result.structuredContent.proposal).toBeNull();
   expect(result._meta.approvalToken).toBeUndefined();
   expect(mutations()).toHaveLength(0);
   await expect(workspace('saul_workspace_apply', approve(original))).rejects.toThrow('Approval');
+});
+
+it('persists reviewed labels for existing and newly created windows across MCP restart', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'saul-window-labels-'));
+  try {
+    workspace = createWorkspace({ call, labels: createWindowLabels(directory) });
+    const proposal = await propose();
+    expect(createWindowLabels(directory).get(session)).toEqual({});
+    const applied = await workspace('saul_workspace_apply', approve(proposal));
+    expect(applied.structuredContent.snapshot.windows).toEqual([
+      { id: 1, title: 'Work' },
+      { id: 100, title: 'Reading' },
+    ]);
+    const restarted = createWorkspace({ call, labels: createWindowLabels(directory) });
+    const refreshed = await restarted('saul_workspace_show', { session });
+    expect(refreshed.structuredContent.snapshot.windows).toEqual(
+      applied.structuredContent.snapshot.windows,
+    );
+    expect(refreshed.structuredContent.proposal).toBeNull();
+    const file = join(directory, 'workspace-labels.json');
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({
+      [session]: { 1: 'Work', 100: 'Reading' },
+    });
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+    expect(createWindowLabels(directory).get('b'.repeat(16))).toEqual({});
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+it('label-only changes require review and do not move Chrome tabs', async () => {
+  const proposal = await propose([
+    { windowId: 1, title: 'Work', tabIds: [12] },
+    { windowId: 2, title: 'Reading', tabIds: [20, 21] },
+  ]);
+  expect(proposal.structuredContent.proposal.changedTabIds).toEqual([]);
+  expect(mutations()).toEqual([]);
+  const result = await workspace('saul_workspace_apply', approve(proposal));
+  expect(result.structuredContent.snapshot.windows.map((w) => w.title)).toEqual([
+    'Work',
+    'Reading',
+  ]);
+  expect(mutations()).toEqual([]);
+});
+
+it('keeps an expired draft editable but consumes its approval until renewed', async () => {
+  const old = await propose();
+  now += 300001;
+  const expired = await workspace('saul_workspace_state', { session });
+  expect(expired.structuredContent.proposal.status).toBe('expired');
+  expect(expired.structuredContent.proposal.projected).toEqual(
+    old.structuredContent.proposal.projected,
+  );
+  expect(expired._meta.approvalToken).toBeUndefined();
+  await expect(workspace('saul_workspace_apply', approve(old))).rejects.toThrow();
+  const renewed = await propose(expired.structuredContent.proposal.windows);
+  expect(renewed.structuredContent.proposal.status).toBe('pending');
+  expect(renewed._meta.approvalToken).not.toBe(old._meta.approvalToken);
+  expect(mutations()).toEqual([]);
+});
+
+it('can label a window containing only pins/groups while rejecting empty new windows', async () => {
+  snapshot.tabs = snapshot.tabs.filter((t) => t.id !== 12);
+  const proposal = await propose([
+    { windowId: 1, title: 'Pinned references', tabIds: [] },
+    { windowId: 2, title: 'Reading', tabIds: [20, 21] },
+  ]);
+  const applied = await workspace('saul_workspace_apply', approve(proposal));
+  expect(applied.structuredContent.snapshot.windows[0].title).toBe('Pinned references');
+  expect(mutations()).toEqual([]);
+  expect(() =>
+    projectLayout(snapshot, [
+      { windowId: 2, title: 'Reading', tabIds: [20, 21] },
+      { title: 'Empty', tabIds: [] },
+    ]),
+  ).toThrow('at least one tab');
 });

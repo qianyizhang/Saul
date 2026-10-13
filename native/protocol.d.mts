@@ -64,7 +64,7 @@ export interface GroupView {
   collapsed: boolean;
 }
 export interface TabSnapshot {
-  windows: { id: number; focused: boolean }[];
+  windows: { id: number; focused: boolean; title?: string }[];
   tabs: TabView[];
   groups: GroupView[];
 }

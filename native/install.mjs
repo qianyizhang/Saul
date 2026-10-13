@@ -121,7 +121,15 @@ function main() {
           'responses.mjs',
           'sse.mjs',
         ]
-      : ['host.mjs', 'client.mjs', 'cli.mjs', 'mcp.mjs', 'app-protocol.mjs', 'workspace.mjs']),
+      : [
+          'host.mjs',
+          'client.mjs',
+          'cli.mjs',
+          'mcp.mjs',
+          'app-protocol.mjs',
+          'workspace.mjs',
+          'window-labels.mjs',
+        ]),
   ]) {
     copyFileSync(join(source, name), join(plan.runtime, name));
     chmodSync(join(plan.runtime, name), 0o600);

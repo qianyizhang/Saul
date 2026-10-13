@@ -30,7 +30,7 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Settings could not be loaded.';
 }
 
-export function useSettingsDraft(onSaved?: () => void, onDirty?: (dirty: boolean) => void) {
+export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [loaded, setLoaded] = useState(false),
     [dirty, setDirty] = useState(false),
@@ -92,7 +92,6 @@ export function useSettingsDraft(onSaved?: () => void, onDirty?: (dirty: boolean
       setSettings(next);
       setDirty(false);
       setSaved(true);
-      onSaved?.();
     } catch (e) {
       setError(errorMessage(e));
     } finally {

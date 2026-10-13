@@ -15,33 +15,36 @@
           <span class="logo">S</span>
           <div>
             <h1>Windows & tabs</h1>
-            <p>SAUL WORKSPACE</p>
+            <p id="counts"></p>
           </div>
         </div>
         <button id="refresh" disabled>Refresh</button>
       </header>
       <p id="status" role="status" aria-live="polite">Connecting to Codex…</p>
-      <div class="toolbar">
+      <div id="session-picker" class="toolbar" hidden>
         <label
           >Browser session
-          <select id="session" aria-label="Browser session" disabled></select></label
-        ><span id="counts"></span>
+          <select id="session" aria-label="Browser session" disabled></select
+        ></label>
       </div>
-      <section class="composer" aria-label="Plan with Codex">
-        <label for="request">How would you like to organize your tabs?</label>
-        <textarea
-          id="request"
-          rows="2"
-          placeholder="Group my research into a new window and keep work tabs together…"
-        ></textarea>
-        <div class="row">
-          <span class="muted">Codex proposes. You review and apply.</span
-          ><button id="ask" class="primary" disabled>Ask Codex for a plan ↗</button>
+      <details id="composer" class="composer">
+        <summary>Plan with Codex</summary>
+        <div class="composer-fields">
+          <label for="request">How would you like to organize your tabs?</label>
+          <textarea
+            id="request"
+            rows="2"
+            placeholder="Group my research into a new window and keep work tabs together…"
+          ></textarea>
+          <div class="row">
+            <span class="muted">Codex proposes. You review and apply.</span
+            ><button id="ask" class="primary" disabled>Ask Codex for a plan ↗</button>
+          </div>
         </div>
-      </section>
+      </details>
       <section id="proposal" hidden aria-label="Proposed changes"></section>
       <div class="toolbar">
-        <div class="segmented" role="group" aria-label="Layout view">
+        <div id="layout-view" class="segmented" role="group" aria-label="Layout view">
           <button id="current" aria-pressed="true">Current</button
           ><button id="proposed" aria-pressed="false" disabled>Proposed</button>
         </div>
@@ -52,10 +55,7 @@
           placeholder="Find a tab or domain…"
         />
       </div>
-      <p class="muted help">
-        Drag tabs to reorder or move between windows, or use each tab’s ↕ button. Pins and groups
-        stay in their windows. All moves are previews until you apply.
-      </p>
+      <p class="muted help">Drag tabs to arrange. Review your changes before applying.</p>
       <section id="move-controls" class="move-controls" aria-label="Move selected tab" hidden>
         <strong id="moving-title"></strong>
         <div class="row">
@@ -69,7 +69,21 @@
       <div id="board" class="board">
         <div class="empty">Your open Chrome windows will appear here.</div>
       </div>
-      <footer>Local Chrome bridge · No tabs closed · Changes require your approval</footer>
+      <details class="help-details">
+        <summary>How to arrange tabs</summary>
+        <p>
+          Drag a row or its grip between tabs, onto a window’s footer, or into New window. Hold near
+          an edge to scroll. Escape cancels a drag.
+        </p>
+        <p>
+          Click a grip for keyboard controls. Pins and groups stay in their windows. Filtering keeps
+          hidden tabs in the plan.
+        </p>
+        <p>
+          Window labels are saved in Saul after apply; they do not change Chrome’s own window names.
+        </p>
+      </details>
+      <footer>Local Chrome bridge · No tabs closed</footer>
     </main>
     <script type="module">
       /* SAUL_SCRIPT */

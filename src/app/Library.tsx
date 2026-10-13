@@ -16,7 +16,13 @@ import { AnnotatedTextView } from '../surface/AnnotatedTextView';
 import { TagStreamParser } from '../parser/tag-stream-parser';
 import { downloadMarkdown, safeSource } from './format';
 
-export function Library({ compact = false }: { compact?: boolean }) {
+export function Library({
+  compact = false,
+  refreshKey = 0,
+}: {
+  compact?: boolean;
+  refreshKey?: number;
+}) {
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [query, setQuery] = useState('');
   const [bookmarks, setBookmarks] = useState(false);
@@ -61,7 +67,7 @@ export function Library({ compact = false }: { compact?: boolean }) {
       clearTimeout(timer);
       request.current++;
     };
-  }, [query, bookmarks, page, revision, size]);
+  }, [query, bookmarks, page, revision, size, refreshKey]);
   async function expand(item: HistoryItem) {
     const revision = ++expandedRequest.current;
     if (expanded === item.selectionId) {
@@ -105,14 +111,14 @@ export function Library({ compact = false }: { compact?: boolean }) {
     <div className="stack">
       <div className="row between">
         <div>
-          <h2 style={{ margin: 0, fontSize: 20 }}>Reading history</h2>
+          <h2 className="view-title">Reading history</h2>
           <p className="muted small">
-            Explanations save automatically. Bookmark the ones to keep close.
+            Select text on a page, then choose Explain. Find it here anytime.
           </p>
         </div>
         {!compact && <span className="badge">Stored on this device</span>}
       </div>
-      <div className="row">
+      <div className="row library-search">
         <input
           className="search grow"
           aria-label="Search reading history"
@@ -143,7 +149,7 @@ export function Library({ compact = false }: { compact?: boolean }) {
           </button>
         </div>
       )}
-      {busy ? (
+      {busy && !items.length ? (
         <p role="status" className="muted">
           Loading reading history…
         </p>
@@ -166,7 +172,7 @@ export function Library({ compact = false }: { compact?: boolean }) {
         </div>
       ) : (
         !error && (
-          <div className="stack">
+          <div className="stack" aria-busy={busy}>
             {items.map((item) => (
               <article className="history-entry" key={item.selectionId}>
                 <div className="row between" style={{ alignItems: 'flex-start' }}>
@@ -176,7 +182,7 @@ export function Library({ compact = false }: { compact?: boolean }) {
                     onClick={() => void expand(item)}
                   >
                     "{item.selectedText}" {item.unread && <span className="badge">New</span>}{' '}
-                    <ChevronDown size={14} style={{ display: 'inline' }} />
+                    <ChevronDown size={14} className="disclosure-icon" />
                   </button>
                   <button
                     className="btn icon"
@@ -202,7 +208,7 @@ export function Library({ compact = false }: { compact?: boolean }) {
                 <div className="row between small muted" style={{ marginTop: 8 }}>
                   {safeSource(item.pageUrl) ? (
                     <button
-                      className="btn"
+                      className="source-link"
                       onClick={() => void action(() => openHistorySource(item.selectionId))}
                       title="View source and explanation"
                     >
@@ -248,41 +254,46 @@ export function Library({ compact = false }: { compact?: boolean }) {
           </div>
         )
       )}
-      <div className="row between">
-        <button className="btn" disabled={!page || busy} onClick={() => setPage((n) => n - 1)}>
-          Previous
-        </button>
-        <span className="small muted">Page {page + 1}</span>
-        <button className="btn" disabled={!more || busy} onClick={() => setPage((n) => n + 1)}>
-          Next
-        </button>
-      </div>
-      <div className="row between">
-        <button
-          className="btn"
-          disabled={actionBusy}
-          onClick={() => action(async () => downloadMarkdown(await exportKnowledgeMarkdown()))}
-        >
-          <Download size={16} />
-          Export to Markdown
-        </button>
-        <button
-          className="btn danger"
-          disabled={actionBusy}
-          onClick={() => {
-            if (window.confirm('Delete all reading history and bookmarks from this device?'))
-              action(async () => {
-                await clearAllHistory();
-                setPage(0);
-              });
-          }}
-        >
-          Clear All
-        </button>
-      </div>
-      <p className="small muted">
-        Export includes the entire library, regardless of the current filter.
-      </p>
+      {(page > 0 || more) && (
+        <div className="row between">
+          <button className="btn" disabled={!page || busy} onClick={() => setPage((n) => n - 1)}>
+            Previous
+          </button>
+          <span className="small muted">Page {page + 1}</span>
+          <button className="btn" disabled={!more || busy} onClick={() => setPage((n) => n + 1)}>
+            Next
+          </button>
+        </div>
+      )}
+      <details className="library-tools">
+        <summary>Export and manage history</summary>
+        <div className="row between">
+          <button
+            className="btn"
+            disabled={actionBusy}
+            onClick={() => action(async () => downloadMarkdown(await exportKnowledgeMarkdown()))}
+          >
+            <Download size={16} />
+            Export to Markdown
+          </button>
+          <button
+            className="btn danger"
+            disabled={actionBusy}
+            onClick={() => {
+              if (window.confirm('Delete all reading history and bookmarks from this device?'))
+                action(async () => {
+                  await clearAllHistory();
+                  setPage(0);
+                });
+            }}
+          >
+            Clear All
+          </button>
+        </div>
+        <p className="small muted">
+          Export includes the entire library, regardless of the current filter.
+        </p>
+      </details>
     </div>
   );
 }

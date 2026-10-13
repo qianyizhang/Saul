@@ -28,6 +28,8 @@ Opening a completed answer marks it read. Dismissing a notification does not. Er
 
 ## Library
 
+The popup opens directly to reading history. Search and bookmarks stay visible; export and deletion of the entire library are under **Export and manage history**. The full workspace uses the same views with a wider reading area.
+
 The full workspace provides:
 
 - search across selected text, readable explanations, concept notes, titles, and URLs;
@@ -44,6 +46,7 @@ SQLite-WASM stores the library in OPFS for the current browser profile. Data is 
 - Missing/stale profile selection preserves the current configuration in a recovered profile.
 - Invalid saved settings show the affected field and offer an explicit backup-and-reset action.
 - Save, connection test, and generation test use the current draft without overwriting unreadable stored settings.
+- Model setup appears first. Save and validation feedback stay visible while scrolling; leaving a changed draft asks before discarding it.
 - Response language and context controls apply to new submissions.
 - Chrome on-device generation is prepared explicitly and can be stopped.
 - [ChatGPT plan](chatgpt-plan.md) supports OAuth sign-in, saved account registrations, account-specific model discovery, and streamed explanations. It requires the local helper. Its controls omit unsupported temperature and output-token options, and failures never switch billing providers.
@@ -59,6 +62,8 @@ The Tabs workspace can preview and apply:
 - moving unpinned, ungrouped tabs between normal windows.
 
 Pinned tabs remain fixed and existing groups move as intact blocks during sorting. Saul rejects stale previews before apply. Browser actions can still race with a multi-step mutation, so refresh and inspect after any error. **Undo last sort** is available only while the tab layout still matches the applied result; previews and undo state disappear when the service worker restarts.
+
+Grouping and moving controls appear when tabs are selected (or groups already exist). Optional connection controls are under **Codex connection**, after the tab list.
 
 External CLI/MCP tab access is optional and disabled by default. It also supports creating windows from selected ungrouped tabs. A separate **Page reading and actions** switch enables bounded visible-page reads, referenced click/fill actions, and HTTP(S) navigation. Page mutations preview by default. See [native messaging](native-messaging.md).
 

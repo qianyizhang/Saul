@@ -26,6 +26,7 @@ test('deleting a saved passage updates its page and clearing history survives re
 
   await seedHistory(browser, fixtureServer.origin, 2);
   await popup.reload();
+  await popup.getByText('Export and manage history', { exact: true }).click();
   popup.once('dialog', (dialog) => dialog.accept());
   await popup.getByRole('button', { name: 'Clear All', exact: true }).click();
   await expect(popup.getByText('No highlights recorded yet.')).toBeVisible();

@@ -1,58 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BookOpen, ExternalLink } from 'lucide-react';
-import { useRefreshOnFocus } from './useRefreshOnFocus';
 import { Library } from './Library';
 import { Settings } from './Settings';
 import { Tabs } from './Tabs';
-import { getSettings } from '../storage/settings';
-import { fetchHistory, sendDbMessage } from '../storage/client';
-import { plainExplanation } from './format';
-import type { HistoryItem } from '../types/storage';
-type View = 'reading' | 'history' | 'tabs' | 'settings';
+
+type View = 'history' | 'tabs' | 'settings';
 function viewFromHash(): View {
   const hash = location.hash.slice(1);
-  return hash === 'history' || hash === 'tabs' || hash === 'settings' ? hash : 'reading';
+  return hash === 'tabs' || hash === 'settings' ? hash : 'history';
 }
 export function Workspace({ popup = false }: { popup?: boolean }) {
   const [view, setView] = useState<View>(viewFromHash);
   const [settingsDirty, setSettingsDirty] = useState(false);
-  const [model, setModel] = useState('');
-  const [unread, setUnread] = useState(0);
-  const [recent, setRecent] = useState<HistoryItem[]>([]);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [revision, refresh] = useState(0);
-  useRefreshOnFocus(useCallback(() => refresh((n) => n + 1), []));
-  useEffect(() => {
-    if (view !== 'reading') return;
-    let cancelled = false;
-    setError('');
-    setLoading(true);
-    Promise.all([
-      getSettings(),
-      fetchHistory(3),
-      sendDbMessage({ type: 'DB_UNREAD', payload: undefined }),
-    ])
-      .then(([settings, history, unread]) => {
-        if (cancelled) return;
-        setModel(
-          settings.activeProvider === 'chrome-ai'
-            ? 'Chrome on-device AI'
-            : settings.openaiCompatible.model,
-        );
-        setRecent(history);
-        setUnread(unread);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [view, revision]);
+  const [readingRevision, refreshReading] = useState(0);
   const navigate = useCallback(
     (next: View) => {
       if (next === view) return;
@@ -63,6 +23,7 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
       setSettingsDirty(false);
       setView(next);
       location.hash = next;
+      window.scrollTo(0, 0);
     },
     [view, settingsDirty],
   );
@@ -76,12 +37,9 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
       <header className="masthead">
         <div className="brand">
           <span className="brand-mark">
-            <BookOpen size={21} />
+            <BookOpen size={20} />
           </span>
-          <div>
-            <h1>Saul</h1>
-            <span className="small muted">Read, understand, organize.</span>
-          </div>
+          <h1>Saul</h1>
         </div>
         {popup && (
           <a
@@ -96,98 +54,30 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
         )}
       </header>
       <nav className="nav" aria-label="Main navigation">
-        <button
-          aria-current={view === 'reading' || view === 'history' ? 'page' : undefined}
-          onClick={() => navigate('reading')}
-        >
-          Reading
-        </button>
-        <button
-          aria-current={view === 'tabs' ? 'page' : undefined}
-          onClick={() => navigate('tabs')}
-        >
-          Tabs
-        </button>
-        <button
-          aria-current={view === 'settings' ? 'page' : undefined}
-          onClick={() => navigate('settings')}
-        >
-          Settings
-        </button>
+        {(
+          [
+            ['history', 'Reading history'],
+            ['tabs', 'Tabs'],
+            ['settings', 'Settings'],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            aria-current={view === id ? 'page' : undefined}
+            onClick={() => {
+              if (id === 'history') refreshReading((n) => n + 1);
+              navigate(id);
+            }}
+          >
+            {label}
+          </button>
+        ))}
       </nav>
-      {view === 'reading' && (
-        <div className="stack">
-          <section className="panel">
-            <h2 className="hero-title">
-              Keep your place.
-              <br />
-              Understand more.
-            </h2>
-            <p className="muted">
-              Select text, choose Explain, and keep reading. Return through the underline or a ready
-              notification. Explanations stay saved on this device.
-            </p>
-            <p className="small muted">
-              Shortcut: Alt+Shift+E · Model: {model || 'Choose in Settings'}
-            </p>
-            <div className="row" style={{ marginTop: 16 }}>
-              <button
-                className="btn primary"
-                aria-label="Reading history"
-                onClick={() => navigate('history')}
-              >
-                Reading history{unread ? ` · ${unread} new` : ''}
-              </button>
-              {popup && (
-                <a
-                  className="btn"
-                  href={chrome.runtime.getURL('/library.html#history')}
-                  target="_blank"
-                >
-                  Open library
-                </a>
-              )}
-            </div>
-          </section>
-          <div className="row between">
-            <h2 style={{ fontSize: 16, margin: 0 }}>Recent reading</h2>
-            <span className="small muted">On this device</span>
-          </div>
-          {error && (
-            <p role="alert" className="notice error">
-              {error}
-            </p>
-          )}
-          {loading ? (
-            <p role="status" className="muted">
-              Loading recent reading…
-            </p>
-          ) : !error && recent.length ? (
-            recent.map((item) => (
-              <button
-                className="history-entry"
-                style={{ textAlign: 'left' }}
-                key={item.selectionId}
-                onClick={() => navigate('history')}
-              >
-                <strong>{item.selectedText}</strong>
-                <p className="small muted">{plainExplanation(item.responseRaw).slice(0, 150)}</p>
-                <span className="small muted">{item.pageTitle}</span>
-              </button>
-            ))
-          ) : (
-            !error && <p className="empty muted">Your first explanation starts with a highlight.</p>
-          )}
-        </div>
-      )}
-      {view === 'history' && <Library compact={popup} />}
+      {view === 'history' && <Library compact={popup} refreshKey={readingRevision} />}
       {view === 'tabs' && <Tabs />}
-      {view === 'settings' && (
-        <Settings onDirty={setSettingsDirty} onSaved={() => refresh((n) => n + 1)} />
-      )}
+      {view === 'settings' && <Settings onDirty={setSettingsDirty} />}
       <footer className="footer">
-        History stays on this device. Your chosen model receives only the context used for an
-        explanation.
+        Saved on this device · Context is sent to your chosen model.
       </footer>
     </main>
   );

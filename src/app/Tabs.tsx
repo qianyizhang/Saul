@@ -84,7 +84,7 @@ export function Tabs() {
     <div className="stack">
       <div className="row between">
         <div>
-          <h2 style={{ margin: 0, fontSize: 20 }}>Tabs</h2>
+          <h2 className="view-title">Tabs</h2>
           <p className="muted small">
             Preview changes before applying them. Pinned tabs stay protected.
           </p>
@@ -93,7 +93,6 @@ export function Tabs() {
           Refresh tabs
         </button>
       </div>
-      <NativeBridge />
       {error && (
         <p role="alert" className="notice error">
           {error}
@@ -201,144 +200,156 @@ export function Tabs() {
       )}
       <ul className="tabs-list">
         {tabs.map((tab) => (
-          <li key={tab.id} className="tab-row">
-            <input
-              type="checkbox"
-              aria-label={`Select ${tab.title}`}
-              disabled={tab.pinned || busy}
-              checked={selected.includes(tab.id)}
-              onChange={(e) => {
-                select((ids) =>
-                  e.target.checked ? [...ids, tab.id] : ids.filter((id) => id !== tab.id),
-                );
-                setPreview(undefined);
-              }}
-            />
-            <div className="grow">
-              <div>{tab.title || 'Untitled tab'}</div>
-              <div className="small muted truncate">{tab.url}</div>
-              <div className="small muted">
-                {tab.pinned
-                  ? 'Pinned'
-                  : tab.groupId >= 0
-                    ? snapshot.groups.find((g) => g.id === tab.groupId)?.title || 'Unnamed group'
-                    : ''}
+          <li key={tab.id}>
+            <label className="tab-row">
+              <input
+                type="checkbox"
+                aria-label={`Select ${tab.title}`}
+                disabled={tab.pinned || busy}
+                checked={selected.includes(tab.id)}
+                onChange={(e) => {
+                  select((ids) =>
+                    e.target.checked ? [...ids, tab.id] : ids.filter((id) => id !== tab.id),
+                  );
+                  setPreview(undefined);
+                }}
+              />
+              <div className="grow">
+                <div>{tab.title || 'Untitled tab'}</div>
+                <div className="small muted truncate">{tab.url}</div>
+                <div className="small muted">
+                  {tab.pinned
+                    ? 'Pinned'
+                    : tab.groupId >= 0
+                      ? snapshot.groups.find((g) => g.id === tab.groupId)?.title || 'Unnamed group'
+                      : ''}
+                </div>
               </div>
-            </div>
+            </label>
           </li>
         ))}
       </ul>
       {!busy && !tabs.length && <p className="empty">No tabs in this window.</p>}
-      <section className="panel stack">
-        <h3>{selected.length} tabs selected</h3>
-        <div className="row">
-          <label className="field grow">
-            Group name
-            <input value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} />
-          </label>
-          <label className="field">
-            Color
-            <select
-              aria-label="Color"
-              value={color}
-              onChange={(e) => setColor(e.target.value as GroupColor)}
-            >
-              {['blue', 'green', 'yellow', 'red', 'purple', 'pink', 'orange', 'cyan', 'grey'].map(
-                (c) => (
-                  <option key={c}>{c}</option>
-                ),
-              )}
-            </select>
-          </label>
-        </div>
-        <div className="row">
-          <button
-            className="btn"
-            disabled={busy || !selected.length}
-            onClick={() => draft('saul_tabs_group', { tabIds: selected, title, color })}
-          >
-            Preview group
-          </button>
-          <button
-            className="btn"
-            disabled={busy || !selected.length}
-            onClick={() => draft('saul_tabs_ungroup', { tabIds: selected })}
-          >
-            Preview ungroup
-          </button>
-        </div>
-        {groups.length > 0 && (
-          <label className="field">
-            Add selected tabs to an existing group
-            <select
-              value=""
+      {(selected.length > 0 || groups.length > 0) && (
+        <section className="panel stack">
+          <h3>{selected.length} tabs selected</h3>
+          <div className="row">
+            <label className="field grow">
+              Group name
+              <input value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} />
+            </label>
+            <label className="field">
+              Color
+              <select
+                aria-label="Color"
+                value={color}
+                onChange={(e) => setColor(e.target.value as GroupColor)}
+              >
+                {['blue', 'green', 'yellow', 'red', 'purple', 'pink', 'orange', 'cyan', 'grey'].map(
+                  (c) => (
+                    <option key={c}>{c}</option>
+                  ),
+                )}
+              </select>
+            </label>
+          </div>
+          <div className="row">
+            <button
+              className="btn"
               disabled={busy || !selected.length}
-              onChange={(e) => {
-                if (e.target.value)
-                  void draft('saul_tabs_group', {
+              onClick={() => draft('saul_tabs_group', { tabIds: selected, title, color })}
+            >
+              Preview group
+            </button>
+            <button
+              className="btn"
+              disabled={busy || !selected.length}
+              onClick={() => draft('saul_tabs_ungroup', { tabIds: selected })}
+            >
+              Preview ungroup
+            </button>
+          </div>
+          {groups.length > 0 && (
+            <label className="field">
+              Add selected tabs to an existing group
+              <select
+                value=""
+                disabled={busy || !selected.length}
+                onChange={(e) => {
+                  if (e.target.value)
+                    void draft('saul_tabs_group', {
+                      tabIds: selected,
+                      groupId: Number(e.target.value),
+                    });
+                }}
+              >
+                <option value="">Choose group…</option>
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.title || 'Unnamed group'}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <div className="row">
+            <label className="field grow">
+              Move to window
+              <select
+                aria-label="Move to window"
+                value={destination ?? ''}
+                onChange={(e) =>
+                  setDestination(e.target.value ? Number(e.target.value) : undefined)
+                }
+              >
+                <option value="">Choose window…</option>
+                {snapshot.windows.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    Window {w.id}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              className="btn"
+              disabled={busy || !selected.length || destination === undefined}
+              onClick={() => {
+                if (destination !== undefined)
+                  void draft('saul_tabs_move', {
                     tabIds: selected,
-                    groupId: Number(e.target.value),
+                    windowId: destination,
+                    index: -1,
                   });
               }}
             >
-              <option value="">Choose group…</option>
+              Preview move
+            </button>
+          </div>
+          <p className="small muted">
+            Moving requires ungrouped tabs. Ungroup them first if needed.
+          </p>
+          {groups.length > 0 && (
+            <details>
+              <summary>Rename or recolor an existing group</summary>
+              <p className="small muted">Uses the group name and color above.</p>
               {groups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.title || 'Unnamed group'}
-                </option>
+                <button
+                  className="btn"
+                  key={g.id}
+                  disabled={busy}
+                  onClick={() => draft('saul_groups_update', { groupId: g.id, title, color })}
+                >
+                  Update {g.title || 'Unnamed group'}
+                </button>
               ))}
-            </select>
-          </label>
-        )}
-        <div className="row">
-          <label className="field grow">
-            Move to window
-            <select
-              aria-label="Move to window"
-              value={destination ?? ''}
-              onChange={(e) => setDestination(e.target.value ? Number(e.target.value) : undefined)}
-            >
-              <option value="">Choose window…</option>
-              {snapshot.windows.map((w) => (
-                <option key={w.id} value={w.id}>
-                  Window {w.id}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            className="btn"
-            disabled={busy || !selected.length || destination === undefined}
-            onClick={() => {
-              if (destination !== undefined)
-                void draft('saul_tabs_move', {
-                  tabIds: selected,
-                  windowId: destination,
-                  index: -1,
-                });
-            }}
-          >
-            Preview move
-          </button>
-        </div>
-        <p className="small muted">Moving requires ungrouped tabs. Ungroup them first if needed.</p>
-        {groups.length > 0 && (
-          <details>
-            <summary>Rename or recolor an existing group</summary>
-            <p className="small muted">Uses the group name and color above.</p>
-            {groups.map((g) => (
-              <button
-                className="btn"
-                key={g.id}
-                disabled={busy}
-                onClick={() => draft('saul_groups_update', { groupId: g.id, title, color })}
-              >
-                Update {g.title || 'Unnamed group'}
-              </button>
-            ))}
-          </details>
-        )}
-      </section>
+            </details>
+          )}
+        </section>
+      )}
+      <details className="connection-details">
+        <summary>Codex connection</summary>
+        <NativeBridge />
+      </details>
     </div>
   );
 }

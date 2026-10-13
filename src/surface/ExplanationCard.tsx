@@ -151,6 +151,23 @@ export function ExplanationCard({
           </div>
         )}
       </div>
+      {!active && passage.completed && (
+        <div className="px-4 pb-2 flex flex-wrap gap-2" aria-label="Follow-up explanations">
+          {['Simpler', 'Give an example', 'Go deeper'].map((label) => (
+            <button
+              className="px-2 py-1.5 text-xs rounded-md border border-slate-200 hover:bg-indigo-50 focus-visible:outline-2 focus-visible:outline-indigo-600 disabled:opacity-40"
+              key={label}
+              disabled={busy}
+              onClick={() => {
+                setRuns(null);
+                onRetry(label);
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="px-3 pb-3 flex flex-wrap items-center gap-1">
         {active ? (
           <button
@@ -180,20 +197,6 @@ export function ExplanationCard({
                 {copied ? <Check size={16} /> : <Copy size={16} />}
               </button>
             )}
-            {passage.completed &&
-              ['Simpler', 'Give an example', 'Go deeper'].map((label) => (
-                <button
-                  className="px-2 py-1 text-xs rounded-md border border-slate-200 hover:bg-indigo-50"
-                  key={label}
-                  disabled={busy}
-                  onClick={() => {
-                    setRuns(null);
-                    onRetry(label);
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
           </>
         )}
         <button
@@ -206,7 +209,8 @@ export function ExplanationCard({
           <Bookmark size={16} fill={passage.bookmarked ? 'currentColor' : 'none'} />
         </button>
         <button
-          className="text-xs p-2 text-slate-500"
+          className={`${iconClass} text-xs ml-auto`}
+          aria-expanded={runs !== null}
           onClick={() => {
             if (runs) setRuns(null);
             else

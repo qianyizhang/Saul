@@ -1,10 +1,3 @@
-import { TagStreamParser } from '../parser/tag-stream-parser';
-export function plainExplanation(raw: string) {
-  return new TagStreamParser()
-    .feed(raw)
-    .map((s) => (s.type === 'text' ? s.text : s.term))
-    .join('');
-}
 export function safeSource(url: string) {
   try {
     const u = new URL(url);

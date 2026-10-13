@@ -20,14 +20,8 @@ function origin(url: string) {
     return '';
   }
 }
-export function Settings({
-  onSaved,
-  onDirty,
-}: {
-  onSaved?: () => void;
-  onDirty?: (dirty: boolean) => void;
-}) {
-  const draft = useSettingsDraft(onSaved, onDirty);
+export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
+  const draft = useSettingsDraft(onDirty);
   const { settings, loaded, dirty, saved, saving, profilesWithCurrent, save } = draft;
   const providerTest = useProviderTest();
   const { testing, notice, availability } = providerTest;
@@ -73,10 +67,9 @@ export function Settings({
   return (
     <fieldset className="stack settings-layout settings-fields" disabled={saving}>
       <div>
-        <h2 style={{ margin: 0, fontSize: 20 }}>Settings</h2>
+        <h2 className="view-title">Settings</h2>
         <p className="small muted">Choose how Saul explains and what context it uses.</p>
       </div>
-      <NotificationSettings />
       <section className="panel settings-section">
         <h3>Model</h3>
         <fieldset className="settings-fields" disabled={testing}>
@@ -308,6 +301,7 @@ export function Settings({
           explanation.
         </p>
       </section>
+      <NotificationSettings />
       <details className="panel">
         <summary>Advanced prompt</summary>
         <div className="settings-section" style={{ marginTop: 12 }}>
@@ -330,32 +324,34 @@ export function Settings({
           </button>
         </div>
       </details>
-      {error && (
-        <p className="notice error" role="alert">
-          {error}
-        </p>
-      )}
-      {draft.recoveryNotice && (
-        <p className="notice" role="status">
-          {draft.recoveryNotice}
-        </p>
-      )}
-      {notice && (
-        <p className="notice" role="status">
-          {notice}
-        </p>
-      )}
-      <div className="row between">
-        <span className="small muted" role="status">
-          {dirty
-            ? 'Unsaved changes'
-            : saved
-              ? 'Saved on this device'
-              : 'Settings stored on this device'}
-        </span>
-        <button className="btn primary" disabled={testing || saving} onClick={save}>
-          {saving ? 'Saving…' : saved ? 'Saved!' : 'Save Settings'}
-        </button>
+      <div className="settings-save">
+        {error && (
+          <p className="notice error" role="alert">
+            {error}
+          </p>
+        )}
+        {draft.recoveryNotice && (
+          <p className="notice" role="status">
+            {draft.recoveryNotice}
+          </p>
+        )}
+        {notice && (
+          <p className="notice" role="status">
+            {notice}
+          </p>
+        )}
+        <div className="row between">
+          <span className="small muted" role="status">
+            {dirty
+              ? 'Unsaved changes'
+              : saved
+                ? 'Saved on this device'
+                : 'Settings stored on this device'}
+          </span>
+          <button className="btn primary" disabled={testing || saving} onClick={save}>
+            {saving ? 'Saving…' : saved ? 'Saved!' : 'Save Settings'}
+          </button>
+        </div>
       </div>
     </fieldset>
   );

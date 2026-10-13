@@ -41,6 +41,7 @@ test('page access is opt-in; reads, previews, fills, clicks and navigation rejec
   const tabId = inventory.tabs.find((tab) => tab.url === page.url())!.id;
   await expect(call(popup, 'saul_page_read', { tabId })).rejects.toThrow('Enable Page reading');
   await popup.goto(popup.url().replace('popup.html', 'library.html') + '#tabs');
+  await popup.getByText('Codex connection', { exact: true }).click();
   await popup.getByRole('checkbox', { name: 'Page reading and actions' }).check();
   let read = await call(popup, 'saul_page_read', { tabId });
   expect(read.text).toContain('Gradient descent');

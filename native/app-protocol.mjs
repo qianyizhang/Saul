@@ -1,6 +1,6 @@
 import { TOOLS, validate } from './protocol.mjs';
 
-export const APP_URI = 'ui://saul/workspace-v1.html';
+export const APP_URI = 'ui://saul/workspace-v2.html';
 export const APP_RESOURCE = {
   uri: APP_URI,
   name: 'Saul windows and tabs',
@@ -49,7 +49,7 @@ export const APP_TOOLS = [
   tool(
     'saul_workspace_propose',
     'Preview a workspace layout',
-    'Stage a dry-run layout for the Saul board. First call saul_workspace_show, then use its session and revision. Assign EVERY unpinned, ungrouped tab exactly once across windows, in desired order. Existing windows use windowId; omit windowId to create a new window. Existing destinations must retain at least one of their original tabs. Pinned tabs/groups remain in their original windows before the movable tabs. Titles label the proposal, not Chrome windows. Does not modify Chrome. The user applies it using the board button; never apply with other tools to bypass review.',
+    'Stage a dry-run layout for the Saul board. First call saul_workspace_show, then use its session and revision. Assign EVERY unpinned, ungrouped tab exactly once across windows, in desired order. Existing windows use windowId; omit windowId to create a new window. Existing destinations must retain at least one of their original tabs. Pinned tabs/groups remain in their original windows before the movable tabs. Titles persist as Saul window labels after apply; Chrome native window names are unavailable through its extension API. Does not modify Chrome. The user applies it using the board button; never apply with other tools to bypass review.',
     object(
       {
         session,
@@ -63,7 +63,7 @@ export const APP_TOOLS = [
             {
               windowId: id,
               title: text,
-              tabIds: { type: 'array', minItems: 1, maxItems: 2000, uniqueItems: true, items: id },
+              tabIds: { type: 'array', maxItems: 2000, uniqueItems: true, items: id },
             },
             ['title', 'tabIds'],
           ),

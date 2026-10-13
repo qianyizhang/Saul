@@ -13,7 +13,7 @@ export interface WorkspaceState {
   error?: string;
   proposal: null | {
     id: string;
-    status: 'pending' | 'applying' | 'applied' | 'stale' | 'failed';
+    status: 'pending' | 'applying' | 'applied' | 'stale' | 'failed' | 'expired';
     summary: string;
     windows: ProposalWindow[];
     before: TabSnapshot;
@@ -33,4 +33,8 @@ export function revision(snapshot: TabSnapshot): string;
 export function createWorkspace(options?: {
   call?: (name: string, args?: Record<string, unknown>) => Promise<unknown>;
   now?: () => number;
+  labels?: {
+    get(session: string): Record<string, string>;
+    save(session: string, labels: Record<string, string>, sessions: string[]): void;
+  };
 }): (name: string, input?: unknown) => Promise<WorkspaceResult>;
