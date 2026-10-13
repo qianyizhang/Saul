@@ -28,7 +28,7 @@ beforeEach(async () => {
     }),
     verify: vi.fn(async () => ({
       status: 'ready',
-      toolCount: 11,
+      toolCount: 15,
       inventories: [{ tabs: 2, windows: 1 }],
     })),
   };

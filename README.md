@@ -9,6 +9,7 @@ Saul is a local-first Chrome extension for reading explanations and safe tab org
 - **Models:** use your [ChatGPT plan](docs/chatgpt-plan.md), an OpenAI-compatible endpoint, or Chrome's on-device `LanguageModel` API.
 - **Tabs:** preview and apply sorting, grouping, ungrouping, and moving without disturbing pinned tabs or existing groups.
 - **Codex access:** opt in to local CLI/MCP tools for tab organization and new windows. A separate switch enables page reading, clicks, text filling and navigation.
+- **MCP App:** drag tabs between windows beside the conversation, use keyboard move controls, or ask Codex for a layout. Review the preview, then apply it with a button. Pinned tabs and existing groups stay intact. See the [workspace guide](docs/mcp-app.md).
 
 ## Install with Codex
 

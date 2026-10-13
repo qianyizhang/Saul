@@ -1,0 +1,36 @@
+import type { TabSnapshot } from './protocol.mjs';
+
+export interface ProposalWindow {
+  windowId?: number;
+  title: string;
+  tabIds: number[];
+}
+export interface WorkspaceState {
+  sessions: { session: string; extensionId: string }[];
+  session?: string;
+  snapshot: TabSnapshot | null;
+  revision?: string;
+  error?: string;
+  proposal: null | {
+    id: string;
+    status: 'pending' | 'applying' | 'applied' | 'stale' | 'failed';
+    summary: string;
+    windows: ProposalWindow[];
+    before: TabSnapshot;
+    projected: { id: number | string; title: string; tabIds: number[] }[];
+    changedTabIds: number[];
+    revision: string;
+    expiresAt: number;
+    receipt?: { completedMoves: number; message: string };
+  };
+}
+export interface WorkspaceResult {
+  content: { type: 'text'; text: string }[];
+  structuredContent: WorkspaceState;
+  _meta: { approvalToken?: string; ui?: { resourceUri: string } };
+}
+export function revision(snapshot: TabSnapshot): string;
+export function createWorkspace(options?: {
+  call?: (name: string, args?: Record<string, unknown>) => Promise<unknown>;
+  now?: () => number;
+}): (name: string, input?: unknown) => Promise<WorkspaceResult>;

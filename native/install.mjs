@@ -121,11 +121,12 @@ function main() {
           'responses.mjs',
           'sse.mjs',
         ]
-      : ['host.mjs', 'client.mjs', 'cli.mjs', 'mcp.mjs']),
+      : ['host.mjs', 'client.mjs', 'cli.mjs', 'mcp.mjs', 'app-protocol.mjs', 'workspace.mjs']),
   ]) {
     copyFileSync(join(source, name), join(plan.runtime, name));
     chmodSync(join(plan.runtime, name), 0o600);
   }
+  if (!values.chatgpt) cpSync(join(source, 'ui'), join(plan.runtime, 'ui'), { recursive: true });
   if (values.chatgpt) {
     const joseRoot = dirname(fileURLToPath(import.meta.resolve('jose/package.json')));
     cpSync(joseRoot, join(plan.runtime, 'node_modules', 'jose'), {

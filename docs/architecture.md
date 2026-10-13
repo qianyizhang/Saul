@@ -69,6 +69,8 @@ CLI or MCP -> private Unix socket -> native host -> Chrome native messaging -> t
 
 `native/protocol.mjs` is the runtime schema shared by the extension, CLI, and MCP server. Mutations preview by default, validate current browser state before apply, serialize inside the extension, and never retry automatically after an uncertain error. Incognito and non-normal windows are excluded. `src/native/pages.ts` handles separately opted-in page reads and actions through Chrome scripting in the isolated world; short-lived element references are tied to the read's document. MCP health/discovery bypasses the browser request queue.
 
+The [MCP App](mcp-app.md) serves a self-contained board from `native/ui/`. Drag-and-drop, keyboard controls and Codex requests all feed `native/workspace.mjs` proposals. The service validates complete layouts, issues expiring approval tokens to the app, and verifies each browser move after the user clicks Apply. `native/app-protocol.mjs` owns app-only schemas; these do not expand the extension's native protocol.
+
 ## Source layout
 
 | Path             | Purpose                                                                      |

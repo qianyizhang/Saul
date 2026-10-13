@@ -144,7 +144,7 @@ export const CLI_COMMANDS = Object.freeze(
 );
 export const TOOLS = definitions.map(({ tool }) => tool);
 
-function validate(schema, value, path) {
+export function validate(schema, value, path) {
   const fail = (reason) => {
     throw new Error(`${path}: ${reason}`);
   };

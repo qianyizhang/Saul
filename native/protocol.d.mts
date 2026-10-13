@@ -122,3 +122,4 @@ export const TOOLS: {
 }[];
 export function validateCall<K extends ToolName>(name: K, args?: unknown): ToolArgs[K];
 export function validateCall(name: string, args?: unknown): ToolArgs[ToolName];
+export function validate(schema: ToolSchema, value: unknown, path: string): void;

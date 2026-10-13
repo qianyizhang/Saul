@@ -7,7 +7,7 @@ import { parseArgs } from 'node:util';
 import { createInterface } from 'node:readline/promises';
 import { createInterface as readLines } from 'node:readline';
 import { installationPlan } from '../native/install.mjs';
-import { TOOLS } from '../native/protocol.mjs';
+import { APP_URI, MCP_TOOLS } from '../native/app-protocol.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const help = `Saul setup (macOS/Linux, Google Chrome)
@@ -119,9 +119,13 @@ export async function verifyMcp(transport, extensionId) {
       JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n',
     );
     const { tools } = await rpc('tools/list');
-    const expected = TOOLS.map((tool) => tool.name).sort();
+    const expected = MCP_TOOLS.map((tool) => tool.name).sort();
     if (JSON.stringify(tools.map((tool) => tool.name).sort()) !== JSON.stringify(expected))
       throw new Error('Installed MCP tools differ from this checkout; run setup again');
+    const { contents } = await rpc('resources/read', { uri: APP_URI });
+    const app = contents?.find((item) => item.uri === APP_URI);
+    if (app?.mimeType !== 'text/html;profile=mcp-app' || !app.text?.includes('ui/initialize'))
+      throw new Error('Installed MCP App resource is missing or invalid; run setup again');
     const { sessions } = await call('saul_sessions');
     const selected = sessions.filter(
       (session) => !extensionId || session.extensionId === extensionId,
@@ -142,6 +146,7 @@ export async function verifyMcp(transport, extensionId) {
       status: selected.length ? 'ready' : 'waiting-for-browser',
       server: initialized.serverInfo,
       toolCount: tools.length,
+      appResource: APP_URI,
       inventories,
     };
   } finally {
@@ -186,7 +191,8 @@ export async function setup(options = {}, dependencies = {}) {
           manifest: plan.manifestPath,
           codexCommand: ['codex', 'mcp', 'add', 'saul-tabs', '--', node, mcpPath],
           browserChanges: 'none; load/reload and access switches are explicit',
-          verification: 'MCP handshake, tool discovery, sessions and tab counts only',
+          verification:
+            'Fresh MCP process: handshake, tools, UI resource, sessions and tab counts; not the running Codex connection or panel',
         },
         null,
         2,
@@ -268,7 +274,7 @@ export async function setup(options = {}, dependencies = {}) {
     );
   else
     log(
-      'Verified tab inventory through MCP. Page actions were not exercised. Start a fresh Codex chat to load the tools.',
+      'Verified UI resource and tab inventory in a fresh MCP process. The running Codex connection and panel were not tested. After an upgrade, fully quit and reopen Codex to replace older MCP processes, then reopen Saul. Page actions were not exercised.',
     );
   return { ...result, exitCode: result.status === 'ready' ? 0 : 2 };
 }

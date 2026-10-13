@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, rmSync, statSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path';
 import { endianness } from 'node:os';
 import { encodeNative, nativeDecoder, lineDecoder } from '../native/transport.mjs';
-import { TOOLS } from '../native/protocol.mjs';
+import { APP_URI, MCP_TOOLS } from '../native/app-protocol.mjs';
 import { callTool, sessions } from '../native/client.mjs';
 import { installationPlan } from '../native/install.mjs';
 
@@ -86,7 +86,7 @@ describe('native transport', () => {
     const transport = { command: process.execPath, args: [resolve('native/mcp.mjs')] };
     expect(await verifyMcp(transport)).toMatchObject({
       status: 'waiting-for-browser',
-      toolCount: TOOLS.length,
+      toolCount: MCP_TOOLS.length,
       inventories: [],
     });
     await host(() => ({
@@ -212,7 +212,7 @@ describe('native transport', () => {
       .sort((a, b) => a.id - b.id);
     expect(responses.map((r) => r.id)).toEqual([1, 2, 3, 4, 5]);
     expect(responses[0].result.protocolVersion).toBe('2025-06-18');
-    expect(responses[1].result.tools).toHaveLength(TOOLS.length);
+    expect(responses[1].result.tools).toHaveLength(MCP_TOOLS.length);
     expect(JSON.parse(responses[2].result.content[0].text).method).toBe('saul_tabs_list');
     expect(responses[3].result.isError).toBe(true);
     expect(responses[4].error.code).toBe(-32601);
@@ -243,7 +243,7 @@ describe('native transport', () => {
     await vi.waitFor(() => expect(responses.map((r) => r.id).sort()).toEqual([2, 3, 4]), {
       timeout: 2000,
     });
-    expect(responses.find((r) => r.id === 3).result.tools).toHaveLength(TOOLS.length);
+    expect(responses.find((r) => r.id === 3).result.tools).toHaveLength(MCP_TOOLS.length);
   });
   it('installs a standalone CLI and MCP server that work outside the checkout', async () => {
     const installDir = join(directory, "Saul's files");
@@ -301,7 +301,22 @@ describe('native transport', () => {
       .split('\n')
       .map((line) => JSON.parse(line))
       .sort((a, b) => a.id - b.id);
-    expect(responses[1].result.tools).toEqual(JSON.parse(tools.stdout));
+    expect(responses[1].result.tools).toEqual(MCP_TOOLS);
+    const resource = await runProcess(
+      process.execPath,
+      [join(installDir, 'bridge/mcp.mjs')],
+      JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'resources/read',
+        params: { uri: APP_URI },
+      }) + '\n',
+      { cwd: unrelatedCwd },
+    );
+    const html = JSON.parse(resource.stdout).result.contents[0];
+    expect(html.mimeType).toBe('text/html;profile=mcp-app');
+    expect(html.text).toContain('ui/initialize');
+    expect(html.text).not.toContain('/* SAUL_SCRIPT */');
 
     const sessionsResult = await runProcess(cli, ['sessions'], undefined, { cwd: unrelatedCwd });
     expect(JSON.parse(sessionsResult.stdout)).toEqual({ sessions: [] });

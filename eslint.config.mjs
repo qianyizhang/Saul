@@ -14,6 +14,7 @@ export default ts.config(
     ],
   },
   js.configs.recommended,
+  { files: ['native/ui/*.js'], languageOptions: { globals: globals.browser } },
   ...ts.configs.recommended,
   {
     files: ['**/*.{ts,tsx,mjs}'],

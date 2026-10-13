@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Saul · Windows & tabs</title>
+    <style>
+      /* SAUL_STYLE */
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="brand">
+          <span class="logo">S</span>
+          <div>
+            <h1>Windows & tabs</h1>
+            <p>SAUL WORKSPACE</p>
+          </div>
+        </div>
+        <button id="refresh" disabled>Refresh</button>
+      </header>
+      <p id="status" role="status" aria-live="polite">Connecting to Codex…</p>
+      <div class="toolbar">
+        <label
+          >Browser session
+          <select id="session" aria-label="Browser session" disabled></select></label
+        ><span id="counts"></span>
+      </div>
+      <section class="composer" aria-label="Plan with Codex">
+        <label for="request">How would you like to organize your tabs?</label>
+        <textarea
+          id="request"
+          rows="2"
+          placeholder="Group my research into a new window and keep work tabs together…"
+        ></textarea>
+        <div class="row">
+          <span class="muted">Codex proposes. You review and apply.</span
+          ><button id="ask" class="primary" disabled>Ask Codex for a plan ↗</button>
+        </div>
+      </section>
+      <section id="proposal" hidden aria-label="Proposed changes"></section>
+      <div class="toolbar">
+        <div class="segmented" role="group" aria-label="Layout view">
+          <button id="current" aria-pressed="true">Current</button
+          ><button id="proposed" aria-pressed="false" disabled>Proposed</button>
+        </div>
+        <input
+          id="filter"
+          type="search"
+          aria-label="Filter tabs"
+          placeholder="Find a tab or domain…"
+        />
+      </div>
+      <p class="muted help">
+        Drag tabs to reorder or move between windows, or use each tab’s ↕ button. Pins and groups
+        stay in their windows. All moves are previews until you apply.
+      </p>
+      <section id="move-controls" class="move-controls" aria-label="Move selected tab" hidden>
+        <strong id="moving-title"></strong>
+        <div class="row">
+          <button id="move-up">Move up</button>
+          <button id="move-down">Move down</button>
+          <select id="destination" aria-label="Destination window"></select>
+          <button id="move-tab">Move to end</button>
+          <button id="cancel-move">Done</button>
+        </div>
+      </section>
+      <div id="board" class="board">
+        <div class="empty">Your open Chrome windows will appear here.</div>
+      </div>
+      <footer>Local Chrome bridge · No tabs closed · Changes require your approval</footer>
+    </main>
+    <script type="module">
+      /* SAUL_SCRIPT */
+    </script>
+  </body>
+</html>

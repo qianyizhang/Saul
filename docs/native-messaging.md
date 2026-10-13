@@ -88,7 +88,7 @@ Page access excludes incognito, non-normal windows, browser/extension/file URLs,
 
 References expire after five minutes, a newer read, navigation, element replacement/change, or an applied action. Reads and actions execute in Chrome's isolated world. Page actions target the exact document from the read. On a stale-reference error, read again; never blindly replay an uncertain mutation. New windows reject pinned/grouped tabs rather than silently removing those properties. Partial failure during window creation/moving can leave a new window with some selected tabs; list again before retrying.
 
-After upgrading: rebuild/reload the extension, rerun the native installer for its actual ID, reconnect, and reload Codex's MCP connection or start a new chat. Enable **Page reading and actions** only if page access is wanted. The server now advertises **11 tools**.
+After upgrading: rebuild/reload the extension, rerun the native installer for its actual ID, reconnect, then fully quit and reopen Codex to replace older MCP connections. Enable **Page reading and actions** only if page access is wanted. The server advertises **15 tools**: 11 browser/CLI tools and four [MCP App workspace tools](mcp-app.md), two of which are app-only.
 
 ## Access and troubleshooting
 
@@ -114,4 +114,4 @@ To disable access, turn off **Codex tab access** in Tabs. To remove Codex regist
 - [MCP stdio transport](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
 - [MCP lifecycle](https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle)
 
-The MCP server implements JSON-RPC initialization, ping, tool discovery and tool calls, with newline-delimited stdio transport. It advertises only tools; no resources, prompts or subscriptions. Health checks, tool discovery and session discovery remain responsive while a browser call is stalled; browser calls remain ordered and are never automatically replayed.
+The MCP server implements JSON-RPC initialization, ping, tool discovery and tool calls, with newline-delimited stdio transport. It also serves the self-contained MCP App UI through resource listing/reading; no prompts or subscriptions are advertised. Health checks, resource/tool discovery and session discovery remain responsive while a browser call is stalled; browser calls remain ordered and are never automatically replayed.
