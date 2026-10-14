@@ -38,3 +38,11 @@ the first browser launch. Keep ordinary checks sandboxed. Use disposable profile
 and the existing startup guard; inspect the first error before retrying. A startup
 permission failure blocks verification, not an application assertion. Do not use
 personal profiles, kill unrelated browsers or disable sandboxing globally.
+
+## Shared agent skills
+
+The generic suite is installed once for the user account from repo-kit.
+Read [local mappings](docs/agent-skills.md) before using it.
+Keep project-specific skills and rules here. Accepted decisions remain settled;
+continue already-authorized work without repeated confirmation unless a material
+ambiguity remains. Retro and architecture surveys require explicit invocation.
