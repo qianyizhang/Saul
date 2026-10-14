@@ -58,6 +58,35 @@ final class StubHTTP: URLProtocol {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
 
+        try configurationChecks(directory: directory, run: run)
+
+        try run("launcher query decoding and invalid input") {
+            let text = "你好 + a&b = 50% # ? / \"quote\"\n%26 $(echo hello)"
+            var parts = URLComponents(string: "ez://lookup")!
+            parts.queryItems = [URLQueryItem(name: "query", value: text)]
+            try expect(try LauncherQuery(url: parts.url!).query == text, "Query must decode exactly once")
+            try expect(
+                try LauncherQuery(url: URL(string: "ez://lookup?query=a+b")!).query == "a+b",
+                "Literal plus must remain plus")
+            for value in [
+                "https://lookup?query=test", "ez://other?query=test", "ez://lookup/path?query=test",
+                "ez://lookup?query=", "ez://lookup?query=%20%0A", "ez://lookup",
+                "ez://lookup?query=one&query=two", "ez://lookup?query=one&model=other",
+                "ez://lookup?query=test#fragment", "ez://user@lookup?query=test",
+                "ez://lookup:80?query=test",
+                "ez://lookup?query=" + String(repeating: "a", count: 16_385),
+            ] {
+                try rejects("Invalid launcher URL accepted") {
+                    _ = try LauncherQuery(url: URL(string: value)!)
+                }
+            }
+            parts.queryItems = [URLQueryItem(name: "query", value: String(repeating: "a", count: 16_384))]
+            try expect(
+                try LauncherQuery(url: parts.url!).query.utf8.count == 16_384, "Boundary query rejected")
+            parts.queryItems = [URLQueryItem(name: "query", value: String(repeating: "你", count: 5_462))]
+            try rejects("Unicode byte limit ignored") { _ = try LauncherQuery(url: parts.url!) }
+        }
+
         try run("history snapshots, Unicode, permissions") {
             let store = try HistoryStore(directory: directory.appendingPathComponent("history"))
             var entry = HistoryEntry(

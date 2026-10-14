@@ -100,6 +100,11 @@ public struct HistoryEntry: Codable, Identifiable, Equatable {
     public var status = "pending"
     public var error: String?
     public var durationSeconds: Double?
+    public var recipeSnapshot: Recipe?
+    public var presetSnapshot: ModelPreset?
+    public var inputValues: [String: String]?
+    /// nil preserves the legacy mode instruction; empty means the recipe prompt is complete.
+    public var instructions: String?
     public init(mode: QueryMode, query: String, model: String, effort: String, requestedServiceTier: String?)
     {
         self.mode = mode
@@ -112,8 +117,16 @@ public struct HistoryEntry: Codable, Identifiable, Equatable {
         let requested = requestedServiceTier == nil ? "Standard requested" : "Fast requested"
         return actualServiceTier.map { "\(requested) · Served: \($0)" } ?? requested
     }
+    public var recipeName: String { recipeSnapshot?.name ?? mode.rawValue }
+    public var recipeSymbol: String { recipeSnapshot?.symbol ?? mode.symbol }
+    public var displayQuery: String {
+        guard let recipe = recipeSnapshot, let values = inputValues,
+            let template = try? PromptTemplate(recipe.template)
+        else { return query }
+        return template.fields.compactMap { values[$0] }.joined(separator: " · ")
+    }
     public var markdown: String {
-        "# \(mode.rawValue)\n\n\(createdAt.formatted()) · \(model) · \(effort) · \(serviceDescription) · \(status)\n\n## Query\n\n\(query)\n\n## Response\n\n\(response)\n"
+        "# \(recipeName)\n\n\(createdAt.formatted()) · \(model) · \(effort) · \(serviceDescription) · \(status)\n\n## Query\n\n\(displayQuery)\n\n## Compiled prompt\n\n\(query)\n\n## Response\n\n\(response)\n"
             + (error.map { "\nError: \($0)\n" } ?? "")
     }
 }

@@ -106,9 +106,11 @@ public struct ResponseAccumulator {
     }
     public static func requestBody(entry: HistoryEntry) -> [String: Any] {
         var body: [String: Any] = [
-            "model": entry.model, "instructions": entry.mode.instruction,
+            "model": entry.model,
             "input": [["role": "user", "content": entry.query]], "store": false, "stream": true,
         ]
+        let instructions = entry.instructions ?? entry.mode.instruction
+        if !instructions.isEmpty { body["instructions"] = instructions }
         if !entry.effort.isEmpty { body["reasoning"] = ["effort": entry.effort] }
         // Codex's speed label is `fast`; the public Responses API tier is `priority`.
         body["service_tier"] =

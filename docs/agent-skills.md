@@ -14,7 +14,7 @@ and write scope. Clear acceptance settles a decision without a second confirmati
 
 | Upstream name | Local owner |
 | --- | --- |
-| `GLOSSARY.md` | Terminology in [architecture](architecture.md); add a small glossary only when needed |
+| `GLOSSARY.md` | Product terminology in [the glossary](../GLOSSARY.md); technical contracts in [architecture](architecture.md) |
 | `docs/adr/` | Decisions in [architecture](architecture.md); create ADRs lazily when needed |
 | `CODING_STANDARDS.md` | [AGENTS.md](../AGENTS.md), [CONTRIBUTING.md](../CONTRIBUTING.md) and existing formatter/checks |
 | Plans and readiness | [Roadmap](roadmap.md) and [verification](verification.md) |

@@ -7,13 +7,27 @@ struct SettingsView: View {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Development"
     }
     var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Settings").font(AppStyle.subject)
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+            }.padding(22)
+            Picker("Settings section", selection: $model.settingsSection) {
+                Text("Configuration").tag(AppModel.SettingsSection.configuration)
+                Text("Account & history").tag(AppModel.SettingsSection.account)
+            }.pickerStyle(.segmented).padding(.horizontal, 24).padding(.bottom, 16)
+            Divider()
+            if model.settingsSection == .configuration {
+                ConfigurationView(model: model)
+            } else {
+                accountBody.disabled(model.offline)
+            }
+        }.frame(width: 760, height: 720).tint(AppStyle.accent)
+    }
+    private var accountBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                HStack {
-                    Text("Make yourself at home.").font(.system(size: 23, weight: .semibold, design: .serif))
-                    Spacer()
-                    Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
-                }
                 GroupBox {
                     VStack(alignment: .leading, spacing: 12) {
                         Label("ChatGPT account", systemImage: "person.crop.circle").font(.headline)
@@ -106,6 +120,6 @@ struct SettingsView: View {
                             string: "https://developers.openai.com/siwc/token-sharing-open-source")!)
                 }.font(.caption).foregroundStyle(.secondary)
             }.padding(26)
-        }.frame(width: 580, height: 600).tint(AppStyle.accent)
+        }
     }
 }

@@ -12,4 +12,9 @@
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSPrincipalClass</key><string>NSApplication</string>
+    <key>CFBundleURLTypes</key><array><dict>
+        <key>CFBundleURLName</key><string>local.ez.app.lookup</string>
+        <key>CFBundleURLSchemes</key><array><string>ez</string></array>
+        <key>CFBundleTypeRole</key><string>Editor</string>
+    </dict></array>
 </dict></plist>

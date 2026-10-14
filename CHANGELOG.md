@@ -11,3 +11,7 @@
   labels, and correctly dismissible storage warnings.
 - In-app Keychain explanation and detailed credential/signing documentation.
 - Staged bundle packaging that preserves the previous app on signing failure.
+- Compact Quick Lookup panel, global shortcut, menu-bar access, and Raycast query entry.
+- Editable recipes with generated inputs, named model presets, temporary overrides,
+  and original request snapshots retained in history.
+- Canonical surface responsibilities and shared, offline native preview tooling.

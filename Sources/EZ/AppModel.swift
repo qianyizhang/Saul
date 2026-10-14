@@ -3,18 +3,16 @@ import Combine
 import EZCore
 
 @MainActor final class AppModel: ObservableObject {
-    @Published var query = ""
-    @Published var mode: QueryMode = .dictionary
+    enum SettingsSection { case configuration, account }
+    @Published var settingsSection: SettingsSection = .configuration
+    @Published private(set) var configuration = Configuration()
+    @Published var selectedRecipeID: UUID?
+    @Published var overridePresetID: UUID?
+    @Published var inputValues: [String: String] = [:]
+    @Published private(set) var draftRevision = 0
+    @Published private(set) var replayEntry: HistoryEntry?
+    @Published var configurationError: String?
     @Published var models: [ModelOption] = []
-    @Published var selectedModel = UserDefaults.standard.string(forKey: "model") ?? "" {
-        didSet { UserDefaults.standard.set(selectedModel, forKey: "model") }
-    }
-    @Published var effort = UserDefaults.standard.string(forKey: "effort") ?? "low" {
-        didSet { UserDefaults.standard.set(effort, forKey: "effort") }
-    }
-    @Published var fast = UserDefaults.standard.bool(forKey: "fast") {
-        didSet { UserDefaults.standard.set(fast, forKey: "fast") }
-    }
     @Published var entries: [HistoryEntry] = []
     @Published var selection: UUID?
     @Published var search = ""
@@ -25,10 +23,12 @@ import EZCore
     @Published var accountID = ""
     @Published var signingIn = false
     @Published var busy = false
+    @Published var launcherPending = false
     @Published var error: String?
     @Published var storageWarning: String?
     @Published var showSettings = false
     let directory: URL
+    let offline: Bool
     private let auth = ChatGPTAuth()
     private let responses = ResponsesClient()
     private var history: HistoryStore?
@@ -37,8 +37,11 @@ import EZCore
     private var requestTask: Task<Void, Never>?
     private var loginTask: Task<Void, Never>?
     private var loaded = false
+    private var configurationStore: ConfigurationStore?
+    private var configurationLoaded = false
 
-    init(historyDirectory: URL? = nil) {
+    init(historyDirectory: URL? = nil, offline: Bool = false) {
+        self.offline = offline
         directory =
             historyDirectory
             ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -53,7 +56,62 @@ import EZCore
                 storageWarning =
                     "Skipped \(loaded.damagedLines) damaged history lines. Original bytes are preserved."
             }
+            let configStore = ConfigurationStore(directory: directory)
+            configurationStore = configStore
+            do {
+                if let saved = try configStore.load() {
+                    configuration = saved
+                } else {
+                    let oldModel = UserDefaults.standard.string(forKey: "model") ?? ""
+                    configuration = .starters(
+                        model: oldModel,
+                        effort: UserDefaults.standard.string(forKey: "effort") ?? "low",
+                        fast: UserDefaults.standard.bool(forKey: "fast"))
+                    try configStore.save(configuration)
+                }
+                configurationLoaded = true
+                selectedRecipeID = configuration.recipes.first?.id
+            } catch {
+                configurationError =
+                    "Configuration could not be loaded. Original file is preserved. \(error.localizedDescription)"
+            }
         } catch { storageWarning = error.localizedDescription }
+    }
+    var currentRecipe: Recipe? {
+        replayEntry?.recipeSnapshot ?? configuration.recipes.first { $0.id == selectedRecipeID }
+    }
+    func openSettings(_ section: SettingsSection = .configuration) {
+        settingsSection = section
+        showSettings = true
+    }
+    var currentPreset: ModelPreset? {
+        if let overridePresetID {
+            return configuration.presets.first { $0.id == overridePresetID }
+        }
+        if let saved = replayEntry?.presetSnapshot { return saved }
+        let id = currentRecipe?.presetID
+        return configuration.presets.first { $0.id == id }
+    }
+    var inputFields: [String] { currentRecipe.flatMap { try? PromptTemplate($0.template).fields } ?? [] }
+    var query: String {
+        get { inputFields.first.flatMap { inputValues[$0] } ?? "" }
+        set { if let field = inputFields.first { inputValues[field] = newValue } }
+    }
+    var selectedModel: String { currentPreset?.model ?? "" }
+    var effort: String { currentPreset?.effort ?? "" }
+    var fast: Bool { currentPreset?.fast ?? false }
+    var configurationLocked: Bool {
+        busy || launcherPending || connecting || signingIn || !configurationLoaded
+    }
+    var requestIssue: String? {
+        if !configurationLoaded { return configurationError ?? "Configuration is unavailable." }
+        guard let recipe = currentRecipe else { return "Add a recipe in Configuration to start a lookup." }
+        guard let preset = currentPreset else { return "Choose a model preset in Configuration." }
+        if let issue = preset.availabilityError(in: models) { return issue }
+        do { _ = try PromptTemplate(recipe.template).render(inputValues) } catch {
+            return error.localizedDescription
+        }
+        return nil
     }
     var currentModel: ModelOption? { models.first { $0.model == selectedModel } }
     var selectedEntry: HistoryEntry? { entries.first { $0.id == selection } }
@@ -66,11 +124,11 @@ import EZCore
             }
     }
     var canSend: Bool {
-        signedIn && planEnabled && !busy && !connecting && !signingIn && currentModel != nil
-            && !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && history != nil && lock != nil
+        !offline && signedIn && planEnabled && !busy && !launcherPending && !connecting && !signingIn
+            && requestIssue == nil && history != nil && lock != nil
     }
     func connect() async {
-        guard !connecting, !busy, !signingIn, lock != nil else { return }
+        guard !offline, !connecting, !busy, !signingIn, lock != nil else { return }
         connecting = true
         error = nil
         defer { connecting = false }
@@ -98,22 +156,72 @@ import EZCore
         let token = try await auth.accessToken()
         models = try await responses.models(token: token)
         guard !models.isEmpty else { throw EZError("No models are available for this ChatGPT account.") }
-        normalizeSelection()
+        initializeStarterPreset()
     }
-    func normalizeSelection() {
-        if currentModel == nil {
-            selectedModel = models.first(where: { $0.isDefault })?.model ?? models.first?.model ?? ""
+    func initializeStarterPreset() {
+        // Only initialize the unassigned starter. Saved choices never silently normalize.
+        guard let starterID = configuration.unassignedStarterID,
+            let index = configuration.presets.firstIndex(where: { $0.id == starterID && $0.model.isEmpty }),
+            let option = models.first(where: { $0.isDefault }) ?? models.first
+        else { return }
+        var updated = configuration
+        updated.presets[index].model = option.model
+        updated.presets[index].effort = option.supportedReasoningEfforts.isEmpty ? "" : option.quickEffort
+        updated.presets[index].fast = false
+        updated.unassignedStarterID = nil
+        do {
+            try configurationStore?.save(updated)
+            configuration = updated
+        } catch { configurationError = "Starter preset could not be saved. \(error.localizedDescription)" }
+    }
+    func chooseRecipe(_ id: UUID?) {
+        guard !busy, !launcherPending else { return }
+        selectedRecipeID = id
+        replayEntry = nil
+        overridePresetID = nil
+        inputValues = [:]
+        selection = nil
+        error = nil
+        draftRevision += 1
+    }
+    func choosePreset(_ id: UUID?) {
+        guard !busy, !launcherPending else { return }
+        overridePresetID = id
+    }
+    func saveConfiguration(_ updated: Configuration) throws {
+        guard !configurationLocked, let store = configurationStore else {
+            throw EZError(
+                "Configuration cannot be changed while a request is active or storage is unavailable.")
         }
-        guard let model = currentModel else { return }
-        if model.supportedReasoningEfforts.isEmpty {
-            effort = ""
-        } else if !model.supportedReasoningEfforts.contains(where: { $0.reasoningEffort == effort }) {
-            effort = model.quickEffort
+        var saved = updated
+        if let id = saved.unassignedStarterID,
+            !saved.presets.contains(where: { $0.id == id && $0.model.isEmpty })
+        {
+            saved.unassignedStarterID = nil
         }
-        if model.fastTier == nil { fast = false }
+        try store.save(saved)
+        configuration = saved
+        configurationError = nil
+        if replayEntry == nil && !saved.recipes.contains(where: { $0.id == selectedRecipeID }) {
+            chooseRecipe(saved.recipes.first?.id)
+        } else {
+            inputValues = inputValues.filter { inputFields.contains($0.key) }
+        }
+    }
+    func prepareLauncher(_ text: String) throws -> Bool {
+        guard !busy, !launcherPending, !signingIn else {
+            throw EZError("EZ is already preparing or generating a lookup.")
+        }
+        newQuery()
+        guard let recipe = currentRecipe else {
+            throw EZError("Add a recipe in Configuration before using Raycast.")
+        }
+        let prepared = try configuration.preparingLauncherInput(text, recipeID: recipe.id)
+        inputValues = prepared.values
+        return prepared.submit
     }
     func signIn(newAccount: Bool = false, enablePlan: Bool = false) {
-        guard !busy, !connecting, !signingIn, lock != nil else { return }
+        guard !offline, !busy, !launcherPending, !connecting, !signingIn, lock != nil else { return }
         signingIn = true
         error = nil
         loginTask = Task {
@@ -142,7 +250,7 @@ import EZCore
         auth.cancelSignIn()
     }
     func selectAccount(_ id: String) async {
-        guard !busy, !connecting, !signingIn, !id.isEmpty else { return }
+        guard !offline, !busy, !launcherPending, !connecting, !signingIn, !id.isEmpty else { return }
         connecting = true
         error = nil
         defer { connecting = false }
@@ -156,7 +264,7 @@ import EZCore
         }
     }
     func signOut() async {
-        guard !busy, !connecting, !signingIn else { return }
+        guard !offline, !busy, !launcherPending, !connecting, !signingIn else { return }
         connecting = true
         defer { connecting = false }
         do {
@@ -166,11 +274,13 @@ import EZCore
         } catch { self.error = error.localizedDescription }
     }
     func send() {
-        guard canSend, let model = currentModel, let history else { return }
+        guard canSend, let recipe = currentRecipe, let preset = currentPreset, let history else { return }
         error = nil
-        let entry = HistoryEntry(
-            mode: mode, query: query.trimmingCharacters(in: .whitespacesAndNewlines), model: selectedModel,
-            effort: effort, requestedServiceTier: fast ? model.fastTier : nil)
+        let entry: HistoryEntry
+        do { entry = try recipe.prepare(values: inputValues, preset: preset, models: models) } catch {
+            self.error = error.localizedDescription
+            return
+        }
         do { try history.append(entry) } catch {
             self.error = "Query not sent: history could not be saved. \(error.localizedDescription)"
             return
@@ -213,16 +323,35 @@ import EZCore
         finish(status: "interrupted")
     }
     func newQuery() {
-        guard !busy else { return }
+        guard !busy, !launcherPending else { return }
         selection = nil
-        query = ""
+        inputValues = [:]
+        overridePresetID = nil
+        replayEntry = nil
+        if !configuration.recipes.contains(where: { $0.id == selectedRecipeID }) {
+            selectedRecipeID = configuration.recipes.first?.id
+        }
         error = nil
+        draftRevision += 1
     }
     func reuse(_ entry: HistoryEntry) {
-        guard !busy else { return }
-        query = entry.query
-        mode = entry.mode
+        guard !busy, !launcherPending else { return }
+        var saved = entry
+        if saved.recipeSnapshot == nil {
+            let preset = ModelPreset(
+                name: "Saved", model: entry.model, effort: entry.effort,
+                fast: entry.requestedServiceTier != nil)
+            saved.recipeSnapshot = Recipe(
+                name: entry.mode.rawValue, presetID: preset.id,
+                template: entry.mode.instruction + "\n\n{{text}}", legacyMode: entry.mode)
+            saved.presetSnapshot = preset
+            saved.inputValues = ["text": entry.query]
+        }
+        replayEntry = saved
+        inputValues = saved.inputValues ?? [:]
+        overridePresetID = nil
         selection = nil
+        draftRevision += 1
     }
     func shutdown() {
         cancelLogin()

@@ -3,7 +3,6 @@ import SwiftUI
 
 struct ContentView: View {
     @ObservedObject var model: AppModel
-    @FocusState private var focused: Bool
     var body: some View {
         NavigationSplitView {
             sidebar
@@ -38,8 +37,6 @@ struct ContentView: View {
         }
         .tint(AppStyle.accent)
         .sheet(isPresented: $model.showSettings) { SettingsView(model: model) }
-        .onChange(of: model.selectedModel) { _, _ in model.normalizeSelection() }
-        .onChange(of: model.selection) { _, value in if value == nil { focused = true } }
     }
 
     private var sidebar: some View {
@@ -51,7 +48,6 @@ struct ContentView: View {
             }.padding(.top, 28).padding(.horizontal, 18)
             Button {
                 model.newQuery()
-                focused = true
             } label: {
                 Label("New lookup", systemImage: "plus").frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 6)
@@ -66,10 +62,10 @@ struct ContentView: View {
             List(selection: $model.selection) {
                 ForEach(model.filteredEntries) { entry in
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(entry.query).font(.system(size: 13, weight: .medium)).lineLimit(2)
+                        Text(entry.displayQuery).font(.system(size: 13, weight: .medium)).lineLimit(2)
                         HStack(spacing: 4) {
-                            Image(systemName: entry.mode.symbol)
-                            Text(entry.mode.rawValue)
+                            Image(systemName: entry.recipeSymbol)
+                            Text(entry.recipeName)
                             if entry.status == "pending" {
                                 Text("· Writing")
                             } else if entry.status != "completed" {
@@ -82,7 +78,7 @@ struct ContentView: View {
             Spacer(minLength: 0)
             Divider()
             Button {
-                model.showSettings = true
+                model.openSettings(.account)
             } label: {
                 HStack {
                     Image(systemName: "person.crop.circle").font(.title3)
@@ -119,16 +115,13 @@ struct ContentView: View {
             )
             .font(.system(size: 14)).foregroundStyle(.secondary).lineSpacing(5)
             VStack(spacing: 10) {
-                example("Serendipity", detail: "A word worth knowing", mode: .dictionary)
-                example(
-                    "Its a pleasure to meet you're team.", detail: "Give this sentence a quick check",
-                    mode: .spelling)
-                example(
-                    "When should I use affect vs. effect?", detail: "Clear up a common confusion", mode: .ask)
+                ForEach(model.configuration.recipes) { recipe in
+                    recipeShortcut(recipe)
+                }
             }.padding(.top, 12)
             if !model.signedIn {
                 Button {
-                    model.showSettings = true
+                    model.openSettings(.account)
                 } label: {
                     Label("Continue with ChatGPT", systemImage: "person.crop.circle")
                 }
@@ -138,17 +131,16 @@ struct ContentView: View {
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
-    private func example(_ text: String, detail: String, mode: QueryMode) -> some View {
+    private func recipeShortcut(_ recipe: Recipe) -> some View {
         Button {
-            model.mode = mode
-            model.query = text
-            focused = true
+            model.chooseRecipe(recipe.id)
         } label: {
             HStack(spacing: 14) {
-                Image(systemName: mode.symbol).frame(width: 24).foregroundStyle(AppStyle.accent)
+                Image(systemName: recipe.symbol).frame(width: 24).foregroundStyle(AppStyle.accent)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(text).font(.system(size: 13, weight: .medium)).foregroundStyle(.primary)
-                    Text(detail).font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text(recipe.name).font(.system(size: 13, weight: .medium)).foregroundStyle(.primary)
+                    Text((try? PromptTemplate(recipe.template).fields.joined(separator: " · ")) ?? "")
+                        .font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
                 }
                 Spacer()
                 Image(systemName: "arrow.up.left").font(.caption).foregroundStyle(.tertiary)
@@ -158,12 +150,12 @@ struct ContentView: View {
     private func answer(_ entry: HistoryEntry) -> some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
-                Label(entry.mode.rawValue.uppercased(), systemImage: entry.mode.symbol)
+                Label(entry.recipeName.uppercased(), systemImage: entry.recipeSymbol)
                     .font(.system(size: 10, weight: .semibold)).tracking(1.2).foregroundStyle(AppStyle.accent)
                 Spacer()
                 Text(entry.createdAt, style: .time).font(.caption).foregroundStyle(.secondary)
             }
-            Text(entry.query).font(AppStyle.subject).textSelection(.enabled)
+            Text(entry.displayQuery).font(AppStyle.subject).textSelection(.enabled)
             Divider()
             if entry.response.isEmpty && entry.status == "pending" {
                 HStack(spacing: 10) {
@@ -200,7 +192,6 @@ struct ContentView: View {
                     }
                     Button {
                         model.reuse(entry)
-                        focused = true
                     } label: {
                         Label("Use again", systemImage: "arrow.counterclockwise")
                     }.disabled(model.busy)
@@ -217,40 +208,11 @@ struct ContentView: View {
     }
     private var composer: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Picker("Mode", selection: $model.mode) {
-                ForEach(QueryMode.allCases) { mode in Label(mode.rawValue, systemImage: mode.symbol).tag(mode)
-                }
-            }.pickerStyle(.segmented).labelsHidden().disabled(model.busy)
-            ZStack(alignment: .topLeading) {
-                if model.query.isEmpty {
-                    Text("A word, a sentence, a question…").foregroundStyle(.tertiary).padding(.horizontal, 5)
-                        .padding(.top, 8).allowsHitTesting(false)
-                }
-                TextEditor(text: $model.query).font(.system(size: 14)).scrollContentBackground(.hidden)
-                    .frame(minHeight: 64, maxHeight: 100).focused($focused).disabled(model.busy)
-                    .accessibilityLabel("Query")
-            }
+            RecipePicker(model: model)
+            RecipeInputs(model: model)
             Divider()
             HStack(spacing: 8) {
-                Picker("Model", selection: $model.selectedModel) {
-                    if model.models.isEmpty { Text("Connect to load models").tag("") }
-                    ForEach(model.models) { Text($0.displayName).tag($0.model) }
-                }.labelsHidden().frame(maxWidth: 200).disabled(model.busy)
-                Picker("Effort", selection: $model.effort) {
-                    if let option = model.currentModel, !option.supportedReasoningEfforts.isEmpty {
-                        ForEach(option.supportedReasoningEfforts, id: \.reasoningEffort) {
-                            Text($0.reasoningEffort.capitalized).tag($0.reasoningEffort)
-                        }
-                    } else {
-                        Text("Default").tag("")
-                    }
-                }.labelsHidden().frame(width: 95).disabled(model.busy)
-                Toggle(isOn: $model.fast) { Label("Fast", systemImage: "bolt.fill") }
-                    .toggleStyle(.checkbox).disabled(model.currentModel?.fastTier == nil || model.busy)
-                    .help(
-                        model.currentModel?.fastTier == nil
-                            ? "This model does not advertise Fast mode."
-                            : "Request Fast mode. Higher plan usage may apply.")
+                RequestControls(model: model)
                 Spacer(minLength: 2)
                 if model.busy {
                     Button {
