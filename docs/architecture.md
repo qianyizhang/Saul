@@ -21,7 +21,7 @@ defines configuration, template inputs, preset overrides, and historical snapsho
 | `AuthStorage` | Keychain records and exclusive runtime lock |
 | `ResponsesClient` | Account model discovery and stateless streamed Responses requests |
 | `ResponseAccumulator` / `SSEParser` | Wire-event parsing and terminal completion checks |
-| `HistoryStore` | Owner-only, locked append-only JSONL snapshots and recovery |
+| `HistoryStore` | Owner-only, locked JSONL snapshots, deletion, and recovery |
 
 ## Direct plan-backed requests
 
@@ -72,7 +72,20 @@ append again on completion, interruption, or failure. Retain partial visible tex
 on cancellation. Record requested and, when returned, actual service tier separately.
 Loading keeps the last valid entry for each ID. Invalid lines are counted and
 preserved. A missing final newline is separated before appending the next record.
-Writes use `flock`, mode `0600`, and `fsync`. Never silently submit an unrecorded query.
+Reads, appends, and deletions use a stable `history.lock` sidecar with `flock`;
+writes use mode `0600` and `fsync`. Never silently submit an unrecorded query.
+
+Individual deletion belongs to the main window: an answer action or history-row
+context menu opens a destructive confirmation. Deletion is blocked during a request
+or pending launcher submission. Remove every JSON line with the selected UUID,
+including identifiable damaged snapshots; preserve all unrelated bytes verbatim.
+Write and flush an owner-only sibling, then atomically rename it over the history
+file while holding the sidecar lock. No backup copy is retained. Only successful
+persistence removes the visible entry and clears its selection in both surfaces;
+failures keep the lookup visible and show an error. Deleting preserves composer
+drafts, including a recipe/inputs already restored with Use again. Unidentifiable
+damaged lines are preserved and may still contain text from a deleted lookup;
+deletion does not remove exports, clipboard contents, or filesystem backups.
 
 Known scale boundary: history loads into memory. Introduce indexed storage only
 when real history size warrants it, with a tested import and export path.

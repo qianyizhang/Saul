@@ -3,19 +3,28 @@
 ## Repeatable offline gate
 
 Run `make check`. This lints Swift, checks shell/plist syntax, compiles the app,
-and runs `EZChecks`, a dependency-free executable contract suite. Apple Command
-Line Tools on this Mac do not include XCTest; the executable harness keeps the
-same checks runnable locally and in CI without requiring the full Xcode app.
+and runs both offline executable suites. The selected Apple Command Line Tools
+provide neither XCTest nor Swift Testing, so the harness keeps the checks runnable
+locally and in CI without requiring the full Xcode app or third-party packages.
 
-The 23 named contracts plus three AppModel state-check groups cover templates,
-presets, configuration storage, immutable recipe history, launcher URL decoding/input validation,
-history snapshots/permissions, damaged tails, failed
-writes, exclusive session ownership, PKCE/form encoding, callback validation,
+Core cases live by behavior in `Tests/EZChecks`; app-state cases live in
+`Tests/EZStateChecks`. Both use the check-only `EZCheckSupport` module, named
+cases, file/line diagnostics, expected error types, independent disposable storage,
+and failure aggregation. HTTP sessions own their handlers and request logs;
+AppModel fixtures are fresh and seeded before initialization. See
+[the testing guide](../Tests/README.md) for filtering, listing, order checks, and
+fixture ownership. `make test` runs both suites even when one reports failures.
+
+Coverage includes templates, presets, configuration storage, immutable recipe
+history, launcher validation, history snapshots/permissions/deletion/recovery,
+failed writes, exclusive session ownership, PKCE/form encoding, callback validation,
 signed OIDC verification and invalid claims, model capabilities, request-body
-constraints, SSE parsing/completion/errors, real URLSession streaming against an
-in-process stub, and refresh rotation/error handling. RSA test keys are generated
-in memory with system OpenSSL; no private fixture is committed. The suite does
-not use the network, Keychain, or a real ChatGPT account.
+constraints, SSE parsing/completion/errors, fragmented Unicode through URLSession,
+and credential restore/refresh. Refresh checks assert one request for overlapping
+callers, persisted rotation, retained scopes, reload behavior, failure-state
+preservation, and missing permission. RSA keys are generated in memory with system
+OpenSSL; identity checks use a fixed clock. No private fixture is committed.
+The suites do not use the network, Keychain, or a real ChatGPT account.
 
 For restricted agent execution use `EZ_SWIFTPM_DISABLE_SANDBOX=1 make check`.
 This keeps the outer sandbox active and places compiler caches in `.build/`.
@@ -225,3 +234,52 @@ Pending native acceptance using the newly built `dist/EZ.app`:
   state-check groups. A suspended-read test verifies UI-actor progress, atomic
   restoration, cancellation, and preservation on storage failure. Existing identity,
   permission, refresh, stream, and storage contracts still pass.
+
+## Lookup deletion — 2026-10-14
+
+- `make format` and `EZ_SWIFTPM_DISABLE_SANDBOX=1 make check` passed: Swift
+  lint/build, shell/plist validation, **25 offline contracts and four AppModel
+  state-check groups**. Deletion checks cover all snapshots for an ID, identifiable
+  damaged snapshots, byte preservation for unrelated records/tails, owner-only
+  replacement, reload, missing/empty stores, subsequent appends, temporary-file
+  cleanup, storage failures, draft/selection handling, and busy/launcher guards.
+- Built `EZ Surface Preview.app` and inspected production views with disposable
+  offline fixtures. Verified the answer action and history-row context menu,
+  destructive confirmation, Cancel preserving the answer, and deletion changing
+  the history count from **1 to 0** while retaining the input draft. Persistence
+  and failure behavior were tested by the offline suites; the preview's synthetic
+  answer is generated in memory. No personal history was deleted.
+- `make app` built `dist/EZ.app` and verified its local ad-hoc signature. The
+  restricted packaging attempt stopped at `iconutil` (`Invalid Iconset`); approved
+  execution outside that sandbox completed successfully. The installed app in
+  `~/Applications` was not replaced.
+- Live account/inference checks were not repeated; this change does not alter
+  authentication or inference. Bulk deletion and automatic retention remain planned.
+
+## Test cleanup evidence — 2026-10-14
+
+- Preserved the previous 25 core contract groups and four AppModel groups while
+  separating behavior files and independent scenarios. The suites now report
+  **41 core/support cases and 14 app-state cases**; this is a case count, not a
+  coverage percentage. No XCTest, Swift Testing, or runtime dependency was added.
+- `make format` and `EZ_SWIFTPM_DISABLE_SANDBOX=1 make check` passed, including
+  Swift/shell/plist lint, the app build, and all 55 offline cases. Both suites also
+  passed in reverse order. Focused core/state filters and case listing passed.
+  The staged source tree also passed `make check` from a clean temporary checkout.
+- Runner checks cover continuation after a failure, temporary-directory cleanup,
+  source/value diagnostics, filtering/listing/order, wrong-error rejection,
+  simultaneous HTTP-fixture isolation, handler-error delivery, held-request
+  cancellation, and early/cancelled fixture signals. The review also removed
+  redundant files and unsafe fixture indexing, preserved errors across URLSession,
+  and joined overlapping refresh tasks on failure.
+- In a disposable source copy, removing refresh coalescing failed with two requests
+  instead of one; removing credential persistence failed with zero writes instead
+  of one; dropping retained scopes also failed. The copy was removed and the
+  working authentication source was unchanged. These probes establish that the
+  strengthened refresh check detects those specific regressions.
+- Native UI, real Keychain access, and live inference were not repeated.
+  This commit includes the approved lookup-deletion dependency and its coverage;
+  unrelated design-review guidance remains outside the change.
+- Review packaging: `EZ_SWIFTPM_DISABLE_SANDBOX=1 make app` completed through
+  approved execution outside the restricted sandbox and verified the local ad-hoc
+  signature of `dist/EZ.app`. The installed app was not replaced.

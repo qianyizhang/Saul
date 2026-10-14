@@ -20,7 +20,11 @@ open dist/EZ.app
 In EZ, open **Settings → Account & history → Continue with ChatGPT**, finish sign-in
 in your browser, and allow ChatGPT plan usage. Choose a recipe, fill its inputs,
 then press **⌘ Return**. **⌘ N** starts a new lookup and **⌘ .** stops generation.
-You can copy answers, export Markdown, and search previous lookups.
+You can copy answers, export Markdown, and search previous lookups. To delete a
+lookup, use **Delete lookup** below its answer or right-click its history row, then
+confirm. Deletion removes its saved snapshots from this Mac and cannot be undone;
+it is unavailable while a request or launcher submission is active. Your current
+draft is preserved.
 
 For quick access while EZ is running, press **⌃⌥ Space** (Control–Option–Space)
 or choose **Quick Lookup** from EZ’s menu-bar icon. Type or paste text and press
@@ -92,17 +96,20 @@ History and Use again preserve the original recipe, inputs, and preset. See
 - Previous model/effort/Fast preferences seed the initial Current preset.
 - Build products: ignored `.build/` and `dist/`; regenerate them with `make app`.
 
-History is append-only: a query is saved before sending, followed by a terminal
-snapshot with the same ID. The latest valid snapshot wins; abandoned pending
-requests appear interrupted on restart. Queries are sent to OpenAI, and previous
-lookups are not sent. Local history is plaintext; it is not encrypted by EZ.
+History uses append-only snapshots during requests: a query is saved before
+sending, followed by a terminal snapshot with the same ID. The latest valid
+snapshot wins; abandoned pending requests appear interrupted on restart.
+Explicit deletion atomically rewrites the
+file to remove all snapshots with the selected ID. Unrelated bytes, including
+damaged lines with no identifiable ID, are preserved. Queries are sent to OpenAI;
+previous lookups are not sent. Local history is plaintext; it is not encrypted by EZ.
 
 ## Development
 
 | Command | Purpose |
 | --- | --- |
 | `make build` | Compile the native app |
-| `make test` | Run offline security/protocol/storage contracts |
+| `make test` | Run isolated offline core and app-state checks |
 | `make check` | Formatting, compile, and contract checks |
 | `make format` | Apply the repository Swift format |
 | `make app` | Build and locally sign `dist/EZ.app` |

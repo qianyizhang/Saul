@@ -8,7 +8,9 @@ let package = Package(
     targets: [
         .target(name: "EZCore"),
         .executableTarget(name: "EZ", dependencies: ["EZCore"]),
-        .executableTarget(name: "EZChecks", dependencies: ["EZCore"], path: "Tests/EZChecks"),
+        .target(name: "EZCheckSupport", path: "Tests/Support"),
+        .executableTarget(
+            name: "EZChecks", dependencies: ["EZCore", "EZCheckSupport"], path: "Tests/EZChecks"),
     ],
     swiftLanguageModes: [.v5]
 )

@@ -21,10 +21,14 @@ sign-in and completed inference; offline tests alone cannot establish those.
   request flow, and compact native answer panel. See [setup](raycast.md) and
   [verification](verification.md). Spotlight actions remain a separate candidate.
 
+- Individual lookup deletion: confirmed answer/history-row actions, removal of all
+  saved snapshots for the selected ID, draft preservation, and visible storage
+  failures. Deletion is blocked during requests and pending launcher submissions.
+
 ## Candidates, not commitments
 - Selected-text Services integration, with explicit pasteboard behavior.
 - Language preferences and optional richer recipe field rules.
-- History deletion/retention controls and larger-history indexing.
+- Bulk history deletion, retention controls, and larger-history indexing.
 - Optional explicitly billed API-key provider.
 - Conversation follow-ups with deliberate context selection.
 - Signed/notarized distribution and an update channel.

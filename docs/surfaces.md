@@ -6,7 +6,7 @@ Canonical responsibilities for the two lookup surfaces. Names are defined in
 | Surface | Core function | Boundary |
 | --- | --- | --- |
 | **Quick Lookup panel** | Choose a recipe, fill its generated inputs, send/stop, read/copy the answer. | Keep compact. Reveal preset overrides and request details on demand; open the main window for history, authoring, and accounts. |
-| **Main window** | Run lookups, search/review/reuse/export history, manage recipes, presets, and accounts. | Own feature growth and configuration; avoid adding management UI to the panel. |
+| **Main window** | Run lookups, search/review/reuse/export/delete history, manage recipes, presets, and accounts. | Own feature growth and configuration; avoid adding management UI to the panel. |
 
 - **One workspace:** Both share the draft inputs, recipe, preset override, selected answer, history, account, and one active request. Switching surfaces preserves work.
 - **Recipe-driven:** Editable/removable starters and custom recipes use the same inputs. Selecting a recipe or New lookup restores its default preset. Unavailable preset choices block sending; never silently substitute.

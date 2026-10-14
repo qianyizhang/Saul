@@ -357,6 +357,17 @@ import EZCore
         cancelLogin()
         stop()
     }
+    var canDeleteLookup: Bool { !busy && !launcherPending && history != nil && lock != nil }
+    func deleteLookup(_ id: UUID) {
+        guard canDeleteLookup, entries.contains(where: { $0.id == id }), let history else { return }
+        do {
+            try history.delete(id: id)
+            entries.removeAll { $0.id == id }
+            if selection == id { selection = nil }
+        } catch {
+            self.error = "Lookup could not be deleted. \(error.localizedDescription)"
+        }
+    }
     func revealHistory() { NSWorkspace.shared.activateFileViewerSelecting([history?.url ?? directory]) }
     func copy(_ text: String) {
         NSPasteboard.general.clearContents()

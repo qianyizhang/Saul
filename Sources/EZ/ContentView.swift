@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ContentView: View {
     @ObservedObject var model: AppModel
+    @State private var lookupToDelete: HistoryEntry?
     var body: some View {
         NavigationSplitView {
             sidebar
@@ -36,6 +37,19 @@ struct ContentView: View {
             .background(Color(nsColor: .textBackgroundColor))
         }
         .tint(AppStyle.accent)
+        .alert(
+            "Delete lookup?",
+            isPresented: Binding(
+                get: { lookupToDelete != nil },
+                set: { if !$0 { lookupToDelete = nil } }
+            ), presenting: lookupToDelete
+        ) { entry in
+            Button("Delete lookup", role: .destructive) { model.deleteLookup(entry.id) }
+                .disabled(!model.canDeleteLookup)
+            Button("Cancel", role: .cancel) {}
+        } message: { entry in
+            Text("Delete “\(entry.displayQuery)” and its saved answer from this Mac? This cannot be undone.")
+        }
         .sheet(isPresented: $model.showSettings) { SettingsView(model: model) }
     }
 
@@ -73,6 +87,9 @@ struct ContentView: View {
                             }
                         }.font(.system(size: 10)).foregroundStyle(.secondary)
                     }.padding(.vertical, 5).tag(entry.id)
+                        .contextMenu {
+                            deleteButton(entry)
+                        }
                 }
             }.listStyle(.sidebar)
             Spacer(minLength: 0)
@@ -195,6 +212,7 @@ struct ContentView: View {
                     } label: {
                         Label("Use again", systemImage: "arrow.counterclockwise")
                     }.disabled(model.busy)
+                    deleteButton(entry)
                     Spacer()
                     if entry.status != "completed" {
                         Text(entry.status.capitalized).font(.caption).foregroundStyle(.orange)
@@ -205,6 +223,13 @@ struct ContentView: View {
                 }
             }
         }
+    }
+    private func deleteButton(_ entry: HistoryEntry) -> some View {
+        Button(role: .destructive) {
+            lookupToDelete = entry
+        } label: {
+            Label("Delete lookup", systemImage: "trash")
+        }.disabled(!model.canDeleteLookup)
     }
     private var composer: some View {
         VStack(alignment: .leading, spacing: 12) {
