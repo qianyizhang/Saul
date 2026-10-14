@@ -1,8 +1,8 @@
 # Shared agent skills
 
-Eight generic skills are installed at user scope from repo-kit's reviewed
+Nine generic skills are installed at user scope from repo-kit's reviewed
 `skills/` bundle: `writing-for-agents`, `codebase-design`, `grilling`,
-`domain-modeling`, `retro`, `improve-codebase-architecture`, `next-slice`, `show-me`.
+`domain-modeling`, `retro`, `improve-codebase-architecture`, `next-slice`, `show-me`, `finish-work`.
 This repository maintains no separate generic copy or upstream lock.
 The shared maintenance procedure is at `../repo-kit/docs/skill-suite.md` in the
 sibling checkout. Update the installation there; preserve project-specific skills.
@@ -18,3 +18,10 @@ and write scope. Clear acceptance settles a decision without a second confirmati
 | `docs/adr/` | Decisions in [architecture](architecture.md); create ADRs lazily when needed |
 | `CODING_STANDARDS.md` | [AGENTS.md](../AGENTS.md), [CONTRIBUTING.md](../CONTRIBUTING.md) and existing formatter/checks |
 | Plans and readiness | [Roadmap](roadmap.md) and [verification](verification.md) |
+
+## Finishing a slice
+
+Use `finish-work` for review and scoped commits. Read [surface contracts](surfaces.md)
+and [architecture](architecture.md) for changed behavior; [the testing guide](../Tests/README.md)
+and [verification record](verification.md) distinguish offline checks from native
+and live-service acceptance. Keep shared lookup state and evidence boundaries intact.
