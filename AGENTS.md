@@ -53,3 +53,11 @@ browsers. Normal user sign-in opens the system browser for the user to complete.
 Explain what changed, which checks passed, and what remains unverified. Do not
 publish, choose an open-source license, configure a remote, or claim notarization
 without the user's direction and supporting evidence.
+
+## Shared agent skills
+
+The generic suite is installed once for the user account from repo-kit.
+Read [local mappings](docs/agent-skills.md) before using it.
+Keep project-specific skills and rules here. Accepted decisions remain settled;
+continue already-authorized work without repeated confirmation unless a material
+ambiguity remains. Retro and architecture surveys require explicit invocation.
