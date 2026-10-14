@@ -2,10 +2,17 @@
 
 ## Repeatable offline gate
 
-Run `make check`. This lints Swift, checks shell/plist syntax, compiles the app,
+Run `make tools` once, then `make check`. This checks Swift formatting and correctness,
+ShellCheck plus shell syntax, GitHub Actions with actionlint, and plist syntax.
+Compilation rejects warnings and enables complete Swift concurrency checking in
+the existing Swift 5 language mode. The gate also typechecks the icon and all
+native preview entry points without opening windows. It compiles the app
 and runs both offline executable suites. The selected Apple Command Line Tools
 provide neither XCTest nor Swift Testing, so the harness keeps the checks runnable
-locally and in CI without requiring the full Xcode app or third-party packages.
+locally and in CI without requiring the full Xcode app or third-party test frameworks.
+The linters are development binaries; they add no app dependencies. See
+[development setup](../CONTRIBUTING.md#development-setup-and-gates) for pinned tools,
+commit/push hooks, and the hosted toolchain.
 
 Core cases live by behavior in `Tests/EZChecks`; app-state cases live in
 `Tests/EZStateChecks`. Both use the check-only `EZCheckSupport` module, named
@@ -46,6 +53,23 @@ valid image dimensions alone do not prove icon packaging succeeded.
 Do not capture or commit credentials, authorization URLs, or personal query data.
 Use synthetic inputs. A connected badge proves sign-in only; a model picker proves
 catalog discovery only; completed inference proves that request succeeded.
+
+## Quality gates — 2026-10-14
+
+- `make format`, `make lint`, and the full pre-push gate passed with Apple Swift
+  **6.3.3**, swift-format **6.3.0**, SwiftLint **0.65.1**, ShellCheck **0.11.0**,
+  and actionlint **1.7.12** on Apple Silicon.
+- **41/41 core checks** and **14/14 app-state checks** passed with compiler warnings
+  treated as errors and complete concurrency checking. Icon generation and all
+  three native preview entry points passed strict typechecking without launching.
+- Commit hooks passed for tracked files and the newly added configurations/scripts.
+  Both Git hooks were installed; repeated installation passed with pre-commit's
+  generated runners and repository-local caches.
+- Release compilation passed. Sandboxed `iconutil` reported `Invalid Iconset`;
+  specifically approved `make app` outside the sandbox then packaged the bundle
+  and passed `codesign --verify --strict` with local ad-hoc signing.
+- Hosted CI remains unrun: no Git remote is configured. Native UI, live inference,
+  Intel execution, Developer ID signing, and notarization were not exercised here.
 
 ## Initial local evidence — 2026-10-13
 

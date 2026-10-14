@@ -17,7 +17,8 @@ struct HTTPReply {
 /// each ephemeral session has a unique route, immutable handler, and request log.
 final class HTTPFixture: @unchecked Sendable {
     private static let registryLock = NSLock()
-    private static var registry: [String: HTTPFixture] = [:]
+    // Every access is protected by registryLock, including URLProtocol callbacks.
+    nonisolated(unsafe) private static var registry: [String: HTTPFixture] = [:]
     private let id = UUID().uuidString
     private let lock = NSLock()
     private var recorded: [URLRequest] = []

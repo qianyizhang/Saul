@@ -56,6 +56,9 @@ or unsupported preview fields are added. Completion requires a terminal
 - Restore credentials asynchronously off the UI actor. Publish a complete read
   only after success and a cancellation check; do not freeze history access while
   Keychain authorization waits.
+  `CredentialStore.read()` starts on the main actor, matching its authentication
+  caller; the Sendable Keychain store explicitly performs blocking reads in a
+  detached task. Complete compiler concurrency checking enforces this boundary.
 - Clear tokens on terminal refresh failure, not on network/5xx errors. Logout
   attempts revocation; an unconfirmed remote revocation is shown explicitly.
 - OAuth URLs, codes, tokens, and raw auth diagnostics never enter chat history.

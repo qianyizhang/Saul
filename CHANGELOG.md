@@ -7,6 +7,8 @@
 - Account model/effort discovery and capability-dependent Fast requests.
 - Local JSONL history, search, Markdown export, and cancellation recovery.
 - Swift package, offline contract checks, formatting, macOS CI, and contributor guidance.
+- Checksum-pinned SwiftLint/ShellCheck/actionlint, installed commit/push gates,
+  warnings-as-errors and complete concurrency checking, and native-script typechecking.
 - Dedicated lookup/settings views, immediate preference saving, accessible action
   labels, and correctly dismissible storage warnings.
 - In-app Keychain explanation and detailed credential/signing documentation.

@@ -5,7 +5,7 @@ import Foundation
 
 @MainActor func responsesChecks() -> [CheckCase] {
     [
-        CheckCase("responses: Responses request stays within plan preview contract") { directory in
+        CheckCase("responses: Responses request stays within plan preview contract") { _ in
             let entry = HistoryEntry(
                 mode: .ask, query: "hi", model: "test", effort: "low", requestedServiceTier: "fast")
             let body = ResponsesClient.requestBody(entry: entry)
@@ -18,7 +18,7 @@ import Foundation
                 try expect(body[key] == nil, "Unsupported field: \(key)")
             }
         },
-        CheckCase("responses: SSE framing and completed text") { directory in
+        CheckCase("responses: SSE framing and completed text") { _ in
             var parser = SSEParser()
             var result = ResponseAccumulator()
             let events = [
@@ -79,7 +79,7 @@ import Foundation
             try expect(
                 result.text == "partial" && !result.completed, "Malformed event changed partial result")
         },
-        CheckCase("responses: structured and admission HTTP errors") { directory in
+        CheckCase("responses: structured and admission HTTP errors") { _ in
             let response = HTTPURLResponse(
                 url: URL(string: "https://api.openai.com/v1/responses")!, statusCode: 403, httpVersion: nil,
                 headerFields: ["x-request-id": "trace"])!

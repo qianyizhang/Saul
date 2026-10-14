@@ -1,4 +1,4 @@
-.PHONY: build check test test-core test-state lint format app run clean design-preview configuration-preview surface-preview
+.PHONY: build check check-scripts test test-core test-state lint lint-swift lint-shell lint-workflows format tools hooks pre-commit pre-push app run clean design-preview configuration-preview surface-preview
 build:
 	./scripts/swift.sh build --product EZ
 test:
@@ -7,17 +7,32 @@ test-core:
 	./scripts/swift.sh run EZChecks $(CHECK_ARGS)
 test-state:
 	bash scripts/state-checks.sh $(CHECK_ARGS)
-lint:
-	xcrun swift-format lint --strict --recursive Sources Tests scripts/icon.swift Package.swift
-	bash -n scripts/swift.sh scripts/build-app.sh
-	bash -n integrations/raycast/ez.sh
-	bash -n scripts/state-checks.sh scripts/test.sh scripts/preview.sh
-	xcrun swift-format lint --strict scripts/design-preview.swift scripts/configuration-preview.swift scripts/surface-preview.swift
+lint: lint-swift lint-shell lint-workflows
 	plutil -lint Resources/Info.plist
+lint-swift:
+	xcrun swift-format lint --strict --recursive Sources Tests scripts Package.swift
+	@test -x .build/tools/swiftlint || { echo 'Run make tools first.' >&2; exit 1; }
+	.build/tools/swiftlint lint --strict --quiet --no-cache --disable-sourcekit
+lint-shell:
+	@test -x .build/tools/shellcheck || { echo 'Run make tools first.' >&2; exit 1; }
+	@for script in scripts/*.sh integrations/raycast/*.sh; do bash -n "$$script" || exit; done
+	.build/tools/shellcheck scripts/*.sh integrations/raycast/*.sh
+lint-workflows:
+	@test -x .build/tools/actionlint || { echo 'Run make tools first.' >&2; exit 1; }
+	.build/tools/actionlint -shellcheck "$$(pwd)/.build/tools/shellcheck"
 format:
-	xcrun swift-format format --in-place --recursive Sources Tests scripts/icon.swift Package.swift
-	xcrun swift-format format --in-place scripts/design-preview.swift scripts/configuration-preview.swift scripts/surface-preview.swift
-check: lint build test
+	xcrun swift-format format --in-place --recursive Sources Tests scripts Package.swift
+check: lint build test check-scripts
+check-scripts: build
+	bash scripts/check-swift-scripts.sh
+tools:
+	bash scripts/bootstrap-tools.sh
+hooks: tools
+	bash scripts/install-hooks.sh
+pre-commit:
+	bash scripts/pre-commit.sh run --all-files
+pre-push:
+	bash scripts/pre-commit.sh run --all-files --hook-stage pre-push
 app:
 	./scripts/build-app.sh
 run: app

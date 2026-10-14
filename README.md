@@ -8,10 +8,11 @@ The [surface contract](docs/surfaces.md) defines the **main window** and
 
 ## Run
 
-Requires macOS 14+ and Apple Command Line Tools with Swift 6+ (`xcode-select --install`).
-No third-party packages, API key, or Codex installation are required.
+Requires macOS 14+ and Apple Command Line Tools with Swift 6.3+ (`xcode-select --install`).
+The app has no third-party runtime packages and needs no API key or Codex installation.
 
 ```sh
+make tools
 make check
 make app
 open dist/EZ.app
@@ -110,7 +111,12 @@ previous lookups are not sent. Local history is plaintext; it is not encrypted b
 | --- | --- |
 | `make build` | Compile the native app |
 | `make test` | Run isolated offline core and app-state checks |
-| `make check` | Formatting, compile, and contract checks |
+| `make tools` | Download checksum-pinned development linters |
+| `make hooks` | Install commit and push checks (requires uv) |
+| `make lint` | Swift formatting/correctness, shell, workflow, and plist checks |
+| `make check` | Lint, warnings-as-errors build, complete concurrency checking, offline contracts |
+| `make pre-commit` | Run commit hooks across tracked files |
+| `make pre-push` | Run the full push gate |
 | `make format` | Apply the repository Swift format |
 | `make app` | Build and locally sign `dist/EZ.app` |
 | `make run` | Build and open the app |
@@ -119,6 +125,9 @@ previous lookups are not sent. Local history is plaintext; it is not encrypted b
 
 Inside an agent sandbox that rejects nested SwiftPM sandboxing, prefix commands
 with `EZ_SWIFTPM_DISABLE_SANDBOX=1`. This does not disable the outer sandbox.
+For hooks, install [uv](https://docs.astral.sh/uv/getting-started/installation/)
+(`brew install uv`), then run `make hooks`. Tool downloads and hook environments
+are development-only; the app still has no third-party runtime dependencies.
 
 Read [contributor guidance](CONTRIBUTING.md), [architecture](docs/architecture.md),
 [verification](docs/verification.md), [release process](docs/releasing.md), and

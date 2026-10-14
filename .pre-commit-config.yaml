@@ -1,0 +1,48 @@
+minimum_pre_commit_version: '4.7.0'
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit]
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # v6.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=512]
+      - id: check-yaml
+      - id: check-json
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+  - repo: local
+    hooks:
+      - id: swift-lint
+        name: Swift format and correctness
+        entry: make lint-swift
+        language: system
+        files: '(\.swift$|^\.swift-format$|^\.swiftlint\.yml$|^Makefile$)'
+        pass_filenames: false
+      - id: shell-lint
+        name: ShellCheck and shell syntax
+        entry: make lint-shell
+        language: system
+        types: [shell]
+        pass_filenames: false
+      - id: workflow-lint
+        name: GitHub Actions static checks
+        entry: make lint-workflows
+        language: system
+        files: '^\.github/.*\.ya?ml$'
+        pass_filenames: false
+      - id: plist-lint
+        name: Property list validation
+        entry: plutil -lint
+        language: system
+        files: '\.plist$'
+      - id: offline-checks
+        name: Compile and offline contracts
+        entry: make check
+        language: system
+        stages: [pre-push]
+        always_run: true
+        pass_filenames: false

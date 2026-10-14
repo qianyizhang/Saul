@@ -46,7 +46,7 @@ import Foundation
             try expect(reloaded.markdown.contains(entry.query), "Export must contain exact compiled prompt")
 
         },
-        CheckCase("recipe history: legacy history retains request and display semantics") { directory in
+        CheckCase("recipe history: legacy history retains request and display semantics") { _ in
             let decoder = JSONDecoder()
             let old = try decoder.decode(
                 HistoryEntry.self,

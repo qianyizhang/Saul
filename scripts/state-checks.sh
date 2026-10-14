@@ -9,7 +9,8 @@ objects=()
 while IFS= read -r file; do
     case "$file" in */EZCore.build/*.o|*/EZCheckSupport.build/*.o) objects+=("$file");; esac
 done < "$bin_dir/EZChecks.product/Objects.LinkFileList"
-xcrun swiftc -parse-as-library -target "$(uname -m)-apple-macos14.0" -module-cache-path "$CLANG_MODULE_CACHE_PATH" \
+xcrun swiftc -swift-version 5 -warnings-as-errors -strict-concurrency=complete \
+    -parse-as-library -target "$(uname -m)-apple-macos14.0" -module-cache-path "$CLANG_MODULE_CACHE_PATH" \
     -I "$bin_dir/Modules" Sources/EZ/AppModel.swift Tests/EZStateChecks/*.swift \
     "${objects[@]}" -o "$bin_dir/EZStateChecks"
 "$bin_dir/EZStateChecks" "$@"

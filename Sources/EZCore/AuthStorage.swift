@@ -27,7 +27,7 @@ public struct AuthState: Codable, Sendable {
 }
 
 public protocol CredentialStore {
-    func read() async throws -> AuthState
+    @MainActor func read() async throws -> AuthState
     func write(_ state: AuthState) throws
 }
 
