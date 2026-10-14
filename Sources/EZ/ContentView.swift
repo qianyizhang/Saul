@@ -163,7 +163,7 @@ struct ContentView: View {
                 Spacer()
                 Text(entry.createdAt, style: .time).font(.caption).foregroundStyle(.secondary)
             }
-            Text(entry.query).font(.system(size: 24, weight: .medium, design: .serif)).textSelection(.enabled)
+            Text(entry.query).font(AppStyle.subject).textSelection(.enabled)
             Divider()
             if entry.response.isEmpty && entry.status == "pending" {
                 HStack(spacing: 10) {
@@ -177,7 +177,7 @@ struct ContentView: View {
                         options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
                         ?? AttributedString(entry.response)
                 )
-                .font(.system(size: 15)).lineSpacing(6).textSelection(.enabled).frame(
+                .font(AppStyle.body).lineSpacing(6).textSelection(.enabled).frame(
                     maxWidth: .infinity, alignment: .leading)
             }
             HStack(spacing: 12) {
@@ -185,7 +185,7 @@ struct ContentView: View {
                     "\(entry.model) · \(entry.effort.isEmpty ? "Default effort" : entry.effort) · \(entry.serviceDescription)"
                 )
                 if let seconds = entry.durationSeconds { Text(String(format: "%.1f s", seconds)) }
-            }.font(.system(size: 10)).foregroundStyle(.tertiary)
+            }.font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
             if entry.status != "pending" {
                 HStack {
                     Button {
@@ -277,11 +277,13 @@ struct ContentView: View {
                         ? "Using ChatGPT plan · Fast may use more allowance." : "Each lookup starts fresh.")
                 Spacer()
                 Text("⌘ Return to send")
-            }.font(.system(size: 10)).foregroundStyle(.tertiary)
+            }.font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
         }.padding(16).background(
-            Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 14)
+            Color(nsColor: .controlBackgroundColor),
+            in: RoundedRectangle(cornerRadius: AppStyle.composerRadius)
         )
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(.quaternary, lineWidth: 1)).padding(20)
+        .overlay(RoundedRectangle(cornerRadius: AppStyle.composerRadius).stroke(.quaternary, lineWidth: 1))
+        .padding(20)
     }
     private func banner(
         _ message: String, symbol: String, color: Color, dismiss: @escaping () -> Void

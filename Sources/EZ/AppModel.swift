@@ -38,8 +38,10 @@ import EZCore
     private var loginTask: Task<Void, Never>?
     private var loaded = false
 
-    init() {
-        directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    init(historyDirectory: URL? = nil) {
+        directory =
+            historyDirectory
+            ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("EZ", isDirectory: true)
         do {
             lock = try SessionLock(directory: directory)
