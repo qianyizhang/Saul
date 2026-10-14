@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 import Security
 
-public struct Credentials: Codable {
+public struct Credentials: Codable, Sendable {
     public var accessToken: String
     public var refreshToken: String?
     public var idToken: String
@@ -10,7 +10,7 @@ public struct Credentials: Codable {
     public var scopes: [String]
     public var canUsePlan: Bool { scopes.contains("chatgpt.tokens.use.direct") }
 }
-public struct AccountProfile: Codable, Identifiable {
+public struct AccountProfile: Codable, Identifiable, Sendable {
     public var id: String { clientID }
     public var clientID: String
     public var subject: String?
@@ -18,7 +18,7 @@ public struct AccountProfile: Codable, Identifiable {
     public var credentials: Credentials?
     public var label: String { "\(email ?? "Pending sign-in") · \(clientID.suffix(6))" }
 }
-public struct AuthState: Codable {
+public struct AuthState: Codable, Sendable {
     public var hostID = "urn:uuid:" + UUID().uuidString.lowercased()
     public var profiles: [AccountProfile] = []
     public var selectedID: String?
@@ -27,11 +27,11 @@ public struct AuthState: Codable {
 }
 
 public protocol CredentialStore {
-    func read() throws -> AuthState
+    func read() async throws -> AuthState
     func write(_ state: AuthState) throws
 }
 
-public struct KeychainStore: CredentialStore {
+public struct KeychainStore: CredentialStore, Sendable {
     private let service = "local.ez.app.chatgpt"
     public init() {}
     private var query: [String: Any] {
@@ -40,7 +40,11 @@ public struct KeychainStore: CredentialStore {
             kSecAttrAccount as String: "accounts",
         ]
     }
-    public func read() throws -> AuthState {
+    public func read() async throws -> AuthState {
+        // Keychain access can wait for macOS authorization. Keep it off the UI actor.
+        try await Task.detached(priority: .userInitiated) { try self.readStoredState() }.value
+    }
+    private func readStoredState() throws -> AuthState {
         var query = query
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne

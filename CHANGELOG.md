@@ -15,3 +15,4 @@
 - Editable recipes with generated inputs, named model presets, temporary overrides,
   and original request snapshots retained in history.
 - Canonical surface responsibilities and shared, offline native preview tooling.
+- Nonblocking credential restoration keeps the window responsive during Keychain access.

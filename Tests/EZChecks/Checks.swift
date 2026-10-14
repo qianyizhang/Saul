@@ -16,9 +16,39 @@ func rejects(_ message: String, _ body: () throws -> Void) throws {
 
 final class MemoryCredentials: CredentialStore {
     var value: AuthState
+    var failReads = false
     init(_ value: AuthState = AuthState()) { self.value = value }
-    func read() throws -> AuthState { value }
+    func read() throws -> AuthState {
+        if failReads { throw EZError("Synthetic credential storage failure") }
+        return value
+    }
     func write(_ state: AuthState) throws { value = state }
+}
+
+actor PendingCredentialRead {
+    private var pending: CheckedContinuation<AuthState, Never>?
+    private var observer: CheckedContinuation<Void, Never>?
+    func read() async -> AuthState {
+        await withCheckedContinuation {
+            pending = $0
+            observer?.resume()
+            observer = nil
+        }
+    }
+    func waitUntilReading() async {
+        if pending != nil { return }
+        await withCheckedContinuation { observer = $0 }
+    }
+    func finish(_ state: AuthState) {
+        pending?.resume(returning: state)
+        pending = nil
+    }
+}
+
+struct DeferredCredentials: CredentialStore {
+    let pending: PendingCredentialRead
+    func read() async throws -> AuthState { await pending.read() }
+    func write(_ state: AuthState) throws { throw EZError("Read-only credential fixture") }
 }
 
 final class StubHTTP: URLProtocol {
@@ -259,9 +289,44 @@ final class StubHTTP: URLProtocol {
                     scopes: ["chatgpt.tokens.use.direct"]))
         ]
         state.selectedID = "issued"
+        let pending = PendingCredentialRead()
+        let restoringAuth = ChatGPTAuth(storage: DeferredCredentials(pending: pending), session: session)
+        let restoring = Task { try await restoringAuth.load() }
+        await pending.waitUntilReading()
+        // This assertion runs on the UI actor while credential access is still suspended.
+        try expect(restoringAuth.selected == nil, "Credential restore published partial state")
+        await pending.finish(state)
+        try await restoring.value
+        try expect(restoringAuth.selected?.clientID == "issued", "Credential restore changed selection")
+
+        let cancelledRead = PendingCredentialRead()
+        let cancelledAuth = ChatGPTAuth(
+            storage: DeferredCredentials(pending: cancelledRead), session: session)
+        let cancelled = Task { try await cancelledAuth.load() }
+        await cancelledRead.waitUntilReading()
+        cancelled.cancel()
+        await cancelledRead.finish(state)
+        do {
+            try await cancelled.value
+            throw CheckFailure(description: "Cancelled credential loading applied state")
+        } catch is CancellationError {}
+        try expect(cancelledAuth.selected == nil, "Cancelled restore replaced account state")
+
+        let failingStore = MemoryCredentials(state)
+        let failingAuth = ChatGPTAuth(storage: failingStore, session: session)
+        try await failingAuth.load()
+        failingStore.failReads = true
+        do {
+            try await failingAuth.load()
+            throw CheckFailure(description: "Credential storage failure was ignored")
+        } catch is EZError {}
+        try expect(failingAuth.selected?.clientID == "issued", "Failed restore erased the saved account")
+        count += 1
+        print("PASS credential loading yields the UI actor, preserves state, and respects cancellation")
+
         let store = MemoryCredentials(state)
         let auth = ChatGPTAuth(storage: MemoryCredentials(state), session: session)
-        try auth.load()
+        try await auth.load()
         StubHTTP.handler = { _ in
             (
                 200,
@@ -279,7 +344,7 @@ final class StubHTTP: URLProtocol {
         print("PASS serialized token refresh and scope retention")
 
         let retryAuth = ChatGPTAuth(storage: store, session: session)
-        try retryAuth.load()
+        try await retryAuth.load()
         StubHTTP.handler = { _ in (503, Data(#"{"detail":"Temporarily unavailable"}"#.utf8)) }
         do {
             _ = try await retryAuth.accessToken()

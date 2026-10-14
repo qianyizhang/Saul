@@ -15,7 +15,11 @@ import Foundation
         configuration.timeoutIntervalForResource = 60
         self.session = session ?? URLSession(configuration: configuration)
     }
-    public func load() throws { state = try storage.read() }
+    public func load() async throws {
+        let restored = try await storage.read()
+        try Task.checkCancellation()
+        state = restored
+    }
     public func select(_ id: String) throws {
         guard state.profiles.contains(where: { $0.id == id }) else { throw EZError("Unknown account.") }
         var next = state

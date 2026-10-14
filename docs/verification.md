@@ -7,7 +7,7 @@ and runs `EZChecks`, a dependency-free executable contract suite. Apple Command
 Line Tools on this Mac do not include XCTest; the executable harness keeps the
 same checks runnable locally and in CI without requiring the full Xcode app.
 
-The 22 named contracts plus three AppModel state-check groups cover templates,
+The 23 named contracts plus three AppModel state-check groups cover templates,
 presets, configuration storage, immutable recipe history, launcher URL decoding/input validation,
 history snapshots/permissions, damaged tails, failed
 writes, exclusive session ownership, PKCE/form encoding, callback validation,
@@ -207,3 +207,21 @@ Pending native acceptance using the newly built `dist/EZ.app`:
   A clean export of the staged tree also passed `make check`; the release bundle
   passed strict signature verification. Live inference and full-screen/multi-display
   acceptance remain separate.
+
+
+## Post-upgrade credential restoration — 2026-10-14
+
+- The installed process retained all **19** history entries, with byte-identical
+  `history.jsonl`, and migrated the prior preferences into one preset and four
+  starter recipes. Bundle identity and strict code-signature checks passed.
+- Native inspection timed out. A one-second process sample placed the main thread
+  in `ChatGPTAuth.load → KeychainStore.read → SecItemCopyMatching`, waiting on
+  macOS Security. No credential contents were inspected or exported.
+- Moved the Keychain read off the UI actor and made credential restoration async.
+  A cancellation check prevents late reads from replacing account state. The
+  stored schema, item query, access permissions, account selection, and write path
+  remain unchanged.
+- `make format` and `make check` passed: **23 core contracts** plus three AppModel
+  state-check groups. A suspended-read test verifies UI-actor progress, atomic
+  restoration, cancellation, and preservation on storage failure. Existing identity,
+  permission, refresh, stream, and storage contracts still pass.

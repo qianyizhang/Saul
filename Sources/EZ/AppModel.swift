@@ -134,7 +134,7 @@ import EZCore
         defer { connecting = false }
         do {
             if !loaded {
-                try auth.load()
+                try await auth.load()
                 loaded = true
             }
             syncAccount()
@@ -231,7 +231,7 @@ import EZCore
             }
             do {
                 if !loaded {
-                    try auth.load()
+                    try await auth.load()
                     loaded = true
                 }
                 try await auth.signIn(newAccount: newAccount, enablePlan: enablePlan) {

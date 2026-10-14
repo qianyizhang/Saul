@@ -4,6 +4,10 @@ EZ uses macOS Keychain to keep you signed in between launches. The macOS access
 prompt protects the saved credential item; it is separate from the browser page
 where you grant EZ permission to use your ChatGPT plan.
 
+Credential restoration runs away from the UI actor, so the window and local
+history remain responsive while macOS waits for access. No account state is
+replaced until the complete read succeeds; cancelling startup discards a late result.
+
 ## What EZ stores and reads
 
 `KeychainStore` queries one generic-password item with service

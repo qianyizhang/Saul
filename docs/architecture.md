@@ -53,6 +53,9 @@ or unsupported preview fields are added. Completion requires a terminal
   `chatgpt.tokens.use.direct` before model discovery/inference.
 - Credentials stay in Keychain. Persist rotations together; serialize refresh in
   the process and hold an exclusive runtime lock to prevent cross-process races.
+- Restore credentials asynchronously off the UI actor. Publish a complete read
+  only after success and a cancellation check; do not freeze history access while
+  Keychain authorization waits.
 - Clear tokens on terminal refresh failure, not on network/5xx errors. Logout
   attempts revocation; an unconfirmed remote revocation is shown explicitly.
 - OAuth URLs, codes, tokens, and raw auth diagnostics never enter chat history.
