@@ -65,7 +65,10 @@ async function openWorkspace(
   const html = (await readFile('native/ui/workspace.html', 'utf8'))
     .replace('/* SAUL_STYLE */', () => '')
     .replace('/* SAUL_SCRIPT */', () => '');
-  const css = await readFile('native/ui/workspace.css', 'utf8');
+  const css =
+    (await readFile('native/ui/design-tokens.css', 'utf8')) +
+    '\n' +
+    (await readFile('native/ui/workspace.css', 'utf8'));
   const js = await readFile('native/ui/workspace.js', 'utf8');
   await host.route('**/saul-app', (route) =>
     route.fulfill({

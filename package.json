@@ -9,6 +9,8 @@
     "node": ">=24"
   },
   "scripts": {
+    "design:generate": "node design/generate.mjs --css assets/design-tokens.css --css native/ui/design-tokens.css --typescript src/design/tokens.ts",
+    "design:check": "pnpm design:generate --check",
     "dev": "wxt",
     "setup": "node scripts/setup.mjs",
     "setup:verify": "node scripts/setup.mjs --verify",
@@ -18,7 +20,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tests/e2e/tsconfig.json",
     "lint": "eslint . --max-warnings 0",
     "check:links": "node scripts/check-links.mjs",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm check:links && pnpm test",
+    "check": "pnpm design:check && pnpm format:check && pnpm lint && pnpm typecheck && pnpm check:links && pnpm test",
     "test": "vitest run",
     "saul": "node native/cli.mjs",
     "native:install": "node native/install.mjs",
@@ -42,6 +44,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@google/design.md": "0.4.0",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/chrome": "^0.2.7",

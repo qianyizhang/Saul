@@ -62,8 +62,12 @@ async function dispatch(message) {
           {
             ...APP_RESOURCE,
             text: readFileSync(new URL('./ui/workspace.html', import.meta.url), 'utf8')
-              .replace('/* SAUL_STYLE */', () =>
-                readFileSync(new URL('./ui/workspace.css', import.meta.url), 'utf8'),
+              .replace(
+                '/* SAUL_STYLE */',
+                () =>
+                  readFileSync(new URL('./ui/design-tokens.css', import.meta.url), 'utf8') +
+                  '\n' +
+                  readFileSync(new URL('./ui/workspace.css', import.meta.url), 'utf8'),
               )
               .replace('/* SAUL_SCRIPT */', () =>
                 readFileSync(new URL('./ui/workspace.js', import.meta.url), 'utf8'),

@@ -375,19 +375,19 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
       )}
       {(passages.length > 0 || list) && (
         <div
-          className="fixed bottom-3 right-3 font-sans text-xs text-slate-600"
+          className="fixed bottom-3 right-3 font-sans text-xs text-muted"
           style={{ zIndex: 2147483646 }}
         >
           {list && (
             <section
               aria-label="Page explanations"
-              className="mb-2 w-72 max-h-80 overflow-auto bg-white border border-slate-200 rounded-lg shadow-lg p-3"
+              className="mb-2 w-72 max-h-80 overflow-auto bg-surface border border-line rounded-control saul-elevated p-3"
             >
               <h2 className="font-semibold mb-2">On this page</h2>
               {!passages.length && <p>No explanations yet.</p>}
               {passages.map((p) => (
                 <button
-                  className="block text-left w-full p-2 rounded hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-indigo-600"
+                  className="block text-left w-full p-2 rounded hover:bg-subtle focus-visible:outline-2 focus-visible:outline-accent"
                   key={p.snapshot.id}
                   onClick={() => open(p.snapshot.id, true)}
                 >
@@ -404,7 +404,7 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
             </section>
           )}
           <button
-            className="bg-white/95 border border-slate-200 rounded-full px-3 py-1.5 shadow-sm"
+            className="bg-surface border border-line rounded-full px-3 py-1.5 saul-elevated"
             aria-label="Page explanations"
             aria-expanded={list}
             onClick={() => {
@@ -420,13 +420,13 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
       {toast && !list && (!toast.error || errorsMuted === false) && (
         <div
           role={toast.error ? 'alert' : 'status'}
-          className="fixed bottom-14 right-3 max-w-xs bg-white text-slate-700 font-sans text-sm border border-slate-200 rounded-lg shadow-lg px-3 py-2"
+          className="fixed bottom-14 right-3 max-w-xs bg-surface text-ink font-sans text-sm border border-line rounded-control saul-elevated px-3 py-2"
           style={{ zIndex: 2147483647 }}
         >
           <span>{toast.text}</span>
           {toast.error && (
             <button
-              className="ml-3 text-indigo-700 underline"
+              className="ml-3 text-accent underline"
               aria-label="Mute error notifications"
               title="Mute error toasts on all pages. Turn them back on in Saul Settings."
               disabled={muting}
@@ -436,15 +436,12 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
             </button>
           )}
           {toast.id && (
-            <button
-              className="ml-3 text-indigo-700 underline"
-              onClick={() => open(toast.id!, true)}
-            >
+            <button className="ml-3 text-accent underline" onClick={() => open(toast.id!, true)}>
               View
             </button>
           )}
           <button
-            className="ml-3 text-slate-400"
+            className="ml-3 text-muted"
             aria-label="Dismiss notification"
             onClick={() => setToast(null)}
           >

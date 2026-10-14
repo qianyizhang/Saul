@@ -53,6 +53,8 @@ Browser tests use disposable profiles and a local model fixture. On macOS, read 
 | [Setup](docs/setup.md)                       | One-command setup, agent instructions and helper lifecycle  |
 | [Product](docs/product.md)                   | Shipped behavior and current limits                         |
 | [Architecture](docs/architecture.md)         | Runtime boundaries, data flow, and invariants               |
+| [Design contract](DESIGN.md)                 | Portable visual identity, component and motion principles   |
+| [Design application](docs/design-system.md)  | Generation, cross-project adoption, and visual verification |
 | [Testing](docs/testing.md)                   | Quality gates, browser harness, and debugging               |
 | [ChatGPT plan](docs/chatgpt-plan.md)         | OAuth setup, supported API surface and credential lifecycle |
 | [Native messaging](docs/native-messaging.md) | CLI/MCP setup and tab-tool safety                           |

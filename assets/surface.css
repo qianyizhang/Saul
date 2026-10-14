@@ -1,0 +1,40 @@
+.saul-elevated {
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--design-color-ink) 14%, transparent);
+}
+.saul-subject {
+  font-family: var(--design-font-subject);
+  font-weight: var(--design-weight-subject);
+  font-size: calc(var(--design-size-subject) * 0.75);
+  line-height: var(--design-leading-subject);
+}
+.saul-reading {
+  font-family: var(--design-font-body);
+  font-size: var(--design-size-body);
+  line-height: var(--design-leading-body);
+  color: var(--design-color-ink);
+}
+.saul-tooltip {
+  font-family: var(--design-font-body);
+  font-size: var(--design-size-body);
+  line-height: var(--design-leading-body);
+}
+.saul-tooltip strong {
+  font-family: var(--design-font-subject);
+  font-size: calc(var(--design-size-subject) * 0.75);
+  font-weight: var(--design-weight-subject);
+}
+.saul-tooltip p {
+  margin: 0;
+}
+:host button:focus-visible {
+  outline: 2px solid var(--design-color-primary);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  :host *,
+  .saul-reading * {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

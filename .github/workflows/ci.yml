@@ -30,6 +30,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pip install pre-commit==4.6.2
       - run: pre-commit run --all-files
+      - run: pnpm design:check
       - run: pnpm test
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e

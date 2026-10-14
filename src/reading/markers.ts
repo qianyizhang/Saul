@@ -1,5 +1,6 @@
 import { buildTextMap, resolveAnchor, type Attachment } from './anchors';
 import type { Passage } from '../types/storage';
+import { designColors } from '../design/tokens';
 
 // The DOM library predates this native Chrome API. This declares its shape;
 // it does not emulate the API or alter host text.
@@ -33,7 +34,7 @@ export class PassageMarkers {
       this.names
         .map(
           (name, i) =>
-            `::highlight(${name}) {text-decoration-line:underline;text-decoration-style:${i === 0 ? 'solid' : 'dotted'};text-decoration-color:rgba(99,102,241,.65);text-decoration-thickness:1px;text-underline-offset:2px;}`,
+            `::highlight(${name}) {text-decoration-line:underline;text-decoration-style:${i === 0 ? 'solid' : 'dotted'};text-decoration-color:light-dark(${designColors.primary},${designColors['primary-dark']});text-decoration-thickness:1px;text-underline-offset:2px;}`,
         )
         .join('\n'),
     );

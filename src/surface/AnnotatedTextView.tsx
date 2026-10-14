@@ -17,7 +17,7 @@ export function AnnotatedTextView({
   } | null>(null);
   const tooltipId = useId();
   return (
-    <div className="text-sm leading-relaxed text-slate-800 font-normal select-text whitespace-pre-wrap">
+    <div className="saul-reading font-normal select-text whitespace-pre-wrap">
       {segments.map((seg) =>
         seg.type === 'text' ? (
           <span key={seg.id}>{seg.text}</span>
@@ -57,7 +57,7 @@ export function AnnotatedTextView({
                 setTerm(null);
               }
             }}
-            className={`inline rounded-sm border-0 border-b border-indigo-400 bg-indigo-50 text-indigo-900 font-medium cursor-help focus-visible:outline-2 focus-visible:outline-indigo-600 ${seg.complete ? '' : 'animate-pulse'}`}
+            className={`inline rounded-sm border-0 border-b border-accent bg-wash text-accent font-medium cursor-help focus-visible:outline-2 focus-visible:outline-accent ${seg.complete ? '' : 'animate-pulse'}`}
             style={{ font: 'inherit', padding: '0 2px' }}
           >
             {seg.term || '…'}
@@ -67,7 +67,7 @@ export function AnnotatedTextView({
       {isStreaming && (
         <span
           aria-hidden="true"
-          className="inline-block w-1 h-4 ml-1 bg-indigo-600 align-middle animate-pulse"
+          className="inline-block w-1 h-4 ml-1 bg-accent align-middle animate-pulse"
         />
       )}
       {term && (

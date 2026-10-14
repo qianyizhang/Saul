@@ -3,6 +3,11 @@
 Saul is a Chrome MV3 extension. Start with [architecture](docs/architecture.md)
 and [product contracts](docs/product.md); use the existing modules and harness.
 
+For UI work, read the portable [design contract](DESIGN.md) and
+[apply-design workflow](design/SKILL.md). Edit the contract, then regenerate with
+`pnpm design:generate`; do not hand-edit generated tokens. Adapt layout density
+to the surface while preserving the shared identity and motion guidance.
+
 ## Changes
 
 - Preserve concurrent edits. Stage explicit paths and keep commits coherent.

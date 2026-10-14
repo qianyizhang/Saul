@@ -22,10 +22,10 @@ export function TooltipPopover({
       id={id}
       role="tooltip"
       style={style}
-      className="max-w-xs rounded-lg border border-indigo-200 bg-white p-3 shadow-xl text-slate-800 text-sm leading-relaxed select-text"
+      className="saul-tooltip max-w-xs rounded-control border border-line bg-surface p-3 saul-elevated text-ink text-sm leading-relaxed select-text"
       onMouseDown={(e) => e.stopPropagation()}
     >
-      <strong className="block text-indigo-700 mb-1">{term}</strong>
+      <strong className="block text-accent mb-1">{term}</strong>
       <p>{note}</p>
     </div>,
     root instanceof ShadowRoot ? root : document.body,

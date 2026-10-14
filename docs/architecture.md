@@ -73,6 +73,13 @@ The [MCP App](mcp-app.md) serves a self-contained board from `native/ui/`. Drag-
 
 ## Source layout
 
+The portable [design contract](../DESIGN.md) generates CSS for the extension and
+self-contained MCP board, a palette for native page highlights, and optionally
+SwiftUI roles for EZ. `design/generate.mjs` consumes the pinned official DESIGN.md
+parser; `pnpm design:check` rejects stale artifacts. The [application workflow](../design/SKILL.md)
+also governs layout/interaction adaptation and rendered review. Generation is
+build tooling, independent of authentication, inference, and storage runtimes.
+
 | Path             | Purpose                                                                      |
 | ---------------- | ---------------------------------------------------------------------------- |
 | `src/app/`       | Popup/workspace screens and settings controllers                             |

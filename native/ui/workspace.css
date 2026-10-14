@@ -1,17 +1,17 @@
 :root {
-  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  font-family: var(--design-font-control);
   color-scheme: light dark;
-  --bg: light-dark(#fafbfc, #191c22);
-  --card: light-dark(#fff, #222731);
-  --ink: light-dark(#202837, #e9edf5);
-  --muted: light-dark(#657083, #a1adbf);
-  --line: light-dark(#dfe4ea, #39404d);
-  --accent: light-dark(#365ece, #9ab4ff);
-  --wash: light-dark(#eef2ff, #293552);
-  --warning: light-dark(#875923, #edc18a);
+  --bg: var(--design-color-canvas);
+  --card: var(--design-color-surface);
+  --ink: var(--design-color-ink);
+  --muted: var(--design-color-muted);
+  --line: var(--design-color-line);
+  --accent: var(--design-color-primary);
+  --wash: var(--design-color-wash);
+  --warning: var(--design-color-warning);
   color: var(--ink);
   background: var(--bg);
-  font-size: 13px;
+  font-size: calc(var(--design-size-control) * 13 / 14);
 }
 :root[data-theme='light'] {
   color-scheme: light;
@@ -51,14 +51,16 @@ header {
   place-items: center;
   width: 38px;
   height: 38px;
-  background: var(--ink);
-  color: var(--bg);
+  background: var(--wash);
+  color: var(--accent);
   font-weight: 750;
   border-radius: 12px;
   font-size: 23px;
 }
 h1 {
-  font-size: 19px;
+  font-family: var(--design-font-subject);
+  font-size: var(--design-size-subject);
+  font-weight: var(--design-weight-subject);
   letter-spacing: -0.5px;
   margin: 0;
 }
@@ -75,7 +77,7 @@ select {
   border: 1px solid var(--line);
   background: var(--card);
   color: var(--ink);
-  border-radius: 8px;
+  border-radius: var(--design-radius-control);
 }
 button {
   padding: 8px 12px;
@@ -91,7 +93,7 @@ button:disabled {
 }
 button.primary {
   background: var(--accent);
-  color: var(--bg);
+  color: var(--design-color-on-primary);
   border-color: transparent;
 }
 button:focus-visible,
@@ -178,7 +180,7 @@ footer,
 .window {
   border: 1px solid var(--line);
   background: var(--card);
-  border-radius: 12px;
+  border-radius: var(--design-radius-panel);
   overflow: hidden;
 }
 .window-head {
@@ -372,7 +374,7 @@ footer {
   border: 1px solid var(--accent);
   border-radius: 10px;
   background: var(--card);
-  box-shadow: 0 12px 32px #0003;
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--ink) 14%, transparent);
   will-change: transform;
 }
 .drag-ghost .tab-detail {
@@ -477,4 +479,11 @@ footer {
 }
 .move-controls select {
   flex: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
 }

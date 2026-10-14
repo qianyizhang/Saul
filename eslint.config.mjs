@@ -43,7 +43,7 @@ export default ts.config(
     },
   },
   {
-    files: ['native/**/*.mjs', 'scripts/**/*.mjs', '*.mjs', '*.ts'],
+    files: ['native/**/*.mjs', 'scripts/**/*.mjs', 'design/**/*.mjs', '*.mjs', '*.ts'],
     languageOptions: { globals: globals.node },
   },
   {

@@ -1,10 +1,29 @@
 @import 'tailwindcss';
+@import './design-tokens.css';
+@import './surface.css';
+
+@theme inline {
+  --font-sans: var(--design-font-control);
+  --font-serif: var(--design-font-subject);
+  --color-accent: var(--design-color-primary);
+  --color-accent-hover: var(--design-color-primary-hover);
+  --color-on-accent: var(--design-color-on-primary);
+  --color-ink: var(--design-color-ink);
+  --color-muted: var(--design-color-muted);
+  --color-surface: var(--design-color-surface);
+  --color-subtle: var(--design-color-subtle);
+  --color-line: var(--design-color-line);
+  --color-wash: var(--design-color-wash);
+  --color-danger: var(--design-color-danger);
+  --color-danger-wash: var(--design-color-danger-wash);
+  --radius-control: var(--design-radius-control);
+  --radius-panel: var(--design-radius-panel);
+}
 
 @layer base {
   :host,
   saul-root {
-    font-family:
-      -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-family: var(--design-font-control);
     -webkit-font-smoothing: antialiased;
   }
 }
