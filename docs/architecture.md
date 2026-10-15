@@ -2,8 +2,9 @@
 
 ## Design review
 
-[ADR 0001: Screenshot-first design review](adr/0001-screenshot-first-design-review.md)
-records the accepted visual feedback workflow and when to reconsider a web mockup.
+The user-scope [`gui-review` skill](../../../.codex/skills/gui-review/SKILL.md)
+owns the annotation workflow for GUI refinement.
+[ADR 0001](adr/0001-screenshot-first-design-review.md) retains the historical rationale.
 
 [ADR 0002: Model presets and editable recipes](adr/0002-model-presets-and-recipes.md)
 defines configuration, template inputs, preset overrides, and historical snapshots.

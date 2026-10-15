@@ -7,6 +7,11 @@ This repository maintains no separate generic copy or upstream lock.
 The shared maintenance procedure is at `../repo-kit/docs/skill-suite.md` in the
 sibling checkout. Update the installation there; preserve project-specific skills.
 
+For GUI refinement or screenshot annotation, use the separately installed
+[`gui-review` skill](../../../.codex/skills/gui-review/SKILL.md). It owns the
+review-surface procedure; [ADR 0001](adr/0001-screenshot-first-design-review.md)
+preserves its original EZ rationale.
+
 Resolve upstream document names to these existing owners. Create a glossary or
 ADR only for a concrete unresolved term or consequential decision; do not create
 a documentation framework as a prerequisite. Local guidance governs validation
