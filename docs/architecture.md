@@ -68,6 +68,20 @@ signing limitations. Presets and recipes persist on explicit Save in Configurati
 they contain no credentials and remain separate from lookup history. Configuration
 editing preserves a draft's preset override and any recipe restored from history.
 
+## Local packaging identity
+
+Local signing setup pins an existing code-signing certificate fingerprint in
+ignored `.local/signing-identity`; the private key remains in macOS Keychain.
+Configured packaging reuses that identity and fails if it is unavailable.
+Unconfigured `make app` remains ad-hoc for offline development/CI. An explicit
+development signing override is allowed, but `make install` requires the pin and
+rejects a different override. Installation requires EZ to be stopped, verifies
+the staged bundle's certificate/identifier and the previous same-certificate
+build's identity requirement, then replaces `~/Applications/EZ.app` while retaining
+the old bundle for rollback. It does not alter authentication or local app data.
+Self-signing establishes update identity, not Developer ID or notarization.
+See [local signing and installation](releasing.md#local-signing-and-installation).
+
 ## Persistence contract
 
 History entries carry `schemaVersion: 1` and UUID identity. Append before sending;

@@ -363,3 +363,45 @@ Pending native acceptance using the newly built `dist/EZ.app`:
 - Candidate `make app` passed with approved native icon generation, release
   compilation, and strict local signature verification. No installed bundle was
   replaced, and no live request was sent during final review.
+
+## 2026-10-15 — Persistent local signing and installation
+
+- Created a self-signed RSA-3072 code-signing identity in the login Keychain,
+  valid for 3,650 days. User-domain trust is constrained to code signing;
+  `/usr/bin/codesign` is authorized to use the private key. Temporary key/export
+  files were removed. No app credentials or Keychain item access policies were
+  changed by the packaging scripts.
+- `make signing-setup` pins its fingerprint in ignored `.local/signing-identity`.
+  `make app` reused that pin and passed strict signature validation. The installed
+  designated requirement binds `local.ez.app` to the signing certificate rather
+  than one build's code hash.
+- `EZ_SWIFTPM_DISABLE_SANDBOX=1 make check` passed: 53 core/support and 19 app-state
+  cases, formatting/lint, plist/workflow/shell checks, and Swift script typechecks.
+  `make lint-shell test-install` passed on the final installer revision, covering
+  missing pin/key, signer override rejection, running/unreadable process state,
+  signature/identity failure before replacement, failed-rename recovery, retained
+  backup, and setup idempotence/data validation. Fixtures use disposable paths and
+  mock tools without personal Keychain access.
+- Approved execution was used for Keychain setup/signing and actual installation;
+  ordinary offline checks stayed sandboxed. The installer switched the previously
+  ad-hoc installation to certificate signing at `~/Applications/EZ.app`, retaining
+  its previous bundle at `~/Applications/.ez-upgrade.m53sia/previous.app`.
+- A real disposable upgrade changed bundle metadata and re-signed it, producing
+  distinct code hashes with the same certificate; the replacement passed the
+  installed build's identity requirement. The personal installation and the
+  packaged app have the same code-directory hash. Different signature timestamps
+  can change whole-executable hashes without changing that identity.
+- This establishes packaging identity continuity, not a guarantee of prompt-free
+  personal Keychain access. No credential item was deleted, no ChatGPT sign-in was
+  repeated, and no live inference or another-Mac Gatekeeper test was performed.
+- Reopened the installed native app and observed its main window and existing
+  history. Account restoration was still pending at that observation; a subsequent
+  native observation was blocked by ScreenCaptureKit error -3811. No claim of
+  prompt-free account restoration or live inference is made.
+- Finish-work review strengthened installer failures to check their specific
+  error/status and added staging-copy failure, TERM recovery, initial setup, and
+  ambiguous-certificate coverage. An isolated HEAD-plus-signing/install candidate
+  excluded the pending UI/metrics and design-review changes. It passed `make
+  format`, `make check` (**44 core/support and 18 app-state cases**, plus installer
+  checks), all pre-commit checks, and approved `make app` using the unconfigured
+  ad-hoc development path. No installed app was replaced during this review.

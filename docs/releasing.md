@@ -1,14 +1,69 @@
 # Building and releasing
 
 `make app` generates `dist/EZ.app` from the Swift package and `Resources/Info.plist`.
-The default signature is ad-hoc, suitable for this Mac. Open the app from the same
-path between runs. macOS may request Keychain access again after an ad-hoc rebuild.
+Without local configuration the signature is ad-hoc. Configured builds reuse the
+pinned certificate below. macOS may request Keychain access again after an ad-hoc rebuild.
 See [Keychain access](keychain.md) for the reason and permission choices.
 
 Packaging creates, signs, and verifies a temporary bundle before replacing
 `dist/EZ.app`. A failure before replacement leaves the previous app intact;
 interrupted replacement attempts to restore it. Quit EZ before opening the new
 build so the existing process does not continue running an older version.
+
+## Local signing and installation
+
+Create a persistent identity once in **Keychain Access → Certificate Assistant →
+Create a Certificate**: name **EZ Local Signing**, identity type **Self Signed Root**,
+certificate type **Code Signing**. Override the defaults if you want a longer
+validity period (for example, 3,650 days). Keep the certificate and its private key
+in your login Keychain. If necessary, set this certificate's **Code Signing** trust
+policy to **Always Trust**; do not change its other trust policies.
+
+Then pin the existing identity and install:
+
+```sh
+make signing-setup
+# Quit EZ before installing or upgrading.
+make install
+open ~/Applications/EZ.app
+```
+
+`signing-setup` selects exactly one valid identity named `EZ Local Signing` and
+saves its certificate fingerprint in ignored `.local/signing-identity`. To select
+another existing identity on initial setup, use
+`EZ_SIGNING_IDENTITY="certificate name or fingerprint" make signing-setup`.
+Setup reuses an existing pin and refuses to replace it with a different certificate.
+It does not create, export, or rotate private keys. Keep a secure backup of the
+identity through Keychain Access if you need recovery or signing on another Mac;
+recipients of the app do not need your private key.
+
+`make app`, `make run`, and `make install` reuse the pin. If the configured identity
+is unavailable, the command stops rather than reverting to ad-hoc signing.
+`make clean` preserves the pin and Keychain identity. An explicit
+`EZ_SIGNING_IDENTITY` overrides signing for development builds; installation
+requires the pinned fingerprint and rejects an override to a different identity.
+
+`make install` builds a release bundle and stages a verified copy beside
+`~/Applications/EZ.app`. It checks the expected certificate and bundle identifier.
+For an installed build using that certificate, it also checks the new build against
+the installed build's identity requirement. It refuses replacement while EZ is
+running. Replacement retains the old bundle under
+`~/Applications/.ez-upgrade.XXXXXX/previous.app`; an interrupted replacement attempts
+to restore it. Keep or remove that backup after verifying the upgrade. To roll
+back, quit EZ and move `previous.app` back to `~/Applications/EZ.app`, retaining the
+newer bundle elsewhere if desired. Installation does not launch EZ or change
+credentials, history, or other app data.
+
+The first switch from ad-hoc to certificate signing can still prompt for EZ's
+Keychain item. Choose **Always Allow** if you want remembered access. Later builds
+signed with the same identity should preserve that recognition; this does not
+guarantee the absence of all macOS prompts or ChatGPT reauthentication.
+
+Self-signing supports personal use and app identity continuity. It does not provide
+Developer ID, notarization, or App Store approval. Another Mac may need manual
+Gatekeeper approval. See Apple's [code-signing policies](https://developer.apple.com/library/archive/technotes/tn2206/).
+
+## Distribution
 
 For distribution:
 

@@ -2,6 +2,9 @@
 
 ## 0.1.0 — Unreleased
 
+- Persistent local code-signing identity and `make install` upgrades with signature
+  validation, running-app checks, and a retained previous bundle for rollback.
+
 - Scroll selectors directly, shared lookup/recipe keyboard commands, and a Shortcuts
   settings tab with recording, conflict checks, saved overrides, and Chrome navigation.
 

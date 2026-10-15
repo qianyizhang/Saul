@@ -17,7 +17,15 @@ make test-core CHECK_ARGS='--filter "auth: overlapping"'
 make test-state CHECK_ARGS='--filter "deletion"'
 make test-core CHECK_ARGS='--list'
 make test CHECK_ARGS='--reverse'
+make test-install
 ```
+
+`test-install` checks the packaging scripts with disposable app directories and
+mock signing/process tools. It verifies identity selection, rejection before
+replacement, copy/rename failures, signal recovery, and previous-bundle retention;
+it does not access personal Keychain items or install an app. `make check` includes
+these checks. Real certificate continuity and native launch are separate checks
+recorded in [verification](../docs/verification.md).
 
 Use `EZ_SWIFTPM_DISABLE_SANDBOX=1` in an outer agent sandbox that rejects
 SwiftPM's nested sandbox. All checks remain offline and use disposable storage.

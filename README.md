@@ -18,6 +18,12 @@ make app
 open dist/EZ.app
 ```
 
+For a persistent installation at `~/Applications/EZ.app`, follow the one-time
+[local signing setup](docs/releasing.md#local-signing-and-installation), run
+`make signing-setup`, quit EZ, then run `make install`. Future upgrades use
+`make install` and reuse the pinned signing identity, reducing rebuild-related
+Keychain prompts. The previous installed bundle is retained for rollback.
+
 In EZ, open **Settings → Account & history → Continue with ChatGPT**, finish sign-in
 in your browser, and allow ChatGPT plan usage. Choose a recipe, fill its inputs,
 then press **⌘ Return**. **⌘ N** starts a new lookup and **⌘ .** stops generation.
@@ -159,6 +165,8 @@ previous lookups are not sent. Local history is plaintext; it is not encrypted b
 | `make pre-push` | Run the full push gate |
 | `make format` | Apply the repository Swift format |
 | `make app` | Build and locally sign `dist/EZ.app` |
+| `make signing-setup` | Pin an existing local code-signing certificate for future builds |
+| `make install` | Build with the pinned certificate and install/upgrade `~/Applications/EZ.app` |
 | `make run` | Build and open the app |
 | `make configuration-preview` | Build editable native configuration preview with disposable offline data |
 | `make surface-preview` | Review compact panel states with disposable offline data |

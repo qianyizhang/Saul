@@ -41,14 +41,19 @@ EZ does not change item permissions to allow all applications or bypass the prom
 
 ## Why a rebuild can ask again
 
-The default `make app` build is ad-hoc signed. Inspection with
+Without local signing setup, `make app` is ad-hoc signed. Inspection with
 `codesign -d -r- dist/EZ.app` shows a designated requirement based on the binary's
 code hash. When code changes, that identity can change too, so an earlier
 permission may not recognize the rebuilt executable. Keeping the same filename
 or bundle ID alone does not establish signing continuity.
 
-A stable signing identity is part of the [release plan](releasing.md). It helps
-macOS recognize updates, but cannot guarantee the absence of all Keychain prompts.
+For personal use, create a persistent self-signed code-signing identity, pin it
+with `make signing-setup`, and use `make install` for upgrades. Configured builds
+reuse that certificate; a missing identity stops installation rather than silently
+switching to ad-hoc signing. See [local signing setup](releasing.md#local-signing-and-installation).
+The initial transition may ask once more; **Always Allow** remembers access for
+the recognized app. A stable identity helps macOS recognize updates, but cannot
+guarantee the absence of all Keychain prompts or actual ChatGPT reauthentication.
 See Apple's [code-signing and Keychain requirements](https://developer.apple.com/library/archive/technotes/tn2206/).
 
 ## History and sign-out
