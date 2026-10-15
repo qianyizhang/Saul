@@ -17,6 +17,12 @@ import SwiftUI
     var body: some Scene {
         Window("EZ Surface Preview", id: "main") {
             SurfacePreviewControls(model: model, controller: controller)
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification))
+            { _ in
+                controller.shutdown()
+                model.shutdown()
+                try? FileManager.default.removeItem(at: model.directory)
+            }
         }.defaultSize(width: 780, height: 640)
     }
 }
@@ -33,7 +39,8 @@ private struct SurfacePreviewControls: View {
                 Picker("Fixture", selection: $scenario) {
                     ForEach(
                         [
-                            "Empty", "Two inputs", "Many inputs", "Answer", "Waiting", "Thinking",
+                            "Empty", "Signed out", "Two inputs", "Many inputs", "Answer", "Waiting",
+                            "Thinking",
                             "Streaming", "Blocked",
                             "No recipes", "Selector hitboxes",
                         ], id: \.self
@@ -76,6 +83,7 @@ private struct SurfacePreviewControls: View {
         model.newQuery()
         model.storageWarning = nil
         model.error = nil
+        model.search = ""
         model.models = [
             ModelOption(catalog: [
                 "visibility": "list", "slug": "fixture-luna", "display_name": "Luna (offline fixture)",
@@ -109,8 +117,8 @@ private struct SurfacePreviewControls: View {
             recipe = config.recipes.first
         }
         model.chooseRecipe(recipe?.id)
-        model.signedIn = true
-        model.planEnabled = true
+        model.signedIn = scenario != "Signed out"
+        model.planEnabled = scenario != "Signed out"
         model.entries = []
         if ["Answer", "Waiting", "Thinking", "Streaming", "Blocked"].contains(scenario) {
             model.query = "Serendipity"

@@ -37,17 +37,54 @@ struct PresetPicker: View {
 
 struct RequestControls: View {
     @ObservedObject var model: AppModel
+    @State private var showDetails = false
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            PresetPicker(model: model).frame(maxWidth: 260)
+        HStack(spacing: 6) {
+            PresetPicker(model: model, showsLabel: false, showsSpeed: true).frame(width: 250)
+            Button {
+                showDetails.toggle()
+            } label: {
+                Image(systemName: "info.circle").frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+            }.buttonStyle(.borderless).help("Request details")
+                .accessibilityLabel("Request details")
+                .popover(isPresented: $showDetails) {
+                    RequestDetails(model: model) {
+                        showDetails = false
+                        model.openSettings(.configuration)
+                    }
+                }
+        }.controlSize(.small)
+    }
+}
+
+struct RequestDetails: View {
+    @ObservedObject var model: AppModel
+    var onConfigure: () -> Void
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Next lookup").font(.headline)
             if let preset = model.currentPreset {
+                Text(preset.name).font(.subheadline.weight(.medium))
                 Text(
                     "\(model.currentModel?.displayName ?? preset.model) · \(preset.effort.isEmpty ? "Default effort" : preset.effort.capitalized) · \(preset.fast ? "Fast requested" : "Normal")"
                 )
-                .font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText).lineLimit(2)
+                .font(AppStyle.caption).textSelection(.enabled)
             }
-        }.controlSize(.small)
-            .disabled(model.busy || model.connecting || model.signingIn || model.launcherPending)
+            Text("A preset override lasts until New lookup or a recipe change.")
+                .font(AppStyle.caption).foregroundStyle(.secondary)
+            if model.fast {
+                Text("Fast may use more plan allowance.").font(AppStyle.caption).foregroundStyle(.secondary)
+            }
+            if let entry = model.selectedEntry {
+                Divider()
+                Text("Displayed answer · \(entry.recipeName)").font(.subheadline.weight(.medium))
+                Text("\(entry.model) · \(entry.effort.isEmpty ? "Default effort" : entry.effort)")
+                    .font(AppStyle.caption).textSelection(.enabled)
+                Text(entry.serviceDescription).font(AppStyle.caption).textSelection(.enabled)
+            }
+            Button("Edit presets & recipes…", action: onConfigure)
+        }.padding(16).frame(width: 300, alignment: .leading)
     }
 }
 
@@ -94,27 +131,30 @@ struct RecipeInputs: View {
                     if let onConfigure { onConfigure() } else { model.openSettings() }
                 }
             } else {
-                ScrollView {
-                    VStack(spacing: 8) {
-                        ForEach(model.inputFields, id: \.self) { field in
-                            TextField(
-                                field,
-                                text: Binding(
-                                    get: { model.inputValues[field] ?? "" },
-                                    set: { model.inputValues[field] = $0 }), axis: .vertical
-                            )
-                            .textFieldStyle(.roundedBorder).lineLimit(2...(compact ? 3 : 4))
-                            .font(.system(size: 14)).accessibilityLabel(field)
-                            .focused($focusedField, equals: field)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 8) {
+                            ForEach(model.inputFields, id: \.self) { field in
+                                TextField(
+                                    field,
+                                    text: Binding(
+                                        get: { model.inputValues[field] ?? "" },
+                                        set: { model.inputValues[field] = $0 }), axis: .vertical
+                                )
+                                .textFieldStyle(.roundedBorder).lineLimit(2...(compact ? 3 : 4))
+                                .font(.system(size: 14)).accessibilityLabel(field)
+                                .focused($focusedField, equals: field)
+                                .id(field)
+                            }
                         }
+                    }
+                    .onChange(of: focusedField) { _, field in
+                        if let field { proxy.scrollTo(field) }
                     }
                 }.frame(
                     height: compact
                         ? QuickLookupLayout.inputHeight(fieldCount: model.inputFields.count)
-                        : min(220, CGFloat(model.inputFields.count) * 62))
-            }
-            if !compact, let issue = model.requestIssue, model.planEnabled, !model.models.isEmpty {
-                Text(issue).font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
+                        : min(180, CGFloat(model.inputFields.count) * 54))
             }
         }
         .disabled(model.busy || model.launcherPending)

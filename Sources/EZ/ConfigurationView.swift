@@ -3,6 +3,9 @@ import SwiftUI
 
 struct ConfigurationView: View {
     @ObservedObject var model: AppModel
+    @Binding var hasUnsavedChanges: Bool
+    @State private var confirmSelection = false
+    @State private var pendingSelection: (() -> Void)?
     @State private var preset: ModelPreset?
     @State private var recipe: Recipe?
     @State private var presetMessage: String?
@@ -24,8 +27,21 @@ struct ConfigurationView: View {
                 .font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
             }.padding(24)
         }.onAppear {
-            preset = model.configuration.presets.first
-            recipe = model.configuration.recipes.first
+            if preset == nil { preset = model.configuration.presets.first }
+            if recipe == nil { recipe = model.configuration.recipes.first }
+        }
+        .onChange(of: presetIsDirty || recipeIsDirty, initial: true) { _, dirty in
+            hasUnsavedChanges = dirty
+        }
+        .alert("Discard unsaved edits?", isPresented: $confirmSelection) {
+            Button("Keep editing", role: .cancel) { pendingSelection = nil }
+            Button("Discard edits", role: .destructive) {
+                let change = pendingSelection
+                pendingSelection = nil
+                change?()
+            }
+        } message: {
+            Text("Save this item before switching, or discard its edits.")
         }
     }
 
@@ -37,19 +53,18 @@ struct ConfigurationView: View {
                     Spacer()
                     Button("Add preset", systemImage: "plus") {
                         let option = model.currentModel ?? model.models.first
-                        preset = ModelPreset(
-                            name: "New preset", model: option?.model ?? "",
-                            effort: option?.supportedReasoningEfforts.isEmpty == false
-                                ? option!.quickEffort : "", fast: false)
-                        presetMessage = nil
+                        selectPreset(
+                            ModelPreset(
+                                name: "New preset", model: option?.model ?? "",
+                                effort: option?.supportedReasoningEfforts.isEmpty == false
+                                    ? option!.quickEffort : "", fast: false))
                     }
                 }
                 HStack(alignment: .top, spacing: 18) {
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(model.configuration.presets) { item in
                             Button {
-                                preset = item
-                                presetMessage = nil
+                                selectPreset(item)
                             } label: {
                                 Text(item.name).frame(maxWidth: .infinity, alignment: .leading).padding(6)
                                     .background(
@@ -119,7 +134,9 @@ struct ConfigurationView: View {
                 Text(issue).font(AppStyle.caption).foregroundStyle(.orange)
             }
             HStack {
-                Button("Save preset") { savePreset() }.buttonStyle(.borderedProminent)
+                Button("Save preset") { savePreset() }.buttonStyle(.borderedProminent).disabled(
+                    !presetIsDirty)
+                if presetIsDirty { Text("Unsaved edits").font(AppStyle.caption).foregroundStyle(.secondary) }
                 Spacer()
                 if model.configuration.presets.contains(where: { $0.id == preset?.id }) {
                     Button("Remove preset", role: .destructive) { removePreset() }
@@ -136,16 +153,15 @@ struct ConfigurationView: View {
                     Spacer()
                     Button("Add recipe", systemImage: "plus") {
                         guard let defaultPreset = model.configuration.presets.first else { return }
-                        recipe = Recipe(name: "New recipe", presetID: defaultPreset.id, template: "{{text}}")
-                        recipeMessage = nil
+                        selectRecipe(
+                            Recipe(name: "New recipe", presetID: defaultPreset.id, template: "{{text}}"))
                     }.disabled(model.configuration.presets.isEmpty)
                 }
                 HStack(alignment: .top, spacing: 18) {
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(model.configuration.recipes) { item in
                             Button {
-                                recipe = item
-                                recipeMessage = nil
+                                selectRecipe(item)
                             } label: {
                                 Label(item.name, systemImage: item.symbol)
                                     .frame(maxWidth: .infinity, alignment: .leading).padding(6)
@@ -202,13 +218,50 @@ struct ConfigurationView: View {
                 Text(templateError).font(AppStyle.caption).foregroundStyle(.orange)
             }
             HStack {
-                Button("Save recipe") { saveRecipe() }.buttonStyle(.borderedProminent)
+                Button("Save recipe") { saveRecipe() }.buttonStyle(.borderedProminent).disabled(
+                    !recipeIsDirty)
+                if recipeIsDirty { Text("Unsaved edits").font(AppStyle.caption).foregroundStyle(.secondary) }
                 Spacer()
                 if model.configuration.recipes.contains(where: { $0.id == recipe?.id }) {
                     Button("Remove recipe", role: .destructive) { removeRecipe() }
                 }
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var presetIsDirty: Bool {
+        guard let preset else { return false }
+        return preset != model.configuration.presets.first { $0.id == preset.id }
+    }
+    private var recipeIsDirty: Bool {
+        guard let recipe else { return false }
+        return recipe != model.configuration.recipes.first { $0.id == recipe.id }
+    }
+    private func selectPreset(_ item: ModelPreset) {
+        guard item.id != preset?.id else { return }
+        let change = {
+            preset = item
+            presetMessage = nil
+        }
+        if presetIsDirty {
+            pendingSelection = change
+            confirmSelection = true
+        } else {
+            change()
+        }
+    }
+    private func selectRecipe(_ item: Recipe) {
+        guard item.id != recipe?.id else { return }
+        let change = {
+            recipe = item
+            recipeMessage = nil
+        }
+        if recipeIsDirty {
+            pendingSelection = change
+            confirmSelection = true
+        } else {
+            change()
+        }
     }
 
     private var templateError: String {

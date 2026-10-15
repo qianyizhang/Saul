@@ -61,3 +61,7 @@ alongside the state cases, linking SwiftPM's core/support objects. This keeps
 app-only state out of EZCore and requires no Xcode test host. These checks do not
 launch the native interface or prove focus, layout, shortcuts, or live inference;
 those remain separate acceptance checks in `docs/verification.md`.
+
+Native layout and keyboard regression journeys are maintained in
+[docs/ui-qa.md](../docs/ui-qa.md). They run against the disposable surface preview,
+using actual production views; they are separate from this offline executable suite.

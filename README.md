@@ -31,6 +31,8 @@ selected lookup's input, thinking, and response tokens, TTFT, and average respon
 tokens/s after TTFT. Hover for definitions; missing values show a dash. Check
 Settings → Manage usage for ChatGPT plan allowance. Metrics are saved with new
 lookups; older history has no metrics. **⌘ N** starts a new lookup and **⌘ .** stops generation.
+Selected answers open in a reading view. **Edit draft** reveals your current inputs;
+**Hide draft** returns to reading, and **Use again** restores the saved request.
 You can copy answers, export Markdown, and search previous lookups. To delete a
 lookup, use **Delete lookup** below its answer or right-click its history row, then
 confirm. Deletion removes its saved snapshots from this Mac and cannot be undone;
@@ -91,7 +93,9 @@ Fast/Normal choice, for example `lit`. A **recipe** selects a default preset and
 contains the entire prompt. Add `{{fuzzy term}}` and `{{fuzzy context}}` to create
 two inputs with those placeholders. Repeated names share one field; all fields
 are required. Templates support substitution only, without Jinja expressions.
-Save each edited preset/recipe explicitly. The input preview shows the generated form.
+Save each edited preset/recipe explicitly. Unsaved edits survive Settings section
+changes; switching items or closing Settings asks before discarding them.
+The input preview shows the generated form.
 
 Dictionary, Spell Check, Ask, and Lookup are editable/removable starters. They are
 not restored after removal. Select a recipe during use; the preset picker can

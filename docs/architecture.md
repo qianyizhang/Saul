@@ -69,6 +69,20 @@ signing limitations. Presets and recipes persist on explicit Save in Configurati
 they contain no credentials and remain separate from lookup history. Configuration
 editing preserves a draft's preset override and any recipe restored from history.
 
+## Lookup workspace
+
+Configuration editors stay mounted while changing Settings sections so unsaved text
+and scroll position survive. Item selection/Add and Settings dismissal guard dirty
+edits; Save remains explicit. A failed save keeps the edit and dirty state.
+
+The main window separates composing from reading. Selecting an answer collapses
+the composer; Edit draft/Hide draft reveal or hide the existing draft without
+replacing it. Use again explicitly restores the saved request. Running requests
+keep Stop reachable in the reading footer. Exact request metadata is disclosed on
+demand, while response metrics remain pinned. Input validation uses a fixed-height
+hint, and both surfaces scroll keyboard-focused inputs into view.
+See [native regression journeys](ui-qa.md) for UI acceptance boundaries.
+
 ## Local packaging identity
 
 Local signing setup pins an existing code-signing certificate fingerprint in
@@ -172,8 +186,9 @@ content height starts at 200 points and grows to retain its inputs, notices, act
 and a usable answer area. Preferred height adds reading space for answers while
 keeping the top edge stable and fitting the current display. Long inputs and
 answers scroll independently of the actions. Its preset selector changes overrides
-directly; the adjacent information button opens a popover using the same `RequestControls` as the main window. The popover separates next-request
-choices from the displayed answer's recorded choices and actual service tier.
+directly; the adjacent information button opens the shared `RequestDetails` popover.
+The main-window `RequestControls` uses that same details view without duplicating
+selectors. The popover separates next-request choices from the displayed answer's recorded choices and actual service tier.
 Configuration/account actions and history open the main window. Text enters through
 typing, explicit paste, or the explicit launcher
 submission below; EZ does not read selected text or poll the pasteboard. Ordinary

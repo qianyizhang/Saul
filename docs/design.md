@@ -51,3 +51,13 @@ header recipe control fills its available space; the footer preset control stays
 250 points wide and has an adjacent information button for request details.
 Settings sections use a fixed-width segmented control. The offline surface preview
 includes **Selector hitboxes** with long names and one-character alternatives.
+
+## Native regression review
+
+Use the [fixed UI journeys](ui-qa.md) for first-run, composition, history, settings,
+long forms, recovery, and light/dark review. The main window gives selected answers
+reading space and reveals the current draft through **Edit draft**; **Hide draft**
+returns to reading. Preset/request details are progressive disclosures. Form hints
+reserve a stable line, and Tab navigation scrolls the focused field into view.
+The surface preview includes a **Signed out** fixture and resets search with each
+fixture so one scenario cannot hide the next scenario's history.

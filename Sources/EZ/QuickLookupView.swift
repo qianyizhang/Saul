@@ -137,27 +137,10 @@ struct QuickLookupView: View {
     }
 
     private var details: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Next lookup").font(.headline)
-            RequestControls(model: model)
-            Text("A preset override lasts until New lookup or a recipe change.")
-                .font(AppStyle.caption).foregroundStyle(.secondary)
-            if model.fast {
-                Text("Fast may use more plan allowance.").font(AppStyle.caption).foregroundStyle(.secondary)
-            }
-            if let entry = model.selectedEntry {
-                Divider()
-                Text("Displayed answer · \(entry.recipeName)").font(.subheadline.weight(.medium))
-                Text(entry.displayQuery).font(AppStyle.caption).textSelection(.enabled)
-                Text("\(entry.model) · \(entry.effort.isEmpty ? "Default effort" : entry.effort)")
-                    .font(AppStyle.caption).textSelection(.enabled)
-                Text(entry.serviceDescription).font(AppStyle.caption).textSelection(.enabled)
-            }
-            Button("Edit presets & recipes…") {
-                showDetails = false
-                controller.showMain(settings: true)
-            }
-        }.padding(16).frame(width: 300, alignment: .leading)
+        RequestDetails(model: model) {
+            showDetails = false
+            controller.showMain(settings: true)
+        }
     }
 
     private func result(_ entry: HistoryEntry) -> some View {

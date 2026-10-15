@@ -4,13 +4,13 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject var model: AppModel
     @State private var lookupToDelete: HistoryEntry?
+    @State private var showsComposer = false
     var body: some View {
         NavigationSplitView {
             sidebar
                 .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 300)
         } detail: {
             VStack(spacing: 0) {
-                header
                 ThinkingDivider(activity: model.selectedResponseActivity)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
@@ -32,7 +32,19 @@ struct ContentView: View {
                 if let error = model.error {
                     banner(error, symbol: "exclamationmark.circle", color: .red) { model.error = nil }
                 }
-                composer
+                if model.selectedEntry == nil || showsComposer {
+                    composer
+                } else {
+                    HStack {
+                        Text("Each lookup starts fresh.").foregroundStyle(.secondary)
+                        Spacer()
+                        if model.busy {
+                            Button("Stop generating", systemImage: "stop.fill") { model.stop() }
+                        } else {
+                            Button("Edit draft", systemImage: "square.and.pencil") { showsComposer = true }
+                        }
+                    }.font(AppStyle.caption).padding(.horizontal, 24).padding(.vertical, 12)
+                }
                 if let entry = model.selectedEntry {
                     Divider()
                     LookupStatusLine(entry: entry)
@@ -42,6 +54,7 @@ struct ContentView: View {
             .background(Color(nsColor: .textBackgroundColor))
         }
         .tint(AppStyle.accent)
+        .onChange(of: model.selection) { _, _ in showsComposer = false }
         .alert(
             "Delete lookup?",
             isPresented: Binding(
@@ -70,13 +83,13 @@ struct ContentView: View {
             } label: {
                 Label("New lookup", systemImage: "plus").frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 6)
-            }.buttonStyle(.bordered).disabled(model.busy).padding(.horizontal, 16)
+            }.buttonStyle(.bordered).disabled(model.busy || model.launcherPending).padding(.horizontal, 16)
             TextField("Search history", text: $model.search).textFieldStyle(.roundedBorder).padding(
                 .horizontal, 16)
             HStack {
                 Text("YOUR LOOKUPS").font(.system(size: 10, weight: .semibold)).tracking(1.4)
                 Spacer()
-                Text("\(model.entries.count)").font(.caption.monospacedDigit())
+                Text("\(model.filteredEntries.count)").font(.caption.monospacedDigit())
             }.foregroundStyle(.secondary).padding(.horizontal, 18)
             List(selection: $model.selection) {
                 ForEach(model.filteredEntries) { entry in
@@ -86,7 +99,7 @@ struct ContentView: View {
                             Image(systemName: entry.recipeSymbol)
                             Text(entry.recipeName)
                             if entry.status == "pending" {
-                                Text("· Writing")
+                                Text("· In progress")
                             } else if entry.status != "completed" {
                                 Text("· \(entry.status.capitalized)")
                             }
@@ -97,6 +110,17 @@ struct ContentView: View {
                         }
                 }
             }.listStyle(.sidebar)
+                .overlay {
+                    if model.filteredEntries.isEmpty {
+                        VStack(spacing: 8) {
+                            Text(model.search.isEmpty ? "No lookups yet" : "No matching lookups")
+                                .font(AppStyle.caption).foregroundStyle(.secondary)
+                            if !model.search.isEmpty {
+                                Button("Clear search") { model.search = "" }.buttonStyle(.borderless)
+                            }
+                        }.frame(maxHeight: .infinity, alignment: .top).padding(.top, 16)
+                    }
+                }
             Spacer(minLength: 0)
             Divider()
             Button {
@@ -116,58 +140,25 @@ struct ContentView: View {
             }.buttonStyle(.plain).padding([.horizontal, .bottom], 12)
         }
     }
-    private var header: some View {
-        HStack {
-            Label("Your everyday word companion", systemImage: "text.book.closed")
-                .font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
-            Spacer()
-            Label("Saved on this Mac", systemImage: "externaldrive").font(.system(size: 10)).foregroundStyle(
-                .secondary)
-        }.padding(.horizontal, 24).padding(.top, 25).padding(.bottom, 18)
-    }
     private var welcome: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Image(systemName: "character.book.closed.fill").font(.system(size: 32)).foregroundStyle(
-                AppStyle.accent
-            )
-            .padding(.top, 22)
-            Text("Find the right words.").font(.system(size: 30, weight: .semibold, design: .serif))
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Find the right words.").font(AppStyle.subject)
             Text(
-                "A definition, a second pair of eyes, or a quick answer.\nA small space for the things you want to know."
+                model.currentRecipe == nil
+                    ? "Add a recipe to start your next lookup."
+                    : "Choose a recipe, fill in its inputs, and send."
             )
-            .font(.system(size: 14)).foregroundStyle(.secondary).lineSpacing(5)
-            VStack(spacing: 10) {
-                ForEach(model.configuration.recipes) { recipe in
-                    recipeShortcut(recipe)
-                }
-            }.padding(.top, 12)
+            .font(AppStyle.body).foregroundStyle(.secondary)
             if !model.signedIn {
                 Button {
                     model.openSettings(.account)
                 } label: {
                     Label("Continue with ChatGPT", systemImage: "person.crop.circle")
-                }
-                .buttonStyle(.borderedProminent).controlSize(.large).padding(.top, 6)
-                Text("Uses your eligible ChatGPT plan. No API key needed.").font(.caption).foregroundStyle(
-                    .secondary)
+                }.buttonStyle(.borderedProminent).padding(.top, 4)
+                Text("Uses your eligible ChatGPT plan. No API key needed.")
+                    .font(AppStyle.caption).foregroundStyle(.secondary)
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
-    }
-    private func recipeShortcut(_ recipe: Recipe) -> some View {
-        Button {
-            model.chooseRecipe(recipe.id)
-        } label: {
-            HStack(spacing: 14) {
-                Image(systemName: recipe.symbol).frame(width: 24).foregroundStyle(AppStyle.accent)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(recipe.name).font(.system(size: 13, weight: .medium)).foregroundStyle(.primary)
-                    Text((try? PromptTemplate(recipe.template).fields.joined(separator: " · ")) ?? "")
-                        .font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
-                }
-                Spacer()
-                Image(systemName: "arrow.up.left").font(.caption).foregroundStyle(.tertiary)
-            }.padding(14).background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 10))
-        }.buttonStyle(.plain)
     }
     private func answer(_ entry: HistoryEntry) -> some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -192,10 +183,11 @@ struct ContentView: View {
                 .font(AppStyle.body).lineSpacing(6).textSelection(.enabled).frame(
                     maxWidth: .infinity, alignment: .leading)
             }
-            HStack(spacing: 12) {
+            DisclosureGroup("Request details") {
                 Text(
                     "\(entry.model) · \(entry.effort.isEmpty ? "Default effort" : entry.effort) · \(entry.serviceDescription)"
                 )
+                .textSelection(.enabled).padding(.top, 4)
                 if let seconds = entry.durationSeconds { Text(String(format: "%.1f s", seconds)) }
             }.font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
             if entry.status != "pending" {
@@ -214,7 +206,7 @@ struct ContentView: View {
                         model.reuse(entry)
                     } label: {
                         Label("Use again", systemImage: "arrow.counterclockwise")
-                    }.disabled(model.busy)
+                    }.disabled(model.busy || model.launcherPending)
                     deleteButton(entry)
                     Spacer()
                     if entry.status != "completed" {
@@ -236,43 +228,66 @@ struct ContentView: View {
     }
     private var composer: some View {
         VStack(alignment: .leading, spacing: 12) {
-            RecipePicker(model: model)
-            RecipeInputs(model: model)
-            Divider()
-            HStack(spacing: 8) {
-                RequestControls(model: model)
-                Spacer(minLength: 2)
-                if model.busy {
-                    Button {
-                        model.stop()
-                    } label: {
-                        Image(systemName: "stop.fill")
-                    }.accessibilityLabel("Stop generating").help(
-                        "Stop generating · \(model.shortcuts.binding(for: .stop).display)")
-                } else {
-                    Button {
-                        model.send()
-                    } label: {
-                        Image(systemName: "arrow.up").fontWeight(.semibold).frame(width: 22, height: 22)
-                    }
-                    .accessibilityLabel("Send query").buttonStyle(.borderedProminent).disabled(!model.canSend)
-                    .help("Send · \(model.shortcuts.binding(for: .send).display)")
-                }
-            }.controlSize(.small).disabled(model.connecting)
             HStack {
-                Text(
-                    model.fast
-                        ? "Using ChatGPT plan · Fast may use more allowance." : "Each lookup starts fresh.")
-                Spacer()
-                Text("\(model.shortcuts.binding(for: .send).display) to send")
-            }.font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
-        }.padding(16).background(
+                if model.currentRecipe == nil {
+                    Text("No recipes yet").font(.headline)
+                } else {
+                    RecipePicker(model: model)
+                }
+                if model.selectedEntry != nil {
+                    Button {
+                        showsComposer = false
+                    } label: {
+                        Image(systemName: "chevron.down")
+                    }
+                    .buttonStyle(.borderless).help("Hide draft").accessibilityLabel("Hide draft")
+                }
+            }
+            RecipeInputs(model: model)
+            if model.currentRecipe != nil {
+                Divider()
+                HStack(spacing: 8) {
+                    RequestControls(model: model)
+                    Spacer(minLength: 2)
+                    if model.busy {
+                        Button {
+                            model.stop()
+                        } label: {
+                            Image(systemName: "stop.fill")
+                        }.accessibilityLabel("Stop generating").help(
+                            "Stop generating · \(model.shortcuts.binding(for: .stop).display)")
+                    } else {
+                        Button {
+                            model.send()
+                        } label: {
+                            Image(systemName: "arrow.up").fontWeight(.semibold).frame(width: 22, height: 22)
+                        }
+                        .accessibilityLabel("Send query").buttonStyle(.borderedProminent).disabled(
+                            !model.canSend
+                        )
+                        .help("Send · \(model.shortcuts.binding(for: .send).display)")
+                    }
+                }.controlSize(.small).disabled(model.connecting)
+                Text(composerHint)
+                    .font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
+                    .lineLimit(1).help(composerHint)
+                    .frame(height: 16, alignment: .leading)
+            }
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(16).background(
             Color(nsColor: .controlBackgroundColor),
             in: RoundedRectangle(cornerRadius: AppStyle.composerRadius)
         )
         .overlay(RoundedRectangle(cornerRadius: AppStyle.composerRadius).stroke(.quaternary, lineWidth: 1))
         .padding(20)
     }
+    private var composerHint: String {
+        if model.connecting { return "Connecting to ChatGPT…" }
+        if !model.signedIn { return "Connect ChatGPT to send a lookup." }
+        if !model.planEnabled { return "Enable plan usage in Account & history." }
+        return model.requestIssue
+            ?? "\(model.shortcuts.binding(for: .send).display) to send · Each lookup starts fresh."
+    }
+
     private func banner(
         _ message: String, symbol: String, color: Color, dismiss: @escaping () -> Void
     ) -> some View {

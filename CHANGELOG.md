@@ -2,6 +2,11 @@
 
 ## 0.1.0 — Unreleased
 
+- Reading-focused answers with an optional draft composer, quieter request details,
+  stable input hints, visible keyboard focus in long forms, and empty-search recovery.
+- Configuration edits survive Settings section changes and require an explicit
+  choice before unsaved edits are discarded; repeatable native UI QA journeys.
+
 - Persistent local code-signing identity and `make install` upgrades with signature
   validation, running-app checks, and a retained previous bundle for rollback.
 - Scroll selectors directly, shared lookup/recipe keyboard commands, and a Shortcuts

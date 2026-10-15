@@ -2,6 +2,8 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var model: AppModel
+    @State private var hasUnsavedChanges = false
+    @State private var confirmDiscard = false
     @Environment(\.dismiss) private var dismiss
     private var version: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Development"
@@ -11,21 +13,36 @@ struct SettingsView: View {
             HStack {
                 Text("Settings").font(AppStyle.subject)
                 Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Done") {
+                    if hasUnsavedChanges { confirmDiscard = true } else { dismiss() }
+                }.keyboardShortcut(.cancelAction)
             }.padding(22)
-            HStack {
-                Text("Settings section")
-                SettingsSectionPicker(selection: $model.settingsSection).frame(width: 400, height: 24)
-            }.padding(.horizontal, 24).padding(.bottom, 16)
+            SettingsSectionPicker(selection: $model.settingsSection).frame(width: 400, height: 24)
+                .padding(.horizontal, 24).padding(.bottom, 16)
             Divider()
-            if model.settingsSection == .configuration {
-                ConfigurationView(model: model)
-            } else if model.settingsSection == .shortcuts {
-                ShortcutSettingsView(model: model)
-            } else {
-                accountBody.disabled(model.offline)
+            ZStack {
+                // Keep editor drafts and scroll position while visiting another section.
+                ConfigurationView(model: model, hasUnsavedChanges: $hasUnsavedChanges)
+                    .opacity(model.settingsSection == .configuration ? 1 : 0)
+                    .allowsHitTesting(model.settingsSection == .configuration)
+                    .disabled(model.settingsSection != .configuration)
+                    .accessibilityHidden(model.settingsSection != .configuration)
+                if model.settingsSection == .shortcuts {
+                    ShortcutSettingsView(model: model)
+                } else if model.settingsSection == .account {
+                    accountBody
+                }
             }
         }.frame(width: 760, height: 720).tint(AppStyle.accent)
+            .interactiveDismissDisabled(hasUnsavedChanges)
+            .alert("Discard unsaved edits?", isPresented: $confirmDiscard) {
+                Button("Keep editing", role: .cancel) {}
+                Button("Discard edits", role: .destructive) { dismiss() }
+            } message: {
+                Text(
+                    "Your preset or recipe has unsaved edits. Return to Configuration to save them before closing."
+                )
+            }
     }
     private var accountBody: some View {
         ScrollView {
@@ -42,7 +59,8 @@ struct SettingsView: View {
                                     set: { value in Task { await model.selectAccount(value) } })
                             )
                             .disabled(
-                                model.busy || model.connecting || model.signingIn || model.launcherPending)
+                                model.offline || model.busy || model.connecting || model.signingIn
+                                    || model.launcherPending)
                         }
                         Text(
                             model.signedIn
@@ -86,7 +104,7 @@ struct SettingsView: View {
                                     Button("Add account") { model.signIn(newAccount: true) }
                                 }
                             }
-                        }.disabled(model.busy || model.connecting)
+                        }.disabled(model.offline || model.busy || model.connecting)
                         HStack {
                             Link(
                                 "Manage usage",
@@ -95,7 +113,8 @@ struct SettingsView: View {
                             Button(model.connecting ? "Loading…" : "Refresh models") {
                                 Task { await model.connect() }
                             }.disabled(
-                                model.busy || model.connecting || model.signingIn || !model.planEnabled)
+                                model.offline || model.busy || model.connecting || model.signingIn
+                                    || !model.planEnabled)
                         }.font(.caption)
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
                 }
@@ -108,7 +127,7 @@ struct SettingsView: View {
                         Text(model.directory.appendingPathComponent("history.jsonl").path).font(
                             .system(size: 10, design: .monospaced)
                         ).textSelection(.enabled)
-                        Button("Show in Finder") { model.revealHistory() }
+                        Button("Show in Finder") { model.revealHistory() }.disabled(model.offline)
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
                 }
                 if let error = model.error {
