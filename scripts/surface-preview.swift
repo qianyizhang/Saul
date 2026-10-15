@@ -33,7 +33,7 @@ private struct SurfacePreviewControls: View {
                     ForEach(
                         [
                             "Empty", "Two inputs", "Many inputs", "Answer", "Streaming", "Blocked",
-                            "No recipes",
+                            "No recipes", "Selector hitboxes",
                         ], id: \.self
                     ) {
                         Text($0)
@@ -80,6 +80,12 @@ private struct SurfacePreviewControls: View {
         var config = Configuration.starters(model: "fixture-luna", effort: "medium", fast: true)
         config.presets[0].name = "lit"
         config.presets.append(ModelPreset(name: "steady", model: "fixture-luna", effort: "high", fast: false))
+        if scenario == "Selector hitboxes" {
+            config.recipes[0].name = "A deliberately long recipe title for checking the full selector hitbox"
+            config.recipes[1].name = "S"
+            config.presets[0].name = "A deliberately long preset title"
+            config.presets[1].name = "S"
+        }
         if scenario == "Many inputs" {
             config.recipes.append(
                 Recipe(

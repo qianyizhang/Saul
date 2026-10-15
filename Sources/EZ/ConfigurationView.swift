@@ -79,40 +79,39 @@ struct ConfigurationView: View {
         VStack(alignment: .leading, spacing: 10) {
             TextField("Name, e.g. lit", text: presetBinding(\.name)).textFieldStyle(.roundedBorder)
                 .accessibilityLabel("Preset name")
-            Picker(
-                "Model",
-                selection: Binding(
-                    get: { preset?.model ?? "" },
-                    set: { value in
-                        preset?.model = value
-                        if let option = model.models.first(where: { $0.model == value }) {
-                            preset?.effort =
-                                option.supportedReasoningEfforts.isEmpty ? "" : option.quickEffort
-                            preset?.fast = false
-                        }
-                    })
-            ) {
-                if !model.models.contains(where: { $0.model == preset?.model }) {
-                    Text(
-                        preset?.model.isEmpty == false
-                            ? "\(preset!.model) (unavailable)" : "Connect to choose a model"
-                    )
-                    .tag(preset?.model ?? "")
-                }
-                ForEach(model.models) { Text($0.displayName).tag($0.model) }
-            }
-            Picker("Effort", selection: presetBinding(\.effort)) {
-                let efforts =
-                    model.models.first { $0.model == preset?.model }?.supportedReasoningEfforts.map(
-                        \.reasoningEffort) ?? []
-                if !efforts.contains(preset?.effort ?? "") {
-                    Text(
-                        preset?.effort.isEmpty == false
-                            ? "\(preset!.effort.capitalized) (unavailable)" : "Default"
-                    ).tag(preset?.effort ?? "")
-                }
-                ForEach(efforts, id: \.self) { Text($0.capitalized).tag($0) }
-            }
+            let modelSelection = Binding(
+                get: { preset?.model ?? "" },
+                set: { value in
+                    preset?.model = value
+                    if let option = model.models.first(where: { $0.model == value }) {
+                        preset?.effort =
+                            option.supportedReasoningEfforts.isEmpty ? "" : option.quickEffort
+                        preset?.fast = false
+                    }
+                })
+            let modelOptions: [SelectorOption<String>] =
+                (model.models.contains(where: { $0.model == preset?.model })
+                    ? []
+                    : [
+                        .init(
+                            value: preset?.model ?? "",
+                            title: preset?.model.isEmpty == false
+                                ? "\(preset!.model) (unavailable)" : "Connect to choose a model")
+                    ]) + model.models.map { .init(value: $0.model, title: $0.displayName) }
+            SelectorPicker("Model", options: modelOptions, selection: modelSelection)
+            let efforts =
+                model.models.first { $0.model == preset?.model }?.supportedReasoningEfforts.map(
+                    \.reasoningEffort) ?? []
+            let effortOptions: [SelectorOption<String>] =
+                (efforts.contains(preset?.effort ?? "")
+                    ? []
+                    : [
+                        .init(
+                            value: preset?.effort ?? "",
+                            title: preset?.effort.isEmpty == false
+                                ? "\(preset!.effort.capitalized) (unavailable)" : "Default")
+                    ]) + efforts.map { .init(value: $0, title: $0.capitalized) }
+            SelectorPicker("Effort", options: effortOptions, selection: presetBinding(\.effort))
             Toggle("Fast", isOn: presetBinding(\.fast)).toggleStyle(.checkbox)
             Text("Fast requests priority service and may use more plan allowance.")
                 .font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
@@ -176,9 +175,10 @@ struct ConfigurationView: View {
     private var recipeEditor: some View {
         VStack(alignment: .leading, spacing: 10) {
             TextField("Recipe name", text: recipeBinding(\.name)).textFieldStyle(.roundedBorder)
-            Picker("Default preset", selection: recipeBinding(\.presetID)) {
-                ForEach(model.configuration.presets) { Text($0.name).tag($0.id) }
-            }
+            SelectorPicker(
+                "Default preset",
+                options: model.configuration.presets.map { .init(value: $0.id, title: $0.name) },
+                selection: recipeBinding(\.presetID))
             Text("Prompt template").font(.subheadline.weight(.medium))
             TextEditor(text: recipeBinding(\.template)).font(.system(size: 12, design: .monospaced))
                 .frame(height: 125).padding(6)

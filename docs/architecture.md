@@ -127,8 +127,8 @@ The panel starts at 460 points wide, with a 420-point minimum width. The minimum
 content height starts at 200 points and grows to retain its inputs, notices, actions,
 and a usable answer area. Preferred height adds reading space for answers while
 keeping the top edge stable and fitting the current display. Long inputs and
-answers scroll independently of the actions. Its preset label opens a popover
-using the same `RequestControls` as the main window. The popover separates next-request
+answers scroll independently of the actions. Its preset selector changes overrides
+directly; the adjacent information button opens a popover using the same `RequestControls` as the main window. The popover separates next-request
 choices from the displayed answer's recorded choices and actual service tier.
 Configuration/account actions and history open the main window. Text enters through
 typing, explicit paste, or the explicit launcher
@@ -159,3 +159,35 @@ The `--ez-launcher` argument suppresses default main-window presentation on macO
 SceneBuilder's limited-availability wrapper retains macOS 14 support, where a cold
 launch may also show the main window. Normal app launch still opens the main window.
 The app remains a native Swift executable, with no launcher runtime dependency.
+
+## Selector scrolling and keyboard commands
+
+All production dropdowns use a width-filling native `NSPopUpButton` through
+`SelectorPicker`. The label is separate from the control’s stable full-width hitbox;
+changing from a long title to a short one never shrinks the click/scroll area.
+Settings sections use a fixed-width native segmented control. Both receive wheel
+events through AppKit’s normal hit-testing, so only the hovered control changes;
+there are no app-wide scroll monitors. Discrete wheel steps and accumulated
+precise deltas use the existing selection bindings. Choices clamp at the ends;
+momentum is ignored and steps are throttled. Quick Lookup’s fixed-width preset
+selector changes overrides; its adjacent information button opens request details.
+
+`LookupCommand` names lookup actions and ordered recipe positions. `AppModel`
+executes them through existing New/Send/Stop/chooseRecipe actions and request guards.
+Next/Previous wraps; positions 1–8 and Last follow Configuration order. A repeated
+selection is a no-op; leaving historical replay selects a live recipe. Recipe
+selection retains its existing draft-reset/default-preset contract.
+
+`QuickLookupController` installs one app-local key monitor independently of global
+hotkey registration. Both lookup surfaces use the same persisted bindings, including
+while text fields have focus. Settings, sheets, and modal dialogs take priority;
+key repeats are consumed without repeated actions. Native Lookup menu items expose
+the bindings. The global panel shortcut and app/window lifecycle keys remain fixed.
+
+`LookupShortcutsStore` owns a separate versioned, owner-only `shortcuts.json` with
+explicit overrides, including cleared bindings. Load validates supported keys,
+modifier bits, reserved editing/app shortcuts, and collisions against defaults.
+Unsupported or corrupt files are preserved and reported in Settings; runtime uses
+defaults until the user explicitly restores the file. Changes validate and flush
+an owner-only sibling before atomic replacement; in-memory bindings publish only
+after persistence succeeds. Chrome navigation changes both bindings atomically.

@@ -67,7 +67,7 @@ import SwiftUI
                     model.error =
                         model.storageWarning
                         ?? model.requestIssue
-                        ?? "Query not sent: connect ChatGPT, enable plan access, and choose an available model. Your query is ready to submit with ⌘ Return."
+                        ?? "Query not sent: connect ChatGPT, enable plan access, and choose an available model. Your query is ready to submit with Send."
                 }
             }
         } catch { quickLookup.launcherError = error.localizedDescription }
@@ -120,14 +120,33 @@ private struct LookupCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
-            Button("New Lookup") { quickLookup.newQuery() }
-                .keyboardShortcut("n").disabled(model.busy)
+            commandButton(.newLookup)
             Button("Quick Lookup") { quickLookup.show() }
+        }
+        CommandMenu("Lookup") {
+            commandButton(.send)
+            commandButton(.stop)
+            Divider()
+            commandButton(.previousRecipe)
+            commandButton(.nextRecipe)
+            Divider()
+            ForEach(
+                LookupCommand.allCases.filter { $0.recipeIndex != nil || $0 == .lastRecipe }, id: \.rawValue
+            ) { command in
+                commandButton(command)
+            }
         }
         CommandGroup(replacing: .appSettings) {
             Button("Settings…") { quickLookup.showMain(settings: true) }
                 .keyboardShortcut(",")
         }
+    }
+    private func commandButton(_ command: LookupCommand) -> some View {
+        Button(command.title) {
+            if command == .newLookup { quickLookup.newQuery() } else { model.performLookupCommand(command) }
+        }
+        .keyboardShortcut(model.shortcuts.binding(for: command).keyboardShortcut)
+        .disabled(model.showSettings || !model.commandEnabled(command))
     }
 }
 

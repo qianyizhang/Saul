@@ -1,24 +1,45 @@
 import EZCore
 import SwiftUI
 
+struct PresetPicker: View {
+    @ObservedObject var model: AppModel
+    var showsLabel = true
+    var showsSpeed = false
+    private var options: [SelectorOption<String>] {
+        var items: [SelectorOption<String>] = []
+        if let saved = model.replayEntry?.presetSnapshot {
+            items.append(.init(value: "saved", title: presetTitle(saved, saved: true)))
+        }
+        items += model.configuration.presets.map {
+            .init(value: $0.id.uuidString, title: presetTitle($0))
+        }
+        if model.currentPreset == nil { items.append(.init(value: "", title: "No preset")) }
+        return items
+    }
+    private func presetTitle(_ preset: ModelPreset, saved: Bool = false) -> String {
+        let name = saved ? "Saved: \(preset.name)" : preset.name
+        guard showsSpeed else { return name }
+        let override = !saved && model.overridePresetID == preset.id ? " · Override" : ""
+        return name + override + (preset.fast ? " · Fast requested" : " · Normal")
+    }
+    var body: some View {
+        SelectorPicker(
+            "Preset", options: options,
+            selection: Binding(
+                get: {
+                    model.replayEntry != nil && model.overridePresetID == nil
+                        ? "saved" : model.currentPreset?.id.uuidString ?? ""
+                }, set: { model.choosePreset(UUID(uuidString: $0)) }), showsLabel: showsLabel
+        )
+        .disabled(model.busy || model.connecting || model.signingIn || model.launcherPending)
+    }
+}
+
 struct RequestControls: View {
     @ObservedObject var model: AppModel
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Picker(
-                "Preset",
-                selection: Binding(
-                    get: {
-                        model.replayEntry != nil && model.overridePresetID == nil
-                            ? "saved" : model.currentPreset?.id.uuidString ?? ""
-                    }, set: { model.choosePreset(UUID(uuidString: $0)) })
-            ) {
-                if let saved = model.replayEntry?.presetSnapshot {
-                    Text("Saved: \(saved.name)").tag("saved")
-                }
-                ForEach(model.configuration.presets) { Text($0.name).tag($0.id.uuidString) }
-                if model.currentPreset == nil { Text("No preset").tag("") }
-            }.frame(maxWidth: 230)
+            PresetPicker(model: model).frame(maxWidth: 260)
             if let preset = model.currentPreset {
                 Text(
                     "\(model.currentModel?.displayName ?? preset.model) · \(preset.effort.isEmpty ? "Default effort" : preset.effort.capitalized) · \(preset.fast ? "Fast requested" : "Normal")"
@@ -32,21 +53,31 @@ struct RequestControls: View {
 
 struct RecipePicker: View {
     @ObservedObject var model: AppModel
+    var showsLabel = true
+    private var options: [SelectorOption<String>] {
+        var items: [SelectorOption<String>] = []
+        if let saved = model.replayEntry?.recipeSnapshot {
+            items.append(.init(value: "saved", title: "Saved: \(saved.name)", symbol: saved.symbol))
+        }
+        items += model.configuration.recipes.map {
+            .init(value: $0.id.uuidString, title: $0.name, symbol: $0.symbol)
+        }
+        if model.currentRecipe == nil {
+            items.append(.init(value: "", title: "No recipes — open Configuration"))
+        }
+        return items
+    }
     var body: some View {
-        Picker(
-            "Recipe",
+        SelectorPicker(
+            "Recipe", options: options,
             selection: Binding(
                 get: { model.replayEntry != nil ? "saved" : model.selectedRecipeID?.uuidString ?? "" },
-                set: { model.chooseRecipe(UUID(uuidString: $0)) })
-        ) {
-            if let saved = model.replayEntry?.recipeSnapshot {
-                Text("Saved: \(saved.name)").tag("saved")
-            }
-            ForEach(model.configuration.recipes) { recipe in
-                Label(recipe.name, systemImage: recipe.symbol).tag(recipe.id.uuidString)
-            }
-            if model.currentRecipe == nil { Text("No recipes — open Configuration").tag("") }
-        }.disabled(model.busy || model.launcherPending)
+                set: { value in
+                    guard value != "saved" else { return }
+                    model.chooseRecipe(UUID(uuidString: value))
+                }), showsLabel: showsLabel
+        )
+        .disabled(model.busy || model.launcherPending)
     }
 }
 

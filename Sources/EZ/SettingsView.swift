@@ -13,13 +13,15 @@ struct SettingsView: View {
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
             }.padding(22)
-            Picker("Settings section", selection: $model.settingsSection) {
-                Text("Configuration").tag(AppModel.SettingsSection.configuration)
-                Text("Account & history").tag(AppModel.SettingsSection.account)
-            }.pickerStyle(.segmented).padding(.horizontal, 24).padding(.bottom, 16)
+            HStack {
+                Text("Settings section")
+                SettingsSectionPicker(selection: $model.settingsSection).frame(width: 400, height: 24)
+            }.padding(.horizontal, 24).padding(.bottom, 16)
             Divider()
             if model.settingsSection == .configuration {
                 ConfigurationView(model: model)
+            } else if model.settingsSection == .shortcuts {
+                ShortcutSettingsView(model: model)
             } else {
                 accountBody.disabled(model.offline)
             }
@@ -32,14 +34,15 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Label("ChatGPT account", systemImage: "person.crop.circle").font(.headline)
                         if !model.profiles.isEmpty {
-                            Picker(
+                            SelectorPicker(
                                 "Account",
+                                options: model.profiles.map { .init(value: $0.id, title: $0.label) },
                                 selection: Binding(
                                     get: { model.accountID },
                                     set: { value in Task { await model.selectAccount(value) } })
-                            ) {
-                                ForEach(model.profiles) { Text($0.label).tag($0.id) }
-                            }.disabled(model.busy || model.connecting || model.signingIn)
+                            )
+                            .disabled(
+                                model.busy || model.connecting || model.signingIn || model.launcherPending)
                         }
                         Text(
                             model.signedIn

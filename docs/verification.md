@@ -307,3 +307,59 @@ Pending native acceptance using the newly built `dist/EZ.app`:
 - Review packaging: `EZ_SWIFTPM_DISABLE_SANDBOX=1 make app` completed through
   approved execution outside the restricted sandbox and verified the local ad-hoc
   signature of `dist/EZ.app`. The installed app was not replaced.
+
+## Hover selectors and configurable shortcuts — 2026-10-15
+
+- Added Settings → Shortcuts for New/Send/Stop, ordered Previous/Next recipe,
+  recipe positions 1–8, and Last recipe. Bindings record, clear, restore, reject
+  conflicts/reserved editing keys, and persist separately in owner-only
+  `shortcuts.json`; failures preserve the last published bindings. Chrome
+  navigation updates both arrow bindings atomically.
+- Replaced dropdowns with native popup controls that fill a stable allocated
+  width. Native wheel dispatch targets the hovered control; no app-wide wheel
+  monitor remains. Compact preset choices now have a direct selector and an
+  adjacent information button. Added the **Selector hitboxes** offline fixture.
+- Native offline preview checks: scrolled the far-right area of a long recipe
+  title to one-character **S**, then clicked the identical point to reopen its
+  menu. The entire control stayed the same width. Scrolling the preset changed
+  it to **S · Normal** while preserving the recipe; scrolling empty panel space
+  changed neither. The popup menus, Configuration layout, and Shortcuts layout
+  were inspected in the actual built preview app.
+- Verified numbered recipe selection, Next and Previous while an input had focus,
+  and New clearing a typed draft. Recorded **⌘T**, saw the updated New hint,
+  rejected assigning the same binding to Stop with a visible conflict, and
+  cancelled recording with Esc. The recorder uses the modal SwiftUI view lifetime;
+  it does not assume the sheet itself is AppKit’s key window.
+- Before commit isolation, `make format` and sandboxed `make check` passed in
+  the shared checkout: **53 core/support cases and 19 app-state cases**, including storage permissions/corruption/failure,
+  shortcut conflicts, navigation order/wrapping, history replay, missing recipes,
+  and busy/launcher guards, plus lint and preview typechecking.
+- Final `make app` passed with approved execution for native icon generation;
+  release compilation and strict local signature verification succeeded. The
+  rebuilt bundle is `dist/EZ.app`; the installed `~/Applications/EZ.app` was not
+  replaced in this slice.
+- Native checks used disposable offline storage. No account switch or live
+  inference was attempted. Live streaming cancellation, personal-account wheel
+  selection, trackpad hardware/inertia, and non-US keyboard layouts remain
+  unverified.
+
+### Final review and isolated commit candidate
+
+- Kept the pre-existing response-metrics/activity work and review-document edits
+  outside this slice. Exported HEAD plus the 22 owned paths/hunks and verified
+  that the feature builds without those pending changes.
+- Restored the compact preset’s **Override** indicator and retained Fast/Normal
+  labels for saved presets. Simplified preset title formatting through one helper;
+  no lookup, billing, or request behavior changed during cleanup.
+- The exact candidate passed `make format`, `make check` (**44 core/support and
+  18 app-state cases**), and all pre-commit checks. The hook runner used its
+  existing cache with `UV_OFFLINE=1`; the ordinary online runner was blocked by
+  the command sandbox’s network restrictions.
+- Rebuilt the candidate’s native offline preview under a separate bundle identity.
+  Repeated the long-title-to-**S** hover scroll and same-point menu-opening check,
+  verified **S · Override · Normal** after preset scrolling, confirmed empty-space
+  scrolling changes neither selector, and used **⌘3** to select Ask and restore
+  its default preset. Earlier native recording/navigation checks remain applicable.
+- Candidate `make app` passed with approved native icon generation, release
+  compilation, and strict local signature verification. No installed bundle was
+  replaced, and no live request was sent during final review.

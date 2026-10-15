@@ -1,5 +1,6 @@
 import AppKit
 import Carbon
+import EZCore
 import SwiftUI
 
 @MainActor final class QuickLookupController: ObservableObject {
@@ -21,6 +22,7 @@ import SwiftUI
     func start() {
         guard !started else { return }
         started = true
+        installKeyMonitor()
         var type = EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
         let status = InstallEventHandler(
@@ -58,6 +60,7 @@ import SwiftUI
     }
 
     func show() {
+        installKeyMonitor()
         if panel == nil {
             let panel = QuickLookupPanel(
                 contentRect: NSRect(x: 0, y: 0, width: QuickLookupLayout.defaultWidth, height: 280),
@@ -77,30 +80,6 @@ import SwiftUI
             panel.contentMinSize = NSSize(width: QuickLookupLayout.minimumWidth, height: 200)
             panel.contentView = NSHostingView(rootView: QuickLookupView(model: model, controller: self))
             self.panel = panel
-            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                let handled = MainActor.assumeIsolated {
-                    guard let self, self.panel?.isKeyWindow == true else { return false }
-                    let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-                        .subtracting([.capsLock, .numericPad, .function])
-                    if event.keyCode == UInt16(kVK_Escape) && modifiers.isEmpty {
-                        self.hide()
-                        return true
-                    }
-                    if modifiers == .command {
-                        switch event.keyCode {
-                        case UInt16(kVK_Return): self.model.send()
-                        case UInt16(kVK_ANSI_Period): self.model.stop()
-                        case UInt16(kVK_ANSI_N):
-                            self.newQuery()
-                        case UInt16(kVK_ANSI_W): self.hide()
-                        default: return false
-                        }
-                        return true
-                    }
-                    return false
-                }
-                return handled ? nil : event
-            }
         }
         guard let panel else { return }
         if !panel.isVisible {
@@ -118,7 +97,45 @@ import SwiftUI
         presentation += 1
     }
 
-    func hide() { panel?.orderOut(nil) }
+    private func installKeyMonitor() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            let handled = MainActor.assumeIsolated { self?.handleKey(event) ?? false }
+            return handled ? nil : event
+        }
+    }
+
+    private func handleKey(_ event: NSEvent) -> Bool {
+        guard let window = NSApp.keyWindow, !model.showSettings,
+            window.attachedSheet == nil, NSApp.modalWindow == nil
+        else { return false }
+        let binding = LookupKeyBinding(event: event)
+        if window === panel {
+            if (event.keyCode == 53 && binding.modifiers == 0)
+                || binding == LookupKeyBinding(key: "w")
+            {
+                hide()
+                return true
+            }
+            if binding == LookupKeyBinding(key: ",") {
+                showMain(settings: true)
+                return true
+            }
+        }
+        guard
+            let command = LookupCommand.allCases.first(where: {
+                model.shortcuts.binding(for: $0) != .unassigned
+                    && model.shortcuts.binding(for: $0) == binding
+            })
+        else { return false }
+        guard !event.isARepeat else { return true }
+        if command == .newLookup { newQuery() } else { model.performLookupCommand(command) }
+        return true
+    }
+
+    func hide() {
+        panel?.orderOut(nil)
+    }
 
     func resizeContent(_ layout: QuickLookupLayout) {
         guard let panel else { return }

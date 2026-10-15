@@ -66,9 +66,8 @@ struct QuickLookupView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            RecipePicker(model: model).labelsHidden().pickerStyle(.menu)
+            RecipePicker(model: model, showsLabel: false)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .help("Choose a recipe")
             Button {
                 controller.showMain()
             } label: {
@@ -95,38 +94,37 @@ struct QuickLookupView: View {
                 controller.newQuery()
             } label: {
                 Label("New", systemImage: "plus")
-            }.buttonStyle(.borderless).help("New lookup · ⌘ N")
-                .disabled(model.busy || model.launcherPending)
+            }.buttonStyle(.borderless).help(
+                "New lookup · \(model.shortcuts.binding(for: .newLookup).display)"
+            )
+            .disabled(model.busy || model.launcherPending)
             Spacer()
             if model.launcherPending {
                 ProgressView().controlSize(.small)
                 Text("Preparing…").font(AppStyle.caption).foregroundStyle(.secondary)
             } else if model.busy {
                 ProgressView().controlSize(.small)
-                Button("Stop") { model.stop() }.help("Stop generating · ⌘ .")
+                Button("Stop") { model.stop() }.help(
+                    "Stop generating · \(model.shortcuts.binding(for: .stop).display)")
             } else {
                 Button("Send") { model.send() }.buttonStyle(.borderedProminent)
-                    .disabled(!model.canSend).help("Send lookup · ⌘ Return")
+                    .disabled(!model.canSend).help(
+                        "Send lookup · \(model.shortcuts.binding(for: .send).display)")
             }
         }.controlSize(.small)
     }
 
     private var footer: some View {
         HStack(spacing: 8) {
+            PresetPicker(model: model, showsLabel: false, showsSpeed: true)
+                .frame(width: 250)
             Button {
                 showDetails.toggle()
             } label: {
-                HStack(spacing: 4) {
-                    Text(model.currentPreset?.name ?? "No preset").lineLimit(1)
-                    if model.overridePresetID != nil { Text("· Override") }
-                    if model.currentPreset != nil { Text(model.fast ? "· Fast requested" : "· Normal") }
-                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
-                }
+                Image(systemName: "info.circle").frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
             }.buttonStyle(.borderless).help("Preset override & request details")
                 .accessibilityLabel("Preset override & request details")
-                .accessibilityValue(
-                    "\(model.currentPreset?.name ?? "No preset")\(model.overridePresetID == nil ? "" : ", override")\(model.currentPreset == nil ? "" : model.fast ? ", Fast requested" : ", Normal")"
-                )
                 .popover(isPresented: $showDetails) { details }
             Spacer(minLength: 0)
             if let entry = model.selectedEntry, !entry.response.isEmpty {

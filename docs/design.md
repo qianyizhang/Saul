@@ -40,3 +40,10 @@ The initial adoption also makes answer metadata and composer hints readable at t
 shared caption size. Quick Lookup uses the shared accent and a compact recipe-first
 layout. Motion guidance includes
 reduced motion; richer VFX are future work.
+
+Lookup dropdowns use stable-width native popup buttons with the entire control
+available for click and hover scrolling, independent of title length. The compact
+header recipe control fills its available space; the footer preset control stays
+250 points wide and has an adjacent information button for request details.
+Settings sections use a fixed-width segmented control. The offline surface preview
+includes **Selector hitboxes** with long names and one-character alternatives.

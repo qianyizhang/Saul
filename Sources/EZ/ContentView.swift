@@ -244,8 +244,8 @@ struct ContentView: View {
                         model.stop()
                     } label: {
                         Image(systemName: "stop.fill")
-                    }.accessibilityLabel("Stop generating").help("Stop generating").keyboardShortcut(
-                        ".", modifiers: .command)
+                    }.accessibilityLabel("Stop generating").help(
+                        "Stop generating · \(model.shortcuts.binding(for: .stop).display)")
                 } else {
                     Button {
                         model.send()
@@ -253,9 +253,7 @@ struct ContentView: View {
                         Image(systemName: "arrow.up").fontWeight(.semibold).frame(width: 22, height: 22)
                     }
                     .accessibilityLabel("Send query").buttonStyle(.borderedProminent).disabled(!model.canSend)
-                    .keyboardShortcut(
-                        .return, modifiers: .command
-                    ).help("Send · ⌘ Return")
+                    .help("Send · \(model.shortcuts.binding(for: .send).display)")
                 }
             }.controlSize(.small).disabled(model.connecting)
             HStack {
@@ -263,7 +261,7 @@ struct ContentView: View {
                     model.fast
                         ? "Using ChatGPT plan · Fast may use more allowance." : "Each lookup starts fresh.")
                 Spacer()
-                Text("⌘ Return to send")
+                Text("\(model.shortcuts.binding(for: .send).display) to send")
             }.font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
         }.padding(16).background(
             Color(nsColor: .controlBackgroundColor),

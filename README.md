@@ -30,8 +30,9 @@ draft is preserved.
 For quick access while EZ is running, press **⌃⌥ Space** (Control–Option–Space)
 or choose **Quick Lookup** from EZ’s menu-bar icon. Type or paste text and press
 **⌘ Return** after filling the recipe's inputs. The panel starts small and grows
-for results; long forms and answers scroll. Click the preset label for an override,
-exact request choices, and the displayed answer's actual service tier. Use the
+for results; long forms and answers scroll. Choose a preset override in the panel’s
+preset selector. Click its information button for exact request choices and the
+displayed answer's actual service tier. Use the
 actions menu for Configuration. **Esc** hides the panel and returns keyboard focus to
 your work. A running answer continues while hidden; **⌘ .** stops it. **⌘ N** starts
 a new lookup. Drafts and answers are shared with the full window, and reopening
@@ -89,11 +90,50 @@ saved model/effort/Fast choices block sending rather than silently changing them
 History and Use again preserve the original recipe, inputs, and preset. See
 [configuration decisions](docs/adr/0002-model-presets-and-recipes.md).
 
+## Selectors and keyboard shortcuts
+
+Scroll over a recipe, preset, model, effort, account, or Settings section selector
+to move through its choices without opening the menu. Wheel selection stops at the
+ends; trackpad momentum is ignored. Disabled selectors stay locked. Scrolling the
+compact panel’s preset selector changes the override directly; the adjacent
+information button opens details. Each native selector keeps its allocated width
+and full click/scroll target when labels change.
+Configuration edits still require Save.
+
+A **lookup** is an independent request and answer; a **recipe** is a reusable prompt.
+Lookups do not yet have conversation follow-ups.
+
+| Action | Default shortcut |
+| --- | --- |
+| New lookup | ⌘N |
+| Send | ⌘Return |
+| Stop generation | ⌘. |
+| Previous / next recipe | ⌘⇧[ / ⌘⇧] |
+| Recipe at position 1–8 | ⌘1–8 |
+| Last recipe | ⌘9 |
+
+Open **Settings → Shortcuts** to record replacements, clear bindings, or restore
+defaults. **Use Chrome navigation** assigns ⌘⌥← / ⌘⌥→ to previous/next recipe.
+You can assign ⌘T to New lookup if you prefer Chrome’s new-tab key. Shortcuts work
+while typing in either lookup surface. The Lookup menu and action hints reflect
+custom bindings. Settings and modal sheets suspend lookup shortcuts so recording,
+editing, and confirmations take priority. Text-editing and reserved app keys cannot
+be reassigned; conflicts are reported without saving. Shortcut changes save immediately.
+
+Previous/next wraps in Configuration order; numbered bindings follow that order,
+and missing positions do nothing. Selecting the current recipe leaves the draft
+intact. Selecting another recipe clears inputs and restores its default preset;
+recipe navigation and New are blocked while a request or launcher submission is active.
+Global Quick Lookup (⌃⌥Space), Settings (⌘,), and panel hiding (Esc / ⌘W) remain fixed.
+New lookup follows [VS Code’s new-item shortcut](https://code.visualstudio.com/shortcuts/keyboard-shortcuts-macos.pdf).
+Numbered and last-item navigation follow [Chrome’s shortcuts](https://support.google.com/chrome/answer/157179).
+
 ## Local data
 
 - Queries/answers: `~/Library/Application Support/EZ/history.jsonl`, owner-only.
 - Credentials, issued client IDs, and host ID: macOS Keychain (`local.ez.app.chatgpt`).
 - Model presets and recipes: owner-only `~/Library/Application Support/EZ/configuration.json`.
+- Keyboard bindings: owner-only `~/Library/Application Support/EZ/shortcuts.json`.
 - Previous model/effort/Fast preferences seed the initial Current preset.
 - Build products: ignored `.build/` and `dist/`; regenerate them with `make app`.
 

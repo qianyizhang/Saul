@@ -3,7 +3,7 @@ import Combine
 import EZCore
 
 @MainActor final class AppModel: ObservableObject {
-    enum SettingsSection { case configuration, account }
+    enum SettingsSection { case configuration, account, shortcuts }
     @Published var settingsSection: SettingsSection = .configuration
     @Published private(set) var configuration = Configuration()
     @Published var selectedRecipeID: UUID?
@@ -27,6 +27,9 @@ import EZCore
     @Published var error: String?
     @Published var storageWarning: String?
     @Published var showSettings = false
+    @Published private(set) var shortcuts = LookupShortcuts()
+    @Published var shortcutSettingsError: String?
+    private var shortcutsLoaded = false
     let directory: URL
     let offline: Bool
     private let auth = ChatGPTAuth()
@@ -75,7 +78,81 @@ import EZCore
                 configurationError =
                     "Configuration could not be loaded. Original file is preserved. \(error.localizedDescription)"
             }
+            do {
+                shortcuts = try LookupShortcutsStore(directory: directory).load()
+                shortcutsLoaded = true
+            } catch {
+                shortcutSettingsError =
+                    "Shortcuts could not be loaded. Using defaults; original file is preserved. \(error.localizedDescription)"
+            }
         } catch { storageWarning = error.localizedDescription }
+    }
+
+    func saveShortcut(_ binding: LookupKeyBinding, for command: LookupCommand) throws {
+        var updated = shortcuts
+        updated.overrides[command.rawValue] = binding
+        try saveShortcuts(updated)
+    }
+
+    func saveShortcuts(_ updated: LookupShortcuts) throws {
+        guard shortcutsLoaded, lock != nil else {
+            throw EZError(
+                "Shortcut storage is unavailable. Restore defaults to replace an unreadable shortcuts file.")
+        }
+        try LookupShortcutsStore(directory: directory).save(updated)
+        shortcuts = updated
+        shortcutSettingsError = nil
+    }
+
+    func restoreShortcuts() throws {
+        guard lock != nil else { throw EZError("Shortcut storage is unavailable.") }
+        let defaults = LookupShortcuts()
+        try LookupShortcutsStore(directory: directory).save(defaults)
+        shortcuts = defaults
+        shortcutsLoaded = true
+        shortcutSettingsError = nil
+    }
+
+    func commandEnabled(_ command: LookupCommand) -> Bool {
+        switch command {
+        case .send: return canSend
+        case .stop: return busy
+        case .newLookup: return !busy && !launcherPending
+        case .nextRecipe, .previousRecipe, .lastRecipe:
+            return !busy && !launcherPending && !configuration.recipes.isEmpty
+        default:
+            return !busy && !launcherPending && command.recipeIndex! < configuration.recipes.count
+        }
+    }
+
+    func performLookupCommand(_ command: LookupCommand) {
+        guard commandEnabled(command) else { return }
+        switch command {
+        case .newLookup: newQuery()
+        case .send: send()
+        case .stop: stop()
+        case .nextRecipe: cycleRecipe(by: 1)
+        case .previousRecipe: cycleRecipe(by: -1)
+        case .lastRecipe: selectRecipe(at: configuration.recipes.count - 1)
+        default: selectRecipe(at: command.recipeIndex!)
+        }
+    }
+
+    func cycleRecipe(by offset: Int) {
+        let recipes = configuration.recipes
+        guard !recipes.isEmpty else { return }
+        let index = replayEntry == nil ? recipes.firstIndex { $0.id == selectedRecipeID } : nil
+        let next =
+            index.map { ($0 + offset + recipes.count) % recipes.count }
+            ?? (offset > 0 ? 0 : recipes.count - 1)
+        selectRecipe(at: next)
+    }
+
+    private func selectRecipe(at index: Int) {
+        guard configuration.recipes.indices.contains(index) else { return }
+        let id = configuration.recipes[index].id
+        guard replayEntry != nil || selectedRecipeID != id else { return }
+        chooseRecipe(id)
     }
     var currentRecipe: Recipe? {
         replayEntry?.recipeSnapshot ?? configuration.recipes.first { $0.id == selectedRecipeID }
@@ -185,7 +262,7 @@ import EZCore
         draftRevision += 1
     }
     func choosePreset(_ id: UUID?) {
-        guard !busy, !launcherPending else { return }
+        guard !busy, !launcherPending, !connecting, !signingIn else { return }
         overridePresetID = id
     }
     func saveConfiguration(_ updated: Configuration) throws {
