@@ -58,7 +58,8 @@ and notarization remain explicit release work in [the release guide](docs/releas
   changing persisted history or Keychain schemas.
 - Dependency additions need a specific reason, license review, pinned resolution,
   and an account of what ships inside the application.
-- GitHub CI is configured but runs only once a remote exists and the repository is pushed.
+- GitHub Actions runs the macOS checks on pushes and pull requests; see
+  [verification](docs/verification.md) for dated results and remaining acceptance gaps.
 
 ## Review priorities
 

@@ -157,34 +157,26 @@ previous lookups are not sent. Local history is plaintext; it is not encrypted b
 
 ## Development
 
-| Command | Purpose |
-| --- | --- |
-| `make build` | Compile the native app |
-| `make test` | Run isolated offline core and app-state checks |
-| `make tools` | Download checksum-pinned development linters |
-| `make hooks` | Install commit and push checks (requires uv) |
-| `make lint` | Swift formatting/correctness, shell, workflow, and plist checks |
-| `make check` | Lint, warnings-as-errors build, complete concurrency checking, offline contracts |
-| `make pre-commit` | Run commit hooks across tracked files |
-| `make pre-push` | Run the full push gate |
-| `make format` | Apply the repository Swift format |
-| `make app` | Build and locally sign `dist/EZ.app` |
-| `make signing-setup` | Pin an existing local code-signing certificate for future builds |
-| `make install` | Build with the pinned certificate and install/upgrade `~/Applications/EZ.app` |
-| `make run` | Build and open the app |
-| `make configuration-preview` | Build editable native configuration preview with disposable offline data |
-| `make surface-preview` | Review compact panel states with disposable offline data |
+```sh
+make tools        # Checksum-pinned development linters
+make hooks        # Install commit/push hooks; requires uv
+make format
+make check        # Lint, strict build, offline core/state and install checks
+make app          # Build and locally sign dist/EZ.app
+```
 
 Inside an agent sandbox that rejects nested SwiftPM sandboxing, prefix commands
-with `EZ_SWIFTPM_DISABLE_SANDBOX=1`. This does not disable the outer sandbox.
-For hooks, install [uv](https://docs.astral.sh/uv/getting-started/installation/)
-(`brew install uv`), then run `make hooks`. Tool downloads and hook environments
-are development-only; the app still has no third-party runtime dependencies.
+with `EZ_SWIFTPM_DISABLE_SANDBOX=1`; this keeps the outer sandbox active.
+After `make clean`, restore linters with `make tools`.
 
-Read [contributor guidance](CONTRIBUTING.md), [architecture](docs/architecture.md),
-[verification](docs/verification.md), [release process](docs/releasing.md), and
-[roadmap](docs/roadmap.md). CI runs offline checks on macOS; it does not log in to
-ChatGPT or spend plan usage. This repository has no third-party runtime dependencies.
+See [contributing](CONTRIBUTING.md) for setup, tool pins, hooks and CI;
+[testing](Tests/README.md) for focused checks;
+[design](docs/design.md) for disposable native previews;
+[architecture](docs/architecture.md) for implementation contracts;
+[verification](docs/verification.md) for evidence and acceptance gaps;
+and [releasing](docs/releasing.md) for signing and distribution.
+Future candidates live in the [roadmap](docs/roadmap.md).
+Development tools add no runtime dependencies to the app.
 
 ## Official integration references
 

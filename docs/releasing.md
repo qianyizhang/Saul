@@ -77,4 +77,4 @@ For distribution:
 
 `EZ_SIGNING_IDENTITY` changes the identity passed to the build script. That alone
 does not implement notarization or make this project distribution-ready. No
-auto-update endpoint, analytics, telemetry service, or remote repository is configured.
+auto-update endpoint, analytics, or telemetry service is configured.
