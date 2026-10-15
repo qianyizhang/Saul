@@ -13,15 +13,35 @@ import Foundation
             try store.append(entry)
             entry.response = "A happy discovery.\n偶然的好运"
             entry.status = "completed"
+            entry.metrics = ResponseMetrics(
+                inputTokens: 20, reasoningTokens: 10, outputTokens: 30, timeToFirstTokenSeconds: 0.4,
+                durationSeconds: 2)
             try store.append(entry)
             let result = try store.load()
             try expect(result.entries.count == 1 && result.damagedLines == 0, "Latest snapshot should win")
             try expect(
                 result.entries[0].query == entry.query && result.entries[0].response == entry.response,
                 "Text must round trip")
+            try expectEqual(result.entries[0].metrics, entry.metrics, "metrics mismatch")
             let attributes = try FileManager.default.attributesOfItem(atPath: store.url.path)
             try expect(
                 (attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600, "History must be owner-only")
+        },
+        CheckCase("history: legacy snapshots without metrics remain readable") { directory in
+            let store = try HistoryStore(directory: directory.appendingPathComponent("legacy"))
+            let entry = HistoryEntry(
+                mode: .ask, query: "legacy", model: "m", effort: "", requestedServiceTier: nil)
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            guard var json = try JSONSerialization.jsonObject(with: encoder.encode(entry)) as? [String: Any]
+            else { throw CheckFailure("Expected history object") }
+            json.removeValue(forKey: "metrics")
+            try JSONSerialization.data(withJSONObject: json).write(to: store.url)
+            let result = try store.load()
+            try expectEqual(result.damagedLines, 0, "damagedLines mismatch")
+            try expect(
+                result.entries.first?.metrics == nil && result.entries.first?.query == "legacy",
+                "Legacy history lost")
         },
         CheckCase("history: damaged tail and interrupted query recovery") { directory in
             let store = try HistoryStore(directory: directory.appendingPathComponent("damaged"))

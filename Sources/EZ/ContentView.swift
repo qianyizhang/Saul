@@ -11,7 +11,7 @@ struct ContentView: View {
         } detail: {
             VStack(spacing: 0) {
                 header
-                Divider()
+                ThinkingDivider(activity: model.selectedResponseActivity)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
                         if let entry = model.selectedEntry {
@@ -33,6 +33,11 @@ struct ContentView: View {
                     banner(error, symbol: "exclamationmark.circle", color: .red) { model.error = nil }
                 }
                 composer
+                if let entry = model.selectedEntry {
+                    Divider()
+                    LookupStatusLine(entry: entry)
+                        .padding(.horizontal, 20).padding(.vertical, 7)
+                }
             }
             .background(Color(nsColor: .textBackgroundColor))
         }
@@ -175,10 +180,8 @@ struct ContentView: View {
             Text(entry.displayQuery).font(AppStyle.subject).textSelection(.enabled)
             Divider()
             if entry.response.isEmpty && entry.status == "pending" {
-                HStack(spacing: 10) {
-                    ProgressView().controlSize(.small)
-                    Text("Finding the words…").foregroundStyle(.secondary)
-                }.padding(.vertical)
+                Text(model.selectedResponseActivity == .thinking ? "Thinking…" : "Waiting for answer…")
+                    .foregroundStyle(.secondary).padding(.vertical)
             } else {
                 Text(
                     (try? AttributedString(

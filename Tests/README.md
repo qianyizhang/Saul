@@ -20,8 +20,9 @@ make test CHECK_ARGS='--reverse'
 make test-install
 ```
 
-`test-install` checks the packaging scripts with disposable app directories and
-mock signing/process tools. It verifies identity selection, rejection before
+`test-install` checks the real build and installation scripts with disposable app
+directories and mock compiler, icon, signing, and process tools. It verifies pinned,
+explicit, and unconfigured signing selection, rejection before
 replacement, copy/rename failures, signal recovery, and previous-bundle retention;
 it does not access personal Keychain items or install an app. `make check` includes
 these checks. Real certificate continuity and native launch are separate checks

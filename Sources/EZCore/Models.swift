@@ -100,6 +100,7 @@ public struct HistoryEntry: Codable, Identifiable, Equatable {
     public var status = "pending"
     public var error: String?
     public var durationSeconds: Double?
+    public var metrics: ResponseMetrics?
     public var recipeSnapshot: Recipe?
     public var presetSnapshot: ModelPreset?
     public var inputValues: [String: String]?

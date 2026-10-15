@@ -6,6 +6,7 @@ import SwiftUI
 @MainActor final class QuickLookupController: ObservableObject {
     @Published private(set) var shortcutError: String?
     @Published private(set) var presentation = 0
+    @Published private(set) var isVisible = false
     @Published var launcherError: String?
     private let model: AppModel
     private var panel: QuickLookupPanel?
@@ -93,6 +94,7 @@ import SwiftUI
                         y: frame.midY - panel.frame.height / 2))
             }
         }
+        isVisible = true
         panel.makeKeyAndOrderFront(nil)
         presentation += 1
     }
@@ -134,6 +136,7 @@ import SwiftUI
     }
 
     func hide() {
+        isVisible = false
         panel?.orderOut(nil)
     }
 

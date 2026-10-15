@@ -8,6 +8,12 @@
 - Scroll selectors directly, shared lookup/recipe keyboard commands, and a Shortcuts
   settings tab with recording, conflict checks, saved overrides, and Chrome navigation.
 
+- Bottom lookup status line with saved token usage, first-text latency, and average
+  response throughput after TTFT; unknown metrics remain unavailable.
+- Yellow waiting/green reasoning activity light without generation spinners, with
+  a stationary Reduce Motion alternative; the light stops permanently once
+  answer/refusal text arrives.
+
 - Native macOS dictionary, spelling check, and quick-answer interface.
 - Direct Sign in with ChatGPT, protected account profiles, and streamed Responses.
 - Account model/effort discovery and capability-dependent Fast requests.

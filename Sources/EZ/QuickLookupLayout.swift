@@ -14,7 +14,7 @@ struct QuickLookupLayout: Equatable {
         max(
             200,
             150 + Self.inputHeight(fieldCount: fieldCount)
-                + (showsNotice ? 98 : 0) + (showsAnswer ? 90 : 0))
+                + (showsNotice ? 98 : 0) + (showsAnswer ? 118 : 0))
     }
     var preferredHeight: CGFloat { minimumHeight + (showsAnswer ? 140 : 0) }
 }

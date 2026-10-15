@@ -26,13 +26,15 @@ private struct SurfacePreviewControls: View {
     @ObservedObject var controller: QuickLookupController
     @State private var scenario = "Empty"
     @State private var dark = false
+    @State private var reduceMotion = false
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Picker("Fixture", selection: $scenario) {
                     ForEach(
                         [
-                            "Empty", "Two inputs", "Many inputs", "Answer", "Streaming", "Blocked",
+                            "Empty", "Two inputs", "Many inputs", "Answer", "Waiting", "Thinking",
+                            "Streaming", "Blocked",
                             "No recipes", "Selector hitboxes",
                         ], id: \.self
                     ) {
@@ -48,10 +50,13 @@ private struct SurfacePreviewControls: View {
                     }
                 }
             }.padding(12)
+            Toggle("Reduce motion (main preview)", isOn: $reduceMotion)
+                .toggleStyle(.checkbox).font(.caption).padding(.bottom, 6)
             Text("Disposable offline data · Send and account actions are blocked")
                 .font(.caption).foregroundStyle(.secondary).padding(.bottom, 8)
             Divider()
             ContentView(model: model)
+                .environment(\.thinkingLightMotionDisabled, reduceMotion)
         }
         .preferredColorScheme(dark ? .dark : .light)
         .onAppear {
@@ -66,6 +71,7 @@ private struct SurfacePreviewControls: View {
 
     private func loadFixture() {
         model.busy = false
+        model.responseActivity = .waiting
         model.launcherPending = false
         model.newQuery()
         model.storageWarning = nil
@@ -106,21 +112,32 @@ private struct SurfacePreviewControls: View {
         model.signedIn = true
         model.planEnabled = true
         model.entries = []
-        if ["Answer", "Streaming", "Blocked"].contains(scenario) {
+        if ["Answer", "Waiting", "Thinking", "Streaming", "Blocked"].contains(scenario) {
             model.query = "Serendipity"
         }
-        if ["Answer", "Streaming", "Blocked"].contains(scenario), let recipe, let preset = model.currentPreset
+        if ["Answer", "Waiting", "Thinking", "Streaming", "Blocked"].contains(scenario), let recipe,
+            let preset = model.currentPreset
         {
             if var entry = try? recipe.prepare(
                 values: model.inputValues, preset: preset, models: model.models)
             {
                 entry.response =
                     "**Serendipity** means finding something valuable or pleasant by chance.\n\nExample: finding a book you love while searching for something else."
-                entry.status = scenario == "Streaming" ? "pending" : "completed"
-                entry.actualServiceTier = scenario == "Streaming" ? nil : "default"
+                let pending = ["Waiting", "Thinking", "Streaming"].contains(scenario)
+                if ["Waiting", "Thinking"].contains(scenario) { entry.response = "" }
+                model.responseActivity =
+                    scenario == "Thinking" ? .thinking : scenario == "Streaming" ? .responding : .waiting
+                entry.status = pending ? "pending" : "completed"
+                entry.actualServiceTier = pending ? nil : "default"
+                entry.metrics = ResponseMetrics(
+                    inputTokens: pending ? nil : 128,
+                    reasoningTokens: pending ? nil : 256,
+                    outputTokens: pending ? nil : 320,
+                    timeToFirstTokenSeconds: ["Waiting", "Thinking"].contains(scenario) ? nil : 0.82,
+                    durationSeconds: pending ? nil : 4.2)
                 model.entries = [entry]
                 model.selection = entry.id
-                model.busy = scenario == "Streaming"
+                model.busy = pending
             }
         }
         if scenario == "Blocked" {

@@ -41,7 +41,7 @@ struct QuickLookupView: View {
                 }.frame(height: 88)
             }
             if let entry = model.selectedEntry {
-                Divider()
+                ThinkingDivider(activity: controller.isVisible ? model.selectedResponseActivity : nil)
                 ScrollView {
                     result(entry).frame(maxWidth: .infinity, alignment: .leading)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -49,6 +49,10 @@ struct QuickLookupView: View {
                 Spacer(minLength: 0)
             }
             footer
+            if let entry = model.selectedEntry {
+                Divider()
+                LookupStatusLine(entry: entry)
+            }
         }
         .padding(14).padding(.top, 10)
         .frame(
@@ -100,10 +104,8 @@ struct QuickLookupView: View {
             .disabled(model.busy || model.launcherPending)
             Spacer()
             if model.launcherPending {
-                ProgressView().controlSize(.small)
                 Text("Preparing…").font(AppStyle.caption).foregroundStyle(.secondary)
             } else if model.busy {
-                ProgressView().controlSize(.small)
                 Button("Stop") { model.stop() }.help(
                     "Stop generating · \(model.shortcuts.binding(for: .stop).display)")
             } else {
@@ -163,7 +165,8 @@ struct QuickLookupView: View {
             Text(entry.displayQuery).font(.system(size: 18, weight: .medium, design: .serif))
                 .lineLimit(2).textSelection(.enabled)
             if entry.response.isEmpty && entry.status == "pending" {
-                Text("Finding the words…").foregroundStyle(.secondary)
+                Text(model.selectedResponseActivity == .thinking ? "Thinking…" : "Waiting for answer…")
+                    .foregroundStyle(.secondary)
             } else {
                 Text(
                     (try? AttributedString(

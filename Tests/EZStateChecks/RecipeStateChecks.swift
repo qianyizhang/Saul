@@ -91,6 +91,25 @@ import Foundation
                 f.model.currentRecipe?.id == f.configuration.recipes.first?.id,
                 "New lookup did not select a remaining recipe")
         },
+        stateCase("thinking light follows only the selected pending lookup while busy") { f in
+            let entry = try f.selectLookup()
+            f.model.responseActivity = .thinking
+            try expect(f.model.selectedResponseActivity == nil, "Idle history showed thinking")
+            f.model.busy = true
+            try expect(f.model.selectedResponseActivity == .thinking, "Active reasoning was hidden")
+            f.model.responseActivity = .responding
+            try expect(
+                f.model.selectedResponseActivity?.showsThinkingLight == false,
+                "Responding kept thinking light")
+            f.model.entries[0].status = "completed"
+            try expect(f.model.selectedResponseActivity == nil, "Completed history showed activity")
+            f.model.entries[0].status = "pending"
+            f.model.selection = UUID()
+            try expect(f.model.selectedResponseActivity == nil, "Missing selection showed activity")
+            f.model.selection = entry.id
+            f.model.busy = false
+            try expect(f.model.selectedResponseActivity == nil, "Stopped lookup showed activity")
+        },
         stateCase("offline model refuses sending despite ready account and valid draft") { f in
             f.model.signedIn = true
             f.model.planEnabled = true

@@ -39,16 +39,47 @@ public struct SSEParser {
     }
 }
 
+/// Transient UI activity; no reasoning content is retained.
+public enum ResponseActivity: Equatable, Sendable {
+    case waiting, thinking, responding, finished
+
+    public var showsThinkingLight: Bool { self == .waiting || self == .thinking }
+}
+
 public struct ResponseAccumulator {
     public private(set) var text = ""
     public private(set) var completed = false
+    public private(set) var activity: ResponseActivity = .waiting
+    public internal(set) var metrics = ResponseMetrics()
     public private(set) var actualServiceTier: String?
     public init() {}
-    public mutating func consume(_ data: Data) throws {
+    public mutating func consume(_ data: Data, elapsedSeconds: Double? = nil) throws {
         guard let event = try JSONSerialization.jsonObject(with: data) as? [String: Any],
             let type = event["type"] as? String
         else { throw EZError("Malformed response event.") }
-        if type == "response.output_text.delta", let delta = event["delta"] as? String { text += delta }
+        if type == "response.output_item.added",
+            let item = event["item"] as? [String: Any], item["type"] as? String == "reasoning",
+            text.isEmpty
+        {
+            activity = .thinking
+        }
+        if ["response.output_text.delta", "response.refusal.delta"].contains(type),
+            let delta = event["delta"] as? String
+        {
+            if !delta.isEmpty && metrics.timeToFirstTokenSeconds == nil {
+                metrics.timeToFirstTokenSeconds = elapsedSeconds
+            }
+            if !delta.isEmpty { activity = .responding }
+            text += delta
+        }
+        if ["response.completed", "response.failed", "response.incomplete", "error"].contains(type) {
+            activity = .finished
+        }
+        if ["response.completed", "response.failed", "response.incomplete"].contains(type) {
+            let response = event["response"] as? [String: Any] ?? [:]
+            if let usage = response["usage"] as? [String: Any] { metrics.recordUsage(usage) }
+            metrics.durationSeconds = elapsedSeconds
+        }
         if type == "response.completed" {
             let response = event["response"] as? [String: Any] ?? [:]
             guard response["status"] as? String == "completed" else {
@@ -117,7 +148,8 @@ public struct ResponseAccumulator {
             entry.requestedServiceTier == "fast" ? "priority" : entry.requestedServiceTier ?? "default"
         return body
     }
-    public func stream(entry: HistoryEntry, token: String, onText: (String) -> Void) async throws
+    public func stream(entry: HistoryEntry, token: String, onUpdate: (ResponseAccumulator) -> Void)
+        async throws
         -> ResponseAccumulator
     {
         var request = URLRequest(url: URL(string: "https://api.openai.com/v1/responses")!)
@@ -126,6 +158,18 @@ public struct ResponseAccumulator {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.httpBody = try JSONSerialization.data(withJSONObject: Self.requestBody(entry: entry))
+        let clock = ContinuousClock()
+        let start = clock.now
+        var result = ResponseAccumulator()
+        func elapsedSeconds() -> Double {
+            let duration = start.duration(to: clock.now).components
+            return Double(duration.seconds) + Double(duration.attoseconds) / 1e18
+        }
+        defer {
+            // Publish partial metrics even when transport, parsing, or cancellation fails.
+            if result.metrics.durationSeconds == nil { result.metrics.durationSeconds = elapsedSeconds() }
+            onUpdate(result)
+        }
         let (bytes, response) = try await session.bytes(for: request)
         guard let response = response as? HTTPURLResponse else { throw EZError("Invalid HTTP response.") }
         guard (200..<300).contains(response.statusCode) else {
@@ -138,19 +182,18 @@ public struct ResponseAccumulator {
         }
         var lines = SSELineDecoder()
         var parser = SSEParser()
-        var result = ResponseAccumulator()
         for try await byte in bytes {
             try Task.checkCancellation()
             guard let line = try lines.feed(byte) else { continue }
             guard let data = parser.feed(line), String(data: data, encoding: .utf8) != "[DONE]" else {
                 continue
             }
-            do { try result.consume(data) } catch let error as APIError {
+            do { try result.consume(data, elapsedSeconds: elapsedSeconds()) } catch let error as APIError {
                 throw APIError(
                     status: response.statusCode, code: error.code, message: error.message,
                     requestID: response.value(forHTTPHeaderField: "x-request-id"))
             }
-            onText(result.text)
+            onUpdate(result)
             if result.completed { break }
         }
         try result.requireCompleted()

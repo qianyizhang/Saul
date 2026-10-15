@@ -6,6 +6,7 @@ fixture=$(mktemp -d "${TMPDIR:-/tmp}/ez-install-check.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
 mkdir -p "$fixture/scripts" "$fixture/bin"
 cp scripts/{signing,configure-signing,install-app}.sh "$fixture/scripts/"
+cp scripts/build-app.sh "$fixture/scripts/build-app-real.sh"
 fingerprint=1111111111111111111111111111111111111111
 cat > "$fixture/scripts/build-app.sh" <<'SH'
 #!/bin/bash
@@ -150,4 +151,54 @@ if EZ_SIGNING_IDENTITY=other bash scripts/configure-signing.sh > result.log 2>&1
 printf 'touch SHOULD_NOT_EXIST\n' > .local/signing-identity
 if bash scripts/configure-signing.sh > result.log 2>&1; then exit 1; fi
 [[ ! -e SHOULD_NOT_EXIST ]]
-printf 'Install checks passed (identity guards, process checks, verification/copy failures, rename/signal recovery, backup, setup safety).\n'
+# Exercise the real packaging entry point as well as the installer's build stub.
+cp scripts/build-app-real.sh scripts/build-app.sh
+mkdir -p Resources
+printf fixture > Resources/Info.plist
+cat > scripts/swift.sh <<'SH'
+#!/bin/bash
+set -eu
+mkdir -p .build/release
+printf fixture > .build/release/EZ
+printf '%s\n' "$PWD/.build/release"
+SH
+cat > "$fixture/bin/swift" <<'SH'
+#!/bin/bash
+exit 0
+SH
+cat > "$fixture/bin/iconutil" <<'SH'
+#!/bin/bash
+printf icon > "$5"
+SH
+cat > "$fixture/bin/codesign" <<'SH'
+#!/bin/bash
+if [[ "$1" == --force ]]; then printf '%s\n' "$3" > .build/signing-used; fi
+if [[ "${EZ_TEST_VERIFY_FAIL:-0}" == 1 ]]; then exit 1; fi
+SH
+chmod +x scripts/swift.sh "$fixture/bin/"*
+
+reset_install
+bash scripts/build-app.sh > result.log
+[[ "$(cat .build/signing-used)" == "$fingerprint" ]]
+EZ_SIGNING_IDENTITY=- bash scripts/build-app.sh > result.log
+[[ "$(cat .build/signing-used)" == - ]]
+rm .local/signing-identity
+bash scripts/build-app.sh > result.log
+[[ "$(cat .build/signing-used)" == - ]]
+
+reset_install
+rm -rf .build
+expect_failure 'is unavailable' 1 env EZ_TEST_MISSING_IDENTITY=1 bash scripts/build-app.sh
+[[ ! -e .build && ! -e dist ]]
+printf invalid > .local/signing-identity
+expect_failure 'Invalid signing fingerprint' 1 bash scripts/build-app.sh
+[[ ! -e .build && ! -e dist ]]
+
+reset_install
+mkdir -p dist/EZ.app
+printf old > dist/EZ.app/marker
+if EZ_TEST_VERIFY_FAIL=1 bash scripts/build-app.sh > result.log 2>&1; then exit 1; fi
+[[ "$(cat dist/EZ.app/marker)" == old ]]
+staging=(dist/.ez-build.*)
+[[ ! -e "${staging[0]}" ]]
+printf 'Install/build checks passed (signing selection, identity guards, process checks, verification/copy failures, rename/signal recovery, backup, setup safety).\n'

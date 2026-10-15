@@ -308,6 +308,141 @@ Pending native acceptance using the newly built `dist/EZ.app`:
   approved execution outside the restricted sandbox and verified the local ad-hoc
   signature of `dist/EZ.app`. The installed app was not replaced.
 
+## Bottom lookup status line — 2026-10-15
+
+- `make format` and `EZ_SWIFTPM_DISABLE_SANDBOX=1 make check` passed:
+  **47 core/support cases and 14 app-state cases**, Swift/shell/plist lint,
+  warnings-as-errors compilation, and native preview typechecking.
+- Added offline coverage for reported usage, zero versus missing counts, malformed
+  usage, reasoning subtraction, first-text timing ignoring metadata/empty deltas,
+  terminal-only answers, incomplete/transport-interrupted streams, finite rates,
+  metrics persistence, and legacy history without metrics. Existing identity,
+  permission, refresh, stream error, and storage-failure cases still pass.
+- Built the disposable `EZ Surface Preview.app` and inspected production views:
+  completed answers in both appearances and both surfaces, the 420-point panel at
+  minimum height, and simulated streaming with unknown counts/rate. The footer
+  stays below the composer/actions while the answer scrolls. Native screenshots
+  remain outside Git; a static screenshot review page is open for annotation.
+- Approved `EZ_SWIFTPM_DISABLE_SANDBOX=1 make app` passed release compilation,
+  icon packaging, and strict local ad-hoc signature verification. The installed
+  personal app was not replaced; personal account/history were not used.
+- Live usage availability, live TTFT/rate, cancellation over a real connection,
+  and dollar cost remain unverified. Cost is shown as unavailable for the existing
+  ChatGPT plan flow, with no API-price estimate or extra network request.
+
+## Thinking divider effect — 2026-10-15
+
+- `make format` and `EZ_SWIFTPM_DISABLE_SANDBOX=1 make check` passed:
+  **48 core/support cases and 15 app-state cases**, including reasoning item
+  transitions, empty/nonempty deltas, interleaved reasoning, terminal failures,
+  and selected/pending/busy activity gates. The unchanged request contract also
+  asserts no `include` payload is requested.
+- The shared native divider uses the existing accent, a smooth 3.2-second
+  back-and-forth light, and a stationary Reduce Motion branch. Hidden Quick
+  Lookup panels remove the animated view. Production views and the disposable
+  Waiting/Thinking/Streaming fixtures compile; the main preview includes a
+  motion-suppression control that composes with the system preference.
+- The offline surface preview built and passed strict local signature verification.
+  Native capture/inspection was blocked by ScreenCaptureKit error **-3811**
+  (audio/video capture failure) when selecting the preview. App inventory remained
+  available, but no unchanged capture/launch retry or substitute browser rendering
+  was used. Motion, light/dark appearance, and Reduce Motion have not been visually
+  accepted for this effect, and no new annotated screenshot was produced.
+- Approved `EZ_SWIFTPM_DISABLE_SANDBOX=1 make app` passed release compilation,
+  icon packaging, and strict local ad-hoc signature verification. The installed
+  personal app was not replaced. Live reasoning-event availability, real-network
+  cancellation, and live inference were not rechecked.
+
+## Finish-work review and local installation — 2026-10-15
+
+- Reviewed the pending status-line/activity slice against HEAD through behavior and
+  repository-fit passes in this session. Unrelated design-review guidance edits
+  were preserved; no commit was requested and nothing was staged or committed.
+- Fixed a supported edge case: `response.refusal.delta` previously left the new
+  activity indicator in thinking and omitted first-visible-text timing. A focused
+  regression failed before the fix, then passed with streamed refusal text,
+  responding activity, TTFT, and terminal refusal replacement verified.
+- Final `make format`, `EZ_SWIFTPM_DISABLE_SANDBOX=1 make check`, and pre-commit
+  checks passed: **49 core/support cases and 15 app-state cases**. The hook runner's
+  package-index access was initially sandbox-blocked; after approved dependency
+  resolution, `UV_OFFLINE=1 EZ_SWIFTPM_DISABLE_SANDBOX=1 make pre-commit` also passed
+  inside the ordinary sandbox. Approved `make app` built and verified the signed
+  release bundle after the fix. The changelog now records this slice.
+- Native capture succeeded after reading the running preview's accessibility tree
+  without another launch. Inspected light/dark thinking, moving light at separate
+  positions in Quick Lookup, the compact width, stationary Reduce Motion in the
+  main preview, and removal of the light when the fixture streams text. Native
+  screenshots are outside Git. This supersedes the earlier capture blocker for
+  those preview checks; actual system Reduce Motion and live reasoning remain
+  separate acceptance checks.
+- Quit the idle installed app, staged and signature-verified the reviewed bundle,
+  then installed it at `~/Applications/EZ.app`. Preserved the previous bundle at
+  `~/Applications/.ez-upgrade-ikqiyg8c/previous.app`. The installed executable's
+  SHA-256 matched the reviewed build; history/configuration hashes were identical
+  before installation and after launch. All **20 saved lookups** reloaded and the
+  new footer appeared on legacy history with unknown metrics. Account restoration
+  was still showing Connecting during inspection; no live request was sent.
+- Account restoration subsequently completed: the installed app reported ChatGPT
+  connected and loaded its model display. This establishes restoration/catalog
+  access only; live inference was deliberately left for the user's test.
+
+## Activity and throughput refinement — 2026-10-15
+
+- Removed generation/preparation spinners from the lookup surfaces. The divider
+  starts native yellow while waiting, transitions to green on a reasoning-item
+  event, and stays green until nonempty answer/refusal text arrives. Once visible
+  text starts, later reasoning items cannot restart the light. Pending text labels
+  distinguish waiting from confirmed thinking. Reduce Motion still suppresses
+  travel and color animation.
+- Response throughput now uses **(output tokens − reasoning tokens) ÷ (stream
+  seconds − TTFT)**. Missing counts/TTFT, invalid timing, and nonpositive intervals
+  remain unknown. Regression checks cover a 10-second TTFT followed by 50 response
+  tokens in one second (50 tok/s), terminal/incomplete streams, interleaved
+  reasoning after text, invalid durations, and reported zero.
+- Removed the cost field. Reviewed official direct-flow Accounts and sessions,
+  Preview limitations, errors/recovery, and rate-limit guidance: the documented
+  plan/credit usage destination is ChatGPT Settings → Usage. No per-response plan
+  quota percentage was established; generic API token rate-limit headers are not
+  presented as plan allowance. The existing Settings Manage usage link remains.
+- Final `make format`, sandboxed `make check`, pre-commit checks, and approved
+  `make app` passed: **50 core/support cases and 15 app-state cases**, plus lint,
+  preview typechecking, release packaging, and strict local signature verification.
+- Rebuilt the native offline preview and inspected yellow waiting, green thinking,
+  no generation spinner in either surface, no cost field, and a quiet streaming
+  panel at compact width. Startup capture again returned ScreenCaptureKit -3811;
+  reading accessibility state on the running app recovered capture without an
+  unchanged relaunch. Native screenshots remain outside Git. Color-event
+  detection and permanent light shutdown are covered by parser regressions;
+  actual system Reduce Motion and a new live stream were not exercised here.
+- Updated `~/Applications/EZ.app`, retaining the previous build at
+  `~/Applications/.ez-upgrade-we798kog/previous.app`. Executable identity matched
+  the reviewed build, all **24 saved lookups** restored, and history/configuration
+  hashes stayed unchanged after launch. An existing real lookup now displays
+  **51.4 tok/s** rather than **9.3 tok/s**, using the same stored usage/timings with
+  the new formula. No new live request was sent. Changes remain uncommitted.
+
+## Final status-line review — 2026-10-15
+
+- Reviewed all pending changes against `c84ceed` through behavior and repository-fit
+  passes. Restored the existing build script's pinned-signing resolution: the pending
+  version bypassed it and defaulted to ad-hoc signing. A disposable check against the
+  real packaging entry point failed on that fallback before the fix and passed after.
+  It also verifies explicit/unconfigured signing, rejection of missing or invalid
+  pins before compilation, and preservation of the previous bundle on signing failure.
+- `make format` and sandboxed `EZ_SWIFTPM_DISABLE_SANDBOX=1 make check` passed:
+  **53 core/support checks and 19 app-state checks**, lint, install/build fixtures,
+  warnings-as-errors compilation, and native preview typechecking.
+- Approved `make app` rebuilt the release bundle using the configured signing path
+  and passed strict signature verification. Rebuilt the disposable surface preview;
+  native inspection covered light main-window thinking and dark minimum-size Quick
+  Lookup thinking with visible footer/actions. ScreenCaptureKit initially returned
+  **-3811**; accessibility inspection recovered capture without relaunching. Hiding
+  the panel later invalidated that capture target (**-3812**), ending this inspection.
+- Earlier native/live evidence above remains separate. This review did not install
+  the new bundle, use personal lookup data, send a live request, or exercise the
+  actual system Reduce Motion setting. The stale README statement that no remote
+  was configured was removed after checking Git's current configuration.
+
 ## Hover selectors and configurable shortcuts — 2026-10-15
 
 - Added Settings → Shortcuts for New/Send/Stop, ordered Previous/Next recipe,

@@ -88,6 +88,35 @@ See [local signing and installation](releasing.md#local-signing-and-installation
 History entries carry `schemaVersion: 1` and UUID identity. Append before sending;
 append again on completion, interruption, or failure. Retain partial visible text
 on cancellation. Record requested and, when returned, actual service tier separately.
+Optional response metrics retain server-reported input/output/reasoning counts and
+client-observed stream timing; older history remains readable with unknown metrics.
+Both surfaces pin a compact status line below the composer/actions for the selected
+lookup. Response tokens mean output minus reasoning and can include non-visible
+formatting tokens. Missing reasoning is unknown, not zero. TTFT uses a monotonic
+clock from HTTP request start (after auth) to the first nonempty answer/refusal text delta;
+metadata/empty events and a terminal-only answer do not establish TTFT. Tokens/s
+is non-reasoning response tokens divided by (HTTP stream duration through the
+terminal event minus TTFT). The interval begins with first visible answer/refusal
+text, excluding initial waiting/thinking. Missing usage/TTFT or an invalid interval
+leaves speed unknown. Partial/failing streams retain observed timing and any
+terminal usage without becoming successful.
+Cost is omitted. Official direct-flow guidance points to ChatGPT Settings → Usage
+for allowance/credits; it does not document a quota percentage in each response.
+API rate-limit token headers are not treated as ChatGPT plan allowance. The existing
+Settings Manage usage link is the supported path; no extra request is added.
+See [official usage guidance](https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions#tracking-usage).
+A transient response activity follows the first reasoning `response.output_item.added`
+event and nonempty answer/refusal text deltas. The divider starts yellow while
+waiting, becomes green on a reasoning-item event, and stays green until text arrives.
+The light stops permanently for that lookup when visible text starts, even if later
+reasoning items arrive. Terminal events/cancellation/failure also stop it. No
+reasoning payload is requested, retained, or added to history. Before a reasoning
+event, the UI labels activity as waiting rather than confirmed thinking. Reduce
+Motion uses a stationary light; hidden panels remove the timeline. Generation uses
+text status and the divider light without a second spinner.
+See [Responses usage](https://developers.openai.com/api/reference/resources/responses)
+and [output counting](https://developers.openai.com/api/docs/guides/token-counting).
+
 Loading keeps the last valid entry for each ID. Invalid lines are counted and
 preserved. A missing final newline is separated before appending the next record.
 Reads, appends, and deletions use a stable `history.lock` sidecar with `flock`;

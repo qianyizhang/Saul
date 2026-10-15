@@ -26,7 +26,11 @@ Keychain prompts. The previous installed bundle is retained for rollback.
 
 In EZ, open **Settings → Account & history → Continue with ChatGPT**, finish sign-in
 in your browser, and allow ChatGPT plan usage. Choose a recipe, fill its inputs,
-then press **⌘ Return**. **⌘ N** starts a new lookup and **⌘ .** stops generation.
+then press **⌘ Return**. A small bottom status line in both windows shows the
+selected lookup's input, thinking, and response tokens, TTFT, and average response
+tokens/s after TTFT. Hover for definitions; missing values show a dash. Check
+Settings → Manage usage for ChatGPT plan allowance. Metrics are saved with new
+lookups; older history has no metrics. **⌘ N** starts a new lookup and **⌘ .** stops generation.
 You can copy answers, export Markdown, and search previous lookups. To delete a
 lookup, use **Delete lookup** below its answer or right-click its history row, then
 confirm. Deletion removes its saved snapshots from this Mac and cannot be undone;
@@ -189,5 +193,5 @@ ChatGPT or spend plan usage. This repository has no third-party runtime dependen
 - [Models and Responses](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)
 - [Preview constraints](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)
 
-This is a local personal project. No distribution license or remote repository
-has been selected. A release for other people requires the steps in the release guide.
+This is a local personal project. No distribution license has been selected.
+A release for other people requires the steps in the release guide.

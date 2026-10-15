@@ -38,8 +38,12 @@ The [surface contract](surfaces.md) governs which controls belong in each surfac
 
 The initial adoption also makes answer metadata and composer hints readable at the
 shared caption size. Quick Lookup uses the shared accent and a compact recipe-first
-layout. Motion guidance includes
-reduced motion; richer VFX are future work.
+layout. The answer boundary shows a yellow light while waiting and transitions to
+green on a reasoning-item event: a smooth 3.2-second round trip, at most 84 points wide, with a 2-point core and 3-point glow.
+Reduce Motion replaces travel with a stationary light. The effect occupies the
+existing divider and stops permanently once answer/refusal text arrives, or when
+the lookup terminates; generation spinners are omitted. Hidden Quick Lookup panels remove the animated view. These are EZ-specific motion values,
+implemented in `ThinkingDivider`, using the shared accent role.
 
 Lookup dropdowns use stable-width native popup buttons with the entire control
 available for click and hover scrolling, independent of title length. The compact

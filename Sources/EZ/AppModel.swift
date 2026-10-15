@@ -23,6 +23,7 @@ import EZCore
     @Published var accountID = ""
     @Published var signingIn = false
     @Published var busy = false
+    @Published var responseActivity: ResponseActivity = .waiting
     @Published var launcherPending = false
     @Published var error: String?
     @Published var storageWarning: String?
@@ -192,6 +193,11 @@ import EZCore
     }
     var currentModel: ModelOption? { models.first { $0.model == selectedModel } }
     var selectedEntry: HistoryEntry? { entries.first { $0.id == selection } }
+    var selectedResponseActivity: ResponseActivity? {
+        guard busy, let entry = selectedEntry, entry.status == "pending" else { return nil }
+        if let active, active.id != entry.id { return nil }
+        return responseActivity
+    }
     var filteredEntries: [HistoryEntry] {
         search.isEmpty
             ? entries
@@ -365,14 +371,17 @@ import EZCore
         active = entry
         entries.insert(entry, at: 0)
         selection = entry.id
+        responseActivity = .waiting
         busy = true
         requestTask = Task {
             do {
                 let token = try await auth.accessToken()
                 try Task.checkCancellation()
-                let result = try await responses.stream(entry: entry, token: token) { text in
+                let result = try await responses.stream(entry: entry, token: token) { progress in
                     guard self.active?.id == entry.id else { return }
-                    self.active?.response = text
+                    self.active?.response = progress.text
+                    self.active?.metrics = progress.metrics
+                    self.responseActivity = progress.activity
                     if let active = self.active,
                         let index = self.entries.firstIndex(where: { $0.id == active.id })
                     {
@@ -471,6 +480,7 @@ import EZCore
         }
         if let message { error = message }
         active = nil
+        responseActivity = .finished
         busy = false
         requestTask = nil
     }
