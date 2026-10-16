@@ -6,7 +6,6 @@ in [verification](verification.md).
 
 ## Candidates, not commitments
 
-- Selected-text Services integration, with explicit pasteboard behavior.
 - Spotlight query entry alongside the existing Raycast integration.
 - Language preferences and optional richer recipe field rules.
 - Bulk history deletion, retention controls, and larger-history indexing.

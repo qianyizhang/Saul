@@ -13,6 +13,6 @@ Canonical responsibilities for the two lookup surfaces. Names are defined in
 - **Compact presentation:** Grow for inputs/results/notices; scroll long content and keep Send/Stop reachable. Show the preset and requested speed; reveal exact choices and the answer's actual tier on demand.
 - **Lifecycle:** Ordinary opening never submits. Esc/⌘ W hide without cancelling; ⌘ . stops; ⌘ N starts fresh when idle. Closing the main window leaves menu-bar access; Quit exits.
 - **Keyboard and wheel:** Both lookup surfaces share configurable New/Send/Stop and recipe navigation in Settings → Shortcuts. Wheel changes native selectors without opening them; compact preset selectors also scroll. Defaults above remain the initial bindings.
-- **Entry points:** Menu bar and Raycast are access routes. Raycast fills the first input: one-field recipes submit; multi-field recipes wait for completion and explicit Send.
+- **Entry points:** Menu bar, Raycast, and macOS Services are access routes. Raycast fills the first input: one-field recipes submit; multi-field recipes wait for completion and explicit Send. **Look Up in EZ** fills the first input from the Services pasteboard and always waits for Send; existing drafts, active work, and open Settings reject the incoming selection without mutation.
 
 Future features must declare which surface owns them and preserve these shared-state and request boundaries. Conversation follow-ups remain a separate planned feature.

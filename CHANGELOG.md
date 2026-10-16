@@ -2,6 +2,9 @@
 
 ## 0.1.0 — Unreleased
 
+- Look Up in EZ macOS Service fills a draft from selected text without sending or
+  changing the clipboard; existing drafts and active work are protected.
+
 - Reading-focused answers with an optional draft composer, quieter request details,
   stable input hints, visible keyboard focus in long forms, and empty-search recovery.
 - Configuration edits survive Settings section changes and require an explicit

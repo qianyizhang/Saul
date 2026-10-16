@@ -83,6 +83,32 @@ demand, while response metrics remain pinned. Input validation uses a fixed-heig
 hint, and both surfaces scroll keyboard-focused inputs into view.
 See [native regression journeys](ui-qa.md) for UI acceptance boundaries.
 
+## Selected-text Services
+
+`NSServices` advertises **Look Up in EZ** as a plain-text input service with no
+return types. `EZAppDelegate` retains a `SelectedTextService` and registers it as
+`NSApp.servicesProvider` after the lookup controller is ready. The Objective-C
+`lookupSelectedText:userData:error:` callback reads only the supplied Services
+pasteboard and synchronously prepares a draft before showing Quick Lookup. It
+does not access the general clipboard, modify the source selection, send, await
+authentication, or queue a submission. Callback failures use the Services error
+pointer so the source app can report rejection.
+
+`AppModel.prepareSelectedText` validates nonblank input and the 16,384 UTF-8-byte
+limit before mutating the workspace. A running request, pending launcher, sign-in,
+open Settings, or any nonempty draft input rejects the selection without mutation.
+Unavailable configuration reports its load/storage error; an empty configuration
+asks the user to add a recipe.
+Otherwise it starts a new lookup using the selected configured recipe (or the first
+remaining recipe after a historical recipe was removed), resets preset overrides,
+and fills only the first field. Sending remains explicit for every recipe. No
+history is written until Send. Signed-out and catalog-loading states can hold the
+draft; ordinary send checks still apply. Cold Services launch may show the main
+window as well as Quick Lookup; the Raycast-only presentation flag is unchanged.
+
+This follows Apple's [Services provider contract](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/SysServices/Articles/providing.html).
+Registration and a direct callback check do not establish cross-app menu delivery.
+
 ## Local packaging identity
 
 Local signing setup pins an existing code-signing certificate fingerprint in
@@ -94,7 +120,10 @@ rejects a different override. Installation requires EZ to be stopped, verifies
 the staged bundle's certificate/identifier and the previous same-certificate
 build's identity requirement, then replaces `~/Applications/EZ.app` while retaining
 the old bundle for rollback. It does not alter authentication or local app data.
-Self-signing establishes update identity, not Developer ID or notarization.
+Self-signing establishes update identity, not prompt-free Keychain upgrades,
+Developer ID, or notarization. The credential item's separate partition policy
+uses `cdhash:` for this signing class and can prompt again when the code changes;
+see the [Keychain diagnosis](keychain.md#why-a-rebuild-can-ask-again).
 See [local signing and installation](releasing.md#local-signing-and-installation).
 
 ## Persistence contract
@@ -190,8 +219,9 @@ directly; the adjacent information button opens the shared `RequestDetails` popo
 The main-window `RequestControls` uses that same details view without duplicating
 selectors. The popover separates next-request choices from the displayed answer's recorded choices and actual service tier.
 Configuration/account actions and history open the main window. Text enters through
-typing, explicit paste, or the explicit launcher
-submission below; EZ does not read selected text or poll the pasteboard. Ordinary
+typing, explicit paste, the selected-text Service above, or the explicit launcher
+submission below. The Service reads only its supplied pasteboard when invoked;
+EZ does not monitor selections or poll the clipboard. Ordinary
 panel opening never sends a query. Hiding the panel does not clear the system
 clipboard. No new history format or inference service is added.
 

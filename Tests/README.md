@@ -18,6 +18,7 @@ make test-state CHECK_ARGS='--filter "deletion"'
 make test-core CHECK_ARGS='--list'
 make test CHECK_ARGS='--reverse'
 make test-install
+make test-services  # Host-native callback/pasteboard checks, separate from the offline gate
 ```
 
 `test-install` checks the real build and installation scripts with disposable app
@@ -65,3 +66,11 @@ those remain separate acceptance checks in `docs/verification.md`.
 Native layout and keyboard regression journeys are maintained in
 [docs/ui-qa.md](../docs/ui-qa.md). They run against the disposable surface preview,
 using actual production views; they are separate from this offline executable suite.
+
+`make test-services` checks the Services plist/Objective-C selector and exercises
+the production callback with private named pasteboards and a disposable offline
+AppModel. It checks Unicode delivery, no automatic submission, unchanged source
+pasteboard and clipboard change counts, and reported errors. It needs access to
+the macOS pasteboard server; request specific approved execution if the outer
+agent sandbox blocks it. It does not launch EZ, read clipboard contents, or prove
+Services menu discovery, cold launch, focus return, or live inference.

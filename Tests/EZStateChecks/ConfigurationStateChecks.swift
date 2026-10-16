@@ -11,6 +11,13 @@ import Foundation
             let model = AppModel(historyDirectory: directory, offline: true)
             defer { model.shutdown() }
             try expect(model.configurationError != nil && !model.canSend, "Corruption silently reset")
+            let revision = model.draftRevision
+            try expectThrows(EZError.self, matching: { $0.message == model.configurationError }) {
+                try model.prepareSelectedText("synthetic selection")
+            }
+            try expect(
+                model.inputValues.isEmpty && model.draftRevision == revision && !model.launcherPending,
+                "Rejected selection changed the workspace")
             try expectThrows(
                 EZError.self, matching: { $0.message.contains("Configuration cannot be changed") }
             ) {

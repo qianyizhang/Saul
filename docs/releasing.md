@@ -54,10 +54,13 @@ back, quit EZ and move `previous.app` back to `~/Applications/EZ.app`, retaining
 newer bundle elsewhere if desired. Installation does not launch EZ or change
 credentials, history, or other app data.
 
-The first switch from ad-hoc to certificate signing can still prompt for EZ's
-Keychain item. Choose **Always Allow** if you want remembered access. Later builds
-signed with the same identity should preserve that recognition; this does not
-guarantee the absence of all macOS prompts or ChatGPT reauthentication.
+Certificate continuity does not establish prompt-free Keychain access. The Oct 16
+upgrade preserved the exact designated requirement but still prompted: the
+credential item's additional partition policy was tied to the executable's code
+hash. **Always Allow** can remember current access without authorizing a future
+changed hash. See the [diagnosis](keychain.md#why-a-rebuild-can-ask-again).
+Apple-issued developer signing with a stable Team ID is a separate setup and must
+be tested with a changed-build upgrade before claiming prompt-free continuity.
 
 Self-signing supports personal use and app identity continuity. It does not provide
 Developer ID, notarization, or App Store approval. Another Mac may need manual

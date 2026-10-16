@@ -21,8 +21,10 @@ open dist/EZ.app
 For a persistent installation at `~/Applications/EZ.app`, follow the one-time
 [local signing setup](docs/releasing.md#local-signing-and-installation), run
 `make signing-setup`, quit EZ, then run `make install`. Future upgrades use
-`make install` and reuse the pinned signing identity, reducing rebuild-related
-Keychain prompts. The previous installed bundle is retained for rollback.
+`make install` and reuse the pinned signing identity. This preserves app identity;
+self-signing alone does not prevent Keychain prompts after upgrades. See
+[the Keychain limitation](docs/keychain.md#why-a-rebuild-can-ask-again).
+The previous installed bundle is retained for rollback.
 
 In EZ, open **Settings → Account & history → Continue with ChatGPT**, finish sign-in
 in your browser, and allow ChatGPT plan usage. Choose a recipe, fill its inputs,
@@ -85,6 +87,29 @@ uses OAuth with explicit `chatgpt.tokens.use.direct` permission, then
 Fast requests priority service only when advertised by the model catalog; it can
 consume more allowance and is not a guarantee of latency. Use **Manage usage** in
 settings to inspect your app allowance. No fallback API billing is configured.
+
+### Look up selected text
+
+Select text in another Mac app, then choose **Services → Look Up in EZ** from
+that app's menu (or its selection's contextual menu, when offered). EZ opens
+Quick Lookup and fills the selected recipe's first input. Complete any remaining
+fields and press **⌘ Return** to Send. Invoking the service never submits a request,
+including after sign-in. It uses the recipe's default preset; normal unavailable
+model/account/storage checks still apply when you Send.
+
+The service reads the selection's dedicated Services pasteboard. It does not read
+or change your clipboard, replace the source selection, or require Accessibility
+permission. It accepts nonblank text up to 16,384 UTF-8 bytes and preserves its
+spacing and Unicode. Existing drafts, active requests, sign-in, and open EZ Settings
+are preserved: finish active work, choose **New lookup** to clear any draft, and close
+Settings before invoking the service again. Sending retains the draft inputs.
+No incoming selection is queued for later.
+
+Install with `make install`, then open the installed EZ once to register the service.
+If it is hidden, enable **Look Up in EZ** under **System Settings → Keyboard →
+Keyboard Shortcuts → Services → Text**; a custom Services shortcut can be assigned
+there. Availability depends on the source app exposing selected text to Services.
+A cold start may also show EZ's main window.
 
 ## Configure presets and recipes
 

@@ -291,6 +291,38 @@ import EZCore
             inputValues = inputValues.filter { inputFields.contains($0.key) }
         }
     }
+    func prepareSelectedText(_ text: String) throws {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            text.utf8.count <= 16_384
+        else {
+            throw EZError("Select 1–16,384 UTF-8 bytes of text for EZ.")
+        }
+        guard !busy, !launcherPending, !signingIn else {
+            throw EZError(
+                "EZ is already preparing a lookup, generating an answer, or signing in. Try again when it finishes."
+            )
+        }
+        guard !showSettings else {
+            throw EZError("Close EZ Settings before looking up selected text.")
+        }
+        guard inputValues.values.allSatisfy({ $0.isEmpty }) else {
+            throw EZError(
+                "EZ has a draft. Finish it, then choose New lookup before looking up selected text.")
+        }
+        guard configurationLoaded else {
+            throw EZError(configurationError ?? storageWarning ?? "Configuration is unavailable.")
+        }
+        // Validate everything before clearing a selection or changing the workspace.
+        let recipe = configuration.recipes.first { $0.id == selectedRecipeID } ?? configuration.recipes.first
+        guard let recipe else {
+            throw EZError("Add a recipe in EZ Configuration before looking up selected text.")
+        }
+        let prepared = try configuration.preparingLauncherInput(text, recipeID: recipe.id)
+        newQuery()
+        inputValues = prepared.values
+        // Services prepares only a draft, even for single-field recipes and after sign-in.
+    }
+
     func prepareLauncher(_ text: String) throws -> Bool {
         guard !busy, !launcherPending, !signingIn else {
             throw EZError("EZ is already preparing or generating a lookup.")

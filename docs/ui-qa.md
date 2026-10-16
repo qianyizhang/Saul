@@ -38,6 +38,27 @@ capture error after a window closes/hides, rebind the visible main window; do no
 assume the action failed or repeatedly capture a stale window. Use current element
 indices from each fresh accessibility tree, never a checked-in list of AX indices.
 
+## Installed selected-text journey
+
+Use the installed `~/Applications/EZ.app`, after quitting any other EZ build.
+In TextEdit, create an unsaved document containing synthetic Unicode/multiline
+text. Select it and choose **TextEdit → Services → Look Up in EZ**. If hidden,
+enable the service in System Settings → Keyboard → Keyboard Shortcuts → Services.
+
+- With an empty EZ draft, verify Quick Lookup contains the exact selection in the
+  recipe's first field and does not send. Check both single- and multi-field recipes.
+- Verify the source selection and clipboard remain unchanged. Use only a synthetic
+  clipboard sentinel for this manual journey. Escape should return focus to the source app.
+- Invoke again with the populated draft, during generation, and while EZ Settings
+  has an unsaved configuration edit. Each rejection must preserve that work.
+- Repeat with EZ stopped to check cold delivery; the main window may also appear.
+  Check signed-out delivery separately: the draft must never send after sign-in.
+- Press Send explicitly on a synthetic selection, check terminal completion and
+  saved metrics, then restart to check history/account restoration.
+
+`make test-services` exercises the callback with disposable pasteboards; it does
+not substitute for the installed cross-app journey above.
+
 ## Evidence
 
 Dated results and remaining gaps live in [verification](verification.md). Keep

@@ -51,10 +51,28 @@ For personal use, create a persistent self-signed code-signing identity, pin it
 with `make signing-setup`, and use `make install` for upgrades. Configured builds
 reuse that certificate; a missing identity stops installation rather than silently
 switching to ad-hoc signing. See [local signing setup](releasing.md#local-signing-and-installation).
-The initial transition may ask once more; **Always Allow** remembers access for
-the recognized app. A stable identity helps macOS recognize updates, but cannot
-guarantee the absence of all Keychain prompts or actual ChatGPT reauthentication.
-See Apple's [code-signing and Keychain requirements](https://developer.apple.com/library/archive/technotes/tn2206/).
+This establishes a stable designated requirement, but it does **not** establish
+prompt-free Keychain upgrades. The file-based Keychain also enforces a partition
+policy. Apple's Security implementation uses a stable `teamid:` partition for
+recognized Apple-issued developer signing and falls back to `cdhash:` for other
+signed code, including this self-signed build. A changed binary has a changed code
+hash even when its certificate and designated requirement stay the same.
+
+The Oct 16 installed upgrade reproduced a prompt. Read-only metadata inspection of
+EZ's single item found a `cdhash:` partition matching the new executable and five
+trusted-app records, including the installed path. The previous executable used
+the same certificate/designated requirement but a different code hash. This
+explains why a remembered app entry alone is insufficient here; **Always Allow**
+does not establish recognition of future changed hashes. No item permissions or
+credentials were changed during the inspection.
+
+Apple-issued development or Developer ID signing with a stable Team ID is the
+appropriate route to test for prompt-free upgrades. It is a separate signing setup,
+not implemented by the local self-signed certificate. Do not remove partition
+checks or allow all applications to work around this behavior. A same-build restart
+and a changed-build upgrade are separate acceptance checks.
+See Apple's [code-signing and Keychain requirements](https://developer.apple.com/library/archive/technotes/tn2206/)
+and [partition selection implementation](https://github.com/apple-oss-distributions/Security/blob/main/securityd/src/clientid.cpp).
 
 ## History and sign-out
 

@@ -24,12 +24,19 @@ import SwiftUI
 @MainActor final class EZAppDelegate: NSObject, NSApplicationDelegate {
     let model = AppModel()
     lazy var quickLookup = QuickLookupController(model: model)
+    private lazy var selectedTextService = SelectedTextService { [unowned self] text in
+        try model.prepareSelectedText(text)
+        quickLookup.launcherError = nil
+        quickLookup.show()
+    }
     private var connectionTask: Task<Void, Never>?
     private var launcherTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         quickLookup.start()
         _ = connectOnce()
+        NSApp.servicesProvider = selectedTextService
+        NSUpdateDynamicServices()
     }
 
     private func connectOnce() -> Task<Void, Never> {
