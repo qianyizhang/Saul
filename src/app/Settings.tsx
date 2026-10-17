@@ -6,6 +6,7 @@ import type { UserSettings } from '../types';
 import { useSettingsDraft } from './useSettingsDraft';
 import { useProviderTest } from './useProviderTest';
 import { NotificationSettings } from './NotificationSettings';
+import { CHROME_AI_ENABLED, CHROME_AI_DISABLED_MESSAGE } from '../models/chrome-ai';
 
 const presets = [
   { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
@@ -23,7 +24,7 @@ function origin(url: string) {
 export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
   const draft = useSettingsDraft(onDirty);
   const { settings, loaded, dirty, saved, saving, profilesWithCurrent, save } = draft;
-  const providerTest = useProviderTest();
+  const providerTest = useProviderTest(settings.activeProvider);
   const { testing, notice, availability } = providerTest;
   const error = draft.error || providerTest.error;
   const [visibleKey, setVisibleKey] = useState(false);
@@ -41,7 +42,7 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
       p = profiles.find((p) => p.id === id);
     if (p) update({ profiles, activeProfileId: id, openaiCompatible: p.config });
   }
-  const test = (mode: 'endpoint' | 'generation') => providerTest.test(mode, settings);
+  const test = (mode: 'endpoint' | 'generation' | 'prepare') => providerTest.test(mode, settings);
   if (!loaded)
     return error ? (
       <div className="stack settings-layout">
@@ -84,7 +85,9 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
             >
               <option value="openai-compatible">OpenAI compatible</option>
               <option value="chatgpt-plan">ChatGPT plan</option>
-              <option value="chrome-ai">Chrome on-device AI</option>
+              <option value="chrome-ai" disabled={!CHROME_AI_ENABLED}>
+                Chrome on-device AI{CHROME_AI_ENABLED ? '' : ' (temporarily disabled)'}
+              </option>
             </select>
           </label>
           {settings.activeProvider === 'chatgpt-plan' ? (
@@ -96,14 +99,67 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
               testing={testing}
             />
           ) : settings.activeProvider === 'chrome-ai' ? (
-            <div className="stack">
-              <p className="muted">
-                Availability: {availability}. On-device setup may require a model download.
-              </p>
-              <button className="btn" disabled={testing} onClick={() => test('generation')}>
-                Prepare on-device model
-              </button>
-            </div>
+            !CHROME_AI_ENABLED ? (
+              <p className="notice">{CHROME_AI_DISABLED_MESSAGE}</p>
+            ) : (
+              <div className="stack">
+                <p className="muted">
+                  Chrome's built-in Gemini Nano runs locally after a separate model download.
+                </p>
+                <p className="small" role="status">
+                  Availability: {availability}.
+                </p>
+                {availability === 'unavailable' && (
+                  <p className="notice">
+                    Chrome reports that the model is unavailable. Open chrome://on-device-internals
+                    in Chrome to check model eligibility and download errors. Preparing cannot
+                    override browser or administrator restrictions.
+                  </p>
+                )}
+                {availability === 'unsupported' && (
+                  <p className="notice">
+                    This browser does not expose the Chrome Prompt API. Update Google Chrome and
+                    check its built-in AI support.
+                  </p>
+                )}
+                <div className="row">
+                  <button
+                    className="btn"
+                    disabled={testing}
+                    onClick={() => void providerTest.refreshAvailability()}
+                  >
+                    Check availability
+                  </button>
+                  <button
+                    className="btn"
+                    disabled={
+                      testing || availability === 'unsupported' || availability === 'unavailable'
+                    }
+                    onClick={() => test('prepare')}
+                  >
+                    Prepare on-device model
+                  </button>
+                  <button
+                    className="btn"
+                    disabled={testing || availability !== 'available'}
+                    onClick={() => test('generation')}
+                  >
+                    Test generation
+                  </button>
+                </div>
+                <p className="small muted">
+                  Preparation checks readiness. Test generation verifies that the model returns
+                  text. Use the full workspace to keep setup open during a download.
+                </p>
+                <a
+                  href="https://developer.chrome.com/docs/ai/prompt-api#hardware-requirements"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Chrome model requirements
+                </a>
+              </div>
+            )
           ) : (
             <>
               <div className="row">
@@ -250,9 +306,7 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
         {testing && (
           <div className="row">
             <span role="status" className="small muted">
-              {settings.activeProvider === 'chrome-ai'
-                ? 'Preparing on-device model…'
-                : 'Testing provider…'}
+              {providerTest.preparing ? 'Preparing on-device model…' : 'Testing provider…'}
             </span>
             <button className="btn" onClick={providerTest.stop}>
               Stop test

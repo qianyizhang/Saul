@@ -51,6 +51,7 @@ export class PlanAuth {
           : `ChatGPT token request failed (HTTP ${response.status}). Try again later.`,
       );
       error.terminalRefresh = terminalRefresh.has(code);
+      error.oauthCode = code;
       throw error;
     }
     return body;
@@ -186,6 +187,15 @@ export class PlanAuth {
               throw new Error('ChatGPT returned a different or missing client registration.');
             const code = callback.searchParams.get('code');
             if (!code) throw new Error('ChatGPT did not return an authorization code.');
+            // Registration succeeds before token exchange. Keep the issued ID
+            // even if exchange fails so retry does not create another app.
+            await this.store.locked((data) => {
+              combined.throwIfAborted();
+              if (!data.accounts.some((a) => a.clientId === clientId)) {
+                data.accounts.push({ clientId });
+                this.store.write(data);
+              }
+            });
             const body = await this.tokenRequest(
               {
                 grant_type: 'authorization_code',
@@ -199,7 +209,7 @@ export class PlanAuth {
             if (typeof body?.id_token !== 'string')
               throw new Error('ChatGPT did not return an identity token.');
             const identity = await this.identity(body.id_token, clientId, nonce);
-            if (selected && identity.sub !== selected.subject)
+            if (selected?.subject && identity.sub !== selected.subject)
               throw new Error('ChatGPT signed in a different account. Add it separately.');
             const account = {
               clientId,
@@ -211,7 +221,7 @@ export class PlanAuth {
             await this.store.locked((data) => {
               combined.throwIfAborted();
               const existing = data.accounts.find((a) => a.clientId === clientId);
-              if (existing && existing.subject !== identity.sub)
+              if (existing?.subject && existing.subject !== identity.sub)
                 throw new Error('ChatGPT account identity mismatch.');
               data.accounts = [...data.accounts.filter((a) => a.clientId !== clientId), account];
               this.store.write(data);
@@ -220,6 +230,9 @@ export class PlanAuth {
               resolve(accountSummary(account)),
             );
           })().catch((error) => {
+            if (error.oauthCode === 'invalid_grant')
+              error.message =
+                'ChatGPT authorization code expired. Registration was retained; select it and Continue with ChatGPT again.';
             res
               .writeHead(400)
               .end('Sign-in failed. Return to Saul Settings for details.', () => reject(error));

@@ -1,26 +1,44 @@
 import { useEffect, useRef, useState } from 'react';
 import type { UserSettings } from '../types';
 import { streamModel } from '../models/provider';
-import { chromeAiAvailability, prepareChromeAi } from '../models/chrome-ai';
+import { chromeAiAvailability, prepareChromeAi, CHROME_AI_ENABLED } from '../models/chrome-ai';
 import { validateProviderSettings } from '../storage/settings';
-export function useProviderTest() {
+export function useProviderTest(provider: UserSettings['activeProvider']) {
   const [testing, setTesting] = useState(false),
+    [preparing, setPreparing] = useState(false),
     [notice, setNotice] = useState(''),
     [error, setError] = useState(''),
     [availability, setAvailability] = useState('Checking…');
   const controller = useRef<AbortController | null>(null),
     mounted = useRef(true);
+  const availabilityRevision = useRef(0);
   useEffect(() => {
     mounted.current = true;
-    void chromeAiAvailability().then((v) => {
-      if (mounted.current) setAvailability(v);
-    });
     return () => {
       mounted.current = false;
+      availabilityRevision.current++;
       controller.current?.abort();
     };
   }, []);
-  async function test(mode: 'endpoint' | 'generation', draft: UserSettings) {
+  useEffect(() => {
+    availabilityRevision.current++;
+    if (provider === 'chrome-ai' && CHROME_AI_ENABLED) void refreshAvailability();
+  }, [provider]);
+  async function refreshAvailability(clearError = true) {
+    const revision = ++availabilityRevision.current;
+    if (clearError) setError('');
+    setAvailability('Checking…');
+    try {
+      const value = await chromeAiAvailability();
+      if (mounted.current && availabilityRevision.current === revision) setAvailability(value);
+    } catch (e) {
+      if (mounted.current && availabilityRevision.current === revision) {
+        setAvailability('check failed');
+        setError(`Could not check Chrome on-device AI: ${(e as Error).message}`);
+      }
+    }
+  }
+  async function test(mode: 'endpoint' | 'generation' | 'prepare', draft: UserSettings) {
     if (controller.current) return;
     const settings = structuredClone(draft),
       ac = new AbortController();
@@ -28,19 +46,22 @@ export function useProviderTest() {
     setError('');
     setNotice('');
     setTesting(true);
+    setPreparing(mode === 'prepare');
     const timeout =
-      settings.activeProvider === 'chrome-ai'
+      mode === 'prepare'
         ? undefined
-        : setTimeout(() => ac.abort(), settings.activeProvider === 'chatgpt-plan' ? 120000 : 20000);
+        : setTimeout(
+            () => ac.abort(),
+            settings.activeProvider === 'openai-compatible' ? 20000 : 120000,
+          );
     try {
       validateProviderSettings(settings);
-      if (settings.activeProvider === 'chrome-ai') {
-        await prepareChromeAi(ac.signal, (progress) => {
+      if (settings.activeProvider === 'chrome-ai' && mode === 'prepare') {
+        const availability = await prepareChromeAi(ac.signal, (progress) => {
           if (mounted.current && !ac.signal.aborted)
             setNotice(`Downloading model: ${Math.round(progress * 100)}%`);
         });
         if (ac.signal.aborted) throw new Error('Stopped');
-        const availability = await chromeAiAvailability();
         if (mounted.current) {
           setAvailability(availability);
           setNotice('On-device model is ready.');
@@ -90,18 +111,24 @@ export function useProviderTest() {
             ? 'Test stopped or timed out. Try again when the provider is ready.'
             : (e as Error).message,
         );
+      if (settings.activeProvider === 'chrome-ai') await refreshAvailability(false);
     } finally {
       clearTimeout(timeout);
       controller.current = null;
-      if (mounted.current) setTesting(false);
+      if (mounted.current) {
+        setTesting(false);
+        setPreparing(false);
+      }
     }
   }
   return {
     testing,
+    preparing,
     notice,
     error,
     availability,
     test,
+    refreshAvailability,
     stop: () => controller.current?.abort(),
     clear: () => {
       setError('');

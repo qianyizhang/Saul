@@ -19,6 +19,7 @@ function harness() {
         },
       },
       connectNative,
+      sendMessage: vi.fn().mockResolvedValue(undefined),
     },
     tabs: { create: vi.fn().mockResolvedValue({}) },
   });
@@ -100,4 +101,23 @@ it('keeps OAuth running after popup closure and rejects non-OpenAI authorization
   h.emit({ id, event: { type: 'authorize', url: 'https://evil.test/sign-in' } });
   expect(chrome.tabs.create).not.toHaveBeenCalled();
   expect(h.native.postMessage).toHaveBeenLastCalledWith({ id, cancel: true });
+});
+it('notifies reopened Settings after sign-in completes without sharing credentials', () => {
+  vi.useFakeTimers();
+  const h = harness();
+  const ui = h.connect('chrome-extension://extension/popup.html');
+  ui.receive({ action: 'login' });
+  const id = h.native.postMessage.mock.calls[0]![0].id;
+  ui.disconnect();
+  h.emit({
+    id,
+    event: {
+      type: 'result',
+      account: { id: 'oaiapp_one', label: 'Account', signedIn: true, planEnabled: true },
+    },
+  });
+  expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
+    target: 'saul-plan-accounts',
+    accountId: 'oaiapp_one',
+  });
 });

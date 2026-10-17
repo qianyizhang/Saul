@@ -1,7 +1,7 @@
 import { chromium, type BrowserContext } from '@playwright/test';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -130,6 +130,7 @@ export interface SandboxOptions {
   artifactsDir?: string;
   databaseFixtures?: boolean;
   browserToolsFixtures?: boolean;
+  chromeAiFixtures?: boolean;
   handleProcessSignals?: boolean;
 }
 
@@ -141,7 +142,7 @@ export async function createSandbox(options: SandboxOptions = {}) {
   // relaunches and prevents later builds in a shared checkout changing the test.
   try {
     await cp(extensionBuild, extension, { recursive: true });
-    if (options.databaseFixtures || options.browserToolsFixtures) {
+    if (options.databaseFixtures || options.browserToolsFixtures || options.chromeAiFixtures) {
       const require = createRequire(import.meta.resolve('wxt'));
       const { build } = await import(require.resolve('vite'));
       if (options.databaseFixtures)
@@ -156,6 +157,13 @@ export async function createSandbox(options: SandboxOptions = {}) {
         build: {
           lib: {
             entry: {
+              ...(options.chromeAiFixtures
+                ? {
+                    'chrome-ai-fixture': fileURLToPath(
+                      new URL('./chrome-ai-fixture.ts', import.meta.url),
+                    ),
+                  }
+                : {}),
               ...(options.browserToolsFixtures
                 ? {
                     'browser-tools-fixture': fileURLToPath(
@@ -182,6 +190,19 @@ export async function createSandbox(options: SandboxOptions = {}) {
           minify: false,
         },
       });
+      if (options.chromeAiFixtures) {
+        for (const page of ['popup.html', 'offscreen.html']) {
+          const file = path.join(extension, page);
+          const html = await readFile(file, 'utf8');
+          await writeFile(
+            file,
+            html.replace(
+              '<head>',
+              '<head><script type="module" src="/chrome-ai-fixture.js"></script>',
+            ),
+          );
+        }
+      }
     }
     if (options.artifactsDir) await mkdir(options.artifactsDir, { recursive: true });
   } catch (error) {

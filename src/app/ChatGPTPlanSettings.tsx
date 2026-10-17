@@ -22,6 +22,10 @@ export function ChatGPTPlanSettings({
     [error, setError] = useState(''),
     [notice, setNotice] = useState('');
   const [welcome, setWelcome] = useState(false);
+  const [helperReady, setHelperReady] = useState<boolean | null>(null);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const current = useRef({ value, onChange });
+  current.current = { value, onChange };
   const mounted = useRef(true),
     controller = useRef<AbortController | null>(null);
   const revision = useRef(0);
@@ -29,16 +33,45 @@ export function ChatGPTPlanSettings({
   const active = accounts.find((a) => a.id === value.accountId);
   useEffect(() => {
     mounted.current = true;
-    void planCall({ action: 'accounts' })
-      .then((r) => {
-        if (mounted.current) setAccounts(r.accounts);
-      })
-      .catch((e) => {
-        if (mounted.current) setError(e.message);
-      });
+    const refresh = (accountId?: string) => {
+      void planCall({ action: 'accounts' })
+        .then((r) => {
+          if (!mounted.current) return;
+          setHelperReady(true);
+          setAccounts(r.accounts);
+          const selected = accountId || current.current.value.accountId;
+          const account = selected
+            ? r.accounts.find((a) => a.id === selected)
+            : r.accounts.length === 1
+              ? r.accounts[0]
+              : undefined;
+          if (account && account.id !== current.current.value.accountId)
+            current.current.onChange({ accountId: account.id, model: '' });
+        })
+        .catch((e) => {
+          if (mounted.current) {
+            setHelperReady(false);
+            setError(e.message);
+          }
+        });
+    };
+    const changed = (
+      message: { target?: string; accountId?: string },
+      sender: chrome.runtime.MessageSender,
+    ) => {
+      if (
+        sender.id === chrome.runtime.id &&
+        !sender.tab &&
+        message?.target === 'saul-plan-accounts'
+      )
+        refresh(message.accountId);
+    };
+    chrome.runtime.onMessage.addListener(changed);
+    refresh();
     return () => {
       mounted.current = false;
       revision.current++;
+      chrome.runtime.onMessage.removeListener(changed);
     };
   }, []);
   useEffect(() => {
@@ -59,11 +92,25 @@ export function ChatGPTPlanSettings({
   useEffect(() => {
     if (welcome) welcomeDialog.current?.showModal();
   }, [welcome]);
-  // Model catalog belongs to one account; never carry choices across accounts.
+  // Restore the catalog after returning from the browser, just as after login.
   useEffect(() => {
     setModels([]);
     revision.current++;
-  }, [value.accountId]);
+    setLoadingModels(false);
+    if (!active?.planEnabled) return;
+    const ac = new AbortController();
+    setLoadingModels(true);
+    void loadModels(active.id, ac.signal, current.current.value.model)
+      .catch((e) => {
+        if (!ac.signal.aborted && mounted.current) setError(e.message);
+      })
+      .finally(() => {
+        if (mounted.current && !ac.signal.aborted) setLoadingModels(false);
+      });
+    return () => {
+      ac.abort();
+    };
+  }, [active?.id, active?.planEnabled]);
   async function operation(
     action: NonNullable<typeof busy>,
     fn: (signal: AbortSignal) => Promise<void>,
@@ -89,9 +136,9 @@ export function ChatGPTPlanSettings({
     if (!mounted.current || revision.current !== stamp) return;
     const list = result.models;
     setModels(list);
-    onChange({
+    current.current.onChange({
       accountId,
-      model: list.some((m) => m.slug === preferred) ? preferred : list[0]?.slug || '',
+      model: preferred || list[0]?.slug || '',
     });
     if (!list.length) setNotice('No models are available for this ChatGPT account.');
   }
@@ -110,7 +157,7 @@ export function ChatGPTPlanSettings({
       setAccounts((all) => [...all.filter((a) => a.id !== account.id), account]);
       onChange({ accountId: account.id, model: '' });
       if (account.planEnabled) {
-        setNotice('Signed in. Refresh models, choose a model, and save Settings to use your plan.');
+        setNotice('Signed in. Choose a model and save Settings to use your plan.');
       } else
         setNotice('Signed in, but ChatGPT plan permission is disabled. Enable plan usage below.');
     });
@@ -120,6 +167,7 @@ export function ChatGPTPlanSettings({
         Use eligible requests from your ChatGPT plan. Plan and app limits apply. API-key profiles
         are billed separately.
       </p>
+      {helperReady === true && <p className="small muted">ChatGPT helper connected.</p>}
       <label className="field">
         ChatGPT account
         <select
@@ -147,7 +195,12 @@ export function ChatGPTPlanSettings({
           onClick={() =>
             operation('accounts', async (signal) => {
               const result = await planCall({ action: 'accounts' }, signal);
-              if (mounted.current) setAccounts(result.accounts);
+              if (mounted.current) {
+                setHelperReady(true);
+                setAccounts(result.accounts);
+                if (!value.accountId && result.accounts.length === 1)
+                  onChange({ accountId: result.accounts[0]!.id, model: '' });
+              }
             })
           }
         >
@@ -213,7 +266,7 @@ export function ChatGPTPlanSettings({
         <select
           aria-label="ChatGPT model"
           value={value.model}
-          disabled={!!busy || testing}
+          disabled={!!busy || loadingModels || testing}
           onChange={(e) => onChange({ ...value, model: e.target.value })}
         >
           <option value="">Refresh models to choose</option>
@@ -227,10 +280,11 @@ export function ChatGPTPlanSettings({
           ))}
         </select>
       </label>
+      {loadingModels && <p role="status">Loading available models…</p>}
       <div className="row">
         <button
           className="btn"
-          disabled={!!busy || testing || !active?.planEnabled}
+          disabled={!!busy || loadingModels || testing || !active?.planEnabled}
           onClick={() =>
             operation('models', (signal) => loadModels(value.accountId, signal, value.model))
           }
@@ -239,7 +293,7 @@ export function ChatGPTPlanSettings({
         </button>
         <button
           className="btn"
-          disabled={!!busy || testing || !active?.planEnabled || !value.model}
+          disabled={!!busy || loadingModels || testing || !active?.planEnabled || !value.model}
           onClick={test}
         >
           Test generation
@@ -259,7 +313,7 @@ export function ChatGPTPlanSettings({
         Generation tests use your plan quota. Model availability and usage limits depend on your
         account.
       </p>
-      <details>
+      <details open={helperReady === false}>
         <summary>ChatGPT helper setup</summary>
         <p className="small muted">
           From your Saul checkout, install the local helper for this extension. It stores OAuth

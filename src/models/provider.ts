@@ -1,6 +1,6 @@
 import type { RunInput } from '../types/storage';
 import { streamOpenAICompatible } from './openai-compatible';
-import { streamChromeAi } from './chrome-ai';
+import { streamChromeAi, CHROME_AI_ENABLED, CHROME_AI_DISABLED_MESSAGE } from './chrome-ai';
 import { planEvents } from './chatgpt-plan';
 import type { ModelEvent } from './events';
 
@@ -20,6 +20,7 @@ export async function* streamModel(
       );
       return;
     case 'chrome-ai':
+      if (!CHROME_AI_ENABLED) throw new Error(CHROME_AI_DISABLED_MESSAGE);
       yield* streamChromeAi(input.local, input.systemPrompt, input.userPrompt, signal);
       return;
     case 'chatgpt-plan':

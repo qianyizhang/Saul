@@ -1,3 +1,4 @@
+import { CHROME_AI_ENABLED } from '../../src/models/chrome-ai';
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider, createFixtureServer, seedHistory } from './support.ts';
 import { getFirstHistory, sendDb, sendWorkspace as tabs } from './driver.ts';
@@ -330,7 +331,7 @@ test('stopping a slow explanation retains partial text without saving a complete
   }
 });
 
-test('workspace navigation protects drafts and on-device preparation can be stopped', async ({
+test('workspace navigation protects drafts and respects on-device availability', async ({
   sandbox,
 }) => {
   const { popup } = await sandbox.launch();
@@ -353,6 +354,11 @@ test('workspace navigation protects drafts and on-device preparation can be stop
   await expect(popup.getByRole('button', { name: 'Refresh tabs' })).toBeVisible();
   await popup.goBack();
   await expect(popup.getByLabel('Model name', { exact: true })).not.toHaveValue('unsaved-model');
+
+  if (!CHROME_AI_ENABLED) {
+    await expect(popup.locator('option[value="chrome-ai"]')).toHaveJSProperty('disabled', true);
+    return;
+  }
 
   // Deterministic preparation that remains pending until cancelled; no model download.
   await popup.evaluate(() => {

@@ -1,4 +1,8 @@
 import type { ModelEvent } from './events';
+// Temporarily paused while live Chrome model setup remains unverified.
+export const CHROME_AI_ENABLED = false;
+export const CHROME_AI_DISABLED_MESSAGE =
+  'Chrome on-device AI is temporarily disabled. Choose ChatGPT plan or OpenAI compatible in Settings.';
 export interface ChromeAiConfig {
   temperature?: number;
   topK?: number;
@@ -9,7 +13,9 @@ interface ModelSession {
   destroy(): void;
 }
 interface LanguageModelFactory {
-  availability(): Promise<string>;
+  availability(options?: {
+    expectedOutputs?: { type: 'text'; languages: string[] }[];
+  }): Promise<string>;
   create(options: {
     signal?: AbortSignal;
     initialPrompts?: { role: 'system'; content: string }[];
@@ -21,18 +27,20 @@ interface LanguageModelFactory {
 }
 const factory = () =>
   (globalThis as unknown as { LanguageModel?: LanguageModelFactory }).LanguageModel;
-export async function chromeAiAvailability(): Promise<string> {
-  try {
-    return (await factory()?.availability()) || 'unavailable';
-  } catch {
-    return 'unavailable';
-  }
+const outputOptions = (config: ChromeAiConfig) =>
+  config.outputLanguage
+    ? { expectedOutputs: [{ type: 'text' as const, languages: [config.outputLanguage] }] }
+    : {};
+export async function chromeAiAvailability(config: ChromeAiConfig = {}): Promise<string> {
+  const lm = factory();
+  if (!lm) return 'unsupported';
+  return lm.availability(outputOptions(config));
 }
 export async function prepareChromeAi(signal?: AbortSignal, progress?: (fraction: number) => void) {
   const lm = factory();
   if (!lm)
     throw new Error(
-      'Chrome on-device AI is unavailable in this browser. Choose an OpenAI-compatible provider.',
+      'This browser does not expose the Chrome Prompt API. Update Google Chrome and check its built-in AI support.',
     );
   const session = await lm.create({
     signal,
@@ -42,6 +50,12 @@ export async function prepareChromeAi(signal?: AbortSignal, progress?: (fraction
       ),
   });
   session.destroy();
+  const availability = await chromeAiAvailability();
+  if (availability !== 'available')
+    throw new Error(
+      `Chrome on-device model is not ready (availability: ${availability}). Check chrome://on-device-internals for model eligibility and download errors.`,
+    );
+  return availability;
 }
 export async function* streamChromeAi(
   config: ChromeAiConfig,
@@ -51,8 +65,14 @@ export async function* streamChromeAi(
 ): AsyncGenerator<ModelEvent, void, unknown> {
   const lm = factory();
   if (!lm)
-    throw new Error('Chrome on-device AI is unavailable. Choose a different provider in Settings.');
-  const availability = await chromeAiAvailability();
+    throw new Error(
+      'This browser does not expose the Chrome Prompt API. Update Google Chrome and check its built-in AI support.',
+    );
+  const availability = await chromeAiAvailability(config);
+  if (availability === 'unavailable')
+    throw new Error(
+      'Chrome reports that its on-device model is unavailable. Check chrome://on-device-internals for model eligibility and download errors.',
+    );
   if (availability !== 'available')
     throw new Error(
       'Prepare the on-device model from Saul Settings first. Availability: ' + availability,
@@ -62,9 +82,7 @@ export async function* streamChromeAi(
     temperature: config.temperature ?? 0.3,
     topK: config.topK ?? 3,
     signal,
-    ...(config.outputLanguage
-      ? { expectedOutputs: [{ type: 'text', languages: [config.outputLanguage] }] }
-      : {}),
+    ...outputOptions(config),
   });
   try {
     for await (const text of session.promptStreaming(userPrompt, { signal })) {

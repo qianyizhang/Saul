@@ -5,6 +5,7 @@ import {
   getSettings,
   InvalidStoredSettingsError,
   saveSettings,
+  validateProviderSettings,
 } from '../src/storage/settings';
 
 const get = vi.fn();
@@ -15,6 +16,13 @@ beforeEach(() => {
   vi.stubGlobal('chrome', { storage: { local: { get, set } } });
 });
 afterEach(() => vi.unstubAllGlobals());
+it('retains saved on-device settings while requiring an explicit enabled provider choice', async () => {
+  get.mockResolvedValueOnce({ saul_user_settings: { activeProvider: 'chrome-ai' } });
+  const settings = await getSettings();
+  expect(settings.activeProvider).toBe('chrome-ai');
+  expect(() => validateProviderSettings(settings)).toThrow('temporarily disabled');
+  expect(set).not.toHaveBeenCalled();
+});
 
 it('uses defaults for absent settings and retains nested defaults for older records', async () => {
   get.mockResolvedValueOnce({});

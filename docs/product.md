@@ -48,7 +48,7 @@ SQLite-WASM stores the library in OPFS for the current browser profile. Data is 
 - Save, connection test, and generation test use the current draft without overwriting unreadable stored settings.
 - Model setup appears first. Save and validation feedback stay visible while scrolling; leaving a changed draft asks before discarding it.
 - Response language and context controls apply to new submissions.
-- Chrome on-device generation is prepared explicitly and can be stopped.
+- Chrome on-device AI is temporarily disabled while live model setup remains unverified. Saved selections remain readable and prompt an explicit switch to ChatGPT plan or OpenAI compatible. New local requests are blocked; Saul does not switch providers automatically.
 - [ChatGPT plan](chatgpt-plan.md) supports OAuth sign-in, saved account registrations, account-specific model discovery, and streamed explanations. It requires the local helper. Its controls omit unsupported temperature and output-token options, and failures never switch billing providers.
 
 Local tests cover the provider boundary with deterministic fixtures. They do not establish external-provider authentication, model quality, Chrome model availability/download, or device performance.

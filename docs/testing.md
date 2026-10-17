@@ -34,6 +34,7 @@ Focused checks can reuse an already-built `.output/chrome-mv3` snapshot:
 pnpm exec playwright test tests/e2e/reading.spec.ts tests/e2e/annotations.spec.ts
 pnpm exec playwright test tests/e2e/product.spec.ts
 pnpm exec playwright test tests/e2e/chatgpt-plan.spec.ts
+pnpm exec playwright test tests/e2e/chrome-ai.spec.ts
 pnpm exec playwright test tests/e2e/notifications.spec.ts
 pnpm exec playwright test tests/e2e/positioning.spec.ts tests/e2e/multiline.spec.ts
 pnpm exec tsc -p tests/e2e/tsconfig.json
@@ -98,6 +99,8 @@ A successful smoke run verifies setup only. Record the built source scope, passe
 ## Evidence limits
 
 The default browser suite uses deterministic local fixtures. It does not verify live provider credentials/output, actual Chrome on-device model download/generation, personal native-host registration, or other browsers. Benchmark reproduction and scope are documented in [benchmarks](benchmarks/README.md).
+
+On-device generation is temporarily disabled. Its integration cases are retained and skipped until re-enabled; the active regression verifies the disabled option and recovery from saved local selections. When enabled, tests include a real, read-only `LanguageModel.availability()` probe with a JSON attachment recording the browser version, API exposure, and result. The disposable model fixture separately verifies user-activated preparation, honest readiness/errors, generation, and selection → offscreen runner → saved history. Fixture success does not establish live Gemini inference. Playwright's default switches disable background networking, component updates, and optimization hints, so its disposable profile's availability is not evidence of model eligibility in the user's normal Chrome profile. For that browser, inspect `chrome://on-device-internals` and the [Prompt API requirements](https://developer.chrome.com/docs/ai/prompt-api#hardware-requirements).
 
 Agent workflow: [saul-browser-testing skill](../.agents/skills/saul-browser-testing/SKILL.md).
 

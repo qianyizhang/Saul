@@ -21,6 +21,18 @@ export function initPlanBridge() {
     if (['result', 'error', 'complete'].includes(event.type)) {
       clearTimeout(entry.timer);
       requests.delete(id);
+      if (entry.request.action === 'login') {
+        // A popup closes when the authorization tab takes focus. Notify any
+        // reopened Settings view; the account store remains the authority.
+        void chrome.runtime
+          .sendMessage({
+            target: 'saul-plan-accounts',
+            ...(event.type === 'result' && 'account' in event
+              ? { accountId: event.account.id }
+              : {}),
+          })
+          .catch(() => {});
+      }
     }
     try {
       entry.port.postMessage(event);

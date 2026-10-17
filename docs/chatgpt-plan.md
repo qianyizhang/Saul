@@ -12,10 +12,10 @@ Saul supports the direct **Sign in with ChatGPT** preview for local and open-sou
    node native/install.mjs --chatgpt --extension-id YOUR_32_LETTER_EXTENSION_ID
    ```
 
-   This registers `com.saul.chatgpt` for the exact extension ID and copies the helper and its JWT verifier dependency into `~/.saul/bridge`. The launcher records the current Node path. Rerun after updating Saul or moving Node. The existing installer's `--browser`, `--install-dir`, `--manifest-dir`, and `--dry-run` options also apply.
+   This registers `com.saul.chatgpt` for the exact extension ID and copies the helper and its JWT verifier dependency into `~/.saul/bridge`. The launcher records the current Node path and any HTTP/HTTPS proxy and bypass settings from the installing shell, then enables Node's environment proxy support. This keeps auth, signing-key retrieval, and inference on the same route when Chrome launches the helper without your shell environment. Rerun after updating Saul, moving Node, or changing your proxy. The launcher is private (`0700`); do not share it if your proxy URL contains credentials. The existing installer's `--browser`, `--install-dir`, `--manifest-dir`, and `--dry-run` options also apply.
 
 4. Choose **Continue with ChatGPT** and complete consent in the opened browser tab. The helper listens only on `127.0.0.1`, with a temporary port and `/auth/callback` path. Sign-in survives the popup closing; reopen Settings to choose the saved account afterward.
-5. Select the account, click **Refresh models**, choose an available model, and **Save Settings**. **Test generation** sends a small prompt and consumes plan quota. A model catalog entry alone does not prove inference access.
+5. Return to Settings. A sole saved account is selected automatically, and eligible accounts load their models automatically. Choose an available model and **Save Settings**. **Refresh models** retries catalog loading. **Test generation** sends a small prompt and consumes plan quota. A model catalog entry alone does not prove inference access.
 
 Use the full Saul workspace for a sign-in flow that stays visible while the authorization tab is open. Saved accounts use distinct registration labels even when their email addresses match. Adding another account or workspace creates a separate registration; returning sign-in reuses the existing client and host IDs.
 
@@ -25,7 +25,7 @@ Use the full Saul workspace for a sign-in flow that stays visible while the auth
 | ----------------- | -------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------ |
 | ChatGPT plan      | OAuth authorization code with PKCE and validated OIDC identity | Public `/v1/responses`, HTTP/SSE | `model`, `instructions`, complete text `input`, `store: false`, `stream: true` |
 | OpenAI compatible | Profile-specific API key or unauthenticated loopback           | `/chat/completions`, HTTP/SSE    | Existing model, temperature and token-limit behavior                           |
-| Chrome on-device  | Local Chrome model                                             | `LanguageModel` stream           | Existing local model controls                                                  |
+| Chrome on-device  | Temporarily disabled                                           | Retained for later verification  | Choose ChatGPT plan or OpenAI compatible explicitly                            |
 
 Plan mode sends no temperature, output-token limit, stored conversation ID, background job, or tools. It sends the captured context needed for each explanation or follow-up. Only `response.completed` marks successful generation; failed, incomplete and disconnected streams retain honest partial-output status. A usage-limit failure pauses new requests in the helper. Use **Manage usage**, then deliberately **Refresh models** to resume attempts; successful model listing does not guarantee the limit has reset.
 
@@ -33,6 +33,7 @@ Plan mode sends no temperature, output-token limit, stored conversation ID, back
 
 - Tokens stay in the helper's `~/.saul/chatgpt/accounts.json`, with directory permissions `0700` and file permissions `0600`. They are excluded from browser storage, page messages and reading exports. Treat the credential directory as private; do not sync or commit it.
 - The native helper owns OAuth state, nonce, PKCE, token exchange and signature validation using `jose`. A stable opaque host ID is written before authorization. Access/refresh/ID tokens and scopes rotate together in an atomic file replacement.
+- A new issued client ID is retained before token exchange. If exchange fails, select that signed-out registration and choose **Continue with ChatGPT** to get a fresh code without creating another app registration. Pending registrations cannot authorize inference until identity validation succeeds.
 - Refresh operations use a cross-process lock. Temporary network errors preserve credentials; terminal refresh errors clear unusable tokens while retaining the account registration.
 - **Sign out** cancels that account's requests in the connected helper and attempts refresh-token revocation using OpenAI's discovery document. Local tokens are cleared even if remote revocation fails; the UI reports that case and directs you to disconnect Saul in ChatGPT settings. Sign-out retains the registration and host ID for reauthorization.
 - Browser profiles using the same helper installation share its saved accounts. Each reading job freezes the selected account and model; changing Settings never reroutes an existing job to a different account.

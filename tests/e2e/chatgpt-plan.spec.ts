@@ -11,7 +11,8 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   sandbox,
   fixtureServer,
 }, testInfo) => {
-  const { popup, worker, context } = await sandbox.launch();
+  const { worker, context, popup: initialPopup } = await sandbox.launch();
+  let popup = initialPopup;
   const initialApiRequests = fixtureServer.requests.length;
   // Replace only the OS transport. UI, sender validation, offscreen runner and
   // durable database are production code; no native registration or real quota.
@@ -20,6 +21,10 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
       requests: [] as PlanRequest[],
       fail: false,
       signedIn: false,
+      holdLogin: true,
+      finishLogin: () => {},
+      holdModels: true,
+      finishModels: () => {},
       cancelled: false,
       hold: false,
       holdLogout: false,
@@ -53,17 +58,22 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
                 emit({ type: 'result', accounts: [account] });
                 break;
               case 'login':
-                state.signedIn = true;
-                emit({
-                  type: 'result',
-                  account: { ...account, signedIn: true, planEnabled: true },
-                });
+                state.finishLogin = () => {
+                  state.signedIn = true;
+                  emit({
+                    type: 'result',
+                    account: { ...account, signedIn: true, planEnabled: true },
+                  });
+                };
+                if (!state.holdLogin) state.finishLogin();
                 break;
               case 'models':
-                emit({
-                  type: 'result',
-                  models: [{ slug: 'plan-fixture-model', display_name: 'Plan fixture model' }],
-                });
+                state.finishModels = () =>
+                  emit({
+                    type: 'result',
+                    models: [{ slug: 'plan-fixture-model', display_name: 'Plan fixture model' }],
+                  });
+                if (!state.holdModels) state.finishModels();
                 break;
               case 'logout':
                 state.finishLogout = () => {
@@ -99,9 +109,35 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   await expect(popup.getByPlaceholder('Optional for local models')).toHaveCount(0);
   await expect(popup.getByLabel(/Temperature/)).toHaveCount(0);
   await popup.getByRole('button', { name: 'Continue with ChatGPT', exact: true }).click();
+  await expect(
+    popup.getByText('Complete sign-in in the opened tab.', { exact: true }),
+  ).toBeVisible();
+  const popupUrl = popup.url();
+  await popup.close();
+  popup = await context.newPage();
+  await popup.goto(popupUrl);
+  await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await popup.getByLabel('Provider', { exact: true }).selectOption('chatgpt-plan');
+  await expect(popup.getByText('ChatGPT helper connected.', { exact: true })).toBeVisible();
+  await worker.evaluate(() => {
+    (
+      globalThis as unknown as { planFixture: { finishLogin: () => void } }
+    ).planFixture.finishLogin();
+  });
   await popup.getByRole('button', { name: 'Got it', exact: true }).click();
   await expect(popup.getByLabel('ChatGPT account', { exact: true })).toHaveValue('oaiapp_fixture');
-  await popup.getByRole('button', { name: 'Refresh models', exact: true }).click();
+  await expect(popup.getByText('Loading available models…', { exact: true })).toBeVisible();
+  await expect(popup.getByLabel('ChatGPT model', { exact: true })).toBeDisabled();
+  await worker.evaluate(() => {
+    const fixture = (
+      globalThis as unknown as {
+        planFixture: { holdModels: boolean; finishModels: () => void };
+      }
+    ).planFixture;
+    fixture.holdModels = false;
+    fixture.finishModels();
+  });
+  await expect(popup.getByLabel('ChatGPT model', { exact: true })).toBeEnabled();
   await expect(popup.getByLabel('ChatGPT model', { exact: true })).toHaveValue(
     'plan-fixture-model',
   );
@@ -175,6 +211,7 @@ test('missing ChatGPT helper shows setup recovery without altering the existing 
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await popup.getByLabel('Provider', { exact: true }).selectOption('chatgpt-plan');
   await expect(popup.getByRole('alert')).toContainText('helper');
+  await expect(popup.getByText('node native/install.mjs', { exact: false })).toBeVisible();
   await popup.getByRole('button', { name: 'Save Settings', exact: true }).click();
   await expect(
     popup.getByText('Choose a ChatGPT account and model.', { exact: true }),

@@ -3,7 +3,12 @@ import { ReadingRunner } from '../src/reading/runner';
 import type { DbCall, DbRequest, Passage, Submission, RunStatus } from '../src/types/storage';
 const mocks = vi.hoisted(() => ({ remote: vi.fn(), local: vi.fn() }));
 vi.mock('../src/models/openai-compatible', () => ({ streamOpenAICompatible: mocks.remote }));
-vi.mock('../src/models/chrome-ai', () => ({ streamChromeAi: mocks.local }));
+// Exercise queue scheduling independently of the temporary product availability switch.
+vi.mock('../src/models/chrome-ai', () => ({
+  streamChromeAi: mocks.local,
+  CHROME_AI_ENABLED: true,
+  CHROME_AI_DISABLED_MESSAGE: 'Chrome on-device AI is temporarily disabled.',
+}));
 const submission = (id: string): Submission => ({
   submissionId: id,
   regenerate: true,

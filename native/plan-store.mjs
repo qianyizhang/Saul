@@ -41,7 +41,7 @@ export class PlanStore {
       const validAccount = (a) =>
         a &&
         text(a.clientId) &&
-        text(a.subject) &&
+        (a.subject === undefined ? a.tokens === undefined : text(a.subject)) &&
         (a.email === undefined || typeof a.email === 'string') &&
         (a.tokens === undefined ||
           (a.tokens &&

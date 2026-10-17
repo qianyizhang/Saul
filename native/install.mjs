@@ -151,9 +151,17 @@ function main() {
         ]),
   ]) {
     const path = join(plan.bin, name);
+    // Chrome launches native hosts without the installing shell's environment.
+    // Preserve configured proxy routing for OAuth, JWKS and inference together.
+    const proxy = values.chatgpt
+      ? ['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'no_proxy']
+          .filter((key) => process.env[key])
+          .map((key) => `export ${key}=${shellQuote(process.env[key])}\n`)
+          .join('')
+      : '';
     writeFileSync(
       path,
-      `#!/bin/sh\nexec ${shellQuote(process.execPath)} ${shellQuote(join(plan.runtime, script))} "$@"\n`,
+      `#!/bin/sh\n${proxy}exec ${shellQuote(process.execPath)} ${values.chatgpt ? '--use-env-proxy ' : ''}${shellQuote(join(plan.runtime, script))} "$@"\n`,
       { mode: 0o700 },
     );
     chmodSync(path, 0o700);

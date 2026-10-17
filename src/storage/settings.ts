@@ -1,5 +1,6 @@
 import type { UserSettings } from '../types';
 import { DEFAULT_SYSTEM_PROMPT } from '../models/prompts';
+import { CHROME_AI_ENABLED, CHROME_AI_DISABLED_MESSAGE } from '../models/chrome-ai';
 
 export const DEFAULT_SETTINGS: UserSettings = {
   activeProvider: 'openai-compatible',
@@ -190,7 +191,10 @@ function normalizeSettings(value: unknown): UserSettings {
 }
 
 export function validateProviderSettings(settings: UserSettings): URL | undefined {
-  if (settings.activeProvider === 'chrome-ai') return undefined;
+  if (settings.activeProvider === 'chrome-ai') {
+    if (!CHROME_AI_ENABLED) throw new Error(CHROME_AI_DISABLED_MESSAGE);
+    return undefined;
+  }
   if (settings.activeProvider === 'chatgpt-plan') {
     if (!settings.chatgptPlan?.accountId || !settings.chatgptPlan.model.trim())
       throw new Error('Choose a ChatGPT account and model.');

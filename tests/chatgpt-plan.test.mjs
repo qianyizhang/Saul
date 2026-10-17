@@ -236,6 +236,54 @@ it('rejects invalid identity audience, issuer, nonce, expiration, or signature',
     auth.identity(token.slice(0, -10) + 'invalidxxx', 'client', 'nonce'),
   ).rejects.toThrow();
 });
+it('retains a new registration after failed exchange and reuses it for a fresh authorization', async () => {
+  let authUrl;
+  const fetcher = vi.fn(
+    async () => new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400 }),
+  );
+  const auth = new PlanAuth(store, { fetcher, jwks });
+  const callback = async (url) => {
+    authUrl = new URL(url);
+    const destination = new URL(authUrl.searchParams.get('redirect_uri'));
+    destination.search = new URLSearchParams({
+      state: authUrl.searchParams.get('state'),
+      code: 'fresh-code',
+      ...(authUrl.searchParams.get('client_id') === 'dynamic_agent_client'
+        ? { client_id: 'oaiapp_retry' }
+        : {}),
+    }).toString();
+    await fetch(destination);
+  };
+  await expect(auth.login({}, callback)).rejects.toThrow('Registration was retained');
+  const before = store.read();
+  expect(before.accounts).toEqual([{ clientId: 'oaiapp_retry' }]);
+  expect(await auth.accounts()).toEqual([
+    expect.objectContaining({ id: 'oaiapp_retry', signedIn: false, planEnabled: false }),
+  ]);
+  await expect(auth.accessToken('oaiapp_retry')).rejects.toThrow('sign in');
+  const firstState = authUrl.searchParams.get('state');
+  fetcher.mockImplementationOnce(
+    async () =>
+      new Response(
+        JSON.stringify({
+          ...tokens,
+          id_token: await jwt('oaiapp_retry', authUrl.searchParams.get('nonce')),
+        }),
+      ),
+  );
+  const retry = new PlanAuth(new PlanStore(directory), { fetcher, jwks });
+  await expect(retry.login({ accountId: 'oaiapp_retry' }, callback)).resolves.toMatchObject({
+    id: 'oaiapp_retry',
+    signedIn: true,
+    planEnabled: true,
+  });
+  expect(authUrl.searchParams.get('client_id')).toBe('oaiapp_retry');
+  expect(authUrl.searchParams.has('agent_name_hint')).toBe(false);
+  expect(authUrl.searchParams.get('state')).not.toBe(firstState);
+  expect(authUrl.searchParams.get('ext_agent_host_id')).toBe(before.hostId);
+  expect(store.read().accounts).toHaveLength(1);
+  expect(store.read().accounts[0].subject).toBe('subject-one');
+});
 it('retains registration and host identity on signout, and warns when remote revocation fails', async () => {
   const before = saved();
   const auth = new PlanAuth(store, {
@@ -414,6 +462,71 @@ it('recovers a dead helper lock while preserving serialized credential writes', 
     });
   await Promise.all([update(), update(), update()]);
   expect(store.read().counter).toBe(3);
+});
+it('keeps installer proxy routing when Chrome launches the helper without shell proxy variables', async () => {
+  const { createServer } = await import('node:http');
+  const { execFileSync, execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const { writeFileSync } = await import('node:fs');
+  const requests = [];
+  const proxy = createServer((request, response) => {
+    requests.push(request.url);
+    response.end('proxy reached');
+  });
+  // Node's fetch proxy agent tunnels HTTP as well as HTTPS with CONNECT.
+  proxy.on('connect', (request, socket) => {
+    requests.push(request.url);
+    socket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+    socket.once('data', () =>
+      socket.end('HTTP/1.1 200 OK\r\nContent-Length: 13\r\nConnection: close\r\n\r\nproxy reached'),
+    );
+  });
+  await new Promise((resolve, reject) => {
+    proxy.once('error', reject);
+    proxy.listen(0, '127.0.0.1', resolve);
+  });
+  try {
+    const proxyUrl = `http://127.0.0.1:${proxy.address().port}`;
+    const root = join(directory, 'proxy-install');
+    const env = { ...process.env };
+    for (const key of [
+      'HTTP_PROXY',
+      'HTTPS_PROXY',
+      'NO_PROXY',
+      'http_proxy',
+      'https_proxy',
+      'no_proxy',
+      'NODE_USE_ENV_PROXY',
+    ])
+      delete env[key];
+    execFileSync(
+      process.execPath,
+      [
+        'native/install.mjs',
+        '--chatgpt',
+        '--extension-id',
+        'a'.repeat(32),
+        '--install-dir',
+        root,
+        '--manifest-dir',
+        join(directory, 'proxy-manifests'),
+      ],
+      { env: { ...env, HTTP_PROXY: proxyUrl, HTTPS_PROXY: proxyUrl } },
+    );
+    // A harmless network fixture runs through the actual installed launcher.
+    writeFileSync(
+      join(root, 'bridge', 'plan-host.mjs'),
+      "console.log(await (await fetch('http://saul-proxy.test/discovery', { signal: AbortSignal.timeout(3000) })).text());",
+    );
+    const { stdout } = await promisify(execFile)(join(root, 'bin', 'saul-chatgpt-host'), [], {
+      env,
+    });
+    expect(stdout.trim()).toBe('proxy reached');
+    expect(requests).toEqual(['saul-proxy.test:80']);
+  } finally {
+    proxy.closeAllConnections();
+    await new Promise((resolve) => proxy.close(resolve));
+  }
 });
 
 it('does not expose damaged credential-file contents or replace the damaged file', async () => {
