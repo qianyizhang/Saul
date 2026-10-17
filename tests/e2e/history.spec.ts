@@ -18,8 +18,9 @@ test('deleting a saved passage updates its page and clearing history survives re
   await article.getByRole('button', { name: 'View', exact: true }).click();
   await expect(article.getByRole('region', { name: 'Saul explanation' })).toBeVisible();
 
-  await popup.getByRole('button', { name: 'Reading history', exact: true }).click();
+  await popup.getByRole('button', { name: 'History', exact: true }).click();
   await popup.locator('.history-title').click();
+  await popup.locator('.history-more > summary').click();
   await popup.getByRole('button', { name: 'Delete highlight' }).click();
   await expect(popup.getByText('No highlights recorded yet.')).toBeVisible();
   await expect(article.getByRole('region', { name: 'Saul explanation' })).toHaveCount(0);
@@ -32,6 +33,6 @@ test('deleting a saved passage updates its page and clearing history survives re
   await expect(popup.getByText('No highlights recorded yet.')).toBeVisible();
 
   const restarted = await sandbox.launch();
-  await restarted.popup.getByRole('button', { name: 'Reading history', exact: true }).click();
+  await restarted.popup.getByRole('button', { name: 'History', exact: true }).click();
   await expect(restarted.popup.getByText('No highlights recorded yet.')).toBeVisible();
 });

@@ -10,15 +10,17 @@ import type {
   HistoryItem,
   Passage,
   RunResult,
+  RunInput,
   Submission,
 } from '../types/storage';
+import { EXPLAIN_RECIPE_ID } from '../models/configuration';
 
 type Row = Record<string, SqlValue>;
 const latest = `(SELECT rowid FROM llm_run WHERE selection_id = s.id ORDER BY created_at DESC, rowid DESC LIMIT 1)`;
 const success = `(SELECT rowid FROM llm_run WHERE selection_id = s.id AND status = 'completed' ORDER BY created_at DESC, rowid DESC LIMIT 1)`;
 const passageSelect = `SELECT s.*, p.url, p.title, p.canonical_url, b.selection_id IS NOT NULL AS bookmarked,
- r.id AS run_id, r.status, r.response_raw, r.error_message, r.reason, r.model, r.provider, r.latency_ms, r.created_at AS run_created_at, r.viewed_at,
- c.id AS completed_id, c.response_raw AS completed_raw, c.model AS completed_model, c.provider AS completed_provider, c.latency_ms AS completed_latency, c.created_at AS completed_at, c.viewed_at AS completed_viewed
+ r.id AS run_id, r.status, r.response_raw, r.error_message, r.reason, r.model, r.provider, r.latency_ms, r.created_at AS run_created_at, r.viewed_at, r.input_json,
+ c.id AS completed_id, c.response_raw AS completed_raw, c.model AS completed_model, c.provider AS completed_provider, c.latency_ms AS completed_latency, c.created_at AS completed_at, c.viewed_at AS completed_viewed, c.input_json AS completed_input
  FROM selection s JOIN page p ON p.id = s.page_id
  LEFT JOIN bookmark b ON b.selection_id = s.id
  JOIN llm_run r ON r.rowid = ${latest}
@@ -65,6 +67,9 @@ export class SaulDatabase {
     this.db.exec({ sql, bind });
   }
   private run(row: Row): RunResult {
+    const input: RunInput | undefined = row.input_json
+      ? JSON.parse(String(row.input_json))
+      : undefined;
     return {
       id: String(row.id),
       status: row.status as RunResult['status'],
@@ -76,9 +81,14 @@ export class SaulDatabase {
       error: row.error_message ? String(row.error_message) : undefined,
       reason: row.reason ? String(row.reason) : undefined,
       viewedAt: row.viewed_at == null ? undefined : Number(row.viewed_at),
+      ...(input?.recipe ? { recipe: { id: input.recipe.id, name: input.recipe.name } } : {}),
+      ...(input?.preset ? { preset: { id: input.preset.id, name: input.preset.name } } : {}),
     };
   }
   private passage(row: Row): Passage {
+    const completedInput: RunInput | undefined = row.completed_input
+      ? JSON.parse(String(row.completed_input))
+      : undefined;
     const completed: RunResult | undefined = row.completed_id
       ? {
           id: String(row.completed_id),
@@ -89,6 +99,12 @@ export class SaulDatabase {
           createdAt: Number(row.completed_at),
           latencyMs: row.completed_latency == null ? undefined : Number(row.completed_latency),
           viewedAt: row.completed_viewed == null ? undefined : Number(row.completed_viewed),
+          ...(completedInput?.recipe
+            ? { recipe: { id: completedInput.recipe.id, name: completedInput.recipe.name } }
+            : {}),
+          ...(completedInput?.preset
+            ? { preset: { id: completedInput.preset.id, name: completedInput.preset.name } }
+            : {}),
         }
       : undefined;
     return {
@@ -152,9 +168,29 @@ export class SaulDatabase {
         [pageId, s.id, key],
       )[0];
       const selectionId = known ? String(known.id) : s.id;
+      const prior = known
+        ? this.rows(
+            'SELECT input_json,status FROM llm_run WHERE selection_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1',
+            [selectionId],
+          )[0]
+        : undefined;
+      const priorInput: RunInput | undefined = prior?.input_json
+        ? JSON.parse(String(prior.input_json))
+        : undefined;
+      const differentRecipe =
+        !!input.recipe && input.recipe.id !== (priorInput?.recipe?.id || EXPLAIN_RECIPE_ID);
       if (
         known &&
-        (!payload.regenerate ||
+        differentRecipe &&
+        prior &&
+        ['queued', 'running', 'saving'].includes(String(prior.status))
+      )
+        throw new Error(
+          'This passage already has an active request. Stop it before choosing another recipe.',
+        );
+      if (
+        known &&
+        ((!payload.regenerate && !differentRecipe) ||
           this.rows(
             "SELECT id FROM llm_run WHERE selection_id=? AND status IN ('queued','running','saving')",
             [selectionId],
@@ -279,6 +315,18 @@ export class SaulDatabase {
         if (!row) throw new Error('This passage no longer exists.');
         return JSON.parse(String(row.context_json));
       }
+      case 'DB_INPUT': {
+        const row = this.rows(
+          'SELECT input_json FROM llm_run WHERE selection_id=?' +
+            (message.payload.runId ? ' AND id=?' : '') +
+            ' ORDER BY created_at DESC,rowid DESC LIMIT 1',
+          message.payload.runId
+            ? [message.payload.selectionId, message.payload.runId]
+            : [message.payload.selectionId],
+        )[0];
+        if (!row) throw new Error('This passage no longer exists.');
+        return row.input_json ? JSON.parse(String(row.input_json)) : undefined;
+      }
       case 'DB_RUNS':
         return this.rows(
           'SELECT * FROM llm_run WHERE selection_id=? ORDER BY created_at DESC,rowid DESC',
@@ -389,8 +437,14 @@ export class SaulDatabase {
         );
         for (const run of runs) {
           const segments = new TagStreamParser().feed(String(run.response_raw || ''));
+          const metadata = this.run(run);
           lines.push(
             `\n${run.status === 'completed' ? 'Completed' : 'Incomplete (' + run.status + ')'} · Model: ${run.model}`,
+            ...(metadata.recipe
+              ? [
+                  `Recipe: ${metadata.recipe.name}${metadata.preset ? ` · Preset: ${metadata.preset.name}` : ''}`,
+                ]
+              : []),
             segments.map((s) => (s.type === 'text' ? s.text : s.term)).join(''),
           );
           for (const s of segments)

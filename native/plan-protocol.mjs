@@ -9,7 +9,7 @@ export function validatePlanRequest(v) {
     login: ['accountId', 'consent'],
     logout: ['accountId'],
     models: ['accountId'],
-    generate: ['accountId', 'model', 'systemPrompt', 'userPrompt'],
+    generate: ['accountId', 'model', 'effort', 'fast', 'systemPrompt', 'userPrompt'],
   }[v.action];
   if (!Array.isArray(keys) || Object.keys(v).some((k) => k !== 'action' && !keys.includes(k)))
     throw new Error('Unsupported plan operation');
@@ -23,7 +23,12 @@ export function validatePlanRequest(v) {
     throw new Error('Invalid sign-in request');
   if (
     v.action === 'generate' &&
-    (!text(v.model, 256) || !text(v.systemPrompt, 100000) || !text(v.userPrompt, 200000))
+    (!text(v.model, 256) ||
+      typeof v.systemPrompt !== 'string' ||
+      v.systemPrompt.length > 100000 ||
+      !text(v.userPrompt, 200000) ||
+      (v.effort !== undefined && (typeof v.effort !== 'string' || v.effort.length > 64)) ||
+      (v.fast !== undefined && typeof v.fast !== 'boolean'))
   )
     throw new Error('Invalid generation request');
 }
@@ -35,7 +40,18 @@ const account = (v) =>
   text(v.label, 1000) &&
   typeof v.signedIn === 'boolean' &&
   typeof v.planEnabled === 'boolean';
-const model = (v) => record(v) && text(v.slug, 256) && text(v.display_name, 1000);
+const model = (v) =>
+  record(v) &&
+  text(v.slug, 256) &&
+  text(v.display_name, 1000) &&
+  Array.isArray(v.supportedReasoningEfforts) &&
+  v.supportedReasoningEfforts.every(
+    (level) => record(level) && text(level.effort, 64) && typeof level.description === 'string',
+  ) &&
+  typeof v.defaultReasoningEffort === 'string' &&
+  v.defaultReasoningEffort.length <= 64 &&
+  (v.fastTier === undefined || text(v.fastTier, 256)) &&
+  typeof v.isDefault === 'boolean';
 export function validatePlanResult(request, value) {
   const validators = {
     accounts: (v) => Array.isArray(v.accounts) && v.accounts.every(account),

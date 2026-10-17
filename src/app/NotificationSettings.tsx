@@ -59,9 +59,8 @@ export function NotificationSettings() {
           onChange={(e) => void toggle(e.target.checked)}
         />
       </label>
-      <p className="small muted">
-        Hide error toasts on web pages, including “Saul did not respond.” Errors remain visible in
-        explanations and Settings. Saves immediately on this device.
+      <p className="small muted standard-only">
+        Errors remain visible in explanations and Settings.
       </p>
       {error && (
         <p className="notice error" role="alert">

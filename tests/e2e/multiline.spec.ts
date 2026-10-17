@@ -106,7 +106,7 @@ test('multiline capture preserves paragraph, list, and explicit line breaks in s
   await page.getByRole('button', { name: 'Explain', exact: true }).click();
   await page.getByRole('button', { name: 'View', exact: true }).click();
   const card = page.getByRole('region', { name: 'Saul explanation' });
-  await expect(card.getByText('Ready · saved on this device', { exact: false })).toBeVisible();
+  await expect(card.getByText('Saved', { exact: true })).toBeVisible();
   const cardBox = (await card.boundingBox())!;
   expect(Math.abs(cardBox.y - end.bottom - 8)).toBeLessThan(2);
   expect(Math.abs(cardBox.x - lastLine!.x)).toBeLessThan(2);
@@ -133,7 +133,7 @@ test('multiline capture preserves paragraph, list, and explicit line breaks in s
   );
   await page.getByRole('button', { name: 'Explain', exact: true }).click();
   await page.getByRole('button', { name: 'View', exact: true }).click();
-  await expect(card.getByText('Ready · saved on this device', { exact: false })).toBeVisible();
+  await expect(card.getByText('Saved', { exact: true })).toBeVisible();
   await expect(card.locator('header span')).toHaveAttribute(
     'title',
     'First line\nSecond line\nFinal line',
@@ -170,7 +170,7 @@ test('live GitHub multiline selection and explanation stay aligned while scrolli
   await trigger.click();
   await page.getByRole('button', { name: 'View', exact: true }).click();
   const card = page.getByRole('region', { name: 'Saul explanation' });
-  await expect(card.getByText('Ready · saved on this device', { exact: false })).toBeVisible();
+  await expect(card.getByText('Saved', { exact: true })).toBeVisible();
   expect(Math.abs((await card.boundingBox())!.y - end.bottom - 8)).toBeLessThan(2);
   await expect(card).toHaveCSS('transition-duration', '0s');
 });

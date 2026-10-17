@@ -68,6 +68,34 @@ export interface ProviderProfile {
   config: UserSettings['openaiCompatible'];
 }
 
+export interface ModelPreset {
+  id: string;
+  name: string;
+  provider: ProviderType;
+  model: string;
+  profileId?: string;
+  accountId?: string;
+  temperature?: number;
+  topK?: number;
+  effort?: string;
+  fast?: boolean;
+}
+
+export interface Recipe {
+  id: string;
+  name: string;
+  presetId: string;
+  template: string;
+  systemPrompt: string;
+}
+
+export interface ReadingConfiguration {
+  schemaVersion: 1;
+  selectedRecipeId: string;
+  presets: ModelPreset[];
+  recipes: Recipe[];
+}
+
 export interface UserSettings {
   profiles?: ProviderProfile[];
   activeProfileId?: string;
@@ -79,11 +107,12 @@ export interface UserSettings {
     model: string;
     temperature: number;
   };
-  chatgptPlan?: { accountId: string; model: string };
+  chatgptPlan?: { accountId: string; model: string; effort?: string; fast?: boolean };
   chromeAi: {
     temperature: number;
     topK: number;
   };
   contextPolicy: ContextPolicy;
   customPromptTemplate?: string;
+  configuration?: ReadingConfiguration;
 }

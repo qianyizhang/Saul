@@ -25,6 +25,7 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
       finishLogin: () => {},
       holdModels: true,
       finishModels: () => {},
+      reducedCapabilities: false,
       cancelled: false,
       hold: false,
       holdLogout: false,
@@ -71,7 +72,21 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
                 state.finishModels = () =>
                   emit({
                     type: 'result',
-                    models: [{ slug: 'plan-fixture-model', display_name: 'Plan fixture model' }],
+                    models: [
+                      {
+                        slug: 'plan-fixture-model',
+                        display_name: 'Plan fixture model',
+                        supportedReasoningEfforts: state.reducedCapabilities
+                          ? [{ effort: 'low', description: 'Quick' }]
+                          : [
+                              { effort: 'low', description: 'Quick' },
+                              { effort: 'high', description: 'Thorough' },
+                            ],
+                        defaultReasoningEffort: 'low',
+                        ...(state.reducedCapabilities ? {} : { fastTier: 'priority' }),
+                        isDefault: true,
+                      },
+                    ],
                   });
                 if (!state.holdModels) state.finishModels();
                 break;
@@ -112,22 +127,29 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   await expect(
     popup.getByText('Complete sign-in in the opened tab.', { exact: true }),
   ).toBeVisible();
+  await expect(popup.getByLabel('Preset', { exact: true })).toBeDisabled();
+  await expect(popup.getByLabel('Provider', { exact: true })).toBeDisabled();
+  await expect(popup.getByRole('button', { name: 'Cancel', exact: true })).toBeEnabled();
   const popupUrl = popup.url();
   await popup.close();
   popup = await context.newPage();
   await popup.goto(popupUrl);
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await popup.getByLabel('Provider', { exact: true }).selectOption('chatgpt-plan');
-  await expect(popup.getByText('ChatGPT helper connected.', { exact: true })).toBeVisible();
+  await expect(popup.getByText('ChatGPT helper connected.', { exact: true })).not.toBeVisible();
   await worker.evaluate(() => {
     (
       globalThis as unknown as { planFixture: { finishLogin: () => void } }
     ).planFixture.finishLogin();
   });
-  await popup.getByRole('button', { name: 'Got it', exact: true }).click();
+  await expect(popup.getByRole('dialog', { name: "You're using your ChatGPT plan" })).toHaveCount(
+    0,
+  );
   await expect(popup.getByLabel('ChatGPT account', { exact: true })).toHaveValue('oaiapp_fixture');
   await expect(popup.getByText('Loading available models…', { exact: true })).toBeVisible();
   await expect(popup.getByLabel('ChatGPT model', { exact: true })).toBeDisabled();
+  await expect(popup.getByLabel('Preset', { exact: true })).toBeDisabled();
+  await expect(popup.getByLabel('Provider', { exact: true })).toBeDisabled();
   await worker.evaluate(() => {
     const fixture = (
       globalThis as unknown as {
@@ -141,10 +163,24 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   await expect(popup.getByLabel('ChatGPT model', { exact: true })).toHaveValue(
     'plan-fixture-model',
   );
+  await expect(popup.getByLabel('ChatGPT effort', { exact: true })).toHaveValue('low');
+  await popup.getByLabel('ChatGPT effort', { exact: true }).selectOption('high');
+  await popup.getByLabel('ChatGPT speed', { exact: true }).selectOption('fast');
   await popup.getByRole('button', { name: 'Test generation', exact: true }).click();
   await expect(popup.getByText(/Generation succeeded:/)).toBeVisible();
-  await popup.getByRole('button', { name: 'Save Settings', exact: true }).click();
-  await expect(popup.getByRole('button', { name: 'Saved!', exact: true })).toBeVisible();
+  expect(
+    await worker.evaluate(() =>
+      (globalThis as unknown as { planFixture: { requests: PlanRequest[] } }).planFixture.requests
+        .filter((request) => request.action === 'generate')
+        .at(-1),
+    ),
+  ).toMatchObject({
+    model: 'plan-fixture-model',
+    effort: 'high',
+    fast: true,
+  });
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
   await popup.screenshot({ path: testInfo.outputPath('chatgpt-settings.png'), fullPage: true });
   await popup.reload();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -152,6 +188,25 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   await expect(popup.getByLabel('ChatGPT model', { exact: true })).toHaveValue(
     'plan-fixture-model',
   );
+  await expect(popup.getByLabel('ChatGPT effort', { exact: true })).toHaveValue('high');
+  await expect(popup.getByLabel('ChatGPT speed', { exact: true })).toHaveValue('fast');
+  await worker.evaluate(() => {
+    (
+      globalThis as unknown as { planFixture: { reducedCapabilities: boolean } }
+    ).planFixture.reducedCapabilities = true;
+  });
+  await popup.getByRole('button', { name: 'Refresh models', exact: true }).click();
+  await expect(popup.getByRole('alert')).toContainText('saved effort');
+  await expect(popup.getByRole('button', { name: 'Test generation', exact: true })).toBeDisabled();
+  await expect(popup.getByLabel('ChatGPT effort', { exact: true })).toHaveValue('high');
+  await expect(popup.getByLabel('ChatGPT speed', { exact: true })).toHaveValue('fast');
+  await worker.evaluate(() => {
+    (
+      globalThis as unknown as { planFixture: { reducedCapabilities: boolean } }
+    ).planFixture.reducedCapabilities = false;
+  });
+  await popup.getByRole('button', { name: 'Refresh models', exact: true }).click();
+  await expect(popup.getByRole('button', { name: 'Test generation', exact: true })).toBeEnabled();
   const page = await context.newPage();
   await page.goto(fixtureServer.origin + '/article');
   await explainSelection(page);
@@ -159,7 +214,23 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   const row = await getFirstHistory(popup);
   expect(row.latest.provider).toBe('chatgpt-plan');
   expect(row.latest.model).toBe('plan-fixture-model');
+  expect(
+    await worker.evaluate(() =>
+      (globalThis as unknown as { planFixture: { requests: PlanRequest[] } }).planFixture.requests
+        .filter((request) => request.action === 'generate')
+        .at(-1),
+    ),
+  ).toMatchObject({
+    model: 'plan-fixture-model',
+    effort: 'high',
+    fast: true,
+  });
   await openFirstPageExplanation(page);
+  await page.getByRole('button', { name: 'More', exact: true }).click();
+  await page
+    .locator('summary')
+    .filter({ hasText: /^Details$/ })
+    .click();
   await expect(page.getByRole('link', { name: 'Manage usage' })).toBeVisible();
   await worker.evaluate(() => {
     (globalThis as unknown as { planFixture: { fail: boolean } }).planFixture.fail = true;
@@ -189,7 +260,7 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   });
   await popup.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(popup.getByText('Signing out…', { exact: true })).toBeVisible();
-  await expect(popup.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0);
+  await expect(popup.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0);
   await worker.evaluate(() => {
     (
       globalThis as unknown as { planFixture: { finishLogout: () => void } }
@@ -212,7 +283,7 @@ test('missing ChatGPT helper shows setup recovery without altering the existing 
   await popup.getByLabel('Provider', { exact: true }).selectOption('chatgpt-plan');
   await expect(popup.getByRole('alert')).toContainText('helper');
   await expect(popup.getByText('node native/install.mjs', { exact: false })).toBeVisible();
-  await popup.getByRole('button', { name: 'Save Settings', exact: true }).click();
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(
     popup.getByText('Choose a ChatGPT account and model.', { exact: true }),
   ).toBeVisible();

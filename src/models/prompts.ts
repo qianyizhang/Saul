@@ -10,7 +10,7 @@ Formatting Rules:
 4. Do NOT nest <term> tags.
 5. Do NOT output markdown code fences around the text. Output plain text with inline <term note="...">...</term> tags directly.`;
 
-export function renderExplainPrompt(context: ResolvedContext, customInstruction?: string): string {
+export function renderReadingContext(context: ResolvedContext): string {
   const parts: string[] = [];
 
   if (context.pageTitle || context.pageUrl) {
@@ -29,6 +29,12 @@ export function renderExplainPrompt(context: ResolvedContext, customInstruction?
     parts.push(`\n--- Surrounding Context ---\n${context.surroundingText}`);
   }
 
+  return parts.join('\n');
+}
+
+export function renderExplainPrompt(context: ResolvedContext, customInstruction?: string): string {
+  const surrounding = renderReadingContext(context);
+  const parts = surrounding ? [surrounding] : [];
   parts.push(`\n--- Selected Text to Explain ---\n"${context.selection}"`);
 
   if (customInstruction) {

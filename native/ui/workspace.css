@@ -169,7 +169,24 @@ footer,
   flex: 1;
 }
 .help {
-  font-size: 11px;
+  font-size: var(--design-size-caption);
+}
+.mode-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 360px;
+  min-height: 44px;
+  color: var(--ink);
+}
+.mode-setting input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+html[data-minimum='true'] .guidance {
+  display: none;
 }
 .board {
   display: grid;
@@ -307,13 +324,11 @@ h2 {
   margin: 0 0 10px;
   color: var(--muted);
 }
+#status:empty {
+  visibility: hidden;
+}
 #status.error {
   color: var(--warning);
-}
-footer {
-  margin-top: 22px;
-  font-size: 10px;
-  text-align: center;
 }
 @media (max-width: 520px) {
   main {
@@ -485,5 +500,15 @@ footer {
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;
+  }
+}
+@media (pointer: coarse) {
+  button,
+  select,
+  summary,
+  .move-handle,
+  .rename-window {
+    min-height: 44px;
+    min-width: 44px;
   }
 }

@@ -2,7 +2,7 @@
 
 ## Reading
 
-1. Select a term or short passage and choose **Explain**, or press **Alt+Shift+E**.
+1. Select a term or short passage, choose a recipe, and select **Explain**. **Alt+Shift+E** uses the selected or default recipe.
 2. Saul saves the request, adds a quiet underline, and confirms that the job is queued. It does not open a card automatically.
 3. Keep reading. A completion notification offers **View**; the badge and page list retain unread state.
 4. Click a marker or open the page list with **Alt+Shift+L** to inspect progress or the saved answer.
@@ -26,9 +26,22 @@ Opening a completed answer marks it read. Dismissing a notification does not. Er
 - **Simpler**, **Give an example**, and **Go deeper** retain the captured source context and include the previous explanation.
 - Copy reports clipboard failures rather than claiming success.
 
-## Library
+## History
 
-The popup opens directly to reading history. Search and bookmarks stay visible; export and deletion of the entire library are under **Export and manage history**. The full workspace uses the same views with a wider reading area.
+The popup opens directly to History. Search and bookmarks stay visible; export and deletion of the entire library are under **Export and manage history**. The full workspace uses the same views with a wider reading area.
+
+**Minimum Mode** is on by default. It keeps source links and essential actions visible,
+removes routine instructions and repeated headings, and places follow-ups, past attempts,
+and selected-entry deletion under **More**. Model and timing information is under
+**Details**. Errors, active progress, incomplete results, and unsaved settings remain
+visible. Turn it off in Settings for the fuller presentation; the choice saves
+immediately and independently of provider drafts, and updates open page overlays.
+
+Shortcuts are listed in a Settings disclosure. **Command/Ctrl+Enter** explains an
+available source selection outside editable fields; **Command/Ctrl+.** stops the
+open explanation's active job. **Escape** dismisses the reading surface without
+cancelling work. **Command/Ctrl+,** opens Settings inside the extension workspace.
+The existing **Alt+Shift+E/L** shortcuts remain. Browser shortcuts stay with Chrome.
 
 The full workspace provides:
 
@@ -41,6 +54,9 @@ SQLite-WASM stores the library in OPFS for the current browser profile. Data is 
 
 ## Settings and models
 
+- Named recipes pair editable prompts with a default model preset. Explain, Lookup, and Nudge are editable starters. A preset names the provider, connection/account, model, and supported options.
+- The existing prompt and model migrate into Explain and Current. Choosing another recipe for the same passage creates a new attempt; retry keeps the original request choices even after Settings changes.
+- Templates substitute `{{text}}`, `{{context}}`, `{{page title}}`, `{{page url}}`, `{{heading}}`, and `{{paragraph}}` once. `{{text}}` is required; unavailable referenced context blocks submission. Enabled context is included once, and template expressions are unsupported.
 - OpenAI-compatible profiles keep separate endpoint, model, temperature, and key values.
 - Changing endpoint origin clears the current key.
 - Missing/stale profile selection preserves the current configuration in a recovered profile.
@@ -49,7 +65,7 @@ SQLite-WASM stores the library in OPFS for the current browser profile. Data is 
 - Model setup appears first. Save and validation feedback stay visible while scrolling; leaving a changed draft asks before discarding it.
 - Response language and context controls apply to new submissions.
 - Chrome on-device AI is temporarily disabled while live model setup remains unverified. Saved selections remain readable and prompt an explicit switch to ChatGPT plan or OpenAI compatible. New local requests are blocked; Saul does not switch providers automatically.
-- [ChatGPT plan](chatgpt-plan.md) supports OAuth sign-in, saved account registrations, account-specific model discovery, and streamed explanations. It requires the local helper. Its controls omit unsupported temperature and output-token options, and failures never switch billing providers.
+- [ChatGPT plan](chatgpt-plan.md) uses the same sign-in flow and control labels as EZ, with separate saved sign-ins. Its account catalog supplies model names, reasoning effort, and Fast/Standard choices. Saved unavailable choices block requests rather than changing silently. It requires the local helper, omits unsupported temperature and output-token options, and never switches billing providers after a failure.
 
 Local tests cover the provider boundary with deterministic fixtures. They do not establish external-provider authentication, model quality, Chrome model availability/download, or device performance.
 

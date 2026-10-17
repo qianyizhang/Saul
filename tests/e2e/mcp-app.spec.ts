@@ -118,7 +118,7 @@ async function openWorkspace(
       .replace('</body>', `<script type="module">${js}</script></body>`),
   );
   const ui = host.frameLocator('iframe');
-  await expect(ui.getByRole('heading', { name: 'Windows & tabs' })).toBeVisible();
+  await expect(ui.getByRole('heading', { name: 'Tabs', exact: true })).toBeVisible();
   await expect(ui.locator('#board')).toContainText('<img src=x onerror=alert(1)> Research');
   await expect(ui.locator('#board img')).toHaveCount(0);
   return { ui, host, context, popup, call, workspace, session, messages, article, reader };
@@ -439,6 +439,8 @@ test('compact board keeps tab controls discoverable and cancels rename and move 
   await expect(ui.locator('.window')).toHaveCount(3);
   await expect(ui.getByRole('combobox', { name: 'Browser session' })).toBeHidden();
   await expect(ui.getByRole('textbox', { name: 'How would you like' })).toBeHidden();
+  await expect(ui.locator('html')).toHaveAttribute('data-minimum', 'true');
+  await expect(ui.locator('.help.guidance')).toBeHidden();
   expect(
     await ui.locator('#board').evaluate((board) => board.getBoundingClientRect().top),
   ).toBeLessThan(280);
@@ -470,6 +472,23 @@ test('compact board keeps tab controls discoverable and cancels rename and move 
   await expect(ui.locator('#move-controls')).toBeHidden();
   await expect(handle).toBeFocused();
   expect(revision((await call('saul_tabs_list')) as TabSnapshot)).toBe(revision(before));
+  await ui.getByText('View options', { exact: true }).click();
+  const minimumMode = ui.getByRole('checkbox', { name: 'Minimum Mode', exact: true });
+  await expect(minimumMode).toBeChecked();
+  await minimumMode.uncheck();
+  await expect(ui.locator('.help.guidance')).toBeVisible();
+  // Reopening the embedded view restores presentation without changing Chrome.
+  await host.locator('iframe').evaluate((frame) => {
+    const iframe = frame as HTMLIFrameElement;
+    const markup = iframe.srcdoc;
+    iframe.srcdoc = markup;
+  });
+  await expect(ui.locator('html')).toHaveAttribute('data-minimum', 'false');
+  await expect(ui.locator('.window')).toHaveCount(3);
+  expect(revision((await call('saul_tabs_list')) as TabSnapshot)).toBe(revision(before));
+  await ui.getByText('View options', { exact: true }).click();
+  await minimumMode.check();
+  await ui.getByText('View options', { exact: true }).click();
   await captureWorkspace(host, ui, info.outputPath('board-light.png'));
   await host.evaluate(() =>
     document.querySelector('iframe')!.contentWindow!.postMessage(

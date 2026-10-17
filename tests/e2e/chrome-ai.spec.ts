@@ -86,8 +86,8 @@ test.describe('on-device provider with a deterministic model fixture', () => {
     expect(calls.calls[0]?.activated).toBe(true);
     expect(calls.calls[1]?.systemPrompt).toBe('Reply briefly.');
     expect(calls.destroyed).toBe(2);
-    await popup.getByRole('button', { name: 'Save Settings', exact: true }).click();
-    await expect(popup.getByRole('button', { name: 'Saved!', exact: true })).toBeVisible();
+    await popup.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
     const page = await context.newPage();
     await page.goto(fixtureServer.origin + '/article');
     await explainSelection(page);
@@ -155,7 +155,7 @@ test('saved on-device selection shows a recovery choice without silently switchi
   await expect(
     popup.getByRole('button', { name: 'Prepare on-device model', exact: true }),
   ).toHaveCount(0);
-  await popup.getByRole('button', { name: 'Save Settings', exact: true }).click();
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(popup.getByRole('alert')).toContainText('temporarily disabled');
   await popup.getByLabel('Provider', { exact: true }).selectOption('chatgpt-plan');
   await expect(

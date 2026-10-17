@@ -5,7 +5,8 @@ import { generateKeyPair, SignJWT, exportJWK, createLocalJWKSet } from 'jose';
 import { PlanStore, accountSummary } from '../native/plan-store.mjs';
 import { PlanAuth, ISSUER } from '../native/plan-auth.mjs';
 import { PlanService } from '../native/plan-service.mjs';
-import { validatePlanRequest } from '../native/plan-protocol.mjs';
+import { validatePlanRequest, validatePlanResult } from '../native/plan-protocol.mjs';
+import { planModels, planModelDefaults, planModelIssue } from '../native/plan-models.mjs';
 import { responsesBody, responseEvents } from '../native/responses.mjs';
 
 let directory, store;
@@ -76,6 +77,7 @@ it('uses only allowed Responses fields and requires a terminal completed event',
     input: [{ role: 'user', content: 'A gradient.' }],
     stream: true,
     store: false,
+    service_tier: 'default',
   });
   expect(
     await collect(
@@ -131,9 +133,14 @@ it('rejects unsupported bridge operations and caller-supplied endpoints or token
     { ...generate, baseUrl: 'https://evil.test' },
     { action: 'shell' },
     { ...generate, model: '' },
+    { ...generate, effort: 3 },
+    { ...generate, fast: 'yes' },
+    { ...generate, serviceTier: 'priority' },
+    { ...generate, systemPrompt: null },
   ])
     expect(() => validatePlanRequest(request)).toThrow();
   expect(() => validatePlanRequest(generate)).not.toThrow();
+  expect(() => validatePlanRequest({ ...generate, systemPrompt: '' })).not.toThrow();
 });
 it('loads the account catalog, streams with OAuth, and never retries quota failures or changes billing', async () => {
   saved();
@@ -160,7 +167,18 @@ it('loads the account catalog, streams with OAuth, and never retries quota failu
     events = [];
   await service.run({ action: 'models', accountId: 'oaiapp_one' }, (e) => events.push(e));
   expect(events).toEqual([
-    { type: 'result', models: [{ slug: 'eligible-model', display_name: 'Eligible' }] },
+    {
+      type: 'result',
+      models: [
+        {
+          slug: 'eligible-model',
+          display_name: 'Eligible',
+          supportedReasoningEfforts: [],
+          defaultReasoningEffort: '',
+          isDefault: false,
+        },
+      ],
+    },
   ]);
   await expect(service.run(generate, () => {})).rejects.toThrow('Manage usage');
   await expect(service.run(generate, () => {})).rejects.toThrow('paused');
@@ -169,6 +187,252 @@ it('loads the account catalog, streams with OAuth, and never retries quota failu
   expect(url).toBe('https://api.openai.com/v1/responses');
   expect(init.headers.Authorization).toBe('Bearer test-access');
   expect(JSON.parse(init.body)).toEqual(responsesBody(generate));
+});
+it('keeps catalog order and advertised effort/speed capabilities without model-name guesses', () => {
+  const models = planModels([
+    { visibility: 'hidden', slug: 'hidden' },
+    {
+      visibility: 'list',
+      slug: 'reasoner',
+      display_name: 'Reasoner',
+      is_default: true,
+      default_reasoning_level: 'medium',
+      supported_reasoning_levels: [
+        { effort: 'low', description: 'Quick' },
+        { effort: 'medium' },
+        { effort: 'low' },
+        { effort: 3 },
+      ],
+      additional_speed_tiers: ['priority'],
+    },
+    {
+      visibility: 'list',
+      slug: 'alternate',
+      default_reasoning_effort: 'high',
+      supported_reasoning_efforts: [{ reasoning_effort: 'high', description: 'Thorough' }],
+      service_tiers: [{ id: 'fast', name: 'Fast' }],
+    },
+    { visibility: 'list', slug: 'fast-in-name', service_tiers: [{ id: 'flex', name: 3 }] },
+  ]);
+  expect(models).toEqual([
+    {
+      slug: 'reasoner',
+      display_name: 'Reasoner',
+      supportedReasoningEfforts: [
+        { effort: 'low', description: 'Quick' },
+        { effort: 'medium', description: '' },
+      ],
+      defaultReasoningEffort: 'medium',
+      fastTier: 'priority',
+      isDefault: true,
+    },
+    {
+      slug: 'alternate',
+      display_name: 'alternate',
+      supportedReasoningEfforts: [{ effort: 'high', description: 'Thorough' }],
+      defaultReasoningEffort: 'high',
+      fastTier: 'fast',
+      isDefault: false,
+    },
+    {
+      slug: 'fast-in-name',
+      display_name: 'fast-in-name',
+      supportedReasoningEfforts: [],
+      defaultReasoningEffort: '',
+      isDefault: false,
+    },
+  ]);
+  expect(planModelDefaults(models[0])).toEqual({ effort: 'low', fast: false });
+  expect(planModelDefaults(models[1])).toEqual({ effort: 'high', fast: false });
+  expect(planModelIssue({ model: 'reasoner' }, models)).toBeUndefined();
+  expect(() => validatePlanResult({ action: 'models' }, { type: 'result', models })).not.toThrow();
+  expect(() =>
+    validatePlanResult(
+      { action: 'models' },
+      { type: 'result', models: [{ slug: 'old', display_name: 'Old' }] },
+    ),
+  ).toThrow('Update the helper');
+});
+it('validates saved model, effort and Fast against the account catalog before inference', async () => {
+  const auth = { accessToken: vi.fn(async () => 'fixture-token') };
+  const fetcher = vi.fn(async (url) =>
+    url.endsWith('/models')
+      ? Response.json({
+          models: [
+            {
+              visibility: 'list',
+              slug: 'eligible-model',
+              display_name: 'Eligible',
+              supported_reasoning_levels: [{ effort: 'low' }, { effort: 'high' }],
+              additional_speed_tiers: ['priority'],
+            },
+          ],
+        })
+      : sse({ type: 'response.completed' }),
+  );
+  const service = new PlanService(auth, fetcher);
+  await expect(service.run({ ...generate, model: 'removed' }, () => {})).rejects.toThrow(
+    'unavailable',
+  );
+  await expect(service.run({ ...generate, effort: 'ultra' }, () => {})).rejects.toThrow(
+    'saved effort',
+  );
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  await service.run({ ...generate, effort: 'high', fast: true }, () => {});
+  expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({
+    ...responsesBody(generate),
+    reasoning: { effort: 'high' },
+    service_tier: 'priority',
+  });
+  // Refreshing removes old capabilities; saved choices must not normalize or send.
+  fetcher.mockResolvedValueOnce(
+    Response.json({ models: [{ visibility: 'list', slug: 'eligible-model' }] }),
+  );
+  await service.run({ action: 'models', accountId: generate.accountId }, () => {});
+  const calls = fetcher.mock.calls.length;
+  await expect(service.run({ ...generate, fast: true }, () => {})).rejects.toThrow(
+    'Fast is unavailable',
+  );
+  await expect(service.run({ ...generate, effort: 'high' }, () => {})).rejects.toThrow(
+    'saved effort',
+  );
+  expect(fetcher).toHaveBeenCalledTimes(calls);
+});
+it('keeps capability catalogs account-bound and blocks inference when permission or discovery fails', async () => {
+  const auth = {
+    accessToken: vi.fn(async (id) => {
+      if (id === 'denied') throw new Error('ChatGPT plan permission is disabled.');
+      return id;
+    }),
+  };
+  const fetcher = vi.fn(async (_url, init) =>
+    Response.json({
+      models: [
+        {
+          visibility: 'list',
+          slug: 'eligible-model',
+          additional_speed_tiers:
+            init.headers.Authorization === 'Bearer oaiapp_one' ? ['priority'] : [],
+        },
+      ],
+    }),
+  );
+  const service = new PlanService(auth, fetcher);
+  await service.run({ action: 'models', accountId: 'oaiapp_one' }, () => {});
+  await expect(
+    service.run({ ...generate, accountId: 'oaiapp_two', fast: true }, () => {}),
+  ).rejects.toThrow('Fast is unavailable');
+  await expect(service.run({ ...generate, accountId: 'denied' }, () => {})).rejects.toThrow(
+    'permission',
+  );
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  fetcher.mockResolvedValueOnce(
+    Response.json({ error: { code: 'subscription_sharing_usage_unavailable' } }, { status: 503 }),
+  );
+  await expect(
+    service.run({ action: 'models', accountId: 'oaiapp_one' }, () => {}),
+  ).rejects.toThrow('temporarily unavailable');
+  fetcher.mockResolvedValueOnce(Response.json({ models: [] }));
+  await expect(service.run(generate, () => {})).rejects.toThrow('unavailable');
+  expect(fetcher.mock.calls.every(([url]) => url.endsWith('/models'))).toBe(true);
+});
+it.each(['fast', 'priority'])(
+  'maps advertised %s to Responses priority and keeps Standard explicit',
+  async (tier) => {
+    const fetcher = vi.fn(async (url) =>
+      url.endsWith('/models')
+        ? Response.json({
+            models: [
+              { visibility: 'list', slug: 'eligible-model', additional_speed_tiers: [tier] },
+            ],
+          })
+        : sse({ type: 'response.completed' }),
+    );
+    const service = new PlanService({ accessToken: async () => 'fixture-token' }, fetcher);
+    await service.run({ ...generate, fast: true }, () => {});
+    expect(JSON.parse(fetcher.mock.calls[1][1].body).service_tier).toBe('priority');
+    await service.run({ ...generate, fast: false, systemPrompt: '' }, () => {});
+    const body = JSON.parse(fetcher.mock.calls[2][1].body);
+    expect(body.service_tier).toBe('default');
+    expect(body).not.toHaveProperty('instructions');
+    expect(body.input).toEqual([{ role: 'user', content: generate.userPrompt }]);
+  },
+);
+it.each(['models', 'generate'])(
+  'a newer refresh supersedes an earlier %s catalog without stale inference',
+  async (action) => {
+    const pending = Promise.withResolvers();
+    const fetcher = vi
+      .fn()
+      .mockImplementationOnce(() => pending.promise)
+      .mockResolvedValueOnce(
+        Response.json({ models: [{ visibility: 'list', slug: 'eligible-model' }] }),
+      );
+    const service = new PlanService({ accessToken: async () => 'fixture-token' }, fetcher);
+    const first = service
+      .run(
+        action === 'generate'
+          ? { ...generate, fast: true }
+          : { action, accountId: generate.accountId },
+        () => {},
+      )
+      .catch((error) => error);
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+    await service.run({ action: 'models', accountId: generate.accountId }, () => {});
+    pending.resolve(
+      Response.json({
+        models: [
+          { visibility: 'list', slug: 'eligible-model', additional_speed_tiers: ['priority'] },
+        ],
+      }),
+    );
+    expect(await first).toMatchObject({
+      message: expect.stringContaining('model choices changed'),
+    });
+    await expect(service.run({ ...generate, fast: true }, () => {})).rejects.toThrow(
+      'Fast is unavailable',
+    );
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  },
+);
+it.each(['login', 'logout'])('%s invalidates an earlier catalog operation', async (action) => {
+  const pending = Promise.withResolvers();
+  const account = { id: generate.accountId };
+  const auth = {
+    accessToken: async () => 'fixture-token',
+    login: async () => account,
+    logout: async () => ({ account }),
+  };
+  const fetcher = vi.fn().mockImplementationOnce(() => pending.promise);
+  const service = new PlanService(auth, fetcher);
+  const first = service
+    .run({ action: 'models', accountId: generate.accountId }, () => {})
+    .catch((error) => error);
+  await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+  await service.run({ action, accountId: generate.accountId }, () => {});
+  pending.resolve(Response.json({ models: [{ visibility: 'list', slug: 'eligible-model' }] }));
+  expect(await first).toMatchObject({ message: expect.stringContaining('model choices changed') });
+  expect(service.catalogs.has(generate.accountId)).toBe(false);
+});
+it('shares initial catalog discovery without one cancelled job cancelling another', async () => {
+  const pending = Promise.withResolvers(),
+    cancelled = new AbortController();
+  const fetcher = vi
+    .fn()
+    .mockImplementationOnce(() => pending.promise)
+    .mockResolvedValueOnce(sse({ type: 'response.completed' }));
+  const service = new PlanService({ accessToken: async () => 'fixture-token' }, fetcher);
+  const first = service.run(generate, () => {}, cancelled.signal).catch((error) => error);
+  const events = [],
+    second = service.run(generate, (event) => events.push(event));
+  await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+  cancelled.abort();
+  pending.resolve(Response.json({ models: [{ visibility: 'list', slug: 'eligible-model' }] }));
+  expect(await first).toMatchObject({ name: 'AbortError' });
+  await second;
+  expect(events).toEqual([{ type: 'complete' }]);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(fetcher.mock.calls[1][0]).toBe('https://api.openai.com/v1/responses');
 });
 it('registers using PKCE and validates identity before atomically saving owner-only credentials', async () => {
   let authUrl, exchange;

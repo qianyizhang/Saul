@@ -36,7 +36,7 @@ try {
     await article.getByRole('button', { name: 'Explain', exact: true }).click();
     await article.getByRole('button', { name: 'View', exact: true }).click();
     await article.getByRole('button', { name: 'Regenerate', exact: true }).waitFor();
-    await popup.getByRole('button', { name: 'Reading history', exact: true }).click();
+    await popup.getByRole('button', { name: 'History', exact: true }).click();
     await popup.getByText('"Gradient descent"', { exact: true }).waitFor();
     console.log('Sandbox smoke passed: selected, explained, and saved.');
   } else {

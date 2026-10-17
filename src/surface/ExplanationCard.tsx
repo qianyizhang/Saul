@@ -1,24 +1,25 @@
 import { useRef, useState } from 'react';
-import { X, Copy, Check, RefreshCw, Pin, Bookmark, Square } from 'lucide-react';
+import { X, Copy, Check, RefreshCw, Pin, Bookmark, Square, ChevronDown } from 'lucide-react';
 import type { Passage, RunResult, RunStatus } from '../types/storage';
 import { TagStreamParser } from '../parser/tag-stream-parser';
 import { AnnotatedTextView } from './AnnotatedTextView';
 import { useAnchoredPosition } from './useAnchoredPosition';
 export const runLabel = (status: RunStatus) =>
   ({
-    queued: 'Queued',
+    queued: 'Waiting…',
     running: 'Explaining…',
     saving: 'Saving…',
-    completed: 'Ready · saved on this device',
-    failed: 'Incomplete · needs attention',
-    interrupted: 'Incomplete · interrupted',
-    cancelled: 'Incomplete · stopped',
+    completed: 'Saved',
+    failed: 'Incomplete',
+    interrupted: 'Interrupted',
+    cancelled: 'Stopped',
   })[status];
 interface Props {
   range: Range | null;
   passage: Passage;
   pinned: boolean;
   busy: boolean;
+  minimum: boolean;
   onRetry: (instruction?: string) => void;
   onClose: () => void;
   onStop: () => void;
@@ -31,6 +32,7 @@ export function ExplanationCard({
   passage,
   pinned,
   busy,
+  minimum,
   onRetry,
   onClose,
   onStop,
@@ -39,19 +41,21 @@ export function ExplanationCard({
   loadRuns,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  const moreButton = useRef<HTMLButtonElement>(null);
   const anchored = useAnchoredPosition(range, ref);
   const style = range
     ? anchored
-    : { position: 'fixed' as const, right: 24, bottom: 76, zIndex: 2147483647 };
+    : { position: 'fixed' as const, right: 12, bottom: 76, zIndex: 2147483647 };
   const [copied, setCopied] = useState(false),
     [error, setError] = useState('');
+  const [more, setMore] = useState(false);
   const [runs, setRuns] = useState<RunResult[] | null>(null);
   const latest = passage.latest,
     answer = passage.completed || latest;
   const active = ['queued', 'running', 'saving'].includes(latest.status);
   const segments = new TagStreamParser().feed(answer.responseRaw);
   const iconClass =
-    'p-2 text-muted hover:bg-subtle rounded-md focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40';
+    'p-2 text-muted hover:bg-subtle rounded-control focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40';
   async function copy() {
     try {
       await navigator.clipboard.writeText(
@@ -63,17 +67,53 @@ export function ExplanationCard({
       setError('Could not copy. Select the explanation and copy it manually.');
     }
   }
+  const copyButton = segments.length > 0 && (
+    <button
+      className={`${iconClass} flex items-center gap-1 text-sm`}
+      aria-label="Copy explanation"
+      onClick={copy}
+    >
+      {copied ? <Check size={16} /> : <Copy size={16} />}
+      {copied ? 'Copied' : 'Copy'}
+    </button>
+  );
   return (
     <div
       ref={ref}
       role="region"
       aria-label="Saul explanation"
+      data-minimum={minimum}
       style={style}
       onClick={(e) => e.stopPropagation()}
-      className="w-96 max-w-[calc(100vw-24px)] max-h-[calc(100vh-24px)] flex flex-col bg-surface rounded-panel border border-line saul-elevated text-ink font-sans"
+      onKeyDown={(event) => {
+        if (
+          event.key !== 'Escape' ||
+          event.defaultPrevented ||
+          event.nativeEvent.isComposing ||
+          event.repeat
+        )
+          return;
+        const target = event.target instanceof Element ? event.target : null;
+        const openDetails = [
+          ...(ref.current?.querySelectorAll<HTMLDetailsElement>('details[open]') || []),
+        ];
+        const details = target?.closest<HTMLDetailsElement>('details[open]') || openDetails.at(-1);
+        if (details) {
+          event.preventDefault();
+          event.stopPropagation();
+          details.open = false;
+          details.querySelector<HTMLElement>(':scope > summary')?.focus();
+        } else if (minimum && more) {
+          event.preventDefault();
+          event.stopPropagation();
+          setMore(false);
+          moreButton.current?.focus();
+        }
+      }}
+      className="saul-card w-96 max-w-[calc(100vw-24px)] max-h-[calc(100vh-24px)] flex flex-col bg-surface rounded-panel border border-line saul-elevated text-ink font-sans"
     >
-      <header className="flex items-center justify-between p-2 border-b border-line">
-        <span className="saul-subject truncate pl-2" title={passage.snapshot.text}>
+      <header className="flex items-center justify-between gap-2 px-3 pt-2">
+        <span className="saul-subject truncate" title={passage.snapshot.text}>
           {passage.snapshot.text}
         </span>
         <div className="flex shrink-0">
@@ -90,40 +130,19 @@ export function ExplanationCard({
           </button>
         </div>
       </header>
-      <div className="p-4 overflow-y-auto min-h-16">
-        {!range && (
-          <p className="text-xs text-muted mb-3">
-            Source location unavailable on this page. Your explanation is still saved.
-          </p>
-        )}
-        {latest.provider === 'chatgpt-plan' && (
-          <p className="text-xs text-muted mb-3">
-            {active ? 'Using ChatGPT plan' : 'ChatGPT plan'} ·{' '}
-            <a
-              href="https://chatgpt.com/settings/usage"
-              target="_blank"
-              rel="noreferrer"
-              className="underline"
-            >
-              Manage usage
-            </a>
-          </p>
-        )}
+      <div className="px-4 py-3 overflow-y-auto min-h-16">
+        {!range && <p className="text-xs text-muted mb-3">Source location unavailable.</p>}
         {latest.error && (
           <p role="alert" className="text-sm text-danger bg-danger-wash p-3 rounded-control mb-3">
             {latest.error}
           </p>
         )}
-        {answer.id !== latest.id && (
-          <p className="text-xs text-muted mb-2">Previous completed explanation</p>
-        )}
+        {answer.id !== latest.id && <p className="text-xs text-muted mb-2">Previous answer</p>}
         {segments.length ? (
           <AnnotatedTextView segments={segments} isStreaming={answer.status === 'running'} />
         ) : (
           <p className="text-sm text-muted">
-            {active
-              ? 'You can keep reading while Saul explains.'
-              : 'No explanation text was returned.'}
+            {active ? 'Waiting…' : 'No explanation text was returned.'}
           </p>
         )}
         {answer.id !== latest.id && latest.responseRaw && (
@@ -137,38 +156,78 @@ export function ExplanationCard({
             {error}
           </p>
         )}
-        {runs && (
-          <div className="mt-3 text-sm border-t border-line">
-            {runs.map((run) => (
-              <details key={run.id} className="mt-2">
-                <summary>
-                  {runLabel(run.status)} · {new Date(run.createdAt).toLocaleString()}
-                </summary>
-                {run.error && <p>{run.error}</p>}
-                <AnnotatedTextView segments={new TagStreamParser().feed(run.responseRaw)} />
-              </details>
-            ))}
+        {(!minimum || more) && (
+          <div className="mt-4 text-sm saul-more">
+            {!active && passage.completed && (
+              <div className="flex flex-wrap gap-2 mb-3" aria-label="Follow-up explanations">
+                {['Simpler', 'Give an example', 'Go deeper'].map((label) => (
+                  <button
+                    className="px-2 py-1.5 text-xs rounded-control border border-line hover:bg-wash focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40"
+                    key={label}
+                    disabled={busy}
+                    onClick={() => {
+                      setRuns(null);
+                      setMore(false);
+                      onRetry(label);
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button
+              className={`${iconClass} text-xs`}
+              aria-expanded={runs !== null}
+              onClick={() => {
+                if (runs) setRuns(null);
+                else
+                  void loadRuns()
+                    .then(setRuns)
+                    .catch((e) => setError(e.message));
+              }}
+            >
+              Past attempts
+            </button>
+            {runs &&
+              runs.map((run) => (
+                <details key={run.id} className="mt-2">
+                  <summary>
+                    {runLabel(run.status)} · {new Date(run.createdAt).toLocaleString()}
+                  </summary>
+                  {run.error && <p>{run.error}</p>}
+                  <AnnotatedTextView segments={new TagStreamParser().feed(run.responseRaw)} />
+                </details>
+              ))}
+            <details className="text-xs text-muted mt-2">
+              <summary>Details</summary>
+              <p>
+                {answer.recipe?.name}
+                {answer.preset?.name ? ` · ${answer.preset.name}` : ''}
+              </p>
+              <p>
+                {answer.model}
+                {answer.latencyMs ? ` · ${(answer.latencyMs / 1000).toFixed(1)}s` : ''}
+              </p>
+              {answer.provider === 'chatgpt-plan' && (
+                <p>
+                  ChatGPT plan ·{' '}
+                  <a
+                    href="https://chatgpt.com/settings/usage"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline"
+                  >
+                    Manage usage
+                  </a>
+                </p>
+              )}
+            </details>
           </div>
         )}
       </div>
-      {!active && passage.completed && (
-        <div className="px-4 pb-2 flex flex-wrap gap-2" aria-label="Follow-up explanations">
-          {['Simpler', 'Give an example', 'Go deeper'].map((label) => (
-            <button
-              className="px-2 py-1.5 text-xs rounded-md border border-line hover:bg-wash focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40"
-              key={label}
-              disabled={busy}
-              onClick={() => {
-                setRuns(null);
-                onRetry(label);
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
-      <div className="px-3 pb-3 flex flex-wrap items-center gap-1">
+      <div className="px-3 pb-1 flex flex-wrap items-center gap-1">
+        {!active && copyButton}
         {active ? (
           <button
             className={`${iconClass} flex items-center gap-1 text-sm`}
@@ -179,26 +238,20 @@ export function ExplanationCard({
             {latest.status === 'saving' ? 'Saving…' : 'Stop'}
           </button>
         ) : (
-          <>
-            <button
-              className={`${iconClass} flex items-center gap-1 text-sm`}
-              aria-label={latest.status === 'completed' ? 'Regenerate' : 'Retry explanation'}
-              disabled={busy}
-              onClick={() => {
-                setRuns(null);
-                onRetry();
-              }}
-            >
-              <RefreshCw size={16} />
-              {latest.status === 'completed' ? 'Regenerate' : 'Retry'}
-            </button>
-            {segments.length > 0 && (
-              <button className={iconClass} aria-label="Copy explanation" onClick={copy}>
-                {copied ? <Check size={16} /> : <Copy size={16} />}
-              </button>
-            )}
-          </>
+          <button
+            className={`${iconClass} flex items-center gap-1 text-sm`}
+            aria-label={latest.status === 'completed' ? 'Regenerate' : 'Retry explanation'}
+            disabled={busy}
+            onClick={() => {
+              setRuns(null);
+              onRetry();
+            }}
+          >
+            <RefreshCw size={16} />
+            {latest.status === 'completed' ? 'Regenerate' : 'Retry'}
+          </button>
         )}
+        {active && copyButton}
         <button
           className={iconClass}
           aria-label={passage.bookmarked ? 'Remove bookmark' : 'Bookmark'}
@@ -208,26 +261,19 @@ export function ExplanationCard({
         >
           <Bookmark size={16} fill={passage.bookmarked ? 'currentColor' : 'none'} />
         </button>
-        <button
-          className={`${iconClass} text-xs ml-auto`}
-          aria-expanded={runs !== null}
-          onClick={() => {
-            if (runs) setRuns(null);
-            else
-              void loadRuns()
-                .then(setRuns)
-                .catch((e) => setError(e.message));
-          }}
-        >
-          Past attempts
-        </button>
-      </div>
-      <footer className="px-4 py-2 bg-subtle rounded-b-xl text-xs text-muted border-t border-line">
-        <span role="status">{runLabel(latest.status)}</span>
-        {latest.latencyMs ? ` · ${(latest.latencyMs / 1000).toFixed(1)}s` : ''}
-        {['queued', 'running'].includes(latest.status) && (
-          <p className="mt-1">Close to keep reading; generation continues.</p>
+        {minimum && (
+          <button
+            ref={moreButton}
+            className={`${iconClass} ml-auto flex items-center gap-1 text-xs`}
+            aria-expanded={more}
+            onClick={() => setMore(!more)}
+          >
+            More <ChevronDown size={14} className={more ? 'rotate-180' : ''} />
+          </button>
         )}
+      </div>
+      <footer className="px-4 pb-3 text-xs text-muted">
+        <span role="status">{runLabel(latest.status)}</span>
       </footer>
     </div>
   );

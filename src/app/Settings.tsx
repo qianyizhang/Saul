@@ -1,12 +1,13 @@
 import { ChatGPTPlanSettings } from './ChatGPTPlanSettings';
 import { useEffect, useState } from 'react';
 import { DEFAULT_SETTINGS } from '../storage/settings';
-import { DEFAULT_SYSTEM_PROMPT } from '../models/prompts';
 import type { UserSettings } from '../types';
 import { useSettingsDraft } from './useSettingsDraft';
 import { useProviderTest } from './useProviderTest';
 import { NotificationSettings } from './NotificationSettings';
 import { CHROME_AI_ENABLED, CHROME_AI_DISABLED_MESSAGE } from '../models/chrome-ai';
+import { configurationFor } from '../models/configuration';
+import { RecipeSettings } from './RecipeSettings';
 
 const presets = [
   { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
@@ -28,6 +29,11 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
   const { testing, notice, availability } = providerTest;
   const error = draft.error || providerTest.error;
   const [visibleKey, setVisibleKey] = useState(false);
+  const [planBusy, setPlanBusy] = useState(false);
+  const configuration = configurationFor(settings);
+  const selectedPreset = configuration.presets.find(
+    (preset) => preset.id === draft.selectedPresetId,
+  );
   useEffect(() => setVisibleKey(false), [settings.activeProfileId, settings.activeProvider]);
   function update(patch: Partial<UserSettings>) {
     if (patch.activeProfileId || patch.activeProvider) setVisibleKey(false);
@@ -67,17 +73,66 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
     );
   return (
     <fieldset className="stack settings-layout settings-fields" disabled={saving}>
-      <div>
+      <div className="standard-only">
         <h2 className="view-title">Settings</h2>
         <p className="small muted">Choose how Saul explains and what context it uses.</p>
       </div>
       <section className="panel settings-section">
-        <h3>Model</h3>
+        <div className="row between">
+          <h3>Model presets</h3>
+          <button
+            className="btn"
+            disabled={testing || planBusy || configuration.presets.length >= 32}
+            onClick={draft.addPreset}
+          >
+            Add preset
+          </button>
+        </div>
         <fieldset className="settings-fields" disabled={testing}>
+          <label className="field">
+            Preset
+            <select
+              aria-label="Preset"
+              disabled={planBusy}
+              value={draft.selectedPresetId}
+              onChange={(event) => {
+                draft.selectPreset(event.target.value);
+                providerTest.clear();
+              }}
+            >
+              {configuration.presets.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {selectedPreset && (
+            <label className="field">
+              Preset name
+              <input
+                maxLength={80}
+                value={selectedPreset.name}
+                onChange={(event) =>
+                  update({
+                    configuration: {
+                      ...configuration,
+                      presets: configuration.presets.map((preset) =>
+                        preset.id === selectedPreset.id
+                          ? { ...preset, name: event.target.value }
+                          : preset,
+                      ),
+                    },
+                  })
+                }
+              />
+            </label>
+          )}
           <label className="field">
             Provider
             <select
               aria-label="Provider"
+              disabled={planBusy}
               value={settings.activeProvider}
               onChange={(e) =>
                 update({ activeProvider: e.target.value as UserSettings['activeProvider'] })
@@ -92,6 +147,8 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
           </label>
           {settings.activeProvider === 'chatgpt-plan' ? (
             <ChatGPTPlanSettings
+              key={draft.selectedPresetId}
+              onBusyChange={setPlanBusy}
               saved={!dirty}
               value={settings.chatgptPlan || { accountId: '', model: '' }}
               onChange={(chatgptPlan) => update({ chatgptPlan })}
@@ -267,7 +324,7 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
                   </button>
                 </div>
               </label>
-              <p className="small muted">
+              <p className="small muted standard-only">
                 Each profile keeps its own key. Changing endpoint origin clears the current key.
               </p>
               <label className="field">
@@ -297,7 +354,7 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
                   Test generation
                 </button>
               </div>
-              <p className="small muted">
+              <p className="small muted standard-only">
                 Generation sends a short sample prompt using the current form values.
               </p>
             </>
@@ -313,9 +370,24 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
             </button>
           </div>
         )}
+        <details>
+          <summary>Manage preset</summary>
+          <button
+            className="btn danger"
+            disabled={testing || planBusy || configuration.presets.length <= 1}
+            onClick={draft.removePreset}
+          >
+            Remove preset
+          </button>
+        </details>
       </section>
+      <RecipeSettings
+        configuration={configuration}
+        presetId={draft.selectedPresetId}
+        onChange={(configuration) => update({ configuration })}
+      />
       <section className="panel settings-section">
-        <h3>Reading preferences</h3>
+        <h3>Reading</h3>
         <label className="field">
           Response language
           <select
@@ -350,33 +422,40 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
             />
           </label>
         ))}
-        <p className="small muted">
+        <p className="small muted standard-only">
           Selected text and enabled context are sent to your chosen model when you ask for an
           explanation.
         </p>
       </section>
       <NotificationSettings />
-      <details className="panel">
-        <summary>Advanced prompt</summary>
-        <div className="settings-section" style={{ marginTop: 12 }}>
-          <label className="field">
-            System prompt
-            <textarea
-              rows={8}
-              value={settings.customPromptTemplate || ''}
-              onChange={(e) => update({ customPromptTemplate: e.target.value })}
-            />
-          </label>
-          <p className="small muted">
-            Keep the &lt;term note="…"&gt; instructions for inline concept notes.
-          </p>
-          <button
-            className="btn"
-            onClick={() => update({ customPromptTemplate: DEFAULT_SYSTEM_PROMPT })}
-          >
-            Reset prompt
-          </button>
-        </div>
+      <details className="panel shortcuts">
+        <summary>Shortcuts</summary>
+        <dl>
+          <div>
+            <dt>Explain selection</dt>
+            <dd>⌘ / Ctrl + Enter</dd>
+          </div>
+          <div>
+            <dt>Stop active explanation</dt>
+            <dd>⌘ / Ctrl + .</dd>
+          </div>
+          <div>
+            <dt>Dismiss</dt>
+            <dd>Escape</dd>
+          </div>
+          <div>
+            <dt>Settings</dt>
+            <dd>⌘ / Ctrl + ,</dd>
+          </div>
+          <div>
+            <dt>Explain selection</dt>
+            <dd>Alt + Shift + E</dd>
+          </div>
+          <div>
+            <dt>Page explanations</dt>
+            <dd>Alt + Shift + L</dd>
+          </div>
+        </dl>
       </details>
       <div className="settings-save">
         {error && (
@@ -396,14 +475,10 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
         )}
         <div className="row between">
           <span className="small muted" role="status">
-            {dirty
-              ? 'Unsaved changes'
-              : saved
-                ? 'Saved on this device'
-                : 'Settings stored on this device'}
+            {dirty ? 'Unsaved changes' : saved ? 'Saved' : ''}
           </span>
-          <button className="btn primary" disabled={testing || saving} onClick={save}>
-            {saving ? 'Saving…' : saved ? 'Saved!' : 'Save Settings'}
+          <button className="btn primary" disabled={testing || saving || planBusy} onClick={save}>
+            {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
       </div>

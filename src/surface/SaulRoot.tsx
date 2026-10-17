@@ -2,6 +2,8 @@ import { useEffect, useState, useRef } from 'react';
 import { captureSelection, buildResolvedContext } from '../capture/selection';
 import { sendReadingMessage } from '../storage/client';
 import type { ReadingRequest } from '../contracts/reading';
+import type { ReadingOperations } from '../contracts/reading';
+import { EXPLAIN_RECIPE_ID } from '../models/configuration';
 import type { Passage } from '../types/storage';
 import { PassageMarkers } from '../reading/markers';
 import { FloatingTrigger } from './FloatingTrigger';
@@ -17,6 +19,10 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
     [toast, setToast] = useState<{ text: string; id?: string; error?: boolean } | null>(null);
   const [, redraw] = useState(0);
   const [errorsMuted, setErrorsMuted] = useState<boolean | null>(null);
+  const [minimum, setMinimum] = useState(true);
+  const [recipes, setRecipes] = useState<ReadingOperations['policy']['result']['recipes']>([]);
+  const [defaultRecipeId, setDefaultRecipeId] = useState(EXPLAIN_RECIPE_ID);
+  const [recipeChoice, setRecipeChoice] = useState<string | null>(null);
   const [muting, setMuting] = useState(false);
   async function muteErrors() {
     if (muting) return;
@@ -150,6 +156,10 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
           if (preferenceReceived || message.muted === true)
             setToast((current) => (current?.error ? null : current));
           preferenceReceived = true;
+        } else if (message.type === 'configuration') {
+          void refreshRecipes();
+        } else if (message.type === 'presentation') {
+          setMinimum(message.minimum !== false);
         } else void refresh();
       });
       connected.onDisconnect.addListener(() => {
@@ -160,6 +170,18 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
     function connect() {
       connectPort();
       void refresh();
+      void refreshRecipes();
+    }
+    async function refreshRecipes() {
+      try {
+        const configuration = await sendReadingMessage({ action: 'policy' });
+        if (disposed || !isContextValid()) return;
+        setRecipes(configuration.recipes);
+        setDefaultRecipeId(configuration.selectedRecipeId);
+      } catch (error) {
+        if (!disposed && isContextValid())
+          setToast({ text: (error as Error).message, error: true });
+      }
     }
     function syncRoute() {
       if (route === location.href) return false;
@@ -243,6 +265,7 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
   }
   async function explain(selection: Captured | null = captured) {
     if (!selection || busy) return;
+    const requestedRecipeId = recipeChoice || (recipes.length ? defaultRecipeId : undefined);
     const known = passages.find((p) => {
       const attachment = markers.current?.attachments.get(p.snapshot.id);
       return (
@@ -251,27 +274,29 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
         selection.range.compareBoundaryPoints(Range.END_TO_END, attachment.range) === 0
       );
     });
-    if (known) {
-      open(known.snapshot.id);
-      return;
-    }
     setBusy(true);
     try {
-      const { policy } = await sendReadingMessage({ action: 'policy' });
+      const { policy, selectedRecipeId } = await sendReadingMessage({ action: 'policy' });
+      const recipeId = requestedRecipeId || selectedRecipeId;
       if (location.href !== selection.snapshot.page.url)
         throw new Error('The page changed. Select the passage again.');
+      if (known && (known.latest.recipe?.id || EXPLAIN_RECIPE_ID) === recipeId) {
+        open(known.snapshot.id);
+        return;
+      }
       const result = await sendReadingMessage({
         action: 'submit',
         submissionId: selection.snapshot.id,
         snapshot: selection.snapshot,
         context: buildResolvedContext(selection.snapshot, selection.range, policy),
+        recipeId,
       });
       if (location.href !== selection.snapshot.page.url) return;
       setCaptured(null);
       window.getSelection()?.removeAllRanges();
       await refreshRef.current();
       if (result.reused && result.passageId) open(result.passageId);
-      else setToast({ text: 'Queued · keep reading', id: result.passageId });
+      else setToast({ text: 'Waiting…', id: result.passageId });
     } catch (error) {
       setToast({ text: (error as Error).message, error: true });
     } finally {
@@ -280,12 +305,22 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
   }
   const explainRef = useRef(explain);
   explainRef.current = explain;
+  const stopRef = useRef<() => void>(() => {});
+  stopRef.current = () => {
+    if (active && ['queued', 'running'].includes(active.latest.status))
+      void action({ action: 'stop', selectionId: active.snapshot.id });
+  };
   useEffect(() => {
     let timeout: ReturnType<typeof setTimeout> | undefined;
     const inside = (e: Event) =>
       e.composedPath().some((n) => n instanceof Element && n.tagName.toLowerCase() === 'saul-root');
     const editing = (e: Event) =>
-      e.target instanceof Element && !!e.target.closest('input,textarea,[contenteditable]');
+      e
+        .composedPath()
+        .some(
+          (node) =>
+            node instanceof Element && !!node.closest('input,textarea,select,[contenteditable]'),
+        );
     const capture = (e: MouseEvent) => {
       if (inside(e) || editing(e)) return;
       clearTimeout(timeout);
@@ -295,11 +330,34 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
       }, 10);
     };
     const key = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing || e.repeat) return;
       if (e.key === 'Escape') {
         setCaptured(null);
         setActiveId(null);
         setList(false);
         setPinned(false);
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && !editing(e)) {
+        if (
+          e.key === '.' &&
+          current.current.some(
+            (passage) =>
+              passage.snapshot.id === activeRef.current &&
+              ['queued', 'running'].includes(passage.latest.status),
+          )
+        ) {
+          e.preventDefault();
+          stopRef.current();
+        }
+        if (e.key === 'Enter' && !inside(e)) {
+          const selection = captureSelection();
+          if (selection) {
+            e.preventDefault();
+            clearTimeout(timeout);
+            void explainRef.current(selection);
+          }
+        }
       }
       if (e.altKey && e.shiftKey && !editing(e)) {
         if (e.code === 'KeyE') {
@@ -338,7 +396,13 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
   return (
     <>
       {captured && !busy && (
-        <FloatingTrigger range={captured.range} onTrigger={() => void explain()} />
+        <FloatingTrigger
+          range={captured.range}
+          onTrigger={() => void explain()}
+          recipes={recipes}
+          recipeId={recipeChoice || defaultRecipeId}
+          onRecipe={setRecipeChoice}
+        />
       )}
       {active && (
         <ExplanationCard
@@ -347,6 +411,7 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
           passage={active}
           pinned={pinned}
           busy={busy}
+          minimum={minimum}
           onPin={() => setPinned((v) => !v)}
           onClose={() => {
             setActiveId(null);

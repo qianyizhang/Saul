@@ -4,7 +4,14 @@ import type { Passage, RunResult } from '../types/storage';
 type EmptyResult = Record<string, never>;
 export interface ReadingOperations {
   list: { request: { action: 'list' }; result: { passages: Passage[] } };
-  policy: { request: { action: 'policy' }; result: { policy: ContextPolicy } };
+  policy: {
+    request: { action: 'policy' };
+    result: {
+      policy: ContextPolicy;
+      recipes: { id: string; name: string; presetName: string; fast: boolean }[];
+      selectedRecipeId: string;
+    };
+  };
   'mute-errors': {
     request: { action: 'mute-errors'; muted: boolean };
     result: EmptyResult;
@@ -15,6 +22,7 @@ export interface ReadingOperations {
       submissionId: string;
       snapshot: SelectionSnapshot;
       context: ResolvedContext;
+      recipeId?: string;
     };
     result: { passageId: string; reused: boolean };
   };
@@ -24,6 +32,7 @@ export interface ReadingOperations {
       submissionId: string;
       selectionId: string;
       instruction?: string;
+      recipeId?: string;
     };
     result: { passageId: string; reused: boolean };
   };
@@ -106,7 +115,11 @@ export function validateReading(v: unknown): asserts v is ReadingRequest {
       valid = true;
       break;
     case 'submit':
-      valid = id(v.submissionId) && validSnapshot(v.snapshot) && validContext(v.context);
+      valid =
+        id(v.submissionId) &&
+        validSnapshot(v.snapshot) &&
+        validContext(v.context) &&
+        (v.recipeId === undefined || id(v.recipeId));
       break;
     case 'mute-errors':
       valid = typeof v.muted === 'boolean';
@@ -115,6 +128,7 @@ export function validateReading(v: unknown): asserts v is ReadingRequest {
       valid =
         id(v.submissionId) &&
         id(v.selectionId) &&
+        (v.recipeId === undefined || id(v.recipeId)) &&
         (v.instruction === undefined || text(v.instruction, 2000));
       break;
     case 'stop':

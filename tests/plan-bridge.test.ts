@@ -83,10 +83,16 @@ it('does not proxy caller-supplied endpoints and cancels generation on caller lo
     action: 'generate',
     accountId: 'account',
     model: 'model',
+    effort: 'high',
+    fast: true,
     systemPrompt: 'system',
     userPrompt: 'user',
   });
   const id = h.native.postMessage.mock.calls[0]![0].id;
+  expect(h.native.postMessage.mock.calls[0]![0].request).toMatchObject({
+    effort: 'high',
+    fast: true,
+  });
   runner.disconnect();
   expect(h.native.postMessage).toHaveBeenLastCalledWith({ id, cancel: true });
 });

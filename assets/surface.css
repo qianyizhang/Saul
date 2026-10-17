@@ -30,6 +30,22 @@
   outline: 2px solid var(--design-color-primary);
   outline-offset: 3px;
 }
+.saul-card summary {
+  cursor: pointer;
+  padding-block: 6px;
+}
+.saul-card summary:focus-visible {
+  outline: 2px solid var(--design-color-primary);
+  outline-offset: 3px;
+}
+@media (pointer: coarse) {
+  :host button,
+  :host select,
+  :host summary {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   :host *,
   .saul-reading * {

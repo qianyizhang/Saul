@@ -56,7 +56,14 @@ it('normalizes partial legacy provider records without dropping nested defaults'
       name: 'Legacy',
       config: { ...DEFAULT_SETTINGS.openaiCompatible, model: 'legacy-model' },
     },
+    {
+      id: 'recovered-current',
+      name: 'Recovered current settings',
+      config: { ...DEFAULT_SETTINGS.openaiCompatible, baseUrl: 'http://localhost:11434/v1' },
+    },
   ]);
+  expect(settings.activeProfileId).toBe('recovered-current');
+  expect(settings.configuration?.presets[0]?.profileId).toBe('recovered-current');
 });
 
 it.each([

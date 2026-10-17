@@ -9,6 +9,10 @@ export interface PlanAccount {
 export interface PlanModel {
   slug: string;
   display_name: string;
+  supportedReasoningEfforts: { effort: string; description: string }[];
+  defaultReasoningEffort: string;
+  fastTier?: string;
+  isDefault: boolean;
 }
 export type PlanRequest =
   | { action: 'accounts' }
@@ -19,6 +23,8 @@ export type PlanRequest =
       action: 'generate';
       accountId: string;
       model: string;
+      effort?: string;
+      fast?: boolean;
       systemPrompt: string;
       userPrompt: string;
     };

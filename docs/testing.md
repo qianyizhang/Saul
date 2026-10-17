@@ -36,6 +36,7 @@ pnpm exec playwright test tests/e2e/product.spec.ts
 pnpm exec playwright test tests/e2e/chatgpt-plan.spec.ts
 pnpm exec playwright test tests/e2e/chrome-ai.spec.ts
 pnpm exec playwright test tests/e2e/notifications.spec.ts
+pnpm exec playwright test tests/e2e/minimum-mode.spec.ts tests/e2e/ui-layout.spec.ts
 pnpm exec playwright test tests/e2e/positioning.spec.ts tests/e2e/multiline.spec.ts
 pnpm exec tsc -p tests/e2e/tsconfig.json
 ```
@@ -93,6 +94,8 @@ In `pnpm test:user`:
 3. Open the marker, inspect notes, close it, refresh, and reopen the restored result.
 4. Check unread state, **Alt+Shift+L**, source navigation, keyboard/pin/follow-up/stop behavior, and tab previews when relevant.
 5. Toggle **Mute error notifications** in Settings; verify another tab and a browser relaunch observe the setting, then turn it off.
+6. Toggle **Minimum Mode** while a page explanation and full History workspace are open. Check that the presentation changes immediately, remains after restart, and can change with an invalid provider draft. In Minimum Mode, verify **More**, **Details**, source links, errors, and unsaved changes.
+7. Check **Command/Ctrl+Enter** on a source selection, **Escape** while generation is active, and **Command/Ctrl+.** with the job open. Editable fields and Chrome shortcuts must keep their existing behavior.
 
 A successful smoke run verifies setup only. Record the built source scope, passed checks, and untested live-provider behavior after hands-on review.
 

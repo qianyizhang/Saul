@@ -1,8 +1,9 @@
 import type { UserSettings } from '../types';
 import { DEFAULT_SYSTEM_PROMPT } from '../models/prompts';
 import { CHROME_AI_ENABLED, CHROME_AI_DISABLED_MESSAGE } from '../models/chrome-ai';
+import { normalizeConfiguration, starterConfiguration } from '../models/configuration';
 
-export const DEFAULT_SETTINGS: UserSettings = {
+const DEFAULT_CONNECTION_SETTINGS: UserSettings = {
   activeProvider: 'openai-compatible',
   openaiCompatible: {
     baseUrl: 'https://api.openai.com/v1',
@@ -22,8 +23,12 @@ export const DEFAULT_SETTINGS: UserSettings = {
   },
   customPromptTemplate: DEFAULT_SYSTEM_PROMPT,
 };
+export const DEFAULT_SETTINGS: UserSettings = {
+  ...DEFAULT_CONNECTION_SETTINGS,
+  configuration: starterConfiguration(DEFAULT_CONNECTION_SETTINGS),
+};
 
-const STORAGE_KEY = 'saul_user_settings';
+export const SETTINGS_STORAGE_KEY = 'saul_user_settings';
 const RECOVERY_BACKUP_KEY = 'saul_user_settings_recovery_backup';
 
 export class InvalidStoredSettingsError extends Error {
@@ -135,9 +140,22 @@ function normalizeSettings(value: unknown): UserSettings {
     activeProfileId = id;
   }
   const responseLanguage = optionalString(stored.responseLanguage, 'response language');
+  if (stored.configuration === undefined && profiles) {
+    const active = profiles.find((profile) => profile.id === activeProfileId);
+    if (active && JSON.stringify(active.config) !== JSON.stringify(openaiCompatible)) {
+      // Older records executed the top-level connection. Preserve both it and the
+      // independently saved profile instead of changing the request destination.
+      const id = recoveredProfileId(profiles);
+      profiles = [
+        ...profiles,
+        { id, name: 'Recovered current settings', config: { ...openaiCompatible } },
+      ];
+      activeProfileId = id;
+    }
+  }
   const customPromptTemplate = optionalString(stored.customPromptTemplate, 'custom prompt');
 
-  return {
+  const settings: UserSettings = {
     ...DEFAULT_SETTINGS,
     activeProvider,
     openaiCompatible,
@@ -153,6 +171,22 @@ function normalizeSettings(value: unknown): UserSettings {
             model:
               optionalString(record(stored.chatgptPlan, 'ChatGPT plan').model, 'ChatGPT model') ??
               '',
+            ...(record(stored.chatgptPlan, 'ChatGPT plan').effort === undefined
+              ? {}
+              : {
+                  effort: optionalString(
+                    record(stored.chatgptPlan, 'ChatGPT plan').effort,
+                    'ChatGPT effort',
+                  ),
+                }),
+            ...(record(stored.chatgptPlan, 'ChatGPT plan').fast === undefined
+              ? {}
+              : {
+                  fast: optionalBoolean(
+                    record(stored.chatgptPlan, 'ChatGPT plan').fast,
+                    'ChatGPT Fast',
+                  ),
+                }),
           },
         }),
     chromeAi: {
@@ -188,6 +222,8 @@ function normalizeSettings(value: unknown): UserSettings {
     ...(responseLanguage === undefined ? {} : { responseLanguage }),
     ...(customPromptTemplate === undefined ? {} : { customPromptTemplate }),
   };
+  settings.configuration = normalizeConfiguration(stored.configuration, settings);
+  return settings;
 }
 
 export function validateProviderSettings(settings: UserSettings): URL | undefined {
@@ -227,8 +263,8 @@ export function isLoopbackEndpoint(endpoint: URL): boolean {
 
 async function readStoredSettings(): Promise<unknown> {
   try {
-    const result = await chrome.storage.local.get(STORAGE_KEY);
-    return result[STORAGE_KEY];
+    const result = await chrome.storage.local.get(SETTINGS_STORAGE_KEY);
+    return result[SETTINGS_STORAGE_KEY];
   } catch (err) {
     throw new Error('Could not read saved settings. Reload Saul and try again.', { cause: err });
   }
@@ -264,7 +300,7 @@ export async function backupAndResetInvalidSettings(): Promise<SettingsRecoveryR
   try {
     await chrome.storage.local.set({
       [RECOVERY_BACKUP_KEY]: stored,
-      [STORAGE_KEY]: DEFAULT_SETTINGS,
+      [SETTINGS_STORAGE_KEY]: DEFAULT_SETTINGS,
     });
   } catch (err) {
     throw new Error('Could not back up and reset saved settings. Try again.', { cause: err });
@@ -290,8 +326,9 @@ export async function saveSettings(settings: Partial<UserSettings>): Promise<Use
       ...(settings.contextPolicy || {}),
     },
   };
+  updated.configuration = normalizeConfiguration(updated.configuration, updated);
 
-  await chrome.storage.local.set({ [STORAGE_KEY]: updated });
+  await chrome.storage.local.set({ [SETTINGS_STORAGE_KEY]: updated });
   return updated;
 }
 

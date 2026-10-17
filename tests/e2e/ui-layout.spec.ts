@@ -8,7 +8,7 @@ test('compact workspace supports reading, tab controls and reachable settings', 
   const { popup, context } = await sandbox.launch();
   await popup.emulateMedia({ colorScheme: 'light' });
   await popup.setViewportSize({ width: 440, height: 600 });
-  await expect(popup.getByRole('button', { name: 'Reading history', exact: true })).toBeVisible();
+  await expect(popup.getByRole('button', { name: 'History', exact: true })).toBeVisible();
   await expect(popup.getByText('No highlights recorded yet.')).toBeVisible();
   await popup.screenshot({ path: info.outputPath('01-reading.png'), fullPage: true });
   await configureFixtureProvider(popup, fixtureServer.origin);
@@ -21,7 +21,7 @@ test('compact workspace supports reading, tab controls and reachable settings', 
   await article.getByRole('button', { name: 'View', exact: true }).click();
   await expect(article.getByRole('button', { name: 'Regenerate', exact: true })).toBeVisible();
   await article.screenshot({ path: info.outputPath('02-explanation.png') });
-  await popup.getByRole('button', { name: 'Reading history', exact: true }).click();
+  await popup.getByRole('button', { name: 'History', exact: true }).click();
   await expect(popup.locator('.history-title')).toHaveCount(1);
   await popup.locator('.history-title').click();
   await popup.screenshot({ path: info.outputPath('03-history.png'), fullPage: true });
@@ -40,7 +40,7 @@ test('compact workspace supports reading, tab controls and reachable settings', 
   await expect(popup.getByLabel('Codex tab access')).toBeVisible();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(popup.getByLabel('Provider', { exact: true })).toBeVisible();
-  const save = popup.getByRole('button', { name: 'Save Settings', exact: true });
+  const save = popup.getByRole('button', { name: 'Save', exact: true });
   await expect(save).toBeInViewport();
   await popup.screenshot({ path: info.outputPath('05-settings.png') });
   await popup.getByLabel('Model name', { exact: true }).fill('');
@@ -51,12 +51,12 @@ test('compact workspace supports reading, tab controls and reachable settings', 
   await popup.getByRole('button', { name: 'Tabs', exact: true }).click();
   await expect(popup.getByLabel('Model name', { exact: true })).toHaveValue('changed-model');
   await save.click();
-  await expect(popup.getByRole('button', { name: 'Saved!', exact: true })).toBeVisible();
+  await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
   await popup.reload();
   await expect(popup.getByLabel('Model name', { exact: true })).toHaveValue('changed-model');
   for (const width of [360, 440, 1000]) {
     await popup.setViewportSize({ width, height: 600 });
-    await popup.getByRole('button', { name: 'Reading history', exact: true }).click();
+    await popup.getByRole('button', { name: 'History', exact: true }).click();
     await expect(popup.locator('.history-title')).toHaveCount(1);
     expect(await popup.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,

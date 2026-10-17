@@ -18,22 +18,22 @@ test('library bookmarks, explanation search, punctuation and pagination survive 
   await first.getByRole('button', { name: 'Bookmark', exact: true }).click();
   await popup.getByRole('button', { name: 'Bookmarks', exact: true }).click();
   await expect(popup.locator('.history-entry')).toHaveCount(1);
-  await popup.getByPlaceholder('Search reading history').fill('velocity');
+  await popup.getByPlaceholder('Search history').fill('velocity');
   await expect(popup.locator('.history-entry')).toHaveCount(1);
-  await popup.getByPlaceholder('Search reading history').fill('"(NOT):*');
+  await popup.getByPlaceholder('Search history').fill('"(NOT):*');
   await expect(popup.getByText('No matching highlights.')).toBeVisible();
   await expect(popup.getByRole('alert')).toHaveCount(0);
-  await popup.getByPlaceholder('Search reading history').fill('');
+  await popup.getByPlaceholder('Search history').fill('');
   await popup.locator('.history-title').click();
   await expect(popup.getByRole('button', { name: 'gradient', exact: true })).toBeVisible();
   await popup.getByRole('button', { name: 'gradient', exact: true }).focus();
   await expect(popup.getByRole('tooltip')).toContainText('Steepest increase');
   await popup.getByRole('button', { name: 'gradient', exact: true }).click();
-  await popup.getByRole('heading', { name: 'Reading history', exact: true }).hover();
+  await popup.getByRole('button', { name: 'History', exact: true }).hover();
   await expect(popup.getByRole('tooltip')).toBeVisible();
   await expect(popup.getByRole('tooltip')).toContainText('Steepest increase');
   ({ popup } = await sandbox.launch());
-  await popup.getByRole('button', { name: 'Reading history', exact: true }).click();
+  await popup.getByRole('button', { name: 'History', exact: true }).click();
   await popup.getByRole('button', { name: 'Bookmarks', exact: true }).click();
   await expect(popup.locator('.history-title')).toHaveText([title!]);
 });
@@ -77,8 +77,8 @@ test('provider profiles preserve their own credentials and clear keys across ori
   await expect(popup.getByPlaceholder('Optional for local models')).toHaveValue('fixture-key-two');
   await popup.getByRole('button', { name: 'DeepSeek', exact: true }).click();
   await expect(popup.getByPlaceholder('Optional for local models')).toHaveValue('');
-  await popup.getByRole('button', { name: 'Save Settings', exact: true }).click();
-  await expect(popup.getByRole('button', { name: 'Saved!', exact: true })).toBeVisible();
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
   await popup.reload();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await popup.getByLabel('Saved profile', { exact: true }).selectOption({ label: 'Local test' });
@@ -133,8 +133,8 @@ test('missing and stale profile selections recover the current config and remain
     await expect(popup.getByLabel('Saved profile', { exact: true })).toHaveValue(recoveredId);
     await expect(popup.getByLabel('Model name', { exact: true })).toHaveValue('current-model');
     await popup.getByLabel('Model name', { exact: true }).fill(model);
-    await popup.getByRole('button', { name: 'Save Settings', exact: true }).click();
-    await expect(popup.getByRole('button', { name: 'Saved!', exact: true })).toBeVisible();
+    await popup.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
     const saved = await popup.evaluate(async () => {
       const { saul_user_settings: settings } = await chrome.storage.local.get('saul_user_settings');
       return settings as {
@@ -213,9 +213,7 @@ test('empty model output stays a failed attempt without a completed answer', asy
     await article.getByRole('button', { name: 'Explain', exact: true }).click();
     await article.getByRole('button', { name: 'View', exact: true }).click();
     await expect(article.getByRole('alert')).toContainText('The model returned no explanation');
-    await expect(article.getByText('Ready · saved on this device', { exact: false })).toHaveCount(
-      0,
-    );
+    await expect(article.getByText('Saved', { exact: true })).toHaveCount(0);
     expect((await getFirstHistory(popup)).latest.status).toBe('failed');
   } finally {
     await server.close();
@@ -233,7 +231,7 @@ test('unreadable settings show an error instead of an editable default profile',
   });
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(popup.getByRole('alert')).toContainText('Could not read saved settings');
-  await expect(popup.getByRole('button', { name: 'Save Settings', exact: true })).toHaveCount(0);
+  await expect(popup.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
   await expect(popup.getByRole('button', { name: 'Back up and reset settings' })).toHaveCount(0);
 });
 
@@ -251,7 +249,7 @@ test('malformed settings expose their field error and require explicit backup be
     'Saved provider temperature must be a finite number',
   );
   await popup.getByRole('button', { name: 'Back up and reset settings', exact: true }).click();
-  await expect(popup.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+  await expect(popup.getByLabel('Provider', { exact: true })).toBeVisible();
   await expect(
     popup.getByText(
       'Defaults restored. The previous saved settings remain in a local recovery backup.',
@@ -280,7 +278,7 @@ test('keyboard explanation can pin, follow up, and bookmark', async ({
   await article.locator('#concept').click({ clickCount: 3 });
   await article.keyboard.press('Alt+Shift+E');
   await article.getByRole('button', { name: 'View', exact: true }).click();
-  await expect(article.getByText('Ready · saved on this device', { exact: false })).toBeVisible();
+  await expect(article.getByText('Saved', { exact: true })).toBeVisible();
   await article.getByRole('button', { name: 'Pin explanation', exact: true }).click();
   await article.locator('h1').click();
   await expect(article.getByRole('region', { name: 'Saul explanation' })).toBeVisible();
@@ -294,8 +292,9 @@ test('keyboard explanation can pin, follow up, and bookmark', async ({
       return Boolean(box && box.y >= 0 && box.y + box.height <= 800);
     })
     .toBe(true);
+  await article.getByRole('button', { name: 'More', exact: true }).click();
   await article.getByRole('button', { name: 'Simpler', exact: true }).click();
-  await expect(article.getByText('Ready · saved on this device', { exact: false })).toBeVisible();
+  await expect(article.getByText('Saved', { exact: true })).toBeVisible();
   await article.getByRole('button', { name: 'Bookmark', exact: true }).click();
   await expect(article.getByRole('button', { name: 'Remove bookmark', exact: true })).toBeVisible();
   expect((await getFirstHistory(popup)).bookmarked).toBe(true);
@@ -319,12 +318,12 @@ test('stopping a slow explanation retains partial text without saving a complete
     await article.getByRole('button', { name: 'View', exact: true }).click();
     await expect(article.getByText('A gradient describes how a', { exact: false })).toBeVisible();
     await article.getByRole('button', { name: 'Stop', exact: true }).click();
-    await expect(article.getByText('Incomplete · stopped')).toBeVisible();
+    await expect(article.getByText('Stopped', { exact: true })).toBeVisible();
     expect((await getFirstHistory(popup)).latest.status).toBe('cancelled');
     server.setGated(false);
     server.releaseAll();
     await article.getByRole('button', { name: 'Retry explanation', exact: true }).click();
-    await expect(article.getByText('Ready · saved on this device', { exact: false })).toBeVisible();
+    await expect(article.getByText('Saved', { exact: true })).toBeVisible();
     expect(await sendDb(popup, { type: 'DB_GET_HISTORY', payload: {} })).toHaveLength(1);
   } finally {
     await server.close();
@@ -412,7 +411,7 @@ test('save locks the draft; provider tests lock only provider settings and remai
         return original(items);
       }) as typeof chrome.storage.local.set;
     });
-    await popup.getByRole('button', { name: 'Save Settings', exact: true }).click();
+    await popup.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(popup.getByLabel('Profile name', { exact: true })).toBeDisabled();
     await expect(popup.getByLabel('Response language', { exact: true })).toBeDisabled();
     await popup.evaluate(() =>
@@ -420,7 +419,7 @@ test('save locks the draft; provider tests lock only provider settings and remai
         globalThis as typeof globalThis & { finishSettingsSave?: () => void }
       ).finishSettingsSave?.(),
     );
-    await expect(popup.getByRole('button', { name: 'Saved!', exact: true })).toBeVisible();
+    await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
     await expect(popup.getByLabel('Response language', { exact: true })).toBeEnabled();
   } finally {
     await server.close();

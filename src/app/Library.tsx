@@ -19,9 +19,11 @@ import { downloadMarkdown, safeSource } from './format';
 export function Library({
   compact = false,
   refreshKey = 0,
+  minimum = true,
 }: {
   compact?: boolean;
   refreshKey?: number;
+  minimum?: boolean;
 }) {
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [query, setQuery] = useState('');
@@ -109,20 +111,19 @@ export function Library({
   }
   return (
     <div className="stack">
-      <div className="row between">
+      <div className="row between standard-only">
         <div>
-          <h2 className="view-title">Reading history</h2>
+          <h2 className="view-title">History</h2>
           <p className="muted small">
             Select text on a page, then choose Explain. Find it here anytime.
           </p>
         </div>
-        {!compact && <span className="badge">Stored on this device</span>}
       </div>
       <div className="row library-search">
         <input
           className="search grow"
-          aria-label="Search reading history"
-          placeholder="Search reading history"
+          aria-label="Search history"
+          placeholder="Search history"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -151,7 +152,7 @@ export function Library({
       )}
       {busy && !items.length ? (
         <p role="status" className="muted">
-          Loading reading history…
+          Loading history…
         </p>
       ) : !error && !items.length ? (
         <div className="empty">
@@ -162,7 +163,7 @@ export function Library({
                 ? 'No bookmarks yet.'
                 : 'No highlights recorded yet.'}
           </p>
-          <p className="muted small">
+          <p className="muted small standard-only">
             {query
               ? 'Try another word, source title, or phrase.'
               : bookmarks
@@ -172,7 +173,7 @@ export function Library({
         </div>
       ) : (
         !error && (
-          <div className="stack" aria-busy={busy}>
+          <div className="stack history-list" aria-busy={busy}>
             {items.map((item) => (
               <article className="history-entry" key={item.selectionId}>
                 <div className="row between" style={{ alignItems: 'flex-start' }}>
@@ -181,7 +182,7 @@ export function Library({
                     aria-expanded={expanded === item.selectionId}
                     onClick={() => void expand(item)}
                   >
-                    "{item.selectedText}" {item.unread && <span className="badge">New</span>}{' '}
+                    {item.selectedText} {item.unread && <span className="badge">New</span>}{' '}
                     <ChevronDown size={14} className="disclosure-icon" />
                   </button>
                   <button
@@ -195,15 +196,17 @@ export function Library({
                   >
                     <Bookmark size={16} fill={item.bookmarked ? 'currentColor' : 'none'} />
                   </button>
-                  <button
-                    className="btn icon danger"
-                    title="Delete"
-                    aria-label="Delete highlight"
-                    disabled={actionBusy}
-                    onClick={() => action(() => deleteHistorySelection(item.selectionId))}
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  {!minimum && (
+                    <button
+                      className="btn icon danger"
+                      title="Delete"
+                      aria-label="Delete highlight"
+                      disabled={actionBusy}
+                      onClick={() => action(() => deleteHistorySelection(item.selectionId))}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
                 </div>
                 <div className="row between small muted" style={{ marginTop: 8 }}>
                   {safeSource(item.pageUrl) ? (
@@ -218,35 +221,64 @@ export function Library({
                   ) : (
                     <span>{item.pageTitle || item.pageUrl}</span>
                   )}
-                  <time>{new Date(item.createdAt).toLocaleDateString()}</time>
+                  <time className="standard-only">
+                    {new Date(item.createdAt).toLocaleDateString()}
+                  </time>
                 </div>
                 {expanded === item.selectionId && (
                   <div className="answer">
-                    <p className="small muted">
+                    <p className="small muted" role="status">
                       {runLabel(item.latest.status)}
                       {item.completed && item.completed.id !== item.latest.id
-                        ? ' · Previous completed explanation shown'
+                        ? ' · Previous answer'
                         : ''}
                     </p>
-                    {item.latest.error && <p className="notice error">{item.latest.error}</p>}
+                    {item.latest.error && (
+                      <p className="notice error" role="alert">
+                        {item.latest.error}
+                      </p>
+                    )}
                     <AnnotatedTextView segments={new TagStreamParser().feed(item.responseRaw)} />
-                    {runs
-                      .filter((run) => run.id !== (item.completed || item.latest).id)
-                      .map((run) => (
-                        <details key={run.id}>
-                          <summary>
-                            {runLabel(run.status)} · {new Date(run.createdAt).toLocaleString()}
-                          </summary>
-                          {run.error && <p>{run.error}</p>}
-                          <AnnotatedTextView
-                            segments={new TagStreamParser().feed(run.responseRaw)}
-                          />
-                        </details>
-                      ))}
-                    <p className="small muted" style={{ marginTop: 12 }}>
-                      {item.model}
-                      {item.latencyMs ? ` · ${(item.latencyMs / 1000).toFixed(1)}s` : ''}
-                    </p>
+                    <details className="history-more">
+                      <summary>More</summary>
+                      {runs
+                        .filter((run) => run.id !== (item.completed || item.latest).id)
+                        .map((run) => (
+                          <details key={run.id}>
+                            <summary>
+                              {runLabel(run.status)} · {new Date(run.createdAt).toLocaleString()}
+                            </summary>
+                            {run.error && <p>{run.error}</p>}
+                            <AnnotatedTextView
+                              segments={new TagStreamParser().feed(run.responseRaw)}
+                            />
+                          </details>
+                        ))}
+                      <details className="small muted">
+                        <summary>Details</summary>
+                        {(item.completed || item.latest).recipe && (
+                          <p>
+                            {(item.completed || item.latest).recipe!.name} ·{' '}
+                            {(item.completed || item.latest).preset?.name}
+                          </p>
+                        )}
+                        <p>
+                          {item.model}
+                          {item.latencyMs ? ` · ${(item.latencyMs / 1000).toFixed(1)}s` : ''}
+                        </p>
+                        <time>{new Date(item.createdAt).toLocaleString()}</time>
+                      </details>
+                      {minimum && (
+                        <button
+                          className="btn danger"
+                          aria-label="Delete highlight"
+                          disabled={actionBusy}
+                          onClick={() => action(() => deleteHistorySelection(item.selectionId))}
+                        >
+                          <Trash2 size={16} /> Delete
+                        </button>
+                      )}
+                    </details>
                   </div>
                 )}
               </article>
@@ -290,7 +322,7 @@ export function Library({
             Clear All
           </button>
         </div>
-        <p className="small muted">
+        <p className="small muted standard-only">
           Export includes the entire library, regardless of the current filter.
         </p>
       </details>

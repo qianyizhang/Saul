@@ -68,7 +68,7 @@ test('View source opens a new tab, restores below-fold location and opens the sa
   await page.getByRole('button', { name: 'Explain', exact: true }).click();
   await expect(page.getByText('Explanation ready', { exact: true })).toBeVisible();
   await page.close();
-  await popup.getByRole('button', { name: 'Reading history', exact: true }).click();
+  await popup.getByRole('button', { name: 'History', exact: true }).click();
   const opening = context.waitForEvent('page');
   await popup.getByTitle('View source and explanation').click();
   const source = await opening;

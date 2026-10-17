@@ -83,7 +83,7 @@ export function Tabs() {
   return (
     <div className="stack">
       <div className="row between">
-        <div>
+        <div className="standard-only">
           <h2 className="view-title">Tabs</h2>
           <p className="muted small">
             Preview changes before applying them. Pinned tabs stay protected.
@@ -154,7 +154,7 @@ export function Tabs() {
             Undo last sort
           </button>
         </div>
-        <p className="small muted">
+        <p className="small muted standard-only">
           Existing groups move together. Undo is available while the tab layout remains unchanged.
         </p>
       </div>

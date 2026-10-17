@@ -116,6 +116,7 @@ function main() {
           'plan-protocol.mjs',
           'plan-host.mjs',
           'plan-service.mjs',
+          'plan-models.mjs',
           'plan-auth.mjs',
           'plan-store.mjs',
           'responses.mjs',

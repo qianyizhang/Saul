@@ -1,4 +1,65 @@
-# Little Clarity adoption · 2026-10-14
+# Shared design verification
+
+## Shared design and configuration · 2026-10-18
+
+The shared [contract](../DESIGN.md) now covers reading/composition states, action
+names, keyboard ownership, progressive disclosure and a future mobile adaptation.
+The existing palette and typography token values are retained; regenerated CSS,
+TypeScript and Swift receipts all match the edited contract.
+
+Minimum Mode defaults on in EZ and Saul. It is reversible, local to each runtime,
+and independent of provider settings. The embedded board has its own preference.
+This is a presentation change, not cross-app history or account synchronization.
+
+The configuration pass adds named recipes and presets to Saul using the same
+concepts as EZ. ChatGPT account controls share their vocabulary and direct sign-in
+flow, while credentials remain separate. The account catalog supplies effort and
+speed choices. Legacy prompt and active-connection migration, literal template
+rendering, frozen retries, and completed-answer follow-ups have regression coverage.
+Independent review also corrected stale catalog refreshes, auth/preset switching,
+shown-answer metadata, preference-save races, and repeated Escape dismissal.
+
+| Review step                     | Result                                                                                                                                          |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| EZ new lookup                   | Native capture: composer is directly below the heading; repeated guidance reduced.                                                              |
+| EZ saved answer                 | Native light/dark captures: Copy and Use again remain visible; More and Details retain secondary controls and metrics.                          |
+| EZ Quick Lookup                 | Native capture: saved recipe/preset describe the displayed answer; Edit draft restores inputs without losing the answer.                        |
+| EZ Settings and recovery        | Native mode switch and fixture errors inspected; model/save warnings remain prominent.                                                          |
+| Saul selection and reading      | Real extension/local fixture: Copy leads; More/Details, follow-ups, source, interruptions and error recovery exercised.                         |
+| Saul History, Settings and Tabs | Light/dark, 360/440/1000px reflow, touch targets, preference persistence, draft protection and scoped shortcuts checked.                        |
+| Saul recipes and presets        | Named model choices, same-passage recipe changes, frozen retries/follow-ups, missing-context errors, and 360/440px light/dark captures checked. |
+| ChatGPT configuration           | Fixture sign-in controls, model/effort/speed persistence, capability removal, cancellation, and locked preset switching checked.                |
+| Embedded tab board              | Light/dark and narrow captures; drag, keyboard movement, preference reopening, stale proposals and explicit Apply verified.                     |
+
+Validation:
+
+- EZ: format and full check, including **53 core checks**, **24 state checks**,
+  installer fixtures and Swift script compilation; app and offline preview builds.
+- Saul: production build; design drift, format, lint, types and links checks;
+  **155 unit/transport tests** covered successfully across the ordinary run and
+  an approved retry of two socket-bound test files after sandbox `EPERM` errors.
+- Saul browser suite: **64 distinct cases passed** across the full suite and a
+  three-case recipe rerun after fixing the prompt textarea's accessible label.
+  **3 expected skips**:
+  two disabled on-device AI cases and the opt-in live GitHub case.
+- Cross-repository CSS/TypeScript/Swift generation drift checks passed.
+
+The preference-race and repeated-Escape regressions failed against the prior build
+at their intended assertions and passed against the final implementation.
+
+Fresh browser captures are in ignored `test-results-parity-final/` and
+`test-results-parity-configuration-final/`; the initial comparison is in
+`test-results-design-before/`. Native captures and the local annotation review
+remain outside Git in the task's design-review artifact folder.
+
+Limits: the previews use disposable fixture data. Live sign-in, model inference,
+installed-app upgrade, native mobile, and a full assistive-technology audit are
+not established by these checks. Native menu-first Escape still needs a direct
+keyboard check: the automation dismissed the menu with a focus click before
+sending Escape, so that result did not demonstrate a product failure. No timing
+workaround or speculative menu interception was retained.
+
+## Initial adoption · 2026-10-14
 
 The initial receipt below records the first working-tree adoption, including the
 then-present Quick Lookup prototype. The scoped review at the end records the

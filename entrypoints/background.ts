@@ -1,17 +1,18 @@
 import { initPlanBridge } from '../src/native/plan';
-import {
-  getSettings,
-  initStorageSecurity,
-  isLoopbackEndpoint,
-  validateProviderSettings,
-} from '../src/storage/settings';
+import { getSettings, initStorageSecurity, SETTINGS_STORAGE_KEY } from '../src/storage/settings';
 import {
   getErrorNotificationsMuted,
   setErrorNotificationsMuted,
   NOTIFICATION_STORAGE_KEY,
 } from '../src/storage/notifications';
+import {
+  getMinimumMode,
+  minimumModeFromStorage,
+  MINIMUM_MODE_STORAGE_KEY,
+} from '../src/storage/presentation';
 import { runnerRequest } from '../src/storage/client';
-import { renderExplainPrompt, DEFAULT_SYSTEM_PROMPT } from '../src/models/prompts';
+import { configurationFor } from '../src/models/configuration';
+import { prepareFrozenRun, prepareRecipeRun } from '../src/reading/configuration';
 import { initNativeBridge } from '../src/native/bridge';
 import { workspaceCall } from '../src/native/workspace';
 import {
@@ -39,30 +40,29 @@ async function submit(
   submissionId: string,
   regenerate: boolean,
   instruction?: string,
+  recipeId?: string,
+  runId?: string,
 ) {
   const settings = await getSettings();
-  const { apiKey, ...remote } = settings.openaiCompatible;
-  const endpoint = validateProviderSettings(settings);
-  if (settings.activeProvider === 'openai-compatible') {
-    if (!apiKey && !isLoopbackEndpoint(endpoint!))
-      throw new Error('API key is missing. Configure it in Saul Settings.');
-  }
-  const language = settings.responseLanguage
-    ? `Respond in ${settings.responseLanguage}.`
-    : 'Respond in the language of the selected text.';
-  const input: RunInput = {
-    provider: settings.activeProvider,
-    remote,
-    local: settings.chromeAi,
-    ...(settings.activeProvider === 'chatgpt-plan' ? { plan: settings.chatgptPlan } : {}),
-    context,
-    systemPrompt: settings.customPromptTemplate || DEFAULT_SYSTEM_PROMPT,
-    userPrompt: renderExplainPrompt(context, [instruction, language].filter(Boolean).join('\n')),
-  };
+  let prepared: { input: RunInput; credential: string };
+  if (regenerate && !recipeId) {
+    const original = await db({ type: 'DB_INPUT', payload: { selectionId: snapshot.id, runId } });
+    if (!original)
+      throw new Error(
+        'This older explanation has no saved request. Select its text and choose a recipe to run again.',
+      );
+    prepared = prepareFrozenRun(settings, original, instruction);
+  } else
+    prepared = prepareRecipeRun(
+      settings,
+      context,
+      recipeId || configurationFor(settings).selectedRecipeId,
+      instruction,
+    );
   return runnerRequest<{ passageId: string; reused: boolean }>({
     operation: 'submit',
-    submission: { snapshot, input, submissionId, regenerate },
-    credential: settings.activeProvider === 'openai-compatible' ? apiKey : '',
+    submission: { snapshot, input: prepared.input, submissionId, regenerate },
+    credential: prepared.credential,
   });
 }
 async function reading(
@@ -74,8 +74,23 @@ async function reading(
     case 'mute-errors':
       await setErrorNotificationsMuted(request.muted);
       return {};
-    case 'policy':
-      return { policy: (await getSettings()).contextPolicy };
+    case 'policy': {
+      const settings = await getSettings();
+      const configuration = configurationFor(settings);
+      return {
+        policy: settings.contextPolicy,
+        selectedRecipeId: configuration.selectedRecipeId,
+        recipes: configuration.recipes.map((recipe) => ({
+          id: recipe.id,
+          name: recipe.name,
+          presetName:
+            configuration.presets.find((preset) => preset.id === recipe.presetId)?.name ||
+            'Unavailable preset',
+          fast:
+            configuration.presets.find((preset) => preset.id === recipe.presetId)?.fast === true,
+        })),
+      };
+    }
     case 'list':
       return { passages: await db({ type: 'DB_PAGE', payload: { url } }) };
     case 'submit': {
@@ -87,7 +102,7 @@ async function reading(
         selection: snapshot.text,
         pageUrl: request.context.pageUrl ? url : '',
       };
-      return submit(snapshot, context, request.submissionId, false);
+      return submit(snapshot, context, request.submissionId, false, undefined, request.recipeId);
     }
     default: {
       const passage = await owned(request.selectionId, url);
@@ -100,7 +115,15 @@ async function reading(
           const instruction = request.instruction
             ? `Previous explanation:\n${passage.completed?.responseRaw || passage.latest.responseRaw}\n\nFollow-up request: ${request.instruction}`
             : undefined;
-          return submit(passage.snapshot, context, request.submissionId, true, instruction);
+          return submit(
+            passage.snapshot,
+            context,
+            request.submissionId,
+            true,
+            instruction,
+            request.recipeId,
+            request.instruction ? (passage.completed || passage.latest).id : passage.latest.id,
+          );
         }
         case 'stop':
           await runnerRequest({ operation: 'stop', selectionId: request.selectionId });
@@ -164,18 +187,36 @@ export default defineBackground(() => {
     .catch((error) => console.warn('[Saul] Could not restore reading state', error));
   const subscribers = new Map<chrome.runtime.Port, string>();
   let notificationRevision = 0;
-  function notifyPreference(port: chrome.runtime.Port, muted: boolean) {
+  let presentationRevision = 0;
+  function notifyPreference(
+    port: chrome.runtime.Port,
+    preference:
+      | { type: 'notifications'; muted: boolean }
+      | { type: 'presentation'; minimum: boolean }
+      | { type: 'configuration' },
+  ) {
     try {
-      port.postMessage({ type: 'notifications', muted });
+      port.postMessage(preference);
     } catch {
       subscribers.delete(port);
     }
   }
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local' || !(NOTIFICATION_STORAGE_KEY in changes)) return;
-    notificationRevision++;
-    const muted = changes[NOTIFICATION_STORAGE_KEY]!.newValue === true;
-    for (const port of subscribers.keys()) notifyPreference(port, muted);
+    if (area !== 'local') return;
+    if (SETTINGS_STORAGE_KEY in changes)
+      for (const port of subscribers.keys()) notifyPreference(port, { type: 'configuration' });
+    if (NOTIFICATION_STORAGE_KEY in changes) {
+      notificationRevision++;
+      const muted = changes[NOTIFICATION_STORAGE_KEY]!.newValue === true;
+      for (const port of subscribers.keys())
+        notifyPreference(port, { type: 'notifications', muted });
+    }
+    if (MINIMUM_MODE_STORAGE_KEY in changes) {
+      presentationRevision++;
+      const minimum = minimumModeFromStorage(changes[MINIMUM_MODE_STORAGE_KEY]!.newValue);
+      for (const port of subscribers.keys())
+        notifyPreference(port, { type: 'presentation', minimum });
+    }
   });
   chrome.runtime.onConnect.addListener((port) => {
     if (port.name !== 'saul-reading') return;
@@ -190,10 +231,21 @@ export default defineBackground(() => {
     void getErrorNotificationsMuted().then(
       (muted) => {
         if (subscribers.has(port) && revision === notificationRevision)
-          notifyPreference(port, muted);
+          notifyPreference(port, { type: 'notifications', muted });
       },
       () => {
-        if (subscribers.has(port)) notifyPreference(port, false);
+        if (subscribers.has(port)) notifyPreference(port, { type: 'notifications', muted: false });
+      },
+    );
+    const appearanceRevision = presentationRevision;
+    void getMinimumMode().then(
+      (minimum) => {
+        if (subscribers.has(port) && appearanceRevision === presentationRevision)
+          notifyPreference(port, { type: 'presentation', minimum });
+      },
+      () => {
+        if (subscribers.has(port) && appearanceRevision === presentationRevision)
+          notifyPreference(port, { type: 'presentation', minimum: true });
       },
     );
   });

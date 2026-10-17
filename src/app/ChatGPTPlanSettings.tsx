@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { planCall } from '../models/chatgpt-plan';
 import type { PlanAccount, PlanModel } from '../../native/plan-protocol.mjs';
 import type { UserSettings } from '../types';
+import { planModelDefaults, planModelIssue } from '../../native/plan-models.mjs';
+import { useMinimumMode } from './useMinimumMode';
 
 export function ChatGPTPlanSettings({
   value,
@@ -9,13 +11,16 @@ export function ChatGPTPlanSettings({
   test,
   testing,
   saved,
+  onBusyChange,
 }: {
   value: NonNullable<UserSettings['chatgptPlan']>;
   onChange: (value: NonNullable<UserSettings['chatgptPlan']>) => void;
   test: () => void;
   testing: boolean;
   saved: boolean;
+  onBusyChange?: (busy: boolean) => void;
 }) {
+  const { minimum } = useMinimumMode();
   const [accounts, setAccounts] = useState<PlanAccount[]>([]);
   const [models, setModels] = useState<PlanModel[]>([]);
   const [busy, setBusy] = useState<'accounts' | 'login' | 'logout' | 'models' | null>(null),
@@ -24,6 +29,7 @@ export function ChatGPTPlanSettings({
   const [welcome, setWelcome] = useState(false);
   const [helperReady, setHelperReady] = useState<boolean | null>(null);
   const [loadingModels, setLoadingModels] = useState(false);
+  const [modelsReady, setModelsReady] = useState(false);
   const current = useRef({ value, onChange });
   current.current = { value, onChange };
   const mounted = useRef(true),
@@ -31,22 +37,28 @@ export function ChatGPTPlanSettings({
   const revision = useRef(0);
   const welcomeDialog = useRef<HTMLDialogElement>(null);
   const active = accounts.find((a) => a.id === value.accountId);
+  const selectedModel = models.find((model) => model.slug === value.model);
+  const modelIssue = modelsReady && value.model ? planModelIssue(value, models) : undefined;
+  useEffect(() => {
+    onBusyChange?.(!!busy || loadingModels);
+    return () => onBusyChange?.(false);
+  }, [busy, loadingModels, onBusyChange]);
   useEffect(() => {
     mounted.current = true;
-    const refresh = (accountId?: string) => {
+    const refresh = (selectSoleAccount = false) => {
       void planCall({ action: 'accounts' })
         .then((r) => {
           if (!mounted.current) return;
           setHelperReady(true);
           setAccounts(r.accounts);
-          const selected = accountId || current.current.value.accountId;
+          const selected = current.current.value.accountId;
           const account = selected
             ? r.accounts.find((a) => a.id === selected)
-            : r.accounts.length === 1
+            : selectSoleAccount && r.accounts.length === 1
               ? r.accounts[0]
               : undefined;
           if (account && account.id !== current.current.value.accountId)
-            current.current.onChange({ accountId: account.id, model: '' });
+            current.current.onChange({ ...current.current.value, accountId: account.id });
         })
         .catch((e) => {
           if (mounted.current) {
@@ -64,10 +76,10 @@ export function ChatGPTPlanSettings({
         !sender.tab &&
         message?.target === 'saul-plan-accounts'
       )
-        refresh(message.accountId);
+        refresh();
     };
     chrome.runtime.onMessage.addListener(changed);
-    refresh();
+    refresh(true);
     return () => {
       mounted.current = false;
       revision.current++;
@@ -75,7 +87,7 @@ export function ChatGPTPlanSettings({
     };
   }, []);
   useEffect(() => {
-    if (!accounts.some((account) => account.planEnabled)) return;
+    if (minimum || !accounts.some((account) => account.planEnabled)) return;
     let current = true;
     void chrome.storage.local
       .get('saul_chatgpt_welcome_seen')
@@ -88,19 +100,21 @@ export function ChatGPTPlanSettings({
     return () => {
       current = false;
     };
-  }, [accounts]);
+  }, [accounts, minimum]);
   useEffect(() => {
-    if (welcome) welcomeDialog.current?.showModal();
-  }, [welcome]);
+    if (welcome && !minimum) welcomeDialog.current?.showModal();
+    else welcomeDialog.current?.close();
+  }, [welcome, minimum]);
   // Restore the catalog after returning from the browser, just as after login.
   useEffect(() => {
     setModels([]);
+    setModelsReady(false);
     revision.current++;
     setLoadingModels(false);
     if (!active?.planEnabled) return;
     const ac = new AbortController();
     setLoadingModels(true);
-    void loadModels(active.id, ac.signal, current.current.value.model)
+    void loadModels(active.id, ac.signal)
       .catch((e) => {
         if (!ac.signal.aborted && mounted.current) setError(e.message);
       })
@@ -130,16 +144,27 @@ export function ChatGPTPlanSettings({
       if (mounted.current) setBusy(null);
     }
   }
-  async function loadModels(accountId: string, signal: AbortSignal, preferred = '') {
+  async function loadModels(accountId: string, signal: AbortSignal) {
     const stamp = ++revision.current;
+    setModelsReady(false);
     const result = await planCall({ action: 'models', accountId }, signal);
-    if (!mounted.current || revision.current !== stamp) return;
+    if (
+      !mounted.current ||
+      revision.current !== stamp ||
+      current.current.value.accountId !== accountId
+    )
+      return;
     const list = result.models;
     setModels(list);
-    current.current.onChange({
-      accountId,
-      model: preferred || list[0]?.slug || '',
-    });
+    setModelsReady(true);
+    const initial = list.find((model) => model.isDefault) ?? list[0];
+    if (!current.current.value.model && initial) {
+      current.current.onChange({
+        ...current.current.value,
+        model: initial.slug,
+        ...planModelDefaults(initial),
+      });
+    }
     if (!list.length) setNotice('No models are available for this ChatGPT account.');
   }
   const login = (newAccount = false, consent = false) =>
@@ -155,7 +180,7 @@ export function ChatGPTPlanSettings({
       if (!mounted.current) return;
       const account = result.account;
       setAccounts((all) => [...all.filter((a) => a.id !== account.id), account]);
-      onChange({ accountId: account.id, model: '' });
+      onChange({ ...current.current.value, accountId: account.id });
       if (account.planEnabled) {
         setNotice('Signed in. Choose a model and save Settings to use your plan.');
       } else
@@ -163,11 +188,6 @@ export function ChatGPTPlanSettings({
     });
   return (
     <div className="stack">
-      <p className="small muted">
-        Use eligible requests from your ChatGPT plan. Plan and app limits apply. API-key profiles
-        are billed separately.
-      </p>
-      {helperReady === true && <p className="small muted">ChatGPT helper connected.</p>}
       <label className="field">
         ChatGPT account
         <select
@@ -176,7 +196,7 @@ export function ChatGPTPlanSettings({
           disabled={!!busy || testing}
           onChange={(e) => {
             setError('');
-            onChange({ accountId: e.target.value, model: '' });
+            onChange({ ...value, accountId: e.target.value });
           }}
         >
           <option value="">Choose an account</option>
@@ -199,7 +219,7 @@ export function ChatGPTPlanSettings({
                 setHelperReady(true);
                 setAccounts(result.accounts);
                 if (!value.accountId && result.accounts.length === 1)
-                  onChange({ accountId: result.accounts[0]!.id, model: '' });
+                  onChange({ ...value, accountId: result.accounts[0]!.id });
               }
             })
           }
@@ -213,7 +233,7 @@ export function ChatGPTPlanSettings({
         )}
         {accounts.length > 0 && (
           <button className="btn" disabled={!!busy || testing} onClick={() => login(true)}>
-            Add account or workspace
+            Add account
           </button>
         )}
         {active?.signedIn && !active.planEnabled && (
@@ -256,7 +276,7 @@ export function ChatGPTPlanSettings({
           </span>
           {busy !== 'logout' && (
             <button className="btn" onClick={() => controller.current?.abort()}>
-              Stop
+              Cancel
             </button>
           )}
         </div>
@@ -267,11 +287,16 @@ export function ChatGPTPlanSettings({
           aria-label="ChatGPT model"
           value={value.model}
           disabled={!!busy || loadingModels || testing}
-          onChange={(e) => onChange({ ...value, model: e.target.value })}
+          onChange={(e) => {
+            const model = models.find((model) => model.slug === e.target.value);
+            if (model) onChange({ ...value, model: model.slug, ...planModelDefaults(model) });
+          }}
         >
           <option value="">Refresh models to choose</option>
           {value.model && !models.some((m) => m.slug === value.model) && (
-            <option value={value.model}>{value.model} (saved)</option>
+            <option value={value.model}>
+              {value.model} {modelsReady ? '(unavailable)' : '(saved)'}
+            </option>
           )}
           {models.map((m) => (
             <option key={m.slug} value={m.slug}>
@@ -280,39 +305,93 @@ export function ChatGPTPlanSettings({
           ))}
         </select>
       </label>
+      {(!!selectedModel?.supportedReasoningEfforts.length || !!value.effort) && (
+        <label className="field">
+          Effort
+          <select
+            aria-label="ChatGPT effort"
+            value={value.effort ?? ''}
+            disabled={!!busy || loadingModels || testing || !selectedModel}
+            onChange={(event) => onChange({ ...value, effort: event.target.value })}
+          >
+            <option value="">Default</option>
+            {value.effort &&
+              !selectedModel?.supportedReasoningEfforts.some(
+                (level) => level.effort === value.effort,
+              ) && <option value={value.effort}>{value.effort} (unavailable)</option>}
+            {selectedModel?.supportedReasoningEfforts.map((level) => (
+              <option key={level.effort} value={level.effort} title={level.description}>
+                {level.effort[0]?.toUpperCase()}
+                {level.effort.slice(1)}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <label className="field">
+        Speed
+        <select
+          aria-label="ChatGPT speed"
+          value={value.fast ? 'fast' : 'standard'}
+          disabled={!!busy || loadingModels || testing || !selectedModel}
+          onChange={(event) => onChange({ ...value, fast: event.target.value === 'fast' })}
+        >
+          <option value="standard">Standard</option>
+          <option value="fast" disabled={!selectedModel?.fastTier}>
+            Fast{selectedModel && !selectedModel.fastTier ? ' (unavailable)' : ''}
+          </option>
+        </select>
+      </label>
       {loadingModels && <p role="status">Loading available models…</p>}
+      {modelIssue && (
+        <p className="notice error" role="alert">
+          {modelIssue}
+        </p>
+      )}
       <div className="row">
         <button
           className="btn"
           disabled={!!busy || loadingModels || testing || !active?.planEnabled}
-          onClick={() =>
-            operation('models', (signal) => loadModels(value.accountId, signal, value.model))
-          }
+          onClick={() => operation('models', (signal) => loadModels(value.accountId, signal))}
         >
           Refresh models
         </button>
         <button
           className="btn"
-          disabled={!!busy || loadingModels || testing || !active?.planEnabled || !value.model}
+          disabled={
+            !!busy ||
+            loadingModels ||
+            testing ||
+            !active?.planEnabled ||
+            !value.model ||
+            !modelsReady ||
+            !!modelIssue
+          }
           onClick={test}
         >
           Test generation
         </button>
       </div>
-      {active?.planEnabled && (
+      {!minimum && active?.planEnabled && (
         <p className="small">
-          {saved
-            ? 'Using ChatGPT plan'
-            : 'Save Settings to use your ChatGPT plan for new explanations.'}
+          {saved ? 'Using ChatGPT plan' : 'Save to use this account for new explanations.'}
         </p>
       )}
       <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">
         Manage usage
       </a>
-      <p className="small muted">
-        Generation tests use your plan quota. Model availability and usage limits depend on your
-        account.
-      </p>
+      <details open={!minimum}>
+        <summary>Details</summary>
+        {helperReady === true && <p className="small muted">ChatGPT helper connected.</p>}
+        <p className="small muted">
+          Generation and tests use your ChatGPT plan. API-key profiles are billed separately.
+        </p>
+        {value.fast && (
+          <p className="small muted">
+            Fast requests priority service and may use more plan allowance.
+          </p>
+        )}
+      </details>
       <details open={helperReady === false}>
         <summary>ChatGPT helper setup</summary>
         <p className="small muted">
@@ -336,7 +415,7 @@ export function ChatGPTPlanSettings({
           {notice}
         </p>
       )}
-      {welcome && (
+      {!minimum && welcome && (
         <dialog
           ref={welcomeDialog}
           onCancel={() => setWelcome(false)}

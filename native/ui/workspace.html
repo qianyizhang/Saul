@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-minimum="true">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -14,7 +14,7 @@
         <div class="brand">
           <span class="logo">S</span>
           <div>
-            <h1>Windows & tabs</h1>
+            <h1>Tabs</h1>
             <p id="counts"></p>
           </div>
         </div>
@@ -37,8 +37,8 @@
             placeholder="Group my research into a new window and keep work tabs together…"
           ></textarea>
           <div class="row">
-            <span class="muted">Codex proposes. You review and apply.</span
-            ><button id="ask" class="primary" disabled>Ask Codex for a plan ↗</button>
+            <span class="muted guidance">Review before applying.</span
+            ><button id="ask" class="primary" disabled>Ask Codex</button>
           </div>
         </div>
       </details>
@@ -48,14 +48,9 @@
           <button id="current" aria-pressed="true">Current</button
           ><button id="proposed" aria-pressed="false" disabled>Proposed</button>
         </div>
-        <input
-          id="filter"
-          type="search"
-          aria-label="Filter tabs"
-          placeholder="Find a tab or domain…"
-        />
+        <input id="filter" type="search" aria-label="Filter tabs" placeholder="Find a tab…" />
       </div>
-      <p class="muted help">Drag tabs to arrange. Review your changes before applying.</p>
+      <p class="muted help guidance">Drag tabs to arrange. Review before applying.</p>
       <section id="move-controls" class="move-controls" aria-label="Move selected tab" hidden>
         <strong id="moving-title"></strong>
         <div class="row">
@@ -70,20 +65,18 @@
         <div class="empty">Your open Chrome windows will appear here.</div>
       </div>
       <details class="help-details">
-        <summary>How to arrange tabs</summary>
-        <p>
-          Drag a row or its grip between tabs, onto a window’s footer, or into New window. Hold near
-          an edge to scroll. Escape cancels a drag.
-        </p>
-        <p>
-          Click a grip for keyboard controls. Pins and groups stay in their windows. Filtering keeps
-          hidden tabs in the plan.
-        </p>
-        <p>
-          Window labels are saved in Saul after apply; they do not change Chrome’s own window names.
-        </p>
+        <summary>View options</summary>
+        <label class="mode-setting"
+          ><span>Minimum Mode</span><input id="minimum-mode" type="checkbox" checked
+        /></label>
+        <p id="preference-error" role="alert" hidden></p>
+        <details>
+          <summary>Shortcuts & details</summary>
+          <p>Escape cancels a move or rename. A tab’s grip opens keyboard and touch controls.</p>
+          <p>Pins and groups stay in their windows. Filtering keeps hidden tabs in the plan.</p>
+          <p>Window labels are saved in Saul after Apply; Chrome’s window names stay unchanged.</p>
+        </details>
       </details>
-      <footer>Local Chrome bridge · No tabs closed</footer>
     </main>
     <script type="module">
       /* SAUL_SCRIPT */

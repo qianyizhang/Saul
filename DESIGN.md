@@ -89,9 +89,9 @@ components:
 
 ## Overview
 
-Quiet, personal, and useful: a small space for finding clarity. EZ is the initial
-visual reference. Carry this identity into other products through the roles and
-rules below; keep each product's vocabulary, workflows, and platform conventions.
+Quiet, personal, and useful: a small space for finding clarity. EZ and Saul are
+surfaces of the same personal tool. Carry the same action names, reading hierarchy,
+and interaction rules between them; adapt to native controls and the surrounding app.
 Tokens are authoritative values. This document is the one authored design source;
 platform files are generated. The format is Google Labs DESIGN.md alpha, with
 paired `-dark` colors as this contract's explicit appearance convention.
@@ -117,6 +117,107 @@ Give reading content a comfortable measure and generous breathing room. Compact
 popups and lookup panels use tighter spacing; tab boards use dense, scannable rows.
 Preserve the same hierarchy across these densities. Reveal advanced options when
 needed, keep the primary action reachable, and avoid horizontal scrolling at narrow widths.
+
+Use one heading for the current task. Avoid repeating the selected navigation label,
+adding a slogan above an input, or boxing every history row. A new lookup puts its
+inputs near the heading; a saved answer gives that space back to reading. Keep
+configuration and history management outside compact reading surfaces.
+
+## Minimum Mode
+
+Minimum Mode is the default presentation for personal use. It is reversible in
+Settings (or the board's View options), independent of model configuration, and
+saved locally on each surface. EZ's two windows share the setting; Saul's extension
+pages and reading cards share it. The embedded board keeps its own preference.
+There is no cross-app or cross-device preference sync.
+
+| Always available                                                | Minimum Mode                                                     | Standard view                     |
+| --------------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------- |
+| Current content, inputs, Send/Explain, Stop, Copy               | Visible                                                          | Visible                           |
+| Errors, interrupted or unsaved work, missing account/model      | Visible with a useful next action                                | Same                              |
+| Source, chosen preset/provider and requested speed              | Visible at the point of choice; exact recorded values in Details | Same                              |
+| Model, timing, token counts, earlier attempts                   | Details or More                                                  | May also appear beside the answer |
+| Follow-ups, export, deletion                                    | More or an explicit disclosure                                   | May appear in the action row      |
+| Repeated instructions, keyboard coaching, local-storage slogans | Omitted                                                          | Brief guidance may appear         |
+
+Minimum changes presentation, never execution or retention. It does not clear a
+draft, alter a recipe, mute errors, change providers, send a request, or skip a
+confirmation. Empty space is preferable to a new tip. Keep accessibility labels,
+tooltips and focus indicators even when visible labels are shortened.
+
+## Language and actions
+
+Use sentence case and concrete nouns. Prefer **History**, **Settings**, **Details**,
+**More**, **Copy**, **Send**, **Stop**, **Save**, and **Cancel** across surfaces.
+Use **Saved**, **Waiting…**, **Thinking…**, **Saving…**, **Stopped**, **Interrupted**,
+or **Incomplete** only when that state is known. Do not repeat “saved on this
+device” on every answer. Place storage explanations in Settings.
+
+Keep meaningful differences explicit. **Explain** starts a reading request from
+selected text; **Send** submits a draft. **Use again** restores an editable draft;
+**Regenerate** starts another attempt. A **recipe** is a prompt template; a
+**preset** saves model choices; a **provider** identifies the service. Do not call
+all three “model.” Hide technical identifiers from routine reading, not from the
+settings or details needed to inspect them.
+
+Keep one primary action per state. Compose: Send or Explain. Running: Stop.
+Reading: Copy, with secondary actions grouped. Management: Preview, then Apply.
+An unavailable action keeps its reason nearby; it does not silently select an
+alternative account, model, service tier, or billing path. Fast is a request,
+not a promise of latency. Details identifies the requested speed; show the actual
+service tier only when it was returned and recorded, never inferred from Fast.
+
+## Accounts, presets, and recipes
+
+Use **Continue with ChatGPT**, **Cancel**, **Add account**, **Enable plan usage**,
+**Refresh models**, **Manage usage**, and **Sign out** for the same account actions.
+Both surfaces use ChatGPT's direct sign-in flow and account model catalog. Each
+app keeps its own sign-ins; signing in or out of one does not change the other.
+Account identity and permission to use the plan are separate states. Show recovery
+actions when needed; keep routine connection details behind a disclosure.
+
+A named **preset** records a model and its supported options, including reasoning
+effort and requested Fast or Standard service. A named **recipe** contains editable
+prompt text and a default preset. Choose the recipe at the point of use; edit
+recipes and presets in Settings. Keep one editor for each choice. An unavailable
+saved choice blocks the request with a useful explanation instead of falling back.
+
+Use the same concepts with surface-specific inputs: EZ collects recipe fields in
+a draft; Saul supplies the selected passage and enabled page context. Saved
+attempts retain their original prompts and model choices when configuration is
+edited. Recipe and preset names are personal data, not fixed navigation labels.
+The two apps do not sync configuration, accounts, or history.
+
+## Keyboard and focus
+
+| Intent                    | EZ                                   | Saul                                                                 |
+| ------------------------- | ------------------------------------ | -------------------------------------------------------------------- |
+| Submit current input      | ⌘Return                              | ⌘/Ctrl+Return on a captured selection, outside editable page content |
+| Stop active work          | ⌘.                                   | ⌘/Ctrl+. for the active reading card                                 |
+| Dismiss a compact surface | Escape, without cancelling           | Escape, without cancelling                                           |
+| Settings                  | ⌘,                                   | ⌘/Ctrl+, in the extension workspace                                  |
+| New lookup                | ⌘N                                   | Not applicable; select another passage                               |
+| Reading entry points      | Quick Lookup ⌃⌥Space; macOS Services | Existing Alt+Shift+E / Alt+Shift+L                                   |
+
+EZ's configured bindings override its defaults. Do not capture browser navigation,
+new-tab, find, address-bar or text-editing shortcuts to imitate a native app.
+Scope commands to the active surface; let menus, forms and dialogs take priority.
+Keep shortcut reference in menus/Settings, not permanent “press X to do Y” banners.
+Closing a reading card leaves work running. Restore useful focus when a disclosure
+or transient surface closes. Every essential action must also work by click or tap.
+
+## Mobile direction
+
+Mobile is a future surface, not a shipped app or a sync promise. Reuse these
+semantics and typography roles, with one reading column, a bottom composer, and
+History and Settings as separate destinations. Present Details and More as sheets;
+preserve a draft when a sheet closes. Use the platform share sheet for selected
+text, with explicit Send after capture.
+
+At touch widths, allow wrapping and platform text scaling; use at least 44-point
+action targets and visible tap alternatives to hover, wheel selection and dragging.
+Keep Send/Stop above the keyboard and respect safe areas. Test 360–440px web
+reflow now, but do not describe a narrow desktop extension as native mobile support.
 
 ## Elevation & Depth
 

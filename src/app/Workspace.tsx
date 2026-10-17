@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { BookOpen, ExternalLink } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import { Library } from './Library';
 import { Settings } from './Settings';
 import { Tabs } from './Tabs';
+import { useMinimumMode } from './useMinimumMode';
+import { PresentationSettings } from './PresentationSettings';
 
 type View = 'history' | 'tabs' | 'settings';
 function viewFromHash(): View {
@@ -10,6 +12,7 @@ function viewFromHash(): View {
   return hash === 'tabs' || hash === 'settings' ? hash : 'history';
 }
 export function Workspace({ popup = false }: { popup?: boolean }) {
+  const presentation = useMinimumMode();
   const [view, setView] = useState<View>(viewFromHash);
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [readingRevision, refreshReading] = useState(0);
@@ -29,16 +32,31 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
   );
   useEffect(() => {
     const onHashChange = () => navigate(viewFromHash());
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        !event.defaultPrevented &&
+        !event.isComposing &&
+        !event.repeat &&
+        (event.metaKey || event.ctrlKey) &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.key === ','
+      ) {
+        event.preventDefault();
+        navigate('settings');
+      }
+    };
     window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('hashchange', onHashChange);
+      window.removeEventListener('keydown', onKeyDown);
+    };
   }, [navigate]);
   return (
-    <main className={`shell ${popup ? 'popup' : ''}`}>
+    <main className={`shell ${popup ? 'popup' : ''}`} data-minimum={presentation.minimum}>
       <header className="masthead">
         <div className="brand">
-          <span className="brand-mark">
-            <BookOpen size={20} />
-          </span>
           <h1>Saul</h1>
         </div>
         {popup && (
@@ -56,7 +74,7 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
       <nav className="nav" aria-label="Main navigation">
         {(
           [
-            ['history', 'Reading history'],
+            ['history', 'History'],
             ['tabs', 'Tabs'],
             ['settings', 'Settings'],
           ] as const
@@ -73,12 +91,16 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
           </button>
         ))}
       </nav>
-      {view === 'history' && <Library compact={popup} refreshKey={readingRevision} />}
+      {view === 'history' && (
+        <Library compact={popup} refreshKey={readingRevision} minimum={presentation.minimum} />
+      )}
       {view === 'tabs' && <Tabs />}
-      {view === 'settings' && <Settings onDirty={setSettingsDirty} />}
-      <footer className="footer">
-        Saved on this device · Context is sent to your chosen model.
-      </footer>
+      {view === 'settings' && (
+        <div className="stack settings-layout">
+          <PresentationSettings preference={presentation} />
+          <Settings onDirty={setSettingsDirty} />
+        </div>
+      )}
     </main>
   );
 }

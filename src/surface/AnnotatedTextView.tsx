@@ -52,7 +52,7 @@ export function AnnotatedTextView({
               );
             }}
             onKeyDown={(e) => {
-              if (e.key === 'Escape') {
+              if (e.key === 'Escape' && term) {
                 e.stopPropagation();
                 setTerm(null);
               }

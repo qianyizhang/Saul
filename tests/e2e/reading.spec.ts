@@ -23,16 +23,16 @@ test('quiet queue, underline view, refresh and persistent unread explanations', 
   expect(await page.locator('#concept').boundingBox()).toEqual(original);
   await page.locator('#concept').click({ position: { x: 30, y: 15 } });
   await expect(page.getByRole('region', { name: 'Saul explanation' })).toBeVisible();
-  await expect(page.getByText('Ready · saved on this device', { exact: true })).toBeVisible();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
   await expect.poll(async () => (await history(browser.popup))[0]?.unread).toBe(false);
   await page.reload();
   await view(page);
-  await expect(page.getByText('Ready · saved on this device', { exact: true })).toBeVisible();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
   browser = await sandbox.launch();
   page = await browser.context.newPage();
   await page.goto(fixtureServer.origin + '/article');
   await view(page);
-  await expect(page.getByText('Ready · saved on this device', { exact: true })).toBeVisible();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
 });
 test('dismiss, refresh and closing the source do not cancel; actual runner loss requires explicit retry', async ({
   sandbox,

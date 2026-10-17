@@ -1,4 +1,25 @@
 const $ = (id) => document.getElementById(id);
+const minimumModeKey = 'saul-board-minimum-mode';
+function setMinimumMode(value) {
+  document.documentElement.dataset.minimum = String(value);
+  $('minimum-mode').checked = value;
+}
+try {
+  setMinimumMode(localStorage.getItem(minimumModeKey) !== 'false');
+} catch {
+  setMinimumMode(true);
+}
+$('minimum-mode').onchange = () => {
+  const value = $('minimum-mode').checked;
+  setMinimumMode(value);
+  try {
+    localStorage.setItem(minimumModeKey, String(value));
+    $('preference-error').hidden = true;
+  } catch {
+    $('preference-error').textContent = 'Changed for this view. The preference could not be saved.';
+    $('preference-error').hidden = false;
+  }
+};
 let data,
   approvalToken,
   mode = 'current',
@@ -212,7 +233,7 @@ function startDrag(item, tabId) {
   indicator.setAttribute('aria-hidden', 'true');
   document.body.append(ghost, indicator);
   Object.assign(pointerDrag, { ghost, indicator, badge, previousTime: performance.now() });
-  status('Drag to a gap or another window. Escape cancels.');
+  status('Moving tab…');
   updateDrag();
   const tick = (time) => {
     const drag = pointerDrag;
@@ -355,7 +376,7 @@ async function stageDraft(source, draft) {
   const alreadyStaging = staging;
   staging = true;
   render();
-  status('Saving preview… You can keep arranging tabs.');
+  status('Saving preview…');
   if (alreadyStaging) return;
   try {
     while (queuedEdit) {
@@ -498,7 +519,7 @@ function renderProposal(proposal, snapshot) {
   );
   const detail = element('details');
   detail.open = detailsOpen;
-  detail.append(element('summary', '', 'Plan details'), element('p', '', proposal.summary));
+  detail.append(element('summary', '', 'Details'), element('p', '', proposal.summary));
   const row = element('div', 'row');
   row.append(
     element(
@@ -695,7 +716,7 @@ function render() {
     if (!newWindow) {
       newWindow = element('div', 'new-window', '+ New window');
       newWindow.id = 'new-window';
-      newWindow.append(element('span', '', 'Drop a tab here to preview a new window'));
+      newWindow.append(element('span', 'guidance', 'Drop a tab here'));
       newWindow.dataset.dropWindow = 'new';
     }
     children.push(newWindow);
@@ -743,7 +764,7 @@ async function refresh() {
   $('refresh').disabled = true;
   try {
     await tool('saul_workspace_state', data?.session ? { session: data.session } : {});
-    status(data?.error || 'Connected · Updated just now', Boolean(data?.error));
+    status(data?.error || '', Boolean(data?.error));
   } catch (error) {
     approvalToken = undefined;
     status(error.message, true);

@@ -13,6 +13,13 @@ Saul is a Chrome MV3 extension with four runtime contexts. State crosses context
 
 The popup and full workspace reuse the application views under `src/app/`. The full workspace owns global history, export, deletion, settings, and tab organization.
 
+Presentation preferences are separate from provider drafts. `src/storage/presentation.ts`
+owns the default-on Minimum Mode value in trusted extension storage. Popup and
+workspace listeners share changes immediately; the background broadcasts only the
+boolean presentation value over the existing validated reading subscription. Content
+scripts do not gain direct storage or credential access. Provider validation or an
+unreadable provider record does not prevent changing presentation.
+
 ## Reading flow
 
 ```text
@@ -56,6 +63,22 @@ Runtime messages do not return to their sender. Content and popup requests there
 `src/models/provider.ts` is the single streaming facade used by the runner and generation tests. It dispatches to OpenAI-compatible, Chrome on-device, or ChatGPT plan adapters and returns the same delta/completion events. Both HTTP adapters reuse `native/sse.mjs` for bounded SSE framing across UTF-8 chunks, CRLF/LF separators, multiline `data:` fields, provider errors, cancellation, and incomplete output. Chrome generation uses the modern `LanguageModel` API in the offscreen document.
 
 Prompts and context are frozen when a job is submitted. Later settings edits do not change an in-flight job. Provider keys are associated with their endpoint origin and are not persisted with job inputs. ChatGPT plan jobs freeze a non-secret account registration ID and model; OAuth credentials stay in the native helper.
+
+`src/models/configuration.ts` owns named recipes and model presets in settings.
+Legacy settings migrate to an Explain recipe and a Current preset; prompt roles,
+the active connection, and the selected model are preserved. Recipes contain
+literal prompt templates and reference a default preset. Presets identify a
+provider and its connection/account with model options; they contain no keys.
+The existing model controls edit the selected preset, so there is one authority
+for each model choice.
+
+Content scripts receive recipe names and safe choice summaries, then submit only
+the recipe ID with captured context. `src/reading/configuration.ts` resolves the
+saved recipe/preset in the background and freezes both with the rendered prompts
+in `input_json`. Retry uses the frozen request, resolving credentials only for its
+original connection; missing connections and changed endpoints block explicitly.
+Choosing another recipe for the same passage creates a new attempt. It cannot
+replace an active attempt. Historic rows remain readable without recipe snapshots.
 
 The [ChatGPT plan helper](chatgpt-plan.md) uses a separate native host, `com.saul.chatgpt`, and a shared allowlisted protocol. The background validates extension-port senders and brokers requests from Settings and the offscreen runner. The native helper owns loopback OAuth, JWT verification, private credential persistence, serialized refresh, and the constrained Responses/SSE transport. It is independent of the tab bridge.
 

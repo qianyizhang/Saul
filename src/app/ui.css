@@ -67,23 +67,18 @@ a:hover {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 .brand {
   display: flex;
   align-items: center;
   gap: 10px;
 }
-.brand-mark {
-  background: var(--design-color-wash);
-  color: var(--accent);
-  border-radius: 11px;
-  padding: 8px;
-  display: flex;
-}
 .brand h1 {
-  font-size: 24px;
-  letter-spacing: -0.5px;
+  font-family: var(--design-font-subject);
+  font-size: 20px;
+  font-weight: var(--design-weight-subject);
+  letter-spacing: -0.3px;
   margin: 0;
 }
 .muted {
@@ -296,12 +291,8 @@ a:hover {
   align-items: center;
   gap: 12px;
 }
-.footer {
-  margin-top: 20px;
-  font-size: 12px;
-  color: var(--muted);
-}
 .settings-layout {
+  width: 100%;
   max-width: 680px;
   margin: auto;
 }
@@ -419,4 +410,90 @@ input[type='checkbox'] {
   padding: 12px 0;
   background: var(--design-color-canvas);
   border-top: 1px solid var(--border);
+}
+
+[data-minimum='true'] .standard-only {
+  display: none;
+}
+[data-minimum='true'] .history-list {
+  gap: 0;
+}
+[data-minimum='true'] .history-entry {
+  padding: 18px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--design-color-canvas);
+}
+[data-minimum='true'] .history-entry .btn.icon {
+  border-color: transparent;
+  background: transparent;
+}
+[data-minimum='true'] .panel {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+[data-minimum='true'] .settings-section,
+[data-minimum='true'] .settings-fields > details {
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+[data-minimum='true'] .settings-fields > .settings-section:last-of-type {
+  padding-bottom: 8px;
+  border-bottom: 0;
+}
+[data-minimum='true'] .empty {
+  background: none;
+}
+[data-minimum='true'] .library-tools {
+  border-top: 0;
+  padding-top: 0;
+}
+.preference-description {
+  display: block;
+  margin-top: 2px;
+}
+.history-more {
+  white-space: normal;
+  margin-top: 14px;
+}
+.history-more .btn.danger {
+  margin-top: 12px;
+}
+.shortcuts dl {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 0;
+}
+.shortcuts dl > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.shortcuts dd {
+  margin: 0;
+  color: var(--muted);
+}
+@media (pointer: coarse) {
+  .btn,
+  .nav button,
+  .history-title,
+  .source-link,
+  summary,
+  .toggle,
+  .field input:not([type='checkbox']),
+  .field select,
+  .search {
+    min-height: 44px;
+  }
+  .btn.icon {
+    min-width: 44px;
+  }
+  .tab-row {
+    min-height: 44px;
+    padding-block: 12px;
+  }
 }

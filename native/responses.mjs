@@ -29,14 +29,19 @@ export function planError(body, status, requestId) {
     safe(code) || 'provider-error',
   );
 }
-export function responsesBody({ model, systemPrompt, userPrompt }) {
+export function responsesBody(
+  { model, effort, systemPrompt, userPrompt },
+  serviceTier = 'default',
+) {
   // This allowlist is deliberately separate from Chat Completions options.
   return {
     model,
-    instructions: systemPrompt,
+    ...(systemPrompt ? { instructions: systemPrompt } : {}),
     input: [{ role: 'user', content: userPrompt }],
     store: false,
     stream: true,
+    service_tier: serviceTier === 'fast' ? 'priority' : serviceTier,
+    ...(effort ? { reasoning: { effort } } : {}),
   };
 }
 export async function* responseEvents(response) {

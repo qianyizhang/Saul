@@ -1,4 +1,10 @@
-import type { SelectionSnapshot, ResolvedContext, UserSettings } from './index';
+import type {
+  SelectionSnapshot,
+  ResolvedContext,
+  UserSettings,
+  Recipe,
+  ModelPreset,
+} from './index';
 
 export type RunStatus =
   | 'queued'
@@ -19,6 +25,8 @@ export interface RunResult {
   createdAt: number;
   latencyMs?: number;
   viewedAt?: number;
+  recipe?: Pick<Recipe, 'id' | 'name'>;
+  preset?: Pick<ModelPreset, 'id' | 'name'>;
 }
 export interface Passage {
   snapshot: SelectionSnapshot;
@@ -35,6 +43,8 @@ export interface RunInput {
   systemPrompt: string;
   userPrompt: string;
   context: ResolvedContext;
+  recipe?: Recipe;
+  preset?: ModelPreset;
 }
 export interface QueuedRun {
   id: string;
@@ -84,6 +94,7 @@ export interface DbOperations {
   DB_PAGE: { payload: { url: string }; result: Passage[] };
   DB_PASSAGE: { payload: { selectionId: string }; result: Passage | undefined };
   DB_CONTEXT: { payload: { selectionId: string }; result: ResolvedContext };
+  DB_INPUT: { payload: { selectionId: string; runId?: string }; result: RunInput | undefined };
   DB_RUNS: { payload: { selectionId: string }; result: RunResult[] };
   DB_VIEW: { payload: { selectionId: string; runId: string }; result: void };
   DB_UNREAD: { payload: undefined; result: number };

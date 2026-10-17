@@ -8,10 +8,16 @@ import {
   validateProviderSettings,
 } from '../storage/settings';
 import type { UserSettings, ProviderProfile } from '../types';
+import {
+  configurationFor,
+  presetFromSettings,
+  settingsForPreset,
+  validateConfiguration,
+} from '../models/configuration';
 
 function settingsDraft(settings: UserSettings): UserSettings {
   const activeProfileId = settings.activeProfileId || 'default';
-  return {
+  const normalized = {
     ...settings,
     activeProfileId,
     profiles: settings.profiles?.length
@@ -24,6 +30,10 @@ function settingsDraft(settings: UserSettings): UserSettings {
           },
         ],
   };
+  const configuration = configurationFor(settings);
+  const recipe = configuration.recipes.find((item) => item.id === configuration.selectedRecipeId)!;
+  const preset = configuration.presets.find((item) => item.id === recipe.presetId)!;
+  return { ...settingsForPreset(normalized, preset, true), configuration };
 }
 
 function errorMessage(error: unknown): string {
@@ -32,6 +42,7 @@ function errorMessage(error: unknown): string {
 
 export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
+  const [selectedPresetId, setSelectedPresetId] = useState('preset-current');
   const [loaded, setLoaded] = useState(false),
     [dirty, setDirty] = useState(false),
     [saved, setSaved] = useState(false),
@@ -46,7 +57,13 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
     getSettings()
       .then((s) => {
         if (!active) return;
-        setSettings(settingsDraft(s));
+        const next = settingsDraft(s);
+        setSettings(next);
+        const configuration = configurationFor(next);
+        setSelectedPresetId(
+          configuration.recipes.find((recipe) => recipe.id === configuration.selectedRecipeId)!
+            .presetId,
+        );
         setLoaded(true);
       })
       .catch((e) => {
@@ -69,7 +86,24 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
   }, [dirty, onDirty]);
   function update(patch: Partial<UserSettings>) {
     if (savingRef.current) return;
-    setSettings((s) => ({ ...s, ...patch }));
+    setSettings((s) => {
+      const next = { ...s, ...patch };
+      const configuration = configurationFor(next);
+      const selected = configuration.presets.find((preset) => preset.id === selectedPresetId);
+      return {
+        ...next,
+        configuration: selected
+          ? {
+              ...configuration,
+              presets: configuration.presets.map((preset) =>
+                preset.id === selected.id
+                  ? presetFromSettings(next, selected.id, selected.name)
+                  : preset,
+              ),
+            }
+          : configuration,
+      };
+    });
     setDirty(true);
     setSaved(false);
     setError('');
@@ -80,12 +114,70 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
       p.id === settings.activeProfileId ? { ...p, config: settings.openaiCompatible } : p,
     );
   }
+  function selectPreset(id: string) {
+    const preset = configurationFor(settings).presets.find((item) => item.id === id);
+    if (!preset || savingRef.current) return;
+    setSettings(settingsForPreset({ ...settings, profiles: profilesWithCurrent() }, preset, true));
+    setSelectedPresetId(id);
+    setError('');
+    setSaved(false);
+  }
+  function addPreset() {
+    if (savingRef.current) return;
+    const configuration = configurationFor(settings);
+    const id = crypto.randomUUID();
+    let name = 'New preset';
+    for (
+      let suffix = 2;
+      configuration.presets.some((preset) => preset.name.toLowerCase() === name.toLowerCase());
+      suffix++
+    )
+      name = `New preset ${suffix}`;
+    setSettings({
+      ...settings,
+      configuration: {
+        ...configuration,
+        presets: [...configuration.presets, presetFromSettings(settings, id, name)],
+      },
+    });
+    setSelectedPresetId(id);
+    setDirty(true);
+    setSaved(false);
+    setError('');
+  }
+  function removePreset() {
+    if (savingRef.current) return;
+    const configuration = configurationFor(settings);
+    const used = configuration.recipes.filter((recipe) => recipe.presetId === selectedPresetId);
+    if (used.length) {
+      setError(
+        `This preset is used by ${used.map((recipe) => recipe.name).join(', ')}. Choose another default preset for those recipes first.`,
+      );
+      return;
+    }
+    const presets = configuration.presets.filter((preset) => preset.id !== selectedPresetId);
+    if (!presets.length) {
+      setError('Keep at least one preset.');
+      return;
+    }
+    const next = {
+      ...settings,
+      profiles: profilesWithCurrent(),
+      configuration: { ...configuration, presets },
+    };
+    setSettings(settingsForPreset(next, presets[0]!, true));
+    setSelectedPresetId(presets[0]!.id);
+    setDirty(true);
+    setSaved(false);
+    setError('');
+  }
   async function save() {
     if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
     setError('');
     try {
+      validateConfiguration(configurationFor(settings));
       validateProviderSettings(settings);
       const next = { ...settings, profiles: profilesWithCurrent() };
       await saveSettings(next);
@@ -106,6 +198,11 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
       const recovered = await backupAndResetInvalidSettings();
       setError('');
       setSettings(settingsDraft(recovered.settings));
+      const configuration = configurationFor(recovered.settings);
+      setSelectedPresetId(
+        configuration.recipes.find((recipe) => recipe.id === configuration.selectedRecipeId)!
+          .presetId,
+      );
       setLoaded(true);
       setCanResetInvalidSettings(false);
       setDirty(false);
@@ -133,6 +230,10 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
     recoveryNotice,
     update,
     profilesWithCurrent,
+    selectedPresetId,
+    selectPreset,
+    addPreset,
+    removePreset,
     save,
     resetInvalidSettings,
   };
