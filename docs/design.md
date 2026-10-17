@@ -27,11 +27,38 @@ both products. Native controls and task density may differ; preserve the contrac
 content/action roles.
 The generator and contract travel together when the design kit is moved or versioned.
 
+## Minimum Mode
+
+Minimum Mode is the default personal-use presentation, shared in name and intent
+with Saul. EZ saves its own preference in UserDefaults. Settings and Quick Lookup's
+actions menu expose the same toggle; offline fixtures keep it in memory only.
+The mode removes taglines, repeated instructions, routine shortcut reminders, and
+pinned token/timing strips. Request metadata and clearly labeled metrics stay in
+Details. Actionable errors, sign-in blockers, unsaved changes, and generation
+controls remain visible. Turning the mode off restores guidance and persistent
+metrics without changing the current draft or request choices.
+
+Shared account actions use Continue with ChatGPT, Cancel, Add account, Enable plan
+usage, Refresh models, Manage usage, and Sign out. EZ and Saul use the same direct
+ChatGPT flow with separate saved sign-ins. Both expose named model presets and
+editable recipes with a default preset; native form fields and browser selection
+context remain surface-specific. Configuration and history are not synchronized.
+
+New lookups place the composer below the heading. Saved answers emphasize Copy
+and Use again; More contains Export and Delete. Quick Lookup uses the same
+reading/editing separation, hiding the fields behind Edit draft when an answer is
+selected in Minimum Mode. These are native presentations of the shared behavior
+contract; the future mobile direction is recorded in the surface contract and is
+not a shipped mobile implementation.
+
+## Offline previews
+
 `make surface-preview` builds `dist/EZ Surface Preview.app` from production views.
 It uses disposable offline storage, blocks account/inference actions, and does not
 register the global shortcut. Choose empty, multi-input, answer, streaming, blocked,
-or no-recipes fixtures; open its actual Quick Lookup panel and inspect light/dark,
-resizing, preset overrides, and main-window handoff. **Minimum panel** applies the
+or no-recipes fixtures; toggle Minimum Mode, open its actual Quick Lookup panel,
+and inspect light/dark, resizing, preset overrides, and main-window handoff.
+**Minimum panel** applies the
 current state's minimum size. Fixture streaming is simulated. All three preview
 targets use `scripts/preview.sh`, which stages and verifies each bundle before replacement.
 The [surface contract](surfaces.md) governs which controls belong in each surface.

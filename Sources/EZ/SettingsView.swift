@@ -13,6 +13,8 @@ struct SettingsView: View {
             HStack {
                 Text("Settings").font(AppStyle.subject)
                 Spacer()
+                Toggle("Minimum Mode", isOn: $model.minimumMode)
+                    .toggleStyle(.switch).controlSize(.small)
                 Button("Done") {
                     if hasUnsavedChanges { confirmDiscard = true } else { dismiss() }
                 }.keyboardShortcut(.cancelAction)
@@ -68,9 +70,11 @@ struct SettingsView: View {
                                     ? "Using ChatGPT plan" : "Signed in · Plan usage not enabled")
                                 : "Not signed in"
                         ).font(.callout)
-                        Text(
-                            "Connect your eligible ChatGPT account and allow EZ to use your plan. Credentials stay in macOS Keychain. Model availability and limits depend on your account."
-                        ).font(.caption).foregroundStyle(.secondary)
+                        if !model.minimumMode {
+                            Text(
+                                "Connect your eligible ChatGPT account and allow EZ to use your plan. Credentials stay in macOS Keychain. Model availability and limits depend on your account."
+                            ).font(.caption).foregroundStyle(.secondary)
+                        }
                         DisclosureGroup("Why does macOS ask for Keychain access?") {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(
@@ -92,7 +96,7 @@ struct SettingsView: View {
                                 Text("Finish signing in in your browser.").font(.caption)
                                 Button("Cancel") { model.cancelLogin() }
                             } else if model.signedIn {
-                                Button("Sign out of EZ") { Task { await model.signOut() } }
+                                Button("Sign out") { Task { await model.signOut() } }
                                 if !model.planEnabled {
                                     Button("Enable plan usage") { model.signIn(enablePlan: true) }
                                 }
@@ -121,13 +125,16 @@ struct SettingsView: View {
                 GroupBox {
                     VStack(alignment: .leading, spacing: 10) {
                         Label("Local history", systemImage: "externaldrive").font(.headline)
-                        Text(
-                            "Queries and answers are saved as plain-text JSONL on this Mac. Your query is sent to OpenAI to generate an answer; previous lookups are not included."
-                        ).font(.caption).foregroundStyle(.secondary)
-                        Text(model.directory.appendingPathComponent("history.jsonl").path).font(
-                            .system(size: 10, design: .monospaced)
-                        ).textSelection(.enabled)
                         Button("Show in Finder") { model.revealHistory() }.disabled(model.offline)
+                        DisclosureGroup("Details") {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(
+                                    "Queries and answers are saved as plain text on this Mac. Each new query is sent to OpenAI; previous lookups are not included."
+                                )
+                                Text(model.directory.appendingPathComponent("history.jsonl").path)
+                                    .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                            }.font(.caption).foregroundStyle(.secondary).padding(.top, 6)
+                        }.font(.caption)
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
                 }
                 if let error = model.error {

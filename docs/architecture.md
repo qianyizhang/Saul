@@ -75,12 +75,24 @@ Configuration editors stay mounted while changing Settings sections so unsaved t
 and scroll position survive. Item selection/Add and Settings dismissal guard dirty
 edits; Save remains explicit. A failed save keeps the edit and dirty state.
 
-The main window separates composing from reading. Selecting an answer collapses
-the composer; Edit draft/Hide draft reveal or hide the existing draft without
-replacing it. Use again explicitly restores the saved request. Running requests
-keep Stop reachable in the reading footer. Exact request metadata is disclosed on
-demand, while response metrics remain pinned. Input validation uses a fixed-height
-hint, and both surfaces scroll keyboard-focused inputs into view.
+The main window separates composing from reading. A new lookup places its composer
+directly below the heading. Selecting an answer collapses the composer; Edit
+draft/Hide draft reveal or hide the existing draft without replacing it. Use again
+explicitly restores the saved request. Running requests keep Stop reachable in
+the reading footer. Copy and Use again are the primary answer actions; export and
+delete live in More. Exact request metadata and metrics are available in Details.
+Input validation uses a fixed-height hint, and both surfaces scroll
+keyboard-focused inputs into view.
+
+Minimum Mode is enabled by default and shared by both native lookup surfaces
+through `AppModel.minimumMode`. It hides repeated guidance, shortcut reminders,
+decorative copy, and persistent response metrics. It never hides actionable
+errors, sign-in/storage blockers, generation state, or unsaved-edit guards. The
+Settings toggle and Quick Lookup actions menu change the same UserDefaults
+preference. Offline previews always start with Minimum Mode on and never read or
+write this personal preference. The preference is local to EZ; there is no
+cross-product or device synchronization. Switching modes changes presentation
+only and preserves the shared draft, preset override, and selected answer.
 See [native regression journeys](ui-qa.md) for UI acceptance boundaries.
 
 ## Selected-text Services
@@ -133,9 +145,10 @@ append again on completion, interruption, or failure. Retain partial visible tex
 on cancellation. Record requested and, when returned, actual service tier separately.
 Optional response metrics retain server-reported input/output/reasoning counts and
 client-observed stream timing; older history remains readable with unknown metrics.
-Both surfaces pin a compact status line below the composer/actions for the selected
-lookup. Response tokens mean output minus reasoning and can include non-visible
-formatting tokens. Missing reasoning is unknown, not zero. TTFT uses a monotonic
+Both surfaces expose token counts and timing in Details; disabling Minimum Mode
+also pins a compact status line below the composer/actions. Response tokens mean
+output minus reasoning and can include non-visible formatting tokens. Missing
+reasoning is unknown, not zero. TTFT uses a monotonic
 clock from HTTP request start (after auth) to the first nonempty answer/refusal text delta;
 metadata/empty events and a terminal-only answer do not establish TTFT. Tokens/s
 is non-reasoning response tokens divided by (HTTP stream duration through the
@@ -218,6 +231,13 @@ answers scroll independently of the actions. Its preset selector changes overrid
 directly; the adjacent information button opens the shared `RequestDetails` popover.
 The main-window `RequestControls` uses that same details view without duplicating
 selectors. The popover separates next-request choices from the displayed answer's recorded choices and actual service tier.
+In Minimum Mode, selecting an answer hides the panel's input fields and replaces
+the recipe picker with the answer's saved recipe name, and the preset selector
+with its saved preset name and requested speed. Exact
+model and service tier information remains in Details. Edit
+draft restores the current inputs and preset selector without changing them;
+Hide draft returns to reading. New/Stop and Copy remain reachable. Field visibility
+participates in panel sizing, so the reading layout does not reserve blank form space.
 Configuration/account actions and history open the main window. Text enters through
 typing, explicit paste, the selected-text Service above, or the explicit launcher
 submission below. The Service reads only its supplied pasteboard when invoked;

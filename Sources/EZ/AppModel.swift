@@ -28,6 +28,11 @@ import EZCore
     @Published var error: String?
     @Published var storageWarning: String?
     @Published var showSettings = false
+    @Published var minimumMode = true {
+        didSet {
+            if !offline { UserDefaults.standard.set(minimumMode, forKey: "minimumMode") }
+        }
+    }
     @Published private(set) var shortcuts = LookupShortcuts()
     @Published var shortcutSettingsError: String?
     private var shortcutsLoaded = false
@@ -46,6 +51,7 @@ import EZCore
 
     init(historyDirectory: URL? = nil, offline: Bool = false) {
         self.offline = offline
+        minimumMode = offline ? true : UserDefaults.standard.object(forKey: "minimumMode") as? Bool ?? true
         directory =
             historyDirectory
             ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -66,11 +72,11 @@ import EZCore
                 if let saved = try configStore.load() {
                     configuration = saved
                 } else {
-                    let oldModel = UserDefaults.standard.string(forKey: "model") ?? ""
+                    let oldModel = offline ? "" : UserDefaults.standard.string(forKey: "model") ?? ""
                     configuration = .starters(
                         model: oldModel,
-                        effort: UserDefaults.standard.string(forKey: "effort") ?? "low",
-                        fast: UserDefaults.standard.bool(forKey: "fast"))
+                        effort: offline ? "low" : UserDefaults.standard.string(forKey: "effort") ?? "low",
+                        fast: !offline && UserDefaults.standard.bool(forKey: "fast"))
                     try configStore.save(configuration)
                 }
                 configurationLoaded = true

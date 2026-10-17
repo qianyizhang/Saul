@@ -19,8 +19,11 @@ struct PresetPicker: View {
     private func presetTitle(_ preset: ModelPreset, saved: Bool = false) -> String {
         let name = saved ? "Saved: \(preset.name)" : preset.name
         guard showsSpeed else { return name }
+        if model.minimumMode {
+            return "\(name) · \(preset.fast ? "Fast" : "Standard")"
+        }
         let override = !saved && model.overridePresetID == preset.id ? " · Override" : ""
-        return name + override + (preset.fast ? " · Fast requested" : " · Normal")
+        return name + override + (preset.fast ? " · Fast requested" : " · Standard")
     }
     var body: some View {
         SelectorPicker(
@@ -46,8 +49,8 @@ struct RequestControls: View {
             } label: {
                 Image(systemName: "info.circle").frame(width: 24, height: 24)
                     .contentShape(Rectangle())
-            }.buttonStyle(.borderless).help("Request details")
-                .accessibilityLabel("Request details")
+            }.buttonStyle(.borderless).help("Details")
+                .accessibilityLabel("Details")
                 .popover(isPresented: $showDetails) {
                     RequestDetails(model: model) {
                         showDetails = false
@@ -67,23 +70,26 @@ struct RequestDetails: View {
             if let preset = model.currentPreset {
                 Text(preset.name).font(.subheadline.weight(.medium))
                 Text(
-                    "\(model.currentModel?.displayName ?? preset.model) · \(preset.effort.isEmpty ? "Default effort" : preset.effort.capitalized) · \(preset.fast ? "Fast requested" : "Normal")"
+                    "\(model.currentModel?.displayName ?? preset.model) · \(preset.effort.isEmpty ? "Default effort" : preset.effort.capitalized) · \(preset.fast ? "Fast requested" : "Standard")"
                 )
                 .font(AppStyle.caption).textSelection(.enabled)
             }
-            Text("A preset override lasts until New lookup or a recipe change.")
-                .font(AppStyle.caption).foregroundStyle(.secondary)
+            if !model.minimumMode {
+                Text("A preset override lasts until New lookup or a recipe change.")
+                    .font(AppStyle.caption).foregroundStyle(.secondary)
+            }
             if model.fast {
-                Text("Fast may use more plan allowance.").font(AppStyle.caption).foregroundStyle(.secondary)
+                Text(
+                    "Fast requests priority service and may use more plan allowance."
+                )
+                .font(AppStyle.caption).foregroundStyle(.secondary)
             }
             if let entry = model.selectedEntry {
                 Divider()
-                Text("Displayed answer · \(entry.recipeName)").font(.subheadline.weight(.medium))
-                Text("\(entry.model) · \(entry.effort.isEmpty ? "Default effort" : entry.effort)")
-                    .font(AppStyle.caption).textSelection(.enabled)
-                Text(entry.serviceDescription).font(AppStyle.caption).textSelection(.enabled)
+                Text("This answer").font(.subheadline.weight(.medium))
+                LookupDetails(entry: entry)
             }
-            Button("Edit presets & recipes…", action: onConfigure)
+            Button("Presets & recipes…", action: onConfigure)
         }.padding(16).frame(width: 300, alignment: .leading)
     }
 }

@@ -48,10 +48,12 @@ struct ShortcutSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Keyboard shortcuts").font(.headline)
-                Text(
-                    "Work in the main window and Quick Lookup, including while typing. Click a shortcut to record a replacement; changes save immediately on this Mac."
-                )
-                .font(AppStyle.caption).foregroundStyle(.secondary)
+                if !model.minimumMode {
+                    Text(
+                        "Work in the main window and Quick Lookup, including while typing. Click a shortcut to record a replacement; changes save immediately on this Mac."
+                    )
+                    .font(AppStyle.caption).foregroundStyle(.secondary)
+                }
                 ForEach(LookupCommand.allCases, id: \.rawValue) { command in
                     HStack {
                         VStack(alignment: .leading) {
@@ -70,14 +72,17 @@ struct ShortcutSettingsView: View {
                     }
                     Divider()
                 }
-                Text(
-                    "Recipe numbers follow Configuration order; Last recipe selects the final item. Next/Previous wraps. Switching recipes clears the draft and restores its default preset. Recipe changes and New are unavailable during generation."
-                )
-                .font(AppStyle.caption).foregroundStyle(.secondary)
-                Text(
-                    "Global Quick Lookup: ⌃⌥Space. Settings: ⌘,. Hide panel: Esc or ⌘W. These remain fixed. Scroll over any selector to change its choice without opening its menu."
-                )
-                .font(AppStyle.caption).foregroundStyle(.secondary)
+                if !model.minimumMode {
+                    Text(
+                        "Recipe numbers follow Configuration order; Last recipe selects the final item. Next/Previous wraps. Switching recipes clears the draft and restores its default preset. Recipe changes and New are unavailable during generation."
+                    )
+                    .font(AppStyle.caption).foregroundStyle(.secondary)
+                }
+                VStack(spacing: 8) {
+                    LabeledContent("Quick Lookup", value: "⌃⌥Space")
+                    LabeledContent("Settings", value: "⌘,")
+                    LabeledContent("Hide panel", value: "Esc / ⌘W")
+                }.font(AppStyle.caption).foregroundStyle(.secondary)
                 HStack {
                     Button("Use Chrome navigation") { chromeNavigation() }
                     Spacer()

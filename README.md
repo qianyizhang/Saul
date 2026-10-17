@@ -28,15 +28,17 @@ The previous installed bundle is retained for rollback.
 
 In EZ, open **Settings → Account & history → Continue with ChatGPT**, finish sign-in
 in your browser, and allow ChatGPT plan usage. Choose a recipe, fill its inputs,
-then press **⌘ Return**. A small bottom status line in both windows shows the
-selected lookup's input, thinking, and response tokens, TTFT, and average response
-tokens/s after TTFT. Hover for definitions; missing values show a dash. Check
-Settings → Manage usage for ChatGPT plan allowance. Metrics are saved with new
-lookups; older history has no metrics. **⌘ N** starts a new lookup and **⌘ .** stops generation.
+then press **⌘ Return**. **Minimum Mode** is on by default: the draft sits below
+the new-lookup heading, answers get a quiet reading view, and **Details** holds
+request settings, token counts, and timing. Turn it off in Settings or Quick
+Lookup's actions menu to restore extra guidance and the persistent metrics footer.
+The choice is saved on this Mac. Check Settings → Manage usage for ChatGPT plan
+allowance. Metrics are saved with new lookups; older history has no metrics.
+**⌘ N** starts a new lookup and **⌘ .** stops generation.
 Selected answers open in a reading view. **Edit draft** reveals your current inputs;
 **Hide draft** returns to reading, and **Use again** restores the saved request.
 You can copy answers, export Markdown, and search previous lookups. To delete a
-lookup, use **Delete lookup** below its answer or right-click its history row, then
+lookup, use **More → Delete lookup** below its answer or right-click its history row, then
 confirm. Deletion removes its saved snapshots from this Mac and cannot be undone;
 it is unavailable while a request or launcher submission is active. Your current
 draft is preserved.
@@ -46,7 +48,9 @@ or choose **Quick Lookup** from EZ’s menu-bar icon. Type or paste text and pre
 **⌘ Return** after filling the recipe's inputs. The panel starts small and grows
 for results; long forms and answers scroll. Choose a preset override in the panel’s
 preset selector. Click its information button for exact request choices and the
-displayed answer's actual service tier. Use the
+displayed answer's actual service tier. In Minimum Mode, an answer hides the input
+fields until **Edit draft**; **New**, **Stop**, and **Copy** stay reachable as
+appropriate. Use the
 actions menu for Configuration. **Esc** hides the panel and returns keyboard focus to
 your work. A running answer continues while hidden; **⌘ .** stops it. **⌘ N** starts
 a new lookup. Drafts and answers are shared with the full window, and reopening
@@ -114,7 +118,7 @@ A cold start may also show EZ's main window.
 ## Configure presets and recipes
 
 Open **Settings → Configuration**. A **model preset** names a model, effort, and
-Fast/Normal choice, for example `lit`. A **recipe** selects a default preset and
+Fast/Standard choice, for example `lit`. A **recipe** selects a default preset and
 contains the entire prompt. Add `{{fuzzy term}}` and `{{fuzzy context}}` to create
 two inputs with those placeholders. Repeated names share one field; all fields
 are required. Templates support substitution only, without Jinja expressions.

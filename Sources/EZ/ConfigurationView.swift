@@ -14,17 +14,21 @@ struct ConfigurationView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                Text("Name your model choices, then build the recipes you use.")
-                    .font(AppStyle.body).foregroundStyle(.secondary)
+                if !model.minimumMode {
+                    Text("Name your model choices, then build the recipes you use.")
+                        .font(AppStyle.body).foregroundStyle(.secondary)
+                }
                 if let error = model.configurationError {
                     Text(error).font(AppStyle.caption).foregroundStyle(.red).textSelection(.enabled)
                 }
                 presetSection
                 recipeSection
-                Text(
-                    "Saved on this Mac. Changes apply to new lookups; history keeps its original prompt and choices."
-                )
-                .font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
+                if !model.minimumMode {
+                    Text(
+                        "Saved on this Mac. Changes apply to new lookups; history keeps its original prompt and choices."
+                    )
+                    .font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
+                }
             }.padding(24)
         }.onAppear {
             if preset == nil { preset = model.configuration.presets.first }
@@ -92,7 +96,7 @@ struct ConfigurationView: View {
 
     private var presetEditor: some View {
         VStack(alignment: .leading, spacing: 10) {
-            TextField("Name, e.g. lit", text: presetBinding(\.name)).textFieldStyle(.roundedBorder)
+            TextField("Name", text: presetBinding(\.name)).textFieldStyle(.roundedBorder)
                 .accessibilityLabel("Preset name")
             let modelSelection = Binding(
                 get: { preset?.model ?? "" },
@@ -195,14 +199,19 @@ struct ConfigurationView: View {
                 "Default preset",
                 options: model.configuration.presets.map { .init(value: $0.id, title: $0.name) },
                 selection: recipeBinding(\.presetID))
-            Text("Prompt template").font(.subheadline.weight(.medium))
+            Text("Prompt").font(.subheadline.weight(.medium))
             TextEditor(text: recipeBinding(\.template)).font(.system(size: 12, design: .monospaced))
                 .frame(height: 125).padding(6)
                 .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
                 .accessibilityLabel("Prompt template")
-            Text("Use {{field name}} for each input. Repeated names share a field. All inputs are required.")
-                .font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
+            if model.minimumMode {
+                DisclosureGroup("Template syntax") {
+                    templateHint.padding(.top, 4)
+                }.font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
+            } else {
+                templateHint
+            }
             if let template = try? PromptTemplate(recipe?.template ?? "") {
                 DisclosureGroup(
                     "Input preview · \(template.fields.count) field\(template.fields.count == 1 ? "" : "s")"
@@ -227,6 +236,11 @@ struct ConfigurationView: View {
                 }
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var templateHint: some View {
+        Text("Use {{field name}} for each input. Repeated names share a field. All inputs are required.")
+            .font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
     }
 
     private var presetIsDirty: Bool {

@@ -57,8 +57,10 @@ private struct SurfacePreviewControls: View {
                     }
                 }
             }.padding(12)
-            Toggle("Reduce motion (main preview)", isOn: $reduceMotion)
-                .toggleStyle(.checkbox).font(.caption).padding(.bottom, 6)
+            HStack(spacing: 20) {
+                Toggle("Minimum Mode", isOn: $model.minimumMode)
+                Toggle("Reduce motion (main preview)", isOn: $reduceMotion)
+            }.toggleStyle(.checkbox).font(.caption).padding(.bottom, 6)
             Text("Disposable offline data · Send and account actions are blocked")
                 .font(.caption).foregroundStyle(.secondary).padding(.bottom, 8)
             Divider()

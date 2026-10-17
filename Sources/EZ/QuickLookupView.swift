@@ -6,13 +6,17 @@ struct QuickLookupView: View {
     @ObservedObject var controller: QuickLookupController
     @Environment(\.openWindow) private var openWindow
     @State private var showDetails = false
+    @State private var showsComposer = false
+    private var showsInputs: Bool { !model.minimumMode || model.selectedEntry == nil || showsComposer }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
-            RecipeInputs(
-                model: model, compact: true, presentation: controller.presentation,
-                onConfigure: { controller.showMain(settings: true) })
+            if showsInputs {
+                RecipeInputs(
+                    model: model, compact: true, presentation: controller.presentation,
+                    onConfigure: { controller.showMain(settings: true) })
+            }
             actions
             if !notices.isEmpty || needsSetup || model.connecting {
                 ScrollView {
@@ -49,7 +53,7 @@ struct QuickLookupView: View {
                 Spacer(minLength: 0)
             }
             footer
-            if let entry = model.selectedEntry {
+            if !model.minimumMode, let entry = model.selectedEntry {
                 Divider()
                 LookupStatusLine(entry: entry)
             }
@@ -66,18 +70,27 @@ struct QuickLookupView: View {
             controller.resizeContent(layout)
         }
         .onChange(of: layout) { _, layout in controller.resizeContent(layout) }
+        .onChange(of: model.selection) { _, _ in showsComposer = false }
     }
 
     private var header: some View {
         HStack(spacing: 8) {
-            RecipePicker(model: model, showsLabel: false)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if showsInputs {
+                RecipePicker(model: model, showsLabel: false)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if let entry = model.selectedEntry {
+                Label(entry.recipeName, systemImage: entry.recipeSymbol)
+                    .font(AppStyle.caption).foregroundStyle(AppStyle.accent).lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading).frame(height: 24)
+            }
             Button {
                 controller.showMain()
             } label: {
                 Image(systemName: "sidebar.left")
             }.help("Open EZ & history").accessibilityLabel("Open EZ & history")
             Menu {
+                Toggle("Minimum Mode", isOn: $model.minimumMode)
+                Divider()
                 Button("Configuration…") { controller.showMain(settings: true) }
                 Button("Account…") { controller.showMain(settings: true, section: .account) }
             } label: {
@@ -102,13 +115,17 @@ struct QuickLookupView: View {
                 "New lookup · \(model.shortcuts.binding(for: .newLookup).display)"
             )
             .disabled(model.busy || model.launcherPending)
+            if model.minimumMode && model.selectedEntry != nil && !model.busy {
+                Button(showsInputs ? "Hide draft" : "Edit draft") { showsComposer.toggle() }
+                    .buttonStyle(.borderless)
+            }
             Spacer()
             if model.launcherPending {
                 Text("Preparing…").font(AppStyle.caption).foregroundStyle(.secondary)
             } else if model.busy {
                 Button("Stop") { model.stop() }.help(
                     "Stop generating · \(model.shortcuts.binding(for: .stop).display)")
-            } else {
+            } else if showsInputs {
                 Button("Send") { model.send() }.buttonStyle(.borderedProminent)
                     .disabled(!model.canSend).help(
                         "Send lookup · \(model.shortcuts.binding(for: .send).display)")
@@ -118,15 +135,24 @@ struct QuickLookupView: View {
 
     private var footer: some View {
         HStack(spacing: 8) {
-            PresetPicker(model: model, showsLabel: false, showsSpeed: true)
-                .frame(width: 250)
+            if showsInputs {
+                PresetPicker(model: model, showsLabel: false, showsSpeed: true)
+                    .frame(width: 250)
+            } else if let entry = model.selectedEntry {
+                Text(
+                    entry.presetSnapshot.map {
+                        "\($0.name) · \(entry.requestedServiceTier == nil ? "Standard" : "Fast")"
+                    } ?? "Details"
+                )
+                .lineLimit(1).help(entry.serviceDescription)
+            }
             Button {
                 showDetails.toggle()
             } label: {
                 Image(systemName: "info.circle").frame(width: 24, height: 24)
                     .contentShape(Rectangle())
-            }.buttonStyle(.borderless).help("Preset override & request details")
-                .accessibilityLabel("Preset override & request details")
+            }.buttonStyle(.borderless).help("Details")
+                .accessibilityLabel("Details")
                 .popover(isPresented: $showDetails) { details }
             Spacer(minLength: 0)
             if let entry = model.selectedEntry, !entry.response.isEmpty {
@@ -190,7 +216,7 @@ struct QuickLookupView: View {
     }
     private var layout: QuickLookupLayout {
         QuickLookupLayout(
-            fieldCount: model.inputFields.count,
+            fieldCount: showsInputs ? model.inputFields.count : 0,
             showsNotice: !notices.isEmpty || needsSetup || model.connecting,
             showsAnswer: model.selectedEntry != nil)
     }

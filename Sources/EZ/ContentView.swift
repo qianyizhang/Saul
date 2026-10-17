@@ -18,6 +18,7 @@ struct ContentView: View {
                             answer(entry)
                         } else {
                             welcome
+                            composer
                         }
                     }
                     .padding(30)
@@ -32,20 +33,22 @@ struct ContentView: View {
                 if let error = model.error {
                     banner(error, symbol: "exclamationmark.circle", color: .red) { model.error = nil }
                 }
-                if model.selectedEntry == nil || showsComposer {
-                    composer
-                } else {
+                if model.selectedEntry != nil && showsComposer {
+                    composer.padding(20)
+                } else if model.selectedEntry != nil {
                     HStack {
-                        Text("Each lookup starts fresh.").foregroundStyle(.secondary)
+                        if !model.minimumMode {
+                            Text("Each lookup starts fresh.").foregroundStyle(.secondary)
+                        }
                         Spacer()
                         if model.busy {
-                            Button("Stop generating", systemImage: "stop.fill") { model.stop() }
+                            Button("Stop", systemImage: "stop.fill") { model.stop() }
                         } else {
                             Button("Edit draft", systemImage: "square.and.pencil") { showsComposer = true }
                         }
                     }.font(AppStyle.caption).padding(.horizontal, 24).padding(.vertical, 12)
                 }
-                if let entry = model.selectedEntry {
+                if !model.minimumMode, let entry = model.selectedEntry {
                     Divider()
                     LookupStatusLine(entry: entry)
                         .padding(.horizontal, 20).padding(.vertical, 7)
@@ -74,10 +77,13 @@ struct ContentView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("ez").font(.system(size: 35, weight: .bold, design: .rounded)).foregroundStyle(
-                    AppStyle.accent)
-                Text("a little clarity.").font(.system(size: 11)).foregroundStyle(.secondary)
-            }.padding(.top, 28).padding(.horizontal, 18)
+                Text("ez").font(.system(size: model.minimumMode ? 26 : 35, weight: .bold, design: .rounded))
+                    .foregroundStyle(
+                        AppStyle.accent)
+                if !model.minimumMode {
+                    Text("a little clarity.").font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+            }.padding(.top, model.minimumMode ? 20 : 28).padding(.horizontal, 18)
             Button {
                 model.newQuery()
             } label: {
@@ -87,9 +93,11 @@ struct ContentView: View {
             TextField("Search history", text: $model.search).textFieldStyle(.roundedBorder).padding(
                 .horizontal, 16)
             HStack {
-                Text("YOUR LOOKUPS").font(.system(size: 10, weight: .semibold)).tracking(1.4)
+                Text("History").font(AppStyle.caption)
                 Spacer()
-                Text("\(model.filteredEntries.count)").font(.caption.monospacedDigit())
+                if !model.minimumMode {
+                    Text("\(model.filteredEntries.count)").font(.caption.monospacedDigit())
+                }
             }.foregroundStyle(.secondary).padding(.horizontal, 18)
             List(selection: $model.selection) {
                 ForEach(model.filteredEntries) { entry in
@@ -129,10 +137,12 @@ struct ContentView: View {
                 HStack {
                     Image(systemName: "person.crop.circle").font(.title3)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(model.signedIn ? "ChatGPT connected" : "Connect ChatGPT").font(
+                        Text(model.signedIn ? "Settings" : "Connect ChatGPT").font(
                             .system(size: 12, weight: .medium))
-                        Text(model.connecting ? "Connecting…" : "Account & settings").font(.system(size: 10))
-                            .foregroundStyle(.secondary)
+                        if model.connecting || !model.minimumMode {
+                            Text(model.connecting ? "Connecting…" : "Account & history")
+                                .font(AppStyle.caption).foregroundStyle(.secondary)
+                        }
                     }
                     Spacer()
                     Image(systemName: "gearshape").foregroundStyle(.secondary)
@@ -142,31 +152,37 @@ struct ContentView: View {
     }
     private var welcome: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Find the right words.").font(AppStyle.subject)
-            Text(
-                model.currentRecipe == nil
-                    ? "Add a recipe to start your next lookup."
-                    : "Choose a recipe, fill in its inputs, and send."
-            )
-            .font(AppStyle.body).foregroundStyle(.secondary)
+            Text("New lookup").font(AppStyle.subject)
+            if !model.minimumMode {
+                Text(
+                    model.currentRecipe == nil
+                        ? "Add a recipe to start your next lookup."
+                        : "Choose a recipe, fill in its inputs, and send."
+                )
+                .font(AppStyle.body).foregroundStyle(.secondary)
+            }
             if !model.signedIn {
                 Button {
                     model.openSettings(.account)
                 } label: {
                     Label("Continue with ChatGPT", systemImage: "person.crop.circle")
                 }.buttonStyle(.borderedProminent).padding(.top, 4)
-                Text("Uses your eligible ChatGPT plan. No API key needed.")
-                    .font(AppStyle.caption).foregroundStyle(.secondary)
+                if !model.minimumMode {
+                    Text("Uses your eligible ChatGPT plan. No API key needed.")
+                        .font(AppStyle.caption).foregroundStyle(.secondary)
+                }
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
     private func answer(_ entry: HistoryEntry) -> some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
-                Label(entry.recipeName.uppercased(), systemImage: entry.recipeSymbol)
-                    .font(.system(size: 10, weight: .semibold)).tracking(1.2).foregroundStyle(AppStyle.accent)
+                Label(entry.recipeName, systemImage: entry.recipeSymbol)
+                    .font(AppStyle.caption).foregroundStyle(AppStyle.accent)
                 Spacer()
-                Text(entry.createdAt, style: .time).font(.caption).foregroundStyle(.secondary)
+                if !model.minimumMode {
+                    Text(entry.createdAt, style: .time).font(.caption).foregroundStyle(.secondary)
+                }
             }
             Text(entry.displayQuery).font(AppStyle.subject).textSelection(.enabled)
             Divider()
@@ -183,13 +199,6 @@ struct ContentView: View {
                 .font(AppStyle.body).lineSpacing(6).textSelection(.enabled).frame(
                     maxWidth: .infinity, alignment: .leading)
             }
-            DisclosureGroup("Request details") {
-                Text(
-                    "\(entry.model) · \(entry.effort.isEmpty ? "Default effort" : entry.effort) · \(entry.serviceDescription)"
-                )
-                .textSelection(.enabled).padding(.top, 4)
-                if let seconds = entry.durationSeconds { Text(String(format: "%.1f s", seconds)) }
-            }.font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
             if entry.status != "pending" {
                 HStack {
                     Button {
@@ -198,16 +207,16 @@ struct ContentView: View {
                         Label("Copy", systemImage: "doc.on.doc")
                     }.disabled(entry.response.isEmpty)
                     Button {
-                        model.export(entry)
-                    } label: {
-                        Label("Export", systemImage: "square.and.arrow.up")
-                    }
-                    Button {
                         model.reuse(entry)
                     } label: {
                         Label("Use again", systemImage: "arrow.counterclockwise")
                     }.disabled(model.busy || model.launcherPending)
-                    deleteButton(entry)
+                    Menu {
+                        Button("Export…", systemImage: "square.and.arrow.up") { model.export(entry) }
+                        deleteButton(entry)
+                    } label: {
+                        Label("More", systemImage: "ellipsis")
+                    }.menuStyle(.borderlessButton).fixedSize()
                     Spacer()
                     if entry.status != "completed" {
                         Text(entry.status.capitalized).font(.caption).foregroundStyle(.orange)
@@ -217,6 +226,9 @@ struct ContentView: View {
                     Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
                 }
             }
+            DisclosureGroup("Details") {
+                LookupDetails(entry: entry).padding(.top, 8)
+            }.font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
         }
     }
     private func deleteButton(_ entry: HistoryEntry) -> some View {
@@ -278,14 +290,14 @@ struct ContentView: View {
             in: RoundedRectangle(cornerRadius: AppStyle.composerRadius)
         )
         .overlay(RoundedRectangle(cornerRadius: AppStyle.composerRadius).stroke(.quaternary, lineWidth: 1))
-        .padding(20)
     }
     private var composerHint: String {
         if model.connecting { return "Connecting to ChatGPT…" }
         if !model.signedIn { return "Connect ChatGPT to send a lookup." }
         if !model.planEnabled { return "Enable plan usage in Account & history." }
         return model.requestIssue
-            ?? "\(model.shortcuts.binding(for: .send).display) to send · Each lookup starts fresh."
+            ?? (model.minimumMode
+                ? "" : "\(model.shortcuts.binding(for: .send).display) to send · Each lookup starts fresh.")
     }
 
     private func banner(
