@@ -31,6 +31,12 @@ colors:
   warning-dark: '#e2bd83'
   warning-wash: '#f7efdf'
   warning-wash-dark: '#403425'
+  window-blue: '#356a99'
+  window-blue-dark: '#8ebde5'
+  window-violet: '#78539a'
+  window-violet-dark: '#c4a3e2'
+  window-rose: '#a34f69'
+  window-rose-dark: '#e4a0b6'
 typography:
   subject:
     fontFamily: 'ui-serif, Georgia, serif'
@@ -117,6 +123,19 @@ Give reading content a comfortable measure and generous breathing room. Compact
 popups and lookup panels use tighter spacing; tab boards use dense, scannable rows.
 Preserve the same hierarchy across these densities. Reveal advanced options when
 needed, keep the primary action reachable, and avoid horizontal scrolling at narrow widths.
+
+Window labels use the same names in Saul's extension and Codex board. A tab
+reorganization uses one editable board with a compact change bar and **Apply**.
+Window cards have stable colors and numbers; each tab keeps its original window
+color and position number until Apply so a shuffle remains legible without a
+second layout. Color is always paired with a numeric identity and a tooltip.
+Cards fold and can be dragged into a preferred board order without changing Chrome.
+Drag tab rows to arrange; their numbered badge offers keyboard and touch moves.
+Right-click a tab or window for contextual moves and editable prompt actions.
+Prompt actions fill the composer; only Send sends them to Codex.
+Keep success to one line. Details holds receipts, removed copies and the reversible
+duplicate-removal preference; duplicate counts remain visible beside Apply.
+Never invent incremental progress when the host only returns a final receipt.
 
 Use one heading for the current task. Avoid repeating the selected navigation label,
 adding a slogan above an input, or boxing every history row. A new lookup puts its

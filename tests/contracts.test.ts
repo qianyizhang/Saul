@@ -14,6 +14,8 @@ import {
 } from '../src/contracts/reading';
 import { validateWorkspace } from '../src/contracts/workspace';
 const fields = {
+  saul_windows_label: ['session', 'windows', 'dryRun'],
+  saul_tabs_close_duplicates: ['session', 'duplicates', 'dryRun'],
   saul_windows_create: ['session', 'tabIds', 'focused', 'dryRun'],
   saul_page_read: ['session', 'tabId'],
   saul_page_act: [
@@ -42,6 +44,8 @@ const complete: {
       ? true
       : never;
 } = {
+  saul_windows_label: true,
+  saul_tabs_close_duplicates: true,
   saul_windows_create: true,
   saul_page_read: true,
   saul_page_act: true,
@@ -55,6 +59,10 @@ const complete: {
   saul_groups_update: true,
 };
 const samples = {
+  saul_windows_label: { windows: [{ windowId: 1, title: 'Reading' }] },
+  saul_tabs_close_duplicates: {
+    duplicates: [{ tabId: 2, keepTabId: 1, url: 'https://example.com/' }],
+  },
   saul_windows_create: { tabIds: [1] },
   saul_page_read: { tabId: 1 },
   saul_page_act: {

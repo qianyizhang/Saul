@@ -59,7 +59,13 @@ const server = net.createServer((socket) => {
     if (request.method === '__ping') {
       send(socket, {
         id: request.id,
-        result: { session, extensionId: origin.split('/')[2], pid: process.pid, connectedAt },
+        result: {
+          session,
+          extensionId: origin.split('/')[2],
+          pid: process.pid,
+          browserPid: process.ppid,
+          connectedAt,
+        },
       });
       return;
     }

@@ -28,7 +28,7 @@
         ></label>
       </div>
       <details id="composer" class="composer">
-        <summary>Plan with Codex</summary>
+        <summary>Ask Codex</summary>
         <div class="composer-fields">
           <label for="request">How would you like to organize your tabs?</label>
           <textarea
@@ -38,19 +38,17 @@
           ></textarea>
           <div class="row">
             <span class="muted guidance">Review before applying.</span
-            ><button id="ask" class="primary" disabled>Ask Codex</button>
+            ><button id="ask" class="primary" disabled>Send</button>
           </div>
         </div>
       </details>
       <section id="proposal" hidden aria-label="Proposed changes"></section>
       <div class="toolbar">
-        <div id="layout-view" class="segmented" role="group" aria-label="Layout view">
-          <button id="current" aria-pressed="true">Current</button
-          ><button id="proposed" aria-pressed="false" disabled>Proposed</button>
-        </div>
         <input id="filter" type="search" aria-label="Filter tabs" placeholder="Find a tab…" />
       </div>
-      <p class="muted help guidance">Drag tabs to arrange. Review before applying.</p>
+      <p class="muted help guidance">
+        Drag tabs to arrange; drag window headers to reorder the board.
+      </p>
       <section id="move-controls" class="move-controls" aria-label="Move selected tab" hidden>
         <strong id="moving-title"></strong>
         <div class="row">
@@ -72,9 +70,13 @@
         <p id="preference-error" role="alert" hidden></p>
         <details>
           <summary>Shortcuts & details</summary>
-          <p>Escape cancels a move or rename. A tab’s grip opens keyboard and touch controls.</p>
+          <p>
+            Tab numbers open move controls. Right-click a tab or window for actions. Escape cancels.
+          </p>
           <p>Pins and groups stay in their windows. Filtering keeps hidden tabs in the plan.</p>
-          <p>Window labels are saved in Saul after Apply; Chrome’s window names stay unchanged.</p>
+          <p>
+            Window names change after Apply. On supported macOS Chrome, names also sync to Chrome.
+          </p>
         </details>
       </details>
     </main>

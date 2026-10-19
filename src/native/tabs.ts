@@ -1,4 +1,5 @@
 import { handlePageCall } from './pages';
+import { getWindowLabels, saveWindowLabels } from './window-labels';
 import {
   validateCall,
   type GroupMetadata,
@@ -92,6 +93,52 @@ export async function handleTabCallUnlocked(
     ...(args.color === undefined ? {} : { color: args.color }),
     ...(args.collapsed === undefined ? {} : { collapsed: args.collapsed }),
   });
+  if (name === 'saul_windows_label') {
+    const args = validateCall('saul_windows_label', input);
+    if (new Set(args.windows.map((w) => w.windowId)).size !== args.windows.length)
+      throw new Error('A window may be labeled only once');
+    for (const window of args.windows) await normalWindow(window.windowId);
+    const dryRun = args.dryRun !== false;
+    if (!dryRun) {
+      const labels = await getWindowLabels();
+      const windows = await chrome.windows.getAll({ windowTypes: ['normal'] });
+      for (const id of Object.keys(labels))
+        if (!windows.some((w) => !w.incognito && w.id === Number(id))) delete labels[id];
+      for (const window of args.windows) labels[window.windowId] = window.title;
+      await saveWindowLabels(labels);
+    }
+    return { dryRun, windows: args.windows };
+  }
+  if (name === 'saul_tabs_close_duplicates') {
+    const args = validateCall('saul_tabs_close_duplicates', input);
+    const closing = new Set(args.duplicates.map((d) => d.tabId));
+    if (
+      closing.size !== args.duplicates.length ||
+      args.duplicates.some((d) => closing.has(d.keepTabId))
+    )
+      throw new Error('Duplicate removal must retain each keeper');
+    const verify = async (duplicate: (typeof args.duplicates)[number]) => {
+      const [tab, keeper] = await getTabs([duplicate.tabId, duplicate.keepTabId]);
+      if (
+        tab!.pinned ||
+        tab!.groupId >= 0 ||
+        !/^https?:\/\//.test(duplicate.url) ||
+        tab!.url !== duplicate.url ||
+        keeper!.url !== duplicate.url ||
+        (tab!.pendingUrl && tab!.pendingUrl !== duplicate.url) ||
+        (keeper!.pendingUrl && keeper!.pendingUrl !== duplicate.url)
+      )
+        throw new Error('Duplicate changed or is protected; refresh and preview again');
+    };
+    for (const duplicate of args.duplicates) await verify(duplicate);
+    const dryRun = args.dryRun !== false;
+    if (!dryRun)
+      for (const duplicate of args.duplicates) {
+        await verify(duplicate);
+        await chrome.tabs.remove(duplicate.tabId);
+      }
+    return { dryRun, tabIds: [...closing] };
+  }
   if (name === 'saul_windows_create') {
     const args = validateCall('saul_windows_create', input);
     const tabs = await getTabs(args.tabIds);
@@ -121,8 +168,13 @@ export async function handleTabCallUnlocked(
       (t) => !t.incognito && windowIds.has(t.windowId),
     );
     const groups = (await chrome.tabGroups.query({})).filter((g) => windowIds.has(g.windowId));
+    const labels = await getWindowLabels();
     return {
-      windows: windows.map((w) => ({ id: w.id!, focused: w.focused })),
+      windows: windows.map((w) => ({
+        id: w.id!,
+        focused: w.focused,
+        ...(labels[w.id!] === undefined ? {} : { title: labels[w.id!] }),
+      })),
       groups,
       tabs: tabs.sort((a, b) => a.windowId - b.windowId || a.index - b.index).map(tabView),
     };

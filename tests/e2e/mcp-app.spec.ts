@@ -2,6 +2,11 @@ import { test, expect } from './fixtures.ts';
 import type { FrameLocator, Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { createWorkspace, revision } from '../../native/workspace.mjs';
+import {
+  createWindowNames,
+  withWindowNames,
+  type WindowNames,
+} from '../../native/window-names.mjs';
 import type { TabSnapshot } from '../../native/protocol.mjs';
 import type { ExtensionSandbox, FixtureServer } from './support.ts';
 
@@ -17,6 +22,8 @@ async function captureWorkspace(host: Page, ui: FrameLocator, path: string) {
   await frame.evaluate((node, height) => {
     node.style.height = `${height}px`;
   }, height);
+  await ui.locator('body').evaluate(() => window.scrollTo(0, 0));
+  await host.evaluate(() => window.scrollTo(0, 0));
   await host.screenshot({ path, fullPage: true });
   await frame.evaluate((node) => {
     node.style.height = '900px';
@@ -27,6 +34,7 @@ async function openWorkspace(
   sandbox: ExtensionSandbox,
   fixtureServer: FixtureServer,
   proposalDelay = 0,
+  nativeNaming = false,
 ) {
   const { context, popup } = await sandbox.launch();
   const article = await context.newPage();
@@ -38,7 +46,7 @@ async function openWorkspace(
   await reader.goto(fixtureServer.origin + '/long');
   const host = await context.newPage();
   const session = 'a'.repeat(16);
-  const call = async (name: string, args: Record<string, unknown> = {}) => {
+  const rawCall = async (name: string, args: Record<string, unknown> = {}) => {
     if (name === 'saul_sessions') return { sessions: [{ session, extensionId: 'b'.repeat(32) }] };
     const params = { ...args };
     delete params.session;
@@ -52,6 +60,24 @@ async function openWorkspace(
       { name, params },
     );
   };
+  let names: WindowNames | undefined;
+  if (nativeNaming) {
+    const cdp = await context.browser()!.newBrowserCDPSession();
+    const { processInfo } = await cdp.send('SystemInfo.getProcessInfo');
+    const browserPid = processInfo.find((p) => p.type === 'browser')!.id;
+    await cdp.detach();
+    names = createWindowNames({ browserPid });
+    const before = (await rawCall('saul_tabs_list')) as TabSnapshot;
+    const native = await names.read(before);
+    if (native.status !== 'available')
+      throw new Error(native.message || `Native naming ${native.status}`);
+    await names.apply(before, [
+      { windowId: before.windows[0]!.id, title: 'Native imported reading' },
+    ]);
+  }
+  const decorated = names ? withWindowNames(rawCall, names) : rawCall;
+  const call = (name: string, args: Record<string, unknown> = {}) =>
+    name === 'saul_sessions' ? rawCall(name, args) : decorated(name, args);
   const workspace = createWorkspace({ call });
   const messages: unknown[] = [];
   await host.exposeFunction('workspaceCall', async (name: string, args: unknown) => {
@@ -121,8 +147,104 @@ async function openWorkspace(
   await expect(ui.getByRole('heading', { name: 'Tabs', exact: true })).toBeVisible();
   await expect(ui.locator('#board')).toContainText('<img src=x onerror=alert(1)> Research');
   await expect(ui.locator('#board img')).toHaveCount(0);
-  return { ui, host, context, popup, call, workspace, session, messages, article, reader };
+  return {
+    ui,
+    host,
+    context,
+    popup,
+    call,
+    rawCall,
+    names,
+    workspace,
+    session,
+    messages,
+    article,
+    reader,
+  };
 }
+
+test('macOS native Chrome names import initially and apply through the reviewed board', async ({
+  sandbox,
+  fixtureServer,
+}, info) => {
+  test.skip(
+    process.platform !== 'darwin' || !process.env.HEADED,
+    'Native AppleScript acceptance requires headed macOS Chrome',
+  );
+  const { ui, host, call, rawCall, names, workspace, session, popup } = await openWorkspace(
+    sandbox,
+    fixtureServer,
+    0,
+    true,
+  );
+  await expect(
+    ui.getByRole('heading', { name: 'Native imported reading', exact: true }),
+  ).toBeVisible();
+  const before = (await call('saul_tabs_list')) as TabSnapshot;
+  expect(before.nativeNames?.status).toBe('available');
+  expect(((await rawCall('saul_tabs_list')) as TabSnapshot).windows[0]!.title).toBe(
+    'Native imported reading',
+  );
+  await ui
+    .getByRole('button', { name: 'Rename window: Native imported reading', exact: true })
+    .click();
+  const input = ui.getByRole('textbox', { name: 'Window label', exact: true });
+  await input.fill('Native verified "研究"');
+  await input.press('Enter');
+  await expect(ui.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
+  expect((await names!.read(before)).status).toBe('available');
+  expect(((await names!.read(before)) as { windows: { title: string }[] }).windows[0]!.title).toBe(
+    'Native imported reading',
+  );
+  await ui.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(ui.locator('.proposal-summary')).toContainText('Applied');
+  const after = (await call('saul_tabs_list')) as TabSnapshot;
+  expect(after.windows[0]!.title).toBe('Native verified "研究"');
+  expect(((await names!.read(after)) as { windows: { title: string }[] }).windows[0]!.title).toBe(
+    'Native verified "研究"',
+  );
+  expect(((await rawCall('saul_tabs_list')) as TabSnapshot).windows[0]!.title).toBe(
+    'Native verified "研究"',
+  );
+  await popup.goto(popup.url().replace('popup.html', 'library.html') + '#tabs');
+  await expect(popup.getByRole('combobox', { name: 'Window', exact: true })).toContainText(
+    'Native verified "研究"',
+  );
+  const updated = (await call('saul_tabs_list')) as TabSnapshot;
+  // An external native rename makes the prior proposal stale and cannot be overwritten.
+  const plan = await workspace('saul_workspace_propose', {
+    session,
+    revision: revision(updated),
+    summary: 'Check stale name handling',
+    deduplicate: false,
+    windows: updated.windows.map((w) => ({
+      windowId: w.id,
+      title: 'Do not overwrite',
+      tabIds: updated.tabs
+        .filter((t) => t.windowId === w.id && !t.pinned && t.groupId < 0)
+        .map((t) => t.id),
+    })),
+  });
+  await names!.apply(after, [
+    {
+      windowId: after.windows[0]!.id,
+      title: 'Changed outside Saul',
+      expectedTitle: 'Native verified "研究"',
+    },
+  ]);
+  await expect(
+    workspace('saul_workspace_apply', {
+      session,
+      proposalId: plan.structuredContent.proposal!.id,
+      approvalToken: plan._meta.approvalToken!,
+    }),
+  ).rejects.toThrow('stale');
+  await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect(
+    ui.getByRole('heading', { name: 'Changed outside Saul', exact: true }),
+  ).toBeVisible();
+  await captureWorkspace(host, ui, info.outputPath('native-name-import-apply.png'));
+});
 
 test('MCP App renders real tabs, sends a Codex request and applies only after its review button', async ({
   sandbox,
@@ -136,7 +258,7 @@ test('MCP App renders real tabs, sends a Codex request and applies only after it
   await ui
     .getByRole('textbox', { name: 'How would you like' })
     .fill('Put research and reading in a new window');
-  await ui.getByRole('button', { name: 'Ask Codex' }).click();
+  await ui.getByRole('button', { name: 'Send', exact: true }).click();
   await expect.poll(() => JSON.stringify(messages)).toContain('saul_workspace_propose');
   const before = (await call('saul_tabs_list')) as TabSnapshot;
   const chosen = before.tabs
@@ -165,7 +287,7 @@ test('MCP App renders real tabs, sends a Codex request and applies only after it
         ),
     plan,
   );
-  await expect(ui.getByRole('heading', { name: 'Ready for your review' })).toBeVisible();
+  await expect(ui.locator('#apply')).toBeEnabled();
   await expect(ui.getByRole('heading', { name: 'Research & reading' })).toBeVisible();
   await ui.getByRole('button', { name: 'Rename window: Research & reading', exact: true }).click();
   await ui.getByRole('textbox', { name: 'Window label', exact: true }).fill('Reading library');
@@ -173,21 +295,121 @@ test('MCP App renders real tabs, sends a Codex request and applies only after it
   await expect(ui.getByRole('heading', { name: 'Reading library', exact: true })).toBeVisible();
   expect(revision((await call('saul_tabs_list')) as TabSnapshot)).toBe(revision(before));
   await captureWorkspace(host, ui, info.outputPath('workspace-preview.png'));
-  await ui.getByRole('button', { name: 'Apply changes to Chrome' }).click();
-  await expect(ui.getByRole('heading', { name: 'Proposal applied' })).toBeVisible();
+  await ui.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(ui.locator('.proposal-summary')).toContainText('Applied');
   await expect(ui.getByRole('heading', { name: 'Reading library', exact: true })).toBeVisible();
   await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
   await expect(ui.getByRole('heading', { name: 'Reading library', exact: true })).toBeVisible();
-  await expect(ui.getByRole('button', { name: 'Apply changes to Chrome' })).toBeDisabled();
+  await expect(ui.getByRole('button', { name: 'Apply', exact: true })).toHaveCount(0);
+  await captureWorkspace(host, ui, info.outputPath('workspace-applied.png'));
   const after = (await call('saul_tabs_list')) as TabSnapshot;
   expect(after.tabs.map((t) => t.id).sort()).toEqual(before.tabs.map((t) => t.id).sort());
   const moved = after.tabs.filter((t) => chosen.includes(t.id));
   expect(new Set(moved.map((t) => t.windowId)).size).toBe(1);
   expect(moved[0]!.windowId).not.toBe(before.tabs.find((t) => t.id === chosen[0])!.windowId);
   expect(moved.sort((a, b) => a.index - b.index).map((t) => t.id)).toEqual(chosen);
+  const changed = after.tabs.filter((tab) => {
+    const original = before.tabs.find((item) => item.id === tab.id)!;
+    return original.windowId !== tab.windowId || original.index !== tab.index;
+  });
+  await expect(ui.locator('.proposal-summary')).toContainText(`${changed.length} tabs rearranged`);
   await host.setViewportSize({ width: 390, height: 850 });
   await expect(ui.locator('body')).toBeVisible();
   expect(await ui.locator('body').evaluate((body) => body.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('shared window labels load initially and duplicate removals stay editable until Apply', async ({
+  sandbox,
+  fixtureServer,
+}, info) => {
+  const { ui, host, context, popup, call, workspace, session, article } = await openWorkspace(
+    sandbox,
+    fixtureServer,
+  );
+  await popup.goto(popup.url().replace('popup.html', 'library.html') + '#tabs');
+  await expect(popup.getByRole('combobox', { name: 'Window', exact: true })).toBeVisible();
+  const duplicate = await context.newPage();
+  await duplicate.goto(article.url());
+  let before = (await call('saul_tabs_list')) as TabSnapshot;
+  const windowId = before.tabs.find((t) => t.url === article.url())!.windowId;
+  await call('saul_windows_label', {
+    windows: [{ windowId, title: 'Existing reading' }],
+    dryRun: false,
+  });
+  await expect(popup.getByRole('combobox', { name: 'Window', exact: true })).toContainText(
+    'Existing reading',
+  );
+  await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect(ui.getByRole('heading', { name: 'Existing reading', exact: true })).toBeVisible();
+  before = (await call('saul_tabs_list')) as TabSnapshot;
+  const copies = before.tabs.filter((t) => t.url === article.url()).map((t) => t.id);
+  expect(copies).toHaveLength(2);
+  await popup.evaluate((tabId) => chrome.tabs.update(tabId, { active: true }), copies[0]!);
+  await workspace('saul_workspace_propose', {
+    session,
+    revision: revision(before),
+    summary: 'Collect reading and remove duplicate copies.',
+    windows: [
+      {
+        windowId,
+        title: 'Working',
+        tabIds: before.tabs.filter((t) => !copies.includes(t.id)).map((t) => t.id),
+      },
+      { title: 'HN discussions + originals', tabIds: [copies[0]!] },
+      { title: 'Duplicate copy', tabIds: [copies[1]!] },
+    ],
+  });
+  await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect(ui.locator('#proposal')).toContainText('1 duplicate will close');
+  expect(((await call('saul_tabs_list')) as TabSnapshot).tabs).toHaveLength(before.tabs.length);
+  await ui.locator('#proposal > details > summary').click();
+  const deduplicate = ui.getByRole('checkbox', { name: 'Remove duplicate tabs' });
+  await deduplicate.uncheck();
+  await expect(ui.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
+  await expect(ui.locator('#proposal')).not.toContainText('will close');
+  await expect(ui.locator('#board .tab')).toHaveCount(before.tabs.length);
+  await expect(ui.getByRole('heading', { name: 'Duplicate copy', exact: true })).toBeVisible();
+  await deduplicate.check();
+  await expect(ui.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
+  await expect(ui.locator('#proposal')).toContainText('1 duplicate will close');
+  await expect(ui.getByRole('heading', { name: 'Duplicate copy', exact: true })).toHaveCount(0);
+  // Renaming a deduplicated preview must retain hidden duplicate inputs.
+  await ui
+    .getByRole('button', { name: 'Rename window: HN discussions + originals', exact: true })
+    .click();
+  await ui.getByRole('textbox', { name: 'Window label', exact: true }).fill('HN reading');
+  await ui.getByRole('textbox', { name: 'Window label', exact: true }).press('Enter');
+  await expect(ui.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
+  await expect(ui.locator('#proposal')).toContainText('1 duplicate will close');
+  expect(revision((await call('saul_tabs_list')) as TabSnapshot)).toBe(revision(before));
+  await captureWorkspace(host, ui, info.outputPath('duplicate-review.png'));
+  await host.setViewportSize({ width: 390, height: 850 });
+  expect(await ui.locator('body').evaluate((body) => body.scrollWidth <= innerWidth)).toBe(true);
+  await captureWorkspace(host, ui, info.outputPath('duplicate-mobile.png'));
+  await host.setViewportSize({ width: 1100, height: 900 });
+  await host.evaluate(() =>
+    document.querySelector('iframe')!.contentWindow!.postMessage(
+      {
+        jsonrpc: '2.0',
+        method: 'ui/notifications/host-context-changed',
+        params: { theme: 'dark' },
+      },
+      '*',
+    ),
+  );
+  await captureWorkspace(host, ui, info.outputPath('duplicate-dark.png'));
+  await ui.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(ui.locator('.proposal-summary')).toContainText('Applied');
+  const after = (await call('saul_tabs_list')) as TabSnapshot;
+  expect(after.tabs.filter((t) => t.url === article.url())).toHaveLength(1);
+  expect(after.windows.map((w) => w.title)).toContain('HN reading');
+  await expect(popup.getByRole('combobox', { name: 'Window', exact: true })).toContainText(
+    'Working',
+  );
+  await popup.getByRole('button', { name: 'Refresh tabs' }).click();
+  await expect(popup.getByRole('combobox', { name: 'Window', exact: true })).toContainText(
+    'HN reading',
+  );
 });
 
 test('drag and keyboard moves compose a reviewed layout without changing Chrome until apply', async ({
@@ -226,7 +448,7 @@ test('drag and keyboard moves compose a reviewed layout without changing Chrome 
     body.addEventListener('dragstart', (event) => event.preventDefault(), true);
   });
   await tab(readerId).dragTo(tab(articleId), { targetPosition: { x: 60, y: 5 } });
-  await expect(ui.getByRole('heading', { name: 'Ready for your review' })).toBeVisible();
+  await expect(ui.locator('#apply')).toBeEnabled();
   const ids = async (selector: string) =>
     ui
       .locator(selector)
@@ -240,7 +462,7 @@ test('drag and keyboard moves compose a reviewed layout without changing Chrome 
   await tab(readerId).getByRole('button').press('Enter');
   await expect(ui.getByRole('combobox', { name: 'Destination window' })).toBeFocused();
   await ui.getByRole('button', { name: 'Move down', exact: true }).press('Enter');
-  await expect(ui.locator('#status')).toContainText('Preview updated');
+  await expect(ui.locator('#apply')).toBeEnabled();
   expect((await ids('.tab')).indexOf(articleId)).toBeLessThan(
     (await ids('.tab')).indexOf(readerId),
   );
@@ -295,8 +517,8 @@ test('drag and keyboard moves compose a reviewed layout without changing Chrome 
   await tab(readerId).dragTo(newCard.locator('.window-end'));
   await expect(newCard.locator('.tab')).toHaveCount(2);
   await captureWorkspace(host, ui, info.outputPath('drag-preview.png'));
-  await ui.getByRole('button', { name: 'Apply changes to Chrome' }).click();
-  await expect(ui.getByRole('heading', { name: 'Proposal applied' })).toBeVisible();
+  await ui.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(ui.locator('.proposal-summary')).toContainText('Applied');
   const after = (await call('saul_tabs_list')) as TabSnapshot;
   expect(after.tabs.map((tab) => tab.id).sort()).toEqual(before.tabs.map((tab) => tab.id).sort());
   const movedWindow = after.tabs.find((tab) => tab.id === articleId)!.windowId;
@@ -314,13 +536,12 @@ test('drag and keyboard moves compose a reviewed layout without changing Chrome 
   expect(after.groups).toEqual(before.groups);
   // An external layout change invalidates the preview and cannot be applied.
   await tab(readerId).dragTo(tab(articleId), { targetPosition: { x: 60, y: 5 } });
-  await expect(ui.getByRole('heading', { name: 'Ready for your review' })).toBeVisible();
+  await expect(ui.locator('#apply')).toBeEnabled();
   const external = await host.context().newPage();
   await external.goto(fixtureServer.origin + '/article#external');
   await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
-  await expect(ui.getByRole('heading', { name: 'Proposal stale' })).toBeVisible();
-  await expect(ui.locator('#proposal')).toContainText('This preview is out of date.');
-  await expect(ui.getByRole('button', { name: 'Apply changes to Chrome' })).toBeDisabled();
+  await expect(ui.locator('#proposal')).toContainText('Tabs changed');
+  await expect(ui.getByRole('button', { name: 'Apply', exact: true })).toHaveCount(0);
   await expect(tab(articleId)).toHaveAttribute('draggable', 'false');
   await host.setViewportSize({ width: 390, height: 850 });
   expect(await ui.locator('body').evaluate((body) => body.scrollWidth <= innerWidth)).toBe(true);
@@ -398,12 +619,12 @@ test('drag feedback follows the pointer, scrolls while held and composes immedia
   await row(articleId).dragTo(targetCard.locator('.window-end'));
   // The row is placed immediately while the host is still validating the preview.
   await expect(targetCard.locator(`[data-tab-id="${articleId}"]`)).toBeVisible();
-  await expect(ui.getByRole('button', { name: 'Apply changes to Chrome' })).toBeDisabled();
+  await expect(ui.getByRole('button', { name: 'Apply', exact: true })).toBeDisabled();
   const targetRow = row(articleId);
   const end = (await targetRow.boundingBox())!;
   await row(readerId).dragTo(targetRow, { targetPosition: { x: 60, y: end.height - 5 } });
   await expect(targetCard.locator('.tab')).toHaveCount(3);
-  await expect(ui.getByRole('button', { name: 'Apply changes to Chrome' })).toBeEnabled();
+  await expect(ui.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
   const finalIds = await targetCard
     .locator('.tab')
     .evaluateAll((nodes) => nodes.map((node) => Number((node as HTMLElement).dataset.tabId)));
@@ -463,7 +684,7 @@ test('compact board keeps tab controls discoverable and cancels rename and move 
     return list.scrollTop;
   });
   expect(scrollTop).toBeGreaterThan(0);
-  const handle = ui.locator(`[data-tab-id="${articleId}"] .move-handle`);
+  const handle = ui.locator(`[data-tab-id="${articleId}"] .tab-index`);
   await handle.click();
   await expect(ui.getByRole('combobox', { name: 'Destination window' })).toBeFocused();
   expect(await originalNode!.evaluate((node) => node.isConnected)).toBe(true);
@@ -509,4 +730,71 @@ test('compact board keeps tab controls discoverable and cancels rename and move 
   await host.setViewportSize({ width: 390, height: 850 });
   expect(await ui.locator('body').evaluate((body) => body.scrollWidth <= innerWidth)).toBe(true);
   await captureWorkspace(host, ui, info.outputPath('board-mobile.png'));
+});
+
+test('window cards fold, reorder locally and accept drops while folded; contextual prompts remain drafts', async ({
+  sandbox,
+  fixtureServer,
+}, info) => {
+  const { ui, host, popup, call, article, messages } = await openWorkspace(sandbox, fixtureServer);
+  await host.setViewportSize({ width: 1100, height: 900 });
+  const destinationId = await popup.evaluate(
+    async (origin) =>
+      (await chrome.windows.create({ url: `${origin}/article#destination`, focused: false }))!.id!,
+    fixtureServer.origin,
+  );
+  await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
+  const before = (await call('saul_tabs_list')) as TabSnapshot;
+  const articleTab = before.tabs.find((tab) => tab.url === article.url())!;
+  const source = ui.locator(`.window[data-window-id="${articleTab.windowId}"]`);
+  const target = ui.locator(`.window[data-window-id="${destinationId}"]`);
+  const row = ui.locator(`[data-tab-id="${articleTab.id}"]`);
+  const badge = await row.locator('.tab-index').textContent();
+  const color = await row.evaluate((node) => node.style.getPropertyValue('--origin-color'));
+  const tabCount = before.tabs.length;
+  await target.getByRole('button', { name: 'Fold window: Window 2', exact: true }).click();
+  await expect(target.locator('.tabs')).toBeHidden();
+  await source.locator('h2').dragTo(target.locator('h2'));
+  await expect(ui.locator('.window').first()).toHaveAttribute(
+    'data-window-id',
+    String(destinationId),
+  );
+  expect(revision((await call('saul_tabs_list')) as TabSnapshot)).toBe(revision(before));
+  await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect(ui.locator('.window').first()).toHaveAttribute(
+    'data-window-id',
+    String(destinationId),
+  );
+  await expect(target.locator('.tabs')).toBeHidden();
+  await row.dragTo(target.locator('h2'));
+  await expect(ui.locator('#apply')).toBeEnabled();
+  await expect(target.locator(`[data-tab-id="${articleTab.id}"]`)).toHaveCount(1);
+  await target.getByRole('button', { name: 'Expand window: Window 2', exact: true }).click();
+  await expect(row.locator('.tab-index')).toHaveText(badge!);
+  expect(await row.evaluate((node) => node.style.getPropertyValue('--origin-color'))).toBe(color);
+  await expect(ui.locator('#board .tab')).toHaveCount(tabCount);
+  await row.click({ button: 'right' });
+  await expect(ui.getByRole('menu', { name: 'Actions' })).toBeVisible();
+  await ui.getByRole('menuitem', { name: 'Move this site…' }).click();
+  expect(await ui.locator('#request').inputValue()).toContain(new URL(article.url()).hostname);
+  expect(messages).toHaveLength(0);
+  await target.locator('h2').click({ button: 'right' });
+  await ui.getByRole('menuitem', { name: 'Move a topic here…' }).click();
+  expect(await ui.locator('#request').inputValue()).toContain(`window ${destinationId}`);
+  expect(messages).toHaveLength(0);
+  await ui.locator('#request').fill('Move tabs about geometry into Window 2');
+  await ui.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => messages.length).toBe(1);
+  await target.locator('.window-head').focus();
+  await host.keyboard.press('Shift+F10');
+  await expect(ui.getByRole('menu', { name: 'Actions' })).toBeVisible();
+  await host.keyboard.press('Escape');
+  await expect(target.locator('.window-head')).toBeFocused();
+  await captureWorkspace(host, ui, info.outputPath('one-board-preview.png'));
+  await ui.getByRole('button', { name: 'Reset', exact: true }).click();
+  await expect(ui.locator('#proposal')).toBeHidden();
+  await expect(source.locator(`[data-tab-id="${articleTab.id}"]`)).toBeVisible();
+  expect(revision((await call('saul_tabs_list')) as TabSnapshot)).toBe(revision(before));
+  await target.locator('h2').click({ button: 'right' });
+  await captureWorkspace(host, ui, info.outputPath('context-actions.png'));
 });

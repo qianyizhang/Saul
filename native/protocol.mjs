@@ -38,6 +38,52 @@ function defineTool(command, name, description, properties, required = [], readO
 }
 const definitions = [
   defineTool(
+    'windows-label',
+    'saul_windows_label',
+    'Set reviewed window labels shared by the extension and Codex board. On macOS Google Chrome, the native helper also applies and verifies Chrome Name Window names through AppleScript. Preview by default.',
+    {
+      session,
+      windows: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 50,
+        items: {
+          type: 'object',
+          properties: {
+            windowId: id,
+            title: { type: 'string', maxLength: 1000 },
+            expectedTitle: { type: 'string', maxLength: 1000 },
+          },
+          required: ['windowId', 'title'],
+          additionalProperties: false,
+        },
+      },
+      dryRun,
+    },
+    ['windows'],
+  ),
+  defineTool(
+    'close-duplicates',
+    'saul_tabs_close_duplicates',
+    'Close explicit unpinned, ungrouped HTTP(S) duplicate tabs only when each still matches the supplied URL and a retained tab. Preview by default; workspace organization must use the board Apply review.',
+    {
+      session,
+      duplicates: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 2000,
+        items: {
+          type: 'object',
+          properties: { tabId: id, keepTabId: id, url: { type: 'string', maxLength: 10000 } },
+          required: ['tabId', 'keepTabId', 'url'],
+          additionalProperties: false,
+        },
+      },
+      dryRun,
+    },
+    ['duplicates'],
+  ),
+  defineTool(
     'windows-create',
     'saul_windows_create',
     'Create a normal window by moving explicit unpinned, ungrouped tabs into it in order. Preview by default. No tabs are closed.',

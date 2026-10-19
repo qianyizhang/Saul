@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { createWorkspace, projectLayout, revision } from '../native/workspace.mjs';
+import { createWorkspace, projectLayout, revision, closedSnapshot } from '../native/workspace.mjs';
 import { APP_TOOLS } from '../native/app-protocol.mjs';
 import { createWindowLabels } from '../native/window-labels.mjs';
 import { mkdtempSync, rmSync, readFileSync, statSync } from 'node:fs';
@@ -25,6 +25,15 @@ beforeEach(() => {
     if (name === 'saul_sessions') return { sessions: [{ session, extensionId: 'b'.repeat(32) }] };
     if (name === 'saul_tabs_list') return structuredClone(snapshot);
     expect(args.dryRun).toBe(false);
+    if (name === 'saul_windows_label') {
+      for (const window of args.windows)
+        snapshot.windows.find((w) => w.id === window.windowId).title = window.title;
+      return { dryRun: false, windows: args.windows };
+    }
+    if (name === 'saul_tabs_close_duplicates') {
+      for (const duplicate of args.duplicates) snapshot = closedSnapshot(snapshot, duplicate.tabId);
+      return { dryRun: false, tabIds: args.duplicates.map((d) => d.tabId) };
+    }
     const windowId = name === 'saul_windows_create' ? 100 : args.windowId;
     if (name === 'saul_windows_create') snapshot.windows.push({ id: windowId });
     const tab = snapshot.tabs.find((t) => t.id === args.tabIds[0]);
@@ -58,7 +67,9 @@ async function propose(
   });
 }
 const mutations = () =>
-  call.mock.calls.filter(([name]) => !['saul_sessions', 'saul_tabs_list'].includes(name));
+  call.mock.calls.filter(
+    ([name]) => !['saul_sessions', 'saul_tabs_list', 'saul_windows_label'].includes(name),
+  );
 const approve = (result) => ({
   session,
   proposalId: result.structuredContent.proposal.id,
@@ -186,7 +197,7 @@ it('returning to the current layout clears the previous approval without mutatio
   await expect(workspace('saul_workspace_apply', approve(original))).rejects.toThrow('Approval');
 });
 
-it('persists reviewed labels for existing and newly created windows across MCP restart', async () => {
+it('shares reviewed labels through the extension across MCP restart and retires helper labels', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'saul-window-labels-'));
   try {
     workspace = createWorkspace({ call, labels: createWindowLabels(directory) });
@@ -205,7 +216,7 @@ it('persists reviewed labels for existing and newly created windows across MCP r
     expect(refreshed.structuredContent.proposal).toBeNull();
     const file = join(directory, 'workspace-labels.json');
     expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({
-      [session]: { 1: 'Work', 100: 'Reading' },
+      [session]: {},
     });
     expect(statSync(file).mode & 0o777).toBe(0o600);
     expect(createWindowLabels(directory).get('b'.repeat(16))).toEqual({});
@@ -227,6 +238,129 @@ it('label-only changes require review and do not move Chrome tabs', async () => 
     'Reading',
   ]);
   expect(mutations()).toEqual([]);
+  expect(call).toHaveBeenCalledWith(
+    'saul_windows_label',
+    expect.objectContaining({
+      windows: [
+        { windowId: 1, title: 'Work' },
+        { windowId: 2, title: 'Reading' },
+      ],
+      dryRun: false,
+    }),
+  );
+});
+
+it('imports existing helper labels on apply without overriding labels already shared by the extension', async () => {
+  const labels = createWindowLabels();
+  labels.save(session, { 1: 'Old work', 2: 'Old reading' }, [session]);
+  snapshot.windows[0].title = 'Extension work';
+  workspace = createWorkspace({ call, labels });
+  const shown = await workspace('saul_workspace_show', { session });
+  expect(shown.structuredContent.snapshot.windows.map((w) => w.title)).toEqual([
+    'Extension work',
+    'Old reading',
+  ]);
+  expect(call.mock.calls.some(([name]) => name === 'saul_windows_label')).toBe(false);
+  const plan = await workspace('saul_workspace_propose', {
+    session,
+    revision: shown.structuredContent.revision,
+    summary: '',
+    windows: [
+      { windowId: 1, title: 'Work', tabIds: [12, 20] },
+      { title: 'Reading', tabIds: [21] },
+    ],
+  });
+  expect(
+    (await workspace('saul_workspace_apply', approve(plan))).structuredContent.proposal.status,
+  ).toBe('applied');
+  expect(labels.get(session)).toEqual({});
+});
+
+it('deduplicates exact URLs by default in the preview and closes only reviewed copies after moves', async () => {
+  snapshot.tabs[4].url = snapshot.tabs[3].url;
+  const plan = await propose();
+  expect(plan.structuredContent.proposal.duplicates).toEqual([
+    { tabId: 21, keepTabId: 20, url: 'https://research.test/' },
+  ]);
+  expect(plan.structuredContent.proposal.projected).toEqual([
+    { id: 1, title: 'Work', tabIds: [10, 11, 12, 20] },
+  ]);
+  expect(mutations()).toEqual([]);
+  const applied = await workspace('saul_workspace_apply', approve(plan));
+  expect(applied.structuredContent.proposal.status).toBe('applied');
+  expect(applied.structuredContent.proposal.receipt.completedClosures).toBe(1);
+  expect(snapshot.tabs.map((t) => t.id)).toEqual([10, 11, 12, 20]);
+  expect(snapshot.windows.map((w) => w.id)).toEqual([1]);
+  expect(applied.structuredContent.proposal.projected[0].id).toBe(1);
+  await expect(workspace('saul_workspace_apply', approve(plan))).rejects.toThrow();
+});
+
+it('preserves pins, groups, URL queries and fragments, and supports keeping duplicates', async () => {
+  snapshot.tabs[2].url = snapshot.tabs[0].url;
+  snapshot.tabs[3].url = snapshot.tabs[1].url;
+  let plan = await propose();
+  expect(plan.structuredContent.proposal.duplicates.map((d) => d.tabId)).toEqual([12, 20]);
+  const keep = await workspace('saul_workspace_propose', {
+    session,
+    revision: revision(snapshot),
+    summary: '',
+    deduplicate: false,
+    windows: plan.structuredContent.proposal.windows,
+  });
+  expect(keep.structuredContent.proposal.duplicates).toEqual([]);
+  snapshot.tabs[2].url = 'https://read.test/?page=1#first';
+  snapshot.tabs[3].url = 'https://read.test/?page=2#first';
+  snapshot.tabs[4].url = 'https://read.test/?page=2#second';
+  plan = await propose();
+  expect(plan.structuredContent.proposal.duplicates).toEqual([]);
+});
+
+it('keeps an active duplicate and detects a label edit after preview', async () => {
+  snapshot.tabs[4].url = snapshot.tabs[3].url;
+  snapshot.tabs[4].active = true;
+  const plan = await propose();
+  expect(plan.structuredContent.proposal.duplicates[0]).toMatchObject({ tabId: 20, keepTabId: 21 });
+  snapshot.windows[0].title = 'Changed elsewhere';
+  await expect(workspace('saul_workspace_apply', approve(plan))).rejects.toThrow('stale');
+  expect(mutations()).toEqual([]);
+});
+
+it('imports helper labels even when the reviewed layout and titles already match', async () => {
+  const labels = createWindowLabels();
+  labels.save(session, { 1: 'Work', 2: 'Reading' }, [session]);
+  workspace = createWorkspace({ call, labels });
+  const current = await workspace('saul_workspace_show', { session });
+  const plan = await workspace('saul_workspace_propose', {
+    session,
+    revision: current.structuredContent.revision,
+    summary: '',
+    windows: [
+      { windowId: 1, title: 'Work', tabIds: [12] },
+      { windowId: 2, title: 'Reading', tabIds: [20, 21] },
+    ],
+  });
+  expect(plan.structuredContent.proposal).not.toBeNull();
+  expect(
+    (await workspace('saul_workspace_apply', approve(plan))).structuredContent.proposal.status,
+  ).toBe('applied');
+  expect(snapshot.windows.map((w) => w.title)).toEqual(['Work', 'Reading']);
+  expect(mutations()).toEqual([]);
+});
+
+it('consumes approval after an uncertain duplicate closure and never replays it', async () => {
+  snapshot.tabs[4].url = snapshot.tabs[3].url;
+  const plan = await propose();
+  const original = call.getMockImplementation();
+  call.mockImplementation(async (name, args) => {
+    const result = await original(name, args);
+    if (name === 'saul_tabs_close_duplicates') throw new Error('Lost close response');
+    return result;
+  });
+  const result = await workspace('saul_workspace_apply', approve(plan));
+  expect(result.structuredContent.proposal.status).toBe('failed');
+  expect(snapshot.tabs.some((t) => t.id === 21)).toBe(false);
+  await expect(workspace('saul_workspace_apply', approve(plan))).rejects.toThrow();
+  expect(call.mock.calls.filter(([name]) => name === 'saul_tabs_close_duplicates')).toHaveLength(1);
 });
 
 it('keeps an expired draft editable but consumes its approval until renewed', async () => {

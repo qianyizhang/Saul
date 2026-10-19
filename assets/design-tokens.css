@@ -1,4 +1,4 @@
-/* Generated from DESIGN.md · SHA-256 cc4602874e5b73cb1b29a7509ad5c683b60146ae048501059fc27d1c4a55c492. Do not edit. */
+/* Generated from DESIGN.md · SHA-256 13d7ef9eb4db189263a91a5f1946a709a326ef3f6f8f865c3271ad6c47cfb3a3. Do not edit. */
 :root,
 :host {
   color-scheme: light dark;
@@ -16,6 +16,9 @@
   --design-color-danger-wash: light-dark(#fff0ed, #472a28);
   --design-color-warning: light-dark(#805417, #e2bd83);
   --design-color-warning-wash: light-dark(#f7efdf, #403425);
+  --design-color-window-blue: light-dark(#356a99, #8ebde5);
+  --design-color-window-violet: light-dark(#78539a, #c4a3e2);
+  --design-color-window-rose: light-dark(#a34f69, #e4a0b6);
   --design-font-subject: ui-serif, Georgia, serif;
   --design-size-subject: 24px;
   --design-leading-subject: 1.3;

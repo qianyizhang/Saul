@@ -22,6 +22,12 @@ interface Mutation extends Common {
   dryRun?: boolean;
 }
 export interface ToolArgs {
+  saul_windows_label: Mutation & {
+    windows: { windowId: number; title: string; expectedTitle?: string }[];
+  };
+  saul_tabs_close_duplicates: Mutation & {
+    duplicates: { tabId: number; keepTabId: number; url: string }[];
+  };
   saul_windows_create: Mutation & { tabIds: number[]; focused?: boolean };
   saul_page_read: Common & { tabId: number };
   saul_page_act: Mutation & {
@@ -64,6 +70,7 @@ export interface GroupView {
   collapsed: boolean;
 }
 export interface TabSnapshot {
+  nativeNames?: { status: 'available' | 'unavailable' | 'unsupported'; message?: string };
   windows: { id: number; focused: boolean; title?: string }[];
   tabs: TabView[];
   groups: GroupView[];
@@ -79,6 +86,8 @@ export interface PageSnapshot {
   elementsTruncated: boolean;
 }
 export interface ToolResults {
+  saul_windows_label: { dryRun: boolean; windows: { windowId: number; title: string }[] };
+  saul_tabs_close_duplicates: { dryRun: boolean; tabIds: number[] };
   saul_windows_create: { dryRun: boolean; tabIds: number[]; windowId?: number };
   saul_page_read: PageSnapshot;
   saul_page_act: { dryRun: boolean; action: string; elementId: number; url: string };

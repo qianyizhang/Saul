@@ -6,7 +6,11 @@ import type { TabSnapshot, ToolArgs, ToolResults, BrowserTool } from '../../nati
 export type { TabSnapshot } from '../../native/protocol.mjs';
 export type WorkspaceTool = Exclude<
   BrowserTool,
-  'saul_tabs_list' | `saul_page_${string}` | 'saul_windows_create'
+  | 'saul_tabs_list'
+  | `saul_page_${string}`
+  | 'saul_windows_create'
+  | 'saul_tabs_close_duplicates'
+  | 'saul_windows_label'
 >;
 export type WorkspacePreviewArgs<K extends WorkspaceTool> = Omit<ToolArgs[K], 'session' | 'dryRun'>;
 export type WorkspacePreviewRequest<K extends WorkspaceTool = WorkspaceTool> =

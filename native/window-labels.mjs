@@ -3,8 +3,8 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { secureDirectory } from './transport.mjs';
 
-// Only user-approved labels are retained, keyed by the connected browser session.
-// No tab inventory, URLs, proposal or approval token is written to disk.
+// Legacy helper-only labels are read for import into extension session storage
+// on the next reviewed apply. No inventory, URLs or approval tokens are stored.
 export function createWindowLabels(directory) {
   let memory = {};
   const file = directory && join(directory, 'workspace-labels.json');

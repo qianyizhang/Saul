@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NativeBridge } from './NativeBridge';
 import { sendWorkspaceMessage } from '../storage/client';
+import { WINDOW_LABELS_KEY, windowLabelsFromStorage } from '../native/window-labels';
 
 import type {
   TabSnapshot,
@@ -68,6 +69,19 @@ export function Tabs() {
   }
   useEffect(() => {
     void perform({ action: 'list' });
+    const changed = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (area !== 'session' || !changes[WINDOW_LABELS_KEY]) return;
+      const labels = windowLabelsFromStorage(changes[WINDOW_LABELS_KEY].newValue);
+      setSnapshot((current) => ({
+        ...current,
+        windows: current.windows.map(({ title: _title, ...w }) => ({
+          ...w,
+          ...(labels[w.id] === undefined ? {} : { title: labels[w.id] }),
+        })),
+      }));
+    };
+    chrome.storage.onChanged.addListener(changed);
+    return () => chrome.storage.onChanged.removeListener(changed);
   }, []);
   const tabs = snapshot.tabs.filter((t) => t.windowId === windowId);
   const draft = <K extends WorkspaceTool>(method: K, args: WorkspacePreviewArgs<NoInfer<K>>) =>
@@ -118,7 +132,7 @@ export function Tabs() {
             >
               {snapshot.windows.map((w) => (
                 <option key={w.id} value={w.id}>
-                  Window {w.id}
+                  {w.title || `Window ${w.id}`}
                   {w.focused ? ' · current' : ''}
                 </option>
               ))}
@@ -305,7 +319,7 @@ export function Tabs() {
                 <option value="">Choose window…</option>
                 {snapshot.windows.map((w) => (
                   <option key={w.id} value={w.id}>
-                    Window {w.id}
+                    {w.title || `Window ${w.id}`}
                   </option>
                 ))}
               </select>

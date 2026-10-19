@@ -11,7 +11,9 @@ export function revision(snapshot) {
   return createHash('sha256')
     .update(
       JSON.stringify({
-        windows: snapshot.windows.map((w) => w.id).sort((a, b) => a - b),
+        windows: snapshot.windows
+          .map(({ id, title }) => ({ id, title }))
+          .sort((a, b) => a.id - b.id),
         tabs: [...snapshot.tabs]
           .sort((a, b) => a.id - b.id)
           .map(({ id, windowId, index, pinned, groupId, url }) => ({
@@ -90,7 +92,37 @@ export function movedSnapshot(before, tabId, destination) {
   tab.windowId = destination;
   tab.index = next.tabs.filter((t) => t.id !== tabId && t.windowId === destination).length;
   if (!next.windows.some((w) => w.id === destination))
-    next.windows.push({ id: destination, focused: false });
+    next.windows.push({
+      id: destination,
+      focused: false,
+      ...(before.nativeNames?.status === 'available' ? { title: '' } : {}),
+    });
+  next.windows = next.windows.filter((w) => next.tabs.some((t) => t.windowId === w.id));
+  return next;
+}
+
+export function duplicateTabs(before, projected) {
+  const tabs = projected.flatMap((w) => w.tabIds.map((id) => before.tabs.find((t) => t.id === id)));
+  const keepers = new Map();
+  // Pins and groups are immutable; otherwise keep an active copy before the
+  // first copy in the proposed order. Exact URLs preserve queries and fragments.
+  for (const tab of [...tabs].sort(
+    (a, b) =>
+      Number(fixed(b)) - Number(fixed(a)) || Number(Boolean(b.active)) - Number(Boolean(a.active)),
+  )) {
+    if (/^https?:\/\//.test(tab.url) && !keepers.has(tab.url)) keepers.set(tab.url, tab.id);
+  }
+  return tabs
+    .filter((tab) => !fixed(tab) && keepers.has(tab.url) && keepers.get(tab.url) !== tab.id)
+    .map((tab) => ({ tabId: tab.id, keepTabId: keepers.get(tab.url), url: tab.url }));
+}
+
+export function closedSnapshot(before, tabId) {
+  const next = structuredClone(before);
+  const tab = next.tabs.find((t) => t.id === tabId);
+  next.tabs = next.tabs.filter((t) => t.id !== tabId);
+  for (const other of next.tabs)
+    if (other.windowId === tab.windowId && other.index > tab.index) other.index--;
   next.windows = next.windows.filter((w) => next.tabs.some((t) => t.windowId === w.id));
   return next;
 }
@@ -109,6 +141,13 @@ export function createWorkspace({
         delete plan.approvalToken;
       }
   };
+  const withLabels = (snapshot, session) => {
+    const titles = labels.get(session);
+    for (const window of snapshot.windows)
+      if (window.title === undefined && titles[window.id] !== undefined)
+        window.title = titles[window.id];
+    return snapshot;
+  };
   const state = async (session) => {
     expire();
     const { sessions } = await call('saul_sessions');
@@ -116,10 +155,7 @@ export function createWorkspace({
     if (!session) return { sessions, snapshot: null, proposal: null };
     if (!sessions.some((s) => s.session === session))
       throw new Error('Browser session disconnected; refresh and select a connected session');
-    const snapshot = await call('saul_tabs_list', { session });
-    const titles = labels.get(session);
-    for (const window of snapshot.windows)
-      if (titles[window.id] !== undefined) window.title = titles[window.id];
+    const snapshot = withLabels(await call('saul_tabs_list', { session }), session);
     const currentRevision = revision(snapshot);
     const plan = plans.get(session);
     if (['pending', 'expired'].includes(plan?.status) && plan.revision !== currentRevision)
@@ -152,7 +188,12 @@ export function createWorkspace({
       const current = await state(args.session);
       if (args.revision !== current.revision)
         throw new Error('Layout changed; call saul_workspace_show and propose again');
-      const projected = projectLayout(current.snapshot, args.windows);
+      const layout = projectLayout(current.snapshot, args.windows);
+      const duplicates = args.deduplicate === false ? [] : duplicateTabs(current.snapshot, layout);
+      const closing = new Set(duplicates.map((d) => d.tabId));
+      const projected = layout
+        .map((w) => ({ ...w, tabIds: w.tabIds.filter((id) => !closing.has(id)) }))
+        .filter((w) => w.tabIds.length);
       const changed = projected
         .flatMap((w) => w.tabIds.map((id, index) => ({ id, windowId: w.id, index })))
         .filter((t) => {
@@ -166,7 +207,8 @@ export function createWorkspace({
             (current.snapshot.windows.find((x) => x.id === w.windowId)?.title ||
               `Window ${current.snapshot.windows.findIndex((x) => x.id === w.windowId) + 1}`),
       );
-      if (!changed.length && !renamed) {
+      const importingLabels = Object.keys(labels.get(args.session)).length > 0;
+      if (!changed.length && !renamed && !duplicates.length && !importingLabels) {
         plans.delete(args.session);
         return response(await state(args.session), true);
       }
@@ -177,9 +219,13 @@ export function createWorkspace({
         status: 'pending',
         summary: args.summary,
         windows: args.windows,
+        deduplicate: args.deduplicate !== false,
+        duplicates,
         before: current.snapshot,
         projected,
-        changedTabIds: changed.map((t) => t.id),
+        changedTabIds: [
+          ...new Set([...changed.map((t) => t.id), ...duplicates.map((d) => d.tabId)]),
+        ],
         revision: current.revision,
         expiresAt: now() + ttl,
       });
@@ -195,15 +241,32 @@ export function createWorkspace({
     delete plan.approvalToken; // Consume before any side effect, including uncertain failures.
     let expected = current.snapshot;
     let completedMoves = 0;
+    let completedClosures = 0;
     const appliedWindows = [];
+    const destinations = new Map();
     const check = async () => {
-      const actual = await call('saul_tabs_list', { session: args.session });
+      const actual = withLabels(
+        await call('saul_tabs_list', { session: args.session }),
+        args.session,
+      );
+      if (
+        expected.nativeNames?.status === 'available' &&
+        actual.nativeNames?.status !== 'available'
+      )
+        throw new Error(
+          actual.nativeNames?.message || 'Native window names could not be refreshed',
+        );
       if (revision(actual) !== revision(expected))
         throw new Error('Browser layout changed during apply');
       return actual;
     };
     try {
-      for (const window of plan.windows) {
+      if (current.snapshot.nativeNames?.status === 'unavailable')
+        throw new Error(
+          current.snapshot.nativeNames.message ||
+            'Native Chrome names unavailable; refresh after granting Automation access',
+        );
+      for (const [index, window] of plan.windows.entries()) {
         let destination = window.windowId;
         let remaining = window.tabIds;
         if (destination === undefined) {
@@ -229,6 +292,7 @@ export function createWorkspace({
           ...window.tabIds,
         ];
         appliedWindows.push({ id: destination, title: window.title });
+        destinations.set(window.windowId ?? `new-${index + 1}`, destination);
         if (
           JSON.stringify(ordered(expected, destination).map((t) => t.id)) ===
           JSON.stringify(desired)
@@ -248,29 +312,59 @@ export function createWorkspace({
           await check();
         }
       }
+      // Move first so existing destinations retain their anchors until all moves
+      // complete. Duplicate-only windows can then disappear without index drift.
+      for (const duplicate of plan.duplicates) {
+        await check();
+        await call('saul_tabs_close_duplicates', {
+          session: args.session,
+          duplicates: [duplicate],
+          dryRun: false,
+        });
+        expected = closedSnapshot(expected, duplicate.tabId);
+        completedClosures++;
+        await check();
+      }
       const actual = await check();
-      const titles = labels.get(args.session);
-      for (const window of appliedWindows) titles[window.id] = window.title;
-      for (const id of Object.keys(titles))
-        if (!actual.windows.some((w) => w.id === Number(id))) delete titles[id];
+      const titles = Object.fromEntries(
+        actual.windows.filter((w) => w.title !== undefined).map((w) => [w.id, w.title]),
+      );
+      for (const window of appliedWindows)
+        if (actual.windows.some((w) => w.id === window.id)) titles[window.id] = window.title;
+      const windows = Object.entries(titles).map(([id, title]) => ({
+        windowId: Number(id),
+        title,
+        ...(actual.nativeNames?.status === 'available'
+          ? { expectedTitle: actual.windows.find((w) => w.id === Number(id)).title }
+          : {}),
+      }));
+      if (windows.length) {
+        await call('saul_windows_label', { session: args.session, windows, dryRun: false });
+        for (const window of expected.windows)
+          if (titles[window.id] !== undefined) window.title = titles[window.id];
+        await check();
+      }
+      // Retire helper-only labels after importing them into extension session state.
       labels.save(
         args.session,
-        titles,
+        {},
         current.sessions.map((s) => s.session),
       );
-      plan.projected = plan.projected.map((w, i) => ({
+      plan.projected = plan.projected.map((w) => ({
         ...w,
-        id: appliedWindows[i]?.id ?? w.id,
+        id: destinations.get(w.id) ?? w.id,
       }));
       plan.status = 'applied';
       plan.receipt = {
         completedMoves,
-        message: 'Layout applied and verified. No tabs were closed.',
+        completedClosures,
+        message: `Layout and labels applied and verified. ${completedClosures} duplicate tab${completedClosures === 1 ? '' : 's'} closed.`,
       };
     } catch (error) {
       plan.status = 'failed';
       plan.receipt = {
         completedMoves,
+        completedClosures,
         message: `${error.message}. Some changes may have completed. Refresh and make a new proposal; this approval cannot be reused.`,
       };
     }

@@ -271,6 +271,8 @@ describe('native transport', () => {
     const tools = await runProcess(cli, ['tools'], undefined, { cwd: unrelatedCwd });
     expect(tools).toMatchObject({ code: 0, stderr: '' });
     expect(JSON.parse(tools.stdout).map((tool) => tool.name)).toEqual([
+      'saul_windows_label',
+      'saul_tabs_close_duplicates',
       'saul_windows_create',
       'saul_page_read',
       'saul_page_act',

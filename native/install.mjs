@@ -130,6 +130,8 @@ function main() {
           'app-protocol.mjs',
           'workspace.mjs',
           'window-labels.mjs',
+          'window-names.mjs',
+          'window-names.jxa',
         ]),
   ]) {
     copyFileSync(join(source, name), join(plan.runtime, name));

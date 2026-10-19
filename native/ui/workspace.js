@@ -22,14 +22,17 @@ $('minimum-mode').onchange = () => {
 };
 let data,
   approvalToken,
-  mode = 'current',
   busy = false,
   refreshing = false,
   ready = false,
   capabilities = {},
   nextId = 0;
 const pending = new Map();
-let poll, draggedTab, selectedTab, pointerDrag, deferredResult, suppressClick;
+let poll, draggedTab, selectedTab, pointerDrag, deferredResult;
+const foldedWindows = new Set();
+let windowOrder = [],
+  windowDrag,
+  contextMenu;
 let draftLayout,
   queuedEdit,
   staging = false,
@@ -77,14 +80,12 @@ function receive(result) {
   if (result?.isError)
     throw new Error(result.content?.[0]?.text || 'Saul could not complete the request');
   if (!result?.structuredContent || !('sessions' in result.structuredContent)) return;
-  if (pointerDrag || draggedTab !== undefined) {
+  if (pointerDrag || windowDrag || draggedTab !== undefined) {
     deferredResult = result;
     return;
   }
   if (result._saulEditSequence === editSequence) draftLayout = undefined;
   const next = result.structuredContent;
-  if (next.proposal?.id !== data?.proposal?.id && next.proposal?.status === 'pending')
-    mode = 'proposed';
   const changed =
     JSON.stringify(next) !== JSON.stringify(data) || approvalToken !== result._meta?.approvalToken;
   data = next;
@@ -97,10 +98,10 @@ async function tool(name, args) {
   receive(result);
   return result;
 }
-function layout() {
-  if (mode === 'proposed' && draftLayout) return draftLayout;
+function layout(current = false) {
+  if (!current && draftLayout) return draftLayout;
   const proposal = data?.proposal;
-  if (mode === 'proposed' && proposal)
+  if (!current && proposal && ['pending', 'expired'].includes(proposal.status))
     return { source: proposal.before, windows: proposal.projected };
   const source = data?.snapshot;
   return {
@@ -117,13 +118,7 @@ function layout() {
 }
 function canEdit() {
   return Boolean(
-    ready &&
-      !busy &&
-      data?.snapshot &&
-      (mode === 'current' ||
-        (draftLayout
-          ? draftLayout.revision === data.revision
-          : ['pending', 'expired'].includes(data.proposal?.status))),
+    ready && !busy && data?.snapshot && (!draftLayout || draftLayout.revision === data.revision),
   );
 }
 function endDrag() {
@@ -163,6 +158,7 @@ function dragDestination(x, y) {
   let beforeId,
     markerY = bounds.bottom;
   const footer = hit.closest('.window-end');
+  if (list.hidden) return { destination: window.id, card, label: `${window.title} · at the end` };
   if (hit.closest('.window-head')) {
     beforeId = ids[0];
     const first = rows[0]?.getBoundingClientRect();
@@ -233,7 +229,6 @@ function startDrag(item, tabId) {
   indicator.setAttribute('aria-hidden', 'true');
   document.body.append(ghost, indicator);
   Object.assign(pointerDrag, { ghost, indicator, badge, previousTime: performance.now() });
-  status('Moving tab…');
   updateDrag();
   const tick = (time) => {
     const drag = pointerDrag;
@@ -264,13 +259,12 @@ function pointerSource(item, tabId) {
       !canEdit() ||
       event.button !== 0 ||
       !event.isPrimary ||
-      event.target.closest('button:not(.move-handle), input, select')
+      event.target.closest('button, input, select')
     )
       return;
-    const handle = event.target.closest('.move-handle');
-    // Let touch users scroll normally on the row; the grip is their drag surface.
-    if (event.pointerType === 'touch' && !handle) return;
-    if (!handle) event.preventDefault();
+    // Touch scrolling stays native; number buttons expose tap-based moves.
+    if (event.pointerType === 'touch') return;
+    event.preventDefault();
     pointerDrag = {
       id: event.pointerId,
       startX: event.clientX,
@@ -280,7 +274,7 @@ function pointerSource(item, tabId) {
       item,
       tabId,
     };
-    (handle || item).setPointerCapture(event.pointerId);
+    item.setPointerCapture(event.pointerId);
   });
   item.addEventListener('pointermove', (event) => {
     const drag = pointerDrag;
@@ -297,11 +291,6 @@ function pointerSource(item, tabId) {
     updateDrag();
     const target = pointerDrag.target;
     const moved = draggedTab !== undefined;
-    suppressClick = moved ? tabId : undefined;
-    if (moved)
-      setTimeout(() => {
-        suppressClick = undefined;
-      }, 0);
     endDrag();
     if (moved && target) void moveTab(tabId, target.destination, target.beforeId);
     else if (moved) status('Move cancelled. The preview is unchanged.');
@@ -335,12 +324,23 @@ async function moveTab(tabId, destination, beforeId) {
   if (JSON.stringify(draft) === JSON.stringify(windows)) return;
   await stageDraft(source, draft);
 }
-async function stageDraft(source, draft) {
+async function stageDraft(source, draft, deduplicate = data?.proposal?.deduplicate ?? true) {
+  const submitted = draft.map((w) => ({ ...w, tabIds: [...w.tabIds] }));
+  // A deduplicated projection hides removed copies. Retain those inputs while
+  // editing or opting out so the server still validates complete tab coverage.
+  for (const duplicate of ['pending', 'expired'].includes(data?.proposal?.status)
+    ? (data.proposal.duplicates ?? [])
+    : []) {
+    if (submitted.some((w) => w.tabIds.includes(duplicate.tabId))) continue;
+    const destination = submitted.find((w) => w.tabIds.includes(duplicate.keepTabId));
+    if (destination) destination.tabIds.push(duplicate.tabId);
+  }
   const args = {
     session: data.session,
     revision: data.revision,
-    summary: 'Your manual layout. Review the highlighted changes before applying.',
-    windows: draft
+    summary: 'Manual arrangement',
+    deduplicate,
+    windows: submitted
       .map((window) => ({
         ...(typeof window.id === 'number' &&
         source.tabs.some(
@@ -369,14 +369,13 @@ async function stageDraft(source, draft) {
       }))
       .filter((window) => window.tabIds.length),
   };
-  mode = 'proposed';
   approvalToken = undefined;
   queuedEdit = { args, sequence };
   animateNextRender = true;
   const alreadyStaging = staging;
   staging = true;
   render();
-  status('Saving preview…');
+  status('');
   if (alreadyStaging) return;
   try {
     while (queuedEdit) {
@@ -390,16 +389,12 @@ async function stageDraft(source, draft) {
       result._saulEditSequence = edit.sequence;
       receive(result);
     }
-    status(
-      data.proposal
-        ? 'Preview updated. Continue arranging tabs, or apply when ready.'
-        : 'Layout matches Chrome. No changes to apply.',
-    );
+    status('');
   } catch (error) {
     // Keep the visible draft, but never enable apply with an unvalidated layout.
     queuedEdit = undefined;
     approvalToken = undefined;
-    status(`${error.message}. Your draft is retained; renew the preview to retry.`, true);
+    status(`${error.message}. Draft retained. Choose Retry.`, true);
   } finally {
     staging = false;
     if (!pointerDrag) render();
@@ -418,13 +413,227 @@ function displayProposal() {
     ...data?.proposal,
     status: draftLayout.revision === data.revision ? 'pending' : 'stale',
     receipt: undefined,
-    summary: 'Your manual layout. Review before applying.',
+    summary: 'Manual arrangement',
     changedTabIds,
     projected: windows,
     before: source,
     expiresAt: 0,
   };
 }
+
+function windowIdentity(source, id, windows) {
+  const ids = [
+    ...source.windows.map((w) => w.id),
+    ...windows.filter((w) => !source.windows.some((s) => s.id === w.id)).map((w) => w.id),
+  ];
+  const index = ids.indexOf(id);
+  const colors = [
+    'var(--design-color-primary)',
+    'var(--design-color-window-blue)',
+    'var(--design-color-window-violet)',
+    'var(--design-color-warning)',
+    'var(--design-color-window-rose)',
+  ];
+  return { index: index + 1, color: colors[Math.max(0, index) % colors.length] };
+}
+function toggleFold(id) {
+  const key = String(id);
+  if (foldedWindows.has(key)) foldedWindows.delete(key);
+  else foldedWindows.add(key);
+  render();
+}
+function closeActions(restore = false) {
+  if (!contextMenu) return;
+  const { node, anchor } = contextMenu;
+  node.remove();
+  contextMenu = undefined;
+  if (restore) anchor.focus({ preventScroll: true });
+}
+function openActions(anchor, actions, point) {
+  closeActions();
+  const menu = element('div', 'context-menu');
+  menu.setAttribute('role', 'menu');
+  menu.setAttribute('aria-label', 'Actions');
+  for (const [label, action, disabled = false] of actions) {
+    const button = element('button', '', label);
+    button.setAttribute('role', 'menuitem');
+    button.disabled = disabled;
+    button.onclick = () => {
+      closeActions();
+      action();
+    };
+    menu.append(button);
+  }
+  document.body.append(menu);
+  const rect = anchor.getBoundingClientRect();
+  menu.style.left = `${Math.max(8, Math.min(point?.x ?? rect.left, innerWidth - menu.offsetWidth - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(point?.y ?? rect.bottom, innerHeight - menu.offsetHeight - 8))}px`;
+  contextMenu = { node: menu, anchor };
+  menu.querySelector('button:not(:disabled)')?.focus();
+  menu.onkeydown = (event) => {
+    const buttons = [...menu.querySelectorAll('button:not(:disabled)')];
+    const index = buttons.indexOf(document.activeElement);
+    if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+      event.preventDefault();
+      const next =
+        event.key === 'Home'
+          ? 0
+          : event.key === 'End'
+            ? buttons.length - 1
+            : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
+      buttons[next]?.focus();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      closeActions(true);
+    } else if (event.key === 'Tab') closeActions();
+  };
+}
+function bindActions(node, actions) {
+  node.addEventListener('contextmenu', (event) => {
+    if (event.target.closest('input, textarea')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openActions(node.querySelector('button') || node, actions(), {
+      x: event.clientX,
+      y: event.clientY,
+    });
+  });
+  node.addEventListener('keydown', (event) => {
+    if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openActions(document.activeElement, actions());
+  });
+}
+function promptAction(text) {
+  $('composer').open = true;
+  const input = $('request');
+  input.value = text;
+  input.focus();
+  const start = text.indexOf('[topic]');
+  if (start >= 0) input.setSelectionRange(start, start + 7);
+}
+function selectMove(tabId) {
+  selectedTab = tabId;
+  render();
+  $('destination').focus();
+}
+function tabActions(tab, window) {
+  return [
+    ['Move…', () => selectMove(tab.id), fixed(tab) || !canEdit()],
+    [
+      'Move this site…',
+      () =>
+        promptAction(
+          `Move tabs from ${domain(tab.url)} (including tab ${tab.id}) to a suitable window.`,
+        ),
+      !capabilities.message || !canEdit(),
+    ],
+    [
+      'Organize related tabs…',
+      () =>
+        promptAction(
+          `Organize tabs related to “${tab.title || domain(tab.url)}” (tab ${tab.id}) in “${window.title}”.`,
+        ),
+      !capabilities.message || !canEdit(),
+    ],
+  ];
+}
+function windowActions(window, head) {
+  const key = String(window.id);
+  const index = windowOrder.indexOf(key);
+  const shift = (direction) => {
+    [windowOrder[index], windowOrder[index + direction]] = [windowOrder[index + direction], key];
+    render();
+  };
+  return [
+    [foldedWindows.has(key) ? 'Expand' : 'Fold', () => toggleFold(window.id)],
+    ['Rename', () => renameWindow(head, head.querySelector('.rename-window'), window), !canEdit()],
+    ['Move earlier on board', () => shift(-1), index <= 0],
+    ['Move later on board', () => shift(1), index >= windowOrder.length - 1],
+    [
+      'Move a topic here…',
+      () => promptAction(`Move tabs about [topic] into “${window.title}” (window ${window.id}).`),
+      !capabilities.message || !canEdit(),
+    ],
+    [
+      'Organize this window…',
+      () => promptAction(`Organize the tabs in “${window.title}” (window ${window.id}) by topic.`),
+      !capabilities.message || !canEdit(),
+    ],
+  ];
+}
+function endWindowDrag(commit = false) {
+  const drag = windowDrag;
+  if (!drag) return;
+  drag.ghost?.remove();
+  drag.card.classList.remove('dragging');
+  drag.target?.classList.remove('window-drop-target');
+  document.body.classList.remove('is-dragging');
+  windowDrag = undefined;
+  if (commit && drag.target) {
+    const from = windowOrder.indexOf(drag.card.dataset.windowId);
+    const to = windowOrder.indexOf(drag.target.dataset.windowId);
+    windowOrder.splice(from, 1);
+    windowOrder.splice(to, 0, drag.card.dataset.windowId);
+    render();
+  }
+  if (deferredResult) {
+    const result = deferredResult;
+    deferredResult = undefined;
+    receive(result);
+  }
+}
+function windowPointerSource(head, card) {
+  head.addEventListener('pointerdown', (event) => {
+    if (
+      event.button !== 0 ||
+      !event.isPrimary ||
+      event.target.closest('button, input') ||
+      busy ||
+      staging
+    )
+      return;
+    closeActions();
+    windowDrag = { id: event.pointerId, x: event.clientX, y: event.clientY, card };
+    head.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+  head.addEventListener('pointermove', (event) => {
+    const drag = windowDrag;
+    if (drag?.id !== event.pointerId) return;
+    if (!drag.ghost && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 6) return;
+    if (!drag.ghost) {
+      drag.ghost = head.cloneNode(true);
+      drag.ghost.className = 'window-head window-ghost';
+      drag.ghost.setAttribute('aria-hidden', 'true');
+      drag.ghost.style.width = `${card.offsetWidth}px`;
+      drag.ghost.style.setProperty('--window-color', card.style.getPropertyValue('--window-color'));
+      document.body.append(drag.ghost);
+      card.classList.add('dragging');
+      document.body.classList.add('is-dragging');
+    }
+    drag.ghost.style.transform = `translate(${Math.max(8, Math.min(event.clientX - 40, innerWidth - card.offsetWidth - 8))}px, ${Math.max(8, event.clientY - 20)}px)`;
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('.window');
+    drag.target?.classList.remove('window-drop-target');
+    drag.target = target !== card ? target : undefined;
+    drag.target?.classList.add('window-drop-target');
+  });
+  head.addEventListener('pointerup', () => endWindowDrag(true));
+  head.addEventListener('pointercancel', () => endWindowDrag());
+  head.addEventListener('lostpointercapture', () => endWindowDrag());
+}
+document.addEventListener('pointerdown', (event) => {
+  if (contextMenu && !contextMenu.node.contains(event.target)) closeActions();
+});
+window.addEventListener('blur', () => {
+  closeActions();
+  endWindowDrag();
+});
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') endWindowDrag();
+});
 
 function renderMoveControls(source, windows, editable) {
   const selected = source?.tabs.find((tab) => tab.id === selectedTab);
@@ -459,7 +668,7 @@ function renameWindow(head, button, window) {
   input.maxLength = 1000;
   input.setAttribute('aria-label', 'Window label');
   heading.replaceWith(input);
-  button.textContent = 'Save label';
+  button.textContent = 'Save';
   const cancel = () => {
     input.replaceWith(heading);
     button.textContent = 'Rename';
@@ -500,59 +709,121 @@ function renderProposal(proposal, snapshot) {
   if (!proposal) return;
   const pending = ['pending', 'expired'].includes(proposal.status);
   const valid = proposal.status === 'pending' && proposal.expiresAt > Date.now();
-  const title = element('div', 'proposal-title');
-  title.append(
-    element(
-      'h2',
-      '',
-      proposal.status === 'pending'
-        ? draftLayout
-          ? 'Updating preview…'
-          : 'Ready for your review'
-        : `Proposal ${proposal.status}`,
-    ),
-    element(
-      'p',
-      'muted',
-      `${quantity(proposal.changedTabIds.length, 'tab')} affected · ${quantity(proposal.projected.length, 'window')}`,
-    ),
-  );
+  const row = element('div', 'proposal-bar');
+  const duplicates = proposal.duplicates ?? [];
+  const count = proposal.changedTabIds.filter(
+    (id) => !duplicates.some((d) => d.tabId === id),
+  ).length;
+  const receipt = proposal.receipt;
+  const renames = proposal.projected.filter((w) => {
+    const index = proposal.before.windows.findIndex((original) => original.id === w.id);
+    return (
+      index >= 0 && w.title !== (proposal.before.windows[index].title || `Window ${index + 1}`)
+    );
+  }).length;
+  let message = busy
+    ? 'Applying…'
+    : draftLayout
+      ? 'Checking…'
+      : count
+        ? `${quantity(count, 'tab')} to rearrange${renames ? ` · ${quantity(renames, 'rename')}` : ''}`
+        : renames
+          ? `${quantity(renames, 'window')} to rename`
+          : duplicates.length
+            ? 'Remove duplicates'
+            : 'Sync window names';
+  if (proposal.status === 'applied')
+    message =
+      count || receipt?.completedClosures
+        ? `Applied · ${quantity(count, 'tab')} rearranged${receipt?.completedClosures ? ` · ${receipt.completedClosures} closed` : ''}`
+        : 'Applied · window names updated';
+  else if (proposal.status === 'stale') message = 'Tabs changed · arrange again';
+  else if (proposal.status === 'failed')
+    message = `Incomplete · ${quantity(receipt?.completedMoves ?? 0, 'tab')} moved`;
+  else if (!pending) message = proposal.status;
+  else if (!valid && !draftLayout) message = 'Preview expired';
+  row.append(element('strong', 'proposal-summary', message));
+  if (pending && duplicates.length)
+    row.append(
+      element('span', 'duplicate-count', `${quantity(duplicates.length, 'duplicate')} will close`),
+    );
   const detail = element('details');
   detail.open = detailsOpen;
   detail.append(element('summary', '', 'Details'), element('p', '', proposal.summary));
-  const row = element('div', 'row');
-  row.append(
-    element(
-      'span',
-      'muted',
-      proposal.receipt?.message ||
-        (!pending
-          ? 'This preview is out of date. Switch to Current to start again.'
-          : draftLayout
-            ? staging
-              ? 'Checking your draft. You can keep arranging.'
-              : 'Draft not validated. Renew the preview to retry.'
-            : valid
-              ? 'Chrome changes only when you apply.'
-              : 'Preview expired. Renew to apply.'),
-    ),
-  );
-  const apply = element('button', 'primary', 'Apply changes to Chrome');
-  apply.id = 'apply';
-  apply.disabled =
-    !valid || !approvalToken || busy || staging || Boolean(draftLayout) || refreshing || !snapshot;
-  apply.onclick = applyPlan;
-  row.append(apply);
-  if (!valid && !staging && pending) {
-    const renew = element('button', '', 'Renew preview');
-    renew.disabled = busy || refreshing || !snapshot;
-    renew.onclick = () => {
-      const { source, windows } = layout();
-      void stageDraft(source, windows);
-    };
-    row.append(renew);
+  if (duplicates.length) {
+    const list = element('ul');
+    for (const duplicate of duplicates) {
+      const tab = proposal.before.tabs.find((t) => t.id === duplicate.tabId);
+      const keeper = proposal.before.tabs.find((t) => t.id === duplicate.keepTabId);
+      list.append(
+        element(
+          'li',
+          '',
+          `Close “${tab?.title || duplicate.url}”; keep “${keeper?.title || duplicate.url}” (tab ${duplicate.keepTabId}).`,
+        ),
+      );
+    }
+    detail.append(list);
   }
-  panel.append(title, row, detail);
+  if (pending) {
+    const label = element('label', 'duplicate-choice');
+    const checkbox = element('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = proposal.deduplicate !== false;
+    checkbox.disabled = busy || staging || refreshing || !snapshot || Boolean(draftLayout);
+    checkbox.onchange = () => {
+      const original = proposal.windows.map((w, index) => ({
+        id: w.windowId ?? `new-${index + 1}`,
+        title: w.title,
+        tabIds: [
+          ...proposal.before.tabs
+            .filter((t) => t.windowId === w.windowId && fixed(t))
+            .sort((a, b) => a.index - b.index)
+            .map((t) => t.id),
+          ...w.tabIds,
+        ],
+      }));
+      // Fixed-only windows may be implicit in the submitted layout.
+      original.push(...proposal.projected.filter((w) => !original.some((x) => x.id === w.id)));
+      void stageDraft(proposal.before, original, checkbox.checked);
+    };
+    label.append(checkbox, document.createTextNode('Remove duplicate tabs'));
+    detail.append(label);
+  }
+  if (receipt) detail.append(element('p', '', receipt.message));
+  if (pending) {
+    const apply = element('button', 'primary', busy ? 'Applying…' : 'Apply');
+    apply.id = 'apply';
+    apply.disabled =
+      !valid ||
+      !approvalToken ||
+      busy ||
+      staging ||
+      Boolean(draftLayout) ||
+      refreshing ||
+      !snapshot;
+    apply.onclick = applyPlan;
+    if (!valid && !staging) {
+      const renew = element('button', '', 'Retry');
+      renew.disabled = busy || refreshing || !snapshot;
+      renew.onclick = () => {
+        const { source, windows } = layout();
+        void stageDraft(source, windows);
+      };
+      row.append(renew);
+    }
+    const reset = element('button', '', 'Reset');
+    reset.disabled = busy || staging || refreshing || !snapshot;
+    reset.onclick = () => {
+      const current = layout(true);
+      void stageDraft(current.source, current.windows, false);
+    };
+    row.append(reset, apply);
+  }
+  if (proposal.status === 'failed') {
+    detail.open = true;
+  }
+  panel.append(row, detail);
 }
 
 function render() {
@@ -594,21 +865,20 @@ function render() {
     $('session').prepend(option);
   }
   $('session-picker').hidden = data?.sessions?.length === 1 && Boolean(data.session);
-  $('layout-view').hidden = !proposal;
   $('counts').textContent = snapshot
     ? `${quantity(snapshot.windows.length, 'window')} · ${quantity(snapshot.tabs.length, 'tab')}`
     : '';
-  $('current').disabled = busy || refreshing;
-  $('proposed').disabled = !proposal || busy || refreshing;
-  if (!proposal) mode = 'current';
-  $('current').setAttribute('aria-pressed', String(mode === 'current'));
-  $('proposed').setAttribute('aria-pressed', String(mode === 'proposed'));
   renderProposal(proposal, snapshot);
   const { source, windows } = layout();
   const editable = canEdit();
   const filter = $('filter').value.toLowerCase();
   const tabMap = new Map(source?.tabs.map((t) => [t.id, t]) ?? []);
-  const cards = windows
+  windowOrder = [
+    ...windowOrder.filter((id) => windows.some((w) => String(w.id) === id)),
+    ...windows.map((w) => String(w.id)).filter((id) => !windowOrder.includes(id)),
+  ];
+  const cards = [...windows]
+    .sort((a, b) => windowOrder.indexOf(String(a.id)) - windowOrder.indexOf(String(b.id)))
     .map((w) => {
       const tabs = w.tabIds
         .map((id) => tabMap.get(id))
@@ -617,6 +887,8 @@ function render() {
       if (!tabs.length && filter) return null;
       const signature = JSON.stringify([
         w.title,
+        foldedWindows.has(String(w.id)),
+        source.windows,
         w.tabIds,
         tabs,
         source.groups,
@@ -632,7 +904,17 @@ function render() {
       card.dataset.windowId = w.id;
       card.dataset.dropWindow = w.id;
       const head = element('div', 'window-head');
+      const identity = windowIdentity(source, w.id, windows);
+      card.style.setProperty('--window-color', identity.color);
+      const fold = element('button', 'fold-window', String(identity.index));
+      fold.title = foldedWindows.has(String(w.id)) ? 'Expand window' : 'Fold window';
+      fold.setAttribute('aria-label', `${fold.title}: ${w.title}`);
+      fold.setAttribute('aria-expanded', String(!foldedWindows.has(String(w.id))));
+      fold.onclick = () => {
+        toggleFold(w.id);
+      };
       head.append(
+        fold,
         element('h2', '', w.title || `Window ${w.id}`),
         element('span', '', quantity(w.tabIds.length, 'tab')),
       );
@@ -641,10 +923,23 @@ function render() {
       rename.setAttribute('aria-label', `Rename window: ${w.title}`);
       rename.onclick = () => renameWindow(head, rename, w);
       head.append(rename);
+      windowPointerSource(head, card);
+      head.tabIndex = 0;
+      head.setAttribute('aria-label', `${w.title}: drag to reorder, or open actions`);
+      bindActions(head, () => windowActions(w, head));
+      head.onkeydown = (event) => {
+        if (event.target === head && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault();
+          openActions(head, windowActions(w, head));
+        }
+      };
       const list = element('ol', 'tabs');
       list.dataset.windowId = w.id;
+      list.hidden = foldedWindows.has(String(w.id));
       for (const tab of tabs) {
-        const changed = mode === 'proposed' && proposal.changedTabIds.includes(tab.id);
+        const changed =
+          ['pending', 'expired'].includes(proposal?.status) &&
+          proposal.changedTabIds.includes(tab.id);
         const item = element('li', `tab${changed ? ' changed' : ''}`);
         item.title = `${tab.title || 'Untitled tab'}\n${tab.url}`;
         item.dataset.tabId = tab.id;
@@ -672,28 +967,29 @@ function render() {
         const detail = text.querySelector('.tab-detail');
         if (tab.pinned) detail.append(element('span', 'tag', 'Pinned'));
         if (group) detail.append(element('span', 'tag', group.title || 'Group'));
-        item.append(text);
+        const origin = windowIdentity(source, tab.windowId, windows);
+        item.style.setProperty('--origin-color', origin.color);
+        const badge = `${origin.index}.${tab.index + 1}`;
+        bindActions(item, () => tabActions(tab, w, item));
         if (!fixed(tab)) {
-          const move = element('button', 'move-handle', '⠿');
+          const move = element('button', 'tab-index', badge);
+          move.title = `Originally ${source.windows.find((win) => win.id === tab.windowId)?.title || `Window ${origin.index}`}, tab ${tab.index + 1}. Move tab`;
           move.setAttribute('aria-label', `Move tab: ${tab.title || 'Untitled tab'}`);
           move.setAttribute('aria-pressed', String(selectedTab === tab.id));
           move.dataset.focusKey = `move-${tab.id}`;
           move.disabled = !editable;
-          move.onclick = (event) => {
-            if (suppressClick === tab.id && event.detail > 0) {
-              suppressClick = undefined;
-              return;
-            }
+          move.onclick = () => {
             selectedTab = selectedTab === tab.id ? undefined : tab.id;
             render();
             if (selectedTab !== undefined) $('destination').focus();
           };
           item.append(move);
-        }
+        } else item.append(element('span', 'tab-index fixed-index', badge));
+        item.append(text);
         list.append(item);
       }
       const end = element('div', 'window-end', 'Drop at end');
-      end.hidden = !editable;
+      end.hidden = !editable || foldedWindows.has(String(w.id));
       card.append(head, list, end);
       return card;
     })
@@ -745,10 +1041,9 @@ function render() {
       const next = node.getBoundingClientRect();
       if (!old || Math.abs(old.x - next.x) + Math.abs(old.y - next.y) < 1) continue;
       node.animate(
-        [
-          { transform: `translate(${old.x - next.x}px, ${old.y - next.y}px)` },
-          { transform: 'translate(0, 0)' },
-        ],
+        // Never animate hit-test geometry: a second drag may begin before this
+        // feedback ends, and its insertion target must already be settled.
+        [{ opacity: 0.55 }, { opacity: 1 }],
         { duration: 160, easing: 'cubic-bezier(.2,.8,.2,1)' },
       );
     }
@@ -756,21 +1051,36 @@ function render() {
   animateNextRender = false;
   if (focusKey)
     document.querySelector(`[data-focus-key="${focusKey}"]`)?.focus({ preventScroll: true });
-  if (data?.error) status(data.error, true);
+  if (data?.error || data?.snapshot?.nativeNames?.status === 'unavailable')
+    status(data.error || data.snapshot.nativeNames.message, true);
 }
 async function refresh() {
-  if (busy || staging || refreshing || !ready || pointerDrag || draggedTab !== undefined) return;
+  if (
+    busy ||
+    staging ||
+    refreshing ||
+    !ready ||
+    pointerDrag ||
+    windowDrag ||
+    draggedTab !== undefined
+  )
+    return;
   refreshing = true;
   $('refresh').disabled = true;
   try {
     await tool('saul_workspace_state', data?.session ? { session: data.session } : {});
-    status(data?.error || '', Boolean(data?.error));
+    const error =
+      data?.error ||
+      (data?.snapshot?.nativeNames?.status === 'unavailable'
+        ? data.snapshot.nativeNames.message
+        : '');
+    status(error || '', Boolean(error));
   } catch (error) {
     approvalToken = undefined;
     status(error.message, true);
   } finally {
     refreshing = false;
-    if (!pointerDrag && draggedTab === undefined) render();
+    if (!pointerDrag && !windowDrag && draggedTab === undefined) render();
   }
 }
 async function applyPlan() {
@@ -787,11 +1097,10 @@ async function applyPlan() {
   busy = true;
   approvalToken = undefined;
   render();
-  status('Applying the reviewed layout…');
+  status('');
   try {
     await tool('saul_workspace_apply', args);
-    status(data.proposal.receipt?.message || 'Finished', data.proposal.status !== 'applied');
-    mode = 'current';
+    status('');
   } catch (error) {
     approvalToken = undefined;
     status(error.message, true);
@@ -826,18 +1135,12 @@ for (const [id, direction] of [
 
 $('session').onchange = async () => {
   draftLayout = undefined;
+  windowOrder = [];
+  foldedWindows.clear();
   selectedTab = undefined;
   data = { ...data, session: $('session').value || undefined, snapshot: null, proposal: null };
   approvalToken = undefined;
   await refresh();
-};
-$('current').onclick = () => {
-  mode = 'current';
-  render();
-};
-$('proposed').onclick = () => {
-  mode = 'proposed';
-  render();
 };
 $('filter').oninput = render;
 window.addEventListener('blur', endDrag);
@@ -856,12 +1159,12 @@ $('ask').onclick = async () => {
   busy = true;
   render();
   try {
-    const text = `Use Saul to propose a window/tab reorganization for browser session ${data.session}. My request: ${goal}\nCall saul_workspace_show for fresh inventory, then saul_workspace_propose with its revision. Preserve pinned tabs and existing groups. Show a dry run in the board and wait for me to click Apply changes to Chrome. Do not execute individual mutations.`;
+    const text = `Use Saul to propose a window/tab reorganization for browser session ${data.session}. My request: ${goal}\nCall saul_workspace_show for fresh inventory, then saul_workspace_propose with its revision. Preserve pinned tabs, existing groups and existing window labels unless a rename helps my request. Deduplicate by default; include duplicate IDs in the full input so the board can review their removal. Show a dry run in the board and wait for me to click Apply. Do not execute individual mutations.`;
     const result = await request('ui/message', { role: 'user', content: [{ type: 'text', text }] });
     if (result?.isError) throw new Error('Codex could not accept the request');
     $('composer').open = false;
     $('composer').querySelector('summary').focus();
-    status('Request sent. The proposed layout will appear here for review.');
+    status('Sent · waiting for a plan');
   } catch (error) {
     status(error.message, true);
   } finally {
@@ -915,6 +1218,8 @@ try {
     if (
       !document.hidden &&
       !draftLayout &&
+      !contextMenu &&
+      !windowDrag &&
       selectedTab === undefined &&
       !document.activeElement?.closest('#board, #session, #proposal, #move-controls')
     )

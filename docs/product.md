@@ -81,6 +81,8 @@ Pinned tabs remain fixed and existing groups move as intact blocks during sortin
 
 Grouping and moving controls appear when tabs are selected (or groups already exist). Optional connection controls are under **Codex connection**, after the tab list.
 
+The Codex board shares reviewed Saul window labels with the extension Tabs selectors. On macOS Chrome, the native helper imports **Name Window** names through AppleScript and applies/verifies reviewed renames in Chrome. macOS Automation errors remain visible; other platforms use Saul labels. Codex reorganizations deduplicate exact HTTP(S) URLs by default, protecting pins and groups; the preview lists closures and offers an opt-out before Apply.
+
 External CLI/MCP tab access is optional and disabled by default. It also supports creating windows from selected ungrouped tabs. A separate **Page reading and actions** switch enables bounded visible-page reads, referenced click/fill actions, and HTTP(S) navigation. Page mutations preview by default. See [native messaging](native-messaging.md).
 
 ## Compatibility

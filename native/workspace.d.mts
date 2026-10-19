@@ -16,12 +16,14 @@ export interface WorkspaceState {
     status: 'pending' | 'applying' | 'applied' | 'stale' | 'failed' | 'expired';
     summary: string;
     windows: ProposalWindow[];
+    deduplicate: boolean;
+    duplicates: { tabId: number; keepTabId: number; url: string }[];
     before: TabSnapshot;
     projected: { id: number | string; title: string; tabIds: number[] }[];
     changedTabIds: number[];
     revision: string;
     expiresAt: number;
-    receipt?: { completedMoves: number; message: string };
+    receipt?: { completedMoves: number; completedClosures: number; message: string };
   };
 }
 export interface WorkspaceResult {

@@ -22,6 +22,7 @@ const tab = (id: number, index: number, title: string, extra = {}) =>
   }) as chrome.tabs.Tab;
 let tabs: chrome.tabs.Tab[];
 const testBrowser = () => ({
+  storage: { session: { get: vi.fn(async () => ({})), set: vi.fn(async (_value: unknown) => {}) } },
   windows: {
     create: vi.fn(async () => ({ id: 20 })),
     get: vi.fn(async (id: number) => ({ id, type: 'normal', incognito: id === 9 })),
@@ -40,6 +41,7 @@ const testBrowser = () => ({
     move: vi.fn(async () => undefined),
     group: vi.fn(async () => 10),
     ungroup: vi.fn(async () => undefined),
+    remove: vi.fn(async (_id: number) => undefined),
   },
   tabGroups: {
     query: vi.fn(async () => [
@@ -66,6 +68,49 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('tab tools', () => {
+  it('shares applied labels in inventory, validates all destinations and previews without writing', async () => {
+    const windows = [{ windowId: 1, title: 'Research' }];
+    await handleTabCall('saul_windows_label', { windows });
+    expect(browser.storage.session.set).not.toHaveBeenCalled();
+    await expect(
+      handleTabCall('saul_windows_label', {
+        windows: [...windows, { windowId: 9, title: 'Private' }],
+        dryRun: false,
+      }),
+    ).rejects.toThrow();
+    expect(browser.storage.session.set).not.toHaveBeenCalled();
+    await handleTabCall('saul_windows_label', { windows, dryRun: false });
+    expect(browser.storage.session.set).toHaveBeenCalledWith({
+      saul_window_labels: { 1: 'Research' },
+    });
+    browser.storage.session.get.mockResolvedValue({ saul_window_labels: { 1: 'Research' } });
+    expect(((await handleTabCall('saul_tabs_list')) as TabSnapshot).windows[0]!.title).toBe(
+      'Research',
+    );
+  });
+  it('previews duplicate closures and rejects protected, navigated or missing keepers before removing tabs', async () => {
+    tabs[4]!.url = tabs[1]!.url;
+    const duplicate = { tabId: 5, keepTabId: 2, url: tabs[1]!.url! };
+    await handleTabCall('saul_tabs_close_duplicates', { duplicates: [duplicate] });
+    expect(browser.tabs.remove).not.toHaveBeenCalled();
+    for (const bad of [
+      { ...duplicate, keepTabId: 999 },
+      { ...duplicate, tabId: 1 },
+      { ...duplicate, url: 'https://changed.test/' },
+      { ...duplicate, keepTabId: 5 },
+    ])
+      await expect(
+        handleTabCall('saul_tabs_close_duplicates', { duplicates: [bad], dryRun: false }),
+      ).rejects.toThrow();
+    tabs[4]!.pendingUrl = 'https://navigating.test/';
+    await expect(
+      handleTabCall('saul_tabs_close_duplicates', { duplicates: [duplicate], dryRun: false }),
+    ).rejects.toThrow();
+    delete tabs[4]!.pendingUrl;
+    expect(browser.tabs.remove).not.toHaveBeenCalled();
+    await handleTabCall('saul_tabs_close_duplicates', { duplicates: [duplicate], dryRun: false });
+    expect(browser.tabs.remove).toHaveBeenCalledWith(5);
+  });
   it('previews new windows and moves exactly the selected tabs in order', async () => {
     expect(await handleTabCall('saul_windows_create', { tabIds: [5, 2] })).toEqual({
       dryRun: true,

@@ -27,7 +27,7 @@ const tool = (
   title,
   description,
   inputSchema: schema,
-  annotations: { readOnlyHint: readOnly, destructiveHint: false, openWorldHint: false },
+  annotations: { readOnlyHint: readOnly, destructiveHint: !readOnly, openWorldHint: false },
   _meta: {
     ui: {
       ...(render ? { resourceUri: APP_URI } : {}),
@@ -49,12 +49,13 @@ export const APP_TOOLS = [
   tool(
     'saul_workspace_propose',
     'Preview a workspace layout',
-    'Stage a dry-run layout for the Saul board. First call saul_workspace_show, then use its session and revision. Assign EVERY unpinned, ungrouped tab exactly once across windows, in desired order. Existing windows use windowId; omit windowId to create a new window. Existing destinations must retain at least one of their original tabs. Pinned tabs/groups remain in their original windows before the movable tabs. Titles persist as Saul window labels after apply; Chrome native window names are unavailable through its extension API. Does not modify Chrome. The user applies it using the board button; never apply with other tools to bypass review.',
+    'Stage a dry-run layout for the Saul board. First call saul_workspace_show, then use its session and revision. Assign EVERY unpinned, ungrouped tab exactly once across windows, in desired order, including duplicates. Exact HTTP(S) URL duplicates are removed by default after review; set deduplicate=false to keep copies. Pins and grouped tabs are never closed. Existing windows use windowId; omit windowId to create a new window. Existing destinations must retain an original tab until moves finish. Keep existing names unless a rename is useful. On macOS Chrome, native names are imported through AppleScript and proposed names apply to Chrome, the extension and board after review. Does not modify Chrome. The user applies it using the board button; never bypass review with other tools.',
     object(
       {
         session,
         revision: { type: 'string', pattern: '^[a-f0-9]{64}$' },
         summary: text,
+        deduplicate: { type: 'boolean', default: true },
         windows: {
           type: 'array',
           minItems: 1,

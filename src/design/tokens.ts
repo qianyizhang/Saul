@@ -1,4 +1,4 @@
-// Generated from DESIGN.md · SHA-256 cc4602874e5b73cb1b29a7509ad5c683b60146ae048501059fc27d1c4a55c492. Do not edit.
+// Generated from DESIGN.md · SHA-256 13d7ef9eb4db189263a91a5f1946a709a326ef3f6f8f865c3271ad6c47cfb3a3. Do not edit.
 export const designColors = {
   primary: '#296e59',
   'primary-dark': '#6ec2a1',
@@ -28,4 +28,10 @@ export const designColors = {
   'warning-dark': '#e2bd83',
   'warning-wash': '#f7efdf',
   'warning-wash-dark': '#403425',
+  'window-blue': '#356a99',
+  'window-blue-dark': '#8ebde5',
+  'window-violet': '#78539a',
+  'window-violet-dark': '#c4a3e2',
+  'window-rose': '#a34f69',
+  'window-rose-dark': '#e4a0b6',
 } as const;

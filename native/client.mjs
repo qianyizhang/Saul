@@ -4,6 +4,9 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { runtimeDirectory, lineDecoder } from './transport.mjs';
 import { validateCall, MAX_MESSAGE } from './protocol.mjs';
+import { createWindowNames, withWindowNames } from './window-names.mjs';
+
+const nativeNames = new Map();
 
 export function request(session, method, params = {}, timeout = 35000) {
   if (!/^[a-f0-9]{16}$/.test(session)) throw new Error('Invalid session ID');
@@ -87,5 +90,14 @@ export async function callTool(name, args = {}) {
   }
   const params = { ...args };
   delete params.session;
-  return request(session, name, params);
+  if (!['saul_tabs_list', 'saul_windows_label'].includes(name))
+    return request(session, name, params);
+  const connected = await request(session, '__ping');
+  let names = nativeNames.get(session);
+  if (!names) {
+    if (nativeNames.size >= 32) nativeNames.delete(nativeNames.keys().next().value);
+    names = createWindowNames({ browserPid: connected.browserPid });
+    nativeNames.set(session, names);
+  }
+  return withWindowNames((method, input) => request(session, method, input), names)(name, params);
 }
