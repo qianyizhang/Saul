@@ -83,14 +83,55 @@ export function projectLayout(before, windows) {
   }
   return projected;
 }
+// Keep the longest ordered run of surviving tabs in place. Departures and
+// duplicate closures shift indices naturally and must not count as moves.
+export function tabMoves(before, projected) {
+  const tabs = new Map(before.tabs.map((tab) => [tab.id, tab]));
+  const moves = [];
+  for (const window of projected) {
+    const original = ordered(before, window.id);
+    const lastFixed = original.filter(fixed).at(-1)?.index ?? -1;
+    const candidates = window.tabIds.filter((id) => {
+      const tab = tabs.get(id);
+      return !fixed(tab) && tab.windowId === window.id && tab.index > lastFixed;
+    });
+    const tails = [],
+      previous = [];
+    for (let i = 0; i < candidates.length; i++) {
+      const position = tabs.get(candidates[i]).index;
+      let low = 0,
+        high = tails.length;
+      while (low < high) {
+        const mid = (low + high) >>> 1;
+        if (tabs.get(candidates[tails[mid]]).index < position) low = mid + 1;
+        else high = mid;
+      }
+      previous[i] = low ? tails[low - 1] : -1;
+      tails[low] = i;
+    }
+    const kept = new Set(window.tabIds.filter((id) => fixed(tabs.get(id))));
+    for (let i = tails.at(-1); i !== undefined && i >= 0; i = previous[i]) kept.add(candidates[i]);
+    let beforeId;
+    // Insert before a settled anchor, from right to left. Outgoing tabs can
+    // remain temporarily; removing them later preserves this relative order.
+    for (const tabId of [...window.tabIds].reverse()) {
+      if (!kept.has(tabId)) moves.push({ tabId, destination: window.id, beforeId });
+      beforeId = tabId;
+    }
+  }
+  return moves;
+}
+
 // Pure expected-state transition. Every applied Chrome operation is checked against it.
-export function movedSnapshot(before, tabId, destination) {
+export function movedSnapshot(before, tabId, destination, index = -1) {
   const next = structuredClone(before);
   const tab = next.tabs.find((t) => t.id === tabId);
   const source = tab.windowId;
   for (const t of next.tabs) if (t.windowId === source && t.index > tab.index) t.index--;
+  const others = ordered(next, destination).filter((t) => t.id !== tabId);
   tab.windowId = destination;
-  tab.index = next.tabs.filter((t) => t.id !== tabId && t.windowId === destination).length;
+  tab.index = index < 0 ? others.length : index;
+  for (const other of others) if (other.index >= tab.index) other.index++;
   if (!next.windows.some((w) => w.id === destination))
     next.windows.push({
       id: destination,
@@ -148,27 +189,23 @@ export function createWorkspace({
         window.title = titles[window.id];
     return snapshot;
   };
-  const state = async (session) => {
+  const withProposal = (current) => {
     expire();
+    const plan = plans.get(current.session);
+    if (['pending', 'expired'].includes(plan?.status) && plan.revision !== current.revision)
+      plan.status = 'stale';
+    const proposal = { ...plan };
+    delete proposal.approvalToken;
+    return { ...current, proposal: plan ? proposal : null };
+  };
+  const state = async (session) => {
     const { sessions } = await call('saul_sessions');
     if (!session && sessions.length === 1) session = sessions[0].session;
     if (!session) return { sessions, snapshot: null, proposal: null };
     if (!sessions.some((s) => s.session === session))
       throw new Error('Browser session disconnected; refresh and select a connected session');
     const snapshot = withLabels(await call('saul_tabs_list', { session }), session);
-    const currentRevision = revision(snapshot);
-    const plan = plans.get(session);
-    if (['pending', 'expired'].includes(plan?.status) && plan.revision !== currentRevision)
-      plan.status = 'stale';
-    const proposal = { ...plan };
-    delete proposal.approvalToken;
-    return {
-      sessions,
-      session,
-      snapshot,
-      revision: currentRevision,
-      proposal: plan ? proposal : null,
-    };
+    return withProposal({ sessions, session, snapshot, revision: revision(snapshot) });
   };
   const response = (data, render = false) => ({
     content: [{ type: 'text', text: JSON.stringify(data) }],
@@ -194,12 +231,7 @@ export function createWorkspace({
       const projected = layout
         .map((w) => ({ ...w, tabIds: w.tabIds.filter((id) => !closing.has(id)) }))
         .filter((w) => w.tabIds.length);
-      const changed = projected
-        .flatMap((w) => w.tabIds.map((id, index) => ({ id, windowId: w.id, index })))
-        .filter((t) => {
-          const old = current.snapshot.tabs.find((x) => x.id === t.id);
-          return t.windowId !== old.windowId || t.index !== old.index;
-        });
+      const moves = tabMoves(current.snapshot, projected);
       const renamed = args.windows.some(
         (w) =>
           w.windowId !== undefined &&
@@ -208,9 +240,9 @@ export function createWorkspace({
               `Window ${current.snapshot.windows.findIndex((x) => x.id === w.windowId) + 1}`),
       );
       const importingLabels = Object.keys(labels.get(args.session)).length > 0;
-      if (!changed.length && !renamed && !duplicates.length && !importingLabels) {
+      if (!moves.length && !renamed && !duplicates.length && !importingLabels) {
         plans.delete(args.session);
-        return response(await state(args.session), true);
+        return response(withProposal(current), true);
       }
       if (plans.size >= 32 && !plans.has(args.session)) plans.delete(plans.keys().next().value);
       plans.set(args.session, {
@@ -224,12 +256,12 @@ export function createWorkspace({
         before: current.snapshot,
         projected,
         changedTabIds: [
-          ...new Set([...changed.map((t) => t.id), ...duplicates.map((d) => d.tabId)]),
+          ...new Set([...moves.map((t) => t.tabId), ...duplicates.map((d) => d.tabId)]),
         ],
         revision: current.revision,
         expiresAt: now() + ttl,
       });
-      return response(await state(args.session), true);
+      return response(withProposal(current), true);
     }
     const current = await state(args.session);
     const plan = plans.get(args.session);
@@ -266,51 +298,43 @@ export function createWorkspace({
           current.snapshot.nativeNames.message ||
             'Native Chrome names unavailable; refresh after granting Automation access',
         );
-      for (const [index, window] of plan.windows.entries()) {
-        let destination = window.windowId;
-        let remaining = window.tabIds;
-        if (destination === undefined) {
+      const moves = tabMoves(plan.before, plan.projected);
+      for (const window of plan.projected) {
+        let destination = typeof window.id === 'number' ? window.id : undefined;
+        for (const move of moves.filter((item) => item.destination === window.id)) {
           await check();
-          const result = await call('saul_windows_create', {
-            session: args.session,
-            tabIds: [remaining[0]],
-            focused: false,
-            dryRun: false,
-          });
-          if (!Number.isSafeInteger(result.windowId))
-            throw new Error('Window creation outcome unknown');
-          destination = result.windowId;
-          expected = movedSnapshot(expected, remaining[0], destination);
-          remaining = remaining.slice(1);
+          if (destination === undefined) {
+            const result = await call('saul_windows_create', {
+              session: args.session,
+              tabIds: [move.tabId],
+              focused: false,
+              dryRun: false,
+            });
+            if (!Number.isSafeInteger(result.windowId))
+              throw new Error('Window creation outcome unknown');
+            destination = result.windowId;
+            expected = movedSnapshot(expected, move.tabId, destination);
+          } else {
+            const remaining = ordered(expected, destination).filter((t) => t.id !== move.tabId);
+            const index =
+              move.beforeId === undefined
+                ? remaining.length
+                : remaining.findIndex((t) => t.id === move.beforeId);
+            if (index < 0) throw new Error('Move anchor no longer exists');
+            await call('saul_tabs_move', {
+              session: args.session,
+              tabIds: [move.tabId],
+              windowId: destination,
+              index,
+              dryRun: false,
+            });
+            expected = movedSnapshot(expected, move.tabId, destination, index);
+          }
           completedMoves++;
           await check();
         }
-        const desired = [
-          ...ordered(expected, destination)
-            .filter(fixed)
-            .map((t) => t.id),
-          ...window.tabIds,
-        ];
         appliedWindows.push({ id: destination, title: window.title });
-        destinations.set(window.windowId ?? `new-${index + 1}`, destination);
-        if (
-          JSON.stringify(ordered(expected, destination).map((t) => t.id)) ===
-          JSON.stringify(desired)
-        )
-          continue;
-        for (const tabId of remaining) {
-          await check();
-          await call('saul_tabs_move', {
-            session: args.session,
-            tabIds: [tabId],
-            windowId: destination,
-            index: -1,
-            dryRun: false,
-          });
-          expected = movedSnapshot(expected, tabId, destination);
-          completedMoves++;
-          await check();
-        }
+        destinations.set(window.id, destination);
       }
       // Move first so existing destinations retain their anchors until all moves
       // complete. Duplicate-only windows can then disappear without index drift.
@@ -331,13 +355,19 @@ export function createWorkspace({
       );
       for (const window of appliedWindows)
         if (actual.windows.some((w) => w.id === window.id)) titles[window.id] = window.title;
-      const windows = Object.entries(titles).map(([id, title]) => ({
-        windowId: Number(id),
-        title,
-        ...(actual.nativeNames?.status === 'available'
-          ? { expectedTitle: actual.windows.find((w) => w.id === Number(id)).title }
-          : {}),
-      }));
+      const windows = Object.entries(titles)
+        .filter(
+          ([id, title]) =>
+            current.snapshot.nativeNames?.status !== 'available' ||
+            actual.windows.find((w) => w.id === Number(id))?.title !== title,
+        )
+        .map(([id, title]) => ({
+          windowId: Number(id),
+          title,
+          ...(actual.nativeNames?.status === 'available'
+            ? { expectedTitle: actual.windows.find((w) => w.id === Number(id)).title }
+            : {}),
+        }));
       if (windows.length) {
         await call('saul_windows_label', { session: args.session, windows, dryRun: false });
         for (const window of expected.windows)

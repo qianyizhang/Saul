@@ -264,7 +264,9 @@ export async function handleTabCallUnlocked(
       remaining[index]!.groupId === remaining[index - 1]!.groupId
     )
       throw new Error('Index would split an existing group');
-    if (!dryRun) {
+    if (!dryRun && tabs.length === 1) {
+      await chrome.tabs.move(tabs[0]!.id!, { windowId: args.windowId, index });
+    } else if (!dryRun) {
       // Remove selected tabs from the destination first by moving them to its end,
       // then fill the final positions from left to right. This avoids index drift.
       for (const tab of tabs)

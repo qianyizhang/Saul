@@ -9,7 +9,7 @@ Saul's existing local MCP server also serves an interactive window-and-tab board
 3. The board shows one editable layout. Window colors and numbers identify destinations; tab badges keep their original window and position (for example, **2.4**) until Apply. Filter by title or domain.
 4. Drag tab rows to rearrange them, including onto folded window headers or **New window**. Click a tab number for keyboard/touch moves. Click a window number to fold it; drag its header to reorder cards locally. **Rename** stages a label change.
 5. Expand **Ask Codex**, write a request and click **Send**. Right-click a tab or window for contextual moves and prompt actions. Prompt actions fill an editable draft; they do not send until you click Send.
-6. Review the compact change bar, including any duplicate closures. **Details** lists removed copies and offers **Remove duplicate tabs**; clear it to keep copies. **Reset** restores the current Chrome layout. **Apply** executes the reviewed proposal and shows a one-line receipt. Failures retain their explanation. The host currently returns a final receipt, not incremental movement counts.
+6. Review the compact change bar: it counts required tab moves, excluding neighbours that merely shift index, and lists duplicate closures separately. **Details** lists removed copies and offers **Remove duplicate tabs**; clear it to keep copies. **Reset** restores the current Chrome layout. **Apply** executes the reviewed proposal and shows a one-line receipt. Failures retain their explanation. The host currently returns a final receipt, not incremental movement counts.
 
 ### Manual controls
 
@@ -48,6 +48,8 @@ Plans live only in the MCP server's memory, one latest proposal per browser sess
 
 The model can create proposals. The apply tool is declared with `ui.visibility: ["app"]`; the host should expose it only to the app. Its single-use token is delivered in result `_meta`, separate from model-visible results, and checked on the server. This is a review boundary within a cooperating MCP host, not protection from other programs running as the same OS user with access to the native bridge.
 
+Preview validation reads one fresh inventory; it does not repeat that read to assemble the response. Native window discovery batches IDs and modes; names are read once per scoped normal window with identity checks. The movement plan keeps a longest ordered subsequence in each window and moves only the remaining tabs; duplicate-only destinations are never created. Single-tab moves go directly to their reviewed insertion index.
+
 The server consumes approval before the first mutation. It validates the starting layout and checks the expected state before and after every move, duplicate closure and label update. Chrome does not offer an atomic multi-window transaction: user actions can race a move, and a failed call may already have changed Chrome. On failure, the UI reports completed moves and refreshes the inventory if possible. It never retries or rolls back automatically. Make a new proposal from the current state.
 
 The board refreshes every ten seconds while visible, pausing during a drag or while move controls are in use. Manual refresh revalidates the preview. Refresh and rendering are read-only. Applying requires the review button; sending a request to Codex does not authorize application. Reviewed window labels are kept in extension session storage; tab inventories, URLs, plans and tokens remain in memory. The MCP host can retain tool results in conversation history.
@@ -63,5 +65,12 @@ The board refreshes every ten seconds while visible, pausing during a drag or wh
 | [Native installer](../native/install.mjs)    | Copies app code and self-contained UI into the existing installation |
 
 `node scripts/setup.mjs --verify` checks the installed tool catalog, HTML resource and live tab inventory. Unit tests cover proposal validation, stale/expired/replaced approvals and partial failures. The disposable-browser test renders the real app in a test MCP host, exercises drag-and-drop, keyboard moves, filtering, pins/groups, stale previews and its message bridge, and applies a plan against real Chromium tabs. This does not by itself establish rendering in the installed Codex desktop host.
+
+Validation timing on 2026-10-19: three isolated dry-run samples per version against
+175 live tabs in eight windows, with native names available in every sample.
+Commit `6e43593` took 2543/2545/2530 ms; the optimized path took 576/570/583 ms
+(77% lower median). The same single-tab move reported 29 index changes before and
+one required move after. These measurements exclude Codex UI transport time and
+never applied a layout or replaced the live app's draft.
 
 References: [OpenAI MCP App UI](https://developers.openai.com/plugins/build/chatgpt-ui), [conversation panels](https://developers.openai.com/plugins/build/extensions), [MCP Apps standard](https://modelcontextprotocol.io/extensions/apps/overview).

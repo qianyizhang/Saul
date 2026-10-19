@@ -251,3 +251,8 @@ describe('tab tools', () => {
     }
   });
 });
+
+it('executes a single-tab move directly at the reviewed final position', async () => {
+  await handleTabCall('saul_tabs_move', { tabIds: [2], windowId: 1, index: 4, dryRun: false });
+  expect(browser.tabs.move.mock.calls).toEqual([[2, { windowId: 1, index: 4 }]]);
+});

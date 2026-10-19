@@ -115,3 +115,67 @@ it('verifies native apply before saving extension labels and never saves a faile
   ).rejects.toThrow('Stale');
   expect(call.mock.calls.map(([method]) => method)).toEqual(['saul_tabs_list']);
 });
+
+it('reads native names with linear Apple events and validates every target before writing', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { runInNewContext } = await import('node:vm');
+  const source = readFileSync(new URL('../native/window-names.jxa', import.meta.url), 'utf8');
+  let idReads = 0,
+    writes = 0;
+  const native = Array.from({ length: 50 }, (_, i) => {
+    let title = `Window ${i}`;
+    const window = {
+      id: () => {
+        idReads++;
+        return i + 1;
+      },
+      tabs: { id: () => [100 + i] },
+    };
+    Object.defineProperty(window, 'givenName', {
+      get: () => () => title,
+      set: (value) => {
+        writes++;
+        title = value;
+      },
+    });
+    return window;
+  });
+  const privateWindow = {
+    id: () => 999,
+    givenName: () => {
+      throw new Error('Private name must not be read');
+    },
+  };
+  const windows = () => [...native, privateWindow];
+  windows.id = () => [...native.map((_, i) => i + 1), 999];
+  windows.mode = () => [...native.map(() => 'normal'), 'incognito'];
+  windows.givenName = () => [...native, privateWindow].map((w) => w.givenName());
+  const context = { Application: () => ({ running: () => true, windows }) };
+  runInNewContext(source, context);
+  const request = {
+    browserPid: 123,
+    action: 'read',
+    windows: native.map((_, i) => ({ windowId: i + 1, tabIds: [100 + i] })),
+  };
+  const result = JSON.parse(context.run([JSON.stringify(request)]));
+  expect(result).toHaveLength(50);
+  expect(result[49]).toEqual({ windowId: 50, title: 'Window 49' });
+  expect(idReads).toBeLessThanOrEqual(50);
+  expect(writes).toBe(0);
+  request.action = 'apply';
+  request.windows.forEach((w, i) => {
+    w.title = `New ${i}`;
+    w.expectedTitle = `Window ${i}`;
+  });
+  request.windows[49].expectedTitle = 'Stale';
+  expect(() => context.run([JSON.stringify(request)])).toThrow('changed since preview');
+  expect(writes).toBe(0);
+  request.windows[49].expectedTitle = 'Window 49';
+  request.windows[49].tabIds = [999];
+  expect(() => context.run([JSON.stringify(request)])).toThrow('tabs changed');
+  expect(writes).toBe(0);
+  request.windows[49].tabIds = [149];
+  const applied = JSON.parse(context.run([JSON.stringify(request)]));
+  expect(applied[49].title).toBe('New 49');
+  expect(writes).toBe(50);
+});

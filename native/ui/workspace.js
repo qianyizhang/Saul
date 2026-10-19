@@ -322,9 +322,14 @@ async function moveTab(tabId, destination, beforeId) {
     return;
   target.tabIds.splice(index, 0, tabId);
   if (JSON.stringify(draft) === JSON.stringify(windows)) return;
-  await stageDraft(source, draft);
+  await stageDraft(source, draft, undefined, tabId);
 }
-async function stageDraft(source, draft, deduplicate = data?.proposal?.deduplicate ?? true) {
+async function stageDraft(
+  source,
+  draft,
+  deduplicate = data?.proposal?.deduplicate ?? true,
+  movedTabId,
+) {
   const submitted = draft.map((w) => ({ ...w, tabIds: [...w.tabIds] }));
   // A deduplicated projection hides removed copies. Retain those inputs while
   // editing or opting out so the server still validates complete tab coverage.
@@ -359,6 +364,15 @@ async function stageDraft(source, draft, deduplicate = data?.proposal?.deduplica
   };
   const sequence = ++editSequence;
   draftLayout = {
+    changedTabIds: [
+      ...new Set([
+        ...(draftLayout?.changedTabIds ??
+          (['pending', 'expired'].includes(data?.proposal?.status)
+            ? data.proposal.changedTabIds
+            : [])),
+        ...(movedTabId === undefined ? [] : [movedTabId]),
+      ]),
+    ],
     source,
     revision: data.revision,
     windows: draft
@@ -403,18 +417,12 @@ async function stageDraft(source, draft, deduplicate = data?.proposal?.deduplica
 function displayProposal() {
   if (!draftLayout) return data?.proposal;
   const { source, windows } = draftLayout;
-  const changedTabIds = windows.flatMap((window) =>
-    window.tabIds.filter((id, index) => {
-      const tab = source.tabs.find((t) => t.id === id);
-      return tab.windowId !== window.id || tab.index !== index;
-    }),
-  );
   return {
     ...data?.proposal,
     status: draftLayout.revision === data.revision ? 'pending' : 'stale',
     receipt: undefined,
     summary: 'Manual arrangement',
-    changedTabIds,
+    changedTabIds: draftLayout.changedTabIds,
     projected: windows,
     before: source,
     expiresAt: 0,
@@ -726,7 +734,7 @@ function renderProposal(proposal, snapshot) {
     : draftLayout
       ? 'Checking…'
       : count
-        ? `${quantity(count, 'tab')} to rearrange${renames ? ` · ${quantity(renames, 'rename')}` : ''}`
+        ? `${quantity(count, 'tab')} to move${renames ? ` · ${quantity(renames, 'rename')}` : ''}`
         : renames
           ? `${quantity(renames, 'window')} to rename`
           : duplicates.length
@@ -735,7 +743,7 @@ function renderProposal(proposal, snapshot) {
   if (proposal.status === 'applied')
     message =
       count || receipt?.completedClosures
-        ? `Applied · ${quantity(count, 'tab')} rearranged${receipt?.completedClosures ? ` · ${receipt.completedClosures} closed` : ''}`
+        ? `Applied · ${quantity(count, 'tab')} moved${receipt?.completedClosures ? ` · ${receipt.completedClosures} closed` : ''}`
         : 'Applied · window names updated';
   else if (proposal.status === 'stale') message = 'Tabs changed · arrange again';
   else if (proposal.status === 'failed')

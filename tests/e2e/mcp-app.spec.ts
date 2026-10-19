@@ -308,11 +308,7 @@ test('MCP App renders real tabs, sends a Codex request and applies only after it
   expect(new Set(moved.map((t) => t.windowId)).size).toBe(1);
   expect(moved[0]!.windowId).not.toBe(before.tabs.find((t) => t.id === chosen[0])!.windowId);
   expect(moved.sort((a, b) => a.index - b.index).map((t) => t.id)).toEqual(chosen);
-  const changed = after.tabs.filter((tab) => {
-    const original = before.tabs.find((item) => item.id === tab.id)!;
-    return original.windowId !== tab.windowId || original.index !== tab.index;
-  });
-  await expect(ui.locator('.proposal-summary')).toContainText(`${changed.length} tabs rearranged`);
+  await expect(ui.locator('.proposal-summary')).toContainText(`${chosen.length} tabs moved`);
   await host.setViewportSize({ width: 390, height: 850 });
   await expect(ui.locator('body')).toBeVisible();
   expect(await ui.locator('body').evaluate((body) => body.scrollWidth <= innerWidth)).toBe(true);
@@ -768,6 +764,7 @@ test('window cards fold, reorder locally and accept drops while folded; contextu
   await expect(target.locator('.tabs')).toBeHidden();
   await row.dragTo(target.locator('h2'));
   await expect(ui.locator('#apply')).toBeEnabled();
+  await expect(ui.locator('.proposal-summary')).toHaveText('1 tab to move');
   await expect(target.locator(`[data-tab-id="${articleTab.id}"]`)).toHaveCount(1);
   await target.getByRole('button', { name: 'Expand window: Window 2', exact: true }).click();
   await expect(row.locator('.tab-index')).toHaveText(badge!);

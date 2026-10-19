@@ -133,6 +133,7 @@ Cards fold and can be dragged into a preferred board order without changing Chro
 Drag tab rows to arrange; their numbered badge offers keyboard and touch moves.
 Right-click a tab or window for contextual moves and editable prompt actions.
 Prompt actions fill the composer; only Send sends them to Codex.
+Count the minimum required tab moves, excluding neighbours that only shift position.
 Keep success to one line. Details holds receipts, removed copies and the reversible
 duplicate-removal preference; duplicate counts remain visible beside Apply.
 Never invent incremental progress when the host only returns a final receipt.

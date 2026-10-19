@@ -1,5 +1,12 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { createWorkspace, projectLayout, revision, closedSnapshot } from '../native/workspace.mjs';
+import {
+  createWorkspace,
+  projectLayout,
+  revision,
+  closedSnapshot,
+  tabMoves,
+  movedSnapshot,
+} from '../native/workspace.mjs';
 import { APP_TOOLS } from '../native/app-protocol.mjs';
 import { createWindowLabels } from '../native/window-labels.mjs';
 import { mkdtempSync, rmSync, readFileSync, statSync } from 'node:fs';
@@ -43,9 +50,15 @@ beforeEach(() => {
     from.forEach((t, index) => {
       t.index = index;
     });
-    const others = snapshot.tabs.filter((t) => t.windowId === windowId && t !== tab);
-    tab.windowId = windowId;
-    tab.index = others.length;
+    const others = snapshot.tabs
+      .filter((t) => t.windowId === windowId && t !== tab)
+      .sort((a, b) => a.index - b.index);
+    const index = name === 'saul_windows_create' || args.index === -1 ? others.length : args.index;
+    others.splice(index, 0, tab);
+    others.forEach((t, index) => {
+      t.windowId = windowId;
+      t.index = index;
+    });
     snapshot.windows = snapshot.windows.filter((w) =>
       snapshot.tabs.some((t) => t.windowId === w.id),
     );
@@ -394,4 +407,132 @@ it('can label a window containing only pins/groups while rejecting empty new win
       { title: 'Empty', tabIds: [] },
     ]),
   ).toThrow('at least one tab');
+});
+
+it('validates a proposal with one fresh inventory read and still rejects stale apply', async () => {
+  call.mockClear();
+  const result = await propose();
+  expect(call.mock.calls.filter(([name]) => name === 'saul_tabs_list')).toHaveLength(1);
+  expect(result._meta.approvalToken).toBeTruthy();
+  snapshot.tabs[2].url = 'https://changed-after-validation.test/';
+  await expect(workspace('saul_workspace_apply', approve(result))).rejects.toThrow('stale');
+  expect(mutations()).toEqual([]);
+});
+
+it('counts and executes one cross-window move without moving the shifted neighbours', async () => {
+  for (let i = 0; i < 40; i++)
+    snapshot.tabs.push({
+      id: 1000 + i,
+      windowId: 2,
+      index: 2 + i,
+      pinned: false,
+      groupId: -1,
+      url: `https://tab${i}.test/`,
+    });
+  const plan = await propose([
+    { windowId: 1, title: 'Work', tabIds: [12, 20] },
+    {
+      windowId: 2,
+      title: 'Reading',
+      tabIds: snapshot.tabs.filter((t) => t.windowId === 2 && t.id !== 20).map((t) => t.id),
+    },
+  ]);
+  expect(plan.structuredContent.proposal.changedTabIds).toEqual([20]);
+  const result = await workspace('saul_workspace_apply', approve(plan));
+  expect(result.structuredContent.proposal.status).toBe('applied');
+  expect(result.structuredContent.proposal.receipt.completedMoves).toBe(1);
+  expect(mutations()).toEqual([
+    ['saul_tabs_move', { session, tabIds: [20], windowId: 1, index: 3, dryRun: false }],
+  ]);
+  expect(snapshot.tabs.find((t) => t.id === 21).index).toBe(0);
+});
+
+it('counts a same-window rotation as one move and does not move tabs merely shifted by a closure', () => {
+  const before = {
+    windows: [{ id: 1 }],
+    groups: [],
+    tabs: Array.from({ length: 20 }, (_, i) => ({
+      id: i,
+      index: i,
+      windowId: 1,
+      pinned: false,
+      groupId: -1,
+    })),
+  };
+  expect(
+    tabMoves(before, [{ id: 1, tabIds: [...Array.from({ length: 19 }, (_, i) => i + 1), 0] }]).map(
+      (m) => m.tabId,
+    ),
+  ).toEqual([0]);
+  expect(
+    tabMoves(before, [{ id: 1, tabIds: Array.from({ length: 19 }, (_, i) => i + 1) }]),
+  ).toEqual([]);
+});
+
+it('the minimum-move planner reconstructs every five-tab permutation', () => {
+  const ids = [1, 2, 3, 4, 5];
+  const before = {
+    windows: [{ id: 1 }],
+    groups: [],
+    tabs: ids.map((id, index) => ({ id, index, windowId: 1, pinned: false, groupId: -1 })),
+  };
+  const permutations = (list) =>
+    list.length
+      ? list.flatMap((id, i) =>
+          permutations(list.filter((_, j) => i !== j)).map((rest) => [id, ...rest]),
+        )
+      : [[]];
+  for (const target of permutations(ids)) {
+    const moves = tabMoves(before, [{ id: 1, tabIds: target }]);
+    const actual = [...ids];
+    for (const move of moves) {
+      actual.splice(actual.indexOf(move.tabId), 1);
+      actual.splice(
+        move.beforeId === undefined ? actual.length : actual.indexOf(move.beforeId),
+        0,
+        move.tabId,
+      );
+    }
+    expect(actual).toEqual(target);
+    // Independent exhaustive subsequence oracle, rather than the planner's LIS algorithm.
+    let longest = 0;
+    for (let mask = 0; mask < 32; mask++) {
+      const kept = ids.filter((_, i) => mask & (1 << i));
+      if (kept.every((id, i) => i === 0 || target.indexOf(kept[i - 1]) < target.indexOf(id)))
+        longest = Math.max(longest, kept.length);
+    }
+    expect(moves).toHaveLength(ids.length - longest);
+  }
+});
+
+it('keeps fixed groups as anchors when movable tabs originally precede them', async () => {
+  snapshot.tabs.find((t) => t.id === 12).index = 1;
+  snapshot.tabs.find((t) => t.id === 11).index = 2;
+  const before = structuredClone(snapshot);
+  const plan = await propose([
+    { windowId: 1, title: 'Work', tabIds: [12] },
+    { windowId: 2, title: 'Reading', tabIds: [20, 21] },
+  ]);
+  expect(plan.structuredContent.proposal.changedTabIds).toEqual([12]);
+  const result = await workspace('saul_workspace_apply', approve(plan));
+  expect(result.structuredContent.proposal.status).toBe('applied');
+  expect(snapshot.groups).toEqual(before.groups);
+  expect(mutations().map(([, args]) => args.tabIds)).toEqual([[12]]);
+});
+
+it('simulates explicit final insertion indices within and across windows', () => {
+  const moved = movedSnapshot(snapshot, 21, 1, 2);
+  expect(
+    moved.tabs
+      .filter((t) => t.windowId === 1)
+      .sort((a, b) => a.index - b.index)
+      .map((t) => t.id),
+  ).toEqual([10, 11, 21, 12]);
+  const same = movedSnapshot(snapshot, 21, 2, 0);
+  expect(
+    same.tabs
+      .filter((t) => t.windowId === 2)
+      .sort((a, b) => a.index - b.index)
+      .map((t) => t.id),
+  ).toEqual([21, 20]);
 });
