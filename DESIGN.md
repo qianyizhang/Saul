@@ -150,6 +150,23 @@ adding a slogan above an input, or boxing every history row. A new lookup puts i
 inputs near the heading; a saved answer gives that space back to reading. Keep
 configuration and history management outside compact reading surfaces.
 
+### First-read clarity
+
+A surface should make its subject, current state and next useful action apparent
+before the user reads supporting detail. Give each visible fact a purpose in that
+task. Group comparable values by meaning and unit; use alignment and typography
+to distinguish labels from values. Place caveats beside the claim they qualify.
+Keep the displayed answer, editable draft and saved configuration visibly distinct.
+
+Input labels remain identifiable after typing, especially in multi-field forms.
+Disclosures name what they reveal and have a full-row activation target. Opening
+one preserves selection, draft and reading position. Essential actions, errors
+and unsaved work remain reachable in narrow layouts and in every display mode.
+
+Evaluate a feature in its surrounding screen and sibling surfaces. Finish the
+[feature UI review](design/SKILL.md#feature-ui-review) before claiming visual
+completion; a build or token check alone does not establish readability.
+
 ## Minimum Mode
 
 Minimum Mode is the default presentation for personal use. It is reversible in
@@ -272,11 +289,25 @@ actual runner/provider signals, never a timer. Keep queued work labelled
 **Waiting…**. Reduced motion uses a static centered light. Keep the textual
 status visible in Minimum Mode and reserve the divider height to avoid jumps.
 
+### Answer details
+
+Give each fact one labelled place. Metadata uses aligned label/value columns,
+muted labels and primary-text values; never a dot-separated sentence of unrelated
+names and numbers. Wrap long values within their column. Group token counts and
+timing by unit, with tabular digits and units beside the values.
+
+Details describes the displayed answer. Keep current draft settings separate:
+show them when composing, or behind **Next lookup** when reading. Do not expand
+both model summaries by default. Keep requested speed and recorded service tier
+separately labelled; unknown values stay unknown. Place **Details** directly beside
+**Inspect input/output**, not inside More. Inspection need not repeat metadata
+already available for the same answer. Use full-row disclosure targets.
+
 ### Input/output inspection
 
 Offer **Inspect input/output** on each answer and earlier attempt, collapsed by
 default in both Minimum Mode and Standard view. Inspect the recorded attempt,
-never the current draft or settings. Keep its status and model beside the content.
+never the current draft or settings. Keep its status beside the content; model identity belongs in Details.
 Use labelled, selectable blocks for **Instructions**, **Context / inputs**,
 **Prompt · user**, and **Response · raw text**. Context shows the saved source
 fields; the assembled prompt is the authority for what was submitted. Use quiet

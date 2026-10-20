@@ -99,6 +99,19 @@ In `pnpm test:user`:
 
 A successful smoke run verifies setup only. Record the built source scope, passed checks, and untested live-provider behavior after hands-on review.
 
+## Metadata review — 2026-10-20
+
+Formatting, lint, types, local links, design receipts and the production build passed.
+All 194 unit/transport cases passed across the sandboxed run and the approved rerun
+of the two socket-dependent files. Browser coverage finished with 72 cases passing
+and five optional/disabled cases skipped: the initial broad run passed 70, then all
+14 affected layout/configuration/inspection/Minimum Mode cases passed after fixing
+two test assumptions. The final rerun checked labelled value-column alignment,
+long model/preset wrapping, keyboard disclosure activation and overflow at 360,
+440 and 1000 px in light/dark appearances. Inspected screenshots also covered
+settings, recipes, summary reading, tab boards and error states. All browser data
+came from disposable local fixtures; the installed extension was not reloaded.
+
 ## Evidence limits
 
 The default browser suite uses deterministic local fixtures. It does not verify live provider credentials/output, actual Chrome on-device model download/generation, personal native-host registration, or other browsers. Benchmark reproduction and scope are documented in [benchmarks](benchmarks/README.md).

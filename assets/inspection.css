@@ -72,3 +72,44 @@
     min-height: 44px;
   }
 }
+
+/* Keep the same metadata hierarchy in page overlays and the history workspace. */
+.saul-run-details {
+  margin-top: 12px;
+  font-size: var(--design-size-caption);
+  color: var(--design-color-muted);
+}
+.saul-run-details > summary {
+  min-height: 32px;
+  padding: 6px 0;
+  cursor: pointer;
+}
+.saul-metadata {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 12px;
+  max-width: 420px;
+  font-variant-numeric: tabular-nums;
+}
+.saul-metadata > div {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 16px;
+  align-items: baseline;
+}
+.saul-metadata dt {
+  color: var(--design-color-muted);
+}
+.saul-metadata dd {
+  margin: 0;
+  color: var(--design-color-ink);
+  overflow-wrap: anywhere;
+}
+.saul-usage-link {
+  text-decoration: underline;
+}
+@media (pointer: coarse) {
+  .saul-run-details > summary {
+    min-height: 44px;
+  }
+}

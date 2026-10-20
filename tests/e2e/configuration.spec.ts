@@ -124,7 +124,7 @@ test('failed different-recipe attempts keep shown-answer metadata; Retry and fol
     await openFirstPageExplanation(article);
     const card = article.getByRole('region', { name: 'Saul explanation' });
     await card.getByRole('button', { name: 'More', exact: true }).click();
-    const detailSummary = card.locator('summary').filter({ hasText: /^Details$/ });
+    const detailSummary = card.locator(':scope > div > .saul-run-details > summary');
     await detailSummary.click();
     const details = detailSummary.locator('..');
     await expect(details).toContainText('Explain');

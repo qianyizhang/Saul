@@ -51,9 +51,7 @@ export function InputOutputInspector({ run }: { run: RunResult }) {
       <summary>Inspect input/output</summary>
       {open && (
         <div className="saul-inspection-content">
-          <p className="saul-inspection-note">
-            {run.status} · {run.model} · {new Date(run.createdAt).toLocaleString()}
-          </p>
+          <p className="saul-inspection-note">{run.status}</p>
           <p className="saul-inspection-note">
             Saved text for this attempt. Context fields are included in the assembled prompt.
           </p>

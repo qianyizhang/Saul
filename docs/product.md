@@ -41,7 +41,8 @@ The popup opens directly to History. Search and bookmarks stay visible; export a
 **Minimum Mode** is on by default. It keeps source links and essential actions visible,
 removes routine instructions and repeated headings, and places follow-ups, past attempts,
 and selected-entry deletion under **More**. Model and timing information is under
-**Details**. Errors, active progress, incomplete results, and unsaved settings remain
+**Details**, directly below the answer. Details uses labelled columns for the saved
+attempt’s recipe, preset, provider, model, creation time and duration. Errors, active progress, incomplete results, and unsaved settings remain
 visible. Turn it off in Settings for the fuller presentation; the choice saves
 immediately and independently of provider drafts, and updates open page overlays.
 

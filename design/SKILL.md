@@ -14,6 +14,33 @@ representative rendered screens and agree on material identity changes before ap
 Use the Google Labs DESIGN.md alpha format: normative YAML values plus concise
 rationale, interaction, adaptation, and motion guidance. Preserve unknown prose.
 
+## Feature UI review
+
+Apply this sequence to new features and to changes in labels, forms, metadata,
+actions or disclosures. Keep the review in the existing task and design owners;
+a separate design document is needed only for a new reusable decision.
+
+1. **Frame the task.** Inspect the current rendered surface. State who is using it,
+   what they need to decide or do, and which answer/draft/configuration the UI
+   describes. List the affected sibling surfaces and meaningful states before coding.
+   Done when the default view and primary action are unambiguous.
+2. **Budget the information.** Assign each fact or control to the default view,
+   a named disclosure, or Settings. Remove duplicates; label values and units;
+   keep editable fields identifiable after filling. Use an existing shared pattern
+   where its semantics match. Done when every visible element supports a decision,
+   action or necessary status and the first read works without explanatory prose.
+3. **Exercise the result.** Inspect actual native views or the built browser UI,
+   including populated/long content, missing data, active/error states, narrow/wide,
+   light/dark and each affected presentation mode. Click the whole disclosure row,
+   follow keyboard focus, and check overflow and draft preservation. Use safe fixtures
+   for mutations. Compare the complete screen with its sibling surfaces, not only
+   the changed component. Done when every affected state has evidence or a named limit.
+4. **Close the findings.** Fix observed confusion, crowding, repeated facts and lost
+   context, then recheck the affected state. Keep source, fixtures, documentation and
+   generated design receipts consistent. Deliver a current screenshot and distinguish
+   source/build, installed UI and live-service verification. Report blocked checks
+   explicitly; code review and passing tests do not replace rendered acceptance.
+
 ## Generate
 
 `generate.mjs` uses the pinned `@google/design.md@0.4.0` parser/linter and

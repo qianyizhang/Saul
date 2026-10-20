@@ -5,6 +5,7 @@ import { TagStreamParser } from '../parser/tag-stream-parser';
 import { AnnotatedTextView } from './AnnotatedTextView';
 import { useAnchoredPosition } from './useAnchoredPosition';
 import { InputOutputInspector } from './InputOutputInspector';
+import { RunDetails } from './RunDetails';
 export const runLabel = (status: RunStatus) =>
   ({
     queued: 'Waiting…',
@@ -54,6 +55,7 @@ export function ExplanationCard({
   const latest = passage.latest,
     answer = passage.completed || latest;
   const active = ['queued', 'running', 'saving'].includes(latest.status);
+  const earlierRuns = runs?.filter((run) => run.id !== answer.id && run.id !== latest.id);
   const segments = new TagStreamParser().feed(answer.responseRaw);
   const activity = latest.activity || (latest.responseRaw ? 'generating' : 'waiting');
   const activityLabel = {
@@ -163,9 +165,11 @@ export function ExplanationCard({
           <details className="text-sm mt-3">
             <summary>Latest attempt · {runLabel(latest.status)}</summary>
             <AnnotatedTextView segments={new TagStreamParser().feed(latest.responseRaw)} />
+            <RunDetails run={latest} />
             <InputOutputInspector key={latest.id} run={latest} />
           </details>
         )}
+        <RunDetails key={`details-${answer.id}`} run={answer} />
         <InputOutputInspector key={answer.id} run={answer} />
         {error && (
           <p role="alert" className="text-sm text-danger mt-2">
@@ -205,41 +209,20 @@ export function ExplanationCard({
             >
               Past attempts
             </button>
-            {runs &&
-              runs.map((run) => (
-                <details key={run.id} className="mt-2">
-                  <summary>
-                    {runLabel(run.status)} · {new Date(run.createdAt).toLocaleString()}
-                  </summary>
-                  {run.error && <p>{run.error}</p>}
-                  <AnnotatedTextView segments={new TagStreamParser().feed(run.responseRaw)} />
-                  <InputOutputInspector run={run} />
-                </details>
-              ))}
-            <details className="text-xs text-muted mt-2">
-              <summary>Details</summary>
-              <p>
-                {answer.recipe?.name}
-                {answer.preset?.name ? ` · ${answer.preset.name}` : ''}
-              </p>
-              <p>
-                {answer.model}
-                {answer.latencyMs ? ` · ${(answer.latencyMs / 1000).toFixed(1)}s` : ''}
-              </p>
-              {answer.provider === 'chatgpt-plan' && (
-                <p>
-                  ChatGPT plan ·{' '}
-                  <a
-                    href="https://chatgpt.com/settings/usage"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="underline"
-                  >
-                    Manage usage
-                  </a>
-                </p>
-              )}
-            </details>
+            {earlierRuns?.length === 0 && (
+              <p className="text-xs text-muted">No earlier attempts.</p>
+            )}
+            {earlierRuns?.map((run) => (
+              <details key={run.id} className="mt-2">
+                <summary>
+                  {runLabel(run.status)} · {new Date(run.createdAt).toLocaleString()}
+                </summary>
+                {run.error && <p>{run.error}</p>}
+                <AnnotatedTextView segments={new TagStreamParser().feed(run.responseRaw)} />
+                <RunDetails run={run} />
+                <InputOutputInspector run={run} />
+              </details>
+            ))}
           </div>
         )}
       </div>

@@ -16,6 +16,7 @@ import { AnnotatedTextView } from '../surface/AnnotatedTextView';
 import { TagStreamParser } from '../parser/tag-stream-parser';
 import { downloadMarkdown, safeSource } from './format';
 import { InputOutputInspector } from '../surface/InputOutputInspector';
+import { RunDetails } from '../surface/RunDetails';
 
 export function Library({
   compact = false,
@@ -240,6 +241,10 @@ export function Library({
                       </p>
                     )}
                     <AnnotatedTextView segments={new TagStreamParser().feed(item.responseRaw)} />
+                    <RunDetails
+                      key={`details-${(item.completed || item.latest).id}`}
+                      run={item.completed || item.latest}
+                    />
                     <InputOutputInspector
                       key={(item.completed || item.latest).id}
                       run={item.completed || item.latest}
@@ -257,23 +262,10 @@ export function Library({
                             <AnnotatedTextView
                               segments={new TagStreamParser().feed(run.responseRaw)}
                             />
+                            <RunDetails run={run} />
                             <InputOutputInspector run={run} />
                           </details>
                         ))}
-                      <details className="small muted">
-                        <summary>Details</summary>
-                        {(item.completed || item.latest).recipe && (
-                          <p>
-                            {(item.completed || item.latest).recipe!.name} ·{' '}
-                            {(item.completed || item.latest).preset?.name}
-                          </p>
-                        )}
-                        <p>
-                          {item.model}
-                          {item.latencyMs ? ` · ${(item.latencyMs / 1000).toFixed(1)}s` : ''}
-                        </p>
-                        <time>{new Date(item.createdAt).toLocaleString()}</time>
-                      </details>
                       {minimum && (
                         <button
                           className="btn danger"

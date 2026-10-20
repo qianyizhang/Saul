@@ -183,3 +183,73 @@ test('shared appearance supports concept notes, page lists, errors and reduced-m
     await server.close();
   }
 });
+
+test('answer metadata stays aligned and readable in cards and history at compact and wide widths', async ({
+  sandbox,
+  fixtureServer,
+}, info) => {
+  const initialRequests = fixtureServer.requests.length;
+  const { popup, context } = await sandbox.launch();
+  await configureFixtureProvider(popup, fixtureServer.origin);
+  await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  const longModel = 'test-model-with-a-deliberately-long-identifier-for-wrapping';
+  await popup.getByLabel('Model name', { exact: true }).fill(longModel);
+  await popup
+    .getByLabel('Preset name', { exact: true })
+    .fill('Careful reading with a deliberately long preset name');
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
+  const article = await context.newPage();
+  await article.goto(fixtureServer.origin + '/article');
+  await article.locator('#concept').click({ clickCount: 3 });
+  await article.getByRole('button', { name: 'Explain', exact: true }).click();
+  await article.getByRole('button', { name: 'View', exact: true }).click();
+  await expect(article.getByRole('button', { name: 'Regenerate', exact: true })).toBeVisible();
+  await popup.getByRole('button', { name: 'History', exact: true }).click();
+  await popup.locator('.history-title').click();
+  for (const [name, page] of [
+    ['card', article],
+    ['history', popup],
+  ] as const) {
+    const details = page.locator('.saul-run-details').first();
+    // Details is available without opening More; native summary supports keyboard activation.
+    await details.locator('summary').focus();
+    await page.keyboard.press('Enter');
+    await expect(details).toHaveAttribute('open');
+    await expect(details.locator('dt')).toHaveText([
+      'Created',
+      'Recipe',
+      'Preset',
+      'Provider',
+      'Model',
+      'Total time',
+    ]);
+    await expect(details.locator('dd').filter({ hasText: longModel })).toHaveCount(1);
+    for (const width of [360, 440, 1000]) {
+      for (const colorScheme of ['light', 'dark'] as const) {
+        await page.setViewportSize({ width, height: 820 });
+        await page.emulateMedia({ colorScheme });
+        await details.scrollIntoViewIfNeeded();
+        const layout = await details.locator('.saul-metadata').evaluate((list) => {
+          const values = [...list.querySelectorAll('dd')];
+          const labels = [...list.querySelectorAll('dt')];
+          return {
+            starts: values.map((el) => el.getBoundingClientRect().x),
+            fits: values.every((el) => el.scrollWidth <= el.clientWidth),
+            distinct: getComputedStyle(values[0]!).color !== getComputedStyle(labels[0]!).color,
+          };
+        });
+        expect(Math.max(...layout.starts) - Math.min(...layout.starts)).toBeLessThan(1);
+        expect(layout.fits).toBe(true);
+        expect(layout.distinct).toBe(true);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
+        await page.screenshot({
+          path: info.outputPath(`metadata-${name}-${width}-${colorScheme}.png`),
+        });
+      }
+    }
+  }
+  expect(fixtureServer.requests).toHaveLength(initialRequests + 1);
+});
