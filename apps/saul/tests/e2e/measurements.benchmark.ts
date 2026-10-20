@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { runDatabaseFixture } from './database-harness.ts';
 import { createSandbox } from './support.ts';
 
@@ -26,8 +26,7 @@ test('record SQLite WASM OPFS scale', async ({}, info) => {
     };
     for (const runs of [50_000, 100_000])
       report.cases.push(await runDatabaseFixture(popup, { action: 'scale', runs }));
-    await mkdir('docs/benchmarks', { recursive: true });
-    await writeFile('docs/benchmarks/reading-scale.json', JSON.stringify(report, null, 2) + '\n');
+    await writeFile(info.outputPath('reading-scale.json'), JSON.stringify(report, null, 2) + '\n');
     expect(report.cases).toHaveLength(2);
   } finally {
     await sandbox.close(info.status !== info.expectedStatus);
@@ -46,9 +45,8 @@ test('record populated-page annotation performance', async ({}, info) => {
       const fixture = await import(chrome.runtime.getURL('marker-fixture.js'));
       return [await fixture.measureMarkers(100), await fixture.measureMarkers(1000)];
     })) as MarkerMeasurement[];
-    await mkdir('docs/benchmarks', { recursive: true });
     await writeFile(
-      'docs/benchmarks/reading-rendering.json',
+      info.outputPath('reading-rendering.json'),
       JSON.stringify(
         { recordedAt: new Date().toISOString(), browser: context.browser()?.version(), cases },
         null,
@@ -90,9 +88,8 @@ test('record CSS Highlight support in target Chrome', async ({}, info) => {
       style.remove();
       return { highlights: true, decoration, hitTesting };
     });
-    await mkdir('docs/benchmarks', { recursive: true });
     await writeFile(
-      'docs/benchmarks/rendering-capabilities.json',
+      info.outputPath('rendering-capabilities.json'),
       JSON.stringify({ browser: context.browser()?.version(), ...capability }, null, 2) + '\n',
     );
     expect(capability.highlights).toBe(true);

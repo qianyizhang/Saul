@@ -40,6 +40,9 @@ live inference. Report live verification separately.
 
 ## macOS UI and browser verification
 
+Save disposable captures/review exports under root `.artifacts/ez/<run>/`; follow
+the [artifact policy](../../docs/artifacts.md). Keep build bundles in `dist/`.
+
 Native visual checks use the built `.app`. Do not call a browser screenshot a
 native UI test. For browser-launching tests on this Mac, request execution outside
 the restricted command sandbox from the first launch, with the specific command

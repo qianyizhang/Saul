@@ -43,7 +43,6 @@ jobs:
         if: failure()
         with:
           name: browser-diagnostics
-          path: |
-            apps/saul/playwright-report/
-            apps/saul/test-results/
+          path: .artifacts/saul/
+          include-hidden-files: true
           retention-days: 7

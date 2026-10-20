@@ -47,10 +47,11 @@ Validation:
 The preference-race and repeated-Escape regressions failed against the prior build
 at their intended assertions and passed against the final implementation.
 
-Fresh browser captures are in ignored `test-results-parity-final/` and
-`test-results-parity-configuration-final/`; the initial comparison is in
-`test-results-design-before/`. Native captures and the local annotation review
-remain outside Git in the task's design-review artifact folder.
+The disposable browser captures for these reviews were retired during artifact
+cleanup on 2026-10-20. The observations and source receipts here are retained;
+those captures are no longer available. Future captures follow the
+[artifact policy](../../../docs/artifacts.md). Native captures and the local
+annotation review were stored outside Git in the task's design-review folder.
 
 Limits: the previews use disposable fixture data. Live sign-in, model inference,
 installed-app upgrade, native mobile, and a full assistive-technology audit are
@@ -96,8 +97,8 @@ The local EZ release executable is
 Inspected Saul popup/history/settings/tabs, wide library, page card, concept tooltip,
 page list, submission-error notification, incomplete answer, and the MCP tab board.
 The review caught and fixed incorrect body-font inheritance in concept notes and
-the Explain trigger. Browser screenshots are disposable local evidence under
-`test-results-design-final/`; they are not committed fixtures.
+the Explain trigger. The disposable browser screenshots were retired on 2026-10-20; they were not
+committed fixtures.
 
 Inspected actual EZ production view sources in the separate `EZ Design Preview.app`:
 main and Quick Lookup, light and dark. It uses temporary fixture history, never

@@ -33,6 +33,8 @@ Choose tests that exercise behavior, failure recovery or persisted data; avoid s
 
 ## Browser execution
 
+Use the root [artifact policy](../../docs/artifacts.md) for test outputs and cleanup.
+
 Read the [browser-testing skill](../../.agents/skills/saul-browser-testing/SKILL.md).
 On this Mac, request approved execution outside the restricted command sandbox for
 the first browser launch. Keep ordinary checks sandboxed. Use disposable profiles

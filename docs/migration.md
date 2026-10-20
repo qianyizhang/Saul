@@ -22,8 +22,9 @@ bundle/extension identities. EZ's ignored signing fingerprint is retained at
 The existing root `.output/chrome-mv3` is deliberately retained at its loaded
 extension path. It is an installed artifact, not a source compatibility layer;
 remove it only after an explicit identity/data-preserving Chrome upgrade. New
-browser builds and diagnostics belong under `apps/saul`; native builds belong
-under `apps/ez`. Obsolete root WXT metadata and disposable test reports are removed.
+browser builds belong under `apps/saul`; native builds belong under `apps/ez`.
+Disposable diagnostics use root `.artifacts/` under the [artifact policy](artifacts.md).
+Obsolete root WXT metadata and disposable test reports are removed.
 Benchmark measurements remain under `apps/saul/docs/benchmarks`.
 
 ## Verification — 2026-10-20

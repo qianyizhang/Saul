@@ -19,6 +19,10 @@ browser checks from native checks. For browser launches on this Mac, use approve
 execution outside the command sandbox, disposable profiles, and the existing
 startup guard; see [browser testing](apps/saul/docs/testing.md).
 
+Write disposable diagnostics, screenshots and review exports under root `.artifacts/`.
+Follow the [artifact policy](docs/artifacts.md) for retention and cleanup; never put
+source, credentials or durable evidence there.
+
 Preserve concurrent edits and stage explicit owned paths. Installed extension
 identity, bundle/signing identity and credential-store IDs are migration contracts,
 not branding strings. See [setup](docs/setup.md) before changing installed paths.

@@ -4,14 +4,7 @@ import ts from 'typescript-eslint';
 
 export default ts.config(
   {
-    ignores: [
-      '.output/**',
-      '.wxt/**',
-      '.pnpm-store/**',
-      'test-results*/**',
-      'playwright-report/**',
-      'coverage/**',
-    ],
+    ignores: ['.output/**', '.wxt/**', '.pnpm-store/**', 'coverage/**'],
   },
   js.configs.recommended,
   { files: ['native/ui/*.js'], languageOptions: { globals: globals.browser } },

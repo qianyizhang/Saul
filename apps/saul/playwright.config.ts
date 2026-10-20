@@ -1,6 +1,8 @@
 import { defineConfig } from '@playwright/test';
+import { artifactConfig } from './tests/e2e/artifacts.ts';
 
 export default defineConfig({
+  ...artifactConfig('e2e'),
   globalSetup: './tests/e2e/browser-preflight.ts',
   testDir: './tests/e2e',
   testMatch: '**/*.spec.ts',
@@ -9,5 +11,4 @@ export default defineConfig({
   workers: 1,
   forbidOnly: Boolean(process.env.CI),
   retries: 0,
-  reporter: [['list'], ['html', { open: 'never' }]],
 });

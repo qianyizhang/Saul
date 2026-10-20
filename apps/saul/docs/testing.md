@@ -8,7 +8,7 @@ On this Mac, Chrome and Chrome for Testing can abort during LaunchServices/Windo
 
 For browser-launching commands, request approved execution outside that sandbox from the first launch. Scope approval to the specific command. Keep compilation and ordinary checks sandboxed, and keep the disposable profiles.
 
-Playwright runs `tests/e2e/browser-preflight.ts` once before the suite. On startup failure it retains the first error under the selected `test-results` directory and stops before individual tests repeat the launch. Treat permission denials and immediate registration aborts as blocked verification, not application failures.
+Playwright runs `tests/e2e/browser-preflight.ts` once before the suite. On startup failure it retains the first error under the configured results directory and stops before individual tests repeat the launch. Treat permission denials and immediate registration aborts as blocked verification, not application failures.
 
 Do not retry an unchanged failed launch, use a personal profile, add Chrome's `--no-sandbox` flag, kill unrelated browsers, or hide crash notifications. If approved execution is unavailable, report the browser checks as blocked.
 
@@ -49,7 +49,7 @@ pnpm benchmark
 ```
 
 An existing-build run verifies that snapshot, not newer source edits. Do not rebuild a shared checkout while another task owns its bundle.
-Concurrent suites must use separate `--output test-results-<scope>` directories; Playwright clears its output directory at startup.
+Concurrent suites must use distinct `SAUL_TEST_RUN=<scope>` values. This isolates both results and HTML reports; Playwright clears its results directory at startup. Run names use letters, digits, underscores and hyphens.
 
 ## Test layers
 
@@ -63,11 +63,16 @@ The browser harness is in `tests/e2e/support.ts` and `tests/e2e/fixtures.ts`. A 
 
 ## Artifacts and debugging
 
-Playwright writes `playwright-report/` and `test-results*/`; all are ignored. Failures retain traces, screenshots, and console logs.
+Playwright writes to root `.artifacts/saul/e2e/<run>/` (`results/` and `report/`);
+benchmarks use `.artifacts/saul/benchmark/<run>/`. The default run name is `latest`.
+Failures retain traces, screenshots and console logs. Set `SAUL_TEST_RUN` for
+named runs rather than overriding `--output` or the reporter destination.
+All diagnostics are disposable under the [artifact policy](../../../docs/artifacts.md).
+The commands below run from `apps/saul`:
 
 ```sh
-pnpm exec playwright show-report
-pnpm exec playwright show-trace test-results/<case>/browser/trace-1.zip
+pnpm exec playwright show-report ../../.artifacts/saul/e2e/latest/report
+pnpm exec playwright show-trace ../../.artifacts/saul/e2e/latest/results/<case>/browser/trace-1.zip
 ```
 
 ## Debug by symptom
