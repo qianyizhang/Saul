@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ReadingRunner } from '../src/reading/runner';
 import type { DbCall, DbRequest, Passage, Submission, RunStatus } from '../src/types/storage';
 const mocks = vi.hoisted(() => ({ remote: vi.fn(), local: vi.fn() }));
@@ -100,7 +100,11 @@ it('persists a stranded storage failure before allowing explicit retry', async (
   const changed = vi.fn(),
     runner = new ReadingRunner(db.call, changed);
   await runner.submit(submission('first'), 'secret');
-  await vi.waitFor(() => expect(changed).toHaveBeenCalledTimes(4));
+  await vi.waitFor(() =>
+    expect(
+      runner.decorateRun('passage', { id: 'first', status: 'saving' } as Passage['latest']).reason,
+    ).toBe('save-failed'),
+  );
   expect(db.rows.get('first')?.status).toBe('saving');
   const passage = {
     snapshot: submission('first').snapshot,
@@ -165,4 +169,85 @@ it('limits on-device work to one active request and Stop releases its queue', as
   await vi.waitFor(() => expect(started).toBe(2));
   await runner.stop('second');
   await vi.waitFor(() => expect(db.rows.get('b')?.status).toBe('cancelled'));
+});
+
+afterEach(() => vi.useRealTimers());
+it('flushes the tail of a fast burst while the provider is silent, then completes without Stop', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(10_000);
+  let finish!: () => void;
+  mocks.remote.mockImplementation(async function* () {
+    yield { type: 'delta', text: 'A' };
+    yield { type: 'delta', text: ' complete-looking answer.' };
+    await new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    yield { type: 'complete' };
+  });
+  const db = store();
+  const changed = vi.fn();
+  const runner = new ReadingRunner(db.call, changed);
+  await runner.submit(submission('burst'), '');
+  await vi.advanceTimersByTimeAsync(0);
+  expect(db.rows.get('burst')).toEqual({ status: 'running', raw: 'A' });
+  const notifications = changed.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(500);
+  expect(db.rows.get('burst')).toEqual({ status: 'running', raw: 'A complete-looking answer.' });
+  expect(changed.mock.calls.length).toBeGreaterThan(notifications);
+  finish();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(db.rows.get('burst')?.status).toBe('completed');
+  expect(vi.getTimerCount()).toBe(0);
+});
+it('cleans up a pending trailing flush on Stop and retains all received text', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(10_000);
+  mocks.remote.mockImplementation(async function* (_config, _system, _user, signal: AbortSignal) {
+    yield { type: 'delta', text: 'A' };
+    yield { type: 'delta', text: ' partial answer' };
+    await new Promise<void>((resolve) =>
+      signal.addEventListener('abort', () => resolve(), { once: true }),
+    );
+  });
+  const db = store();
+  const runner = new ReadingRunner(db.call, () => {});
+  await runner.submit(submission('stop'), '');
+  await vi.advanceTimersByTimeAsync(0);
+  await runner.stop('passage');
+  await vi.advanceTimersByTimeAsync(0);
+  expect(db.rows.get('stop')).toEqual({ status: 'cancelled', raw: 'A partial answer' });
+  expect(vi.getTimerCount()).toBe(0);
+});
+it('exposes live provider activity without retaining reasoning or regressing after answer text', async () => {
+  let resume!: () => void;
+  const hold = () =>
+    new Promise<void>((resolve) => {
+      resume = resolve;
+    });
+  mocks.remote.mockImplementation(async function* () {
+    await hold();
+    yield { type: 'activity', phase: 'thinking' };
+    await hold();
+    yield { type: 'delta', text: 'Answer' };
+    yield { type: 'activity', phase: 'thinking' };
+    await hold();
+    yield { type: 'complete' };
+  });
+  const db = store();
+  const runner = new ReadingRunner(db.call, () => {});
+  const current = () =>
+    runner.decorateRun('passage', {
+      id: 'activity',
+      status: db.rows.get('activity')?.status,
+    } as Passage['latest']);
+  await runner.submit(submission('activity'), '');
+  await vi.waitFor(() => expect(current().activity).toBe('connecting'));
+  resume();
+  await vi.waitFor(() => expect(current().activity).toBe('thinking'));
+  resume();
+  await vi.waitFor(() => expect(db.rows.get('activity')?.raw).toBe('Answer'));
+  expect(current().activity).toBe('generating');
+  resume();
+  await vi.waitFor(() => expect(current().status).toBe('completed'));
+  expect(current().activity).toBeUndefined();
 });

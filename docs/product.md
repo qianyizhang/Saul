@@ -23,6 +23,12 @@ Opening a completed answer marks it read. Dismissing a notification does not. Er
 
 ### Explanation card
 
+- **Inspect input/output** reveals the selected attempt's saved instructions,
+  context fields, assembled user prompt and literal response text. Each block can
+  be selected or copied. History and past attempts use the same inspector. Status
+  distinguishes prepared, completed and incomplete attempts; missing older input
+  is labelled unavailable. Inspection does not send another request.
+
 - Pin keeps the card open while interacting with the page.
 - Concept terms expose notes on hover, focus, or click.
 - **Simpler**, **Give an example**, and **Go deeper** retain the captured source context and include the previous explanation.

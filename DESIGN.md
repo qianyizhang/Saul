@@ -260,6 +260,33 @@ status cues or floating entry points. Use existing platform icons consistently.
 
 ## Components
 
+### Reading activity
+
+Use a quiet thinking light on the answer boundary, matching EZ. A 24%-width
+light moves smoothly across a fixed 2px divider on a 3.2-second round trip.
+Use warning color while connecting/waiting and primary green only after an
+explicit reasoning event. Stop the light when answer text arrives; keep a
+**Generating response…** label until terminal completion, then **Saving…** and
+**Saved**. Show **Connecting…**, **Waiting for answer…**, or **Thinking…** from
+actual runner/provider signals, never a timer. Keep queued work labelled
+**Waiting…**. Reduced motion uses a static centered light. Keep the textual
+status visible in Minimum Mode and reserve the divider height to avoid jumps.
+
+### Input/output inspection
+
+Offer **Inspect input/output** on each answer and earlier attempt, collapsed by
+default in both Minimum Mode and Standard view. Inspect the recorded attempt,
+never the current draft or settings. Keep its status and model beside the content.
+Use labelled, selectable blocks for **Instructions**, **Context / inputs**,
+**Prompt · user**, and **Response · raw text**. Context shows the saved source
+fields; the assembled prompt is the authority for what was submitted. Use quiet
+tonal backgrounds, a neutral rule for inputs and the shared green for response;
+labels must convey the distinction without color. Preserve whitespace and literal
+markup, wrap long lines, and provide Copy per block with honest failure feedback.
+Show partial, empty, and unavailable data explicitly. A queued request is prepared,
+not proof of delivery. This is retained model text, not an HTTP/event log or hidden
+reasoning. No extra request, credential capture, or debug-mode prerequisite.
+
 Use a clear primary action per task, quiet secondary actions, and explicit destructive
 labels. Search, lists, selection, focus, tooltips, notices, and loading feedback must
 share the palette and hierarchy. Keep keyboard access and honest persisted/error states.

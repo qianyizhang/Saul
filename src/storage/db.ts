@@ -15,6 +15,7 @@ import type {
   Submission,
 } from '../types/storage';
 import { EXPLAIN_RECIPE_ID } from '../models/configuration';
+import { inspectionInput } from '../reading/inspection';
 
 type Row = Record<string, SqlValue>;
 const latest = `(SELECT rowid FROM llm_run WHERE selection_id = s.id ORDER BY created_at DESC, rowid DESC LIMIT 1)`;
@@ -82,6 +83,7 @@ export class SaulDatabase {
       error: row.error_message ? String(row.error_message) : undefined,
       reason: row.reason ? String(row.reason) : undefined,
       viewedAt: row.viewed_at == null ? undefined : Number(row.viewed_at),
+      inspection: input ? inspectionInput(input) : undefined,
       ...(input?.recipe ? { recipe: { id: input.recipe.id, name: input.recipe.name } } : {}),
       ...(input?.preset ? { preset: { id: input.preset.id, name: input.preset.name } } : {}),
     };
@@ -100,6 +102,7 @@ export class SaulDatabase {
           createdAt: Number(row.completed_at),
           latencyMs: row.completed_latency == null ? undefined : Number(row.completed_latency),
           viewedAt: row.completed_viewed == null ? undefined : Number(row.completed_viewed),
+          inspection: completedInput ? inspectionInput(completedInput) : undefined,
           ...(completedInput?.recipe
             ? { recipe: { id: completedInput.recipe.id, name: completedInput.recipe.name } }
             : {}),

@@ -1,6 +1,6 @@
 import type { DbCall, Passage, RunResult, QueuedRun, Submission } from '../types/storage';
 import { streamModel } from '../models/provider';
-import { IncompleteGeneration } from '../models/events';
+import { type ModelActivity, type ModelEvent, IncompleteGeneration } from '../models/events';
 import { TagStreamParser } from '../parser/tag-stream-parser';
 
 type Task = QueuedRun & {
@@ -8,6 +8,7 @@ type Task = QueuedRun & {
   controller: AbortController;
   raw: string;
   saving: boolean;
+  activity: ModelActivity;
 };
 export class ReadingRunner {
   private tasks = new Map<string, Task>();
@@ -46,6 +47,7 @@ export class ReadingRunner {
         controller: new AbortController(),
         raw: '',
         saving: false,
+        activity: 'connecting',
       });
       this.changed(result.run.pageUrl);
       this.pump();
@@ -67,19 +69,60 @@ export class ReadingRunner {
   private async execute(task: Task) {
     const started = Date.now(),
       signal = task.controller.signal;
+    let stream: AsyncGenerator<ModelEvent> | undefined;
     try {
       if (signal.aborted || !(await this.db({ type: 'DB_CLAIM', payload: { runId: task.id } })))
         return;
       const input = task.input;
-      const stream = streamModel(input, task.credential, signal);
+      this.changed(task.pageUrl);
+      stream = streamModel(input, task.credential, signal);
       let completed = false,
-        checkpoint = 0;
-      for await (const event of stream) {
+        checkpoint = 0,
+        savedRaw = '';
+      let pending: Promise<IteratorResult<ModelEvent>> | undefined;
+      while (!signal.aborted) {
+        pending ??= stream.next();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let result: IteratorResult<ModelEvent> | undefined;
+        try {
+          // Flush the tail of a burst even if the provider sends nothing else.
+          result = await Promise.race([
+            pending,
+            ...(task.raw !== savedRaw
+              ? [
+                  new Promise<undefined>((resolve) => {
+                    timer = setTimeout(
+                      () => resolve(undefined),
+                      Math.max(0, 500 - (Date.now() - checkpoint)),
+                    );
+                  }),
+                ]
+              : []),
+          ]);
+        } finally {
+          clearTimeout(timer);
+        }
         if (signal.aborted) break;
-        if (event.type === 'complete') completed = true;
-        else task.raw += event.text;
-        if (Date.now() - checkpoint >= 500) {
+        if (result) {
+          pending = undefined;
+          if (result.done) break;
+          const event = result.value;
+          if (event.type === 'complete') {
+            completed = true;
+            break;
+          }
+          const previous = task.activity;
+          if (event.type === 'delta' && event.text) {
+            task.raw += event.text;
+            task.activity = 'generating';
+          } else if (event.type === 'activity' && task.activity !== 'generating') {
+            task.activity = event.phase;
+          }
+          if (previous !== task.activity) this.changed(task.pageUrl);
+        }
+        if (task.raw !== savedRaw && Date.now() - checkpoint >= 500) {
           await this.db({ type: 'DB_CHECKPOINT', payload: { runId: task.id, raw: task.raw } });
+          savedRaw = task.raw;
           checkpoint = Date.now();
           this.changed(task.pageUrl);
         }
@@ -142,6 +185,8 @@ export class ReadingRunner {
         });
       }
     } finally {
+      task.controller.abort();
+      await stream?.return(undefined).catch(() => {});
       task.credential = '';
       this.tasks.delete(task.id);
       this.active.delete(task.id);
@@ -192,6 +237,8 @@ export class ReadingRunner {
     this.pump();
   }
   decorateRun(selectionId: string, run: RunResult): RunResult {
+    const task = this.tasks.get(run.id);
+    if (task && run.status === 'running') run = { ...run, activity: task.activity };
     const failed = this.failures.get(selectionId);
     return failed?.runId === run.id && ['queued', 'running', 'saving'].includes(run.status)
       ? {

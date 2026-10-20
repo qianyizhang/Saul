@@ -15,6 +15,7 @@ import type { HistoryItem, RunResult } from '../types/storage';
 import { AnnotatedTextView } from '../surface/AnnotatedTextView';
 import { TagStreamParser } from '../parser/tag-stream-parser';
 import { downloadMarkdown, safeSource } from './format';
+import { InputOutputInspector } from '../surface/InputOutputInspector';
 
 export function Library({
   compact = false,
@@ -239,6 +240,10 @@ export function Library({
                       </p>
                     )}
                     <AnnotatedTextView segments={new TagStreamParser().feed(item.responseRaw)} />
+                    <InputOutputInspector
+                      key={(item.completed || item.latest).id}
+                      run={item.completed || item.latest}
+                    />
                     <details className="history-more">
                       <summary>More</summary>
                       {runs
@@ -252,6 +257,7 @@ export function Library({
                             <AnnotatedTextView
                               segments={new TagStreamParser().feed(run.responseRaw)}
                             />
+                            <InputOutputInspector run={run} />
                           </details>
                         ))}
                       <details className="small muted">

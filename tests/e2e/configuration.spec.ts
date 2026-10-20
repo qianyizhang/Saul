@@ -132,6 +132,13 @@ test('failed different-recipe attempts keep shown-answer metadata; Retry and fol
     await expect(details).not.toContainText('model-b');
     await expect(card.getByRole('alert')).toBeVisible();
     expect((await getFirstHistory(popup)).completed?.id).toBe(saved.completed?.id);
+    // Both the shown successful answer and the interrupted latest attempt retain their own prompts.
+    const attempts = await sendDb(popup, {
+      type: 'DB_RUNS',
+      payload: { selectionId: saved.selectionId },
+    });
+    expect(attempts[0]!.inspection!.userPrompt).toBe(sentRequest(server, 1).messages[1]!.content);
+    expect(attempts[1]!.inspection!.userPrompt).toBe(sentRequest(server, 0).messages[1]!.content);
     await popup.getByLabel('Model name', { exact: true }).fill('model-c');
     await popup.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(popup.getByText('Saved', { exact: true })).toBeVisible();

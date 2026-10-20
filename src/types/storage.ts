@@ -1,3 +1,4 @@
+import type { ModelActivity } from '../models/events';
 import type { DigestDbOperations } from '../digest/types';
 import type {
   SelectionSnapshot,
@@ -19,6 +20,8 @@ export interface RunResult {
   id: string;
   status: RunStatus;
   responseRaw: string;
+  /** Live runner state only; never inferred from elapsed time or persisted. */
+  activity?: ModelActivity;
   error?: string;
   reason?: string;
   model: string;
@@ -28,6 +31,7 @@ export interface RunResult {
   viewedAt?: number;
   recipe?: Pick<Recipe, 'id' | 'name'>;
   preset?: Pick<ModelPreset, 'id' | 'name'>;
+  inspection?: Pick<RunInput, 'systemPrompt' | 'userPrompt' | 'context'>;
 }
 export interface Passage {
   snapshot: SelectionSnapshot;

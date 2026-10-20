@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import './design-tokens.css';
 @import './surface.css';
+@import './inspection.css';
 
 @theme inline {
   --font-sans: var(--design-font-control);

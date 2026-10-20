@@ -842,3 +842,46 @@ it('bounds whole SSE records across lines and chunks, not batches of complete re
   const batch = new Response('data: ok\n\n'.repeat(20));
   expect(await collect(eventData(batch.body, 40))).toEqual(Array(20).fill('ok'));
 });
+
+it('reports reasoning activity without exposing its content and includes refusal text', async () => {
+  expect(
+    await collect(
+      responseEvents(
+        sse(
+          { type: 'response.created' },
+          {
+            type: 'response.output_item.added',
+            item: { type: 'reasoning', content: 'not retained' },
+          },
+          { type: 'response.refusal.delta', delta: 'I cannot help with that.' },
+          { type: 'response.completed' },
+        ),
+      ),
+    ),
+  ).toEqual([
+    { type: 'activity', phase: 'waiting' },
+    { type: 'activity', phase: 'thinking' },
+    { type: 'delta', text: 'I cannot help with that.' },
+    { type: 'complete' },
+  ]);
+});
+it('finishes at response.completed even while the HTTP connection stays open', async () => {
+  const cancel = vi.fn();
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(
+        new TextEncoder().encode(
+          'data: {"type":"response.output_text.delta","delta":"Done"}\n\n' +
+            'data: {"type":"response.completed"}\n\n',
+        ),
+      );
+    },
+    cancel,
+  });
+  expect(await collect(responseEvents(new Response(body)))).toEqual([
+    { type: 'delta', text: 'Done' },
+    { type: 'complete' },
+  ]);
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(body.locked).toBe(false);
+});

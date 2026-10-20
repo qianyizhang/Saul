@@ -28,6 +28,8 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
       reducedCapabilities: false,
       cancelled: false,
       hold: false,
+      phased: false,
+      sendGeneration: (_event: PlanEvent) => {},
       holdLogout: false,
       finishLogout: () => {},
     };
@@ -101,6 +103,8 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
                 if (!state.holdLogout) state.finishLogout();
                 break;
               case 'generate':
+                state.sendGeneration = emit;
+                if (state.phased) return;
                 emit({ type: 'delta', text: 'A plan-backed explanation.' });
                 if (!state.hold)
                   emit(
@@ -209,7 +213,48 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   await expect(popup.getByRole('button', { name: 'Test generation', exact: true })).toBeEnabled();
   const page = await context.newPage();
   await page.goto(fixtureServer.origin + '/article');
+  await worker.evaluate(() => {
+    (globalThis as unknown as { planFixture: { phased: boolean } }).planFixture.phased = true;
+  });
   await explainSelection(page);
+  await openFirstPageExplanation(page);
+  const card = page.getByRole('region', { name: 'Saul explanation' });
+  const send = (event: PlanEvent) =>
+    worker.evaluate((event) => {
+      (
+        globalThis as unknown as { planFixture: { sendGeneration: (event: PlanEvent) => void } }
+      ).planFixture.sendGeneration(event);
+    }, event);
+  await expect(card.getByRole('status')).toHaveText('Connecting…');
+  await send({ type: 'activity', phase: 'waiting' });
+  await expect(card.getByRole('status')).toHaveText('Waiting for answer…');
+  await send({ type: 'activity', phase: 'thinking' });
+  await expect(card.getByRole('status')).toHaveText('Thinking…');
+  await card.screenshot({ path: testInfo.outputPath('thinking-light.png') });
+  await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
+  await page.setViewportSize({ width: 390, height: 720 });
+  await expect
+    .poll(() =>
+      card
+        .locator('.saul-activity-divider')
+        .evaluate((el) => getComputedStyle(el, '::after').animationName),
+    )
+    .toBe('none');
+  await card.screenshot({ path: testInfo.outputPath('thinking-dark-reduced-motion.png') });
+  await send({ type: 'delta', text: 'A' });
+  await expect(card.locator('.saul-reading')).toHaveText('A');
+  await send({ type: 'delta', text: ' plan-backed explanation.' });
+  // Nothing further arrives. The tail must still become visible before Stop/completion.
+  await expect(card.locator('.saul-reading')).toHaveText('A plan-backed explanation.');
+  await expect(card.getByRole('status')).toHaveText('Generating response…');
+  await expect(card.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
+  await send({ type: 'complete' });
+  await expect(card.getByRole('status')).toHaveText('Saved');
+  await page.emulateMedia({ reducedMotion: 'no-preference', colorScheme: 'light' });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await worker.evaluate(() => {
+    (globalThis as unknown as { planFixture: { phased: boolean } }).planFixture.phased = false;
+  });
   await expect.poll(async () => (await getHistory(popup))[0]?.latest.status).toBe('completed');
   const row = await getFirstHistory(popup);
   expect(row.latest.provider).toBe('chatgpt-plan');

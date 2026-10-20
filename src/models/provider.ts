@@ -35,7 +35,8 @@ export async function* streamModel(
         },
         signal,
       ))
-        if (event.type === 'delta' || event.type === 'complete') yield event;
+        if (event.type === 'delta' || event.type === 'complete' || event.type === 'activity')
+          yield event;
       return;
     default:
       throw new Error('Unsupported model provider.');

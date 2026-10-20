@@ -58,7 +58,14 @@ export async function* responseEvents(response) {
     }
     if (!event || typeof event.type !== 'string')
       throw new ResponseFailure('Invalid Responses stream event.');
-    if (event.type === 'response.output_text.delta') {
+    if (event.type === 'response.created') {
+      yield { type: 'activity', phase: 'waiting' };
+    } else if (event.type === 'response.output_item.added' && event.item?.type === 'reasoning') {
+      yield { type: 'activity', phase: 'thinking' };
+    } else if (
+      event.type === 'response.output_text.delta' ||
+      event.type === 'response.refusal.delta'
+    ) {
       if (typeof event.delta !== 'string')
         throw new ResponseFailure('Invalid Responses text delta.');
       yield { type: 'delta', text: event.delta };

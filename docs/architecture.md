@@ -36,6 +36,13 @@ page selection
 
 An answer is ready only after a provider completion signal, readable output, and a successful database commit. Interrupted, stopped, provider-error, and save-error states retain honest status and available partial text.
 
+Streaming checkpoints flush within 500 ms even when the provider becomes silent
+after a burst. The runner exposes transient connecting/waiting/thinking/generating
+activity separately from saved run status. Thinking requires an explicit provider
+reasoning-item event; only its activity signal is forwarded, never reasoning text.
+Answer or refusal text stops the light, and completion still requires the terminal
+provider event followed by a successful save.
+
 ## Persistence and anchors
 
 - SQLite runs only in the dedicated worker. Production must not fall back silently to an in-memory database.
@@ -63,6 +70,12 @@ Runtime messages do not return to their sender. Content and popup requests there
 `src/models/provider.ts` is the streaming facade used by the reading runner and generation tests. It dispatches to OpenAI-compatible, Chrome on-device, or ChatGPT plan adapters and returns the same delta/completion events. Both HTTP adapters reuse `native/sse.mjs` for bounded SSE framing across UTF-8 chunks, CRLF/LF separators, multiline `data:` fields, provider errors, cancellation, and incomplete output. Chrome generation uses the modern `LanguageModel` API in the offscreen document.
 
 Prompts and context are frozen when a job is submitted. Later settings edits do not change an in-flight job. Provider keys are associated with their endpoint origin and are not persisted with job inputs. ChatGPT plan jobs freeze a non-secret account registration ID and model; OAuth credentials stay in the native helper.
+
+Reading results project only saved instruction text, user prompt and context fields
+into `inspection`. Connection settings and account identifiers are excluded. The
+shared input/output inspector renders literal text from the selected attempt in
+the page card and History, including partial output; it does not reconstruct prompts
+from current settings or claim to retain raw HTTP/SSE traffic.
 
 `src/models/configuration.ts` owns named recipes and model presets in settings.
 Legacy settings migrate to an Explain recipe and a Current preset; prompt roles,

@@ -54,3 +54,44 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Same restrained answer-boundary light as EZ; status text supplies meaning. */
+.saul-activity-divider {
+  position: relative;
+  height: 2px;
+  flex-shrink: 0;
+  margin-top: 8px;
+  background: var(--design-color-line);
+  overflow: hidden;
+}
+.saul-activity-divider:is(
+    [data-activity='connecting'],
+    [data-activity='waiting'],
+    [data-activity='thinking']
+  )::after {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 24%;
+  color: var(--design-color-warning);
+  background: linear-gradient(90deg, transparent, currentColor, transparent);
+  animation: saul-thinking-light 1.6s ease-in-out infinite alternate;
+}
+.saul-activity-divider[data-activity='thinking']::after {
+  color: var(--design-color-primary);
+}
+@keyframes saul-thinking-light {
+  from {
+    left: 0;
+  }
+  to {
+    left: 76%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .saul-activity-divider::after {
+    animation: none !important;
+    left: 38%;
+  }
+}

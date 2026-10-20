@@ -4,6 +4,14 @@ Shared language for reading and organizing open browser tabs across Saul's surfa
 
 ## Language
 
+**Recipe**:
+A named prompt template with a default model preset, such as Explain or Lookup.
+EZ uses the same term for its configurable text workflows.
+
+**Input/output inspection**:
+A view of one attempt's saved prompt, context or input fields, and response.
+_Avoid_: Debug mode
+
 **Window**:
 A Chrome window containing an ordered set of tabs and tab groups. In Saul's
 extension navigation, Window names the view of the window containing Saul.

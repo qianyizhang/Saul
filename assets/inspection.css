@@ -1,0 +1,74 @@
+.saul-inspector {
+  margin-top: 12px;
+  font: 13px/1.55 var(--design-font-control);
+  color: var(--design-color-ink);
+  min-width: 0;
+}
+.saul-inspector summary {
+  cursor: pointer;
+  padding: 8px 0;
+  color: var(--design-color-muted);
+}
+.saul-inspection-content {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.saul-inspection-note {
+  color: var(--design-color-muted);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.saul-inspection-block {
+  min-width: 0;
+  border-left: 3px solid var(--design-color-line);
+  background: var(--design-color-subtle);
+  border-radius: 0 var(--design-radius-control) var(--design-radius-control) 0;
+  padding: 12px;
+}
+.saul-inspection-block[data-response='true'] {
+  border-left-color: var(--design-color-primary);
+  background: var(--design-color-wash);
+}
+.saul-inspection-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.saul-inspection-heading button {
+  font: inherit;
+  color: var(--design-color-primary);
+  cursor: pointer;
+  padding: 6px;
+  background: transparent;
+  border: 0;
+}
+.saul-inspection-heading button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.saul-inspection-block pre {
+  font:
+    12px/1.65 ui-monospace,
+    monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 8px 0 0;
+  max-height: 280px;
+  overflow-y: auto;
+  user-select: text;
+}
+.saul-inspection-context .saul-inspection-block {
+  margin-top: 8px;
+}
+.saul-inspector :focus-visible {
+  outline: 2px solid var(--design-color-primary);
+  outline-offset: 2px;
+}
+@media (pointer: coarse) {
+  .saul-inspector summary,
+  .saul-inspection-heading button {
+    min-height: 44px;
+  }
+}

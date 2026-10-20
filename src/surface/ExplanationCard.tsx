@@ -4,6 +4,7 @@ import type { Passage, RunResult, RunStatus } from '../types/storage';
 import { TagStreamParser } from '../parser/tag-stream-parser';
 import { AnnotatedTextView } from './AnnotatedTextView';
 import { useAnchoredPosition } from './useAnchoredPosition';
+import { InputOutputInspector } from './InputOutputInspector';
 export const runLabel = (status: RunStatus) =>
   ({
     queued: 'Waiting…',
@@ -54,6 +55,14 @@ export function ExplanationCard({
     answer = passage.completed || latest;
   const active = ['queued', 'running', 'saving'].includes(latest.status);
   const segments = new TagStreamParser().feed(answer.responseRaw);
+  const activity = latest.activity || (latest.responseRaw ? 'generating' : 'waiting');
+  const activityLabel = {
+    connecting: 'Connecting…',
+    waiting: 'Waiting for answer…',
+    thinking: 'Thinking…',
+    generating: 'Generating response…',
+  }[activity];
+  const statusLabel = latest.status === 'running' ? activityLabel : runLabel(latest.status);
   const iconClass =
     'p-2 text-muted hover:bg-subtle rounded-control focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40';
   async function copy() {
@@ -130,6 +139,11 @@ export function ExplanationCard({
           </button>
         </div>
       </header>
+      <div
+        className="saul-activity-divider"
+        data-activity={latest.status === 'running' ? activity : undefined}
+        aria-hidden="true"
+      />
       <div className="px-4 py-3 overflow-y-auto min-h-16">
         {!range && <p className="text-xs text-muted mb-3">Source location unavailable.</p>}
         {latest.error && (
@@ -142,15 +156,17 @@ export function ExplanationCard({
           <AnnotatedTextView segments={segments} isStreaming={answer.status === 'running'} />
         ) : (
           <p className="text-sm text-muted">
-            {active ? 'Waiting…' : 'No explanation text was returned.'}
+            {active ? 'The response will appear here.' : 'No explanation text was returned.'}
           </p>
         )}
-        {answer.id !== latest.id && latest.responseRaw && (
+        {answer.id !== latest.id && (
           <details className="text-sm mt-3">
             <summary>Latest attempt · {runLabel(latest.status)}</summary>
             <AnnotatedTextView segments={new TagStreamParser().feed(latest.responseRaw)} />
+            <InputOutputInspector key={latest.id} run={latest} />
           </details>
         )}
+        <InputOutputInspector key={answer.id} run={answer} />
         {error && (
           <p role="alert" className="text-sm text-danger mt-2">
             {error}
@@ -197,6 +213,7 @@ export function ExplanationCard({
                   </summary>
                   {run.error && <p>{run.error}</p>}
                   <AnnotatedTextView segments={new TagStreamParser().feed(run.responseRaw)} />
+                  <InputOutputInspector run={run} />
                 </details>
               ))}
             <details className="text-xs text-muted mt-2">
@@ -273,7 +290,7 @@ export function ExplanationCard({
         )}
       </div>
       <footer className="px-4 pb-3 text-xs text-muted">
-        <span role="status">{runLabel(latest.status)}</span>
+        <span role="status">{statusLabel}</span>
       </footer>
     </div>
   );

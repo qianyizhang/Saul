@@ -39,6 +39,7 @@ export type PlanResult<T extends PlanControlRequest = PlanControlRequest> = {
   type: 'result';
 } & PlanResults[T['action']];
 export type PlanEvent =
+  | { type: 'activity'; phase: 'waiting' | 'thinking' }
   | { type: 'delta'; text: string }
   | { type: 'complete' }
   | PlanResult
