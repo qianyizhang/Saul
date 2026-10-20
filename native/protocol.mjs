@@ -217,8 +217,45 @@ export function validate(schema, value, path) {
     if (schema.enum && !schema.enum.includes(value)) fail(`expected ${schema.enum.join(', ')}`);
   }
 }
+// Transport-only commands. The MCP app reaches them through its private
+// interaction token; they are never advertised as model or CLI tools.
+const internal = [
+  defineTool(
+    '',
+    'saul_tabs_edit',
+    'Direct user tab edit',
+    {
+      session,
+      kind: { type: 'string', enum: ['move', 'group', 'moveGroup'] },
+      expected: { type: 'string', maxLength: 300000 },
+      tabIds: ids,
+      windowId: { type: 'integer', minimum: -1 },
+      beforeTabId: id,
+      groupId: id,
+      title: metadata.title,
+    },
+    ['kind', 'expected'],
+  ),
+  defineTool(
+    '',
+    'saul_tabs_undo',
+    'Undo a direct user edit',
+    {
+      session,
+      token: { type: 'string', maxLength: 100 },
+    },
+    ['token'],
+  ),
+  defineTool('', 'saul_summary_open', 'Open the summary reader', {
+    session,
+    tabIds: ids,
+    id: { type: 'string', maxLength: 100 },
+  }),
+  defineTool('', 'saul_summary_status', 'Active summary progress', { session }, [], true),
+].map(({ tool }) => tool);
+export const TRANSPORT_TOOLS = [...TOOLS, ...internal];
 export function validateCall(name, args = {}) {
-  const definition = TOOLS.find((item) => item.name === name);
+  const definition = TRANSPORT_TOOLS.find((item) => item.name === name);
   if (!definition) throw new Error(`Unknown tool: ${name}`);
   validate(definition.inputSchema, args, name);
   return args;

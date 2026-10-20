@@ -2,6 +2,7 @@ import { expect, it, vi, afterEach } from 'vitest';
 import {
   CLI_COMMANDS,
   TOOLS,
+  TRANSPORT_TOOLS,
   validateCall,
   type ToolArgs,
   type ToolName,
@@ -14,6 +15,19 @@ import {
 } from '../src/contracts/reading';
 import { validateWorkspace } from '../src/contracts/workspace';
 const fields = {
+  saul_tabs_edit: [
+    'session',
+    'kind',
+    'expected',
+    'tabIds',
+    'windowId',
+    'beforeTabId',
+    'groupId',
+    'title',
+  ],
+  saul_tabs_undo: ['session', 'token'],
+  saul_summary_open: ['session', 'tabIds', 'id'],
+  saul_summary_status: ['session'],
   saul_windows_label: ['session', 'windows', 'dryRun'],
   saul_tabs_close_duplicates: ['session', 'duplicates', 'dryRun'],
   saul_windows_create: ['session', 'tabIds', 'focused', 'dryRun'],
@@ -44,6 +58,10 @@ const complete: {
       ? true
       : never;
 } = {
+  saul_tabs_edit: true,
+  saul_tabs_undo: true,
+  saul_summary_open: true,
+  saul_summary_status: true,
   saul_windows_label: true,
   saul_tabs_close_duplicates: true,
   saul_windows_create: true,
@@ -59,6 +77,10 @@ const complete: {
   saul_groups_update: true,
 };
 const samples = {
+  saul_tabs_edit: { kind: 'move', expected: '{}', tabIds: [1], windowId: 2 },
+  saul_tabs_undo: { token: 'undo' },
+  saul_summary_open: { tabIds: [1] },
+  saul_summary_status: {},
   saul_windows_label: { windows: [{ windowId: 1, title: 'Reading' }] },
   saul_tabs_close_duplicates: {
     duplicates: [{ tabId: 2, keepTabId: 1, url: 'https://example.com/' }],
@@ -86,10 +108,10 @@ const samples = {
   saul_groups_update: { groupId: 1, title: 'Hello' },
 } satisfies ToolArgs;
 it('native declarations and executable schema cover the same tool and argument names', () => {
-  expect(TOOLS.map((t) => t.name).sort()).toEqual(Object.keys(complete).sort());
+  expect(TRANSPORT_TOOLS.map((t) => t.name).sort()).toEqual(Object.keys(complete).sort());
   expect(Object.values(CLI_COMMANDS).sort()).toEqual(TOOLS.map((tool) => tool.name).sort());
   expect(new Set(Object.keys(CLI_COMMANDS)).size).toBe(TOOLS.length);
-  for (const tool of TOOLS) {
+  for (const tool of TRANSPORT_TOOLS) {
     expect(Object.keys(tool.inputSchema.properties || {}).sort()).toEqual(
       [...fields[tool.name]].sort(),
     );

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { callTool } from './client.mjs';
 import { APP_URI, validateAppCall } from './app-protocol.mjs';
+import { tabLayoutRevision } from './tab-layout.mjs';
 import { createWindowLabels } from './window-labels.mjs';
 import { runtimeDirectory } from './transport.mjs';
 
@@ -173,6 +174,8 @@ export function createWorkspace({
   now = Date.now,
   labels = createWindowLabels(call === callTool ? runtimeDirectory() : undefined),
 } = {}) {
+  const interactions = new Map();
+  const undos = new Map();
   const plans = new Map(); // Ephemeral; no browser inventory or approval token written to disk.
   const ttl = 5 * 60 * 1000;
   const expire = () => {
@@ -205,13 +208,36 @@ export function createWorkspace({
     if (!sessions.some((s) => s.session === session))
       throw new Error('Browser session disconnected; refresh and select a connected session');
     const snapshot = withLabels(await call('saul_tabs_list', { session }), session);
-    return withProposal({ sessions, session, snapshot, revision: revision(snapshot) });
+    let summary = null;
+    try {
+      summary = await call('saul_summary_status', { session });
+    } catch {
+      /* Reader errors remain visible in Chrome. */
+    }
+    return withProposal({
+      sessions,
+      session,
+      snapshot,
+      revision: revision(snapshot),
+      // The extension validates affected windows when Undo is invoked, just
+      // as it does for the Window view. Unrelated windows do not hide Undo.
+      canUndo: undos.has(session),
+      summary,
+    });
   };
+  function interactionToken(session) {
+    if (!interactions.has(session) || interactions.get(session).expiresAt < now()) {
+      if (interactions.size >= 32) interactions.delete(interactions.keys().next().value);
+      interactions.set(session, { token: randomUUID(), expiresAt: now() + ttl });
+    }
+    return interactions.get(session).token;
+  }
   const response = (data, render = false) => ({
     content: [{ type: 'text', text: JSON.stringify(data) }],
     structuredContent: data,
     _meta: {
       ...(render ? { ui: { resourceUri: APP_URI } } : {}),
+      ...(data.session ? { interactionToken: interactionToken(data.session) } : {}),
       ...(data.proposal?.status === 'pending'
         ? { approvalToken: plans.get(data.session)?.approvalToken }
         : {}),
@@ -221,6 +247,53 @@ export function createWorkspace({
     const args = validateAppCall(name, input);
     if (name === 'saul_workspace_show' || name === 'saul_workspace_state')
       return response(await state(args.session), name === 'saul_workspace_show');
+    if (
+      [
+        'saul_workspace_edit',
+        'saul_workspace_undo',
+        'saul_workspace_summarize',
+        'saul_workspace_discard',
+      ].includes(name)
+    ) {
+      const permission = interactions.get(args.session);
+      if (!permission || permission.expiresAt < now() || permission.token !== args.interactionToken)
+        throw new Error('Manual action expired. Refresh the Tab board.');
+      interactions.delete(args.session);
+      if (name === 'saul_workspace_discard') {
+        plans.delete(args.session);
+        return response(await state(args.session));
+      }
+      if (name === 'saul_workspace_summarize') {
+        await call('saul_summary_open', {
+          session: args.session,
+          ...(args.tabIds ? { tabIds: args.tabIds } : {}),
+          ...(args.id ? { id: args.id } : {}),
+        });
+        return response(await state(args.session));
+      }
+      let result;
+      if (name === 'saul_workspace_undo') {
+        const undo = undos.get(args.session);
+        undos.delete(args.session);
+        if (!undo) throw new Error('No reversible edit is available.');
+        result = await call('saul_tabs_undo', { session: args.session, token: undo });
+      } else {
+        const current = await state(args.session);
+        if (args.revision !== current.revision)
+          throw new Error('Tabs changed. Review the refreshed board.');
+        const edit = { ...args };
+        delete edit.interactionToken;
+        delete edit.revision;
+        undos.delete(args.session);
+        result = await call('saul_tabs_edit', {
+          ...edit,
+          expected: tabLayoutRevision(current.snapshot),
+        });
+      }
+      if (result.undoToken) undos.set(args.session, result.undoToken);
+      plans.delete(args.session);
+      return response({ ...(await state(args.session)), notice: result.message });
+    }
     if (name === 'saul_workspace_propose') {
       const current = await state(args.session);
       if (args.revision !== current.revision)

@@ -1,5 +1,7 @@
 # Product behavior
 
+See the [glossary](../GLOSSARY.md) for shared domain and surface names.
+
 ## Reading
 
 1. Select a term or short passage, choose a recipe, and select **Explain**. **Alt+Shift+E** uses the selected or default recipe.
@@ -69,31 +71,77 @@ SQLite-WASM stores the library in OPFS for the current browser profile. Data is 
 
 Local tests cover the provider boundary with deterministic fixtures. They do not establish external-provider authentication, model quality, Chrome model availability/download, or device performance.
 
-## Tabs
+## Window and Tab board
 
-The Tabs workspace can preview and apply:
+**Window** manages the Chrome window containing the extension popup or page.
+**Tab board** manages all connected normal windows in the MCP app. Window
+names, row styling, selection and action labels are shared. Incognito windows
+are excluded. Live refresh preserves surviving selections.
 
-- title/domain sorting;
-- creating, updating, or removing groups;
-- moving unpinned, ungrouped tabs between normal windows.
+Select tabs individually, with Shift for a range, or with Select all. The
+selection bar offers only **Group**, **Move to**, and **Summarize**. Pinned tabs
+can be summarized; grouping and moving never silently unpin them.
 
-Pinned tabs remain fixed and existing groups move as intact blocks during sorting. Saul rejects stale previews before apply. Browser actions can still race with a multi-step mutation, so refresh and inspect after any error. **Undo last sort** is available only while the tab layout still matches the applied result; previews and undo state disappear when the service worker restarts.
+Manual drags and Group/Move act immediately. Individual tabs can leave or join
+groups; dragging a group heading moves it intact. Grouping a selection spanning
+windows asks for an existing or new destination. Selection order follows the
+displayed window and tab order. Keyboard move controls accompany dragging.
+Explicit sorting and Ungroup controls are absent.
 
-Grouping and moving controls appear when tabs are selected (or groups already exist). Optional connection controls are under **Codex connection**, after the tab list.
+**Undo** restores the last reversible manual arrangement while its affected
+tabs remain unchanged. A move that closes its source window has no Undo:
+Chrome's window identity and associated UI cannot be restored. Partial failures
+require refreshing and inspecting the result; operations are not replayed.
 
-The Codex board shares reviewed Saul window labels with the extension Tabs selectors. On macOS Chrome, the native helper imports **Name Window** names through AppleScript and applies/verifies reviewed renames in Chrome. macOS Automation errors remain visible; other platforms use Saul labels. Codex reorganizations deduplicate exact HTTP(S) URLs by default, protecting pins and groups; the preview lists closures and offers an opt-out before Apply.
+Codex-generated reorganizations retain the editable proposal service and an
+explicit **Apply** boundary. The board shows proposed moves and duplicate
+closures together, with an opt-out for deduplication. **Discard** dismisses
+the proposal. Manual gestures operate on the current layout after a proposal
+is applied or discarded; they never silently remove duplicate tabs.
+Pinned/grouped tabs stay protected in automated proposals.
 
-External CLI/MCP tab access is optional and disabled by default. It also supports creating windows from selected ungrouped tabs. A separate **Page reading and actions** switch enables bounded visible-page reads, referenced click/fill actions, and HTTP(S) navigation. Page mutations preview by default. See [native messaging](native-messaging.md).
+On macOS Chrome, the native helper imports **Name Window** labels through
+AppleScript and verifies reviewed renames. Automation errors remain visible;
+other platforms use Saul labels. Connection and page-access settings live
+under **Settings → Codex connection**. External access is off by default.
+See [native messaging](native-messaging.md).
 
-### Window digests
+### Summaries
 
-Choose a window in Tabs, then **Summarize all tabs**. Digests use the signed-in ChatGPT account with GPT-6 Luna and medium effort; unavailable capability blocks explicitly. This does not change reading presets or use the Gemini panel. The summary profile is concise English followed by equivalent Simplified Chinese, with source attribution and optional limitations; optional follow-up, glossary, and flow sections are removed as whole bilingual sections if they exceed the reading budget, while core points and caveats are preserved; it does not inherit private Gemini or ChatGPT memories.
+**Select all → Summarize** summarizes a window; a smaller selection summarizes
+only those tabs. A selection across windows produces one saved summary in
+display order with source-window labels.
 
-All tabs are listed in their original order, including pinned and grouped tabs. Browser-restricted and incognito pages are skipped. Loaded HTTP(S) pages are captured without focusing or reloading them. Capture includes visible article/page text and loaded discussion, bounded to 120,000 characters; images, frames, collapsed content, and linked pages are not read. Coverage and truncation remain visible. Navigated, closed, unloaded, and unreadable pages report an error instead of using another source.
+Summarize immediately opens a reader in Chrome. It starts using the configured
+eligible ChatGPT account, or asks for an account when the choice is ambiguous.
+The profile remains GPT-6 Luna, medium effort, concise English followed by
+equivalent Simplified Chinese. Missing capability blocks explicitly; no
+provider or billing fallback is chosen.
 
-One digest runs at a time, sequentially. Provider failures pause the remaining queue; page-capture or summary-format errors affect only that tab. Popup closure does not stop it. Completed results and captured source text persist in local SQLite; **Stop digest** retains finished results and available partial text. A browser/extension restart marks unfinished work interrupted and never automatically spends quota again. **Retry unfinished** explicitly retries failures, interruptions, and cancellations, using captured text when available. Unsaved stream fragments can be lost on restart. A storage failure stops further processing and shows that progress could not be saved.
+Two items process concurrently within one summary. Results appear in original
+order as they finish. Other reading jobs retain their existing concurrency.
+Provider failures stop dequeuing new items while in-flight siblings settle;
+capture/format failures affect only their own item. **Stop** aborts all active
+summary streams and retains completed/partial results. A storage failure stops
+all workers before delete, retry, or another summary can proceed.
 
-**Download HTML** exports a self-contained digest with source links, English–Chinese pairs, coverage, capture times, and incomplete statuses. Download is available during processing. **Delete digest** removes that digest and its captured text; this data is separate from passage History and its Clear all action.
+Loaded HTTP(S) text is captured without focusing or reloading source tabs,
+bounded to 120,000 characters. Video, audio, images, frames, linked pages,
+collapsed and unloaded content are not read. Source changes and unreadable
+pages report their limitations. Restricted pages are skipped.
+
+Summaries and captured text persist in local SQLite. The reader is a disposable
+view: closing it never stops processing or deletes data. Reopening never
+regenerates results. Browser/extension restart marks unfinished work interrupted
+and never automatically spends quota again. **Retry unfinished** explicitly
+retries using frozen sources when available.
+
+History separates **Passages** and **Summaries**. The reader contains progress,
+Stop, Retry unfinished, source coverage, **Export HTML**, and deletion under
+Details. Export creates a self-contained snapshot, including incomplete states.
+Completion does not open a second tab or steal focus. Tab surfaces retain only
+a compact link to active summary progress. Summary deletion remains separate
+from passage History's Clear all action.
 
 ## Compatibility
 

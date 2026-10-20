@@ -1,4 +1,6 @@
 import { handlePageCall } from './pages';
+import { editTabs, undoTabEdit } from './interaction';
+import { openSummaryReader, summaryProgress } from '../digest/reader';
 import { getWindowLabels, saveWindowLabels } from './window-labels';
 import {
   validateCall,
@@ -70,6 +72,14 @@ export async function handleTabCallUnlocked(
   input: Args = {},
 ): Promise<ToolResults[BrowserTool]> {
   validateCall(name, input);
+  if (name === 'saul_tabs_edit')
+    return editTabs(validateCall(name, input), () => handleTabCallUnlocked('saul_tabs_list'));
+  if (name === 'saul_tabs_undo')
+    return undoTabEdit(validateCall(name, input).token, () =>
+      handleTabCallUnlocked('saul_tabs_list'),
+    );
+  if (name === 'saul_summary_open') return openSummaryReader(validateCall(name, input));
+  if (name === 'saul_summary_status') return summaryProgress();
   if (name.startsWith('saul_page_')) return handlePageCall(name, input);
   const normalWindow = async (windowId: number) => {
     const window = await chrome.windows.get(windowId);

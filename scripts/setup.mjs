@@ -261,7 +261,7 @@ export async function setup(options = {}, dependencies = {}) {
       registration = { transport: { type: 'stdio', command: node, args: [mcpPath] } };
     } else log('Keeping the existing matching Codex registration and its settings.');
     log(
-      'Installed and registered. In Saul → Tabs, enable Codex tab access and choose Reconnect. Enable Page reading and actions only if wanted.',
+      'Installed and registered. In Saul → Settings → Codex connection, enable Codex tab access and choose Reconnect. Enable Page reading and actions only if wanted.',
     );
     if (ask) await ask('Press Enter after Saul shows Connected to native host: ');
   }

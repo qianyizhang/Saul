@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Saul · Windows & tabs</title>
+    <title>Saul · Tab board</title>
     <style>
       /* SAUL_STYLE */
     </style>
@@ -14,7 +14,7 @@
         <div class="brand">
           <span class="logo">S</span>
           <div>
-            <h1>Tabs</h1>
+            <h1>Tab board</h1>
             <p id="counts"></p>
           </div>
         </div>
@@ -49,15 +49,38 @@
       <p class="muted help guidance">
         Drag tabs to arrange; drag window headers to reorder the board.
       </p>
-      <section id="move-controls" class="move-controls" aria-label="Move selected tab" hidden>
-        <strong id="moving-title"></strong>
+      <div class="row manual-feedback">
+        <span id="manual-notice" role="status"></span><button id="undo" hidden>Undo</button
+        ><button id="active-summary" hidden></button>
+      </div>
+      <section id="move-controls" class="move-controls" aria-label="Selected tabs" hidden>
         <div class="row">
-          <button id="move-up">Move up</button>
-          <button id="move-down">Move down</button>
-          <select id="destination" aria-label="Destination window"></select>
-          <button id="move-tab">Move to end</button>
-          <button id="cancel-move">Done</button>
+          <strong id="moving-title"></strong>
+          <button id="group-tabs">Group</button>
+          <select id="destination" aria-label="Move to"></select>
+          <button
+            id="summarize"
+            class="primary"
+            title="Summarize loaded text using your ChatGPT account"
+          >
+            Summarize
+          </button>
+          <button id="cancel-move">Clear</button>
         </div>
+        <p id="pin-reason" class="muted" hidden>
+          Pinned tabs can be summarized. Deselect them to group or move.
+        </p>
+        <form id="group-form" class="row" hidden>
+          <input
+            id="group-title"
+            aria-label="Group name"
+            placeholder="Group name"
+            maxlength="200"
+          />
+          <select id="group-window" aria-label="Group destination window"></select>
+          <button id="create-group">Create group</button>
+          <select id="existing-group" aria-label="Add to group"></select>
+        </form>
       </section>
       <div id="board" class="board">
         <div class="empty">Your open Chrome windows will appear here.</div>
@@ -71,9 +94,13 @@
         <details>
           <summary>Shortcuts & details</summary>
           <p>
-            Tab numbers open move controls. Right-click a tab or window for actions. Escape cancels.
+            Select tabs with checkboxes. Shift selects a range. Alt+Arrow moves a focused tab; Move
+            to also works by keyboard. Escape cancels a drag.
           </p>
-          <p>Pins and groups stay in their windows. Filtering keeps hidden tabs in the plan.</p>
+          <p>
+            Drag group headings to move groups intact. Individual tabs can be dragged into or out of
+            groups. Pins are preserved.
+          </p>
           <p>
             Window names change after Apply. On supported macOS Chrome, names also sync to Chrome.
           </p>

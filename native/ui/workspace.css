@@ -464,7 +464,7 @@ h2 {
 .move-controls strong {
   display: block;
   overflow-wrap: anywhere;
-  margin-bottom: 10px;
+  margin-bottom: 0;
 }
 .move-controls .row {
   flex-wrap: wrap;
@@ -485,7 +485,6 @@ h2 {
   button,
   select,
   summary,
-  .tab-index,
   .rename-window {
     min-height: 44px;
     min-width: 44px;
@@ -508,8 +507,7 @@ h2 {
   outline: 2px solid var(--accent);
   outline-offset: -3px;
 }
-.fold-window,
-.tab-index {
+.fold-window {
   font-variant-numeric: tabular-nums;
   font-size: 11px;
   min-width: 32px;
@@ -523,13 +521,6 @@ h2 {
 }
 .fold-window[aria-expanded='false'] {
   border-style: dashed;
-}
-.fixed-index {
-  display: grid;
-  place-items: center;
-}
-.tab-index[aria-pressed='true'] {
-  outline: 2px solid var(--accent);
 }
 .tab.changed {
   background: color-mix(in srgb, var(--origin-color) 5%, var(--card));
@@ -591,9 +582,92 @@ h2 {
 }
 
 @media (pointer: coarse) {
-  .tab-index,
   .fold-window {
     min-width: 44px;
     min-height: 44px;
+  }
+}
+
+.tab.selected {
+  background: var(--design-color-wash);
+}
+.tab > input[type='checkbox'],
+.window-head > input[type='checkbox'] {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--design-color-primary);
+}
+.tab {
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 10px;
+}
+.tab-title {
+  font-weight: 500;
+}
+.tab-group-head {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--design-color-line);
+  font-weight: 600;
+  cursor: grab;
+  list-style: none;
+}
+.move-controls {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+#group-form {
+  padding-top: 10px;
+}
+#group-title {
+  flex: 1;
+  min-width: 100px;
+}
+.manual-feedback:empty {
+  display: none;
+}
+.manual-feedback {
+  font-size: 12px;
+  gap: 8px;
+}
+#active-summary {
+  background: transparent;
+  border: 0;
+  color: var(--design-color-primary);
+}
+.window-head .rename-window {
+  opacity: 0;
+}
+.window-head:hover .rename-window,
+.window-head:focus-within .rename-window {
+  opacity: 1;
+}
+
+@media (max-width: 520px) {
+  .move-controls > .row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: 'count count clear' 'group move summarize';
+  }
+  #moving-title {
+    grid-area: count;
+  }
+  #cancel-move {
+    grid-area: clear;
+  }
+  #group-tabs {
+    grid-area: group;
+  }
+  #destination {
+    grid-area: move;
+    min-width: 0;
+  }
+  #summarize {
+    grid-area: summarize;
+  }
+  .move-controls > .row button,
+  .manual-feedback button {
+    width: auto;
   }
 }

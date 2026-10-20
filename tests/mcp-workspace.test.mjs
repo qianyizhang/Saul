@@ -31,6 +31,7 @@ beforeEach(() => {
   call = vi.fn(async (name, args) => {
     if (name === 'saul_sessions') return { sessions: [{ session, extensionId: 'b'.repeat(32) }] };
     if (name === 'saul_tabs_list') return structuredClone(snapshot);
+    if (name === 'saul_summary_status') return null;
     expect(args.dryRun).toBe(false);
     if (name === 'saul_windows_label') {
       for (const window of args.windows)
@@ -81,7 +82,10 @@ async function propose(
 }
 const mutations = () =>
   call.mock.calls.filter(
-    ([name]) => !['saul_sessions', 'saul_tabs_list', 'saul_windows_label'].includes(name),
+    ([name]) =>
+      !['saul_sessions', 'saul_tabs_list', 'saul_windows_label', 'saul_summary_status'].includes(
+        name,
+      ),
   );
 const approve = (result) => ({
   session,
@@ -535,4 +539,40 @@ it('simulates explicit final insertion indices within and across windows', () =>
       .sort((a, b) => a.index - b.index)
       .map((t) => t.id),
   ).toEqual([21, 20]);
+});
+
+it('manual commands require a private single-use app token and never inherit deduplication', async () => {
+  const shown = await workspace('saul_workspace_show', { session });
+  const token = shown._meta.interactionToken;
+  expect(token).toBeTruthy();
+  expect(JSON.stringify(shown.content)).not.toContain(token);
+  expect(JSON.stringify(shown.structuredContent)).not.toContain(token);
+  const action = {
+    session,
+    interactionToken: token,
+    revision: shown.structuredContent.revision,
+    kind: 'move',
+    tabIds: [12],
+    windowId: 2,
+  };
+  await expect(
+    workspace('saul_workspace_edit', { ...action, interactionToken: 'forged' }),
+  ).rejects.toThrow('expired');
+  const original = call.getMockImplementation();
+  call.mockImplementation(async (name, args) => {
+    if (name === 'saul_tabs_edit') {
+      expect(args).not.toHaveProperty('deduplicate');
+      expect(args.expected).toContain('"tabs"');
+      snapshot = movedSnapshot(snapshot, 12, 2);
+      return { snapshot, undoToken: 'native-undo', message: '1 tab moved.' };
+    }
+    return original(name, args);
+  });
+  const edited = await workspace('saul_workspace_edit', action);
+  expect(edited.structuredContent.proposal).toBeNull();
+  expect(edited.structuredContent.canUndo).toBe(true);
+  expect(snapshot.tabs).toHaveLength(5);
+  await expect(workspace('saul_workspace_edit', action)).rejects.toThrow('expired');
+  for (const name of ['saul_workspace_edit', 'saul_workspace_undo', 'saul_workspace_summarize'])
+    expect(APP_TOOLS.find((t) => t.name === name)._meta.ui.visibility).toEqual(['app']);
 });

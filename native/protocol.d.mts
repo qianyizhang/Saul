@@ -21,7 +21,30 @@ interface Common {
 interface Mutation extends Common {
   dryRun?: boolean;
 }
+export interface TabEdit {
+  kind: 'move' | 'group' | 'moveGroup';
+  expected: string;
+  tabIds?: number[];
+  windowId?: number;
+  beforeTabId?: number;
+  groupId?: number;
+  title?: string;
+}
+export interface TabEditResult {
+  snapshot: TabSnapshot;
+  undoToken?: string;
+  message: string;
+}
+export interface SummaryProgress {
+  id: string;
+  completed: number;
+  total: number;
+}
 export interface ToolArgs {
+  saul_tabs_edit: Common & TabEdit;
+  saul_tabs_undo: Common & { token: string };
+  saul_summary_open: Common & { tabIds?: number[]; id?: string };
+  saul_summary_status: Common;
   saul_windows_label: Mutation & {
     windows: { windowId: number; title: string; expectedTitle?: string }[];
   };
@@ -86,6 +109,10 @@ export interface PageSnapshot {
   elementsTruncated: boolean;
 }
 export interface ToolResults {
+  saul_tabs_edit: TabEditResult;
+  saul_tabs_undo: TabEditResult;
+  saul_summary_open: { id: string };
+  saul_summary_status: SummaryProgress | null;
   saul_windows_label: { dryRun: boolean; windows: { windowId: number; title: string }[] };
   saul_tabs_close_duplicates: { dryRun: boolean; tabIds: number[] };
   saul_windows_create: { dryRun: boolean; tabIds: number[]; windowId?: number };
@@ -129,6 +156,7 @@ export const TOOLS: {
   inputSchema: ToolSchema;
   annotations: { readOnlyHint: boolean; destructiveHint: boolean; openWorldHint: boolean };
 }[];
+export const TRANSPORT_TOOLS: typeof TOOLS;
 export function validateCall<K extends ToolName>(name: K, args?: unknown): ToolArgs[K];
 export function validateCall(name: string, args?: unknown): ToolArgs[ToolName];
 export function validate(schema: ToolSchema, value: unknown, path: string): void;

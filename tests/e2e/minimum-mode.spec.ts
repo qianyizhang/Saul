@@ -279,11 +279,11 @@ test('Minimum Mode stays usable at narrow touch widths with visible errors and e
     await expect(card.getByRole('status')).toHaveText('Interrupted');
     await popup.getByRole('button', { name: 'History', exact: true }).click();
     await popup.locator('.history-title').click();
-    for (const page of [popup, article]) {
-      const cdp = await context.newCDPSession(page);
-      await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
-      expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
-    }
+    const touchSessions = new Map(
+      await Promise.all(
+        [popup, article].map(async (page) => [page, await context.newCDPSession(page)] as const),
+      ),
+    );
     for (const width of [360, 440, 1000]) {
       for (const colorScheme of ['light', 'dark'] as const) {
         for (const [name, page] of [
@@ -292,28 +292,50 @@ test('Minimum Mode stays usable at narrow touch widths with visible errors and e
         ] as const) {
           await page.setViewportSize({ width, height: 640 });
           await page.emulateMedia({ colorScheme });
+          // Playwright resets touch emulation when changing the viewport.
+          await touchSessions.get(page)!.send('Emulation.setTouchEmulationEnabled', {
+            enabled: true,
+            maxTouchPoints: 1,
+          });
+          expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
           expect(
             await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
           ).toBe(true);
+          if (name === 'overlay') {
+            await expect
+              .poll(
+                async () => {
+                  const box = await card.boundingBox();
+                  return Boolean(
+                    box && box.x >= 0 && box.x + box.width <= width && box.y + box.height <= 640,
+                  );
+                },
+                { message: 'Anchored card settles inside the resized viewport' },
+              )
+              .toBe(true);
+          }
+          const buttons =
+            name === 'history'
+              ? [popup.getByRole('button', { name: 'Bookmarks', exact: true })]
+              : [
+                  card.getByRole('button', { name: 'Copy explanation' }),
+                  card.getByRole('button', { name: 'Retry explanation' }),
+                  card.getByRole('button', { name: 'Bookmark', exact: true }),
+                  card.getByRole('button', { name: 'More', exact: true }),
+                ];
+          for (const button of buttons) {
+            const target = (await button.boundingBox())!;
+            const label =
+              (await button.getAttribute('aria-label')) || (await button.textContent()) || '';
+            expect(target.height, label).toBeGreaterThanOrEqual(44);
+            expect(target.width, label).toBeGreaterThanOrEqual(44);
+          }
+          // A full-page screenshot can restore the viewport and reset touch.
+          // Measure the emulated layout first, then capture that same layout.
           await page.screenshot({
             path: info.outputPath(`${name}-${width}-${colorScheme}.png`),
             fullPage: name === 'history',
           });
-        }
-        const box = (await card.boundingBox())!;
-        expect(box.x).toBeGreaterThanOrEqual(0);
-        expect(box.x + box.width).toBeLessThanOrEqual(width);
-        expect(box.y + box.height).toBeLessThanOrEqual(640);
-        for (const button of [
-          card.getByRole('button', { name: 'Copy explanation' }),
-          card.getByRole('button', { name: 'Retry explanation' }),
-          card.getByRole('button', { name: 'Bookmark', exact: true }),
-          card.getByRole('button', { name: 'More', exact: true }),
-          popup.getByRole('button', { name: 'Bookmarks', exact: true }),
-        ]) {
-          const target = (await button.boundingBox())!;
-          expect(target.height).toBeGreaterThanOrEqual(44);
-          expect(target.width).toBeGreaterThanOrEqual(44);
         }
       }
     }

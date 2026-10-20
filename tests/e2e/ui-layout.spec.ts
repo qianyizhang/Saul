@@ -25,15 +25,16 @@ test('compact workspace supports reading, tab controls and reachable settings', 
   await expect(popup.locator('.history-title')).toHaveCount(1);
   await popup.locator('.history-title').click();
   await popup.screenshot({ path: info.outputPath('03-history.png'), fullPage: true });
-  await popup.getByRole('button', { name: 'Tabs', exact: true }).click();
+  await popup.getByRole('button', { name: 'Window', exact: true }).click();
   await expect(popup.locator('.tab-row').first()).toBeVisible();
   await expect(popup.getByLabel('Codex tab access')).toBeHidden();
-  await expect(popup.getByRole('button', { name: 'Preview group', exact: true })).toHaveCount(0);
+  await expect(popup.getByRole('button', { name: 'Group', exact: true })).toHaveCount(0);
   await popup.screenshot({ path: info.outputPath('04-tabs.png'), fullPage: true });
   await popup
     .getByRole('checkbox', { name: 'Select Calculus reading fixture', exact: true })
     .check();
-  await expect(popup.getByRole('button', { name: 'Preview group', exact: true })).toBeEnabled();
+  await expect(popup.getByRole('button', { name: 'Group', exact: true })).toBeEnabled();
+  await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   const connection = popup.locator('summary').filter({ hasText: /^Codex connection$/ });
   await connection.focus();
   await popup.keyboard.press('Enter');
@@ -48,7 +49,7 @@ test('compact workspace supports reading, tab controls and reachable settings', 
   await expect(popup.getByRole('alert')).toBeInViewport();
   await popup.getByLabel('Model name', { exact: true }).fill('changed-model');
   popup.once('dialog', (dialog) => dialog.dismiss());
-  await popup.getByRole('button', { name: 'Tabs', exact: true }).click();
+  await popup.getByRole('button', { name: 'Window', exact: true }).click();
   await expect(popup.getByLabel('Model name', { exact: true })).toHaveValue('changed-model');
   await save.click();
   await expect(popup.getByText('Saved', { exact: true })).toBeVisible();

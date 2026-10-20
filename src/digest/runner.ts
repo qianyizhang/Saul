@@ -31,6 +31,7 @@ export class DigestRunner {
   }
   private async handle(r: DigestRequest, snapshot?: DigestBatch): Promise<unknown> {
     await this.ready;
+    if (r.action === 'active') return this.task ? structuredClone(this.batch) : undefined;
     if (r.action === 'list') return this.db({ type: 'DB_DIGEST_LIST', payload: undefined });
     if (r.action === 'get')
       return structuredClone(
@@ -52,10 +53,10 @@ export class DigestRunner {
       return;
     }
     if (this.task)
-      throw new Error('A digest is already running. Stop it or wait for it to finish.');
+      throw new Error('A summary is already running. Stop it or wait for it to finish.');
     let batch: DigestBatch;
     if (r.action === 'start') {
-      if (!snapshot) throw new Error('Missing window snapshot.');
+      if (!snapshot) throw new Error('Missing selection snapshot.');
       batch = await this.db({ type: 'DB_DIGEST_CREATE', payload: snapshot });
       // Duplicate start IDs never regenerate completed or interrupted work.
       if (!batch.items.some((i) => i.status === 'queued')) return batch;
@@ -77,7 +78,7 @@ export class DigestRunner {
     this.batch = batch;
     const controller = new AbortController();
     this.controller = controller;
-    this.task = this.run(batch, controller.signal)
+    this.task = this.run(batch, controller)
       .catch((error) => {
         batch.error =
           'Saving progress failed; processing stopped. ' +
@@ -98,84 +99,105 @@ export class DigestRunner {
     return this.db({
       type: 'DB_DIGEST_ITEM',
       payload: { id: batch.id, item: { ...item }, source },
+    }).catch((error: unknown) => {
+      item.status = 'interrupted';
+      item.error = 'Progress could not be saved.';
+      throw error;
     });
   }
-  private async run(batch: DigestBatch, signal: AbortSignal) {
-    // One request at a time: bounded quota use and immediate stop before the next tab.
-    for (const item of batch.items) {
-      if (item.status !== 'queued') continue;
-      if (signal.aborted) {
-        item.status = 'cancelled';
-        await this.save(batch, item);
-        continue;
-      }
-      item.status = 'capturing';
-      await this.save(batch, item);
-      let source = await this.db({
-        type: 'DB_DIGEST_SOURCE',
-        payload: { id: batch.id, index: item.index },
-      });
-      if (!source) {
+  private async run(batch: DigestBatch, controller: AbortController) {
+    const signal = controller.signal;
+    const queue = batch.items.filter((i) => i.status === 'queued');
+    let paused = false;
+    const worker = async () => {
+      while (!paused && !signal.aborted) {
+        const item = queue.shift();
+        if (!item) return;
         try {
-          source = await this.capture(item);
+          await this.process(batch, item, signal, () => {
+            paused = true;
+          });
         } catch (error) {
-          item.status = signal.aborted ? 'cancelled' : 'failed';
-          item.error = String(error instanceof Error ? error.message : error);
-          await this.save(batch, item);
-          continue;
+          controller.abort();
+          throw error;
         }
       }
-      item.coverage = source.coverage;
-      item.truncated = source.truncated;
-      item.capturedAt = source.capturedAt;
-      item.status = signal.aborted ? 'cancelled' : 'running';
-      await this.save(batch, item, source);
-      if (signal.aborted) continue;
-      let providerFailed = false;
+    };
+    // Wait for both streams before releasing delete/retry/new-start controls.
+    const results = await Promise.allSettled([worker(), worker()]);
+    const failed = results.find((r) => r.status === 'rejected');
+    if (failed?.status === 'rejected') throw failed.reason;
+    for (const item of queue) {
+      item.status = signal.aborted ? 'cancelled' : 'interrupted';
+      item.error = signal.aborted
+        ? 'Stopped.'
+        : 'Paused after a provider failure. Retry unfinished tabs explicitly.';
+      await this.save(batch, item);
+    }
+  }
+  private async process(
+    batch: DigestBatch,
+    item: DigestItem,
+    signal: AbortSignal,
+    pause: () => void,
+  ) {
+    item.status = 'capturing';
+    await this.save(batch, item);
+    let source = await this.db({
+      type: 'DB_DIGEST_SOURCE',
+      payload: { id: batch.id, index: item.index },
+    });
+    if (!source) {
       try {
-        let complete = false;
-        providerFailed = true;
-        for await (const event of this.generate(
-          {
-            action: 'generate',
-            accountId: batch.accountId,
-            model: batch.model,
-            effort: batch.effort,
-            systemPrompt: batch.prompt,
-            userPrompt: JSON.stringify({
-              title: item.title,
-              url: item.url,
-              coverage: source.coverage,
-              text: source.text,
-            }),
-          },
-          signal,
-        )) {
-          if (event.type === 'delta') {
-            item.raw += event.text;
-            if (item.raw.length > 30000) throw new Error('Summary exceeded the output limit.');
-          }
-          if (event.type === 'complete') complete = true;
-        }
-        signal.throwIfAborted();
-        if (!complete) throw new Error('Generation ended without a completed response.');
-        providerFailed = false;
-        item.summary = parseSummary(item.raw);
-        item.status = 'completed';
+        source = await this.capture(item);
       } catch (error) {
         item.status = signal.aborted ? 'cancelled' : 'failed';
         item.error = String(error instanceof Error ? error.message : error);
-      }
-      await this.save(batch, item);
-      if (providerFailed && !signal.aborted) {
-        for (const pending of batch.items)
-          if (pending.status === 'queued') {
-            pending.status = 'interrupted';
-            pending.error = 'Paused after a provider failure. Retry unfinished tabs explicitly.';
-            await this.save(batch, pending);
-          }
+        await this.save(batch, item);
         return;
       }
     }
+    item.coverage = source.coverage;
+    item.truncated = source.truncated;
+    item.capturedAt = source.capturedAt;
+    item.status = signal.aborted ? 'cancelled' : 'running';
+    await this.save(batch, item, source);
+    if (signal.aborted) return;
+    let providerFailed = true;
+    try {
+      let complete = false;
+      for await (const event of this.generate(
+        {
+          action: 'generate',
+          accountId: batch.accountId,
+          model: batch.model,
+          effort: batch.effort,
+          systemPrompt: batch.prompt,
+          userPrompt: JSON.stringify({
+            title: item.title,
+            url: item.url,
+            coverage: source.coverage,
+            text: source.text,
+          }),
+        },
+        signal,
+      )) {
+        if (event.type === 'delta') {
+          item.raw += event.text;
+          if (item.raw.length > 30000) throw new Error('Summary exceeded the output limit.');
+        }
+        if (event.type === 'complete') complete = true;
+      }
+      signal.throwIfAborted();
+      if (!complete) throw new Error('Generation ended without a completed response.');
+      providerFailed = false;
+      item.summary = parseSummary(item.raw);
+      item.status = 'completed';
+    } catch (error) {
+      item.status = signal.aborted ? 'cancelled' : 'failed';
+      item.error = String(error instanceof Error ? error.message : error);
+      if (providerFailed && !signal.aborted) pause();
+    }
+    await this.save(batch, item);
   }
 }

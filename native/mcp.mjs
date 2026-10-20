@@ -85,6 +85,8 @@ async function dispatch(message) {
       break;
     case 'tools/call':
       try {
+        if (!MCP_TOOLS.some((tool) => tool.name === message.params?.name))
+          throw new Error('Unknown MCP tool');
         if (message.params?.name?.startsWith('saul_workspace_')) {
           reply(await workspace(message.params.name, message.params.arguments ?? {}));
           break;

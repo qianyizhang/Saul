@@ -150,7 +150,7 @@ test('missing and stale profile selections recover the current config and remain
   }
 });
 
-test('tab previews do not mutate, sorting can undo, and stale previews are rejected', async ({
+test('Window drag reorders immediately and Undo restores the previous order', async ({
   sandbox,
   fixtureServer,
 }) => {
@@ -158,46 +158,24 @@ test('tab previews do not mutate, sorting can undo, and stale previews are rejec
   for (const title of ['Zulu', 'Alpha']) {
     const page = await context.newPage();
     await page.goto(fixtureServer.origin + '/article');
-    await page.evaluate((title) => (document.title = title), title);
+    await page.evaluate((title) => {
+      document.title = title;
+    }, title);
   }
-  await popup.getByRole('button', { name: 'Tabs', exact: true }).click();
-  await expect(popup.getByText('Zulu', { exact: true })).toBeVisible();
+  await popup.getByRole('button', { name: 'Window', exact: true }).click();
   const before = (await tabs(popup, { action: 'list' })).snapshot;
-  await popup.getByLabel('Sort by', { exact: true }).selectOption('title');
-  await popup.getByRole('button', { name: 'Preview sort', exact: true }).click();
-  await expect(popup.getByRole('region', { name: 'Tab change preview' })).toBeVisible();
-  expect((await tabs(popup, { action: 'list' })).snapshot.tabs.map((tab) => tab.id)).toEqual(
-    before.tabs.map((tab) => tab.id),
+  await popup
+    .locator('.tab-row')
+    .filter({ hasText: 'Alpha' })
+    .dragTo(popup.locator('.tab-row').filter({ hasText: 'Zulu' }));
+  await expect(popup.getByRole('button', { name: 'Undo', exact: true })).toBeVisible();
+  const after = (await tabs(popup, { action: 'list' })).snapshot;
+  expect(after.tabs.find((t) => t.title === 'Alpha')!.index).toBeLessThan(
+    after.tabs.find((t) => t.title === 'Zulu')!.index,
   );
-  await popup.getByRole('button', { name: 'Apply changes', exact: true }).click();
-  await expect(popup.getByText('Changes applied.', { exact: true })).toBeVisible();
-  await popup.getByRole('button', { name: 'Undo last sort', exact: true }).click();
-  await expect(popup.getByText('Previous tab order restored.')).toBeVisible();
-  expect((await tabs(popup, { action: 'list' })).snapshot.tabs.map((tab) => tab.id)).toEqual(
-    before.tabs.map((tab) => tab.id),
-  );
-  await popup.getByRole('button', { name: 'Preview sort', exact: true }).click();
-  await expect(popup.getByRole('button', { name: 'Apply changes', exact: true })).toBeVisible();
-  await context.newPage();
-  await popup.getByRole('button', { name: 'Apply changes', exact: true }).click();
-  await expect(
-    popup.getByRole('alert').filter({ hasText: 'Tabs changed since this preview' }),
-  ).toBeVisible();
-  await popup.getByRole('button', { name: 'Refresh tabs', exact: true }).click();
-  await popup.getByRole('button', { name: 'Preview sort', exact: true }).click();
-  await popup.getByRole('button', { name: 'Apply changes', exact: true }).click();
-  await expect(popup.getByRole('button', { name: 'Undo last sort', exact: true })).toBeEnabled();
-  await context.newPage();
-  await popup.getByRole('button', { name: 'Refresh tabs', exact: true }).click();
-  await expect(popup.getByRole('button', { name: 'Undo last sort', exact: true })).toBeDisabled();
-  await popup.getByRole('checkbox', { name: 'Select Zulu', exact: true }).check();
-  await popup.getByRole('checkbox', { name: 'Select Alpha', exact: true }).check();
-  await popup.getByRole('button', { name: 'Preview group', exact: true }).click();
-  await popup.getByRole('button', { name: 'Apply changes', exact: true }).click();
-  await expect(popup.getByText('Changes applied.', { exact: true })).toBeVisible();
-  const grouped = (await tabs(popup, { action: 'list' })).snapshot;
-  expect(grouped.groups).toEqual(
-    expect.arrayContaining([expect.objectContaining({ title: 'Research' })]),
+  await popup.getByRole('button', { name: 'Undo', exact: true }).click();
+  expect((await tabs(popup, { action: 'list' })).snapshot.tabs.map((t) => t.id)).toEqual(
+    before.tabs.map((t) => t.id),
   );
 });
 
@@ -352,7 +330,7 @@ test('workspace navigation protects drafts and respects on-device availability',
   await popup.evaluate(() => {
     location.hash = 'tabs';
   });
-  await expect(popup.getByRole('button', { name: 'Refresh tabs' })).toBeVisible();
+  await expect(popup.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
   await popup.goBack();
   await expect(popup.getByLabel('Model name', { exact: true })).not.toHaveValue('unsaved-model');
 

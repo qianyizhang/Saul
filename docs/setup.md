@@ -16,10 +16,10 @@ The wizard:
 2. Installs locked dependencies and builds the extension.
 3. Prints the exact extension folder. Load it at `chrome://extensions` using **Developer mode → Load unpacked**, or reload the existing Saul extension. Paste its displayed ID into the terminal prompt.
 4. Installs the native helper and registers MCP with Codex using absolute paths. Existing matching Codex registration settings are preserved.
-5. Prompts you to enable **Saul → Tabs → Codex tab access**, choose **Reconnect**, and optionally enable **Page reading and actions**.
+5. Prompts you to enable **Saul → Settings → Codex connection**, choose **Reconnect**, and optionally enable **Page reading and actions**.
 6. Verifies MCP initialization, the expected tools, the MCP App HTML resource, browser sessions and an actual tab inventory. It prints counts/timing, never tab titles, URLs or page text.
 
-After an upgrade, fully quit and reopen Codex to replace older MCP processes, then ask **“Open the Saul workspace”** to launch the [window and tab app](mcp-app.md). Closing the panel or clicking Try again can reuse a chat's old MCP connection. The same local MCP registration supplies both tools and UI; no public server, API key or separate app account is needed. Verification launches a fresh MCP process: it proves tab connectivity and resource availability there, not in an already-running Codex connection. It does not prove panel rendering, exercise page actions or establish that every web page allows access.
+After an upgrade, fully quit and reopen Codex to replace older MCP processes, then ask **“Open the Saul Tab board”** to launch the [Tab board](mcp-app.md). Closing the panel or clicking Try again can reuse a chat's old MCP connection. The same local MCP registration supplies both tools and UI; no public server, API key or separate app account is needed. Verification launches a fresh MCP process: it proves tab connectivity and resource availability there, not in an already-running Codex connection. It does not prove panel rendering, exercise page actions or establish that every web page allows access.
 
 Only the extension load/reload, extension-ID entry and access switches require Chrome interaction. The wizard does not edit personal Chrome profiles, install system prerequisites, enable access silently, use sudo, or add a login/startup service. Chrome must be running for the final connection check. Installing files is not the same as starting the helper.
 
@@ -53,7 +53,7 @@ For an agent with shell and Chrome UI access:
 2. Run `node scripts/setup.mjs --prepare`. This does not launch Chrome. If preparation fails, inspect the first error before proceeding.
 3. In the user's intended Chrome profile, open `chrome://extensions`. Reload Saul if its source folder matches the printed build folder; otherwise load that folder unpacked. Read the extension's actual ID from the UI. Do not guess an ID or modify Chrome's profile files to install/enable an extension.
 4. Run `node scripts/setup.mjs --skip-build --extension-id ACTUAL_ID`. This installs the helper and registers MCP. Exit 2 is expected if access is not yet enabled. Request scoped filesystem/configuration execution approval if required by the environment.
-5. Open **Saul → Tabs**. Enable **Codex tab access** within the authorized scope, then click **Reconnect**. Enable **Page reading and actions** only when the user has authorized that broader access. Verify that the UI says **Connected to native host**.
+5. Open **Saul → Settings → Codex connection**. Enable **Codex tab access** within the authorized scope, then click **Reconnect**. Enable **Page reading and actions** only when the user has authorized that broader access. Verify that the UI says **Connected to native host**.
 6. Run `node scripts/setup.mjs --verify --extension-id ACTUAL_ID`. Socket access may require scoped execution approval. Report tool count, tab/window counts, and any unresolved failure. Do not use real-tab mutations as a setup test.
 7. After an upgrade, tell the user to fully quit and reopen Codex before opening Saul. Do not interrupt active chats automatically. Report bridge verification only after the live inventory succeeds; report desktop rendering separately. If browser UI control is unavailable, give the exact remaining load/toggle steps and report setup as pending.
 

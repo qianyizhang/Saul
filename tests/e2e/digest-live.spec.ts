@@ -10,7 +10,8 @@ test('live installed helper summarizes three public tabs and exports a durable d
 }, info) => {
   test.skip(!process.env.SAUL_LIVE_CHATGPT_HOST, 'Requires explicit live ChatGPT host opt-in.');
   test.setTimeout(240_000);
-  const { worker, context, popup } = await sandbox.launch();
+  const { worker, context, popup: chooser } = await sandbox.launch();
+  let popup = chooser;
   const extensionId = new URL(worker.url()).host;
   const hostDir = path.join(sandbox.profile, 'NativeMessagingHosts');
   await mkdir(hostDir, { recursive: true });
@@ -52,15 +53,27 @@ test('live installed helper summarizes three public tabs and exports a durable d
     expect(page, 'Source loaded: ' + url).toBeTruthy();
     expect((await page!.locator('body').innerText()).length).toBeGreaterThan(500);
   }
-  await popup.getByRole('button', { name: 'Tabs', exact: true }).click();
-  await popup.getByLabel('Window', { exact: true }).selectOption(String(windowId));
-  await expect(popup.getByRole('button', { name: 'Summarize all tabs' })).toBeEnabled({
-    timeout: 20_000,
+  const titles = await popup.evaluate(
+    async ({ windowId, urls }) => {
+      const current = await chrome.tabs.getCurrent();
+      await chrome.tabs.move(current!.id!, { windowId, index: -1 });
+      return (await chrome.tabs.query({ windowId }))
+        .filter((t) => urls.includes(t.url!))
+        .map((t) => t.title!);
+    },
+    { windowId, urls },
+  );
+  await popup.getByRole('button', { name: 'Window', exact: true }).click();
+  for (const title of titles)
+    await popup.getByRole('checkbox', { name: 'Select ' + title, exact: true }).check();
+  const opening = context.waitForEvent('page');
+  await popup.getByRole('button', { name: 'Summarize', exact: true }).click();
+  popup = await opening;
+  await expect(popup.getByRole('button', { name: 'Stop', exact: true })).toBeVisible({
+    timeout: 30_000,
   });
-  await popup.getByRole('button', { name: 'Summarize all tabs' }).click();
-  await expect(popup.getByRole('button', { name: 'Stop digest' })).toBeVisible({ timeout: 30_000 });
   await popup.screenshot({ path: info.outputPath('live-progress.png'), fullPage: true });
-  await expect(popup.getByRole('button', { name: 'Stop digest' })).toHaveCount(0, {
+  await expect(popup.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0, {
     timeout: 170_000,
   });
   const batch = await popup.evaluate(async () => {
@@ -85,10 +98,9 @@ test('live installed helper summarizes three public tabs and exports a durable d
   );
   expect(batch.model).toBe('gpt-6-luna');
   expect(batch.effort).toBe('medium');
-  await popup.getByText('Tab results and source coverage', { exact: true }).click();
   await popup.screenshot({ path: info.outputPath('live-completed.png'), fullPage: true });
   const downloading = popup.waitForEvent('download');
-  await popup.getByRole('button', { name: 'Download HTML' }).click();
+  await popup.getByRole('button', { name: 'Export HTML' }).click();
   const download = await downloading;
   const downloaded = (await download.path())!;
   await copyFile(downloaded, info.outputPath('live-digest.html'));
@@ -113,7 +125,6 @@ test('live installed helper summarizes three public tabs and exports a durable d
   ).toBe(true);
   await exportPage.screenshot({ path: info.outputPath('live-export.png'), fullPage: true });
   await popup.reload();
-  await popup.getByRole('button', { name: 'Tabs', exact: true }).click();
   await expect(popup.getByRole('status')).toContainText('3 of 3 summarized');
   console.log(
     'Live verification: 3/3 completed through installed native messaging; export and reopen passed.',

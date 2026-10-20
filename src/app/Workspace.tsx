@@ -3,18 +3,32 @@ import { ExternalLink } from 'lucide-react';
 import { Library } from './Library';
 import { Settings } from './Settings';
 import { Tabs } from './Tabs';
+import { SummaryHistory, SummaryReader } from './Summaries';
+import { NativeBridge } from './NativeBridge';
 import { useMinimumMode } from './useMinimumMode';
 import { PresentationSettings } from './PresentationSettings';
 
-type View = 'history' | 'tabs' | 'settings';
+type View = 'history' | 'tabs' | 'settings' | 'summaries' | 'summary';
 function viewFromHash(): View {
   const hash = location.hash.slice(1);
-  return hash === 'tabs' || hash === 'settings' ? hash : 'history';
+  if (hash.startsWith('summary/')) return 'summary';
+  return hash === 'tabs' || hash === 'settings' || hash === 'summaries' ? hash : 'history';
 }
 export function Workspace({ popup = false }: { popup?: boolean }) {
   const presentation = useMinimumMode();
+  const [route, setRoute] = useState(location.hash);
   const [view, setView] = useState<View>(viewFromHash);
   const [settingsDirty, setSettingsDirty] = useState(false);
+  useEffect(() => {
+    const labels: Record<View, string> = {
+      history: 'History',
+      tabs: 'Window',
+      settings: 'Settings',
+      summaries: 'Summaries',
+      summary: 'Summary',
+    };
+    document.title = 'Saul · ' + labels[view];
+  }, [view]);
   const [readingRevision, refreshReading] = useState(0);
   const navigate = useCallback(
     (next: View) => {
@@ -25,13 +39,16 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
       }
       setSettingsDirty(false);
       setView(next);
-      location.hash = next;
+      if (next !== 'summary') location.hash = next;
       window.scrollTo(0, 0);
     },
     [view, settingsDirty],
   );
   useEffect(() => {
-    const onHashChange = () => navigate(viewFromHash());
+    const onHashChange = () => {
+      setRoute(location.hash);
+      navigate(viewFromHash());
+    };
     const onKeyDown = (event: KeyboardEvent) => {
       if (
         !event.defaultPrevented &&
@@ -75,13 +92,17 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
         {(
           [
             ['history', 'History'],
-            ['tabs', 'Tabs'],
+            ['tabs', 'Window'],
             ['settings', 'Settings'],
           ] as const
         ).map(([id, label]) => (
           <button
             key={id}
-            aria-current={view === id ? 'page' : undefined}
+            aria-current={
+              view === id || (id === 'history' && ['summaries', 'summary'].includes(view))
+                ? 'page'
+                : undefined
+            }
             onClick={() => {
               if (id === 'history') refreshReading((n) => n + 1);
               navigate(id);
@@ -91,6 +112,18 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
           </button>
         ))}
       </nav>
+      {['history', 'summaries'].includes(view) && (
+        <nav className="history-kinds" aria-label="History type">
+          <button aria-pressed={view === 'history'} onClick={() => navigate('history')}>
+            Passages
+          </button>
+          <button aria-pressed={view === 'summaries'} onClick={() => navigate('summaries')}>
+            Summaries
+          </button>
+        </nav>
+      )}
+      {view === 'summaries' && <SummaryHistory />}
+      {view === 'summary' && <SummaryReader key={route.split('?')[0]} route={route} />}
       {view === 'history' && (
         <Library compact={popup} refreshKey={readingRevision} minimum={presentation.minimum} />
       )}
@@ -99,6 +132,10 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
         <div className="stack settings-layout">
           <PresentationSettings preference={presentation} />
           <Settings onDirty={setSettingsDirty} />
+          <details>
+            <summary>Codex connection</summary>
+            <NativeBridge />
+          </details>
         </div>
       )}
     </main>

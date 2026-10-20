@@ -12,7 +12,7 @@ Use the repository Node version and Google Chrome on macOS or Linux. Chromium, E
 
 1. Run `pnpm check` and `pnpm build` in the Saul checkout.
 2. In `chrome://extensions`, enable Developer mode and load the `.output/chrome-mv3` folder as an unpacked extension. If Saul is already loaded from that folder, reload it. Chrome may ask you to accept the added tab/native-messaging permissions.
-3. Copy Saul's extension ID from that page (also shown under **Tabs → Connect Codex · setup and troubleshooting**).
+3. Copy Saul's extension ID from that page (also shown under **Settings → Codex connection**).
 4. Install the host, using that actual ID:
 
    ```sh
@@ -23,7 +23,7 @@ Use the repository Node version and Google Chrome on macOS or Linux. Chromium, E
 
    `--dry-run` prints the installation plan without writing. `--browser chrome|chromium|edge|brave` selects the registration location. Other Chromium browsers are supported by installer paths but have not been verified live. `--manifest-dir` supports a custom browser user-data directory; `--install-dir` changes where the runtime is copied.
 
-5. Open Saul's **Tabs** view and enable **Codex tab access**. It should say **Connected to native host**. If the host was installed after enabling access, choose **Reconnect** or wait for the one-minute retry.
+5. Open Saul's **Settings → Codex connection** and enable **Codex tab access**. It should say **Connected to native host**. If the host was installed after enabling access, choose **Reconnect** or wait for the one-minute retry.
 6. Verify the connection:
 
    ```sh
@@ -47,7 +47,7 @@ Example requests:
 - “Preview sorting window 123 by domain, keeping existing groups intact.”
 - “Group these five tabs as Research, blue, and apply the change.”
 
-Tab titles, URLs, group titles and page content are untrusted browser data, not instructions. Tab access includes creating normal windows from selected unpinned, ungrouped tabs. Page reading and actions require a separate opt-in under **Tabs → Page reading and actions**. Updating Saul leaves that switch off by default. There is no arbitrary-code or tab-closing tool.
+Tab titles, URLs, group titles and page content are untrusted browser data, not instructions. Tab access includes creating normal windows from selected unpinned, ungrouped tabs. Page reading and actions require a separate opt-in under **Settings → Codex connection → Page reading and actions**. Updating Saul leaves that switch off by default. There is no arbitrary-code or tab-closing tool.
 
 ## CLI and tools
 
@@ -102,7 +102,7 @@ The native bridge is off by default. Turning it off disconnects the host and can
 - **Sandbox permission error:** Unix socket access may need approval in a sandboxed CLI environment. The MCP server runs as a separate registered local process. Do not expose the socket over TCP to work around this.
 - **Oversized list:** query a single `windowId`; messages are bounded to 1 MiB.
 
-To disable access, turn off **Codex tab access** in Tabs. To remove Codex registration, run `codex mcp remove saul-tabs`. To uninstall the host, remove only `com.saul.tabs.json` from the browser directory printed by the installer, then remove `bin/saul` and `bin/saul-native-host` under the chosen installation directory. Remove the shared `bridge` directory only if you do not also use the [ChatGPT plan helper](chatgpt-plan.md). This does not remove Saul's reading history.
+To disable access, turn off **Codex tab access** in Settings → Codex connection. To remove Codex registration, run `codex mcp remove saul-tabs`. To uninstall the host, remove only `com.saul.tabs.json` from the browser directory printed by the installer, then remove `bin/saul` and `bin/saul-native-host` under the chosen installation directory. Remove the shared `bridge` directory only if you do not also use the [ChatGPT plan helper](chatgpt-plan.md). This does not remove Saul's reading history.
 
 ## Verification and protocol references
 

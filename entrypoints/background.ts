@@ -1,4 +1,4 @@
-import { snapshotWindow, captureTab } from '../src/digest/capture';
+import { snapshotSelection, captureTab } from '../src/digest/capture';
 import { validateDigest } from '../src/digest/contracts';
 import { initPlanBridge } from '../src/native/plan';
 import { getSettings, initStorageSecurity, SETTINGS_STORAGE_KEY } from '../src/storage/settings';
@@ -311,7 +311,7 @@ export default defineBackground(() => {
         validateDigest(request.message);
         const r = request.message;
         const snapshot =
-          r.action === 'start' ? await snapshotWindow(r.id, r.windowId, r.accountId) : undefined;
+          r.action === 'start' ? await snapshotSelection(r.id, r.tabIds, r.accountId) : undefined;
         return runnerRequest({ operation: 'digest', message: r, snapshot });
       }
       if (request.type === 'WORKSPACE_TABS') return workspaceCall(request);

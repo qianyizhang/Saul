@@ -124,19 +124,26 @@ popups and lookup panels use tighter spacing; tab boards use dense, scannable ro
 Preserve the same hierarchy across these densities. Reveal advanced options when
 needed, keep the primary action reachable, and avoid horizontal scrolling at narrow widths.
 
-Window labels use the same names in Saul's extension and Codex board. A tab
-reorganization uses one editable board with a compact change bar and **Apply**.
-Window cards have stable colors and numbers; each tab keeps its original window
-color and position number until Apply so a shuffle remains legible without a
-second layout. Color is always paired with a numeric identity and a tooltip.
-Cards fold and can be dragged into a preferred board order without changing Chrome.
-Drag tab rows to arrange; their numbered badge offers keyboard and touch moves.
-Right-click a tab or window for contextual moves and editable prompt actions.
-Prompt actions fill the composer; only Send sends them to Codex.
-Count the minimum required tab moves, excluding neighbours that only shift position.
-Keep success to one line. Details holds receipts, removed copies and the reversible
-duplicate-removal preference; duplicate counts remain visible beside Apply.
-Never invent incremental progress when the host only returns a final receipt.
+**Window** is the extension view of its containing Chrome window. **Tab board**
+is the MCP view across windows. Both use the same tab rows, checkboxes, group
+headings and selection actions: **Group**, **Move to**, **Summarize**. Show
+window name and tab count before the list; group and move inputs appear only
+when needed. Use hostnames on rows and full URLs in accessible titles.
+
+Manual drags and selection actions change Chrome immediately. Never deduplicate
+as a side effect of a manual edit. Provide one contextual **Undo** when the
+affected arrangement can still be restored. Drag group headings to move intact
+groups; dragging individual tabs into or out of groups changes membership.
+Pins are selectable for summaries and remain protected from group/move actions.
+Use **Select all** and range selection rather than another summary workflow.
+
+Codex proposals retain a compact review bar and **Apply** with visible duplicate
+closure counts. **Discard** restores the current board view. Proposed edits
+never execute without Apply; manual editing resumes after Apply or Discard.
+Window cards fold and reorder locally; exact browser position numbers are
+useful only when reviewing a proposed change, not on every normal tab row.
+Preserve focus, surviving selections and scroll position on refresh. Keep
+success to one line. Connection management belongs in Settings.
 
 Use one heading for the current task. Avoid repeating the selected navigation label,
 adding a slogan above an input, or boxing every history row. A new lookup puts its
@@ -181,7 +188,8 @@ all three “model.” Hide technical identifiers from routine reading, not from
 settings or details needed to inspect them.
 
 Keep one primary action per state. Compose: Send or Explain. Running: Stop.
-Reading: Copy, with secondary actions grouped. Management: Preview, then Apply.
+Reading: Copy, with secondary actions grouped. Manual organization: act directly.
+Codex proposals: review, then Apply.
 An unavailable action keeps its reason nearby; it does not silently select an
 alternative account, model, service tier, or billing path. Fast is a request,
 not a promise of latency. Details identifies the requested speed; show the actual
@@ -272,6 +280,17 @@ including streaming indicators. Future VFX (particles, glow, distortion) are opt
 accent treatments, kept away from reading text and never required to understand status.
 Add concrete motion/effect tokens and platform mappings when an actual effect is adopted.
 
-### Window digests
+### Summaries
 
-Tabs offers a window-level digest with one primary Summarize action, saved progress, and HTML export. English always precedes its equivalent Simplified Chinese. Keep the first read short: one lead and two to four concrete points, with optional limits and deeper details. Show processed and successful counts separately. Retain failures, skipped pages, source links, capture coverage, and Stop even in Minimum Mode. Keep per-tab detail collapsed until requested.
+Summarize opens a reader immediately. A summary represents one explicit
+selection, possibly across windows, retaining tab order and source-window
+labels. Results and source captures persist; the reader is disposable and
+closing it does not cancel work. Keep **Export HTML**, **Stop**, **Retry
+unfinished**, coverage and failures in the reader. History offers **Passages**
+and **Summaries**. Tab surfaces show only a compact active-progress link.
+
+English precedes equivalent Simplified Chinese. The first read has one lead
+and two to four concrete points; limits stay visible, deeper material is
+collapsed. Keep successful and processed counts distinct. Completion must
+never steal focus or open another tab. Explain capture limitations for
+video/audio pages; page text is not the media itself.

@@ -28,6 +28,8 @@ export interface DigestSource {
 export interface DigestItem {
   index: number;
   tabId: number;
+  windowId?: number;
+  windowTitle?: string;
   title: string;
   url: string;
   status: ItemStatus;
@@ -55,9 +57,10 @@ export interface DigestBatch extends DigestMeta {
 export type DigestOverview = Pick<DigestMeta, 'id' | 'windowTitle' | 'createdAt'>;
 export interface DigestOperations {
   start: {
-    request: { action: 'start'; id: string; windowId: number; accountId: string };
+    request: { action: 'start'; id: string; tabIds: number[]; accountId: string };
     result: DigestBatch;
   };
+  active: { request: { action: 'active' }; result: DigestBatch | undefined };
   list: { request: { action: 'list' }; result: DigestOverview[] };
   get: { request: { action: 'get'; id: string }; result: DigestBatch };
   stop: { request: { action: 'stop'; id: string }; result: DigestBatch };

@@ -22,6 +22,7 @@ $('minimum-mode').onchange = () => {
 };
 let data,
   approvalToken,
+  interactionToken,
   busy = false,
   refreshing = false,
   ready = false,
@@ -29,6 +30,8 @@ let data,
   nextId = 0;
 const pending = new Map();
 let poll, draggedTab, selectedTab, pointerDrag, deferredResult;
+const selection = new Set();
+let selectedGroup;
 const foldedWindows = new Set();
 let windowOrder = [],
   windowDrag,
@@ -91,6 +94,9 @@ function receive(result) {
   data = next;
   if (!next.snapshot?.tabs.some((tab) => tab.id === selectedTab)) selectedTab = undefined;
   approvalToken = result._meta?.approvalToken;
+  interactionToken = result._meta?.interactionToken;
+  for (const id of selection)
+    if (!next.snapshot?.tabs.some((t) => t.id === id)) selection.delete(id);
   if (changed) render();
 }
 async function tool(name, args) {
@@ -118,7 +124,11 @@ function layout(current = false) {
 }
 function canEdit() {
   return Boolean(
-    ready && !busy && data?.snapshot && (!draftLayout || draftLayout.revision === data.revision),
+    ready &&
+      !busy &&
+      data?.snapshot &&
+      !['pending', 'expired'].includes(data?.proposal?.status) &&
+      !draftLayout,
   );
 }
 function endDrag() {
@@ -148,8 +158,16 @@ function dragDestination(x, y) {
   const window = windows.find((w) => String(w.id) === card.dataset.dropWindow);
   if (!window) return;
   const ids = window.tabIds.filter(
-    (id) => id !== draggedTab && !fixed(source.tabs.find((t) => t.id === id)),
+    (id) => id !== draggedTab && !source.tabs.find((t) => t.id === id).pinned,
   );
+  const groupHead = hit.closest('[data-group-id]');
+  if (groupHead)
+    return {
+      destination: window.id,
+      groupId: Number(groupHead.dataset.groupId),
+      card,
+      label: window.title + ' · ' + groupHead.textContent,
+    };
   const list = card.querySelector('.tabs');
   const rows = [...list.querySelectorAll('.tab[data-movable="true"]')].filter(
     (row) => Number(row.dataset.tabId) !== draggedTab,
@@ -182,6 +200,12 @@ function dragDestination(x, y) {
   return {
     destination: window.id,
     beforeId,
+    groupId:
+      beforeId === undefined
+        ? undefined
+        : source.tabs.find((t) => t.id === beforeId)?.groupId >= 0
+          ? source.tabs.find((t) => t.id === beforeId).groupId
+          : undefined,
     card,
     list,
     markerY,
@@ -253,7 +277,7 @@ function startDrag(item, tabId) {
   };
   pointerDrag.frame = requestAnimationFrame(tick);
 }
-function pointerSource(item, tabId) {
+function pointerSource(item, tabId, sourceGroupId) {
   item.addEventListener('pointerdown', (event) => {
     if (
       !canEdit() ||
@@ -292,42 +316,82 @@ function pointerSource(item, tabId) {
     const target = pointerDrag.target;
     const moved = draggedTab !== undefined;
     endDrag();
-    if (moved && target) void moveTab(tabId, target.destination, target.beforeId);
-    else if (moved) status('Move cancelled. The preview is unchanged.');
+    if (moved && target)
+      void moveTab(tabId, target.destination, target.beforeId, target.groupId, sourceGroupId);
+    else if (moved) status('Move cancelled.');
+    else if (sourceGroupId === undefined) {
+      if (selection.has(tabId)) selection.delete(tabId);
+      else selection.add(tabId);
+      selectedTab = tabId;
+      selectedGroup = undefined;
+      render();
+    }
   });
   item.addEventListener('pointercancel', endDrag);
   item.addEventListener('lostpointercapture', () => {
     if (pointerDrag) endDrag();
   });
 }
-async function moveTab(tabId, destination, beforeId) {
-  if (!canEdit()) return;
-  const { source, windows } = layout();
-  const tab = source.tabs.find((item) => item.id === tabId);
-  if (!tab || fixed(tab) || beforeId === tabId) return;
-  const draft = windows.map((window) => ({ ...window, tabIds: [...window.tabIds] }));
-  const origin = draft.find((window) => window.tabIds.includes(tabId));
-  let target = draft.find((window) => String(window.id) === String(destination));
-  if (!origin || (!target && destination !== 'new')) return;
-  if (!target) {
-    let title = 'New window';
-    let number = 2;
-    while (draft.some((window) => window.title === title)) title = `New window ${number++}`;
-    target = { title, tabIds: [] };
-    draft.push(target);
+function selectedIds(source = data.snapshot) {
+  const order = windowOrder.length ? windowOrder : source.windows.map((w) => String(w.id));
+  return [...source.tabs]
+    .sort(
+      (a, b) =>
+        order.indexOf(String(a.windowId)) - order.indexOf(String(b.windowId)) || a.index - b.index,
+    )
+    .filter((t) => selection.has(t.id))
+    .map((t) => t.id);
+}
+async function manual(name, args = {}) {
+  if (busy || !interactionToken) return;
+  busy = true;
+  render();
+  status('');
+  try {
+    const result = await tool(name, { session: data.session, interactionToken, ...args });
+    $('manual-notice').textContent = result.structuredContent.notice || '';
+    $('group-form').hidden = true;
+  } catch (error) {
+    status(error.message, true);
+    try {
+      await tool('saul_workspace_state', { session: data.session });
+    } catch {
+      /* Keep original error. */
+    }
+  } finally {
+    busy = false;
+    render();
   }
-  origin.tabIds = origin.tabIds.filter((id) => id !== tabId);
-  const index = beforeId === undefined ? target.tabIds.length : target.tabIds.indexOf(beforeId);
-  if (index < 0 || (beforeId !== undefined && fixed(source.tabs.find((t) => t.id === beforeId))))
-    return;
-  target.tabIds.splice(index, 0, tabId);
-  if (JSON.stringify(draft) === JSON.stringify(windows)) return;
-  await stageDraft(source, draft, undefined, tabId);
+}
+async function moveTab(tabId, destination, beforeId, groupId, sourceGroupId) {
+  if (!canEdit()) return;
+  const tab = data.snapshot.tabs.find((t) => t.id === tabId);
+  if (!tab || tab.pinned) return;
+  const ids =
+    sourceGroupId !== undefined
+      ? data.snapshot.tabs.filter((t) => t.groupId === sourceGroupId).map((t) => t.id)
+      : selection.has(tabId)
+        ? selectedIds()
+        : [tabId];
+  if (ids.includes(beforeId) || (sourceGroupId !== undefined && groupId === sourceGroupId)) return;
+  if (sourceGroupId !== undefined && groupId !== undefined)
+    beforeId = data.snapshot.tabs
+      .filter((t) => t.groupId === groupId)
+      .sort((a, b) => a.index - b.index)[0]?.id;
+  await manual('saul_workspace_edit', {
+    revision: data.revision,
+    kind: sourceGroupId !== undefined ? 'moveGroup' : 'move',
+    ...(sourceGroupId !== undefined
+      ? { groupId: sourceGroupId }
+      : { tabIds: ids, ...(groupId === undefined ? {} : { groupId }) }),
+    windowId: destination === 'new' ? -1 : Number(destination),
+    ...(beforeId === undefined ? {} : { beforeTabId: beforeId }),
+  });
 }
 async function stageDraft(
   source,
   draft,
-  deduplicate = data?.proposal?.deduplicate ?? true,
+  deduplicate = data?.proposal?.deduplicate ?? false,
   movedTabId,
 ) {
   const submitted = draft.map((w) => ({ ...w, tabIds: [...w.tabIds] }));
@@ -343,7 +407,7 @@ async function stageDraft(
   const args = {
     session: data.session,
     revision: data.revision,
-    summary: 'Manual arrangement',
+    summary: data?.proposal?.summary || 'Window name change',
     deduplicate,
     windows: submitted
       .map((window) => ({
@@ -421,7 +485,7 @@ function displayProposal() {
     ...data?.proposal,
     status: draftLayout.revision === data.revision ? 'pending' : 'stale',
     receipt: undefined,
-    summary: 'Manual arrangement',
+    summary: data?.proposal?.summary || 'Window name change',
     changedTabIds: draftLayout.changedTabIds,
     projected: windows,
     before: source,
@@ -514,62 +578,50 @@ function bindActions(node, actions) {
     openActions(document.activeElement, actions());
   });
 }
-function promptAction(text) {
-  $('composer').open = true;
-  const input = $('request');
-  input.value = text;
-  input.focus();
-  const start = text.indexOf('[topic]');
-  if (start >= 0) input.setSelectionRange(start, start + 7);
-}
 function selectMove(tabId) {
+  selection.clear();
+  selection.add(tabId);
   selectedTab = tabId;
+  selectedGroup = undefined;
   render();
   $('destination').focus();
 }
 function tabActions(tab, window) {
+  const siblings = window.tabIds,
+    index = siblings.indexOf(tab.id);
   return [
-    ['Move…', () => selectMove(tab.id), fixed(tab) || !canEdit()],
+    ['Select', () => selectMove(tab.id)],
     [
-      'Move this site…',
-      () =>
-        promptAction(
-          `Move tabs from ${domain(tab.url)} (including tab ${tab.id}) to a suitable window.`,
-        ),
-      !capabilities.message || !canEdit(),
+      'Move up',
+      () => void moveTab(tab.id, window.id, siblings[index - 1]),
+      tab.pinned || index <= 0 || !canEdit(),
     ],
     [
-      'Organize related tabs…',
-      () =>
-        promptAction(
-          `Organize tabs related to “${tab.title || domain(tab.url)}” (tab ${tab.id}) in “${window.title}”.`,
-        ),
-      !capabilities.message || !canEdit(),
+      'Move down',
+      () => void moveTab(tab.id, window.id, siblings[index + 2]),
+      tab.pinned || index >= siblings.length - 1 || !canEdit(),
     ],
   ];
 }
 function windowActions(window, head) {
-  const key = String(window.id);
-  const index = windowOrder.indexOf(key);
+  const key = String(window.id),
+    index = windowOrder.indexOf(key);
   const shift = (direction) => {
     [windowOrder[index], windowOrder[index + direction]] = [windowOrder[index + direction], key];
     render();
   };
   return [
     [foldedWindows.has(key) ? 'Expand' : 'Fold', () => toggleFold(window.id)],
-    ['Rename', () => renameWindow(head, head.querySelector('.rename-window'), window), !canEdit()],
+    ['Rename', () => renameWindow(head, head.querySelector('.rename-window'), window), busy],
+    [
+      'Select all',
+      () => {
+        window.tabIds.forEach((id) => selection.add(id));
+        render();
+      },
+    ],
     ['Move earlier on board', () => shift(-1), index <= 0],
     ['Move later on board', () => shift(1), index >= windowOrder.length - 1],
-    [
-      'Move a topic here…',
-      () => promptAction(`Move tabs about [topic] into “${window.title}” (window ${window.id}).`),
-      !capabilities.message || !canEdit(),
-    ],
-    [
-      'Organize this window…',
-      () => promptAction(`Organize the tabs in “${window.title}” (window ${window.id}) by topic.`),
-      !capabilities.message || !canEdit(),
-    ],
   ];
 }
 function endWindowDrag(commit = false) {
@@ -644,31 +696,60 @@ window.addEventListener('keydown', (event) => {
 });
 
 function renderMoveControls(source, windows, editable) {
-  const selected = source?.tabs.find((tab) => tab.id === selectedTab);
-  $('move-controls').hidden = !selected;
-  if (selected) {
-    $('moving-title').textContent = `Move “${selected.title || 'Untitled tab'}”`;
-    const previous = $('destination').value;
-    $('destination').replaceChildren(
-      ...[...windows, { id: 'new', title: 'New window' }].map((window) => {
-        const option = element('option', '', window.title);
-        option.value = window.id;
-        return option;
-      }),
-    );
-    if ([...$('destination').options].some((option) => option.value === previous))
-      $('destination').value = previous;
-    for (const id of ['destination', 'move-tab', 'move-up', 'move-down'])
-      $(id).disabled = !editable;
-    const siblings =
-      windows
-        .find((window) => window.tabIds.includes(selectedTab))
-        ?.tabIds.filter((id) => !fixed(source.tabs.find((tab) => tab.id === id))) ?? [];
-    $('move-up').disabled ||= siblings.indexOf(selectedTab) <= 0;
-    $('move-down').disabled ||= siblings.indexOf(selectedTab) === siblings.length - 1;
-  }
+  const ids = source ? selectedIds(source) : [];
+  const pins = source?.tabs.some((t) => selection.has(t.id) && t.pinned);
+  $('move-controls').hidden = !ids.length;
+  $('moving-title').textContent = ids.length + ' selected';
+  $('destination').replaceChildren(
+    element('option', '', 'Move to…'),
+    ...[...windows, { id: 'new', title: 'New window' }].map((w) => {
+      const option = element('option', '', w.title);
+      option.value = w.id;
+      return option;
+    }),
+  );
+  $('destination').firstChild.value = '';
+  $('destination').disabled = !editable || pins;
+  $('group-tabs').disabled = !editable || pins;
+  $('summarize').disabled = busy || !ready;
+  $('pin-reason').hidden = !pins;
+  const sourceWindows = new Set(
+    source?.tabs.filter((t) => selection.has(t.id)).map((t) => t.windowId),
+  );
+  const previous = $('group-window').value;
+  $('group-window').replaceChildren(
+    element('option', '', 'Destination window…'),
+    ...[...(source?.windows || []), { id: -1, title: 'New window' }].map((w) => {
+      const option = element('option', '', w.title || 'Window ' + w.id);
+      option.value = w.id;
+      return option;
+    }),
+  );
+  $('group-window').firstChild.value = '';
+  $('group-window').hidden = sourceWindows.size <= 1;
+  if (sourceWindows.size === 1) $('group-window').value = [...sourceWindows][0];
+  else if ([...$('group-window').options].some((o) => o.value === previous))
+    $('group-window').value = previous;
+  const destinationGroups = $('group-window').value
+    ? (source?.groups || []).filter((g) => g.windowId === Number($('group-window').value))
+    : [];
+  $('existing-group').replaceChildren(
+    element('option', '', 'Existing group…'),
+    ...destinationGroups.map((g) => {
+      const option = element('option', '', g.title || 'Unnamed group');
+      option.value = g.id;
+      return option;
+    }),
+  );
+  $('existing-group').firstChild.value = '';
+  $('existing-group').hidden = !destinationGroups.length;
+  $('undo').hidden = !data?.canUndo;
+  $('undo').disabled = busy;
+  $('active-summary').hidden = !data?.summary;
+  if (data?.summary)
+    $('active-summary').textContent =
+      'Summarizing ' + data.summary.completed + ' of ' + data.summary.total + ' · Open';
 }
-
 function renameWindow(head, button, window) {
   const heading = head.querySelector('h2');
   const input = element('input', 'window-label');
@@ -820,11 +901,11 @@ function renderProposal(proposal, snapshot) {
       };
       row.append(renew);
     }
-    const reset = element('button', '', 'Reset');
+    const reset = element('button', '', 'Discard');
     reset.disabled = busy || staging || refreshing || !snapshot;
     reset.onclick = () => {
-      const current = layout(true);
-      void stageDraft(current.source, current.windows, false);
+      draftLayout = undefined;
+      void manual('saul_workspace_discard');
     };
     row.append(reset, apply);
   }
@@ -902,7 +983,7 @@ function render() {
         source.groups,
         tabs.map((t) => proposal?.changedTabIds.includes(t.id)),
         editable,
-        tabs.some((tab) => tab.id === selectedTab) ? selectedTab : undefined,
+        tabs.filter((tab) => selection.has(tab.id)).map((tab) => tab.id),
         filter,
       ]);
       const old = oldCards.get(String(w.id));
@@ -927,10 +1008,20 @@ function render() {
         element('span', '', quantity(w.tabIds.length, 'tab')),
       );
       const rename = element('button', 'rename-window', 'Rename');
-      rename.disabled = !editable;
+      rename.disabled = !ready || busy || staging;
       rename.setAttribute('aria-label', `Rename window: ${w.title}`);
       rename.onclick = () => renameWindow(head, rename, w);
       head.append(rename);
+      const selectAll = element('input');
+      selectAll.type = 'checkbox';
+      selectAll.setAttribute('aria-label', 'Select all in ' + w.title);
+      selectAll.checked = tabs.length > 0 && tabs.every((t) => selection.has(t.id));
+      selectAll.onchange = () => {
+        tabs.forEach((t) => (selectAll.checked ? selection.add(t.id) : selection.delete(t.id)));
+        selectedGroup = undefined;
+        render();
+      };
+      head.prepend(selectAll);
       windowPointerSource(head, card);
       head.tabIndex = 0;
       head.setAttribute('aria-label', `${w.title}: drag to reorder, or open actions`);
@@ -944,16 +1035,20 @@ function render() {
       const list = element('ol', 'tabs');
       list.dataset.windowId = w.id;
       list.hidden = foldedWindows.has(String(w.id));
+      let previousGroup;
       for (const tab of tabs) {
         const changed =
           ['pending', 'expired'].includes(proposal?.status) &&
           proposal.changedTabIds.includes(tab.id);
-        const item = element('li', `tab${changed ? ' changed' : ''}`);
+        const item = element(
+          'li',
+          'tab' + (changed ? ' changed' : '') + (selection.has(tab.id) ? ' selected' : ''),
+        );
         item.title = `${tab.title || 'Untitled tab'}\n${tab.url}`;
         item.dataset.tabId = tab.id;
         item.draggable = false;
-        item.dataset.movable = String(Boolean(editable && !fixed(tab)));
-        if (!fixed(tab) && editable) pointerSource(item, tab.id);
+        item.dataset.movable = String(Boolean(editable && !tab.pinned));
+        if (!tab.pinned && editable) pointerSource(item, tab.id);
         const name = domain(tab.url);
         const text = element('div');
         const title = element('div', 'tab-title', tab.title || 'Untitled tab');
@@ -974,25 +1069,63 @@ function render() {
         );
         const detail = text.querySelector('.tab-detail');
         if (tab.pinned) detail.append(element('span', 'tag', 'Pinned'));
-        if (group) detail.append(element('span', 'tag', group.title || 'Group'));
-        const origin = windowIdentity(source, tab.windowId, windows);
-        item.style.setProperty('--origin-color', origin.color);
-        const badge = `${origin.index}.${tab.index + 1}`;
+
         bindActions(item, () => tabActions(tab, w, item));
-        if (!fixed(tab)) {
-          const move = element('button', 'tab-index', badge);
-          move.title = `Originally ${source.windows.find((win) => win.id === tab.windowId)?.title || `Window ${origin.index}`}, tab ${tab.index + 1}. Move tab`;
-          move.setAttribute('aria-label', `Move tab: ${tab.title || 'Untitled tab'}`);
-          move.setAttribute('aria-pressed', String(selectedTab === tab.id));
-          move.dataset.focusKey = `move-${tab.id}`;
-          move.disabled = !editable;
-          move.onclick = () => {
-            selectedTab = selectedTab === tab.id ? undefined : tab.id;
+        const check = element('input');
+        check.type = 'checkbox';
+        check.checked = selection.has(tab.id);
+        check.disabled = busy;
+        check.setAttribute('aria-label', 'Select ' + (tab.title || 'Untitled tab'));
+        check.dataset.focusKey = 'select-' + tab.id;
+        check.onclick = (event) => {
+          const previous = tabs.findIndex((t) => t.id === selectedTab),
+            index = tabs.indexOf(tab);
+          if (event.shiftKey && previous >= 0)
+            tabs
+              .slice(Math.min(previous, index), Math.max(previous, index) + 1)
+              .forEach((t) => selection.add(t.id));
+          else if (check.checked) selection.add(tab.id);
+          else selection.delete(tab.id);
+          selectedTab = tab.id;
+          selectedGroup = undefined;
+          render();
+        };
+        check.onkeydown = (event) => {
+          if (!event.altKey || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+          event.preventDefault();
+          const i = w.tabIds.indexOf(tab.id),
+            before = w.tabIds[i + (event.key === 'ArrowUp' ? -1 : 2)];
+          if (
+            (event.key === 'ArrowUp' && i === 0) ||
+            (event.key === 'ArrowDown' && i === w.tabIds.length - 1)
+          )
+            return;
+          void moveTab(tab.id, w.id, before);
+        };
+        item.append(check);
+        if (group && previousGroup !== group.id) {
+          const groupHead = element('li', 'tab-group-head', group.title || 'Unnamed group');
+          groupHead.dataset.groupId = group.id;
+          groupHead.tabIndex = 0;
+          groupHead.setAttribute('aria-label', 'Tab group: ' + (group.title || 'Unnamed group'));
+          if (editable) pointerSource(groupHead, tab.id, group.id);
+          groupHead.onclick = () => {
+            selection.clear();
+            source.tabs.filter((t) => t.groupId === group.id).forEach((t) => selection.add(t.id));
+            selectedGroup = group.id;
+            selectedTab = tab.id;
             render();
-            if (selectedTab !== undefined) $('destination').focus();
           };
-          item.append(move);
-        } else item.append(element('span', 'tab-index fixed-index', badge));
+          groupHead.onkeydown = (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              groupHead.click();
+              $('destination').focus();
+            }
+          };
+          list.append(groupHead);
+        }
+        previousGroup = group?.id;
         item.append(text);
         list.append(item);
       }
@@ -1009,7 +1142,7 @@ function render() {
           'div',
           'empty',
           !data?.sessions?.length
-            ? 'No Chrome session connected. Open Saul → Tabs and enable Codex tab access, then refresh.'
+            ? 'No Chrome session connected. Open Saul → Settings → Codex connection and enable tab access, then refresh.'
             : !snapshot
               ? 'Select the Chrome session you want to organize.'
               : 'No matching tabs.',
@@ -1118,34 +1251,58 @@ async function applyPlan() {
   }
 }
 $('refresh').onclick = refresh;
-$('move-tab').onclick = () => void moveTab(selectedTab, $('destination').value);
 function cancelMove() {
   const key = selectedTab;
+  selection.clear();
   selectedTab = undefined;
+  selectedGroup = undefined;
+  $('group-form').hidden = true;
   render();
-  document.querySelector(`[data-focus-key="move-${key}"]`)?.focus();
+  document.querySelector('[data-focus-key="select-' + key + '"]')?.focus();
 }
 $('cancel-move').onclick = cancelMove;
-for (const [id, direction] of [
-  ['move-up', -1],
-  ['move-down', 1],
-]) {
-  $(id).onclick = () => {
-    const { source, windows } = layout();
-    const window = windows.find((item) => item.tabIds.includes(selectedTab));
-    const siblings = window.tabIds.filter(
-      (tabId) => !fixed(source.tabs.find((tab) => tab.id === tabId)),
-    );
-    const index = siblings.indexOf(selectedTab);
-    void moveTab(selectedTab, window.id, siblings[index + (direction < 0 ? -1 : 2)]);
-  };
-}
+$('destination').onchange = () => {
+  if (!$('destination').value) return;
+  void moveTab(selectedIds()[0], $('destination').value, undefined, undefined, selectedGroup);
+};
+$('group-window').onchange = render;
+$('group-tabs').onclick = () => {
+  $('group-form').hidden = !$('group-form').hidden;
+  if (!$('group-form').hidden) $('group-title').focus();
+};
+$('group-form').onsubmit = (event) => {
+  event.preventDefault();
+  if (!$('group-title').value.trim()) return $('group-title').focus();
+  if (!$('group-window').value) return $('group-window').focus();
+  void manual('saul_workspace_edit', {
+    revision: data.revision,
+    kind: 'group',
+    tabIds: selectedIds(),
+    windowId: Number($('group-window').value),
+    title: $('group-title').value.trim(),
+  });
+};
+$('existing-group').onchange = () => {
+  if ($('existing-group').value)
+    void manual('saul_workspace_edit', {
+      revision: data.revision,
+      kind: 'group',
+      tabIds: selectedIds(),
+      groupId: Number($('existing-group').value),
+    });
+};
+$('summarize').onclick = () => void manual('saul_workspace_summarize', { tabIds: selectedIds() });
+$('active-summary').onclick = () =>
+  void manual('saul_workspace_summarize', { id: data.summary.id });
+$('undo').onclick = () => void manual('saul_workspace_undo');
 
 $('session').onchange = async () => {
   draftLayout = undefined;
   windowOrder = [];
   foldedWindows.clear();
   selectedTab = undefined;
+  selection.clear();
+  selectedGroup = undefined;
   data = { ...data, session: $('session').value || undefined, snapshot: null, proposal: null };
   approvalToken = undefined;
   await refresh();
@@ -1155,7 +1312,7 @@ window.addEventListener('blur', endDrag);
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && pointerDrag) {
     endDrag();
-    status('Drag cancelled. The preview is unchanged.');
+    status('Drag cancelled.');
   } else if (event.key === 'Escape' && selectedTab !== undefined) cancelMove();
 });
 $('ask').onclick = async () => {
@@ -1210,7 +1367,7 @@ window.addEventListener('message', (event) => {
 });
 try {
   const init = await request('ui/initialize', {
-    appInfo: { name: 'Saul workspace', version: '1.1.0' },
+    appInfo: { name: 'Saul Tab board', version: '1.1.0' },
     appCapabilities: { availableDisplayModes: ['inline', 'fullscreen'] },
     protocolVersion: '2026-01-26',
   });
@@ -1228,8 +1385,7 @@ try {
       !draftLayout &&
       !contextMenu &&
       !windowDrag &&
-      selectedTab === undefined &&
-      !document.activeElement?.closest('#board, #session, #proposal, #move-controls')
+      !document.activeElement?.closest('#session, #proposal, #group-form, select')
     )
       void refresh();
   }, 10000);

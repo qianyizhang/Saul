@@ -5,7 +5,7 @@ import { validateDigest } from '../src/digest/contracts';
 import { DigestRunner } from '../src/digest/runner';
 import type { DigestBatch, DigestSource } from '../src/digest/types';
 import type { DbCall, DbRequest } from '../src/types/storage';
-import type { PlanEvent } from '../native/plan-protocol.mjs';
+import type { PlanEvent, PlanRequest } from '../native/plan-protocol.mjs';
 const pair = { en: 'A concrete explanation.', zh: '具体解释。' };
 const summary = {
   lead: pair,
@@ -122,27 +122,27 @@ describe('window digests', () => {
   });
   it('validates action boundaries', () => {
     expect(() =>
-      validateDigest({ action: 'start', id: 'valid', windowId: 1, accountId: 'saved' }),
+      validateDigest({ action: 'start', id: 'valid', tabIds: [1], accountId: 'saved' }),
     ).not.toThrow();
     for (const r of [
-      { action: 'start', id: 'valid', windowId: -1, accountId: 'saved' },
+      { action: 'start', id: 'valid', tabIds: [-1], accountId: 'saved' },
       { action: 'list', source: 'injected' },
       { action: '__proto__' },
     ])
       expect(() => validateDigest(r)).toThrow();
   });
-  it('finishes sequentially and duplicate IDs never regenerate', async () => {
+  it('finishes in source order and duplicate IDs never regenerate', async () => {
     const f = fixture(),
       generate = vi.fn(success),
       r = new DigestRunner(f.db, f.capture, generate);
     await r.request(
-      { action: 'start', id: 'digest-test', windowId: 1, accountId: 'account' },
+      { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
       batch(),
     );
     await waitDone(r);
     expect(f.get().items.map((i) => i.status)).toEqual(['completed', 'completed', 'completed']);
     await r.request(
-      { action: 'start', id: 'digest-test', windowId: 1, accountId: 'account' },
+      { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
       batch(),
     );
     expect(generate).toHaveBeenCalledTimes(3);
@@ -165,10 +165,10 @@ describe('window digests', () => {
     });
     const r = new DigestRunner(f.db, f.capture, generate);
     await r.request(
-      { action: 'start', id: 'digest-test', windowId: 1, accountId: 'account' },
+      { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
       batch(),
     );
-    await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(2));
     await r.request({ action: 'stop', id: 'digest-test' });
     expect(f.get().items.map((i) => i.status)).toEqual(['cancelled', 'cancelled', 'cancelled']);
     expect(f.get().items[0]!.raw).toBe('partial');
@@ -176,7 +176,7 @@ describe('window digests', () => {
     await r.request({ action: 'retry', id: 'digest-test' });
     await waitDone(r);
     expect(f.capture).toHaveBeenCalledTimes(3);
-    expect(generate).toHaveBeenCalledTimes(4);
+    expect(generate).toHaveBeenCalledTimes(5);
   });
   it('pauses after provider failure without spending requests on the remaining tabs', async () => {
     const f = fixture();
@@ -186,12 +186,12 @@ describe('window digests', () => {
     });
     const r = new DigestRunner(f.db, f.capture, generate);
     await r.request(
-      { action: 'start', id: 'digest-test', windowId: 1, accountId: 'account' },
+      { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
       batch(),
     );
     await waitDone(r);
-    expect(generate).toHaveBeenCalledTimes(1);
-    expect(f.get().items.map((i) => i.status)).toEqual(['failed', 'interrupted', 'interrupted']);
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(f.get().items.map((i) => i.status)).toEqual(['failed', 'failed', 'interrupted']);
     expect(f.get().items[0]!.error).toContain('Usage limit');
     expect(f.get().items[0]!.raw).toBe('partial');
   });
@@ -207,7 +207,7 @@ describe('window digests', () => {
     });
     const r = new DigestRunner(f.db, f.capture, generate);
     await r.request(
-      { action: 'start', id: 'digest-test', windowId: 1, accountId: 'account' },
+      { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
       batch(),
     );
     await waitDone(r);
@@ -227,13 +227,100 @@ describe('window digests', () => {
     const generate = vi.fn(success),
       r = new DigestRunner(f.db, f.capture, generate);
     await r.request(
-      { action: 'start', id: 'digest-test', windowId: 1, accountId: 'account' },
+      { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
       batch(),
     );
     await waitDone(r);
-    expect(generate).toHaveBeenCalledTimes(1);
+    expect(generate).toHaveBeenCalledTimes(2);
     expect(
       ((await r.request({ action: 'get', id: 'digest-test' })) as DigestBatch).error,
     ).toContain('disk full');
   });
+});
+
+it('bounds workers at two and retains source order when later items finish first', async () => {
+  const f = fixture();
+  const releases = new Map<number, () => void>();
+  let active = 0,
+    maximum = 0;
+  const completed: number[] = [];
+  const generate = async function* (request: PlanRequest): AsyncGenerator<PlanEvent> {
+    if (request.action !== 'generate') throw new Error('Expected generation');
+    const index = Number(JSON.parse(request.userPrompt).url.split('/').at(-1));
+    active++;
+    maximum = Math.max(maximum, active);
+    await new Promise<void>((resolve) => releases.set(index, resolve));
+    active--;
+    completed.push(index);
+    yield* success();
+  };
+  const runner = new DigestRunner(f.db, f.capture, generate);
+  await runner.request(
+    { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
+    batch(),
+  );
+  await vi.waitFor(() => expect(releases.size).toBe(2));
+  expect(releases.has(2)).toBe(false);
+  releases.get(1)!();
+  await vi.waitFor(() => expect(releases.has(2)).toBe(true));
+  releases.get(2)!();
+  await vi.waitFor(() => expect(completed).toEqual([1, 2]));
+  releases.get(0)!();
+  await waitDone(runner);
+  expect(maximum).toBe(2);
+  expect(f.get().items.map((i) => i.index)).toEqual([0, 1, 2]);
+  expect(f.get().items.every((i) => i.status === 'completed')).toBe(true);
+});
+
+it('a storage failure aborts a sibling stream before a new control can proceed', async () => {
+  const f = fixture(),
+    original = f.mock.getMockImplementation()!;
+  let siblingAborted = false,
+    firstRelease: () => void = () => {};
+  f.mock.mockImplementation(async (r) => {
+    if (
+      r.type === 'DB_DIGEST_ITEM' &&
+      r.payload.item.index === 0 &&
+      r.payload.item.status === 'completed'
+    )
+      throw new Error('disk full');
+    return original(r);
+  });
+  const generate = async function* (
+    request: PlanRequest,
+    signal?: AbortSignal,
+  ): AsyncGenerator<PlanEvent> {
+    if (request.action !== 'generate') throw new Error('Expected generation');
+    const index = Number(JSON.parse(request.userPrompt).url.split('/').at(-1));
+    if (index === 0)
+      await new Promise<void>((resolve) => {
+        firstRelease = resolve;
+      });
+    else
+      await new Promise<void>((resolve) =>
+        signal!.addEventListener(
+          'abort',
+          () => {
+            siblingAborted = true;
+            resolve();
+          },
+          { once: true },
+        ),
+      );
+    signal!.throwIfAborted();
+    yield* success();
+  };
+  const runner = new DigestRunner(f.db, f.capture, generate);
+  await runner.request(
+    { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
+    batch(),
+  );
+  await vi.waitFor(() => expect(f.capture).toHaveBeenCalledTimes(2));
+  firstRelease();
+  await waitDone(runner);
+  expect(siblingAborted).toBe(true);
+  expect(f.capture).toHaveBeenCalledTimes(2);
+  const current = (await runner.request({ action: 'get', id: 'digest-test' })) as DigestBatch;
+  expect(current.error).toContain('disk full');
+  expect(current.items[0]!.status).toBe('interrupted');
 });

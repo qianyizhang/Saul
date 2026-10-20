@@ -11,6 +11,9 @@ export interface WorkspaceState {
   snapshot: TabSnapshot | null;
   revision?: string;
   error?: string;
+  notice?: string;
+  canUndo?: boolean;
+  summary?: { id: string; completed: number; total: number } | null;
   proposal: null | {
     id: string;
     status: 'pending' | 'applying' | 'applied' | 'stale' | 'failed' | 'expired';
@@ -29,7 +32,7 @@ export interface WorkspaceState {
 export interface WorkspaceResult {
   content: { type: 'text'; text: string }[];
   structuredContent: WorkspaceState;
-  _meta: { approvalToken?: string; ui?: { resourceUri: string } };
+  _meta: { interactionToken?: string; approvalToken?: string; ui?: { resourceUri: string } };
 }
 export function revision(snapshot: TabSnapshot): string;
 export function createWorkspace(options?: {

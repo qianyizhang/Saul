@@ -129,6 +129,7 @@ function main() {
           'mcp.mjs',
           'app-protocol.mjs',
           'workspace.mjs',
+          'tab-layout.mjs',
           'window-labels.mjs',
           'window-names.mjs',
           'window-names.jxa',

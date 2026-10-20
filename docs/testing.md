@@ -92,7 +92,7 @@ In `pnpm test:user`:
 1. Select the fixture concept and choose **Explain**.
 2. Confirm the page stays readable while the underline and queued/ready cues update.
 3. Open the marker, inspect notes, close it, refresh, and reopen the restored result.
-4. Check unread state, **Alt+Shift+L**, source navigation, keyboard/pin/follow-up/stop behavior, and tab previews when relevant.
+4. Check unread state, **Alt+Shift+L**, source navigation, keyboard/pin/follow-up/stop behavior, and direct tab edits or Codex proposal review when relevant.
 5. Toggle **Mute error notifications** in Settings; verify another tab and a browser relaunch observe the setting, then turn it off.
 6. Toggle **Minimum Mode** while a page explanation and full History workspace are open. Check that the presentation changes immediately, remains after restart, and can change with an invalid provider draft. In Minimum Mode, verify **More**, **Details**, source links, errors, and unsaved changes.
 7. Check **Command/Ctrl+Enter** on a source selection, **Escape** while generation is active, and **Command/Ctrl+.** with the job open. Editable fields and Chrome shortcuts must keep their existing behavior.

@@ -90,15 +90,33 @@ The extension tab workspace calls `src/native/tabs.ts` directly. Optional extern
 CLI or MCP -> private Unix socket -> native host -> Chrome native messaging -> tab tools
 ```
 
-`native/protocol.mjs` is the runtime schema shared by the extension, CLI, and MCP server. Mutations preview by default, validate current browser state before apply, serialize inside the extension, and never retry automatically after an uncertain error. Incognito and non-normal windows are excluded. `src/native/pages.ts` handles separately opted-in page reads and actions through Chrome scripting in the isolated world; short-lived element references are tied to the read's document. MCP health/discovery bypasses the browser request queue.
+`native/protocol.mjs` is the runtime schema shared by the extension, CLI, and MCP server. Public CLI mutation tools preview by default. Internal transport commands support direct user edits; both paths validate current browser state, serialize inside the extension, and never retry automatically after an uncertain error. Incognito and non-normal windows are excluded. `src/native/pages.ts` handles separately opted-in page reads and actions through Chrome scripting in the isolated world; short-lived element references are tied to the read's document. MCP health/discovery bypasses the browser request queue.
 
-The [MCP App](mcp-app.md) serves a self-contained board from `native/ui/`. Drag-and-drop, keyboard controls and Codex requests all feed `native/workspace.mjs` proposals. The service validates complete layouts, issues expiring approval tokens to the app, and verifies each browser move, duplicate closure and label update after the user clicks Apply. Shared window labels belong to trusted extension session storage (`src/native/window-labels.ts`), and are included in tab inventories for both surfaces. On macOS Google Chrome, `native/window-names.mjs` targets the connected browser PID through the AppleScript `givenName` interface: inventory reads import names, and reviewed writes validate window/tab IDs and the expected name, then read back the result. The extension API itself has no native name field. Legacy helper-only labels import on a reviewed apply. Duplicate detection uses exact HTTP(S) URLs; closures retain pins/groups and revalidate the URL and keeper at the extension boundary. `native/app-protocol.mjs` owns app-only schemas; these do not expand the extension's native protocol.
+The [MCP App](mcp-app.md) serves a self-contained board from `native/ui/`. Codex reorganization requests and window renames feed `native/workspace.mjs` proposals; manual tab and group edits use the direct interaction boundary below. The service validates complete layouts, issues expiring approval tokens to the app, and verifies each browser move, duplicate closure and label update after the user clicks Apply. Shared window labels belong to trusted extension session storage (`src/native/window-labels.ts`), and are included in tab inventories for both surfaces. On macOS Google Chrome, `native/window-names.mjs` targets the connected browser PID through the AppleScript `givenName` interface: inventory reads import names, and reviewed writes validate window/tab IDs and the expected name, then read back the result. The extension API itself has no native name field. Legacy helper-only labels import on a reviewed apply. Duplicate detection uses exact HTTP(S) URLs; closures retain pins/groups and revalidate the URL and keeper at the extension boundary. `native/app-protocol.mjs` owns app-only schemas and gates direct actions with a private interaction token.
 
-## Window digest ownership
+The shared native protocol distinguishes public model/CLI tools from internal
+transport commands. Direct tab edits and Undo live in
+`src/native/interaction.ts`, inside the existing mutation lock. Organization
+identity ignores focus and navigation; Undo validates only affected windows.
+Both extension and MCP selection controls use this boundary.
 
-`src/digest/` owns the fixed bilingual summary contract, capture, runner, persistence operations, and safe standalone HTML renderer. The workspace sends validated digest actions through the background; only the background snapshots Chrome windows, and only the offscreen runner can request page captures. Content scripts cannot start or inspect digests. Capture uses isolated-world scripting and validates the original URL before and after reading.
+MCP manual operations require an expiring interaction token returned only in
+tool-result metadata. They are app-only, distinct from proposal approval tokens.
+The MCP dispatcher rejects unadvertised transport commands. Summarize opens a
+Chrome reader; source text and credentials never traverse the board. The reader
+then uses the existing trusted extension digest boundary.
 
-The existing offscreen document hosts the digest runner alongside reading jobs. Both use the same database worker and native ChatGPT transport; digest generation calls the existing plan adapter with a frozen account, prompt, model and effort. Digest control actions serialize, generation is sequential, and there is no automatic retry. Schema version 2 adds digest metadata and item/source rows without rewriting reading data. Restart reconciliation marks unfinished items interrupted. The UI polls saved/live state while mounted and renders English before Chinese from validated pairs; raw model text is never interpreted as HTML.
+## Summary ownership
+
+`src/digest/` owns the fixed bilingual summary contract, capture, runner, persistence operations, and safe standalone HTML renderer. The workspace sends validated digest actions through the background; only the background snapshots selected tabs, and only the offscreen runner can request page captures. Content scripts cannot start or inspect digests. Capture uses isolated-world scripting and validates the original URL before and after reading.
+
+The existing offscreen document hosts the digest runner alongside reading jobs. Both use the same database worker and native ChatGPT transport; digest generation calls the existing plan adapter with a frozen account, prompt, model and effort. Digest control actions serialize, generation uses two concurrent workers, and there is no automatic retry. All workers settle before a stop/delete/retry control can complete. Schema version 2 adds digest metadata and item/source rows without rewriting reading data. Restart reconciliation marks unfinished items interrupted. The UI polls saved/live state while mounted and renders English before Chinese from validated pairs; raw model text is never interpreted as HTML.
+
+`src/app/Summaries.tsx` owns saved-summary history and live reading under
+`library.html#summary/<id>`. A new reader resolves account choice and sends the
+exact selected tab IDs. Snapshot metadata records source-window labels per item;
+older saved summaries remain readable. Polling reads active progress or the
+open reader, never the entire summary history on a recurring timer.
 
 ## Source layout
 
