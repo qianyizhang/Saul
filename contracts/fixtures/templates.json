@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "valid": [
+    {
+      "name": "literal Unicode",
+      "template": "Explain {{text}}.",
+      "values": {
+        "text": "你好 {{text}}"
+      },
+      "output": "Explain 你好 {{text}}."
+    },
+    {
+      "name": "repeated field and whitespace",
+      "template": "{{ text }}\nAgain: {{text}}",
+      "values": {
+        "text": " alpha\nbeta "
+      },
+      "output": " alpha\nbeta \nAgain:  alpha\nbeta "
+    },
+    {
+      "name": "literal markup",
+      "template": "<input>{{text}}</input>",
+      "values": {
+        "text": "<b>x</b> $() {% text %}"
+      },
+      "output": "<input><b>x</b> $() {% text %}</input>"
+    }
+  ],
+  "invalid": [
+    "{{}}",
+    "{{text",
+    "text}}",
+    "{{text | upper}}",
+    "{{text.value}}",
+    "{% if text %}{{text}}{% endif %}",
+    "no inputs",
+    "{{{{text}}"
+  ],
+  "missing": [
+    {
+      "template": "{{text}}",
+      "values": {}
+    },
+    {
+      "template": "{{text}}",
+      "values": {
+        "text": " \n"
+      }
+    }
+  ]
+}

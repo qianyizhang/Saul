@@ -6,6 +6,9 @@ SwiftUI UI, direct OpenAI Responses API, and history saved on your Mac.
 The [surface contract](docs/surfaces.md) defines the **main window** and
 **Quick Lookup panel**, their core functions, and their shared workspace.
 
+This app lives in `apps/ez`; run the commands below from that directory.
+See the [monorepo setup guide](../../docs/setup.md) for component selection.
+
 ## Run
 
 Requires macOS 14+ and Apple Command Line Tools with Swift 6.3+ (`xcode-select --install`).

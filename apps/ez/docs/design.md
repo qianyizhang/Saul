@@ -4,17 +4,17 @@ EZ and Saul use **Little Clarity**, a portable Google Labs DESIGN.md contract.
 EZ supplied its visual baseline: a green accent, serif subjects, system controls,
 quiet surfaces, and a spacious reading area. Native system surfaces remain native.
 
-The single authoring source in this local two-repository setup is
-`../Saul/DESIGN.md`; the application workflow is `../Saul/design/SKILL.md`.
+The single authoring source is [DESIGN.md](../../../DESIGN.md); the application
+workflow is [feature UI review](../../../design/SKILL.md#feature-ui-review).
 `Sources/EZ/DesignTokens.swift` records the exact source SHA-256 and is generated;
 `AppStyle.swift` connects its roles to the app. Do not hand-edit generated tokens.
 The compiled app and ordinary Swift checks require no JavaScript runtime or sibling checkout.
 
-From the Saul checkout (Node 24 and installed pinned dependencies):
+From the monorepo root (Node 24 and installed pinned dependencies):
 
 ```sh
-node design/generate.mjs --swift ../ez/Sources/EZ/DesignTokens.swift
-node design/generate.mjs --swift ../ez/Sources/EZ/DesignTokens.swift --check
+pnpm design:generate
+pnpm design:check
 ```
 
 After regeneration, run EZ's `make format` and `make check`, then inspect the built
@@ -29,7 +29,7 @@ The generator and contract travel together when the design kit is moved or versi
 
 ## Feature UI review
 
-Follow the shared [feature UI review](../../Saul/design/SKILL.md#feature-ui-review)
+Follow the shared [feature UI review](../../../design/SKILL.md#feature-ui-review)
 for new features and changes to forms, metadata, actions or disclosures. Map the
 user’s task and information hierarchy before editing. Verify the affected main
 window, Quick Lookup and Settings states through [native UI journeys](ui-qa.md),

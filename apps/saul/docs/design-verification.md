@@ -2,7 +2,7 @@
 
 ## Shared design and configuration · 2026-10-18
 
-The shared [contract](../DESIGN.md) now covers reading/composition states, action
+The shared [contract](../../../DESIGN.md) now covers reading/composition states, action
 names, keyboard ownership, progressive disclosure and a future mobile adaptation.
 The existing palette and typography token values are retained; regenerated CSS,
 TypeScript and Swift receipts all match the edited contract.
@@ -65,7 +65,7 @@ The initial receipt below records the first working-tree adoption, including the
 then-present Quick Lookup prototype. The scoped review at the end records the
 independent commit snapshots and later fixes.
 
-**Delivered:** one portable [DESIGN.md](../DESIGN.md), the [application skill](../design/SKILL.md),
+**Delivered:** one portable [DESIGN.md](../../../DESIGN.md), the [application skill](../../../design/SKILL.md),
 deterministic web/SwiftUI generation, all Saul visual surfaces, and targeted EZ typography polish.
 The projects remain separate; EZ builds independently from its generated Swift source.
 

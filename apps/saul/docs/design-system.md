@@ -1,8 +1,8 @@
 # Applying Little Clarity
 
-[DESIGN.md](../DESIGN.md) is the single authored identity. Its YAML gives exact
+[DESIGN.md](../../../DESIGN.md) is the single authored identity. Its YAML gives exact
 values; its prose defines hierarchy, component use, surface adaptation, and motion.
-The [apply-design skill](../design/SKILL.md) is the reusable agent workflow.
+The [apply-design skill](../../../design/SKILL.md) is the reusable agent workflow.
 
 ## Generate and check
 
@@ -12,15 +12,15 @@ Use Node 24 and the pinned pnpm version:
 pnpm design:generate
 pnpm design:check
 # Local EZ adoption, while these projects remain separate checkouts:
-node design/generate.mjs --swift ../ez/Sources/EZ/DesignTokens.swift
-node design/generate.mjs --swift ../ez/Sources/EZ/DesignTokens.swift --check
+pnpm --dir ../.. design:generate
+pnpm --dir ../.. design:check
 ```
 
 The parser/linter is pinned at `@google/design.md@0.4.0`; the upstream format is
 alpha. Source SHA-256 receipts accompany all generated assets. Formatting or
 editing the contract requires regeneration, including EZ when its styles change.
-`pnpm check` checks the Saul artifacts; the explicit Swift check verifies the sibling
-consumer without making either project's ordinary build depend on the other checkout.
+`pnpm check` in this app checks browser artifacts; root `pnpm design:check` verifies the native
+consumer without making either project's ordinary build depend on the other application.
 
 ## Surface adapters
 
@@ -82,7 +82,7 @@ editors expose the account catalog's available model, effort, and speed choices;
 unavailable saved choices block execution. EZ supplies user-entered recipe fields;
 Saul supplies a selected passage and enabled page context. Both retain original
 request choices in saved attempts. See the contract's
-[configuration rules](../DESIGN.md#accounts-presets-and-recipes).
+[configuration rules](../../../DESIGN.md#accounts-presets-and-recipes).
 
 Mobile follows the same contract, with one reading column, tap-accessible Details,
 and a bottom composer. This is a future adaptation; narrow web reflow is the current

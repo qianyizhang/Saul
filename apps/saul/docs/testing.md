@@ -118,7 +118,7 @@ The default browser suite uses deterministic local fixtures. It does not verify 
 
 On-device generation is temporarily disabled. Its integration cases are retained and skipped until re-enabled; the active regression verifies the disabled option and recovery from saved local selections. When enabled, tests include a real, read-only `LanguageModel.availability()` probe with a JSON attachment recording the browser version, API exposure, and result. The disposable model fixture separately verifies user-activated preparation, honest readiness/errors, generation, and selection → offscreen runner → saved history. Fixture success does not establish live Gemini inference. Playwright's default switches disable background networking, component updates, and optimization hints, so its disposable profile's availability is not evidence of model eligibility in the user's normal Chrome profile. For that browser, inspect `chrome://on-device-internals` and the [Prompt API requirements](https://developer.chrome.com/docs/ai/prompt-api#hardware-requirements).
 
-Agent workflow: [saul-browser-testing skill](../.agents/skills/saul-browser-testing/SKILL.md).
+Agent workflow: [saul-browser-testing skill](../../../.agents/skills/saul-browser-testing/SKILL.md).
 
 ChatGPT plan unit tests include a real loopback callback and temporary native-helper installation. Run socket-dependent tests with local binding permission. OAuth and inference endpoints are mocked; no real plan quota is consumed.
 

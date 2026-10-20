@@ -1,28 +1,72 @@
-minimum_pre_commit_version: '4.0.0'
+minimum_pre_commit_version: '4.7.0'
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit]
 repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # v6.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=512]
+      - id: check-yaml
+      - id: check-json
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
   - repo: local
     hooks:
       - id: format
-        name: Format
+        name: Web and shared formatting
         entry: pnpm format:check
         language: system
         pass_filenames: false
         always_run: true
       - id: lint
-        name: Lint
-        entry: pnpm lint
+        name: Shared and browser lint
+        entry: bash -c 'pnpm lint && pnpm --dir apps/saul lint'
         language: system
         pass_filenames: false
         always_run: true
       - id: types
-        name: Typecheck
+        name: Browser types
         entry: pnpm typecheck
         language: system
         pass_filenames: false
         always_run: true
       - id: links
-        name: Documentation links
+        name: Repository documentation links
         entry: pnpm check:links
         language: system
         pass_filenames: false
         always_run: true
+      - id: swift-lint
+        name: Native Swift format and correctness
+        entry: make -C apps/ez lint-swift
+        language: system
+        files: '^apps/ez/.*(\.swift$|\.swift-format$|\.swiftlint\.yml$|Makefile$)'
+        pass_filenames: false
+      - id: shell-lint
+        name: Native shell syntax and ShellCheck
+        entry: make -C apps/ez lint-shell
+        language: system
+        files: '^(apps/ez/|scripts/).*\.sh$'
+        pass_filenames: false
+      - id: workflow-lint
+        name: Workflow static checks
+        entry: make -C apps/ez lint-workflows
+        language: system
+        files: '^\.github/.*\.ya?ml$'
+        pass_filenames: false
+      - id: plist-lint
+        name: Property list validation
+        entry: plutil -lint
+        language: system
+        files: '\.plist$'
+      - id: offline-checks
+        name: Native offline checks
+        entry: make -C apps/ez check
+        language: system
+        stages: [pre-push]
+        files: '^apps/ez/|^contracts/'
+        pass_filenames: false

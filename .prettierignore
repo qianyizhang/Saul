@@ -6,7 +6,11 @@ playwright-report/
 test-results*/
 coverage/
 pnpm-lock.yaml
-docs/benchmarks/*.json
+**/docs/benchmarks/*.json
 # Imported generic skills are maintained outside this project.
 .agents/skills/grilling/
 .agents/skills/show-me/
+
+# Native formatting is owned by swift-format.
+apps/ez/
+pnpm-workspace.yaml

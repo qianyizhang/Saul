@@ -42,3 +42,9 @@ web-ext.config.ts
 playwright-report/
 test-results/
 test-results-*/
+
+# Native build and development tools
+.build/
+.cache/
+.swiftpm/
+.local/

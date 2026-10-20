@@ -1,63 +1,53 @@
-# Saul
+# Saul workspace
 
-Saul is a local-first Chrome extension for reading explanations and safe tab organization. It is built with WXT, React, TypeScript, and SQLite-WASM/OPFS.
+One repository for independently installed Chrome and macOS applications, with
+shared design, vocabulary, behavior and interface contracts. Implementations,
+credentials and local records remain app-owned. Mobile and two-way sync are future work.
 
-## Capabilities
+| Application                 | Install independently                                       | Development                    |
+| --------------------------- | ----------------------------------------------------------- | ------------------------------ |
+| [Saul](apps/saul/README.md) | Chrome extension; optional ChatGPT and tab helpers          | TypeScript/React, Node helpers |
+| [EZ](apps/ez/README.md)     | Native macOS app; no Saul, Node or Codex runtime dependency | SwiftUI/AppKit and Swift core  |
 
-- **Reading:** select text, queue an explanation, keep reading, and return through persistent underlines, notifications, or history.
-- **Library:** search saved passages and explanations, bookmark them, revisit sources, inspect attempts, and export Markdown.
-- **Models:** use your [ChatGPT plan](docs/chatgpt-plan.md), an OpenAI-compatible endpoint, or Chrome's on-device `LanguageModel` API.
-- **Window and Tab board:** select, drag, group, move and summarize tabs with shared controls; Codex proposals retain review and Apply.
-- **Codex access:** opt in to local CLI/MCP tools for tab organization and new windows. A separate switch enables page reading, clicks, text filling and navigation.
-- **MCP App:** drag tabs between windows beside the conversation, use keyboard move controls, or ask Codex for a layout. Review the preview, then apply it with a button. Pinned tabs and existing groups stay intact. See the [workspace guide](docs/mcp-app.md).
+## Setup
 
-## Install with Codex
-
-With Node 24, the pinned pnpm version, Chrome and Codex CLI available, run from this checkout:
+Start with [selective installation](docs/setup.md). From the repository root:
 
 ```sh
-node scripts/setup.mjs
+node scripts/setup.mjs --components extension --dry-run
+node scripts/setup.mjs --components extension --prepare
+node scripts/setup.mjs --components ez --dry-run
 ```
 
-The wizard builds Saul, installs its native helper, registers MCP and verifies a real tab inventory. It guides you through loading the extension and enabling access in Chrome. See [setup and agent instructions](docs/setup.md) for unattended use, upgrades and the helper lifecycle. Run `node scripts/setup.mjs --verify` to check an existing installation.
+No package is published to npm. The setup command is an optional coordinator;
+each application's own build/install commands remain usable. Chrome loading is
+explicit. Codex registration is an explicit `--codex` option, never a prerequisite.
 
 ## Develop
 
-Use the Node version in `.node-version` and the pnpm version declared in `package.json`.
+Use Node 24 and the pinned pnpm version, then `pnpm install --frozen-lockfile`.
+Native development also needs Apple tools and `make -C apps/ez tools`.
 
 ```sh
-corepack enable
-pnpm install --frozen-lockfile
-uvx --from pre-commit==4.6.2 pre-commit install
-pnpm dev
+pnpm check                 # Shared + browser + macOS checks
+pnpm check:shared          # Shared tooling, contracts and browser design receipts
+pnpm check:saul            # Browser app checks
+pnpm check:ez              # All design receipts + native checks (macOS)
+pnpm build:saul
+pnpm build:ez
+pnpm test:e2e              # Disposable browser tests; observe macOS launch policy
+pnpm design:generate       # Regenerate CSS, TypeScript and Swift together (macOS)
 ```
 
-Build and verify:
+Git hooks use the root `.pre-commit-config.yaml`; install through
+`bash scripts/install-hooks.sh`. Native commands run from `apps/ez` or with
+`make -C apps/ez`. Browser commands run from `apps/saul` or with `pnpm --dir apps/saul`.
 
-The hook command uses [uv](https://docs.astral.sh/uv/). It installs this repository's
-format, lint, type, and documentation-link checks for future commits.
+- [Architecture and decisions](docs/architecture.md)
+- [Shared behavior and interfaces](contracts/README.md)
+- [Vocabulary](GLOSSARY.md)
+- [Design](DESIGN.md) and [feature review](design/SKILL.md)
+- [Migration verification](docs/migration.md)
 
-```sh
-pnpm check
-pnpm build
-pnpm test:e2e
-pnpm zip
-```
-
-Browser tests use disposable profiles and a local model fixture. On macOS, read the browser-launch approval guidance in the [testing runbook](docs/testing.md) before running them from a restricted agent sandbox.
-
-## Documentation
-
-| Document                                     | Purpose                                                     |
-| -------------------------------------------- | ----------------------------------------------------------- |
-| [Setup](docs/setup.md)                       | One-command setup, agent instructions and helper lifecycle  |
-| [Product](docs/product.md)                   | Shipped behavior and current limits                         |
-| [Architecture](docs/architecture.md)         | Runtime boundaries, data flow, and invariants               |
-| [Design contract](DESIGN.md)                 | Portable visual identity, component and motion principles   |
-| [Design application](docs/design-system.md)  | Generation, cross-project adoption, and visual verification |
-| [Testing](docs/testing.md)                   | Quality gates, browser harness, and debugging               |
-| [ChatGPT plan](docs/chatgpt-plan.md)         | OAuth setup, supported API surface and credential lifecycle |
-| [Native messaging](docs/native-messaging.md) | CLI/MCP setup and tab-tool safety                           |
-| [Benchmarks](docs/benchmarks/README.md)      | Reproduction commands and evidence limits                   |
-
-The native bridge is optional. See [Codex tab access](docs/native-messaging.md) for installation and removal.
+Naming is provisional. A future rename must separate display names from installed
+identities; the shared contracts use domain terms rather than product names.

@@ -1,143 +1,175 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { setup } from '../scripts/setup.mjs';
+import { tmpdir } from 'node:os';
+import { createPlan, executePlan, installExtension } from '../scripts/setup.mjs';
 
-let root;
-let deps;
-let options;
-beforeEach(async () => {
-  root = await mkdtemp('/tmp/saul-setup-');
-  await mkdir(join(root, '.output/chrome-mv3'), { recursive: true });
-  await writeFile(join(root, '.output/chrome-mv3/manifest.json'), '{}');
-  await writeFile(join(root, 'package.json'), JSON.stringify({ packageManager: 'pnpm@11.0.3' }));
-  options = {
-    extensionId: 'a'.repeat(32),
-    installDir: join(root, "Saul's files"),
-    manifestDir: join(root, 'Native Hosts'),
-  };
-  deps = {
-    root,
-    node: '/node with spaces/node',
-    nodeVersion: '24.21.0',
-    log: vi.fn(),
-    run: vi.fn(async (command, args) => {
-      if (command === 'codex' && args[1] === 'list') return '[]';
-      if (command === 'pnpm' && args[0] === '--version') return '11.0.3';
-      return '';
-    }),
-    verify: vi.fn(async () => ({
-      status: 'ready',
-      toolCount: 15,
-      inventories: [{ tabs: 2, windows: 1 }],
-    })),
-  };
+const environment = {
+  repo: '/fixture/repo',
+  home: '/fixture/home',
+  platform: 'darwin',
+  node: '/fixture/node',
+};
+const id = 'a'.repeat(32);
+
+test('extension, helpers and native app are independently selectable; Codex is explicit', () => {
+  const extension = createPlan({ components: 'extension' }, environment);
+  assert.deepEqual(extension.components, ['extension']);
+  assert.deepEqual(
+    extension.commands.map((c) => c.command),
+    ['pnpm', 'pnpm'],
+  );
+  assert.equal(extension.hosts.length, 0);
+  const native = createPlan({ components: 'ez' }, environment);
+  assert.deepEqual(
+    native.commands.map((c) => c.command),
+    ['make'],
+  );
+  assert.equal(native.commands[0].env.EZ_APPLICATIONS_DIR, '/fixture/home/Applications');
+  const helpers = createPlan(
+    { components: 'chatgpt,tabs', extensionId: id, skipBuild: true },
+    environment,
+  );
+  assert.equal(helpers.commands.length, 2);
+  assert.equal(helpers.hosts[0].manifest.name, 'com.saul.chatgpt');
+  assert.equal(helpers.hosts[1].manifest.name, 'com.saul.tabs');
+  assert(!helpers.commands.some((c) => c.command === 'codex'));
+  const connected = createPlan({ components: 'tabs', extensionId: id, codex: true }, environment);
+  assert.equal(connected.commands.at(-1).command, 'codex');
 });
-afterEach(async () => {
-  await rm(root, { recursive: true, force: true });
+
+test('unsupported combinations and missing helper identity fail before execution', () => {
+  for (const options of [
+    { components: 'unknown' },
+    { components: 'tabs' },
+    { components: 'extension', codex: true },
+    { components: 'ez', skipBuild: true },
+    { components: 'extension', prepare: true, verify: true },
+    { components: 'extension', extensionDir: '/fixture/home' },
+  ])
+    assert.throws(() => createPlan(options, environment));
+  assert.throws(() => createPlan({ components: 'ez' }, { ...environment, platform: 'linux' }));
+  assert.doesNotThrow(() =>
+    createPlan({ components: 'extension' }, { ...environment, platform: 'linux' }),
+  );
 });
-it('builds, installs and registers with argument arrays, then verifies the registered transport', async () => {
-  expect((await setup(options, deps)).exitCode).toBe(0);
-  expect(deps.run.mock.calls.map(([command, args]) => [command, args])).toEqual([
-    ['codex', ['mcp', 'list', '--json']],
-    ['pnpm', ['--version']],
-    ['pnpm', ['install', '--frozen-lockfile']],
-    ['pnpm', ['build']],
+
+test('prepare builds without installing or registering; verification has no install commands', () => {
+  const plan = createPlan({ components: 'extension,chatgpt,tabs,ez', prepare: true }, environment);
+  assert.deepEqual(
+    plan.commands.map((c) => [c.command, c.args[0]]),
     [
-      deps.node,
-      [
-        join(root, 'native/install.mjs'),
-        '--extension-id',
-        options.extensionId,
-        '--install-dir',
-        options.installDir,
-        '--manifest-dir',
-        options.manifestDir,
-      ],
+      ['pnpm', 'install'],
+      ['pnpm', 'build'],
+      ['make', 'app'],
     ],
-    [
-      'codex',
-      ['mcp', 'add', 'saul-tabs', '--', deps.node, join(options.installDir, 'bridge/mcp.mjs')],
-    ],
-  ]);
-  expect(deps.verify).toHaveBeenCalledWith(
-    { type: 'stdio', command: deps.node, args: [join(options.installDir, 'bridge/mcp.mjs')] },
-    options.extensionId,
+  );
+  assert.equal(
+    createPlan({ components: 'extension,ez', verify: true }, environment).commands.length,
+    0,
   );
 });
-it('dry-run performs no subprocesses, prompts or verification', async () => {
-  deps.ask = vi.fn();
-  expect((await setup({ ...options, dryRun: true }, deps)).status).toBe('dry-run');
-  expect(deps.run).not.toHaveBeenCalled();
-  expect(deps.ask).not.toHaveBeenCalled();
-  expect(deps.verify).not.toHaveBeenCalled();
-});
-it('prepare builds without registering; unattended missing ID returns actionable status', async () => {
-  expect((await setup({ prepare: true }, deps)).status).toBe('prepared');
-  expect(deps.run.mock.calls.every(([command]) => command === 'pnpm')).toBe(true);
-  deps.run.mockClear();
-  expect((await setup({ skipBuild: true }, deps)).status).toBe('needs-extension-id');
-  expect(deps.run.mock.calls).toHaveLength(1);
-  expect(deps.verify).not.toHaveBeenCalled();
-});
-it('interactive setup requests the actual ID and waits for the Chrome step before verification', async () => {
-  deps.ask = vi.fn().mockResolvedValueOnce(options.extensionId).mockResolvedValueOnce('');
-  expect((await setup({ ...options, extensionId: undefined, skipBuild: true }, deps)).status).toBe(
-    'ready',
-  );
-  expect(deps.ask).toHaveBeenCalledTimes(2);
-  expect(deps.verify.mock.invocationCallOrder[0]).toBeGreaterThan(
-    deps.ask.mock.invocationCallOrder[1],
-  );
-});
-it('preserves matching registration command, environment and cwd on reinstall and verify', async () => {
-  const transport = {
-    type: 'stdio',
-    command: '/old/node',
-    args: [join(options.installDir, 'bridge/mcp.mjs')],
-    env: { SAUL_RUNTIME_DIR: '/tmp/saul-custom' },
-    cwd: root,
-  };
-  deps.run.mockResolvedValue(
-    JSON.stringify([{ name: 'saul-tabs', enabled: true, transport, tool_timeout_sec: 45 }]),
-  );
-  await setup({ ...options, skipBuild: true }, deps);
-  expect(deps.run.mock.calls.some(([, args]) => args[1] === 'add')).toBe(false);
-  expect(deps.verify).toHaveBeenCalledWith(transport, options.extensionId);
-  deps.run.mockClear();
-  await setup({ ...options, verify: true }, deps);
-  expect(deps.run.mock.calls).toHaveLength(1);
-});
-it('does not replace unrelated or disabled registrations', async () => {
-  for (const registration of [
-    { name: 'saul-tabs', transport: { type: 'http', url: 'https://example.com/mcp' } },
-    {
-      name: 'saul-tabs',
-      enabled: false,
-      transport: { type: 'stdio', args: [join(options.installDir, 'bridge/mcp.mjs')] },
-    },
-  ]) {
-    deps.run.mockClear().mockResolvedValue(JSON.stringify([registration]));
-    await expect(setup(options, deps)).rejects.toThrow();
-    expect(deps.run.mock.calls).toHaveLength(1);
+
+test('extension copy retains bytes, verifies artifact, and refuses to replace existing data or symlinks', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'workspace-install-'));
+  try {
+    const source = join(dir, 'source');
+    const target = join(dir, 'installed');
+    await mkdir(source);
+    await writeFile(join(source, 'manifest.json'), JSON.stringify({ manifest_version: 3 }));
+    await writeFile(join(source, 'payload'), 'fixture');
+    await installExtension(source, target);
+    assert.equal(await readFile(join(target, 'payload'), 'utf8'), 'fixture');
+    await assert.rejects(installExtension(source, target), /already exists/);
+    const alias = join(dir, 'alias');
+    await symlink(target, alias);
+    await assert.rejects(installExtension(source, alias), /already exists/);
+    const plan = createPlan(
+      { components: 'extension', extensionDir: target, verify: true },
+      { ...environment, home: join(dir, 'home') },
+    );
+    await executePlan(plan, {
+      log() {},
+      run() {
+        throw new Error('Verification must not execute installers');
+      },
+    });
+    await writeFile(join(source, 'manifest.json'), '{}');
+    await assert.rejects(installExtension(source, join(dir, 'bad')), /not a Chrome MV3/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
-  expect(deps.verify).not.toHaveBeenCalled();
 });
-it('reports offline as waiting and never labels it ready', async () => {
-  deps.verify.mockResolvedValue({ status: 'waiting-for-browser', inventories: [] });
-  expect(await setup({ ...options, skipBuild: true }, deps)).toMatchObject({
-    status: 'waiting-for-browser',
-    exitCode: 2,
-  });
+
+test('missing prerequisites and an existing Codex registration stop before installation', async () => {
+  const plan = createPlan(
+    { components: 'tabs', extensionId: id, skipBuild: true, codex: true },
+    environment,
+  );
+  const calls = [];
+  await assert.rejects(
+    executePlan(plan, {
+      log() {},
+      run: async (command, args) => {
+        calls.push([command, args]);
+        return command === '/fixture/node' ? 'v24.21.0' : '[{"name":"saul-tabs"}]';
+      },
+    }),
+    /already registered/,
+  );
+  assert.equal(calls.length, 2);
+  await assert.rejects(executePlan(plan, { log() {}, run: async () => 'v25.0.0' }), /Use Node 24/);
 });
-it('stops on prerequisite or installation failure before claiming registration succeeded', async () => {
-  await expect(setup(options, { ...deps, nodeVersion: '22.0.0' })).rejects.toThrow('Node 24');
-  expect(deps.run).not.toHaveBeenCalled();
-  deps.run.mockImplementation(async (command) => {
-    if (command === 'codex') return '[]';
-    throw new Error('Installer refused conflict');
-  });
-  await expect(setup({ ...options, skipBuild: true }, deps)).rejects.toThrow('Installer refused');
-  expect(deps.run.mock.calls.some(([, args]) => args[1] === 'add')).toBe(false);
-  expect(deps.verify).not.toHaveBeenCalled();
+
+test('helper registration verification rejects mismatched extension identity without executing', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'workspace-host-'));
+  try {
+    const plan = createPlan(
+      {
+        components: 'chatgpt',
+        extensionId: id,
+        verify: true,
+        installDir: join(dir, 'runtime'),
+        manifestDir: dir,
+      },
+      environment,
+    );
+    await writeFile(
+      plan.hosts[0].manifestPath,
+      JSON.stringify({ ...plan.hosts[0].manifest, allowed_origins: [] }),
+    );
+    await assert.rejects(
+      executePlan(plan, {
+        log() {},
+        run() {
+          throw new Error('Must not run');
+        },
+      }),
+      /registration mismatch/,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('an existing extension destination stops the whole install before other components change', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'workspace-existing-'));
+  try {
+    const plan = createPlan(
+      { components: 'extension,chatgpt,ez', extensionId: id, extensionDir: dir },
+      environment,
+    );
+    await assert.rejects(
+      executePlan(plan, {
+        log() {},
+        run() {
+          throw new Error('No command should run before destination validation');
+        },
+      }),
+      /destination already exists/,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

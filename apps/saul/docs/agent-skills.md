@@ -4,8 +4,7 @@ Nine generic skills are installed at user scope from repo-kit's reviewed
 `skills/` bundle: `writing-for-agents`, `codebase-design`, `grilling`,
 `domain-modeling`, `retro`, `improve-codebase-architecture`, `next-slice`, `show-me`, `finish-work`.
 This repository maintains no separate generic copy or upstream lock.
-The shared maintenance procedure is at `../repo-kit/docs/skill-suite.md` in the
-sibling checkout. Update the installation there; preserve project-specific skills.
+The shared maintenance procedure lives in repo-kit's `docs/skill-suite.md`. Update the installation there; preserve project-specific skills.
 
 Resolve upstream document names to these existing owners. Create a glossary or
 ADR only for a concrete unresolved term or consequential decision; do not create
@@ -17,7 +16,7 @@ and write scope. Clear acceptance settles a decision without a second confirmati
 | `GLOSSARY.md`         | Domain terms in [product](product.md) and [architecture](architecture.md); add a glossary only when needed |
 | `docs/adr/`           | Consequential decisions in [architecture](architecture.md); create ADRs lazily                             |
 | `CODING_STANDARDS.md` | [AGENTS.md](../AGENTS.md) and existing lint, types and [testing](testing.md)                               |
-| Browser verification  | [Local browser skill](../.agents/skills/saul-browser-testing/SKILL.md)                                     |
+| Browser verification  | [Local browser skill](../../../.agents/skills/saul-browser-testing/SKILL.md)                               |
 
 ## Finishing a slice
 

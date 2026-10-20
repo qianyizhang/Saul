@@ -9,7 +9,7 @@ Node, Python, Electron, or webview runtime dependency to the app.
 
 For feature UI, forms, metadata, actions, or disclosure changes, read `docs/design.md`
 and follow its feature UI review before implementation and completion. The shared
-authoring contract currently lives at `../Saul/DESIGN.md`; `DesignTokens.swift` is
+authoring contract currently lives at [the root DESIGN.md](../../DESIGN.md); `DesignTokens.swift` is
 generated from it. Keep native semantic controls and backgrounds, and use `AppStyle` roles for shared identity.
 
 ## Working rules

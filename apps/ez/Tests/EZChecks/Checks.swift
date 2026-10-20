@@ -7,7 +7,7 @@ import Foundation
             runnerChecks() + launcherChecks() + historyChecks() + identityChecks()
             + modelChecks() + templateChecks() + configurationChecks()
             + spellingComparisonChecks() + recipeHistoryChecks() + responsesChecks() + authenticationChecks()
-            + shortcutChecks()
+            + shortcutChecks() + sharedContractChecks()
         exit(await CheckRunner.run(cases))
     }
 }

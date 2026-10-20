@@ -19,11 +19,11 @@ lint-swift:
 	.build/tools/swiftlint lint --strict --quiet --no-cache --disable-sourcekit
 lint-shell:
 	@test -x .build/tools/shellcheck || { echo 'Run make tools first.' >&2; exit 1; }
-	@for script in scripts/*.sh integrations/raycast/*.sh; do bash -n "$$script" || exit; done
-	.build/tools/shellcheck scripts/*.sh integrations/raycast/*.sh
+	@for script in scripts/*.sh integrations/raycast/*.sh ../../scripts/*.sh; do bash -n "$$script" || exit; done
+	.build/tools/shellcheck scripts/*.sh integrations/raycast/*.sh ../../scripts/*.sh
 lint-workflows:
 	@test -x .build/tools/actionlint || { echo 'Run make tools first.' >&2; exit 1; }
-	.build/tools/actionlint -shellcheck "$$(pwd)/.build/tools/shellcheck"
+	.build/tools/actionlint -shellcheck "$$(pwd)/.build/tools/shellcheck" ../../.github/workflows/*.yml
 format:
 	xcrun swift-format format --in-place --recursive Sources Tests scripts Package.swift
 check: lint build test test-install check-scripts

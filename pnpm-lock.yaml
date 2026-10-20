@@ -7,6 +7,42 @@ settings:
 importers:
 
   .:
+    devDependencies:
+      '@google/design.md':
+        specifier: 0.4.0
+        version: 0.4.0
+      '@eslint/js':
+        specifier: ^10.0.1
+        version: 10.0.1(eslint@10.11.0(jiti@2.7.0))
+      '@types/node':
+        specifier: ^24.13.6
+        version: 24.13.6
+      eslint:
+        specifier: ^10.11.0
+        version: 10.11.0(jiti@2.7.0)
+      github-slugger:
+        specifier: ^2.0.0
+        version: 2.0.0
+      globals:
+        specifier: ^17.12.0
+        version: 17.12.0
+      marked:
+        specifier: ^18.0.13
+        version: 18.0.13
+      prettier:
+        specifier: 3.6.2
+        version: 3.6.2
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      typescript-eslint:
+        specifier: ^8.70.0
+        version: 8.70.0(eslint@10.11.0(jiti@2.7.0))(typescript@5.9.3)
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@24.13.6)(vite@8.2.2(@types/node@24.13.6)(jiti@2.7.0)(yaml@2.9.1))
+
+  apps/saul:
     dependencies:
       '@floating-ui/dom':
         specifier: ^1.8.0
@@ -33,9 +69,6 @@ importers:
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.11.0(jiti@2.7.0))
-      '@google/design.md':
-        specifier: 0.4.0
-        version: 0.4.0
       '@playwright/test':
         specifier: ^1.63.0
         version: 1.63.0
@@ -60,15 +93,9 @@ importers:
       eslint:
         specifier: ^10.11.0
         version: 10.11.0(jiti@2.7.0)
-      github-slugger:
-        specifier: ^2.0.0
-        version: 2.0.0
       globals:
         specifier: ^17.12.0
         version: 17.12.0
-      marked:
-        specifier: ^18.0.13
-        version: 18.0.13
       prettier:
         specifier: 3.6.2
         version: 3.6.2

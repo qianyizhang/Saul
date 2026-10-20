@@ -4,11 +4,10 @@ Nine generic skills are installed at user scope from repo-kit's reviewed
 `skills/` bundle: `writing-for-agents`, `codebase-design`, `grilling`,
 `domain-modeling`, `retro`, `improve-codebase-architecture`, `next-slice`, `show-me`, `finish-work`.
 This repository maintains no separate generic copy or upstream lock.
-The shared maintenance procedure is at `../repo-kit/docs/skill-suite.md` in the
-sibling checkout. Update the installation there; preserve project-specific skills.
+The shared maintenance procedure lives in repo-kit's `docs/skill-suite.md`. Update the installation there; preserve project-specific skills.
 
 For GUI refinement or screenshot annotation, use the separately installed
-[`gui-review` skill](../../../.codex/skills/gui-review/SKILL.md). It owns the
+`gui-review` skill installed at user scope. It owns the
 review-surface procedure; [ADR 0001](adr/0001-screenshot-first-design-review.md)
 preserves its original EZ rationale.
 

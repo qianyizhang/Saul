@@ -5,7 +5,7 @@ description: Debug and regression-test Saul's Chrome extension, persistence, mes
 
 # Saul browser testing
 
-Work from this Saul checkout. Read [the testing runbook](../../../docs/testing.md) and reuse `tests/e2e/`; do not create parallel browser launchers or fixture servers.
+Work from `apps/saul` in this monorepo. Read [the testing runbook](../../../apps/saul/docs/testing.md) and reuse `tests/e2e/`; do not create parallel browser launchers or fixture servers.
 
 ## Before launching a browser
 

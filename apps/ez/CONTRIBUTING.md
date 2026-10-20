@@ -4,7 +4,7 @@
 
 Install Apple Command Line Tools with Swift 6.3+ and
 [uv](https://docs.astral.sh/uv/getting-started/installation/) (`brew install uv`),
-then run `make hooks`. This downloads checksum-verified macOS linters and installs
+then run `make hooks` from `apps/ez`. This downloads checksum-verified macOS linters and installs
 both Git hooks. `make tools` alone is enough for `make check`; uv/Python are needed
 only for the development hook runner. Nothing is added to EZ.app.
 
@@ -24,15 +24,15 @@ Git commit hooks check staged changes; manual gates check the current working tr
 Native linters live in ignored `.build/tools/`. Their versions and release archive
 SHA-256 hashes are pinned in `scripts/bootstrap-tools.sh` for Apple Silicon and Intel.
 Run `make tools` again after `make clean`.
-Hook environments use ignored `.cache/`, which survives `make clean` so installed
-hooks retain their Python interpreter. `scripts/pre-commit.sh` pins
+Hook environments use the root ignored `.cache/`, which survives `make clean` so installed
+hooks retain their Python interpreter. The root `scripts/pre-commit.sh` pins
 pre-commit 4.7.0 and Python 3.12; hook revisions and CI actions use full commit hashes.
 Installed hooks use pre-commit's generated runner with the same repository cache.
 Update pins deliberately, verify release hashes, and run both gates before delivery.
 Dependabot proposes weekly GitHub Actions updates; native tools and hook revisions
 are updated manually.
 
-CI uses macOS 26 with Xcode 26.6, runs both hook gates and `make app`
+CI uses macOS 26 with Xcode 26.6, runs root commit hooks, native checks and `make app`
 with ad-hoc signature verification. It needs no account, secrets, or live inference.
 Workflow permissions are read-only; checkout credentials are not persisted.
 Packaging validates a local development bundle. Publishing, Developer ID signing,

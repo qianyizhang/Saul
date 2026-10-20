@@ -2,7 +2,7 @@
 
 ## Design review
 
-The user-scope [`gui-review` skill](../../../.codex/skills/gui-review/SKILL.md)
+The user-scope `gui-review` skill installed at user scope
 owns the annotation workflow for GUI refinement.
 [ADR 0001](adr/0001-screenshot-first-design-review.md) retains the historical rationale.
 

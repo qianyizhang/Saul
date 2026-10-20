@@ -1,7 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: npm
-    directory: /
+    directories: ['/', '/apps/saul']
     schedule:
       interval: weekly
     groups:

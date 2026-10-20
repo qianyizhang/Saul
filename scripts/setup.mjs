@@ -1,322 +1,322 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
-import { readFile, access } from 'node:fs/promises';
-import { resolve, join } from 'node:path';
+import { access, cp, lstat, mkdir, mkdtemp, readFile, rename, rm } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createInterface } from 'node:readline/promises';
-import { createInterface as readLines } from 'node:readline';
-import { installationPlan } from '../native/install.mjs';
-import { APP_URI, MCP_TOOLS } from '../native/app-protocol.mjs';
+import { installationPlan } from '../apps/saul/native/install.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const help = `Saul setup (macOS/Linux, Google Chrome)
+const choices = ['extension', 'chatgpt', 'tabs', 'ez'];
+export const help = `Selective setup (run from any directory)
 
-  node scripts/setup.mjs                     Interactive build/install/connect wizard
-  node scripts/setup.mjs --extension-id ID   Install using a known Chrome extension ID
-  node scripts/setup.mjs --prepare           Install dependencies and build only
-  node scripts/setup.mjs --verify            Read-only MCP and browser connection check
-  node scripts/setup.mjs --dry-run           Show steps without running or writing anything
+  node scripts/setup.mjs --components extension --dry-run
+  node scripts/setup.mjs --components extension,chatgpt --extension-id ID
+  node scripts/setup.mjs --components ez
+  node scripts/setup.mjs --components extension,chatgpt,tabs,ez --extension-id ID
 
-Options: --skip-build (reuse a prepared bundle), --install-dir DIR,
-         --manifest-dir DIR, --extension-id ID, --help
-Prerequisites: Node 24, the package.json pnpm version, Chrome and Codex CLI on PATH.
-Exit codes: 0 ready/prepared, 1 error, 2 browser or user action still needed.
-No sudo, startup daemon, browser-profile edits, or automatic access toggles.`;
+Components:
+  extension  Chrome extension; API-provider reading and local history work alone
+  chatgpt    Optional Node helper for ChatGPT sign-in, inference and summaries
+  tabs       Optional Node helper for external tab tools and native window names
+  ez         Independent native macOS app (no Node runtime dependency)
 
-export function runCommand(command, args, { cwd = root, capture = false } = {}) {
+Options:
+  --dry-run                Show the complete plan without checks or writes
+  --prepare                Install build dependencies and build selected artifacts only
+  --skip-build             Install already prepared artifacts
+  --verify                 Check installed artifacts only; no writes or live inference
+  --extension-id ID         Actual 32-letter ID from chrome://extensions (helpers)
+  --extension-dir DIR       Stable unpacked extension directory (defaults to ~/.saul/extension)
+  --install-dir DIR         Helper installation root (defaults to ~/.saul)
+  --manifest-dir DIR        Chrome NativeMessagingHosts override
+  --applications-dir DIR    EZ installation directory (defaults to ~/Applications)
+  --codex                   Explicitly register the tabs helper with Codex
+
+Chrome loading/reloading remains a user action. --codex requires tabs.
+Node 24/pinned pnpm build browser artifacts; Apple tools build EZ.
+EZ installation requires its existing pinned signing identity; see docs/setup.md.
+No credential migration, automatic sign-in, app launch, or background sync.`;
+
+export function createPlan(
+  options,
+  { repo = root, home = homedir(), platform = process.platform, node = process.execPath } = {},
+) {
+  const components = [
+    ...new Set(
+      (options.components ?? '')
+        .split(',')
+        .map((v) => v.trim())
+        .filter(Boolean),
+    ),
+  ];
+  if (!components.length || components.some((v) => !choices.includes(v)))
+    throw new Error(`Select --components from ${choices.join(',')}.`);
+  if (options.prepare && (options.skipBuild || options.verify || options.codex))
+    throw new Error('--prepare cannot combine with --skip-build, --verify or --codex.');
+  if (options.verify && (options.skipBuild || options.codex))
+    throw new Error('--verify cannot combine with --skip-build or --codex.');
+  if (options.codex && !components.includes('tabs'))
+    throw new Error('--codex requires the tabs component.');
+  if (components.includes('ez') && platform !== 'darwin')
+    throw new Error('EZ requires macOS; select browser components on this platform.');
+  const hasHelper = components.some((v) => ['chatgpt', 'tabs'].includes(v));
+  if (hasHelper && !options.prepare && !/^[a-p]{32}$/.test(options.extensionId ?? ''))
+    throw new Error(
+      'Helpers need --extension-id from chrome://extensions. Prepare/load the extension first.',
+    );
+  const browser = join(repo, 'apps/saul');
+  const native = join(repo, 'apps/ez');
+  const helperRoot = resolve(options.installDir ?? join(home, '.saul'));
+  const extensionDir = resolve(options.extensionDir ?? join(helperRoot, 'extension'));
+  // Refuse targets that would replace source, home, or the helper runtime tree.
+  for (const protectedPath of [
+    repo,
+    home,
+    helperRoot,
+    join(helperRoot, 'bridge'),
+    join(helperRoot, 'bin'),
+    join(browser, '.output/chrome-mv3'),
+  ]) {
+    if (protectedPath === extensionDir || protectedPath.startsWith(extensionDir + '/'))
+      throw new Error(
+        'Extension destination must be a dedicated directory outside source and helper runtime.',
+      );
+  }
+  const applicationsDir = resolve(options.applicationsDir ?? join(home, 'Applications'));
+  const hosts = components
+    .filter((v) => ['chatgpt', 'tabs'].includes(v))
+    .map((component) => ({
+      component,
+      ...installationPlan({
+        extensionId: options.extensionId ?? 'a'.repeat(32),
+        installDir: helperRoot,
+        manifestDir: options.manifestDir,
+        platform,
+        home,
+        chatgpt: component === 'chatgpt',
+      }),
+    }));
+  const commands = [];
+  const add = (command, args, cwd, env = {}) => commands.push({ command, args, cwd, env });
+  if (!options.verify) {
+    if (!options.skipBuild && components.some((v) => v !== 'ez'))
+      add('pnpm', ['install', '--frozen-lockfile'], repo);
+    if (!options.skipBuild && components.includes('extension')) add('pnpm', ['build'], browser);
+    if (components.includes('ez')) {
+      if (options.prepare) add('make', ['app'], native);
+      else {
+        if (options.skipBuild)
+          throw new Error(
+            'EZ uses its verified build/install transaction; --skip-build is for browser components only.',
+          );
+        add('make', ['install'], native, { EZ_APPLICATIONS_DIR: applicationsDir });
+      }
+    }
+    if (!options.prepare) {
+      for (const host of hosts)
+        add(
+          node,
+          [
+            join(browser, 'native/install.mjs'),
+            '--extension-id',
+            options.extensionId,
+            '--install-dir',
+            helperRoot,
+            '--manifest-dir',
+            dirname(host.manifestPath),
+            ...(host.component === 'chatgpt' ? ['--chatgpt'] : []),
+          ],
+          browser,
+        );
+      if (options.codex)
+        add(
+          'codex',
+          ['mcp', 'add', 'saul-tabs', '--', node, join(helperRoot, 'bridge/mcp.mjs')],
+          repo,
+        );
+    }
+  }
+  return {
+    mode: options.verify ? 'verify' : options.prepare ? 'prepare' : 'install',
+    components,
+    repo,
+    browser,
+    native,
+    node,
+    commands,
+    hosts,
+    extensionDir,
+    extensionSource: join(browser, '.output/chrome-mv3'),
+    app: join(applicationsDir, 'EZ.app'),
+    codex: Boolean(options.codex),
+  };
+}
+
+export function runCommand(command, args, { cwd, env = {}, capture = false } = {}) {
   return new Promise((resolveResult, reject) => {
     const child = spawn(command, args, {
       cwd,
+      env: { ...process.env, ...env },
       shell: false,
       stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
     });
-    let stdout = '',
-      stderr = '';
-    child.stdout?.on('data', (data) => {
-      stdout += data;
+    let out = '';
+    let err = '';
+    child.stdout?.on('data', (value) => {
+      out += value;
     });
-    child.stderr?.on('data', (data) => {
-      stderr += data;
+    child.stderr?.on('data', (value) => {
+      err += value;
     });
-    child.once('error', (error) => reject(new Error(`Cannot run ${command}: ${error.message}`)));
-    child.once('close', (code) => {
-      if (code !== 0)
-        reject(
-          new Error(
-            `${command} ${args.slice(0, 2).join(' ')} failed (${code}).${capture ? ' ' + stderr.trim() : ''}`,
-          ),
-        );
-      else resolveResult(stdout.trim());
-    });
+    child.once('error', reject);
+    child.once('close', (code) =>
+      code === 0
+        ? resolveResult(out.trim())
+        : reject(new Error(`${command} failed (${code}). ${err.trim()}`)),
+    );
   });
 }
 
-// Verify the command actually registered with Codex, including its environment/cwd.
-// Return counts only: do not print or persist the user's titles, URLs or page text.
-export async function verifyMcp(transport, extensionId) {
-  const child = spawn(transport.command, transport.args ?? [], {
-    cwd: transport.cwd || root,
-    env: { ...process.env, ...transport.env },
-    stdio: ['pipe', 'pipe', 'pipe'],
-    shell: false,
-  });
-  const pending = new Map();
-  let nextId = 0;
-  let failure;
-  const fail = (error) => {
-    failure = error;
-    for (const item of pending.values()) {
-      clearTimeout(item.timer);
-      item.reject(error);
-    }
-    pending.clear();
-  };
-  child.on('error', fail);
-  child.on('exit', () => fail(new Error('MCP process exited before verification completed')));
-  child.stdin.on('error', fail);
-  child.stderr.resume();
-  const lines = readLines({ input: child.stdout });
-  lines.on('line', (line) => {
-    try {
-      const response = JSON.parse(line);
-      const item = pending.get(response.id);
-      if (!item) return;
-      clearTimeout(item.timer);
-      pending.delete(response.id);
-      if (response.error) item.reject(new Error(response.error.message));
-      else item.resolve(response.result);
-    } catch {
-      fail(new Error('MCP returned invalid JSON'));
-    }
-  });
-  const rpc = (method, params = {}) =>
-    new Promise((resolveResult, reject) => {
-      if (failure) {
-        reject(failure);
-        return;
-      }
-      const id = ++nextId;
-      const timer = setTimeout(() => {
-        pending.delete(id);
-        reject(new Error(`MCP ${method} timed out; no browser mutation was requested`));
-      }, 10000);
-      pending.set(id, { resolve: resolveResult, reject, timer });
-      child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
-    });
-  const call = async (name, args = {}) => {
-    const result = await rpc('tools/call', { name, arguments: args });
-    if (result.isError) throw new Error(result.content?.[0]?.text || 'MCP tool failed');
-    return JSON.parse(result.content[0].text);
-  };
+export async function installExtension(source, destination) {
+  const manifest = JSON.parse(await readFile(join(source, 'manifest.json'), 'utf8'));
+  if (manifest.manifest_version !== 3)
+    throw new Error('Prepared artifact is not a Chrome MV3 extension.');
   try {
-    const initialized = await rpc('initialize', {
-      protocolVersion: '2025-11-25',
-      capabilities: {},
-      clientInfo: { name: 'saul-setup', version: '1' },
-    });
-    child.stdin.write(
-      JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n',
+    await lstat(destination);
+    throw new Error(
+      'Extension destination already exists. Keep the loaded path and upgrade it explicitly; setup refuses to replace profile-linked artifacts.',
     );
-    const { tools } = await rpc('tools/list');
-    const expected = MCP_TOOLS.map((tool) => tool.name).sort();
-    if (JSON.stringify(tools.map((tool) => tool.name).sort()) !== JSON.stringify(expected))
-      throw new Error('Installed MCP tools differ from this checkout; run setup again');
-    const { contents } = await rpc('resources/read', { uri: APP_URI });
-    const app = contents?.find((item) => item.uri === APP_URI);
-    if (app?.mimeType !== 'text/html;profile=mcp-app' || !app.text?.includes('ui/initialize'))
-      throw new Error('Installed MCP App resource is missing or invalid; run setup again');
-    const { sessions } = await call('saul_sessions');
-    const selected = sessions.filter(
-      (session) => !extensionId || session.extensionId === extensionId,
-    );
-    const inventories = [];
-    for (const session of selected) {
-      const before = performance.now();
-      const inventory = await call('saul_tabs_list', { session: session.session });
-      inventories.push({
-        session: session.session,
-        extensionId: session.extensionId,
-        tabs: inventory.tabs.length,
-        windows: inventory.windows.length,
-        elapsedMs: Math.round(performance.now() - before),
-      });
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+  await mkdir(dirname(destination), { recursive: true });
+  const staging = await mkdtemp(join(dirname(destination), '.extension-'));
+  try {
+    await cp(source, join(staging, 'bundle'), { recursive: true, errorOnExist: true });
+    // Recheck before rename; never knowingly replace an existing installation.
+    try {
+      await lstat(destination);
+      throw new Error('Extension destination appeared during setup.');
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
     }
-    return {
-      status: selected.length ? 'ready' : 'waiting-for-browser',
-      server: initialized.serverInfo,
-      toolCount: tools.length,
-      appResource: APP_URI,
-      inventories,
-    };
+    await rename(join(staging, 'bundle'), destination);
   } finally {
-    for (const item of pending.values()) clearTimeout(item.timer);
-    pending.clear();
-    lines.close();
-    child.kill();
+    await rm(staging, { recursive: true, force: true });
   }
 }
 
-export async function setup(options = {}, dependencies = {}) {
-  const run = dependencies.run ?? runCommand;
-  const log = dependencies.log ?? console.log;
-  const ask = dependencies.ask;
-  const verify = dependencies.verify ?? verifyMcp;
-  const repo = dependencies.root ?? root;
-  const node = dependencies.node ?? process.execPath;
-  const nodeVersion = dependencies.nodeVersion ?? process.versions.node;
-  const pkg = JSON.parse(await readFile(join(repo, 'package.json'), 'utf8'));
-  const bundle = join(repo, '.output/chrome-mv3');
-  if (options.prepare && (options.verify || options.skipBuild || options.extensionId))
-    throw new Error('--prepare cannot be combined with --verify, --skip-build or --extension-id');
-  if (options.verify && (options.prepare || options.skipBuild))
-    throw new Error('--verify cannot be combined with --prepare or --skip-build');
-  if (options.extensionId && !/^[a-p]{32}$/.test(options.extensionId))
-    throw new Error('Extension ID must be the actual 32-letter ID from chrome://extensions');
-  const plan = installationPlan({
-    extensionId: options.extensionId ?? 'a'.repeat(32),
-    installDir: options.installDir,
-    manifestDir: options.manifestDir,
-  });
-  const mcpPath = join(plan.runtime, 'mcp.mjs');
-  if (options.dryRun) {
-    log(
-      JSON.stringify(
-        {
-          mode: options.verify ? 'verify' : options.prepare ? 'prepare' : 'install',
-          build: !options.verify && !options.skipBuild,
-          bundle,
-          extensionId: options.extensionId ?? 'prompt after loading extension',
-          runtime: plan.runtime,
-          manifest: plan.manifestPath,
-          codexCommand: ['codex', 'mcp', 'add', 'saul-tabs', '--', node, mcpPath],
-          browserChanges: 'none; load/reload and access switches are explicit',
-          verification:
-            'Fresh MCP process: handshake, tools, UI resource, sessions and tab counts; not the running Codex connection or panel',
-        },
-        null,
-        2,
-      ),
-    );
-    return { status: 'dry-run', exitCode: 0 };
-  }
-  if (Number(nodeVersion.split('.')[0]) !== 24)
-    throw new Error(`Use Node 24 (see .node-version); current version is ${nodeVersion}`);
-  let registration;
-  if (!options.prepare) {
-    const configured = JSON.parse(
-      await run('codex', ['mcp', 'list', '--json'], { cwd: repo, capture: true }),
-    );
-    registration = configured.find((item) => item.name === 'saul-tabs');
-    if (
-      registration &&
-      (registration.transport?.type !== 'stdio' ||
-        registration.transport.args?.length !== 1 ||
-        resolve(registration.transport.args[0]) !== mcpPath)
-    )
-      throw new Error(
-        'Existing saul-tabs registration points elsewhere; refusing to replace it. Inspect codex mcp get saul-tabs.',
-      );
-    if (registration?.enabled === false)
-      throw new Error(
-        'saul-tabs is disabled in Codex; enable it explicitly before setup/verification',
-      );
-  }
-  if (!options.verify && !options.skipBuild) {
-    const version = await run('pnpm', ['--version'], { cwd: repo, capture: true });
-    const expected = pkg.packageManager.replace('pnpm@', '');
-    if (version !== expected)
-      throw new Error(
-        `Use pnpm ${expected}; found ${version}. Activate the packageManager version with Corepack.`,
-      );
-    log('Installing locked dependencies and building Saul…');
-    await run('pnpm', ['install', '--frozen-lockfile'], { cwd: repo });
-    await run('pnpm', ['build'], { cwd: repo });
-  }
-  if (!options.verify) {
-    await access(join(bundle, 'manifest.json'));
-    log(
-      `Extension ready: ${bundle}\nIn chrome://extensions enable Developer mode, load this folder (or reload Saul), and copy its ID.`,
-    );
-    if (options.prepare) return { status: 'prepared', exitCode: 0, bundle };
-    if (!options.extensionId && ask)
-      options = { ...options, extensionId: (await ask('Saul extension ID: ')).trim() };
-    if (!options.extensionId) {
-      log(
-        'Build prepared. Continue with: node scripts/setup.mjs --skip-build --extension-id YOUR_ID',
-      );
-      return { status: 'needs-extension-id', exitCode: 2, bundle };
+export async function executePlan(plan, { run = runCommand, log = console.log } = {}) {
+  if (plan.mode === 'verify') {
+    if (plan.components.includes('extension')) {
+      const manifest = JSON.parse(await readFile(join(plan.extensionDir, 'manifest.json'), 'utf8'));
+      if (manifest.manifest_version !== 3)
+        throw new Error('Installed extension manifest is invalid.');
     }
-    installationPlan({ extensionId: options.extensionId }); // Validate prompt input before any install.
-    const args = [join(repo, 'native/install.mjs'), '--extension-id', options.extensionId];
-    if (options.installDir) args.push('--install-dir', options.installDir);
-    if (options.manifestDir) args.push('--manifest-dir', options.manifestDir);
-    log('Installing the native helper…');
-    await run(node, args, { cwd: repo, capture: true });
-    if (!registration) {
-      await run('codex', ['mcp', 'add', 'saul-tabs', '--', node, mcpPath], {
-        cwd: repo,
-        capture: true,
-      });
-      registration = { transport: { type: 'stdio', command: node, args: [mcpPath] } };
-    } else log('Keeping the existing matching Codex registration and its settings.');
+    for (const host of plan.hosts) {
+      const manifest = JSON.parse(await readFile(host.manifestPath, 'utf8'));
+      if (
+        manifest.name !== host.manifest.name ||
+        manifest.path !== host.manifest.path ||
+        !manifest.allowed_origins?.includes(host.manifest.allowed_origins[0])
+      )
+        throw new Error(`Host registration mismatch: ${host.component}`);
+      await access(manifest.path);
+      await access(join(host.runtime, host.component === 'chatgpt' ? 'plan-host.mjs' : 'host.mjs'));
+    }
+    if (plan.components.includes('ez'))
+      await run('codesign', ['--verify', '--strict', plan.app], { cwd: plan.native });
     log(
-      'Installed and registered. In Saul → Settings → Codex connection, enable Codex tab access and choose Reconnect. Enable Page reading and actions only if wanted.',
+      'Installed artifact checks passed. Browser connection, live OAuth/inference and running app versions were not tested.',
     );
-    if (ask) await ask('Press Enter after Saul shows Connected to native host: ');
+    return;
   }
-  if (!registration) throw new Error('saul-tabs is not registered with Codex; run setup first');
-  const result = await verify(registration.transport, options.extensionId);
-  log(JSON.stringify(result, null, 2));
-  if (result.status !== 'ready')
-    log(
-      'MCP is installed, but no matching browser is connected. Load/reload Saul, enable access, click Reconnect, then run node scripts/setup.mjs --verify.',
+  // Check prerequisites before the first installation action.
+  if (plan.mode === 'install' && plan.components.includes('extension')) {
+    try {
+      await lstat(plan.extensionDir);
+      throw new Error(
+        'Extension destination already exists. Preserve the loaded path; setup will not replace it.',
+      );
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+  }
+  if (plan.components.some((v) => v !== 'ez')) {
+    const version = await run(plan.node, ['--version'], { capture: true });
+    if (!version.startsWith('v24.')) throw new Error(`Use Node 24; found ${version}.`);
+    if (plan.commands.some((c) => c.command === 'pnpm')) {
+      const pkg = JSON.parse(await readFile(join(plan.repo, 'package.json'), 'utf8'));
+      const pnpm = await run('pnpm', ['--version'], { capture: true });
+      if (`pnpm@${pnpm}` !== pkg.packageManager)
+        throw new Error(`Use ${pkg.packageManager}; found pnpm ${pnpm}.`);
+    }
+  }
+  if (plan.components.includes('ez')) {
+    await run('xcrun', ['--find', 'swift'], { capture: true });
+    if (plan.mode === 'install') await access(join(plan.native, '.local/signing-identity'));
+  }
+  if (plan.codex) {
+    const registrations = JSON.parse(
+      await run('codex', ['mcp', 'list', '--json'], { capture: true }),
     );
-  else
+    if (registrations.some((item) => item.name === 'saul-tabs'))
+      throw new Error(
+        'saul-tabs is already registered. Omit --codex to preserve it; inspect it explicitly before changing registration.',
+      );
+  }
+  for (const { command, args, cwd, env } of plan.commands) await run(command, args, { cwd, env });
+  if (plan.components.includes('extension')) {
+    if (plan.mode === 'install') await installExtension(plan.extensionSource, plan.extensionDir);
     log(
-      'Verified UI resource and tab inventory in a fresh MCP process. The running Codex connection and panel were not tested. After an upgrade, fully quit and reopen Codex to replace older MCP processes, then reopen Saul. Page actions were not exercised.',
+      `Extension prepared at ${plan.mode === 'install' ? plan.extensionDir : plan.extensionSource}. Load it explicitly in chrome://extensions. Existing profiles and extensions were not changed.`,
     );
-  return { ...result, exitCode: result.status === 'ready' ? 0 : 2 };
+  }
+  if (plan.hosts.length && plan.mode === 'install')
+    log(
+      'Helpers installed. Enable the selected connection in Saul Settings. Helpers use the installation-time Node executable.',
+    );
+  if (plan.mode === 'prepare') log('Preparation complete; nothing was installed or registered.');
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   let prompt;
   try {
     const { values } = parseArgs({
-      options: {
-        'extension-id': { type: 'string' },
-        'install-dir': { type: 'string' },
-        'manifest-dir': { type: 'string' },
-        'skip-build': { type: 'boolean' },
-        prepare: { type: 'boolean' },
-        verify: { type: 'boolean' },
-        'dry-run': { type: 'boolean' },
-        help: { type: 'boolean' },
-      },
+      options: Object.fromEntries([
+        ...[
+          'components',
+          'extension-id',
+          'extension-dir',
+          'install-dir',
+          'manifest-dir',
+          'applications-dir',
+        ].map((key) => [key, { type: 'string' }]),
+        ...['dry-run', 'prepare', 'skip-build', 'verify', 'codex', 'help'].map((key) => [
+          key,
+          { type: 'boolean' },
+        ]),
+      ]),
     });
     if (values.help) console.log(help);
     else {
-      if (
-        process.stdin.isTTY &&
-        process.stdout.isTTY &&
-        !values['dry-run'] &&
-        !values.verify &&
-        !values.prepare
-      )
+      if (!values.components && process.stdin.isTTY && process.stdout.isTTY) {
+        console.log(help);
         prompt = createInterface({ input: process.stdin, output: process.stdout });
-      const result = await setup(
-        {
-          extensionId: values['extension-id'],
-          installDir: values['install-dir'],
-          manifestDir: values['manifest-dir'],
-          skipBuild: values['skip-build'],
-          prepare: values.prepare,
-          verify: values.verify,
-          dryRun: values['dry-run'],
-        },
-        { ask: prompt ? (question) => prompt.question(question) : undefined },
+        values.components = await prompt.question('Components (comma-separated): ');
+      }
+      const options = Object.fromEntries(
+        Object.entries(values).map(([key, value]) => [
+          key.replace(/-([a-z])/g, (_, c) => c.toUpperCase()),
+          value,
+        ]),
       );
-      process.exitCode = result.exitCode;
+      const plan = createPlan(options);
+      if (options.dryRun) console.log(JSON.stringify(plan, null, 2));
+      else await executePlan(plan);
     }
   } catch (error) {
     console.error(`Setup stopped: ${error.message}`);
