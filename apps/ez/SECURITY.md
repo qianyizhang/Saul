@@ -5,7 +5,7 @@ in issues or logs. Reproduce failures with synthetic text and redact request bod
 Preserve error codes and OpenAI request IDs when reporting service failures.
 
 EZ stores OAuth credentials in macOS Keychain and history as owner-only plaintext.
-It sends the current query and mode instructions to OpenAI. It does not request
+It sends the compiled recipe prompt to OpenAI. It does not request
 ChatGPT conversation access or offer model-controlled local tools. OS/network and
 OpenAI account policies still apply; `store: false` is not an offline mode.
 

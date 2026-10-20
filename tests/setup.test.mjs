@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { test } from 'vitest';
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createPlan, executePlan, installExtension } from '../scripts/setup.mjs';
+import { createPlan, executePlan, installExtension, runCommand } from '../scripts/setup.mjs';
 
 const environment = {
   repo: '/fixture/repo',
@@ -172,4 +174,133 @@ test('an existing extension destination stops the whole install before other com
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test('helper installation preserves argument boundaries and stops before Codex registration on failure', async () => {
+  const plan = createPlan(
+    {
+      components: 'chatgpt,tabs',
+      extensionId: id,
+      skipBuild: true,
+      codex: true,
+      installDir: "/fixture/Saul's files",
+      manifestDir: '/fixture/Native Hosts',
+    },
+    { ...environment, node: '/node with spaces/node' },
+  );
+  const calls = [];
+  await assert.rejects(
+    executePlan(plan, {
+      log() {},
+      run: async (command, args) => {
+        calls.push([command, args]);
+        if (args[0] === '--version') return 'v24.21.0';
+        if (command === 'codex') return '[]';
+        assert(args.includes("/fixture/Saul's files"));
+        assert(args.includes('/fixture/Native Hosts'));
+        throw new Error('Installer refused conflict');
+      },
+    }),
+    /Installer refused conflict/,
+  );
+  assert.equal(calls.filter(([command]) => command === '/node with spaces/node').length, 2);
+  assert(!calls.some(([command, args]) => command === 'codex' && args[1] === 'add'));
+});
+
+test('EZ installation invokes only the native installer and preserves the chosen application directory', async () => {
+  const repo = await mkdtemp(join(tmpdir(), 'workspace-native-'));
+  try {
+    await mkdir(join(repo, 'apps/ez/.local'), { recursive: true });
+    await writeFile(join(repo, 'apps/ez/.local/signing-identity'), 'fixture');
+    const plan = createPlan(
+      { components: 'ez', applicationsDir: join(repo, 'My Applications') },
+      { ...environment, repo },
+    );
+    const calls = [];
+    await executePlan(plan, {
+      log() {},
+      run: async (command, args, options) => {
+        calls.push(command);
+        if (command === 'make') {
+          assert.deepEqual(args, ['install']);
+          assert.equal(options.cwd, join(repo, 'apps/ez'));
+          assert.equal(options.env.EZ_APPLICATIONS_DIR, join(repo, 'My Applications'));
+        }
+        return '';
+      },
+    });
+    assert.deepEqual(calls, ['xcrun', 'make']);
+  } finally {
+    await rm(repo, { recursive: true, force: true });
+  }
+});
+
+test('wrong pnpm and missing native signing setup fail before any install command', async () => {
+  const repo = await mkdtemp(join(tmpdir(), 'workspace-prerequisite-'));
+  try {
+    await writeFile(join(repo, 'package.json'), JSON.stringify({ packageManager: 'pnpm@11.0.3' }));
+    const calls = [];
+    const run = async (command, args) => {
+      calls.push([command, args]);
+      return command === 'pnpm' ? '10.0.0' : 'v24.21.0';
+    };
+    await assert.rejects(
+      executePlan(
+        createPlan({ components: 'extension', prepare: true }, { ...environment, repo }),
+        { run, log() {} },
+      ),
+      /pnpm@11.0.3/,
+    );
+    assert(calls.every(([, args]) => args[0] === '--version'));
+    calls.length = 0;
+    await assert.rejects(
+      executePlan(createPlan({ components: 'ez' }, { ...environment, repo }), { run, log() {} }),
+      /ENOENT/,
+    );
+    assert.deepEqual(
+      calls.map(([command]) => command),
+      ['xcrun'],
+    );
+  } finally {
+    await rm(repo, { recursive: true, force: true });
+  }
+});
+
+test('the CLI dry run needs no executable on PATH and creates no installation directory', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'workspace-dry-run-'));
+  try {
+    const destination = join(directory, 'not-created');
+    const output = execFileSync(
+      process.execPath,
+      [
+        fileURLToPath(new URL('../scripts/setup.mjs', import.meta.url)),
+        '--components',
+        'extension',
+        '--extension-dir',
+        destination,
+        '--dry-run',
+      ],
+      { encoding: 'utf8', env: { ...process.env, PATH: '' } },
+    );
+    assert.equal(JSON.parse(output).extensionDir, destination);
+    await assert.rejects(readFile(join(destination, 'manifest.json')), { code: 'ENOENT' });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('subprocess execution preserves literal arguments and rejects unsuccessful commands', async () => {
+  const values = ['two words', "a'quote", '$literal'];
+  const output = await runCommand(
+    process.execPath,
+    ['-e', 'process.stdout.write(JSON.stringify(process.argv.slice(1)))', '--', ...values],
+    { capture: true },
+  );
+  assert.deepEqual(JSON.parse(output), values);
+  await assert.rejects(
+    runCommand(process.execPath, ['-e', 'process.stderr.write("fixture error"); process.exit(3)'], {
+      capture: true,
+    }),
+    /failed \(3\).*fixture error/,
+  );
 });

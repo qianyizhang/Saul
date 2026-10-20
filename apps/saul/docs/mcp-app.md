@@ -4,7 +4,7 @@ Saul's existing local MCP server also serves an interactive Tab board. The same 
 
 ## Open and use
 
-1. Run the [setup wizard](setup.md), or upgrade an existing installation with `node scripts/setup.mjs --skip-build --extension-id ACTUAL_ID` after building the intended extension source.
+1. Use the [root selective installer](../../../docs/setup.md) with the `tabs` component and actual extension ID. Add `--codex` only for a new Codex registration. Existing registrations are preserved by omitting that flag.
 2. After an upgrade, fully quit and reopen Codex so its MCP connections load the new tools. Ask **“Open the Saul Tab board.”** Codex calls `saul_workspace_show`, which links the board resource. A compatible desktop host can expand it beside the conversation. A thread entrypoint is also declared; its availability depends on the host's local-server support.
 3. **Tab board** shows all normal Chrome windows. Filter by title or hostname. Window cards fold and reorder locally.
 4. Select tabs with checkboxes, Shift for a range, or Select all in a window. The action bar offers **Group**, **Move to**, and **Summarize**. Pins remain selectable for summaries, without implicit unpinning.
@@ -29,7 +29,7 @@ If the host cannot send messages from a widget, use the chat composer instead. I
 
 ## Troubleshooting the Codex panel
 
-**“Couldn’t display Saul” after upgrading:** run `node scripts/setup.mjs --verify`. This starts a separate MCP process; success does not refresh a process already owned by a chat. Fully quit and reopen Codex, then reopen Saul. The panel's Try again button can reuse the same old connection. Chrome and the extension do not need reinstalling for this case.
+**“Couldn’t display Saul” after upgrading:** run `pnpm verify:connection`. This starts a separate MCP process; success does not refresh a process already owned by a chat. Fully quit and reopen Codex, then reopen Saul. The panel's Try again button can reuse the same old connection. Chrome and the extension do not need reinstalling for this case.
 
 On 2026-10-13, Codex desktop 26.1007.30912 (20156) displayed Saul in its menu while this existing chat still returned `Unknown tool: saul_workspace_show` and resource-read error `-32601 Method not found`. A fresh installed Saul process served all 15 tools and live inventory. An isolated fresh instance of Codex's bundled app-server also fetched `ui://saul/workspace-v1.html` successfully through `mcpServer/resource/read`. Together these identify a stale chat connection as the likely cause; they do not establish successful rendering after restart. The old Saul server lacks both the workspace tools and resource handler.
 
@@ -67,7 +67,7 @@ The board refreshes every ten seconds while visible, pausing during a drag, an o
 | [UI](../native/ui/workspace.js)              | Standard initialization, results, tool calls and user messages       |
 | [Native installer](../native/install.mjs)    | Copies app code and self-contained UI into the existing installation |
 
-`node scripts/setup.mjs --verify` checks the installed tool catalog, HTML resource and live tab inventory. Unit tests cover proposal validation, stale/expired/replaced approvals and partial failures. The disposable-browser test renders the real app in a test MCP host, exercises drag-and-drop, keyboard moves, filtering, pins/groups, stale previews and its message bridge, and applies a plan against real Chromium tabs. This does not by itself establish rendering in the installed Codex desktop host.
+`pnpm verify:connection` checks the installed tool catalog, HTML resource and live tab inventory. Unit tests cover proposal validation, stale/expired/replaced approvals and partial failures. The disposable-browser test renders the real app in a test MCP host, exercises drag-and-drop, keyboard moves, filtering, pins/groups, stale previews and its message bridge, and applies a plan against real Chromium tabs. This does not by itself establish rendering in the installed Codex desktop host.
 
 Validation timing on 2026-10-19: three isolated dry-run samples per version against
 175 live tabs in eight windows, with native names available in every sample.

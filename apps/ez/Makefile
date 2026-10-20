@@ -1,4 +1,4 @@
-.PHONY: build check check-scripts test test-core test-state test-services test-install lint lint-swift lint-shell lint-workflows format tools hooks pre-commit pre-push app run install signing-setup clean design-preview configuration-preview surface-preview
+.PHONY: build check check-scripts test test-core test-state test-services test-install lint lint-swift lint-shell lint-workflows format tools app run install signing-setup clean design-preview configuration-preview surface-preview
 build:
 	./scripts/swift.sh build --product EZ
 test:
@@ -31,12 +31,6 @@ check-scripts: build
 	bash scripts/check-swift-scripts.sh
 tools:
 	bash scripts/bootstrap-tools.sh
-hooks: tools
-	bash scripts/install-hooks.sh
-pre-commit:
-	bash scripts/pre-commit.sh run --all-files
-pre-push:
-	bash scripts/pre-commit.sh run --all-files --hook-stage pre-push
 app:
 	./scripts/build-app.sh
 signing-setup:

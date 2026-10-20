@@ -19,6 +19,9 @@ node scripts/setup.mjs --components extension --prepare
 node scripts/setup.mjs --components ez --dry-run
 ```
 
+To install EZ on this Mac, quit it and run `make -C apps/ez install`; the existing
+pinned identity is already retained. On another Mac, follow the signing setup guide.
+
 No package is published to npm. The setup command is an optional coordinator;
 each application's own build/install commands remain usable. Chrome loading is
 explicit. Codex registration is an explicit `--codex` option, never a prerequisite.

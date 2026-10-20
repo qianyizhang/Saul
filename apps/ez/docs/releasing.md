@@ -66,6 +66,14 @@ Self-signing supports personal use and app identity continuity. It does not prov
 Developer ID, notarization, or App Store approval. Another Mac may need manual
 Gatekeeper approval. See Apple's [code-signing policies](https://developer.apple.com/library/archive/technotes/tn2206/).
 
+## CI artifact
+
+The native workflow runs on the pinned macOS/Xcode runner, verifies the app, and
+retains `EZ-macos.zip` for 14 days. The archive preserves the app bundle and targets
+the runner's architecture. CI uses an ad-hoc signature; this is a development
+artifact, not a notarized public release. The source-only publication hold also
+means no new hosted workflow has run for the local monorepo yet.
+
 ## Distribution
 
 For distribution:

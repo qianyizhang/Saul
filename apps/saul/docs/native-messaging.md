@@ -4,7 +4,7 @@ Saul exposes tab organization, window creation and optional page reading/actions
 
 ## Recommended setup
 
-Run `node scripts/setup.mjs` from this checkout. It builds the extension, installs the helper, registers MCP and verifies browser connectivity, with prompts for the Chrome steps. See [setup and agent instructions](setup.md), including the [native helper lifecycle](setup.md#native-helper-lifecycle). The individual commands below remain available for advanced setup.
+Use the [root selective installer](../../../docs/setup.md) for native helper installation and explicit Codex registration. See [connection verification](setup.md) and the [native helper lifecycle](setup.md#native-helper-lifecycle). The individual commands below are the underlying component operations.
 
 ## Install on macOS or Linux
 

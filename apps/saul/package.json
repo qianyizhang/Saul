@@ -12,11 +12,8 @@
     "design:generate": "node ../../design/generate.mjs --css assets/design-tokens.css --css native/ui/design-tokens.css --typescript src/design/tokens.ts",
     "design:check": "pnpm design:generate --check",
     "dev": "wxt",
-    "setup": "node scripts/setup.mjs",
-    "setup:verify": "node scripts/setup.mjs --verify",
     "build": "wxt build",
     "zip": "wxt zip",
-    "compile": "pnpm typecheck",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tests/e2e/tsconfig.json",
     "lint": "eslint . --max-warnings 0",
     "check:links": "node ../../scripts/check-links.mjs",
@@ -31,7 +28,8 @@
     "benchmark": "pnpm build && playwright test --config tests/e2e/playwright.benchmark.config.ts",
     "test:user": "pnpm build && node tests/e2e/manual.ts",
     "format": "prettier --write . --ignore-path ../../.prettierignore",
-    "format:check": "prettier --check . --ignore-path ../../.prettierignore"
+    "format:check": "prettier --check . --ignore-path ../../.prettierignore",
+    "verify:connection": "node scripts/verify-connection.mjs"
   },
   "dependencies": {
     "@floating-ui/dom": "^1.8.0",

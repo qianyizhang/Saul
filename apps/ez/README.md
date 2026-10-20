@@ -204,7 +204,6 @@ previous lookups are not sent. Local history is plaintext; it is not encrypted b
 
 ```sh
 make tools        # Checksum-pinned development linters
-make hooks        # Install commit/push hooks; requires uv
 make format
 make check        # Lint, strict build, offline core/state and install checks
 make app          # Build and locally sign dist/EZ.app
@@ -213,6 +212,8 @@ make app          # Build and locally sign dist/EZ.app
 Inside an agent sandbox that rejects nested SwiftPM sandboxing, prefix commands
 with `EZ_SWIFTPM_DISABLE_SANDBOX=1`; this keeps the outer sandbox active.
 After `make clean`, restore linters with `make tools`.
+
+Install shared Git hooks from the monorepo root with `bash scripts/install-hooks.sh`.
 
 See [contributing](CONTRIBUTING.md) for setup, tool pins, hooks and CI;
 [testing](Tests/README.md) for focused checks;

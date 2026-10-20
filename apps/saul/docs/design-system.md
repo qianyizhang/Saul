@@ -6,21 +6,18 @@ The [apply-design skill](../../../design/SKILL.md) is the reusable agent workflo
 
 ## Generate and check
 
-Use Node 24 and the pinned pnpm version:
+From the monorepo root, use Node 24 and the pinned pnpm version (macOS for Swift output):
 
 ```sh
 pnpm design:generate
 pnpm design:check
-# Local EZ adoption, while these projects remain separate checkouts:
-pnpm --dir ../.. design:generate
-pnpm --dir ../.. design:check
 ```
 
 The parser/linter is pinned at `@google/design.md@0.4.0`; the upstream format is
 alpha. Source SHA-256 receipts accompany all generated assets. Formatting or
 editing the contract requires regeneration, including EZ when its styles change.
-`pnpm check` in this app checks browser artifacts; root `pnpm design:check` verifies the native
-consumer without making either project's ordinary build depend on the other application.
+`pnpm check` in this app checks browser artifacts; root `pnpm design:check` verifies
+all four outputs without coupling the applications at runtime.
 
 ## Surface adapters
 

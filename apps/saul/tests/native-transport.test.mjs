@@ -1,4 +1,4 @@
-import { verifyMcp } from '../scripts/setup.mjs';
+import { verifyMcp } from '../scripts/verify-connection.mjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';

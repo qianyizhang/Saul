@@ -4,9 +4,10 @@
 
 Install Apple Command Line Tools with Swift 6.3+ and
 [uv](https://docs.astral.sh/uv/getting-started/installation/) (`brew install uv`),
-then run `make hooks` from `apps/ez`. This downloads checksum-verified macOS linters and installs
-both Git hooks. `make tools` alone is enough for `make check`; uv/Python are needed
-only for the development hook runner. Nothing is added to EZ.app.
+then run `make tools` from `apps/ez` and `bash scripts/install-hooks.sh` from the
+monorepo root. These install the native linters and shared Git hooks. `make tools`
+alone is enough for `make check`; uv/Python are needed only for the development
+hook runner. Nothing is added to EZ.app.
 
 | Python analogy | EZ gate |
 | --- | --- |
@@ -18,7 +19,8 @@ only for the development hook runner. Nothing is added to EZ.app.
 Commit hooks check whitespace, merge markers, YAML/JSON, private keys, files over
 512 KiB, Swift, shell scripts, workflows, and plists. They do not rewrite Swift;
 use `make format` to fix formatting. Push hooks run `make check`, including both
-offline suites. Run `make pre-commit` or `make pre-push` to reproduce each gate.
+offline suites. From the monorepo root, run `bash scripts/pre-commit.sh run --all-files`; add
+`--hook-stage pre-push` for the native push gate.
 Git commit hooks check staged changes; manual gates check the current working tree.
 
 Native linters live in ignored `.build/tools/`. Their versions and release archive
@@ -33,7 +35,8 @@ Dependabot proposes weekly GitHub Actions updates; native tools and hook revisio
 are updated manually.
 
 CI uses macOS 26 with Xcode 26.6, runs root commit hooks, native checks and `make app`
-with ad-hoc signature verification. It needs no account, secrets, or live inference.
+with ad-hoc signature verification, retaining a development app ZIP for 14 days.
+It needs no account, secrets, or live inference.
 Workflow permissions are read-only; checkout credentials are not persisted.
 Packaging validates a local development bundle. Publishing, Developer ID signing,
 and notarization remain explicit release work in [the release guide](docs/releasing.md).
@@ -46,7 +49,7 @@ and notarization remain explicit release work in [the release guide](docs/releas
 3. Implement a bounded change. Keep UI state out of the networking and storage layers.
 4. Add tests for meaningful behavior and failure modes. Prefer small synthetic
    values over captured user payloads. Never record OAuth URLs or live credentials.
-5. Run `make format`, `make pre-commit`, and `make check`; package and inspect the native app when UI changes.
+5. Run `make format` and `make check`, then the root commit hooks; package and inspect the native app when UI changes.
 6. Update relevant docs and `CHANGELOG.md`. Describe checks and limitations in the PR.
 
 ## Repository conventions

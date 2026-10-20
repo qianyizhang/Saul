@@ -36,8 +36,16 @@ artifacts. For an interactive selection, run the command without arguments in a
 terminal. The coordinator stops after a failed command; completed components may
 remain installed. Inspect them with `--verify` before retrying.
 
-For EZ, follow [local signing setup](../apps/ez/docs/releasing.md#local-signing-and-installation),
-then `node scripts/setup.mjs --components ez` or `make -C apps/ez install`.
+To install EZ from this monorepo (quit EZ first):
+
+```sh
+make -C apps/ez install
+# Or use the optional coordinator:
+node scripts/setup.mjs --components ez
+```
+
+On a new machine, first follow [local signing setup](../apps/ez/docs/releasing.md#local-signing-and-installation),
+then `make -C apps/ez signing-setup`.
 The existing installer refuses replacement while EZ is running, preserves signing
 identity, verifies the staged bundle and retains a rollback copy.
 
@@ -63,7 +71,7 @@ and credentials remain untouched.
 
 The coordinator refuses to overwrite an existing `saul-tabs` Codex registration.
 Omit `--codex` to preserve it. The browser application's advanced
-[Codex connection setup](../apps/saul/docs/setup.md) can verify a matching existing
+[read-only connection checker](../apps/saul/docs/setup.md) can verify a matching existing
 connection with a read-only live inventory; this is separate from artifact checks.
 
 ## Verify and remove

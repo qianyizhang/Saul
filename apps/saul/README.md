@@ -6,7 +6,7 @@ Saul is a local-first Chrome extension for reading explanations and safe tab org
 
 - **Reading:** select text, queue an explanation, keep reading, and return through persistent underlines, notifications, or history.
 - **Library:** search saved passages and explanations, bookmark them, revisit sources, inspect attempts, and export Markdown.
-- **Models:** use your [ChatGPT plan](docs/chatgpt-plan.md), an OpenAI-compatible endpoint, or Chrome's on-device `LanguageModel` API.
+- **Models:** use your [ChatGPT plan](docs/chatgpt-plan.md) or an OpenAI-compatible endpoint. Chrome's on-device provider is currently disabled.
 - **Window and Tab board:** select, drag, group, move and summarize tabs with shared controls; Codex proposals retain review and Apply.
 - **Codex access:** opt in to local CLI/MCP tools for tab organization and new windows. A separate switch enables page reading, clicks, text filling and navigation.
 - **MCP App:** drag tabs between windows beside the conversation, use keyboard move controls, or ask Codex for a layout. Review the preview, then apply it with a button. Pinned tabs and existing groups stay intact. See the [workspace guide](docs/mcp-app.md).
@@ -16,15 +16,9 @@ Saul is a local-first Chrome extension for reading explanations and safe tab org
 Use the [selective installer](../../docs/setup.md) for the extension alone, optional
 helpers, or both apps. EZ and Codex are not required for standalone Saul.
 
-### Optional Codex connection
-
-With Node 24, the pinned pnpm version, Chrome and Codex CLI available, run from this checkout:
-
-```sh
-node scripts/setup.mjs
-```
-
-The wizard builds Saul, installs its native helper, registers MCP and verifies a real tab inventory. It guides you through loading the extension and enabling access in Chrome. See [setup and agent instructions](docs/setup.md) for unattended use, upgrades and the helper lifecycle. Run `node scripts/setup.mjs --verify` to check an existing installation.
+For optional Codex access, select the tab helper and `--codex` in the root setup.
+Then enable access in Saul Settings and run `pnpm verify:connection` from this
+application directory. See [connection verification and helper lifecycle](docs/setup.md).
 
 ## Develop
 

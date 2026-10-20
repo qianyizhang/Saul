@@ -1,4 +1,4 @@
-name: macOS checks
+name: Native checks and artifact
 on:
   push:
   pull_request:
@@ -39,5 +39,13 @@ jobs:
         run: bash scripts/pre-commit.sh run --all-files
       - name: Push gate (build, static checks, offline contracts)
         run: pnpm check:ez
-      - name: Package local app
-        run: make -C apps/ez app
+      - name: Package development app
+        run: |
+          make -C apps/ez app
+          ditto -c -k --sequesterRsrc --keepParent apps/ez/dist/EZ.app apps/ez/dist/EZ-macos.zip
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: macos-development-app
+          path: apps/ez/dist/EZ-macos.zip
+          if-no-files-found: error
+          retention-days: 14
