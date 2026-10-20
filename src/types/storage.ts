@@ -1,3 +1,4 @@
+import type { DigestDbOperations } from '../digest/types';
 import type {
   SelectionSnapshot,
   ResolvedContext,
@@ -74,7 +75,7 @@ export interface HistoryItem {
   unread: boolean;
 }
 
-export interface DbOperations {
+export interface DbOperations extends DigestDbOperations {
   DB_SUBMIT: { payload: Submission; result: { passageId: string; run?: QueuedRun } };
   DB_RECOVER: { payload: undefined; result: void };
   DB_CLAIM: { payload: { runId: string }; result: boolean };

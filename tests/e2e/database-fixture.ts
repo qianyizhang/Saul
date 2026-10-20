@@ -133,6 +133,16 @@ async function migrationChecks(legacy: string) {
         "SELECT count(*) FROM explanation_fts WHERE explanation_fts MATCH 'Slope'",
       ),
     };
+    // A version-1 installation must add only digest tables, preserving reading data.
+    db.exec('DROP TABLE digest_item; DROP TABLE digest_batch; PRAGMA user_version=1');
+    migrate(db);
+    const upgradedV1 = {
+      version: db.selectValue('PRAGMA user_version'),
+      response: db.selectValue('SELECT response_raw FROM llm_run'),
+      tables: db.selectValue(
+        "SELECT count(*) FROM sqlite_master WHERE name IN ('digest_batch','digest_item')",
+      ),
+    };
     db.exec('PRAGMA user_version=99');
     let rejected = false;
     try {
@@ -140,7 +150,7 @@ async function migrationChecks(legacy: string) {
     } catch {
       rejected = true;
     }
-    return { rollback, upgraded, rejected };
+    return { rollback, upgraded, upgradedV1, rejected };
   } finally {
     db.close();
   }

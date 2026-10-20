@@ -1,3 +1,4 @@
+import { digestStore } from '../digest/store';
 import sqlite3InitModule, { type Database, type SqlValue } from '@sqlite.org/sqlite-wasm';
 import wasmUrl from '@sqlite.org/sqlite-wasm/sqlite3.wasm?url';
 import { nanoid } from 'nanoid';
@@ -259,6 +260,14 @@ export class SaulDatabase {
   }
   private executeReady(message: DbRequest): unknown {
     switch (message.type) {
+      case 'DB_DIGEST_CREATE':
+      case 'DB_DIGEST_GET':
+      case 'DB_DIGEST_LIST':
+      case 'DB_DIGEST_ITEM':
+      case 'DB_DIGEST_SOURCE':
+      case 'DB_DIGEST_RECOVER':
+      case 'DB_DIGEST_DELETE':
+        return digestStore(this.db, message);
       case 'DB_SUBMIT':
         return this.submit(message.payload);
       case 'DB_RECOVER':

@@ -1,3 +1,4 @@
+import type { DigestBatch, DigestRequest, DigestResult } from '../digest/types';
 import type { DbOperations, DbRequest, DbType, Reply, Submission } from '../types/storage';
 import type { ReadingRequest, ReadingResultFor } from '../contracts/reading';
 import type { WorkspaceRequest, WorkspaceResultFor } from '../native/workspace';
@@ -39,7 +40,11 @@ export function sendWorkspaceMessage<T extends WorkspaceRequest>(
 ): Promise<WorkspaceResultFor<T>> {
   return request({ type: 'WORKSPACE_TABS', ...message });
 }
+export function sendDigestMessage<T extends DigestRequest>(message: T): Promise<DigestResult<T>> {
+  return request({ target: 'saul-digest', message });
+}
 export type RunnerRequest =
+  | { operation: 'digest'; message: DigestRequest; snapshot?: DigestBatch }
   | { operation: 'db'; message: DbRequest }
   | { operation: 'submit'; submission: Submission; credential: string }
   | { operation: 'stop'; selectionId: string }

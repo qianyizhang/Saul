@@ -19,11 +19,16 @@ test('transactional legacy migration preserves responses/bookmarks, rolls back f
     expect(report.rollback.columns).not.toContain('viewed_at');
     expect(report.rollback.bookmark).toBe(1);
     expect(report.upgraded).toEqual({
-      version: 1,
+      version: 2,
       response: 'A <term note="Slope">gradient</term>.',
       viewed: 4,
       bookmark: 1,
       search: 1,
+    });
+    expect(report.upgradedV1).toEqual({
+      version: 2,
+      response: report.upgraded.response,
+      tables: 2,
     });
     expect(report.rejected).toBe(true);
   } finally {

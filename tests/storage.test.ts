@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
+import { SCHEMA_VERSION } from '../src/storage/schema';
 import { SaulDatabase } from '../src/storage/db';
 
 vi.mock('@sqlite.org/sqlite-wasm', () => ({ default: vi.fn() }));
@@ -21,7 +22,7 @@ it('rejects unavailable persistence instead of reporting success from a memory d
   install.mockResolvedValue({
     OpfsSAHPoolDb: class {
       exec = exec;
-      selectValue = () => 1;
+      selectValue = () => SCHEMA_VERSION;
       selectObjects = () => [];
       close = vi.fn();
     },

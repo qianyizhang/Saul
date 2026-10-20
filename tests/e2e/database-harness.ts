@@ -15,6 +15,7 @@ interface FixtureReply {
 export interface MigrationReport {
   rollback: { failed: boolean; version: number; columns: string[]; bookmark: number };
   upgraded: { version: number; response: string; viewed: number; bookmark: number; search: number };
+  upgradedV1: { version: number; response: string; tables: number };
   rejected: boolean;
 }
 

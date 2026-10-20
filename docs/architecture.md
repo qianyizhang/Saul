@@ -60,7 +60,7 @@ Runtime messages do not return to their sender. Content and popup requests there
 
 ## Model boundary
 
-`src/models/provider.ts` is the single streaming facade used by the runner and generation tests. It dispatches to OpenAI-compatible, Chrome on-device, or ChatGPT plan adapters and returns the same delta/completion events. Both HTTP adapters reuse `native/sse.mjs` for bounded SSE framing across UTF-8 chunks, CRLF/LF separators, multiline `data:` fields, provider errors, cancellation, and incomplete output. Chrome generation uses the modern `LanguageModel` API in the offscreen document.
+`src/models/provider.ts` is the streaming facade used by the reading runner and generation tests. It dispatches to OpenAI-compatible, Chrome on-device, or ChatGPT plan adapters and returns the same delta/completion events. Both HTTP adapters reuse `native/sse.mjs` for bounded SSE framing across UTF-8 chunks, CRLF/LF separators, multiline `data:` fields, provider errors, cancellation, and incomplete output. Chrome generation uses the modern `LanguageModel` API in the offscreen document.
 
 Prompts and context are frozen when a job is submitted. Later settings edits do not change an in-flight job. Provider keys are associated with their endpoint origin and are not persisted with job inputs. ChatGPT plan jobs freeze a non-secret account registration ID and model; OAuth credentials stay in the native helper.
 
@@ -93,6 +93,12 @@ CLI or MCP -> private Unix socket -> native host -> Chrome native messaging -> t
 `native/protocol.mjs` is the runtime schema shared by the extension, CLI, and MCP server. Mutations preview by default, validate current browser state before apply, serialize inside the extension, and never retry automatically after an uncertain error. Incognito and non-normal windows are excluded. `src/native/pages.ts` handles separately opted-in page reads and actions through Chrome scripting in the isolated world; short-lived element references are tied to the read's document. MCP health/discovery bypasses the browser request queue.
 
 The [MCP App](mcp-app.md) serves a self-contained board from `native/ui/`. Drag-and-drop, keyboard controls and Codex requests all feed `native/workspace.mjs` proposals. The service validates complete layouts, issues expiring approval tokens to the app, and verifies each browser move, duplicate closure and label update after the user clicks Apply. Shared window labels belong to trusted extension session storage (`src/native/window-labels.ts`), and are included in tab inventories for both surfaces. On macOS Google Chrome, `native/window-names.mjs` targets the connected browser PID through the AppleScript `givenName` interface: inventory reads import names, and reviewed writes validate window/tab IDs and the expected name, then read back the result. The extension API itself has no native name field. Legacy helper-only labels import on a reviewed apply. Duplicate detection uses exact HTTP(S) URLs; closures retain pins/groups and revalidate the URL and keeper at the extension boundary. `native/app-protocol.mjs` owns app-only schemas; these do not expand the extension's native protocol.
+
+## Window digest ownership
+
+`src/digest/` owns the fixed bilingual summary contract, capture, runner, persistence operations, and safe standalone HTML renderer. The workspace sends validated digest actions through the background; only the background snapshots Chrome windows, and only the offscreen runner can request page captures. Content scripts cannot start or inspect digests. Capture uses isolated-world scripting and validates the original URL before and after reading.
+
+The existing offscreen document hosts the digest runner alongside reading jobs. Both use the same database worker and native ChatGPT transport; digest generation calls the existing plan adapter with a frozen account, prompt, model and effort. Digest control actions serialize, generation is sequential, and there is no automatic retry. Schema version 2 adds digest metadata and item/source rows without rewriting reading data. Restart reconciliation marks unfinished items interrupted. The UI polls saved/live state while mounted and renders English before Chinese from validated pairs; raw model text is never interpreted as HTML.
 
 ## Source layout
 

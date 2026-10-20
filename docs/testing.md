@@ -108,3 +108,13 @@ On-device generation is temporarily disabled. Its integration cases are retained
 Agent workflow: [saul-browser-testing skill](../.agents/skills/saul-browser-testing/SKILL.md).
 
 ChatGPT plan unit tests include a real loopback callback and temporary native-helper installation. Run socket-dependent tests with local binding permission. OAuth and inference endpoints are mocked; no real plan quota is consumed.
+
+## Explicit live digest check
+
+After installing the ChatGPT helper, opt in to a real three-public-tab run:
+
+```sh
+SAUL_LIVE_CHATGPT_HOST="$HOME/.saul/bin/saul-chatgpt-host" pnpm exec playwright test tests/e2e/digest-live.spec.ts
+```
+
+This consumes ChatGPT plan quota using the helper’s existing saved sign-in. The normal suite skips it. It uses the standard disposable browser harness, registers the installed host only inside that temporary profile, opens three public articles, clicks the actual batch UI, verifies generation and English–Chinese export, and reopens saved results. No native transport or model output is mocked, and no personal browser profile or credential copy is used. Artifacts include the exported HTML, screenshots, and a result record with the local account identifier redacted. This proves the built bundle and installed helper together; it does not operate the user’s personal Chrome window.

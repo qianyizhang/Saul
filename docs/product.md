@@ -85,6 +85,16 @@ The Codex board shares reviewed Saul window labels with the extension Tabs selec
 
 External CLI/MCP tab access is optional and disabled by default. It also supports creating windows from selected ungrouped tabs. A separate **Page reading and actions** switch enables bounded visible-page reads, referenced click/fill actions, and HTTP(S) navigation. Page mutations preview by default. See [native messaging](native-messaging.md).
 
+### Window digests
+
+Choose a window in Tabs, then **Summarize all tabs**. Digests use the signed-in ChatGPT account with GPT-6 Luna and medium effort; unavailable capability blocks explicitly. This does not change reading presets or use the Gemini panel. The summary profile is concise English followed by equivalent Simplified Chinese, with source attribution and optional limitations; optional follow-up, glossary, and flow sections are removed as whole bilingual sections if they exceed the reading budget, while core points and caveats are preserved; it does not inherit private Gemini or ChatGPT memories.
+
+All tabs are listed in their original order, including pinned and grouped tabs. Browser-restricted and incognito pages are skipped. Loaded HTTP(S) pages are captured without focusing or reloading them. Capture includes visible article/page text and loaded discussion, bounded to 120,000 characters; images, frames, collapsed content, and linked pages are not read. Coverage and truncation remain visible. Navigated, closed, unloaded, and unreadable pages report an error instead of using another source.
+
+One digest runs at a time, sequentially. Provider failures pause the remaining queue; page-capture or summary-format errors affect only that tab. Popup closure does not stop it. Completed results and captured source text persist in local SQLite; **Stop digest** retains finished results and available partial text. A browser/extension restart marks unfinished work interrupted and never automatically spends quota again. **Retry unfinished** explicitly retries failures, interruptions, and cancellations, using captured text when available. Unsaved stream fragments can be lost on restart. A storage failure stops further processing and shows that progress could not be saved.
+
+**Download HTML** exports a self-contained digest with source links, English–Chinese pairs, coverage, capture times, and incomplete statuses. Download is available during processing. **Delete digest** removes that digest and its captured text; this data is separate from passage History and its Clear all action.
+
 ## Compatibility
 
 - Saul targets Google Chrome MV3 only.

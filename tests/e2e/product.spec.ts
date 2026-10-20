@@ -180,7 +180,9 @@ test('tab previews do not mutate, sorting can undo, and stale previews are rejec
   await expect(popup.getByRole('button', { name: 'Apply changes', exact: true })).toBeVisible();
   await context.newPage();
   await popup.getByRole('button', { name: 'Apply changes', exact: true }).click();
-  await expect(popup.getByRole('alert')).toContainText('Tabs changed since this preview');
+  await expect(
+    popup.getByRole('alert').filter({ hasText: 'Tabs changed since this preview' }),
+  ).toBeVisible();
   await popup.getByRole('button', { name: 'Refresh tabs', exact: true }).click();
   await popup.getByRole('button', { name: 'Preview sort', exact: true }).click();
   await popup.getByRole('button', { name: 'Apply changes', exact: true }).click();

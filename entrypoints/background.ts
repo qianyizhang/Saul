@@ -1,3 +1,5 @@
+import { snapshotWindow, captureTab } from '../src/digest/capture';
+import { validateDigest } from '../src/digest/contracts';
 import { initPlanBridge } from '../src/native/plan';
 import { getSettings, initStorageSecurity, SETTINGS_STORAGE_KEY } from '../src/storage/settings';
 import {
@@ -255,6 +257,8 @@ export default defineBackground(() => {
   chrome.runtime.onMessage.addListener((request, sender, reply) => {
     if (
       ![
+        'saul-digest',
+        'saul-digest-capture',
         'saul-reading',
         'saul-workspace',
         'saul-events',
@@ -265,6 +269,15 @@ export default defineBackground(() => {
     )
       return false;
     (async () => {
+      if (request.target === 'saul-digest-capture') {
+        if (
+          sender.id !== chrome.runtime.id ||
+          sender.url !== chrome.runtime.getURL('offscreen.html') ||
+          sender.tab
+        )
+          throw new Error('Runner only');
+        return captureTab(request.item);
+      }
       if (request.target === 'saul-events') {
         if (
           sender.id !== chrome.runtime.id ||
@@ -294,6 +307,13 @@ export default defineBackground(() => {
         return reading(request.message, sender);
       }
       if (!workspaceSender(sender)) throw new Error('Extension workspace only');
+      if (request.target === 'saul-digest') {
+        validateDigest(request.message);
+        const r = request.message;
+        const snapshot =
+          r.action === 'start' ? await snapshotWindow(r.id, r.windowId, r.accountId) : undefined;
+        return runnerRequest({ operation: 'digest', message: r, snapshot });
+      }
       if (request.type === 'WORKSPACE_TABS') return workspaceCall(request);
       if (request.target === 'saul-open-source') {
         if (!id(request.selectionId)) throw new Error('Invalid passage');

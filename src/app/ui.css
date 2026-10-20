@@ -497,3 +497,31 @@ input[type='checkbox'] {
     padding-block: 12px;
   }
 }
+
+.digest-results {
+  list-style: none;
+  padding: 0;
+  max-height: 420px;
+  overflow: auto;
+}
+.digest-results li {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+progress {
+  appearance: none;
+  height: 6px;
+  border: none;
+  border-radius: 999px;
+  overflow: hidden;
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+progress::-webkit-progress-bar {
+  background: var(--border);
+}
+progress::-webkit-progress-value {
+  background: var(--accent);
+}

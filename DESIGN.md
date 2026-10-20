@@ -271,3 +271,7 @@ preserve readability and input responsiveness. Honor reduced-motion preferences,
 including streaming indicators. Future VFX (particles, glow, distortion) are optional
 accent treatments, kept away from reading text and never required to understand status.
 Add concrete motion/effect tokens and platform mappings when an actual effect is adopted.
+
+### Window digests
+
+Tabs offers a window-level digest with one primary Summarize action, saved progress, and HTML export. English always precedes its equivalent Simplified Chinese. Keep the first read short: one lead and two to four concrete points, with optional limits and deeper details. Show processed and successful counts separately. Retain failures, skipped pages, source links, capture coverage, and Stop even in Minimum Mode. Keep per-tab detail collapsed until requested.

@@ -1,3 +1,4 @@
+import { BatchSummary } from './BatchSummary';
 import { useEffect, useState } from 'react';
 import { NativeBridge } from './NativeBridge';
 import { sendWorkspaceMessage } from '../storage/client';
@@ -172,6 +173,7 @@ export function Tabs() {
           Existing groups move together. Undo is available while the tab layout remains unchanged.
         </p>
       </div>
+      <BatchSummary windowId={windowId} />
       {preview && (
         <section className="panel stack" aria-label="Tab change preview">
           <h3>Review changes</h3>
