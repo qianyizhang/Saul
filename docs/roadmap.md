@@ -12,6 +12,9 @@ in [verification](verification.md).
 - Optional explicitly billed API-key provider.
 - Conversation follow-ups with deliberate context selection.
 - Signed/notarized distribution and an update channel.
+- Deferred: keep self-signing; revisit only when installation prompts bother us again.
+  Candidate: full Xcode + free Personal Team → Apple Development signing; verify
+  credential restoration across two changed builds. [Context](keychain.md#why-a-rebuild-can-ask-again).
 
 For each addition, define the interaction, data boundary, and acceptance checks
 before implementation. Keep the default experience fast and compact.

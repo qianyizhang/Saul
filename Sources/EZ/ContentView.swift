@@ -22,7 +22,7 @@ struct ContentView: View {
                         }
                     }
                     .padding(30)
-                    .frame(maxWidth: 820, alignment: .leading)
+                    .frame(maxWidth: model.selectedEntry?.mode == .spelling ? 1140 : 820, alignment: .leading)
                     .frame(maxWidth: .infinity)
                 }
                 if let warning = model.storageWarning {
@@ -184,21 +184,7 @@ struct ContentView: View {
                     Text(entry.createdAt, style: .time).font(.caption).foregroundStyle(.secondary)
                 }
             }
-            Text(entry.displayQuery).font(AppStyle.subject).textSelection(.enabled)
-            Divider()
-            if entry.response.isEmpty && entry.status == "pending" {
-                Text(model.selectedResponseActivity == .thinking ? "Thinking…" : "Waiting for answer…")
-                    .foregroundStyle(.secondary).padding(.vertical)
-            } else {
-                Text(
-                    (try? AttributedString(
-                        markdown: entry.response,
-                        options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-                        ?? AttributedString(entry.response)
-                )
-                .font(AppStyle.body).lineSpacing(6).textSelection(.enabled).frame(
-                    maxWidth: .infinity, alignment: .leading)
-            }
+            LookupAnswerText(entry: entry, activity: model.selectedResponseActivity)
             if entry.status != "pending" {
                 HStack {
                     Button {
@@ -228,6 +214,11 @@ struct ContentView: View {
             }
             DisclosureGroup("Details") {
                 LookupDetails(entry: entry).padding(.top, 8)
+                if entry.mode == .spelling {
+                    DisclosureGroup("Full response") {
+                        AnswerMarkdown(text: entry.response).padding(.top, 8)
+                    }
+                }
             }.font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
         }
     }

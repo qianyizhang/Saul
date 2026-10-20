@@ -171,20 +171,7 @@ struct QuickLookupView: View {
 
     private func result(_ entry: HistoryEntry) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(entry.displayQuery).font(.system(size: 18, weight: .medium, design: .serif))
-                .lineLimit(2).textSelection(.enabled)
-            if entry.response.isEmpty && entry.status == "pending" {
-                Text(model.selectedResponseActivity == .thinking ? "Thinking…" : "Waiting for answer…")
-                    .foregroundStyle(.secondary)
-            } else {
-                Text(
-                    (try? AttributedString(
-                        markdown: entry.response,
-                        options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-                        ?? AttributedString(entry.response)
-                )
-                .font(AppStyle.body).textSelection(.enabled).lineSpacing(3)
-            }
+            LookupAnswerText(entry: entry, activity: model.selectedResponseActivity, compact: true)
             if entry.status != "pending" && entry.status != "completed" {
                 Text(entry.status.capitalized).font(AppStyle.caption).foregroundStyle(.orange)
             }

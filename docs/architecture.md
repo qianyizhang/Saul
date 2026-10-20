@@ -300,3 +300,26 @@ Unsupported or corrupt files are preserved and reported in Settings; runtime use
 defaults until the user explicitly restores the file. Changes validate and flush
 an owner-only sibling before atomic replacement; in-memory bindings publish only
 after persistence succeeds. Chrome navigation changes both bindings atomically.
+
+## Spelling comparison presentation
+
+`SpellingComparison` derives a local word/punctuation diff from completed spelling
+history with a single input. It recognizes explicit corrected-text / changes
+labels, either standalone or followed by same-line content, including Markdown
+emphasis and supported Chinese equivalents; ambiguous unlabelled responses
+retain the ordinary answer renderer. It does not alter prompts, saved history,
+copy/export contents, or make a second request. Markdown inline decoration is
+removed from the corrected comparison text; original input is preserved literally.
+Notes are separated only at a recognized heading. The complete response stays in
+main-window Details. Failed, interrupted, and streaming answers never claim to be
+completed corrections. Diff work is bounded at 4,000 tokens per side and 2,000,000
+token pairs; larger passages still compare without highlights and disclose that limit.
+
+Wide spelling comparisons use shared paragraph rows. Unchanged word positions from
+the existing diff anchor corresponding blocks; blank lines and list-item starts
+form block boundaries. One-to-many and many-to-one anchors group paragraph splits
+and merges. Unanchored blocks occupy their own side with the opposite cell empty,
+so insertions/deletions do not shift later matches. Each row grows to its taller
+cell without fixed heights or independent scrolling. Narrow presentation retains
+the full text; the existing long-input limit also bounds alignment work and falls
+back to a single unhighlighted pair.

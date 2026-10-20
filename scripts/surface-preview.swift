@@ -41,7 +41,7 @@ private struct SurfacePreviewControls: View {
                         [
                             "Empty", "Signed out", "Two inputs", "Many inputs", "Answer", "Waiting",
                             "Thinking",
-                            "Streaming", "Blocked",
+                            "Streaming", "Blocked", "Prose corrections",
                             "No recipes", "Selector hitboxes",
                         ], id: \.self
                     ) {
@@ -149,6 +149,34 @@ private struct SurfacePreviewControls: View {
                 model.selection = entry.id
                 model.busy = pending
             }
+        }
+        if scenario == "Prose corrections" {
+            var entry = HistoryEntry(
+                mode: .spelling,
+                query: """
+                    our comunity garden opens on saturday.
+                    please brings a small shovel and some water, we has extra gloves for everyone.
+
+                    first, meet by the wooden gate so the organiser can explain the planting plan.
+
+                    - label each row befor planting the seeds
+                    - the new watering schedule should posted imediately
+                    """,
+                model: "fixture-luna", effort: "medium", requestedServiceTier: nil)
+            entry.response = """
+                Our community garden opens on Saturday.
+                Please bring a small shovel and some water. We have extra gloves for everyone.
+
+                First, meet by the wooden gate so the organizer can explain the planting plan.
+
+                - Label each row before planting the seeds.
+                - The new watering schedule should be posted immediately.
+
+                Changes: Fixed spelling, agreement, capitalization, and punctuation.
+                """
+            entry.status = "completed"
+            model.entries = [entry]
+            model.selection = entry.id
         }
         if scenario == "Blocked" {
             model.models = []

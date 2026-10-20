@@ -43,6 +43,12 @@ confirm. Deletion removes its saved snapshots from this Mac and cannot be undone
 it is unavailable while a request or launcher submission is active. Your current
 draft is preserved.
 
+Completed Spell Check answers with recognized corrected-text or changes labels
+show an Original / Corrected comparison: paragraph-aligned columns, highlighted
+edits, and expandable explanations. Narrow windows show the correction first.
+Other response formats keep the normal reading view; Copy and Export retain the
+full response. Long original passages sit behind **Original text**.
+
 For quick access while EZ is running, press **⌃⌥ Space** (Control–Option–Space)
 or choose **Quick Lookup** from EZ’s menu-bar icon. Type or paste text and press
 **⌘ Return** after filling the recipe's inputs. The panel starts small and grows

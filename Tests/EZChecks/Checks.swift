@@ -6,7 +6,8 @@ import Foundation
         let cases =
             runnerChecks() + launcherChecks() + historyChecks() + identityChecks()
             + modelChecks() + templateChecks() + configurationChecks()
-            + recipeHistoryChecks() + responsesChecks() + authenticationChecks() + shortcutChecks()
+            + spellingComparisonChecks() + recipeHistoryChecks() + responsesChecks() + authenticationChecks()
+            + shortcutChecks()
         exit(await CheckRunner.run(cases))
     }
 }

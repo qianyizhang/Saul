@@ -2,6 +2,10 @@
 
 ## 0.1.0 — Unreleased
 
+- Readable prose spell checks with paragraph-aligned Original / Corrected columns,
+  highlighted edits, expandable explanations, and a compact reading layout.
+  Comparison parsing accepts standalone and same-line section labels.
+
 - Look Up in EZ macOS Service fills a draft from selected text without sending or
   changing the clipboard; existing drafts and active work are protected.
 

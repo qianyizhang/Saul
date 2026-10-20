@@ -88,3 +88,16 @@ returns to reading. Preset/request details are progressive disclosures. Form hin
 reserve a stable line, and Tab navigation scrolls the focused field into view.
 The surface preview includes a **Signed out** fixture and resets search with each
 fixture so one scenario cannot hide the next scenario's history.
+
+## Prose corrections
+
+Long passages use body typography, never a full-page subject heading. Completed
+Spell Check answers with an explicit corrected-text or changes heading offer an
+Original / Corrected comparison. Removed text uses a warm tint and strikethrough;
+added text uses the shared green and underline. Labels make color nonessential.
+Two readable columns share one scroll area at wider widths. Corresponding paragraphs
+and list items occupy shared, top-aligned rows whose height follows the taller side;
+paragraph splits and merges stay together, and unmatched paragraphs leave an empty
+opposite cell. Narrow windows and Quick Lookup show Corrected first with Original
+in a disclosure. Explanatory notes sit under Why these changes. Unrecognized responses keep the ordinary answer view
+with long original text collapsed. Full response remains in main-window Details.
