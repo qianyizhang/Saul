@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+    <key>CFBundleName</key><string>EZ</string>
+    <key>CFBundleDisplayName</key><string>EZ</string>
+    <key>CFBundleIdentifier</key><string>local.ez.app</string>
+    <key>CFBundleExecutable</key><string>EZ</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleShortVersionString</key><string>0.1.0</string>
+    <key>CFBundleVersion</key><string>1</string>
+    <key>CFBundleIconFile</key><string>EZ</string>
+    <key>LSMinimumSystemVersion</key><string>14.0</string>
+    <key>NSHighResolutionCapable</key><true/>
+    <key>NSPrincipalClass</key><string>NSApplication</string>
+    <key>NSServices</key><array><dict>
+        <key>NSMenuItem</key><dict><key>default</key><string>Look Up in EZ</string></dict>
+        <key>NSMessage</key><string>lookupSelectedText</string>
+        <key>NSPortName</key><string>EZ</string>
+        <key>NSSendTypes</key><array><string>public.utf8-plain-text</string></array>
+        <key>NSRequiredContext</key><dict/>
+    </dict></array>
+    <key>CFBundleURLTypes</key><array><dict>
+        <key>CFBundleURLName</key><string>local.ez.app.lookup</string>
+        <key>CFBundleURLSchemes</key><array><string>ez</string></array>
+        <key>CFBundleTypeRole</key><string>Editor</string>
+    </dict></array>
+</dict></plist>

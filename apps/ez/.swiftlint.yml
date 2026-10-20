@@ -1,0 +1,32 @@
+# swift-format owns layout. SwiftLint checks correctness, without competing
+# naming/length/style rules or a baseline that hides existing violations.
+# All selected rules use SwiftSyntax; lint runs with --disable-sourcekit so
+# Apple's Command Line Tools suffice. Do not add SourceKit-dependent rules.
+included:
+  - Sources
+  - Tests
+  - scripts
+  - Package.swift
+only_rules:
+  - blanket_disable_command
+  - compiler_protocol_init
+  - discarded_notification_center_observer
+  - duplicate_conditions
+  - duplicate_enum_cases
+  - duplicate_imports
+  - duplicated_key_in_dictionary_literal
+  - force_cast
+  - force_try
+  - identical_operands
+  - incompatible_concurrency_annotation
+  - invalid_swiftlint_command
+  - notification_center_detachment
+  - prohibited_super_call
+  - return_value_from_void_function
+  - unhandled_throwing_task
+  - unused_closure_parameter
+  - unused_control_flow_label
+  - unused_optional_binding
+  - unused_setter_value
+  - valid_ibinspectable
+  - weak_delegate

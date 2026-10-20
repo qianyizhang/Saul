@@ -1,0 +1,37 @@
+name: macOS checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: macos-26
+    timeout-minutes: 15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: false
+          version: '0.11.8'
+      - name: Toolchain
+        run: |
+          swift --version
+          xcrun swift-format --version
+          uv --version
+      - name: Install verified development tools
+        run: make tools
+      - name: Commit hooks (all tracked files)
+        run: make pre-commit
+      - name: Push gate (build, static checks, offline contracts)
+        run: make pre-push
+      - name: Package local app
+        run: make app
