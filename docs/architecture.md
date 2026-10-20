@@ -81,6 +81,12 @@ draft/Hide draft reveal or hide the existing draft without replacing it. Use aga
 explicitly restores the saved request. Running requests keep Stop reachable in
 the reading footer. Copy and Use again are the primary answer actions; export and
 delete live in More. Exact request metadata and metrics are available in Details.
+**Inspect input/output** shows the selected lookup's saved instructions, input
+fields, compiled prompt and literal response, with per-block copy. The main window
+and Quick Lookup's Details popover share this native view. It reads history only;
+it does not regenerate prompts, send requests or retain HTTP/SSE logs. Legacy
+instructions that were not saved are labelled unavailable rather than reconstructed
+from current mode defaults. Incomplete output retains its lookup status and error.
 Input validation uses a fixed-height hint, and both surfaces scroll
 keyboard-focused inputs into view.
 
@@ -310,8 +316,8 @@ emphasis and supported Chinese equivalents; ambiguous unlabelled responses
 retain the ordinary answer renderer. It does not alter prompts, saved history,
 copy/export contents, or make a second request. Markdown inline decoration is
 removed from the corrected comparison text; original input is preserved literally.
-Notes are separated only at a recognized heading. The complete response stays in
-main-window Details. Failed, interrupted, and streaming answers never claim to be
+Notes are separated only at a recognized heading. The complete literal response stays in
+Inspect input/output on both lookup surfaces. Failed, interrupted, and streaming answers never claim to be
 completed corrections. Diff work is bounded at 4,000 tokens per side and 2,000,000
 token pairs; larger passages still compare without highlights and disclose that limit.
 

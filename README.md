@@ -37,6 +37,9 @@ allowance. Metrics are saved with new lookups; older history has no metrics.
 **⌘ N** starts a new lookup and **⌘ .** stops generation.
 Selected answers open in a reading view. **Edit draft** reveals your current inputs;
 **Hide draft** returns to reading, and **Use again** restores the saved request.
+**Inspect input/output** shows the saved instructions, input fields, assembled
+prompt and literal response with per-section Copy. It is also in Quick Lookup's
+Details popover, including for incomplete answers.
 You can copy answers, export Markdown, and search previous lookups. To delete a
 lookup, use **More → Delete lookup** below its answer or right-click its history row, then
 confirm. Deletion removes its saved snapshots from this Mac and cannot be undone;

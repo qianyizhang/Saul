@@ -100,7 +100,7 @@ and list items occupy shared, top-aligned rows whose height follows the taller s
 paragraph splits and merges stay together, and unmatched paragraphs leave an empty
 opposite cell. Narrow windows and Quick Lookup show Corrected first with Original
 in a disclosure. Explanatory notes sit under Why these changes. Unrecognized responses keep the ordinary answer view
-with long original text collapsed. Full response remains in main-window Details.
+with long original text collapsed. The literal full response remains in Inspect input/output on both lookup surfaces.
 
 Disclosure headers use a shared full-width button with a minimum 32-point height.
 The chevron, label, and remaining header space all toggle expansion; the expanded

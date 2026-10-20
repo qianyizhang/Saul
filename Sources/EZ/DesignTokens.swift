@@ -1,4 +1,4 @@
-// Generated from DESIGN.md · SHA-256 cc4602874e5b73cb1b29a7509ad5c683b60146ae048501059fc27d1c4a55c492. Do not edit.
+// Generated from DESIGN.md · SHA-256 8f9f4343700f561f238d7b24ed78a81e7bb9a14f32650f00382aaea2f67d1113. Do not edit.
 import SwiftUI
 
 enum DesignTokens {
@@ -136,6 +136,35 @@ enum DesignTokens {
             }
             return NSColor(
                 srgbRed: 0.9686274509803922, green: 0.9372549019607843, blue: 0.8745098039215686, alpha: 1)
+        })
+    static let `windowBlue` = Color(
+        nsColor: NSColor(name: "Little Clarity.window-blue") { appearance in
+            if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+                return NSColor(
+                    srgbRed: 0.5568627450980392, green: 0.7411764705882353, blue: 0.8980392156862745, alpha: 1
+                )
+            }
+            return NSColor(srgbRed: 0.20784313725490197, green: 0.41568627450980394, blue: 0.6, alpha: 1)
+        })
+    static let `windowViolet` = Color(
+        nsColor: NSColor(name: "Little Clarity.window-violet") { appearance in
+            if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+                return NSColor(
+                    srgbRed: 0.7686274509803922, green: 0.6392156862745098, blue: 0.8862745098039215, alpha: 1
+                )
+            }
+            return NSColor(
+                srgbRed: 0.47058823529411764, green: 0.3254901960784314, blue: 0.6039215686274509, alpha: 1)
+        })
+    static let `windowRose` = Color(
+        nsColor: NSColor(name: "Little Clarity.window-rose") { appearance in
+            if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+                return NSColor(
+                    srgbRed: 0.8941176470588236, green: 0.6274509803921569, blue: 0.7137254901960784, alpha: 1
+                )
+            }
+            return NSColor(
+                srgbRed: 0.6392156862745098, green: 0.30980392156862746, blue: 0.4117647058823529, alpha: 1)
         })
     static let `subject` = Font.system(size: 24, weight: .medium, design: .serif)
     static let `body` = Font.system(size: 15, weight: .regular, design: .default)

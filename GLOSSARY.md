@@ -23,5 +23,9 @@ A named choice of model, reasoning effort, and Fast/Normal service.
 **Lookup**:
 One independent request and its answer, using a recipe, input values, and a preset.
 
+**Input/output inspection**:
+A view of one lookup's saved prompt, context or input fields, and response.
+_Avoid_: Debug mode
+
 **Preset override**:
 A temporary preset choice for the current lookup, replacing the recipe's default.

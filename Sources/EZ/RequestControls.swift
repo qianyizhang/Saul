@@ -65,32 +65,35 @@ struct RequestDetails: View {
     @ObservedObject var model: AppModel
     var onConfigure: () -> Void
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Next lookup").font(.headline)
-            if let preset = model.currentPreset {
-                Text(preset.name).font(.subheadline.weight(.medium))
-                Text(
-                    "\(model.currentModel?.displayName ?? preset.model) · \(preset.effort.isEmpty ? "Default effort" : preset.effort.capitalized) · \(preset.fast ? "Fast requested" : "Standard")"
-                )
-                .font(AppStyle.caption).textSelection(.enabled)
-            }
-            if !model.minimumMode {
-                Text("A preset override lasts until New lookup or a recipe change.")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Next lookup").font(.headline)
+                if let preset = model.currentPreset {
+                    Text(preset.name).font(.subheadline.weight(.medium))
+                    Text(
+                        "\(model.currentModel?.displayName ?? preset.model) · \(preset.effort.isEmpty ? "Default effort" : preset.effort.capitalized) · \(preset.fast ? "Fast requested" : "Standard")"
+                    )
+                    .font(AppStyle.caption).textSelection(.enabled)
+                }
+                if !model.minimumMode {
+                    Text("A preset override lasts until New lookup or a recipe change.")
+                        .font(AppStyle.caption).foregroundStyle(.secondary)
+                }
+                if model.fast {
+                    Text(
+                        "Fast requests priority service and may use more plan allowance."
+                    )
                     .font(AppStyle.caption).foregroundStyle(.secondary)
-            }
-            if model.fast {
-                Text(
-                    "Fast requests priority service and may use more plan allowance."
-                )
-                .font(AppStyle.caption).foregroundStyle(.secondary)
-            }
-            if let entry = model.selectedEntry {
-                Divider()
-                Text("This answer").font(.subheadline.weight(.medium))
-                LookupDetails(entry: entry)
-            }
-            Button("Presets & recipes…", action: onConfigure)
-        }.padding(16).frame(width: 300, alignment: .leading)
+                }
+                if let entry = model.selectedEntry {
+                    Divider()
+                    Text("This answer").font(.subheadline.weight(.medium))
+                    LookupDetails(entry: entry)
+                    InputOutputInspector(entry: entry).id(entry.id)
+                }
+                Button("Presets & recipes…", action: onConfigure)
+            }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
+        }.frame(width: 380).frame(maxHeight: 520)
     }
 }
 

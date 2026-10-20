@@ -213,13 +213,9 @@ struct ContentView: View {
                     Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
                 }
             }
+            InputOutputInspector(entry: entry).id(entry.id)
             DisclosureGroup("Details") {
                 LookupDetails(entry: entry).padding(.top, 8)
-                if entry.mode == .spelling {
-                    DisclosureGroup("Full response") {
-                        AnswerMarkdown(text: entry.response).padding(.top, 8)
-                    }
-                }
             }.font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
         }
     }
