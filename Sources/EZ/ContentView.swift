@@ -57,6 +57,7 @@ struct ContentView: View {
             .background(Color(nsColor: .textBackgroundColor))
         }
         .tint(AppStyle.accent)
+        .disclosureGroupStyle(FullRowDisclosureStyle())
         .onChange(of: model.selection) { _, _ in showsComposer = false }
         .alert(
             "Delete lookup?",

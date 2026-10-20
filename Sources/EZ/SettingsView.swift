@@ -36,6 +36,7 @@ struct SettingsView: View {
                 }
             }
         }.frame(width: 760, height: 720).tint(AppStyle.accent)
+            .disclosureGroupStyle(FullRowDisclosureStyle())
             .interactiveDismissDisabled(hasUnsavedChanges)
             .alert("Discard unsaved edits?", isPresented: $confirmDiscard) {
                 Button("Keep editing", role: .cancel) {}

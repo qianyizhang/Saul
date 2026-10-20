@@ -64,6 +64,7 @@ struct QuickLookupView: View {
             minHeight: layout.minimumHeight, maxHeight: .infinity, alignment: .topLeading
         )
         .background(Color(nsColor: .windowBackgroundColor)).tint(AppStyle.accent)
+        .disclosureGroupStyle(FullRowDisclosureStyle())
         .ignoresSafeArea(.container, edges: .top)
         .onAppear {
             controller.setOpenMain { openWindow(id: "main") }

@@ -2,6 +2,9 @@
 
 ## 0.1.0 — Unreleased
 
+- Full-row disclosure hit targets across reading views and Settings, with keyboard
+  activation and accessible expansion state.
+
 - Readable prose spell checks with paragraph-aligned Original / Corrected columns,
   highlighted edits, expandable explanations, and a compact reading layout.
   Comparison parsing accepts standalone and same-line section labels.

@@ -101,3 +101,8 @@ paragraph splits and merges stay together, and unmatched paragraphs leave an emp
 opposite cell. Narrow windows and Quick Lookup show Corrected first with Original
 in a disclosure. Explanatory notes sit under Why these changes. Unrecognized responses keep the ordinary answer view
 with long original text collapsed. Full response remains in main-window Details.
+
+Disclosure headers use a shared full-width button with a minimum 32-point height.
+The chevron, label, and remaining header space all toggle expansion; the expanded
+content remains independently selectable and interactive. Native button keyboard
+activation and an accessible Expanded/Collapsed value accompany the visual state.
