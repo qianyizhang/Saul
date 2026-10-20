@@ -8,7 +8,9 @@ struct QuickLookupLayout: Equatable {
     let showsNotice: Bool
     let showsAnswer: Bool
 
-    static func inputHeight(fieldCount: Int) -> CGFloat { min(150, CGFloat(fieldCount) * 50) }
+    static func inputHeight(fieldCount: Int) -> CGFloat {
+        min(150, CGFloat(fieldCount) * (fieldCount > 1 ? 70 : 50))
+    }
 
     var minimumHeight: CGFloat {
         max(

@@ -37,3 +37,25 @@ struct FullRowDisclosureStyle: DisclosureGroupStyle {
         }
     }
 }
+
+/// A stable value column shared by request details and fixed shortcut references.
+struct MetadataRow: View {
+    let label: String
+    let value: String
+
+    init(_ label: String, value: String) {
+        self.label = label
+        self.value = value
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 16) {
+            Text(label).foregroundStyle(AppStyle.secondaryText).frame(width: 108, alignment: .leading)
+            Text(verbatim: value).foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(AppStyle.caption.monospacedDigit())
+        .accessibilityElement(children: .combine)
+    }
+}

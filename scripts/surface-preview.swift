@@ -42,7 +42,7 @@ private struct SurfacePreviewControls: View {
                             "Empty", "Signed out", "Two inputs", "Many inputs", "Answer", "Waiting",
                             "Thinking",
                             "Streaming", "Blocked", "Prose corrections",
-                            "No recipes", "Selector hitboxes",
+                            "No recipes", "Selector hitboxes", "Long metadata", "Legacy answer",
                         ], id: \.self
                     ) {
                         Text($0)
@@ -122,10 +122,13 @@ private struct SurfacePreviewControls: View {
         model.signedIn = scenario != "Signed out"
         model.planEnabled = scenario != "Signed out"
         model.entries = []
-        if ["Answer", "Waiting", "Thinking", "Streaming", "Blocked"].contains(scenario) {
+        if ["Answer", "Waiting", "Thinking", "Streaming", "Blocked", "Long metadata", "Legacy answer"]
+            .contains(scenario)
+        {
             model.query = "Serendipity"
         }
-        if ["Answer", "Waiting", "Thinking", "Streaming", "Blocked"].contains(scenario), let recipe,
+        if ["Answer", "Waiting", "Thinking", "Streaming", "Blocked", "Long metadata", "Legacy answer"]
+            .contains(scenario), let recipe,
             let preset = model.currentPreset
         {
             if var entry = try? recipe.prepare(
@@ -145,6 +148,16 @@ private struct SurfacePreviewControls: View {
                     outputTokens: pending ? nil : 320,
                     timeToFirstTokenSeconds: ["Waiting", "Thinking"].contains(scenario) ? nil : 0.82,
                     durationSeconds: pending ? nil : 4.2)
+                if scenario == "Long metadata" {
+                    entry.model = "fixture-model-with-a-deliberately-long-identifier-for-wrapping"
+                    entry.presetSnapshot?.name =
+                        "A deliberately long saved preset name for detailed translation"
+                }
+                if scenario == "Legacy answer" {
+                    entry.presetSnapshot = nil
+                    entry.metrics = nil
+                    entry.actualServiceTier = nil
+                }
                 model.entries = [entry]
                 model.selection = entry.id
                 model.busy = pending

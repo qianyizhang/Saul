@@ -52,7 +52,7 @@ struct RequestControls: View {
             }.buttonStyle(.borderless).help("Details")
                 .accessibilityLabel("Details")
                 .popover(isPresented: $showDetails) {
-                    RequestDetails(model: model) {
+                    RequestDetails(model: model, showsAnswer: false) {
                         showDetails = false
                         model.openSettings(.configuration)
                     }
@@ -63,37 +63,47 @@ struct RequestControls: View {
 
 struct RequestDetails: View {
     @ObservedObject var model: AppModel
+    var showsAnswer = true
     var onConfigure: () -> Void
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Next lookup").font(.headline)
-                if let preset = model.currentPreset {
-                    Text(preset.name).font(.subheadline.weight(.medium))
-                    Text(
-                        "\(model.currentModel?.displayName ?? preset.model) · \(preset.effort.isEmpty ? "Default effort" : preset.effort.capitalized) · \(preset.fast ? "Fast requested" : "Standard")"
-                    )
-                    .font(AppStyle.caption).textSelection(.enabled)
-                }
-                if !model.minimumMode {
-                    Text("A preset override lasts until New lookup or a recipe change.")
-                        .font(AppStyle.caption).foregroundStyle(.secondary)
-                }
-                if model.fast {
-                    Text(
-                        "Fast requests priority service and may use more plan allowance."
-                    )
-                    .font(AppStyle.caption).foregroundStyle(.secondary)
-                }
-                if let entry = model.selectedEntry {
-                    Divider()
-                    Text("This answer").font(.subheadline.weight(.medium))
+                if showsAnswer, let entry = model.selectedEntry {
+                    Text("Answer details").font(.headline)
                     LookupDetails(entry: entry)
                     InputOutputInspector(entry: entry).id(entry.id)
+                    Divider()
+                    DisclosureGroup("Next lookup") { draftDetails.padding(.top, 8) }
+                        .font(AppStyle.caption)
+                        .disclosureGroupStyle(FullRowDisclosureStyle())
+                } else {
+                    Text("Next lookup").font(.headline)
+                    draftDetails
                 }
                 Button("Presets & recipes…", action: onConfigure)
             }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
         }.frame(width: 380).frame(maxHeight: 520)
+    }
+
+    private var draftDetails: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let preset = model.currentPreset {
+                MetadataRow("Preset", value: preset.name)
+                MetadataRow("Model", value: preset.model)
+                MetadataRow("Effort", value: preset.effort.isEmpty ? "Default" : preset.effort.capitalized)
+                MetadataRow("Requested speed", value: preset.fast ? "Fast" : "Standard")
+            } else {
+                Text("No preset selected").font(AppStyle.caption).foregroundStyle(.secondary)
+            }
+            if !model.minimumMode {
+                Text("A preset override lasts until New lookup or a recipe change.")
+                    .font(AppStyle.caption).foregroundStyle(.secondary)
+            }
+            if model.fast {
+                Text("Fast requests priority service and may use more plan allowance.")
+                    .font(AppStyle.caption).foregroundStyle(.secondary)
+            }
+        }.textSelection(.enabled)
     }
 }
 
@@ -144,16 +154,21 @@ struct RecipeInputs: View {
                     ScrollView {
                         VStack(spacing: 8) {
                             ForEach(model.inputFields, id: \.self) { field in
-                                TextField(
-                                    field,
-                                    text: Binding(
-                                        get: { model.inputValues[field] ?? "" },
-                                        set: { model.inputValues[field] = $0 }), axis: .vertical
-                                )
-                                .textFieldStyle(.roundedBorder).lineLimit(2...(compact ? 3 : 4))
-                                .font(.system(size: 14)).accessibilityLabel(field)
-                                .focused($focusedField, equals: field)
-                                .id(field)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    if model.inputFields.count > 1 {
+                                        Text(field).font(AppStyle.caption).foregroundStyle(
+                                            AppStyle.secondaryText)
+                                    }
+                                    TextField(
+                                        model.inputFields.count > 1 ? "" : field,
+                                        text: Binding(
+                                            get: { model.inputValues[field] ?? "" },
+                                            set: { model.inputValues[field] = $0 }), axis: .vertical
+                                    )
+                                    .textFieldStyle(.roundedBorder).lineLimit(2...(compact ? 3 : 4))
+                                    .font(.system(size: 14)).accessibilityLabel(field)
+                                    .focused($focusedField, equals: field)
+                                }.id(field)
                             }
                         }
                     }
@@ -163,7 +178,8 @@ struct RecipeInputs: View {
                 }.frame(
                     height: compact
                         ? QuickLookupLayout.inputHeight(fieldCount: model.inputFields.count)
-                        : min(180, CGFloat(model.inputFields.count) * 54))
+                        : min(180, CGFloat(model.inputFields.count) * (model.inputFields.count > 1 ? 74 : 54))
+                )
             }
         }
         .disabled(model.busy || model.launcherPending)

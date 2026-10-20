@@ -216,7 +216,7 @@ struct ContentView: View {
             InputOutputInspector(entry: entry).id(entry.id)
             DisclosureGroup("Details") {
                 LookupDetails(entry: entry).padding(.top, 8)
-            }.font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
+            }.font(AppStyle.caption).disclosureGroupStyle(FullRowDisclosureStyle())
         }
     }
     private func deleteButton(_ entry: HistoryEntry) -> some View {

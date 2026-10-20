@@ -8,7 +8,7 @@ struct InputOutputInspector: View {
     var body: some View {
         DisclosureGroup("Inspect input/output") {
             VStack(alignment: .leading, spacing: 12) {
-                Text("\(entry.status.capitalized) · \(entry.model)")
+                Text(entry.status.capitalized)
                     .font(AppStyle.caption).foregroundStyle(.secondary)
                 Text(
                     "Saved text for this lookup. Input fields are included in the assembled prompt."

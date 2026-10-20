@@ -7,9 +7,10 @@ before changing behavior. Keep SwiftUI in `Sources/EZ` and reusable authenticati
 networking, protocol, and storage code in `Sources/EZCore`. Do not add a Codex,
 Node, Python, Electron, or webview runtime dependency to the app.
 
-For visual changes, read `docs/design.md`. The shared authoring contract currently
-lives at `../Saul/DESIGN.md`; `DesignTokens.swift` is generated from it. Keep native
-semantic controls and backgrounds, and use `AppStyle` roles for shared identity.
+For feature UI, forms, metadata, actions, or disclosure changes, read `docs/design.md`
+and follow its feature UI review before implementation and completion. The shared
+authoring contract currently lives at `../Saul/DESIGN.md`; `DesignTokens.swift` is
+generated from it. Keep native semantic controls and backgrounds, and use `AppStyle` roles for shared identity.
 
 ## Working rules
 

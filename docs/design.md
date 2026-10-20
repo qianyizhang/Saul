@@ -27,6 +27,15 @@ both products. Native controls and task density may differ; preserve the contrac
 content/action roles.
 The generator and contract travel together when the design kit is moved or versioned.
 
+## Feature UI review
+
+Follow the shared [feature UI review](../../Saul/design/SKILL.md#feature-ui-review)
+for new features and changes to forms, metadata, actions or disclosures. Map the
+user’s task and information hierarchy before editing. Verify the affected main
+window, Quick Lookup and Settings states through [native UI journeys](ui-qa.md),
+including filled fields, long/missing values, errors and both presentation modes.
+Keep screenshots outside Git and record evidence limits in [verification](verification.md).
+
 ## Minimum Mode
 
 Minimum Mode is the default personal-use presentation, shared in name and intent
@@ -106,3 +115,18 @@ Disclosure headers use a shared full-width button with a minimum 32-point height
 The chevron, label, and remaining header space all toggle expansion; the expanded
 content remains independently selectable and interactive. Native button keyboard
 activation and an accessible Expanded/Collapsed value accompany the visual state.
+
+## Metadata readability
+
+Answer Details uses a stable label/value column, primary-text values, and compact
+three-column token and timing groups. Unknown metrics use a dash; unreported
+service tiers say Not reported. Long identifiers wrap. The main composer’s information
+button describes Next lookup only; Quick Lookup opens Answer details whenever an
+answer is selected, with Next lookup collapsed in both presentation modes. Standard view's footer keeps first-text and total time in
+plain language; full token counts and throughput remain in Details. Both native
+surfaces share the same layout and full-row disclosures.
+
+Multi-input recipes retain a label above each field after typing; single-input
+recipes keep the compact placeholder. Fixed shortcut references use aligned
+label/value rows too. The offline preview includes Long metadata and Legacy
+answer fixtures for wrapping and unavailable-data review.

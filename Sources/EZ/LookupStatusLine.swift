@@ -6,85 +6,81 @@ struct LookupStatusLine: View {
     let entry: HistoryEntry
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            Text(summary(compact: false)).fixedSize()
-            Text(summary(compact: true)).fixedSize()
-        }
-        .font(AppStyle.caption.monospacedDigit())
-        .foregroundStyle(AppStyle.secondaryText)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .textSelection(.enabled)
-        .help(explanation)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(summary(compact: false))
-        .accessibilityHint(explanation)
+        Text(summary)
+            .font(AppStyle.caption.monospacedDigit())
+            .foregroundStyle(AppStyle.secondaryText)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .textSelection(.enabled)
+            .help(explanation)
     }
 
-    private func summary(compact: Bool) -> String {
+    private var summary: String {
         let metrics = entry.metrics
-        let input = count(metrics?.inputTokens, compact: compact)
-        let thinking = count(metrics?.reasoningTokens, compact: compact)
-        let response = count(metrics?.responseTokens, compact: compact)
-        let ttft = metrics?.timeToFirstTokenSeconds.map { String(format: "%.2f s", $0) } ?? "—"
-        let rate = metrics?.tokensPerSecond.map { String(format: "%.1f", $0) } ?? "—"
-        if compact {
-            return "I \(input) · T \(thinking) · R \(response) · TTFT \(ttft) · \(rate) t/s"
-        }
-        return
-            "In \(input) · Think \(thinking) · Response \(response) · TTFT \(ttft) · \(rate) tok/s"
-    }
-
-    private func count(_ value: Int?, compact: Bool) -> String {
-        guard let value else { return "—" }
-        if compact && value >= 1_000_000 { return String(format: "%.1fM", Double(value) / 1_000_000) }
-        if compact && value >= 1_000 { return String(format: "%.1fk", Double(value) / 1_000) }
-        return value.formatted()
+        let first = metrics?.timeToFirstTokenSeconds.map { String(format: "%.2f s", $0) } ?? "—"
+        let total =
+            (metrics?.durationSeconds ?? entry.durationSeconds).map { String(format: "%.2f s", $0) } ?? "—"
+        return "First text: \(first) · Total: \(total)"
     }
 
     private var explanation: String {
-        "Input, thinking, and response token counts come from OpenAI usage. "
-            + "Response = output minus reasoning; it may include formatting tokens. "
-            + "TTFT measures HTTP request start to first nonempty answer/refusal text delta, including network time and thinking. "
-            + "Tokens/s = response tokens ÷ (HTTP stream seconds − TTFT); waiting and thinking before first text are excluded. "
-            + "A dash means the value was not reported or observed. Plan allowance is available through Manage usage in Settings."
+        "First text includes network time and thinking. Total is the observed request duration. "
+            + "A dash means the time was not observed. Token counts and throughput are in Details."
     }
 }
 
-/// Exact request and response information, shared by both reading surfaces.
+/// Exact recorded facts, shared by both reading surfaces.
 struct LookupDetails: View {
     let entry: HistoryEntry
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            LabeledContent("Created", value: entry.createdAt.formatted(date: .abbreviated, time: .shortened))
-            LabeledContent("Model", value: entry.model)
-            LabeledContent("Effort", value: entry.effort.isEmpty ? "Default" : entry.effort.capitalized)
-            LabeledContent("Requested speed", value: entry.requestedServiceTier == nil ? "Standard" : "Fast")
-            LabeledContent("Service tier", value: entry.actualServiceTier ?? "Not reported")
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(spacing: 8) {
+                MetadataRow("Created", value: entry.createdAt.formatted(date: .abbreviated, time: .shortened))
+                if let preset = entry.presetSnapshot {
+                    MetadataRow("Preset", value: preset.name)
+                }
+                MetadataRow("Model", value: entry.model)
+                MetadataRow("Effort", value: entry.effort.isEmpty ? "Default" : entry.effort.capitalized)
+                MetadataRow("Requested speed", value: entry.requestedServiceTier == nil ? "Standard" : "Fast")
+                MetadataRow("Served tier", value: entry.actualServiceTier ?? "Not reported")
+            }
             Divider()
-            LabeledContent("Input tokens", value: count(entry.metrics?.inputTokens))
-            LabeledContent("Thinking tokens", value: count(entry.metrics?.reasoningTokens))
-            LabeledContent("Answer tokens", value: count(entry.metrics?.responseTokens))
-                .help("Output tokens minus reasoning tokens; may include formatting tokens.")
-            LabeledContent("Time to first text", value: seconds(entry.metrics?.timeToFirstTokenSeconds))
-                .help(
-                    "From HTTP request start to the first nonempty answer or refusal text, including network time and thinking."
+            Text("Tokens").font(AppStyle.caption.weight(.semibold)).foregroundStyle(.primary)
+            HStack(alignment: .top, spacing: 12) {
+                metric("Input", count(entry.metrics?.inputTokens))
+                metric("Thinking", count(entry.metrics?.reasoningTokens))
+                metric("Answer", count(entry.metrics?.responseTokens))
+                    .help("Output tokens minus reasoning tokens; may include formatting tokens.")
+            }
+            Divider()
+            HStack(alignment: .top, spacing: 12) {
+                metric("First text", seconds(entry.metrics?.timeToFirstTokenSeconds))
+                    .help(
+                        "From HTTP request start to first answer or refusal text, including network time and thinking."
+                    )
+                metric("Total time", seconds(entry.metrics?.durationSeconds ?? entry.durationSeconds))
+                metric(
+                    "Answer tokens/s",
+                    entry.metrics?.tokensPerSecond.map { String(format: "%.1f", $0) } ?? "—"
                 )
-            LabeledContent(
-                "Answer tokens / s",
-                value: entry.metrics?.tokensPerSecond.map { String(format: "%.1f", $0) } ?? "—"
-            )
-            .help(
-                "Answer tokens divided by the time from first text to the terminal event. Initial waiting and thinking are excluded."
-            )
-            LabeledContent(
-                "Total time", value: seconds(entry.metrics?.durationSeconds ?? entry.durationSeconds))
+                .help(
+                    "Answer tokens per second after first text; initial waiting and thinking are excluded."
+                )
+            }
         }
-        .font(AppStyle.caption.monospacedDigit())
         .textSelection(.enabled)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: 420, alignment: .leading)
     }
 
+    private func metric(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
+            Text(value).font(.system(size: 14, weight: .medium).monospacedDigit()).foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+        }.frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+    }
     private func count(_ value: Int?) -> String { value?.formatted() ?? "—" }
     private func seconds(_ value: Double?) -> String { value.map { String(format: "%.2f s", $0) } ?? "—" }
 }

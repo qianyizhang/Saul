@@ -79,9 +79,9 @@ struct ShortcutSettingsView: View {
                     .font(AppStyle.caption).foregroundStyle(.secondary)
                 }
                 VStack(spacing: 8) {
-                    LabeledContent("Quick Lookup", value: "⌃⌥Space")
-                    LabeledContent("Settings", value: "⌘,")
-                    LabeledContent("Hide panel", value: "Esc / ⌘W")
+                    MetadataRow("Quick Lookup", value: "⌃⌥Space")
+                    MetadataRow("Settings", value: "⌘,")
+                    MetadataRow("Hide panel", value: "Esc / ⌘W")
                 }.font(AppStyle.caption).foregroundStyle(.secondary)
                 HStack {
                     Button("Use Chrome navigation") { chromeNavigation() }
