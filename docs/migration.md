@@ -55,3 +55,18 @@ installed from the existing cache with unchanged resolved versions.
 Installed apps, live provider consent/inference and hosted CI were not exercised.
 The root installer deliberately refuses an existing unpacked extension destination;
 it does not migrate profile-local data or claim a seamless loaded-extension upgrade.
+
+## Local integration
+
+The verified tree was fast-forwarded into local Saul `main`. Its existing root
+`.output/chrome-mv3` (22 files) remained byte-identical; the old loaded extension
+path was not changed. EZ's ignored signing fingerprint was copied into
+`apps/ez/.local/signing-identity` without exporting a key. The original EZ checkout
+remains clean and intact pending the publication decision.
+
+The old checkout's dependency links lacked a hoisted WXT React module after the
+workspace move. Retaining the old `node_modules` trees outside the checkout and
+performing a fresh frozen, offline install restored the same layout tested in the
+rehearsal. Development hooks now use the monorepo's own cache and interpreter,
+with copied cache paths rebased away from the original EZ checkout. No dependency
+version changed and no installed app was replaced.
