@@ -19,6 +19,7 @@ export type PlanRequest =
   | { action: 'login'; accountId?: string; consent?: boolean }
   | { action: 'logout'; accountId: string }
   | { action: 'models'; accountId: string }
+  | { action: 'speech'; accountId: string; input: string; voice: string }
   | {
       action: 'generate';
       accountId: string;
@@ -34,6 +35,7 @@ export interface PlanResults {
   login: { account: PlanAccount };
   logout: { account: PlanAccount; warning?: string };
   models: { models: PlanModel[] };
+  speech: { audioBase64: string; mimeType: 'audio/mpeg' };
 }
 export type PlanResult<T extends PlanControlRequest = PlanControlRequest> = {
   type: 'result';

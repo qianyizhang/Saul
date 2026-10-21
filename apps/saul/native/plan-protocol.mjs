@@ -9,6 +9,7 @@ export function validatePlanRequest(v) {
     login: ['accountId', 'consent'],
     logout: ['accountId'],
     models: ['accountId'],
+    speech: ['accountId', 'input', 'voice'],
     generate: ['accountId', 'model', 'effort', 'fast', 'systemPrompt', 'userPrompt'],
   }[v.action];
   if (!Array.isArray(keys) || Object.keys(v).some((k) => k !== 'action' && !keys.includes(k)))
@@ -21,6 +22,13 @@ export function validatePlanRequest(v) {
       (v.consent !== undefined && typeof v.consent !== 'boolean'))
   )
     throw new Error('Invalid sign-in request');
+  if (
+    v.action === 'speech' &&
+    (!text(v.input, 512) ||
+      !v.input.trim() ||
+      !['coral', 'alloy', 'marin', 'cedar'].includes(v.voice))
+  )
+    throw new Error('Speech requires 1–512 characters and a supported voice.');
   if (
     v.action === 'generate' &&
     (!text(v.model, 256) ||
@@ -57,6 +65,11 @@ export function validatePlanResult(request, value) {
     accounts: (v) => Array.isArray(v.accounts) && v.accounts.every(account),
     login: (v) => account(v.account),
     logout: (v) => account(v.account) && (v.warning === undefined || typeof v.warning === 'string'),
+    speech: (v) =>
+      v.mimeType === 'audio/mpeg' &&
+      text(v.audioBase64, 800000) &&
+      v.audioBase64.length % 4 === 0 &&
+      /^[A-Za-z0-9+/]+={0,2}$/.test(v.audioBase64),
     models: (v) => Array.isArray(v.models) && v.models.every(model),
   };
   if (

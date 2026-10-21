@@ -151,3 +151,15 @@ build tooling, independent of authentication, inference, and storage runtimes.
 | `src/storage/`   | Settings, client routing, schema, database, and worker                       |
 | `src/surface/`   | Page-side React UI                                                           |
 | `native/`        | Node CLI, MCP server, native host, transport, installer, and shared protocol |
+
+## Experimental speech boundary
+
+The Settings-only `speech` operation uses the existing ChatGPT native bridge and
+credential owner. Its allowlist fixes the public Speech endpoint, model and MP3
+format; callers can supply only the selected account, up to 512 input characters,
+and a small supported voice list. It refuses redirects, limits audio to 600 kB
+before base64/native-message framing, and uses the existing sanitized error parser.
+Page scripts and the offscreen text runner cannot call it. Closing the view or
+pressing Stop cancels the request; blob URLs are revoked on replacement/unmount.
+No history, saved credential format, or normal Responses behavior changes. See the
+[endpoint probe results](chatgpt-plan.md#experimental-speech-and-endpoint-probes).

@@ -85,6 +85,52 @@ export class PlanService {
         'ChatGPT plan requests are paused after a usage limit. Manage usage, then refresh models in Settings to retry.',
       );
     const token = await this.auth.accessToken(request.accountId, signal);
+    if (request.action === 'speech') {
+      const response = await this.fetcher(`${RESOURCE}/audio/speech`, {
+        method: 'POST',
+        redirect: 'error',
+        signal: AbortSignal.any([
+          signal || new AbortController().signal,
+          AbortSignal.timeout(60_000),
+        ]),
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini-tts',
+          input: request.input,
+          voice: request.voice,
+          response_format: 'mp3',
+        }),
+      });
+      if (!response.ok)
+        throw planError(
+          await response.json().catch(() => null),
+          response.status,
+          response.headers.get('x-request-id'),
+        );
+      if (
+        !response.headers.get('content-type')?.toLowerCase().startsWith('audio/mpeg') ||
+        !response.body
+      ) {
+        await response.body?.cancel();
+        throw new Error('Speech endpoint returned no MP3 audio.');
+      }
+      const chunks = [];
+      let size = 0;
+      for await (const chunk of response.body) {
+        size += chunk.length;
+        if (size > 600_000)
+          throw new Error('Speech audio exceeded the widget’s size limit. Try shorter text.');
+        chunks.push(chunk);
+      }
+      signal?.throwIfAborted();
+      if (!size) throw new Error('Speech endpoint returned empty audio.');
+      emit({
+        type: 'result',
+        mimeType: 'audio/mpeg',
+        audioBase64: Buffer.concat(chunks).toString('base64'),
+      });
+      return;
+    }
     if (request.action === 'models') {
       const models = await this.loadModels(request.accountId, token);
       signal?.throwIfAborted();

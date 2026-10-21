@@ -3,6 +3,7 @@ import { planCall } from '../models/chatgpt-plan';
 import type { PlanAccount, PlanModel } from '../../native/plan-protocol.mjs';
 import type { UserSettings } from '../types';
 import { planModelDefaults, planModelIssue } from '../../native/plan-models.mjs';
+import { SpeechTest } from './SpeechTest';
 import { useMinimumMode } from './useMinimumMode';
 
 export function ChatGPTPlanSettings({
@@ -26,6 +27,7 @@ export function ChatGPTPlanSettings({
   const [busy, setBusy] = useState<'accounts' | 'login' | 'logout' | 'models' | null>(null),
     [error, setError] = useState(''),
     [notice, setNotice] = useState('');
+  const [speechBusy, setSpeechBusy] = useState(false);
   const [welcome, setWelcome] = useState(false);
   const [helperReady, setHelperReady] = useState<boolean | null>(null);
   const [loadingModels, setLoadingModels] = useState(false);
@@ -40,9 +42,9 @@ export function ChatGPTPlanSettings({
   const selectedModel = models.find((model) => model.slug === value.model);
   const modelIssue = modelsReady && value.model ? planModelIssue(value, models) : undefined;
   useEffect(() => {
-    onBusyChange?.(!!busy || loadingModels);
+    onBusyChange?.(!!busy || speechBusy || loadingModels);
     return () => onBusyChange?.(false);
-  }, [busy, loadingModels, onBusyChange]);
+  }, [busy, speechBusy, loadingModels, onBusyChange]);
   useEffect(() => {
     mounted.current = true;
     const refresh = (selectSoleAccount = false) => {
@@ -193,7 +195,7 @@ export function ChatGPTPlanSettings({
         <select
           aria-label="ChatGPT account"
           value={value.accountId}
-          disabled={!!busy || testing}
+          disabled={!!busy || speechBusy || testing}
           onChange={(e) => {
             setError('');
             onChange({ ...value, accountId: e.target.value });
@@ -211,7 +213,7 @@ export function ChatGPTPlanSettings({
       <div className="row">
         <button
           className="btn"
-          disabled={!!busy || testing}
+          disabled={!!busy || speechBusy || testing}
           onClick={() =>
             operation('accounts', async (signal) => {
               const result = await planCall({ action: 'accounts' }, signal);
@@ -227,24 +229,36 @@ export function ChatGPTPlanSettings({
           Refresh accounts
         </button>
         {!active?.signedIn && (
-          <button className="btn primary" disabled={!!busy || testing} onClick={() => login()}>
+          <button
+            className="btn primary"
+            disabled={!!busy || speechBusy || testing}
+            onClick={() => login()}
+          >
             Continue with ChatGPT
           </button>
         )}
         {accounts.length > 0 && (
-          <button className="btn" disabled={!!busy || testing} onClick={() => login(true)}>
+          <button
+            className="btn"
+            disabled={!!busy || speechBusy || testing}
+            onClick={() => login(true)}
+          >
             Add account
           </button>
         )}
         {active?.signedIn && !active.planEnabled && (
-          <button className="btn" disabled={!!busy || testing} onClick={() => login(false, true)}>
+          <button
+            className="btn"
+            disabled={!!busy || speechBusy || testing}
+            onClick={() => login(false, true)}
+          >
             Enable plan usage
           </button>
         )}
         {active?.signedIn && (
           <button
             className="btn"
-            disabled={!!busy || testing}
+            disabled={!!busy || speechBusy || testing}
             onClick={() =>
               operation('logout', async (signal) => {
                 const r = await planCall({ action: 'logout', accountId: active.id }, signal);
@@ -286,7 +300,7 @@ export function ChatGPTPlanSettings({
         <select
           aria-label="ChatGPT model"
           value={value.model}
-          disabled={!!busy || loadingModels || testing}
+          disabled={!!busy || speechBusy || loadingModels || testing}
           onChange={(e) => {
             const model = models.find((model) => model.slug === e.target.value);
             if (model) onChange({ ...value, model: model.slug, ...planModelDefaults(model) });
@@ -311,7 +325,7 @@ export function ChatGPTPlanSettings({
           <select
             aria-label="ChatGPT effort"
             value={value.effort ?? ''}
-            disabled={!!busy || loadingModels || testing || !selectedModel}
+            disabled={!!busy || speechBusy || loadingModels || testing || !selectedModel}
             onChange={(event) => onChange({ ...value, effort: event.target.value })}
           >
             <option value="">Default</option>
@@ -333,7 +347,7 @@ export function ChatGPTPlanSettings({
         <select
           aria-label="ChatGPT speed"
           value={value.fast ? 'fast' : 'standard'}
-          disabled={!!busy || loadingModels || testing || !selectedModel}
+          disabled={!!busy || speechBusy || loadingModels || testing || !selectedModel}
           onChange={(event) => onChange({ ...value, fast: event.target.value === 'fast' })}
         >
           <option value="standard">Standard</option>
@@ -351,7 +365,7 @@ export function ChatGPTPlanSettings({
       <div className="row">
         <button
           className="btn"
-          disabled={!!busy || loadingModels || testing || !active?.planEnabled}
+          disabled={!!busy || speechBusy || loadingModels || testing || !active?.planEnabled}
           onClick={() => operation('models', (signal) => loadModels(value.accountId, signal))}
         >
           Refresh models
@@ -360,6 +374,7 @@ export function ChatGPTPlanSettings({
           className="btn"
           disabled={
             !!busy ||
+            speechBusy ||
             loadingModels ||
             testing ||
             !active?.planEnabled ||
@@ -377,6 +392,12 @@ export function ChatGPTPlanSettings({
           {saved ? 'Using ChatGPT plan' : 'Save to use this account for new explanations.'}
         </p>
       )}
+      <SpeechTest
+        key={active?.id || 'none'}
+        account={active}
+        disabled={!!busy || loadingModels || testing}
+        onBusyChange={setSpeechBusy}
+      />
       <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">
         Manage usage
       </a>

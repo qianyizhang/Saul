@@ -64,3 +64,63 @@ Protocol sources (sign-in, sessions, and model guidance rechecked 2026-10-18):
 - [Models and inference](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)
 - [Preview limitations](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)
 - [Errors and recovery](https://developers.openai.com/siwc/token-sharing-open-source/errors-and-recovery)
+
+## Experimental speech and endpoint probes
+
+Settings → ChatGPT plan → **Speech test · experimental** sends up to 512 characters
+with the selected account's OAuth credential to `POST /v1/audio/speech`, using
+`gpt-4o-mini-tts` and a selectable voice. It offers Stop and, when MP3 bytes are
+returned, an audio player. Audio is AI-generated. Text/audio remain in memory and
+are discarded on leaving the view; they are not saved to reading history. There
+is no API-key, system-voice, or alternate-account fallback. An old installed helper
+must be upgraded using its existing extension ID before it recognizes `speech`.
+
+This is an availability experiment, not a claim that ChatGPT plan TTS is supported.
+The [direct-flow documentation](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)
+documents Models and Responses. The
+[Speech API guide](https://developers.openai.com/api/docs/guides/text-to-speech)
+schedules `gpt-4o-mini-tts` shutdown for January 6, 2027; this widget is not a
+long-term speech integration.
+
+### Live result — October 21, 2026
+
+A single refreshed access token from Saul's existing, plan-enabled direct OAuth
+registration was held in memory and used for every request in this run:
+
+| Endpoint                      | Model / control                                        | Observed result                             |
+| ----------------------------- | ------------------------------------------------------ | ------------------------------------------- |
+| `GET /v1/models`              | Account catalog                                        | HTTP 200                                    |
+| `POST /v1/responses`          | `gpt-6-luna`, “Reply with exactly OK.”                 | HTTP 200, `response.completed`, output `OK` |
+| `POST /v1/audio/speech`       | `gpt-4o-mini-tts`, coral                               | HTTP 401, `no_matching_rule`                |
+| `POST /v1/images/generations` | `gpt-image-2.5-flare`, one low-quality 1024×1024 image | HTTP 401, `hardened_oauth_rule_missing`     |
+| `POST /v1/embeddings`         | `text-embedding-3-small`                               | HTTP 401, `no_matching_rule`                |
+| `POST /v1/chat/completions`   | `gpt-6-luna`                                           | HTTP 401, `no_matching_rule`                |
+
+Responses completed before the other endpoints were tested: these rejections do
+not indicate a generally broken sign-in. They establish rejection for this account,
+client registration, route and date; they do not prove that every OAuth client or
+rollout behaves identically. No audio or image was generated. Other endpoints,
+Realtime sessions, and private ChatGPT backend routes were not tested.
+
+To repeat explicitly (uses live plan allowance), run from `apps/saul` with Node 24:
+
+```sh
+node --use-env-proxy scripts/probe-capabilities.mjs
+```
+
+The probe requires exactly one signed-in, plan-enabled Saul account, uses the
+existing locked refresh owner, then freezes one token for the run. It stops if the
+live Responses control fails. It never prints or copies credentials. Sanitized
+status/error receipts and any successful generated media go to root
+`.artifacts/saul/capability-probe/`. Probe prompts are synthetic; no browsing history
+is read. Endpoint bodies follow the official
+[image](https://developers.openai.com/api/docs/guides/image-generation) and
+[embedding](https://developers.openai.com/api/docs/guides/embeddings) references.
+
+The widget is verified in the disposable browser harness for input validation,
+account locking, cancellation, sanitized rejection, audio-control rendering,
+keyboard disclosure, draft retention, and narrow/wide light/dark presentation in
+both display modes. Audio-control success uses synthetic bytes; live audio decoding
+and playback remain unverified because the endpoint rejected the credential.
+Source and the app-owned build were updated; the loaded personal extension and
+installed helper were not upgraded by this experiment.
