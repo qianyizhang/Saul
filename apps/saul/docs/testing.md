@@ -4,13 +4,12 @@ Tests use a built extension snapshot, disposable Chromium profiles, and a loopba
 
 ## macOS browser execution
 
-On this Mac, Chrome and Chrome for Testing can abort during LaunchServices/WindowServer registration when launched inside a restricted command sandbox, including headless mode.
+Read `macos-browser-testing.md` in `$CODEX_HOME/practices`
+(default `~/.codex/practices`) before launching Chrome on this Mac.
 
-For browser-launching commands, request approved execution outside that sandbox from the first launch. Scope approval to the specific command. Keep compilation and ordinary checks sandboxed, and keep the disposable profiles.
-
-Playwright runs `tests/e2e/browser-preflight.ts` once before the suite. On startup failure it retains the first error under the configured results directory and stops before individual tests repeat the launch. Treat permission denials and immediate registration aborts as blocked verification, not application failures.
-
-Do not retry an unchanged failed launch, use a personal profile, add Chrome's `--no-sandbox` flag, kill unrelated browsers, or hide crash notifications. If approved execution is unavailable, report the browser checks as blocked.
+Playwright runs `tests/e2e/browser-preflight.ts` once before the suite. A startup
+failure retains the first error in the results directory and stops repeated
+launches. Keep this probe and browser crash notifications enabled.
 
 ## Commands
 

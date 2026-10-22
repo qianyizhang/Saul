@@ -14,11 +14,9 @@ generated from it. Keep native semantic controls and backgrounds, and use `AppSt
 
 ## Working rules
 
-- Inspect existing changes and preserve concurrent work. Stage exact owned paths.
 - Prefer the smallest complete feature slice. Add abstractions for actual callers,
   not hypothetical providers. No generated protocol dumps or large JSON fixtures.
 - Do not commit credentials, user history, browser profiles, builds, or local logs.
-- Keep feature behavior, error states, docs, and relevant verification together.
 - Record decisions that affect future features in `docs/architecture.md`. Keep
   planned features in `docs/roadmap.md`; distinguish plans from shipped behavior.
 - Never silently switch the account, model, billing path, or requested service tier.
@@ -43,25 +41,15 @@ live inference. Report live verification separately.
 Save disposable captures/review exports under root `.artifacts/ez/<run>/`; follow
 the [artifact policy](../../docs/artifacts.md). Keep build bundles in `dist/`.
 
-Native visual checks use the built `.app`. Do not call a browser screenshot a
-native UI test. For browser-launching tests on this Mac, request execution outside
-the restricted command sandbox from the first launch, with the specific command
-using `sandbox_permissions: require_escalated`. Use disposable profiles and the
-repository's harness. Stop unchanged relaunches after a LaunchServices,
-WindowServer, or permission abort. Report the check as blocked, not failed app
-behavior. Do not use a personal browser profile for automation or kill unrelated
-browsers. Normal user sign-in opens the system browser for the user to complete.
+Native visual checks use the built `.app`. Read `macos-browser-testing.md` in
+`$CODEX_HOME/practices` (default `~/.codex/practices`) before browser tests.
+Normal user sign-in opens the system browser for the user to complete.
 
 ## Delivery
 
-Explain what changed, which checks passed, and what remains unverified. Do not
-publish, choose an open-source license, configure a remote, or claim notarization
-without the user's direction and supporting evidence.
+Do not publish, choose an open-source license, configure a remote, or claim
+notarization without the user's direction and supporting evidence.
 
 ## Shared agent skills
 
-The generic suite is installed once for the user account from repo-kit.
-Read [local mappings](docs/agent-skills.md) before using it.
-Keep project-specific skills and rules here. Accepted decisions remain settled;
-continue already-authorized work without repeated confirmation unless a material
-ambiguity remains. Retro and architecture surveys require explicit invocation.
+Read [local mappings](docs/agent-skills.md) before using shared skills.

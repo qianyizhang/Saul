@@ -9,9 +9,9 @@ Work from `apps/saul` in this monorepo. Read [the testing runbook](../../../apps
 
 ## Before launching a browser
 
-On this Mac, restricted command execution can abort Chrome during LaunchServices/WindowServer registration, including headless launches. Request approved execution outside the command sandbox from the first browser-launching command, scoped to that command. Keep ordinary checks sandboxed and preserve the disposable profiles.
-
-Do not bypass the Playwright startup probe. Inspect its first retained error and stop unchanged relaunches. Permission denials and immediate registration aborts mean browser verification is blocked; they are not application assertion failures. Chrome's `--no-sandbox` flag does not bypass the outer command sandbox. Never switch to a personal profile, kill unrelated browsers, or suppress crash notifications.
+Read `macos-browser-testing.md` in `$CODEX_HOME/practices`
+(default `~/.codex/practices`) before launching Chrome on this Mac. Keep the
+Playwright startup probe; the runbook explains its retained errors.
 
 ## Choose the smallest useful check
 

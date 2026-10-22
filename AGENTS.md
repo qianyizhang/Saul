@@ -1,5 +1,8 @@
 # Working in this monorepo
 
+Use `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`) and its practice guides
+when present; local contracts and checks below still apply.
+
 Saul (Chrome) and EZ (macOS) are independently installed applications. Read the
 [architecture](docs/architecture.md) before changing ownership or installation.
 Follow the app-local instructions in `apps/saul/AGENTS.md` or `apps/ez/AGENTS.md`.
@@ -15,16 +18,14 @@ For UI changes, read [DESIGN.md](DESIGN.md) and complete the
 
 Use Node 24 and the packageManager pinned in package.json for JavaScript tooling.
 `pnpm check` runs shared, browser and native gates on macOS. CI separates Linux
-browser checks from native checks. For browser launches on this Mac, use approved
-execution outside the command sandbox, disposable profiles, and the existing
-startup guard; see [browser testing](apps/saul/docs/testing.md).
+browser checks from native checks. For browser tests, read the
+[testing runbook](apps/saul/docs/testing.md).
 
 Write disposable diagnostics, screenshots and review exports under root `.artifacts/`.
 Follow the [artifact policy](docs/artifacts.md) for retention and cleanup; never put
 source, credentials or durable evidence there.
 
-Preserve concurrent edits and stage explicit owned paths. Installed extension
-identity, bundle/signing identity and credential-store IDs are migration contracts,
+Installed extension identity, bundle/signing identity and credential-store IDs are migration contracts,
 not branding strings. See [setup](docs/setup.md) before changing installed paths.
 
 Before any push, read the [publication hold](docs/migration.md#publication-hold).
