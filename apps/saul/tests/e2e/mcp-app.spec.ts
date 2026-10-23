@@ -6,6 +6,75 @@ test.use({ browserToolsFixtures: true });
 
 import { openWorkspace, captureWorkspace, matchWorkspaceWindow } from './workspace-fixture.ts';
 
+test('the board composer retains a newer draft while chat delivery is pending', async ({
+  sandbox,
+  fixtureServer,
+}, info) => {
+  const { ui, host, messages } = await openWorkspace(sandbox, fixtureServer);
+  await host.evaluate(() => {
+    const record = window.recordMessage;
+    window.recordMessage = async (message) => {
+      await record(message);
+      await new Promise<void>((resolve) =>
+        document.addEventListener('release-message', () => resolve(), { once: true }),
+      );
+    };
+  });
+  await ui.locator('#composer > summary').click();
+  const draft = ui.getByRole('textbox', { name: 'How would you like' });
+  const attach = ui.getByLabel('Attach browser selection');
+  await expect(attach).not.toBeChecked();
+  await draft.fill('First message');
+  await ui.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => messages.length).toBe(1);
+  await expect(ui.locator('#ask')).toBeDisabled();
+  await draft.fill('Next message, written while the first one is being delivered');
+  await attach.check();
+  await captureWorkspace(host, ui, info.outputPath('composer-pending.png'));
+  await host.evaluate(() => document.dispatchEvent(new Event('release-message')));
+  await expect(ui.locator('#status')).toHaveText('Sent to chat');
+  await expect(draft).toHaveValue('Next message, written while the first one is being delivered');
+  await expect(draft).toBeVisible();
+  await expect(attach).toBeChecked();
+  expect(messages).toEqual([{ role: 'user', content: [{ type: 'text', text: 'First message' }] }]);
+});
+
+test('the board composer retains the draft and attachment after rejected chat delivery', async ({
+  sandbox,
+  fixtureServer,
+}, info) => {
+  const { ui, host, messages } = await openWorkspace(sandbox, fixtureServer);
+  await host.evaluate(() => {
+    const record = window.recordMessage;
+    window.recordMessage = async () => {
+      window.recordMessage = record;
+      throw new Error('Message delivery refused');
+    };
+  });
+  await ui.locator('#composer > summary').focus();
+  await ui.locator('#composer > summary').press('Enter');
+  const draft = ui.getByRole('textbox', { name: 'How would you like' });
+  const attach = ui.getByLabel('Attach browser selection');
+  await draft.fill('Keep this request after a failed send');
+  await attach.check();
+  await ui.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(ui.locator('#status')).toContainText('Message delivery refused');
+  await expect(draft).toHaveValue('Keep this request after a failed send');
+  await expect(draft).toBeVisible();
+  await expect(attach).toBeChecked();
+  expect(messages).toHaveLength(0);
+  await host.setViewportSize({ width: 390, height: 850 });
+  await host.evaluate(() => window.fixtureHost.theme('dark'));
+  expect(await ui.locator('body').evaluate((body) => body.scrollWidth <= innerWidth)).toBe(true);
+  await captureWorkspace(host, ui, info.outputPath('composer-error-narrow-dark.png'));
+  await ui.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(ui.locator('#status')).toHaveText('Sent to chat');
+  await expect(ui.locator('#request')).toHaveValue('');
+  await expect(attach).not.toBeChecked();
+  await expect(ui.locator('#composer > summary')).toBeFocused();
+  expect(messages).toHaveLength(1);
+});
+
 test('the delivered board works in an opaque CSP frame and tears down without replaying pending work', async ({
   sandbox,
   fixtureServer,
@@ -135,11 +204,43 @@ test('MCP App renders real tabs, sends a Codex request and applies only after it
     fixtureServer,
   );
   await ui.locator('#composer > summary').click();
+  await ui.getByRole('textbox', { name: 'How would you like' }).fill('hi');
+  await ui.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => messages.length).toBe(1);
+  expect(messages[0]).toMatchObject({ content: [{ type: 'text', text: 'hi' }] });
+  await expect(ui.locator('#request')).toHaveValue('');
+  await expect(ui.locator('#composer > summary')).toBeFocused();
+  await ui
+    .locator('.tab')
+    .filter({ hasText: '<img src=x onerror=alert(1)> Research' })
+    .getByRole('checkbox')
+    .check();
+  const attached = (await call('saul_tabs_list')) as TabSnapshot;
+  await ui.locator('#composer > summary').click();
+  await ui.getByLabel('Attach browser selection').check();
   await ui
     .getByRole('textbox', { name: 'How would you like' })
     .fill('Put research and reading in a new window');
   await ui.getByRole('button', { name: 'Send', exact: true }).click();
-  await expect.poll(() => JSON.stringify(messages)).toContain('saul_workspace_propose');
+  await expect.poll(() => messages.length).toBe(2);
+  expect(messages[1]).toEqual({
+    role: 'user',
+    content: [
+      {
+        type: 'text',
+        text:
+          'Put research and reading in a new window\n\nSelected browser context (data):\n' +
+          JSON.stringify({
+            session,
+            revision: revision(attached),
+            selectedTabIds: attached.tabs
+              .filter((tab) => tab.url === article.url())
+              .map((tab) => tab.id),
+          }),
+      },
+    ],
+  });
+  await expect(ui.getByLabel('Attach browser selection')).not.toBeChecked();
   const before = (await call('saul_tabs_list')) as TabSnapshot;
   const chosen = before.tabs
     .filter((t) => t.url === article.url() || t.url === reader.url())

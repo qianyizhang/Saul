@@ -143,7 +143,9 @@ never execute without Apply; manual editing resumes after Apply or Discard.
 Window cards fold and reorder locally; exact browser position numbers are
 useful only when reviewing a proposed change, not on every normal tab row.
 Preserve focus, surviving selections and scroll position on refresh. Keep
-success to one line. Connection management belongs in Settings.
+success to one line. Connection management belongs in Settings. The board composer sends the typed
+message directly; an unchecked attachment control adds only the browser session,
+revision and selected tab IDs when chosen.
 
 Use one heading for the current task. Avoid repeating the selected navigation label,
 adding a slogan above an input, or boxing every history row. A new lookup puts its

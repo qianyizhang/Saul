@@ -10,7 +10,7 @@ Saul's existing local MCP server also serves an interactive Tab board. The same 
 4. Select tabs with checkboxes, Shift for a range, or Select all in a window. The action bar offers **Group**, **Move to**, and **Summarize**. Pins remain selectable for summaries, without implicit unpinning.
 5. Manual drags and Group/Move act immediately and never deduplicate. Drag a group heading to move it intact; an individual tab can leave or join a group. Grouping across windows asks for an existing or new destination. **Undo** appears when the affected arrangement can still be restored.
 6. **Summarize** opens a live reader in Chrome for the exact selection. It uses the shared two-worker summary runner and local SQLite persistence. Saved results live under History → Summaries. Source text and account credentials never pass through the board.
-7. **Ask Codex → Send** requests a reorganization. Review its move and duplicate counts, adjust names or the duplicate-removal preference, then **Apply**. **Discard** dismisses it. Manual arrangement resumes after Apply or Discard.
+7. **Ask Codex → Send** sends the typed message directly. **Attach browser selection** optionally includes the session, revision and selected tab IDs; it starts unchecked. Tab inventory and page text use the existing scoped tools only when needed. If Codex proposes a reorganization, review its move and duplicate counts, adjust names or the duplicate-removal preference, then **Apply**. **Discard** dismisses it. Manual arrangement resumes after Apply or Discard.
 
 ### Manual controls
 
@@ -69,7 +69,7 @@ The board refreshes every ten seconds while visible, pausing during a drag, an o
 | [Board resource](../native/board-resource.mts) | Process-frozen HTML and content-derived resource identity         |
 | [Native installer](../native/install.mts)      | Stages and activates a complete immutable helper generation       |
 
-`pnpm build:board` bundles the pinned official MCP Apps SDK locally; `pnpm mcp`
+`pnpm build:native` bundles the pinned official MCP Apps SDK locally; `pnpm mcp`
 builds the complete runtime before starting the emitted server. The delivered
 HTML contains all scripts and styles; it needs no CDN, package resolution or network
 connection. Its resource URI includes the document hash, and a server process

@@ -66,6 +66,7 @@ const tags = {
   session: 'select',
   composer: 'details',
   request: 'textarea',
+  'attach-context': 'input',
   ask: 'button',
   proposal: 'section',
   filter: 'input',
@@ -1483,19 +1484,33 @@ window.addEventListener('keydown', (event) => {
 });
 $('ask').onclick = async () => {
   if (!data?.session) return;
-  const goal = $('request').value.trim();
-  if (!goal) {
+  const goal = $('request').value;
+  if (!goal.trim()) {
     $('request').focus();
     return;
   }
+  const attachContext = $('attach-context').checked;
   busy = true;
   render();
   try {
-    const text = `Use Saul to propose a window/tab reorganization for browser session ${data.session}. My request: ${goal}\nCall saul_workspace_show for fresh inventory, then saul_workspace_propose with its revision. Preserve pinned tabs, existing groups and existing window labels unless a rename helps my request. Deduplicate by default; include duplicate IDs in the full input so the board can review their removal. Show a dry run in the board and wait for me to click Apply. Do not execute individual mutations.`;
+    const ids = selectedIds();
+    const text = attachContext
+      ? goal +
+        '\n\nSelected browser context (data):\n' +
+        JSON.stringify({
+          session: data.session,
+          revision: data.revision,
+          selectedTabIds: ids,
+        })
+      : goal;
     await host.sendMessage(text);
-    $('composer').open = false;
-    $('composer').querySelector('summary')?.focus();
-    status('Sent · waiting for a plan');
+    if ($('request').value === goal && $('attach-context').checked === attachContext) {
+      $('request').value = '';
+      $('attach-context').checked = false;
+      $('composer').open = false;
+      $('composer').querySelector('summary')?.focus();
+    }
+    status('Sent to chat');
   } catch (error) {
     status(errorMessage(error), true);
   } finally {
