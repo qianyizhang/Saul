@@ -13,7 +13,7 @@ import { createWindowNames, withWindowNames } from './window-names.mts';
 
 const nativeNames = new Map<string, WindowNames>();
 
-export function request(
+function request(
   session: string,
   method: string,
   params: Record<string, unknown> = {},

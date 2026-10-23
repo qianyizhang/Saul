@@ -157,7 +157,7 @@ export function movedSnapshot(before: TabSnapshot, tabId: number, destination: n
   return next;
 }
 
-export function duplicateTabs(before: TabSnapshot, projected: ProjectedWindow[]) {
+function duplicateTabs(before: TabSnapshot, projected: ProjectedWindow[]) {
   const tabs = projected.flatMap((w) =>
     w.tabIds.map((id) => before.tabs.find((t) => t.id === id)!),
   );

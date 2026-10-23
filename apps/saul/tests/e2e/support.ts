@@ -9,7 +9,7 @@ import { createRequire } from 'node:module';
 
 export { configureFixtureProvider } from './driver.ts';
 
-export const answer = 'A gradient points in the direction of steepest increase.';
+const answer = 'A gradient points in the direction of steepest increase.';
 export const taggedAnswer =
   'A <term note="The direction of steepest increase.">gradient</term> describes how a function changes.';
 const extensionBuild = fileURLToPath(new URL('../../.output/chrome-mv3', import.meta.url));

@@ -1,21 +1,6 @@
 #!/usr/bin/env node
 import { errorCode } from '../apps/saul/native/value.mts';
 import { errorMessage } from '../apps/saul/native/transport.mts';
-interface SetupOptions {
-  components?: string;
-  prepare?: boolean;
-  skipBuild?: boolean;
-  verify?: boolean;
-  codex?: boolean;
-  migrateLegacy?: boolean;
-  extensionId?: string;
-  installDir?: string;
-  extensionDir?: string;
-  manifestDir?: string;
-  applicationsDir?: string;
-  dryRun?: boolean;
-}
-type Command = { command: string; args: string[]; cwd: string; env: NodeJS.ProcessEnv };
 import { spawn } from 'node:child_process';
 import {
   access,
@@ -34,6 +19,22 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createInterface } from 'node:readline/promises';
 import { installationPlan, verifyInstallation } from '../apps/saul/native/installation.mts';
+
+interface SetupOptions {
+  components?: string;
+  prepare?: boolean;
+  skipBuild?: boolean;
+  verify?: boolean;
+  codex?: boolean;
+  migrateLegacy?: boolean;
+  extensionId?: string;
+  installDir?: string;
+  extensionDir?: string;
+  manifestDir?: string;
+  applicationsDir?: string;
+  dryRun?: boolean;
+}
+type Command = { command: string; args: string[]; cwd: string; env: NodeJS.ProcessEnv };
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const choices = ['extension', 'chatgpt', 'tabs', 'ez'];

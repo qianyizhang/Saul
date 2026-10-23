@@ -109,6 +109,12 @@ The [ChatGPT plan helper](chatgpt-plan.md) uses a separate native host, `com.sau
 
 ## Tab boundary
 
+User-facing **Window** and **Tab board** names follow the [glossary](../GLOSSARY.md).
+Internal `workspace` names cover different scopes: `src/app/Workspace.tsx` is the
+extension shell, `src/contracts/workspace.ts` validates history operations, and
+`native/workspace.mts` owns tab-board state and proposals. These are not one domain
+entity. Existing `saul_workspace_*` tool names remain protocol identifiers.
+
 The extension tab workspace calls `src/native/tabs.ts` directly. Optional external access follows this path:
 
 ```text
@@ -132,6 +138,10 @@ Chrome reader; source text and credentials never traverse the board. The reader
 then uses the existing trusted extension digest boundary.
 
 ## Summary ownership
+
+**Summary** is the user-facing term. `digest` remains the implementation name in
+`src/digest/`, internal messages and persisted SQLite records; it does not name a
+separate feature. Wire and storage renames require explicit migrations.
 
 `src/digest/` owns the fixed bilingual summary contract, capture, runner, persistence operations, and safe standalone HTML renderer. The workspace sends validated digest actions through the background; only the background snapshots selected tabs, and only the offscreen runner can request page captures. Content scripts cannot start or inspect digests. Capture uses isolated-world scripting and validates the original URL before and after reading.
 

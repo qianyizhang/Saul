@@ -6,13 +6,12 @@ import {
   type ToolResults,
 } from '../../native/protocol.mts';
 import { record } from '../contracts/reading';
-export type { TabSnapshot } from '../../native/protocol.mts';
-export type WorkspaceCommandTool =
+type WorkspaceCommandTool =
   | 'saul_tabs_edit'
   | 'saul_tabs_undo'
   | 'saul_summary_open'
   | 'saul_summary_status';
-export type WorkspaceCommandRequest = {
+type WorkspaceCommandRequest = {
   [K in WorkspaceCommandTool]: {
     action: 'command';
     method: K;

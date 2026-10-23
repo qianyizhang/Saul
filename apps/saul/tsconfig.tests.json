@@ -13,7 +13,6 @@
     "jsx": "react-jsx"
   },
   "include": [
-    "scripts/*.mts",
     "tests/*.mts",
     "tests/*.ts",
     "vitest.config.ts",

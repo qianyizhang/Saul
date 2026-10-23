@@ -66,7 +66,7 @@ export const text = (v: unknown, max = 10000): v is string =>
   typeof v === 'string' && v.length <= max;
 export const id = (v: unknown): v is string => text(v, 128) && v.length > 0;
 const number = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
-export function validSnapshot(v: unknown): v is SelectionSnapshot {
+function validSnapshot(v: unknown): v is SelectionSnapshot {
   if (
     !record(v) ||
     !id(v.id) ||
@@ -95,7 +95,7 @@ export function validSnapshot(v: unknown): v is SelectionSnapshot {
     number(v.capturedAt)
   );
 }
-export function validContext(v: unknown): v is ResolvedContext {
+function validContext(v: unknown): v is ResolvedContext {
   return (
     record(v) &&
     text(v.selection) &&

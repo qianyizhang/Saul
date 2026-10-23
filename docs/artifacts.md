@@ -52,7 +52,7 @@ workflow; an installed app may depend on a particular bundle path. Empty cache
 directories alone are not evidence that the cache is obsolete.
 
 `apps/saul/.build/native/` is the ignored, generated helper runtime tree.
-`pnpm --dir apps/saul build:board` bundles the board and its pinned MCP Apps SDK;
+`pnpm --dir apps/saul build:native` compiles the helpers and bundles the board with its pinned MCP Apps SDK;
 the native installer stages that complete asset with the board HTML and styles.
 The source MCP server and installed server deliver the same document format.
 

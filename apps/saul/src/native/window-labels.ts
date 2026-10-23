@@ -1,8 +1,8 @@
 // Window IDs belong to the current browser run. Session storage survives service
 // worker/MCP reconnects without attaching old labels to a later browser's IDs.
-export const WINDOW_LABELS_KEY = 'saul_window_labels';
+const WINDOW_LABELS_KEY = 'saul_window_labels';
 
-export function windowLabelsFromStorage(value: unknown): Record<string, string> {
+function windowLabelsFromStorage(value: unknown): Record<string, string> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   return Object.fromEntries(
     Object.entries(value).filter(

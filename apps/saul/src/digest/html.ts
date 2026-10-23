@@ -1,6 +1,6 @@
 import { designColors } from '../design/tokens';
 import type { DigestBatch, Pair } from './types';
-export function escapeHtml(text: string): string {
+function escapeHtml(text: string): string {
   return text.replace(
     /[&<>"']/g,
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,

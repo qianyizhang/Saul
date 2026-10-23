@@ -179,7 +179,7 @@ export function mcpTools(resourceUri: string) {
       : definition,
   );
 }
-export function validateAppCall(name: string, args: unknown) {
+function validateAppCall(name: string, args: unknown) {
   const definition = APP_TOOLS.find((item) => item.name === name);
   if (!definition) throw new Error(`Unknown app tool: ${name}`);
   validate(definition.inputSchema, args, name);
