@@ -26,11 +26,13 @@ test('named presets and recipes save, choose their models, and create a new atte
   await configureFixtureProvider(popup, fixtureServer.origin);
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(popup.getByLabel('Preset name', { exact: true })).toHaveValue('Current');
+  await popup.getByText('Manage model presets', { exact: true }).click();
   await popup.getByLabel('Preset name', { exact: true }).fill('Short');
   await popup.getByRole('button', { name: 'Add preset', exact: true }).click();
   await popup.getByLabel('Preset name', { exact: true }).fill('Careful');
   await popup.getByLabel('Model name', { exact: true }).fill('careful-model');
   const carefulId = await popup.getByLabel('Preset', { exact: true }).inputValue();
+  await popup.getByText('Edit recipes', { exact: true }).click();
   await popup.getByLabel('Edit recipe', { exact: true }).selectOption('recipe-lookup');
   await popup.getByLabel('Default preset', { exact: true }).selectOption(carefulId);
   await popup
@@ -73,12 +75,14 @@ test('named presets and recipes save, choose their models, and create a new atte
   await expect.poll(() => fixtureServer.requests.length).toBe(initialRequests + 3);
   expect(sentRequest(fixtureServer, initialRequests + 2).model).toBe('careful-model');
 
+  await popup.getByText('Edit recipes', { exact: true }).click();
+  await popup.getByText('Manage model presets', { exact: true }).click();
   for (const width of [360, 440]) {
     for (const scheme of ['light', 'dark'] as const) {
       await popup.setViewportSize({ width, height: 700 });
       await popup.emulateMedia({ colorScheme: scheme });
       await popup.getByLabel('Edit recipe', { exact: true }).selectOption('recipe-lookup');
-      await popup.getByRole('region', { name: 'Recipes', exact: true }).scrollIntoViewIfNeeded();
+      await popup.getByText('Edit recipes', { exact: true }).scrollIntoViewIfNeeded();
       expect(await popup.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       );
@@ -172,6 +176,8 @@ test('missing recipe context or connection blocks submission without using anoth
   const initialRequests = fixtureServer.requests.length;
   await configureFixtureProvider(popup, fixtureServer.origin);
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await popup.getByText('Edit recipes', { exact: true }).click();
+  await popup.getByText('Include with selected text', { exact: true }).click();
   await popup.getByLabel('Edit recipe', { exact: true }).selectOption('recipe-nudge');
   await popup.getByLabel('Prompt template', { exact: true }).fill('{{text}}\n{{heading}}');
   await popup.getByLabel('Section heading', { exact: true }).uncheck();

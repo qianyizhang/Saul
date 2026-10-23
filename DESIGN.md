@@ -231,6 +231,15 @@ service tier only when it was returned and recorded, never inferred from Fast.
 
 ## Accounts, presets, and recipes
 
+Saul Settings leads with AI service, account/model and reading defaults. Keep
+preset management, recipe editing, model tuning and diagnostics in named
+disclosures. Essential meaning and billing distinctions remain visible in Minimum
+Mode. Put independent preferences after the configuration Save area and label
+their immediate-save behavior. The toolbar popup should support ordinary reading
+and setup without requiring a full tab; use a wider desktop layout and verify
+its actual browser bounds. Collapsed History entries show a short passage preview;
+opening the entry reveals the full selection and answer.
+
 Use **Continue with ChatGPT**, **Cancel**, **Add account**, **Enable plan usage**,
 **Refresh models**, **Manage usage**, and **Sign out** for the same account actions.
 Both surfaces use ChatGPT's direct sign-in flow and account model catalog. Each

@@ -42,6 +42,7 @@ test('inspection matches the submitted request, retains literal output, and surv
   ).toHaveText('Gradient descent');
 
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await popup.getByText('Edit recipes', { exact: true }).click();
   await popup.getByText('System instructions', { exact: true }).click();
   await popup
     .getByLabel('Recipe system instructions', { exact: true })

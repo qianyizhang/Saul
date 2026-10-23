@@ -52,6 +52,10 @@ test('Minimum Mode defaults on, updates open surfaces, and persists independentl
   await popup.keyboard.press('ControlOrMeta+,');
   const toggle = popup.getByRole('checkbox', { name: 'Minimum Mode', exact: false });
   await expect(toggle).toBeChecked();
+  await popup
+    .locator('summary')
+    .filter({ hasText: /^API connection$/ })
+    .click();
   await popup.getByLabel('Base URL', { exact: true }).fill('invalid endpoint');
   await toggle.uncheck();
   await expect(popup.locator('main')).toHaveAttribute('data-minimum', 'false');

@@ -48,8 +48,7 @@ export function NotificationSettings() {
     }
   }
   return (
-    <section className="panel settings-section">
-      <h3>Notifications</h3>
+    <section className="settings-section" aria-label="Notifications">
       <label className="toggle">
         Mute error notifications
         <input
@@ -59,9 +58,7 @@ export function NotificationSettings() {
           onChange={(e) => void toggle(e.target.checked)}
         />
       </label>
-      <p className="small muted standard-only">
-        Errors remain visible in explanations and Settings.
-      </p>
+      <p className="small muted">Errors remain visible in explanations and Settings.</p>
       {error && (
         <p className="notice error" role="alert">
           {error}

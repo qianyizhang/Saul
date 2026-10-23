@@ -6,11 +6,13 @@ export function PresentationSettings({
   preference: ReturnType<typeof useMinimumMode>;
 }) {
   return (
-    <section className="panel settings-section" aria-label="Appearance">
+    <section className="settings-section" aria-label="Appearance">
       <label className="toggle">
         <span>
           <strong>Minimum Mode</strong>
-          <span className="small muted preference-description">Fewer hints and details.</span>
+          <span className="small muted preference-description">
+            Show fewer secondary actions and details.
+          </span>
         </span>
         <input
           type="checkbox"

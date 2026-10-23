@@ -190,92 +190,74 @@ export function ChatGPTPlanSettings({
     });
   return (
     <div className="stack">
-      <label className="field">
-        ChatGPT account
-        <select
-          aria-label="ChatGPT account"
-          value={value.accountId}
-          disabled={!!busy || speechBusy || testing}
-          onChange={(e) => {
-            setError('');
-            onChange({ ...value, accountId: e.target.value });
-          }}
-        >
-          <option value="">Choose an account</option>
-          {accounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.label}
-              {a.signedIn ? '' : ' (signed out)'}
-            </option>
-          ))}
-        </select>
-      </label>
-      <div className="row">
-        <button
-          className="btn"
-          disabled={!!busy || speechBusy || testing}
-          onClick={() =>
-            operation('accounts', async (signal) => {
-              const result = await planCall({ action: 'accounts' }, signal);
-              if (mounted.current) {
-                setHelperReady(true);
-                setAccounts(result.accounts);
-                if (!value.accountId && result.accounts.length === 1)
-                  onChange({ ...value, accountId: result.accounts[0]!.id });
-              }
-            })
-          }
-        >
-          Refresh accounts
-        </button>
-        {!active?.signedIn && (
-          <button
-            className="btn primary"
+      <div className="settings-pair">
+        <label className="field">
+          ChatGPT account
+          <select
+            aria-label="ChatGPT account"
+            value={value.accountId}
             disabled={!!busy || speechBusy || testing}
-            onClick={() => login()}
+            onChange={(e) => {
+              setError('');
+              onChange({ ...value, accountId: e.target.value });
+            }}
           >
-            Continue with ChatGPT
-          </button>
-        )}
-        {accounts.length > 0 && (
-          <button
-            className="btn"
-            disabled={!!busy || speechBusy || testing}
-            onClick={() => login(true)}
+            <option value="">Choose an account</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.label}
+                {a.signedIn ? '' : ' (signed out)'}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          ChatGPT model
+          <select
+            aria-label="ChatGPT model"
+            value={value.model}
+            disabled={!!busy || speechBusy || loadingModels || testing}
+            onChange={(e) => {
+              const model = models.find((model) => model.slug === e.target.value);
+              if (model) onChange({ ...value, model: model.slug, ...planModelDefaults(model) });
+            }}
           >
-            Add account
-          </button>
-        )}
-        {active?.signedIn && !active.planEnabled && (
-          <button
-            className="btn"
-            disabled={!!busy || speechBusy || testing}
-            onClick={() => login(false, true)}
-          >
-            Enable plan usage
-          </button>
-        )}
-        {active?.signedIn && (
-          <button
-            className="btn"
-            disabled={!!busy || speechBusy || testing}
-            onClick={() =>
-              operation('logout', async (signal) => {
-                const r = await planCall({ action: 'logout', accountId: active.id }, signal);
-                if (!mounted.current) return;
-                setAccounts((all) => all.map((a) => (a.id === r.account.id ? r.account : a)));
-                setModels([]);
-                setNotice(
-                  r.warning ||
-                    'Signed out. Account registration is retained for your next sign-in.',
-                );
-              })
-            }
-          >
-            Sign out
-          </button>
-        )}
+            <option value="">Refresh models to choose</option>
+            {value.model && !models.some((m) => m.slug === value.model) && (
+              <option value={value.model}>
+                {value.model} {modelsReady ? '(unavailable)' : '(saved)'}
+              </option>
+            )}
+            {models.map((m) => (
+              <option key={m.slug} value={m.slug}>
+                {m.display_name}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
+      {(!active?.signedIn || !active.planEnabled) && (
+        <div className="row">
+          {!active?.signedIn && (
+            <button
+              className="btn primary"
+              disabled={!!busy || speechBusy || testing}
+              onClick={() => login()}
+            >
+              Continue with ChatGPT
+            </button>
+          )}
+          {active?.signedIn && !active.planEnabled && (
+            <button
+              className="btn"
+              disabled={!!busy || speechBusy || testing}
+              onClick={() => login(false, true)}
+            >
+              Enable plan usage
+            </button>
+          )}
+        </div>
+      )}
       {busy && (
         <div className="row">
           <span role="status">
@@ -295,137 +277,177 @@ export function ChatGPTPlanSettings({
           )}
         </div>
       )}
-      <label className="field">
-        ChatGPT model
-        <select
-          aria-label="ChatGPT model"
-          value={value.model}
-          disabled={!!busy || speechBusy || loadingModels || testing}
-          onChange={(e) => {
-            const model = models.find((model) => model.slug === e.target.value);
-            if (model) onChange({ ...value, model: model.slug, ...planModelDefaults(model) });
-          }}
-        >
-          <option value="">Refresh models to choose</option>
-          {value.model && !models.some((m) => m.slug === value.model) && (
-            <option value={value.model}>
-              {value.model} {modelsReady ? '(unavailable)' : '(saved)'}
-            </option>
+      <details>
+        <summary>Model options</summary>
+        <div className="stack settings-disclosure">
+          {(!!selectedModel?.supportedReasoningEfforts.length || !!value.effort) && (
+            <label className="field">
+              Effort
+              <select
+                aria-label="ChatGPT effort"
+                value={value.effort ?? ''}
+                disabled={!!busy || speechBusy || loadingModels || testing || !selectedModel}
+                onChange={(event) => onChange({ ...value, effort: event.target.value })}
+              >
+                <option value="">Default</option>
+                {value.effort &&
+                  !selectedModel?.supportedReasoningEfforts.some(
+                    (level) => level.effort === value.effort,
+                  ) && <option value={value.effort}>{value.effort} (unavailable)</option>}
+                {selectedModel?.supportedReasoningEfforts.map((level) => (
+                  <option key={level.effort} value={level.effort} title={level.description}>
+                    {level.effort[0]?.toUpperCase()}
+                    {level.effort.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </label>
           )}
-          {models.map((m) => (
-            <option key={m.slug} value={m.slug}>
-              {m.display_name}
-            </option>
-          ))}
-        </select>
-      </label>
-      {(!!selectedModel?.supportedReasoningEfforts.length || !!value.effort) && (
-        <label className="field">
-          Effort
-          <select
-            aria-label="ChatGPT effort"
-            value={value.effort ?? ''}
-            disabled={!!busy || speechBusy || loadingModels || testing || !selectedModel}
-            onChange={(event) => onChange({ ...value, effort: event.target.value })}
-          >
-            <option value="">Default</option>
-            {value.effort &&
-              !selectedModel?.supportedReasoningEfforts.some(
-                (level) => level.effort === value.effort,
-              ) && <option value={value.effort}>{value.effort} (unavailable)</option>}
-            {selectedModel?.supportedReasoningEfforts.map((level) => (
-              <option key={level.effort} value={level.effort} title={level.description}>
-                {level.effort[0]?.toUpperCase()}
-                {level.effort.slice(1)}
+          <label className="field">
+            Speed
+            <select
+              aria-label="ChatGPT speed"
+              value={value.fast ? 'fast' : 'standard'}
+              disabled={!!busy || speechBusy || loadingModels || testing || !selectedModel}
+              onChange={(event) => onChange({ ...value, fast: event.target.value === 'fast' })}
+            >
+              <option value="standard">Standard</option>
+              <option value="fast" disabled={!selectedModel?.fastTier}>
+                Fast{selectedModel && !selectedModel.fastTier ? ' (unavailable)' : ''}
               </option>
-            ))}
-          </select>
-        </label>
-      )}
-      <label className="field">
-        Speed
-        <select
-          aria-label="ChatGPT speed"
-          value={value.fast ? 'fast' : 'standard'}
-          disabled={!!busy || speechBusy || loadingModels || testing || !selectedModel}
-          onChange={(event) => onChange({ ...value, fast: event.target.value === 'fast' })}
-        >
-          <option value="standard">Standard</option>
-          <option value="fast" disabled={!selectedModel?.fastTier}>
-            Fast{selectedModel && !selectedModel.fastTier ? ' (unavailable)' : ''}
-          </option>
-        </select>
-      </label>
+            </select>
+          </label>
+        </div>
+      </details>
       {loadingModels && <p role="status">Loading available models…</p>}
       {modelIssue && (
         <p className="notice error" role="alert">
           {modelIssue}
         </p>
       )}
-      <div className="row">
-        <button
-          className="btn"
-          disabled={!!busy || speechBusy || loadingModels || testing || !active?.planEnabled}
-          onClick={() => operation('models', (signal) => loadModels(value.accountId, signal))}
-        >
-          Refresh models
-        </button>
-        <button
-          className="btn"
-          disabled={
-            !!busy ||
-            speechBusy ||
-            loadingModels ||
-            testing ||
-            !active?.planEnabled ||
-            !value.model ||
-            !modelsReady ||
-            !!modelIssue
-          }
-          onClick={test}
-        >
-          Test generation
-        </button>
-      </div>
       {!minimum && active?.planEnabled && (
         <p className="small">
           {saved ? 'Using ChatGPT plan' : 'Save to use this account for new explanations.'}
         </p>
       )}
-      <SpeechTest
-        key={active?.id || 'none'}
-        account={active}
-        disabled={!!busy || loadingModels || testing}
-        onBusyChange={setSpeechBusy}
-      />
-      <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">
-        Manage usage
-      </a>
-      <details open={!minimum}>
-        <summary>Details</summary>
-        {helperReady === true && <p className="small muted">ChatGPT helper connected.</p>}
-        <p className="small muted">
-          Generation and tests use your ChatGPT plan. API-key profiles are billed separately.
-        </p>
-        {value.fast && (
-          <p className="small muted">
-            Fast requests priority service and may use more plan allowance.
-          </p>
-        )}
+      <details>
+        <summary>Manage accounts</summary>
+        <div className="settings-disclosure">
+          <div className="row">
+            <button
+              className="btn"
+              disabled={!!busy || speechBusy || testing}
+              onClick={() =>
+                operation('accounts', async (signal) => {
+                  const result = await planCall({ action: 'accounts' }, signal);
+                  if (mounted.current) {
+                    setHelperReady(true);
+                    setAccounts(result.accounts);
+                    if (!value.accountId && result.accounts.length === 1)
+                      onChange({ ...value, accountId: result.accounts[0]!.id });
+                  }
+                })
+              }
+            >
+              Refresh accounts
+            </button>
+            {accounts.length > 0 && (
+              <button
+                className="btn"
+                disabled={!!busy || speechBusy || testing}
+                onClick={() => login(true)}
+              >
+                Add account
+              </button>
+            )}
+            {active?.signedIn && (
+              <button
+                className="btn"
+                disabled={!!busy || speechBusy || testing}
+                onClick={() =>
+                  operation('logout', async (signal) => {
+                    const r = await planCall({ action: 'logout', accountId: active.id }, signal);
+                    if (!mounted.current) return;
+                    setAccounts((all) => all.map((a) => (a.id === r.account.id ? r.account : a)));
+                    setModels([]);
+                    setNotice(
+                      r.warning ||
+                        'Signed out. Account registration is retained for your next sign-in.',
+                    );
+                  })
+                }
+              >
+                Sign out
+              </button>
+            )}
+          </div>
+        </div>
       </details>
       <details open={helperReady === false}>
-        <summary>ChatGPT helper setup</summary>
-        <p className="small muted">
-          From apps/saul, build and install the local helper for this extension. It stores OAuth
-          credentials on this computer, outside browser storage. Use Node 24.
-        </p>
-        <code className="code">
-          pnpm native:install --chatgpt --extension-id {chrome.runtime.id}
-        </code>
-        <p className="small muted">
-          Then retry Continue with ChatGPT. This helper is separate from Codex tab access.
-        </p>
+        <summary>Connection and tests</summary>
+        <div className="stack settings-disclosure">
+          <div className="row">
+            <button
+              className="btn"
+              disabled={!!busy || speechBusy || loadingModels || testing || !active?.planEnabled}
+              onClick={() => operation('models', (signal) => loadModels(value.accountId, signal))}
+            >
+              Refresh models
+            </button>
+            <button
+              className="btn"
+              disabled={
+                !!busy ||
+                speechBusy ||
+                loadingModels ||
+                testing ||
+                !active?.planEnabled ||
+                !value.model ||
+                !modelsReady ||
+                !!modelIssue
+              }
+              onClick={test}
+            >
+              Test generation
+            </button>
+          </div>
+          <p className="small muted">Tests send a sample prompt using your ChatGPT plan.</p>
+          {helperReady === true && <p className="small muted">ChatGPT helper connected.</p>}
+          <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">
+            Manage usage
+          </a>
+          <details open={helperReady === false}>
+            <summary>ChatGPT helper setup</summary>
+            <p className="small muted">
+              From apps/saul, build and install the local helper for this extension. It stores OAuth
+              credentials on this computer, outside browser storage. Use Node 24.
+            </p>
+            <code className="code">
+              pnpm native:install --chatgpt --extension-id {chrome.runtime.id}
+            </code>
+            <p className="small muted">
+              Then retry Continue with ChatGPT. This helper is separate from Codex tab access.
+            </p>
+          </details>
+          <details>
+            <summary>Experimental tools</summary>
+            <SpeechTest
+              key={active?.id || 'none'}
+              account={active}
+              disabled={!!busy || loadingModels || testing}
+              onBusyChange={setSpeechBusy}
+            />
+          </details>
+        </div>
       </details>
+      <p className="small muted">
+        ChatGPT requests use plan allowance. API connections are billed separately.
+      </p>
+      {value.fast && (
+        <p className="small muted">
+          Fast requests priority service and may use more plan allowance.
+        </p>
+      )}
       {error && (
         <p className="notice error" role="alert">
           {error}

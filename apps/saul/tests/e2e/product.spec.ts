@@ -62,6 +62,10 @@ test('provider profiles preserve their own credentials and clear keys across ori
 }) => {
   const { popup } = await sandbox.launch();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await popup
+    .locator('summary')
+    .filter({ hasText: /^API connection$/ })
+    .click();
   await popup.getByLabel('Profile name', { exact: true }).fill('Local test');
   await popup.getByPlaceholder('https://api.openai.com/v1').fill(fixtureServer.origin + '/v1');
   await popup.getByPlaceholder('Optional for local models').fill('fixture-key-one');
@@ -81,8 +85,13 @@ test('provider profiles preserve their own credentials and clear keys across ori
   await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
   await popup.reload();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await popup
+    .locator('summary')
+    .filter({ hasText: /^API connection$/ })
+    .click();
   await popup.getByLabel('Saved profile', { exact: true }).selectOption({ label: 'Local test' });
   await expect(popup.getByPlaceholder('Optional for local models')).toHaveValue('fixture-key-one');
+  await popup.getByText('Model options and tests', { exact: true }).click();
   await popup.getByRole('button', { name: 'Test generation', exact: true }).click();
   await expect(popup.getByText(/Generation succeeded:/)).toBeVisible();
 });
@@ -229,7 +238,7 @@ test('malformed settings expose their field error and require explicit backup be
     'Saved provider temperature must be a finite number',
   );
   await popup.getByRole('button', { name: 'Back up and reset settings', exact: true }).click();
-  await expect(popup.getByLabel('Provider', { exact: true })).toBeVisible();
+  await expect(popup.getByLabel('AI service', { exact: true })).toBeVisible();
   await expect(
     popup.getByText(
       'Defaults restored. The previous saved settings remain in a local recovery backup.',
@@ -356,12 +365,12 @@ test('workspace navigation protects drafts and respects on-device availability',
       },
     });
   });
-  await popup.getByLabel('Provider', { exact: true }).selectOption('chrome-ai');
+  await popup.getByLabel('AI service', { exact: true }).selectOption('chrome-ai');
   await popup.getByRole('button', { name: 'Prepare on-device model' }).click();
-  await expect(popup.getByLabel('Provider', { exact: true })).toBeDisabled();
+  await expect(popup.getByLabel('AI service', { exact: true })).toBeDisabled();
   await popup.getByRole('button', { name: 'Stop test' }).click();
   await expect(popup.getByRole('alert')).toContainText('Test stopped');
-  await expect(popup.getByLabel('Provider', { exact: true })).toBeEnabled();
+  await expect(popup.getByLabel('AI service', { exact: true })).toBeEnabled();
 });
 
 test('save locks the draft; provider tests lock only provider settings and remain cancellable', async ({
@@ -372,6 +381,7 @@ test('save locks the draft; provider tests lock only provider settings and remai
     const { popup, worker } = await sandbox.launch();
     await configureFixtureProvider(popup, server.origin);
     await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+    await popup.getByText('Model options and tests', { exact: true }).click();
     await popup.getByRole('button', { name: 'Test generation', exact: true }).click();
     await expect(popup.getByLabel('Profile name', { exact: true })).toBeDisabled();
     await expect(popup.getByLabel('Response language', { exact: true })).toBeEnabled();

@@ -133,7 +133,9 @@ export function Library({
           }}
         />
         <button
-          className="btn"
+          className="btn icon"
+          aria-label="Bookmarks"
+          title="Bookmarks"
           aria-pressed={bookmarks}
           onClick={() => {
             setBookmarks(!bookmarks);
@@ -141,7 +143,6 @@ export function Library({
           }}
         >
           <Bookmark size={16} fill={bookmarks ? 'currentColor' : 'none'} />
-          Bookmarks
         </button>
       </div>
       {error && (
@@ -184,7 +185,8 @@ export function Library({
                     aria-expanded={expanded === item.selectionId}
                     onClick={() => void expand(item)}
                   >
-                    {item.selectedText} {item.unread && <span className="badge">New</span>}{' '}
+                    <span className="history-preview">{item.selectedText}</span>
+                    {item.unread && <span className="badge">New</span>}{' '}
                     <ChevronDown size={14} className="disclosure-icon" />
                   </button>
                   <button

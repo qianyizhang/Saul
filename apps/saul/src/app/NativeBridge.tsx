@@ -61,7 +61,7 @@ export function NativeBridge() {
       </label>
       <p className="small muted">
         Let local tools read tab titles and URLs and organize tabs. Incognito is excluded. You can
-        use the tab organizer below without enabling Codex access.
+        use the Window tab without enabling Codex access.
       </p>
       <label className="toggle">
         <strong>Page reading and actions</strong>

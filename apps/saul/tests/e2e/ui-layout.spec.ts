@@ -47,7 +47,7 @@ test('compact workspace supports reading, tab controls and reachable settings', 
   ).toBeVisible();
   await popup.getByText('Connect Codex · setup and troubleshooting', { exact: true }).click();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await expect(popup.getByLabel('Provider', { exact: true })).toBeVisible();
+  await expect(popup.getByLabel('AI service', { exact: true })).toBeVisible();
   const save = popup.getByRole('button', { name: 'Save', exact: true });
   await expect(save).toBeInViewport();
   await popup.screenshot({ path: info.outputPath('05-settings.png') });
@@ -201,6 +201,7 @@ test('answer metadata stays aligned and readable in cards and history at compact
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   const longModel = 'test-model-with-a-deliberately-long-identifier-for-wrapping';
   await popup.getByLabel('Model name', { exact: true }).fill(longModel);
+  await popup.getByText('Manage model presets', { exact: true }).click();
   await popup
     .getByLabel('Preset name', { exact: true })
     .fill('Careful reading with a deliberately long preset name');

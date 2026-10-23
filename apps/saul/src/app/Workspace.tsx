@@ -7,6 +7,7 @@ import { SummaryHistory, SummaryReader } from './Summaries';
 import { NativeBridge } from './NativeBridge';
 import { useMinimumMode } from './useMinimumMode';
 import { PresentationSettings } from './PresentationSettings';
+import { NotificationSettings } from './NotificationSettings';
 
 type View = 'history' | 'tabs' | 'settings' | 'summaries' | 'summary';
 function viewFromHash(): View {
@@ -130,10 +131,16 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
       {view === 'tabs' && <Tabs />}
       {view === 'settings' && (
         <div className="stack settings-layout">
-          <PresentationSettings preference={presentation} />
           <Settings onDirty={setSettingsDirty} />
+          <section className="panel settings-section" aria-label="Preferences">
+            <h3>Preferences</h3>
+            <p className="small muted">Changes here save immediately.</p>
+            <PresentationSettings preference={presentation} />
+            <NotificationSettings />
+          </section>
           <details>
             <summary>Codex connection</summary>
+            <p className="small muted">Access changes save immediately.</p>
             <NativeBridge />
           </details>
         </div>

@@ -8,7 +8,9 @@ test('two Settings surfaces retain a stale draft until deliberate reload', async
   const other = await context.newPage();
   await other.goto(popup.url().replace('popup.html', 'library.html'));
   await expect(other.getByLabel('Model name', { exact: true })).toBeVisible();
+  await popup.getByText('Edit recipes', { exact: true }).click();
   await popup.getByLabel('Recipe name', { exact: true }).fill('Saved in first surface');
+  await other.getByText('Edit recipes', { exact: true }).click();
   await other.getByLabel('Edit recipe', { exact: true }).selectOption('recipe-lookup');
   await other.getByLabel('Prompt template', { exact: true }).fill('Keep this draft: {{text}}');
   await other.getByLabel('Response language', { exact: true }).selectOption('Chinese');
@@ -71,6 +73,7 @@ test('an uncertain commit reply keeps the draft and never sends the commit again
 }) => {
   const { popup } = await sandbox.launch();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await popup.getByText('Edit recipes', { exact: true }).click();
   await popup.getByLabel('Recipe name', { exact: true }).fill('Saved but acknowledgement lost');
   await popup.evaluate(() => {
     const original = chrome.runtime.sendMessage.bind(chrome.runtime) as (
@@ -121,6 +124,7 @@ test('an appearance change in another surface does not conflict with a settings 
 }) => {
   const { popup, context } = await sandbox.launch();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await popup.getByText('Edit recipes', { exact: true }).click();
   await popup.getByLabel('Recipe name', { exact: true }).fill('Personal recipe');
   const other = await context.newPage();
   await other.goto(popup.url().replace('popup.html', 'library.html'));

@@ -15,6 +15,9 @@
 body {
   margin: 0;
 }
+.toolbar-popup {
+  width: 640px;
+}
 button,
 input,
 select,
@@ -57,8 +60,8 @@ a:hover {
   padding: 28px;
 }
 .shell.popup {
-  width: 440px;
-  max-width: 100vw;
+  width: 640px;
+  max-width: 100%;
   min-height: 420px;
   padding: 20px;
 }
@@ -222,7 +225,16 @@ a:hover {
   color: var(--ink);
   font-family: var(--design-font-subject);
   font-weight: var(--design-weight-subject);
-  font-size: calc(var(--design-size-subject) * 5 / 6);
+  font-size: var(--design-size-control);
+}
+.history-title[aria-expanded='false'] .history-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.history-preview {
+  display: block;
 }
 .history-entry .answer {
   margin-top: 14px;
@@ -284,6 +296,24 @@ a:hover {
 .settings-section {
   display: grid;
   gap: 14px;
+}
+.settings-disclosure {
+  margin-top: 12px;
+}
+.settings-pair,
+.api-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.api-fields > details {
+  grid-column: 1 / -1;
+}
+@media (max-width: 479px) {
+  .settings-pair,
+  .api-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .toggle {
   display: flex;
@@ -435,8 +465,7 @@ input[type='checkbox'] {
   border-radius: 0;
   background: none;
 }
-[data-minimum='true'] .settings-section,
-[data-minimum='true'] .settings-fields > details {
+[data-minimum='true'] .settings-section.panel {
   padding-bottom: 20px;
   border-bottom: 1px solid var(--border);
 }

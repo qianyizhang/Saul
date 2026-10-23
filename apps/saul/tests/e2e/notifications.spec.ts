@@ -43,6 +43,10 @@ test('mute from a toast applies across tabs and restart; Settings can unmute wit
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   const toggle = popup.getByRole('checkbox', { name: 'Mute error notifications' });
   await expect(toggle).toBeChecked();
+  await popup
+    .locator('summary')
+    .filter({ hasText: /^API connection$/ })
+    .click();
   await popup.getByLabel('Base URL', { exact: true }).fill('invalid endpoint');
   await toggle.uncheck();
   await expect
@@ -93,7 +97,19 @@ test('no-response error can be muted even while reading storage is unavailable',
   await explain(page);
   await expect(page.getByRole('alert')).toHaveCount(0);
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await popup.getByRole('checkbox', { name: 'Mute error notifications' }).uncheck();
+  const toggle = popup.getByRole('checkbox', { name: 'Mute error notifications' });
+  await expect(toggle).toBeChecked();
+  await toggle.uncheck();
+  // The checkbox updates optimistically; a new page must observe the committed preference.
+  await expect
+    .poll(() =>
+      popup.evaluate(
+        async () =>
+          (await chrome.storage.local.get('saul_mute_error_notifications'))
+            .saul_mute_error_notifications,
+      ),
+    )
+    .toBe(false);
   await page.reload();
   await expect(page.getByRole('alert')).toContainText('Saul did not respond');
 });
