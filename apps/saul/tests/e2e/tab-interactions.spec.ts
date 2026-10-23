@@ -4,6 +4,75 @@ import { installDigestProvider } from './digest-fixture.ts';
 import type { TabSnapshot } from '../../native/protocol.mts';
 test.use({ browserToolsFixtures: true });
 
+test('both tab surfaces show readable titles while retaining original browser data', async ({
+  sandbox,
+  fixtureServer,
+}, info) => {
+  const { ui, host, popup, context, article, call } = await openWorkspace(sandbox, fixtureServer);
+  await popup.goto(popup.url().replace('popup.html', 'library.html') + '#tabs');
+  const snapshot = (await call('saul_tabs_list')) as TabSnapshot;
+  const id = snapshot.tabs.find((tab) => tab.url === article.url())!.id;
+  const boardRow = ui.locator(`[data-tab-id="${id}"]`);
+  const resource = fixtureServer.origin + '/title-resource-probe';
+  const requests: string[] = [];
+  context.on('request', (request) => {
+    if (request.url() === resource) requests.push(request.url());
+  });
+  const cases = [
+    [`<img src="${resource}" onerror="alert(1)"> Research`, 'Research'],
+    ['<b>Research &amp; evidence</b><br>研究', 'Research & evidence 研究'],
+    ['<script>alert(1)</script><style>body{display:none}</style>Methods', 'Methods'],
+    [`<img src="${resource}" alt="Research diagram">`, 'Research diagram'],
+    ['<div>First</div><div>Second</div>', 'First Second'],
+    ['<b>Unclosed emphasis', 'Unclosed emphasis'],
+    ['When 2 < 3 & 5 > 4 — 研究', 'When 2 < 3 & 5 > 4 — 研究'],
+    [`<img src="${resource}">`, '127.0.0.1'],
+  ] as const;
+  for (const [original, label] of cases) {
+    await article.evaluate((title) => {
+      document.title = title;
+    }, original);
+    await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
+    const windowRow = popup.locator('.tab-row').filter({
+      has: popup.getByRole('checkbox', { name: 'Select ' + label, exact: true }),
+    });
+    await expect(boardRow.locator('.tab-title')).toHaveText(label);
+    await expect(windowRow.locator('.tab-title')).toHaveText(label);
+    await expect(boardRow).toHaveAttribute('title', original + '\n' + article.url());
+    await expect(windowRow).toHaveAttribute('title', original + '\n' + article.url());
+    await expect(
+      boardRow.getByRole('checkbox', { name: 'Select ' + label, exact: true }),
+    ).toBeVisible();
+    await expect(boardRow.locator('img, script, style, iframe')).toHaveCount(0);
+    await expect(windowRow.locator('img, script, style, iframe')).toHaveCount(0);
+    expect(
+      ((await call('saul_tabs_list')) as TabSnapshot).tabs.find((tab) => tab.id === id)!.title,
+    ).toBe(original);
+    if (label === 'Research & evidence 研究') {
+      await ui.locator('#filter').fill(label);
+      await popup.getByRole('searchbox', { name: 'Filter tabs' }).fill(label);
+      await expect(boardRow).toBeVisible();
+      await expect(windowRow).toBeVisible();
+      await ui.locator('#filter').clear();
+      await popup.getByRole('searchbox', { name: 'Filter tabs' }).clear();
+    }
+  }
+  await article.evaluate(() => {
+    document.title = '<img src=x onerror=alert(1)> Research';
+  });
+  await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect(boardRow.locator('.tab-title')).toHaveText('Research');
+  await host.setViewportSize({ width: 390, height: 850 });
+  await host.evaluate(() => window.fixtureHost.theme('dark'));
+  expect(await ui.locator('body').evaluate((body) => body.scrollWidth <= innerWidth)).toBe(true);
+  await captureWorkspace(host, ui, info.outputPath('readable-board-dark.png'));
+  await boardRow.screenshot({ path: info.outputPath('readable-tab-row.png') });
+  await popup.setViewportSize({ width: 390, height: 850 });
+  await expect(popup.getByRole('checkbox', { name: 'Select Research', exact: true })).toBeVisible();
+  await popup.screenshot({ path: info.outputPath('readable-window-light.png'), fullPage: true });
+  expect(requests).toEqual([]);
+});
+
 test('Window scopes live selection, edits groups directly, preserves pins and offers guarded Undo', async ({
   sandbox,
   fixtureServer,

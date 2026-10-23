@@ -129,6 +129,10 @@ is the MCP view across windows. Both use the same tab rows, checkboxes, group
 headings and selection actions: **Group**, **Move to**, **Summarize**. Show
 window name and tab count before the list; group and move inputs appear only
 when needed. Use hostnames on rows and full URLs in accessible titles.
+Tab labels show readable plain text from markup-like page titles, with the site
+name as a fallback. Keep the original page title and URL in the row's hover text;
+selection labels and search also use the readable title. This is display-only:
+browser titles, saved sources and protocol data retain their original values.
 
 Manual drags and selection actions change Chrome immediately. Never deduplicate
 as a side effect of a manual edit. Provide one contextual **Undo** when the

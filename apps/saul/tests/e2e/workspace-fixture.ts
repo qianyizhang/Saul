@@ -179,7 +179,8 @@ export async function openWorkspace(
   }, html);
   const ui = host.frameLocator('iframe');
   await expect(ui.getByRole('heading', { name: 'Tab board', exact: true })).toBeVisible();
-  await expect(ui.locator('#board')).toContainText('<img src=x onerror=alert(1)> Research');
+  await expect(ui.locator('.tab-title').filter({ hasText: /^Research$/ })).toHaveCount(1);
+  await expect(ui.locator('#board')).not.toContainText('<img src=x onerror=alert(1)>');
   await expect(ui.locator('#board img')).toHaveCount(0);
   return {
     ui,

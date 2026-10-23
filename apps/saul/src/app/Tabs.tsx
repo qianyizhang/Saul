@@ -4,19 +4,9 @@ import { ActiveSummary, openSummary } from './Summaries';
 import { sendWorkspaceMessage } from '../storage/client';
 import { tabLayoutRevision } from '../../native/tab-layout.mts';
 import type { TabEdit, TabSnapshot, TabView } from '../../native/protocol.mts';
+import { tabLabel, tabSite } from '../native/tab-label';
 
 const empty: TabSnapshot = { windows: [], tabs: [], groups: [] };
-const hostname = (url: string) => {
-  try {
-    const u = new URL(url);
-    if (u.protocol === 'chrome-extension:') return 'Extension';
-    if (u.protocol === 'chrome:') return 'Chrome';
-    if (u.protocol === 'about:') return 'Browser page';
-    return u.hostname || 'Local file';
-  } catch {
-    return 'Local tab';
-  }
-};
 type Drag = { ids: number[]; groupId?: number; expected: string };
 export function Tabs() {
   const [snapshot, setSnapshot] = useState(empty);
@@ -89,8 +79,9 @@ export function Tabs() {
   const tabs = snapshot.tabs
     .filter((t) => t.windowId === windowId)
     .sort((a, b) => a.index - b.index);
+  const labels = new Map(tabs.map((tab) => [tab.id, tabLabel(tab.title, tab.url)]));
   const visible = tabs.filter((t) =>
-    (t.title + ' ' + t.url).toLowerCase().includes(filter.toLowerCase()),
+    (labels.get(t.id) + ' ' + t.title + ' ' + t.url).toLowerCase().includes(filter.toLowerCase()),
   );
   const chosen = tabs.filter((t) => selected.includes(t.id));
   const hasPins = chosen.some((t) => t.pinned);
@@ -397,6 +388,7 @@ export function Tabs() {
         }}
       >
         {visible.map((tab, i) => {
+          const label = labels.get(tab.id)!;
           const group = groups.find((g) => g.id === tab.groupId);
           const groupHead = group && visible[i - 1]?.groupId !== group.id;
           return (
@@ -467,7 +459,7 @@ export function Tabs() {
                   title={tab.title + '\n' + tab.url}
                   draggable={!tab.pinned && !busy}
                   tabIndex={0}
-                  aria-label={tab.title}
+                  aria-label={label}
                   onKeyDown={(e) => keyboardMove(e, tab)}
                   onDragStart={(e) => startDrag(e, tab)}
                   onDragOver={(e) => {
@@ -480,15 +472,15 @@ export function Tabs() {
                 >
                   <input
                     type="checkbox"
-                    aria-label={'Select ' + tab.title}
+                    aria-label={'Select ' + label}
                     checked={selected.includes(tab.id)}
                     disabled={busy}
                     onChange={(e) => toggle(tab, (e.nativeEvent as MouseEvent).shiftKey)}
                   />
                   <button className="tab-copy" onClick={(e) => toggle(tab, e.shiftKey)}>
-                    <span className="tab-title">{tab.title || 'Untitled tab'}</span>
+                    <span className="tab-title">{label}</span>
                     <span className="small muted tab-domain">
-                      {hostname(tab.url)}
+                      {tabSite(tab.url)}
                       {tab.pinned ? ' · Pinned' : ''}
                     </span>
                   </button>

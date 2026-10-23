@@ -9,6 +9,7 @@ import {
   type ProjectedWindow,
 } from '../workspace-contract.mts';
 import { isRecord } from '../value.mts';
+import { tabLabel, tabSite } from '../../src/native/tab-label.ts';
 type BoardWindow = ProjectedWindow;
 type DraftWindow = Omit<BoardWindow, 'id'> & { id?: string | number };
 type DisplayProposal = Pick<
@@ -155,16 +156,6 @@ function element<K extends keyof HTMLElementTagNameMap>(
   if (className) node.className = className;
   if (text !== undefined) node.textContent = String(text);
   return node;
-}
-function domain(url: string) {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol === 'chrome-extension:') return 'Extension';
-    if (parsed.protocol === 'chrome:') return 'Chrome';
-    return parsed.hostname || parsed.protocol;
-  } catch {
-    return 'Local tab';
-  }
 }
 function receive(result: CallToolResult, sequence?: number) {
   if (result?.isError)
@@ -984,7 +975,7 @@ function renderProposal(
         element(
           'li',
           '',
-          `Close “${tab?.title || duplicate.url}”; keep “${keeper?.title || duplicate.url}” (tab ${duplicate.keepTabId}).`,
+          `Close “${tabLabel(tab?.title || '', duplicate.url)}”; keep “${tabLabel(keeper?.title || '', duplicate.url)}” (tab ${duplicate.keepTabId}).`,
         ),
       );
     }
@@ -1122,7 +1113,8 @@ function render() {
       const tabs = w.tabIds
         .map((id) => tabMap.get(id))
         .filter((value) => value != null)
-        .filter((t) => `${t.title} ${t.url}`.toLowerCase().includes(filter));
+        .map((t) => ({ ...t, label: tabLabel(t.title, t.url) }))
+        .filter((t) => `${t.label} ${t.title} ${t.url}`.toLowerCase().includes(filter));
       if (!tabs.length && filter) return null;
       const signature = JSON.stringify([
         w.title,
@@ -1199,9 +1191,9 @@ function render() {
         item.draggable = false;
         item.dataset.movable = String(Boolean(editable && !tab.pinned));
         if (!tab.pinned && editable) pointerSource(item, tab.id);
-        const name = domain(tab.url);
+        const name = tabSite(tab.url);
         const text = element('div');
-        const title = element('div', 'tab-title', tab.title || 'Untitled tab');
+        const title = element('div', 'tab-title', tab.label);
         const group = source.groups.find((g) => g.id === tab.groupId);
         text.append(
           title,
@@ -1225,7 +1217,7 @@ function render() {
         check.type = 'checkbox';
         check.checked = selection.has(tab.id);
         check.disabled = busy;
-        check.setAttribute('aria-label', 'Select ' + (tab.title || 'Untitled tab'));
+        check.setAttribute('aria-label', 'Select ' + tab.label);
         check.dataset.focusKey = 'select-' + tab.id;
         check.onclick = (event) => {
           const previous = tabs.findIndex((t) => t.id === selectedTab),

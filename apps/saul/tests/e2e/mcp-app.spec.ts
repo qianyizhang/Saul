@@ -92,10 +92,7 @@ test('the delivered board works in an opaque CSP frame and tears down without re
       }
     }),
   ).toBe(true);
-  await ui
-    .locator('.tab')
-    .filter({ hasText: '<img src=x onerror=alert(1)> Research' })
-    .dragTo(ui.locator('.window-end'));
+  await ui.locator('.tab').filter({ hasText: 'Research' }).dragTo(ui.locator('.window-end'));
   await expect(ui.getByRole('button', { name: 'Undo', exact: true })).toBeVisible();
   await ui.getByRole('button', { name: 'Rename window: Window 1', exact: true }).click();
   const title = ui.getByRole('textbox', { name: 'Window label', exact: true });
@@ -210,11 +207,7 @@ test('MCP App renders real tabs, sends a Codex request and applies only after it
   expect(messages[0]).toMatchObject({ content: [{ type: 'text', text: 'hi' }] });
   await expect(ui.locator('#request')).toHaveValue('');
   await expect(ui.locator('#composer > summary')).toBeFocused();
-  await ui
-    .locator('.tab')
-    .filter({ hasText: '<img src=x onerror=alert(1)> Research' })
-    .getByRole('checkbox')
-    .check();
+  await ui.locator('.tab').filter({ hasText: 'Research' }).getByRole('checkbox').check();
   const attached = (await call('saul_tabs_list')) as TabSnapshot;
   await ui.locator('#composer > summary').click();
   await ui.getByLabel('Attach browser selection').check();
