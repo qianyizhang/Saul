@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures.ts';
 import type { Page } from '@playwright/test';
-import type { ToolArgs, ToolName, ToolResults } from '../../native/protocol.mjs';
+import type { ToolArgs, ToolName, ToolResults } from '../../native/protocol.mts';
 
 test.use({ browserToolsFixtures: true });
 

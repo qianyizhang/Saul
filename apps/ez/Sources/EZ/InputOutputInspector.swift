@@ -11,7 +11,11 @@ struct InputOutputInspector: View {
                 Text(entry.status.capitalized)
                     .font(AppStyle.caption).foregroundStyle(.secondary)
                 Text(
-                    "Saved text for this lookup. Input fields are included in the assembled prompt."
+                    entry.status == "unsaved"
+                        ? "This answer has not been saved. Input fields are included in the assembled prompt."
+                        : entry.status == "pending"
+                            ? "Text for this running lookup. Input fields are included in the assembled prompt."
+                            : "Saved text for this lookup. Input fields are included in the assembled prompt."
                 )
                 .font(AppStyle.caption).foregroundStyle(.secondary)
                 if let error = entry.error {

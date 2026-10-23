@@ -4,9 +4,9 @@ import {
   type TabSnapshot,
   type ToolArgs,
   type ToolResults,
-} from '../../native/protocol.mjs';
+} from '../../native/protocol.mts';
 import { record } from '../contracts/reading';
-export type { TabSnapshot } from '../../native/protocol.mjs';
+export type { TabSnapshot } from '../../native/protocol.mts';
 export type WorkspaceCommandTool =
   | 'saul_tabs_edit'
   | 'saul_tabs_undo'

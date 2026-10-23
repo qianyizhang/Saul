@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "completed-and-saved",
+      "text": "Retained answer",
+      "providerOutcome": "complete",
+      "initialSaveFails": false,
+      "finalSaveFails": false,
+      "expected": { "providerCalls": 1, "hasOutput": true, "savedSuccess": true }
+    },
+    {
+      "id": "initial-save-blocks-execution",
+      "text": "Retained answer",
+      "providerOutcome": "complete",
+      "initialSaveFails": true,
+      "finalSaveFails": false,
+      "expected": { "providerCalls": 0, "hasOutput": false, "savedSuccess": false }
+    },
+    {
+      "id": "final-save-blocks-saved-success",
+      "text": "Retained answer",
+      "providerOutcome": "complete",
+      "initialSaveFails": false,
+      "finalSaveFails": true,
+      "expected": { "providerCalls": 1, "hasOutput": true, "savedSuccess": false }
+    },
+    {
+      "id": "provider-error-retains-partial-output",
+      "text": "Retained answer",
+      "providerOutcome": "error",
+      "initialSaveFails": false,
+      "finalSaveFails": false,
+      "expected": { "providerCalls": 1, "hasOutput": true, "savedSuccess": false }
+    },
+    {
+      "id": "missing-completion-is-not-success",
+      "text": "Retained answer",
+      "providerOutcome": "eof",
+      "initialSaveFails": false,
+      "finalSaveFails": false,
+      "expected": { "providerCalls": 1, "hasOutput": true, "savedSuccess": false }
+    },
+    {
+      "id": "stop-retains-partial-output",
+      "text": "Retained answer",
+      "providerOutcome": "cancel",
+      "initialSaveFails": false,
+      "finalSaveFails": false,
+      "expected": { "providerCalls": 1, "hasOutput": true, "savedSuccess": false }
+    }
+  ]
+}

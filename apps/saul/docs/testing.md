@@ -60,6 +60,14 @@ Concurrent suites must use distinct `SAUL_TEST_RUN=<scope>` values. This isolate
 
 The browser harness is in `tests/e2e/support.ts` and `tests/e2e/fixtures.ts`. A sandbox snapshots the extension once and reuses the same profile across relaunches so restart tests prove persistence. Test-only database, marker and browser-tool fixtures are explicitly enabled and bundled only into disposable snapshots.
 
+The board fixture renders the server-delivered document in an opaque frame under
+CSP, using the SDK AppBridge as its host. For wide pointer journeys, call
+`matchWorkspaceWindow(host)` after creating fixture tabs/windows and before the
+next interaction. Chrome can reset native window bounds to the context default
+while leaving the emulated viewport larger; screenshots then look correct but
+pointer events miss the child frame. The helper matches native bounds without
+changing app controls, CSP, or sandbox permissions.
+
 ## Artifacts and debugging
 
 Playwright writes to root `.artifacts/saul/e2e/<run>/` (`results/` and `report/`);
@@ -135,3 +143,17 @@ SAUL_LIVE_CHATGPT_HOST="$HOME/.saul/bin/saul-chatgpt-host" pnpm exec playwright 
 ```
 
 This consumes ChatGPT plan quota using the helper’s existing saved sign-in. The normal suite skips it. It uses the standard disposable browser harness, registers the installed host only inside that temporary profile, opens three public articles, clicks the actual batch UI, verifies generation and English–Chinese export, and reopens saved results. No native transport or model output is mocked, and no personal browser profile or credential copy is used. Artifacts include the exported HTML, screenshots, and a result record with the local account identifier redacted. This proves the built bundle and installed helper together; it does not operate the user’s personal Chrome window.
+
+## TypeScript and delivered helper checks
+
+`pnpm typecheck` checks the extension, Node helpers, browser board, JXA, tooling,
+unit tests and browser fixtures in their own compiler contexts. It prepares the
+emitted runtime needed by delivery tests. `pnpm test` also builds that runtime.
+Use `pnpm saul`, `pnpm mcp` and `pnpm native:install` for development entry points;
+they build first. Installed launchers keep their existing paths and need only Node.
+Direct tooling commands now use `.mts`, for example `node scripts/verify-connection.mts`.
+
+Subprocess and installation tests exercise `.build/native/*.mjs`, complete adjacent
+assets, retained generations and the emitted JXA script. Pure unit tests import
+source. The source/output decision is recorded once in the
+[root architecture](../../../docs/architecture.md#typescript-maintenance).

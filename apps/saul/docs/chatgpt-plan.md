@@ -9,10 +9,10 @@ Saul supports the direct **Sign in with ChatGPT** preview for local and open-sou
 3. Expand **ChatGPT helper setup** and run its command from the checkout:
 
    ```sh
-   node native/install.mjs --chatgpt --extension-id YOUR_32_LETTER_EXTENSION_ID
+   pnpm native:install --chatgpt --extension-id YOUR_32_LETTER_EXTENSION_ID
    ```
 
-   This registers `com.saul.chatgpt` for the exact extension ID and copies the helper and its JWT verifier dependency into `~/.saul/bridge`. The launcher records the current Node path and any HTTP/HTTPS proxy and bypass settings from the installing shell, then enables Node's environment proxy support. This keeps auth, signing-key retrieval, and inference on the same route when Chrome launches the helper without your shell environment. Rerun after updating Saul, moving Node, or changing your proxy. The launcher is private (`0700`); do not share it if your proxy URL contains credentials. The existing installer's `--browser`, `--install-dir`, `--manifest-dir`, and `--dry-run` options also apply.
+   This registers `com.saul.chatgpt` for the exact extension ID and stages the helper and its JWT verifier dependency in a complete versioned runtime. The stable `~/.saul/bridge` entry selects the generation for new connections; running helpers retain their original payload. The first upgrade from the flat layout requires the explicit [disconnected maintenance window](../../../docs/setup.md#one-time-helper-migration). The launcher records the current Node path and any HTTP/HTTPS proxy and bypass settings from the installing shell, then enables Node's environment proxy support. This keeps auth, signing-key retrieval, and inference on the same route when Chrome launches the helper without your shell environment. Rerun after updating Saul, moving Node, or changing your proxy. The launcher is private (`0700`); do not share it if your proxy URL contains credentials. The existing installer's `--browser`, `--install-dir`, `--manifest-dir`, and `--dry-run` options also apply.
 
 4. Choose **Continue with ChatGPT** and complete consent in the opened browser tab. The helper listens only on `127.0.0.1`, with a temporary port and `/auth/callback` path. Sign-in survives the popup closing; reopen Settings to choose the saved account afterward.
 5. Return to Settings. A sole saved account is selected automatically, and eligible accounts load their models automatically. Name the preset, choose an available model, effort and speed, then **Save**. **Refresh models** retries catalog loading. **Test generation** sends a small prompt and consumes plan quota. A model catalog entry alone does not prove inference access.
@@ -51,7 +51,7 @@ validates the model's capabilities again before inference.
 
 The plan helper does not expose a general HTTP proxy, shell tool, MCP server, or tab operations. Replies are validated against the requested operation. Its extension port accepts account controls only from Saul's settings/workspace pages and generation from those pages or the trusted offscreen runner. Codex tab access remains separately opt-in.
 
-To remove this integration, sign out, close/reload Saul to stop its native connection, and remove `com.saul.chatgpt.json` from the browser's `NativeMessagingHosts` directory and `~/.saul/bin/saul-chatgpt-host`. Remove `~/.saul/chatgpt` only if you also want to discard the saved host/account mappings. Keep the shared `bridge` directory if you use Codex tab access.
+To remove this integration, sign out, disconnect its native connection, and remove `com.saul.chatgpt.json` from the browser's `NativeMessagingHosts` directory. Retain its versioned payload; do not delete individual files through `bin` or `bridge`. Remove `~/.saul/chatgpt` only if you also want to discard the saved host/account mappings. Full runtime cleanup requires both helpers and MCP to be disconnected; see the [helper lifecycle](native-messaging.md).
 
 ## Verification and limits
 
@@ -105,7 +105,7 @@ Realtime sessions, and private ChatGPT backend routes were not tested.
 To repeat explicitly (uses live plan allowance), run from `apps/saul` with Node 24:
 
 ```sh
-node --use-env-proxy scripts/probe-capabilities.mjs
+node --use-env-proxy scripts/probe-capabilities.mts
 ```
 
 The probe requires exactly one signed-in, plan-enabled Saul account, uses the

@@ -1,7 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { handleTabCall, sortBlocks } from '../src/native/tabs';
-import { validateCall } from '../native/protocol.mjs';
-import type { TabSnapshot } from '../native/protocol.mjs';
+import { validateCall } from '../native/protocol.mts';
+import type { TabSnapshot } from '../native/protocol.mts';
 
 const tab = (id: number, index: number, title: string, extra = {}) =>
   ({

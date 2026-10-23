@@ -1,7 +1,12 @@
 import { snapshotSelection, captureTab } from '../src/digest/capture';
 import { validateDigest } from '../src/digest/contracts';
 import { initPlanBridge } from '../src/native/plan';
-import { getSettings, initStorageSecurity, SETTINGS_STORAGE_KEY } from '../src/storage/settings';
+import {
+  createSettingsOwner,
+  getSettings,
+  initStorageSecurity,
+  SETTINGS_STORAGE_KEY,
+} from '../src/storage/settings';
 import {
   getErrorNotificationsMuted,
   setErrorNotificationsMuted,
@@ -181,6 +186,7 @@ async function openSource(selectionId: string) {
   await deliverSource(tab.id);
 }
 export default defineBackground(() => {
+  const settings = createSettingsOwner();
   initStorageSecurity();
   initNativeBridge();
   initPlanBridge();
@@ -261,6 +267,7 @@ export default defineBackground(() => {
         'saul-digest-capture',
         'saul-reading',
         'saul-workspace',
+        'saul-settings',
         'saul-events',
         'saul-open-source',
         'saul-source-ready',
@@ -307,6 +314,7 @@ export default defineBackground(() => {
         return reading(request.message, sender);
       }
       if (!workspaceSender(sender)) throw new Error('Extension workspace only');
+      if (request.target === 'saul-settings') return settings(request.message);
       if (request.target === 'saul-digest') {
         validateDigest(request.message);
         const r = request.message;

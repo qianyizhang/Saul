@@ -51,6 +51,11 @@ Toolchain builds and caches stay in their conventional locations:
 workflow; an installed app may depend on a particular bundle path. Empty cache
 directories alone are not evidence that the cache is obsolete.
 
+`apps/saul/.build/native/` is the ignored, generated helper runtime tree.
+`pnpm --dir apps/saul build:board` bundles the board and its pinned MCP Apps SDK;
+the native installer stages that complete asset with the board HTML and styles.
+The source MCP server and installed server deliver the same document format.
+
 The root `.output/chrome-mv3` is still the loaded extension path and must remain
 until an explicit identity/data-preserving upgrade. Never include it, native
 `apps/ez/.local/signing-identity`, Keychain state, installed helper directories or

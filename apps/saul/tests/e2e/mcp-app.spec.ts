@@ -1,10 +1,49 @@
 import { test, expect } from './fixtures.ts';
-import { revision } from '../../native/workspace.mjs';
-import type { TabSnapshot } from '../../native/protocol.mjs';
+import { revision } from '../../native/workspace.mts';
+import type { TabSnapshot } from '../../native/protocol.mts';
 
 test.use({ browserToolsFixtures: true });
 
-import { openWorkspace, captureWorkspace } from './workspace-fixture.ts';
+import { openWorkspace, captureWorkspace, matchWorkspaceWindow } from './workspace-fixture.ts';
+
+test('the delivered board works in an opaque CSP frame and tears down without replaying pending work', async ({
+  sandbox,
+  fixtureServer,
+}) => {
+  const { host, ui, workspaceCalls } = await openWorkspace(sandbox, fixtureServer, 500);
+  expect(await host.locator('iframe').getAttribute('sandbox')).toBe('allow-scripts');
+  expect(await ui.locator('html').evaluate(() => window.origin)).toBe('null');
+  expect(
+    await ui.locator('html').evaluate(() => {
+      try {
+        localStorage.getItem('fixture');
+        return false;
+      } catch {
+        return true;
+      }
+    }),
+  ).toBe(true);
+  await ui
+    .locator('.tab')
+    .filter({ hasText: '<img src=x onerror=alert(1)> Research' })
+    .dragTo(ui.locator('.window-end'));
+  await expect(ui.getByRole('button', { name: 'Undo', exact: true })).toBeVisible();
+  await ui.getByRole('button', { name: 'Rename window: Window 1', exact: true }).click();
+  const title = ui.getByRole('textbox', { name: 'Window label', exact: true });
+  await title.fill('Retained draft');
+  await title.press('Enter');
+  await expect
+    .poll(() => workspaceCalls.filter((name) => name === 'saul_workspace_propose').length)
+    .toBe(1);
+  await host.evaluate(() => window.fixtureHost.teardown());
+  await expect(ui.locator('#refresh')).toBeDisabled();
+  await expect(ui.locator('#ask')).toBeDisabled();
+  await expect(ui.locator('#undo')).toBeDisabled();
+  await expect(ui.locator('#active-summary')).toBeDisabled();
+  await expect(ui.locator('#status')).toContainText(/closed|lost/);
+  await expect(ui.getByRole('heading', { name: 'Retained draft', exact: true })).toBeVisible();
+  expect(workspaceCalls.filter((name) => name === 'saul_workspace_propose')).toHaveLength(1);
+});
 
 test('macOS native Chrome names import initially and apply through the reviewed board', async ({
   sandbox,
@@ -118,16 +157,7 @@ test('MCP App renders real tabs, sends a Codex request and applies only after it
       { title: 'Research & reading', tabIds: chosen },
     ],
   });
-  await host.evaluate(
-    (result) =>
-      document
-        .querySelector('iframe')!
-        .contentWindow!.postMessage(
-          { jsonrpc: '2.0', method: 'ui/notifications/tool-result', params: result },
-          '*',
-        ),
-    plan,
-  );
+  await host.evaluate((result) => window.fixtureHost.result({ ...result }), plan);
   await expect(ui.locator('#apply')).toBeEnabled();
   await expect(ui.getByRole('heading', { name: 'Research & reading' })).toBeVisible();
   await ui.getByRole('button', { name: 'Rename window: Research & reading', exact: true }).click();
@@ -222,16 +252,7 @@ test('shared window labels load initially and duplicate removals stay editable u
   expect(await ui.locator('body').evaluate((body) => body.scrollWidth <= innerWidth)).toBe(true);
   await captureWorkspace(host, ui, info.outputPath('duplicate-mobile.png'));
   await host.setViewportSize({ width: 1100, height: 900 });
-  await host.evaluate(() =>
-    document.querySelector('iframe')!.contentWindow!.postMessage(
-      {
-        jsonrpc: '2.0',
-        method: 'ui/notifications/host-context-changed',
-        params: { theme: 'dark' },
-      },
-      '*',
-    ),
-  );
+  await host.evaluate(() => window.fixtureHost.theme('dark'));
   await captureWorkspace(host, ui, info.outputPath('duplicate-dark.png'));
   await ui.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(ui.locator('.proposal-summary')).toContainText('Applied');
@@ -266,6 +287,7 @@ test('drag feedback follows the pointer, scrolls while held and commits manual m
     return (await chrome.windows.create({ url: `${origin}/article#destination`, focused: false }))!
       .id!;
   }, fixtureServer.origin);
+  await matchWorkspaceWindow(host);
   await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
   await expect(ui.locator(`.window[data-window-id="${destinationId}"]`)).toBeVisible();
   const before = (await call('saul_tabs_list')) as TabSnapshot;
@@ -380,29 +402,22 @@ test('compact board keeps tab controls discoverable and cancels rename and move 
   await expect(minimumMode).toBeChecked();
   await minimumMode.uncheck();
   await expect(ui.locator('.help.guidance')).toBeVisible();
-  // Reopening the embedded view restores presentation without changing Chrome.
+  // Opaque host frames cannot retain localStorage; the view discloses that limit.
+  await expect(ui.locator('#preference-error')).toContainText('could not be saved');
+  await host.evaluate(() => window.fixtureHost.connect());
   await host.locator('iframe').evaluate((frame) => {
     const iframe = frame as HTMLIFrameElement;
     const markup = iframe.srcdoc;
     iframe.srcdoc = markup;
   });
-  await expect(ui.locator('html')).toHaveAttribute('data-minimum', 'false');
+  await expect(ui.locator('html')).toHaveAttribute('data-minimum', 'true');
   await expect(ui.locator('.window')).toHaveCount(3);
   expect(revision((await call('saul_tabs_list')) as TabSnapshot)).toBe(revision(before));
   await ui.getByText('View options', { exact: true }).click();
   await minimumMode.check();
   await ui.getByText('View options', { exact: true }).click();
   await captureWorkspace(host, ui, info.outputPath('board-light.png'));
-  await host.evaluate(() =>
-    document.querySelector('iframe')!.contentWindow!.postMessage(
-      {
-        jsonrpc: '2.0',
-        method: 'ui/notifications/host-context-changed',
-        params: { theme: 'dark' },
-      },
-      '*',
-    ),
-  );
+  await host.evaluate(() => window.fixtureHost.theme('dark'));
   await expect(ui.locator('html')).toHaveAttribute('data-theme', 'dark');
   await captureWorkspace(host, ui, info.outputPath('board-dark.png'));
   await ui.locator('#composer > summary').focus();

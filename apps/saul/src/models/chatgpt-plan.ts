@@ -5,7 +5,7 @@ import {
   type PlanEvent,
   type PlanControlRequest,
   type PlanResult,
-} from '../../native/plan-protocol.mjs';
+} from '../../native/plan-protocol.mts';
 import { IncompleteGeneration } from './events';
 
 export async function* planEvents(

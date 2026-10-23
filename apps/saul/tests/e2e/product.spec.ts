@@ -203,8 +203,8 @@ test('empty model output stays a failed attempt without a completed answer', asy
 test('unreadable settings show an error instead of an editable default profile', async ({
   sandbox,
 }) => {
-  const { popup } = await sandbox.launch();
-  await popup.evaluate(() => {
+  const { popup, worker } = await sandbox.launch();
+  await worker.evaluate(() => {
     chrome.storage.local.get = async () => {
       throw new Error('Storage unavailable');
     };
@@ -369,7 +369,7 @@ test('save locks the draft; provider tests lock only provider settings and remai
 }) => {
   const server = await createFixtureServer('Test response.', { gated: true });
   try {
-    const { popup } = await sandbox.launch();
+    const { popup, worker } = await sandbox.launch();
     await configureFixtureProvider(popup, server.origin);
     await popup.getByRole('button', { name: 'Settings', exact: true }).click();
     await popup.getByRole('button', { name: 'Test generation', exact: true }).click();
@@ -379,7 +379,7 @@ test('save locks the draft; provider tests lock only provider settings and remai
     await popup.getByRole('button', { name: 'Stop test', exact: true }).click();
     await expect(popup.getByLabel('Profile name', { exact: true })).toBeEnabled();
     // Hold the actual storage write so the save boundary can be observed reliably.
-    await popup.evaluate(() => {
+    await worker.evaluate(() => {
       const original = chrome.storage.local.set.bind(chrome.storage.local) as (
         items: object,
       ) => Promise<void>;
@@ -394,7 +394,7 @@ test('save locks the draft; provider tests lock only provider settings and remai
     await popup.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(popup.getByLabel('Profile name', { exact: true })).toBeDisabled();
     await expect(popup.getByLabel('Response language', { exact: true })).toBeDisabled();
-    await popup.evaluate(() =>
+    await worker.evaluate(() =>
       (
         globalThis as typeof globalThis & { finishSettingsSave?: () => void }
       ).finishSettingsSave?.(),

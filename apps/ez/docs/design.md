@@ -72,6 +72,13 @@ current state's minimum size. Fixture streaming is simulated. All three preview
 targets use `scripts/preview.sh`, which stages and verifies each bundle before replacement.
 The [surface contract](surfaces.md) governs which controls belong in each surface.
 
+For failure recovery, launch the same surface preview with `--unsaved-attempt`.
+This explicit mode uses a synthetic provider, fails its first terminal save and
+allows Save again against disposable history. It does not connect to an account
+or the network. Ordinary preview mode still blocks Send. Inspect the Unsaved
+notice in the main window and Quick Lookup, including its Save error disclosure,
+Copy/Export access, successful Save again and retained draft after navigation.
+
 The initial adoption also makes answer metadata and composer hints readable at the
 shared caption size. Quick Lookup uses the shared accent and a compact recipe-first
 layout. The answer boundary shows a yellow light while waiting and transitions to

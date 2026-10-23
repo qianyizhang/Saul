@@ -185,6 +185,7 @@ struct ContentView: View {
                     Text(entry.createdAt, style: .time).font(.caption).foregroundStyle(.secondary)
                 }
             }
+            UnsavedAttemptNotice(model: model, entry: entry)
             LookupAnswerText(entry: entry, activity: model.selectedResponseActivity)
             if entry.status != "pending" {
                 HStack {
@@ -205,7 +206,7 @@ struct ContentView: View {
                         Label("More", systemImage: "ellipsis")
                     }.menuStyle(.borderlessButton).fixedSize()
                     Spacer()
-                    if entry.status != "completed" {
+                    if entry.status != "completed" && entry.status != "unsaved" {
                         Text(entry.status.capitalized).font(.caption).foregroundStyle(.orange)
                     }
                 }.buttonStyle(.borderless).font(.caption)

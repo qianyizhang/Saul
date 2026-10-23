@@ -5,18 +5,53 @@ import SwiftUI
 @main struct EZSurfacePreview: App {
     @StateObject private var model: AppModel
     private let controller: QuickLookupController
+    private let syntheticAttempt: Bool
 
     init() {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ez-surface-preview-\(UUID())", isDirectory: true)
-        let model = AppModel(historyDirectory: directory, offline: true)
+        syntheticAttempt = CommandLine.arguments.contains("--unsaved-attempt")
+        let execution: AttemptExecution?
+        if syntheticAttempt {
+            let history = try? HistoryStore(directory: directory)
+            var failedTerminal = false
+            execution = AttemptExecution(
+                accessToken: { "offline-preview-token" },
+                stream: { _, _, update in
+                    var result = ResponseAccumulator()
+                    try result.consume(
+                        JSONSerialization.data(withJSONObject: [
+                            "type": "response.output_text.delta",
+                            "delta":
+                                "**Serendipity** means finding something valuable or pleasant by chance.\n\nThis synthetic answer exercises recovery without network or account access.",
+                        ]))
+                    try result.consume(
+                        JSONSerialization.data(withJSONObject: [
+                            "type": "response.completed", "response": ["status": "completed"],
+                        ]))
+                    update(result)
+                    return result
+                },
+                append: { entry in
+                    guard let history else { throw EZError("Preview history is unavailable.") }
+                    if entry.status != "pending", !failedTerminal {
+                        failedTerminal = true
+                        throw EZError(
+                            "Synthetic final-save failure. Save again will use disposable local history.")
+                    }
+                    try history.append(entry)
+                })
+        } else {
+            execution = nil
+        }
+        let model = AppModel(historyDirectory: directory, offline: true, attemptExecution: execution)
         _model = StateObject(wrappedValue: model)
         controller = QuickLookupController(model: model)
     }
 
     var body: some Scene {
         Window("EZ Surface Preview", id: "main") {
-            SurfacePreviewControls(model: model, controller: controller)
+            SurfacePreviewControls(model: model, controller: controller, syntheticAttempt: syntheticAttempt)
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification))
             { _ in
                 controller.shutdown()
@@ -30,9 +65,16 @@ import SwiftUI
 private struct SurfacePreviewControls: View {
     @ObservedObject var model: AppModel
     @ObservedObject var controller: QuickLookupController
+    let syntheticAttempt: Bool
     @State private var scenario = "Empty"
     @State private var dark = false
     @State private var reduceMotion = false
+    init(model: AppModel, controller: QuickLookupController, syntheticAttempt: Bool) {
+        self.model = model
+        self.controller = controller
+        self.syntheticAttempt = syntheticAttempt
+        _scenario = State(initialValue: syntheticAttempt ? "Unsaved" : "Empty")
+    }
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -43,7 +85,7 @@ private struct SurfacePreviewControls: View {
                             "Thinking",
                             "Streaming", "Blocked", "Prose corrections",
                             "No recipes", "Selector hitboxes", "Long metadata", "Legacy answer",
-                        ], id: \.self
+                        ] + (syntheticAttempt ? ["Unsaved"] : []), id: \.self
                     ) {
                         Text($0)
                     }
@@ -61,8 +103,12 @@ private struct SurfacePreviewControls: View {
                 Toggle("Minimum Mode", isOn: $model.minimumMode)
                 Toggle("Reduce motion (main preview)", isOn: $reduceMotion)
             }.toggleStyle(.checkbox).font(.caption).padding(.bottom, 6)
-            Text("Disposable offline data · Send and account actions are blocked")
-                .font(.caption).foregroundStyle(.secondary).padding(.bottom, 8)
+            Text(
+                syntheticAttempt
+                    ? "Disposable synthetic requests · No account or network access"
+                    : "Disposable offline data · Send and account actions are blocked"
+            )
+            .font(.caption).foregroundStyle(.secondary).padding(.bottom, 8)
             Divider()
             ContentView(model: model)
                 .environment(\.thinkingLightMotionDisabled, reduceMotion)
@@ -196,6 +242,10 @@ private struct SurfacePreviewControls: View {
             model.error =
                 "The selected preset is unavailable. Open Configuration to choose a supported model."
             model.storageWarning = "Answer could not be saved. Copy it before quitting."
+        }
+        if scenario == "Unsaved" {
+            model.query = "Serendipity"
+            model.send()
         }
     }
 }

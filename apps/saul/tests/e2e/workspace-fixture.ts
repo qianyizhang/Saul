@@ -1,14 +1,66 @@
+import type { ToolName, ToolArgs } from '../../native/protocol.mts';
+import { validateToolResult } from '../../native/results.mts';
 import { expect } from './fixtures.ts';
 import type { FrameLocator, Page } from '@playwright/test';
-import { readFile } from 'node:fs/promises';
-import { createWorkspace } from '../../native/workspace.mjs';
+import { execFileSync } from 'node:child_process';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
+import { BOARD_URI } from '../../.build/native/board-resource.mjs';
+import { createWorkspace } from '../../native/workspace.mts';
 import {
   createWindowNames,
   withWindowNames,
   type WindowNames,
-} from '../../native/window-names.mjs';
-import type { TabSnapshot } from '../../native/protocol.mjs';
+} from '../../native/window-names.mts';
+import type { TabSnapshot } from '../../native/protocol.mts';
 import type { ExtensionSandbox, FixtureServer } from './support.ts';
+
+const hostBundle = build({
+  entryPoints: [fileURLToPath(new URL('./mcp-host.ts', import.meta.url))],
+  bundle: true,
+  write: false,
+  format: 'iife',
+  platform: 'browser',
+  target: 'es2022',
+  logLevel: 'silent',
+}).then((result) => result.outputFiles[0]!.text);
+
+function deliveredBoard() {
+  const output = execFileSync(process.execPath, [resolve('.build/native/mcp.mjs')], {
+    input:
+      JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'resources/read',
+        params: { uri: BOARD_URI },
+      }) + '\n',
+    encoding: 'utf8',
+    maxBuffer: 4 * 1024 * 1024,
+    timeout: 10000,
+  });
+  const reply = JSON.parse(output);
+  if (reply.error) throw new Error(reply.error.message);
+  return reply.result.contents[0].text as string;
+}
+
+export async function matchWorkspaceWindow(host: Page) {
+  // Attaching fixture tabs can reset the native window to the context's default
+  // size. Opaque frames then miss real input outside that smaller hit-test area,
+  // even though screenshots use the page's larger emulated viewport.
+  const viewport = host.viewportSize();
+  if (!viewport) throw new Error('Workspace input requires a fixed test viewport.');
+  const session = await host.context().newCDPSession(host);
+  try {
+    const { windowId } = await session.send('Browser.getWindowForTarget');
+    await session.send('Browser.setWindowBounds', {
+      windowId,
+      bounds: { left: 0, top: 0, ...viewport },
+    });
+  } finally {
+    await session.detach();
+  }
+}
 
 export async function captureWorkspace(host: Page, ui: FrameLocator, path: string) {
   // Expand the fixture frame for an uncropped capture; do not alter app styles or controls.
@@ -45,7 +97,10 @@ export async function openWorkspace(
   const host = await context.newPage();
   const session = 'a'.repeat(16);
   const rawCall = async (name: string, args: Record<string, unknown> = {}) => {
-    if (name === 'saul_sessions') return { sessions: [{ session, extensionId: 'b'.repeat(32) }] };
+    if (name === 'saul_sessions')
+      return {
+        sessions: [{ session, extensionId: 'b'.repeat(32), pid: 1, connectedAt: 'fixture' }],
+      };
     const params = { ...args };
     delete params.session;
     return popup.evaluate(
@@ -88,11 +143,16 @@ export async function openWorkspace(
     ]);
   }
   const decorated = names ? withWindowNames(rawCall, names) : rawCall;
-  const call = (name: string, args: Record<string, unknown> = {}) =>
-    name === 'saul_sessions' ? rawCall(name, args) : decorated(name, args);
+  const call = async <K extends ToolName>(name: K, args?: ToolArgs[K]) =>
+    validateToolResult(
+      name,
+      await (name === 'saul_sessions' ? rawCall(name, { ...args }) : decorated(name, { ...args })),
+    );
   const workspace = createWorkspace({ call });
   const messages: unknown[] = [];
+  const workspaceCalls: string[] = [];
   await host.exposeFunction('workspaceCall', async (name: string, args: unknown) => {
+    workspaceCalls.push(name);
     if (name === 'saul_workspace_propose' && proposalDelay)
       await new Promise((resolve) => setTimeout(resolve, proposalDelay));
     return workspace(name, args);
@@ -100,61 +160,23 @@ export async function openWorkspace(
   await host.exposeFunction('recordMessage', (message: unknown) => {
     messages.push(message);
   });
-  const html = (await readFile('native/ui/workspace.html', 'utf8'))
-    .replace('/* SAUL_STYLE */', () => '')
-    .replace('/* SAUL_SCRIPT */', () => '');
-  const css =
-    (await readFile('native/ui/design-tokens.css', 'utf8')) +
-    '\n' +
-    (await readFile('native/ui/workspace.css', 'utf8'));
-  const js = await readFile('native/ui/workspace.js', 'utf8');
+  const html = deliveredBoard();
   await host.route('**/saul-app', (route) =>
     route.fulfill({
       contentType: 'text/html',
-      body: '<!doctype html><title>MCP App host fixture</title><iframe title="Saul workspace" style="width:100%;height:900px;border:0"></iframe>',
+      headers: {
+        'Content-Security-Policy':
+          "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; frame-src 'self'",
+      },
+      body: '<!doctype html><title>MCP App host fixture</title><iframe title="Saul workspace" sandbox="allow-scripts" style="width:100%;height:900px;border:0"></iframe>',
     }),
   );
   await host.goto(fixtureServer.origin + '/saul-app');
-  await host.evaluate(() => {
-    const runtime = window as typeof window & {
-      workspaceCall: (name: string, args: unknown) => Promise<unknown>;
-      recordMessage: (message: unknown) => Promise<void>;
-    };
-    window.addEventListener('message', async (event) => {
-      if (event.source !== document.querySelector('iframe')!.contentWindow) return;
-      const message = event.data;
-      if (message.id === undefined) return;
-      let result: unknown = {};
-      try {
-        if (message.method === 'ui/initialize')
-          result = {
-            protocolVersion: '2026-01-26',
-            hostCapabilities: { message: {} },
-            hostContext: { theme: 'light' },
-          };
-        if (message.method === 'tools/call')
-          result = await runtime.workspaceCall(message.params.name, message.params.arguments);
-        if (message.method === 'ui/message') await runtime.recordMessage(message.params);
-        event.source!.postMessage(
-          { jsonrpc: '2.0', id: message.id, result },
-          { targetOrigin: '*' },
-        );
-      } catch (error) {
-        event.source!.postMessage(
-          { jsonrpc: '2.0', id: message.id, error: { message: String(error) } },
-          { targetOrigin: '*' },
-        );
-      }
-    });
-  });
-  await host.locator('iframe').evaluate(
-    (iframe, content) => {
-      (iframe as HTMLIFrameElement).srcdoc = content;
-    },
-    html
-      .replace('</head>', `<style>${css}</style></head>`)
-      .replace('</body>', `<script type="module">${js}</script></body>`),
-  );
+  await host.addScriptTag({ content: await hostBundle });
+  await host.evaluate(() => window.fixtureHost.connect());
+  await host.locator('iframe').evaluate((iframe, content) => {
+    (iframe as HTMLIFrameElement).srcdoc = content;
+  }, html);
   const ui = host.frameLocator('iframe');
   await expect(ui.getByRole('heading', { name: 'Tab board', exact: true })).toBeVisible();
   await expect(ui.locator('#board')).toContainText('<img src=x onerror=alert(1)> Research');
@@ -171,6 +193,7 @@ export async function openWorkspace(
     workspace,
     session,
     messages,
+    workspaceCalls,
     article,
     reader,
   };

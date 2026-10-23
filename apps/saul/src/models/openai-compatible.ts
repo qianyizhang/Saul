@@ -1,4 +1,4 @@
-import { eventData } from '../../native/sse.mjs';
+import { eventData } from '../../native/sse.mts';
 import { IncompleteGeneration, type ModelEvent } from './events';
 export interface OpenAICompatibleConfig {
   baseUrl: string;

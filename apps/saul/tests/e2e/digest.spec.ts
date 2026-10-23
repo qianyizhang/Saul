@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures.ts';
 import { installDigestProvider } from './digest-fixture.ts';
-import type { PlanRequest } from '../../native/plan-protocol.mjs';
+import type { PlanRequest } from '../../native/plan-protocol.mts';
 import type { DigestBatch } from '../../src/digest/types';
 import { readFile } from 'node:fs/promises';
 

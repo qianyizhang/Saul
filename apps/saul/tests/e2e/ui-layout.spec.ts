@@ -39,6 +39,13 @@ test('compact workspace supports reading, tab controls and reachable settings', 
   await connection.focus();
   await popup.keyboard.press('Enter');
   await expect(popup.getByLabel('Codex tab access')).toBeVisible();
+  await popup.getByText('Connect Codex · setup and troubleshooting', { exact: true }).click();
+  await expect(
+    popup
+      .locator('code')
+      .filter({ hasText: 'node scripts/setup.mts --components tabs --extension-id' }),
+  ).toBeVisible();
+  await popup.getByText('Connect Codex · setup and troubleshooting', { exact: true }).click();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(popup.getByLabel('Provider', { exact: true })).toBeVisible();
   const save = popup.getByRole('button', { name: 'Save', exact: true });

@@ -42,15 +42,18 @@ import EZCore
     private let responses = ResponsesClient()
     private var history: HistoryStore?
     private var lock: SessionLock?
-    private var active: HistoryEntry?
-    private var requestTask: Task<Void, Never>?
+    private var attemptExecution: AttemptExecution?
     private var loginTask: Task<Void, Never>?
     private var loaded = false
     private var configurationStore: ConfigurationStore?
     private var configurationLoaded = false
 
-    init(historyDirectory: URL? = nil, offline: Bool = false) {
+    init(
+        historyDirectory: URL? = nil, offline: Bool = false,
+        attemptExecution: AttemptExecution? = nil
+    ) {
         self.offline = offline
+        self.attemptExecution = attemptExecution
         minimumMode = offline ? true : UserDefaults.standard.object(forKey: "minimumMode") as? Bool ?? true
         directory =
             historyDirectory
@@ -60,6 +63,19 @@ import EZCore
             lock = try SessionLock(directory: directory)
             let store = try HistoryStore(directory: directory)
             history = store
+            if !offline, attemptExecution == nil {
+                let auth = self.auth
+                let responses = self.responses
+                self.attemptExecution = AttemptExecution(
+                    accessToken: { [weak self] in
+                        defer { self?.syncAccount() }
+                        return try await auth.accessToken()
+                    },
+                    stream: { entry, token, update in
+                        try await responses.stream(entry: entry, token: token, onUpdate: update)
+                    },
+                    append: { try store.append($0) })
+            }
             let loaded = try store.load()
             entries = loaded.entries
             if loaded.damagedLines > 0 {
@@ -93,6 +109,9 @@ import EZCore
                     "Shortcuts could not be loaded. Using defaults; original file is preserved. \(error.localizedDescription)"
             }
         } catch { storageWarning = error.localizedDescription }
+        self.attemptExecution?.onChange = { [weak self] update in
+            self?.receiveAttempt(update)
+        }
     }
 
     func saveShortcut(_ binding: LookupKeyBinding, for command: LookupCommand) throws {
@@ -201,7 +220,7 @@ import EZCore
     var selectedEntry: HistoryEntry? { entries.first { $0.id == selection } }
     var selectedResponseActivity: ResponseActivity? {
         guard busy, let entry = selectedEntry, entry.status == "pending" else { return nil }
-        if let active, active.id != entry.id { return nil }
+        if let activeID = attemptExecution?.activeID, activeID != entry.id { return nil }
         return responseActivity
     }
     var filteredEntries: [HistoryEntry] {
@@ -213,7 +232,8 @@ import EZCore
             }
     }
     var canSend: Bool {
-        !offline && signedIn && planEnabled && !busy && !launcherPending && !connecting && !signingIn
+        attemptExecution != nil && signedIn && planEnabled && !busy && !launcherPending && !connecting
+            && !signingIn
             && requestIssue == nil && history != nil && lock != nil
     }
     func connect() async {
@@ -395,56 +415,29 @@ import EZCore
         } catch { self.error = error.localizedDescription }
     }
     func send() {
-        guard canSend, let recipe = currentRecipe, let preset = currentPreset, let history else { return }
+        guard canSend, let recipe = currentRecipe, let preset = currentPreset, let attemptExecution else {
+            return
+        }
         error = nil
         let entry: HistoryEntry
         do { entry = try recipe.prepare(values: inputValues, preset: preset, models: models) } catch {
             self.error = error.localizedDescription
             return
         }
-        do { try history.append(entry) } catch {
-            self.error = "Query not sent: history could not be saved. \(error.localizedDescription)"
+        do { try attemptExecution.start(entry) } catch {
+            self.error = error.localizedDescription
             return
         }
-        active = entry
-        entries.insert(entry, at: 0)
         selection = entry.id
-        responseActivity = .waiting
-        busy = true
-        requestTask = Task {
-            do {
-                let token = try await auth.accessToken()
-                try Task.checkCancellation()
-                let result = try await responses.stream(entry: entry, token: token) { progress in
-                    guard self.active?.id == entry.id else { return }
-                    self.active?.response = progress.text
-                    self.active?.metrics = progress.metrics
-                    self.responseActivity = progress.activity
-                    if let active = self.active,
-                        let index = self.entries.firstIndex(where: { $0.id == active.id })
-                    {
-                        self.entries[index] = active
-                    }
-                }
-                if active?.id == entry.id {
-                    active?.actualServiceTier = result.actualServiceTier
-                    finish(status: "completed")
-                }
-            } catch is CancellationError { if active?.id == entry.id { finish(status: "interrupted") } } catch
-            {
-                if active?.id == entry.id {
-                    let cancelled = (error as? URLError)?.code == .cancelled
-                    finish(
-                        status: cancelled ? "interrupted" : "failed",
-                        error: cancelled ? nil : error.localizedDescription)
-                }
-            }
-            syncAccount()
-        }
     }
     func stop() {
-        requestTask?.cancel()
-        finish(status: "interrupted")
+        attemptExecution?.stop()
+    }
+    func saveError(for id: UUID) -> String? { attemptExecution?.saveError(for: id) }
+    var canSaveAgain: Bool { canDeleteLookup }
+    func saveAgain(_ id: UUID) {
+        guard canSaveAgain, entries.contains(where: { $0.id == id }) else { return }
+        attemptExecution?.saveAgain(id)
     }
     func newQuery() {
         guard !busy, !launcherPending else { return }
@@ -486,6 +479,7 @@ import EZCore
         guard canDeleteLookup, entries.contains(where: { $0.id == id }), let history else { return }
         do {
             try history.delete(id: id)
+            attemptExecution?.forget(id)
             entries.removeAll { $0.id == id }
             if selection == id { selection = nil }
         } catch {
@@ -506,20 +500,14 @@ import EZCore
             }
         }
     }
-    private func finish(status: String, error message: String? = nil) {
-        guard var entry = active else { return }
-        entry.status = status
-        entry.error = message
-        entry.durationSeconds = Date().timeIntervalSince(entry.createdAt)
-        if let index = entries.firstIndex(where: { $0.id == entry.id }) { entries[index] = entry }
-        do { try history?.append(entry) } catch {
-            storageWarning =
-                "Answer is visible but could not be saved: \(error.localizedDescription). Copy or export it before closing."
+    private func receiveAttempt(_ update: AttemptExecution.Update) {
+        if let index = entries.firstIndex(where: { $0.id == update.entry.id }) {
+            entries[index] = update.entry
+        } else {
+            entries.insert(update.entry, at: 0)
         }
-        if let message { error = message }
-        active = nil
-        responseActivity = .finished
-        busy = false
-        requestTask = nil
+        responseActivity = update.activity
+        busy = attemptExecution?.activeID != nil
+        if !update.isActive, !offline { syncAccount() }
     }
 }

@@ -1,2 +1,8 @@
 packages:
   - apps/saul
+allowBuilds:
+  esbuild: true
+overrides:
+  # One validator instance keeps every MCP schema on the CSP-safe interpreter.
+  '@modelcontextprotocol/client>zod': 4.6.7
+  '@modelcontextprotocol/core>zod': 4.6.7

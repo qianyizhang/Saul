@@ -1,6 +1,5 @@
 import { ChatGPTPlanSettings } from './ChatGPTPlanSettings';
 import { useEffect, useState } from 'react';
-import { DEFAULT_SETTINGS } from '../storage/settings';
 import type { UserSettings } from '../types';
 import { useSettingsDraft } from './useSettingsDraft';
 import { useProviderTest } from './useProviderTest';
@@ -15,16 +14,9 @@ const presets = [
   { name: 'Ollama', baseUrl: 'http://localhost:11434/v1', model: 'llama3.2' },
   { name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', model: '' },
 ];
-function origin(url: string) {
-  try {
-    return new URL(url).origin;
-  } catch {
-    return '';
-  }
-}
 export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
   const draft = useSettingsDraft(onDirty);
-  const { settings, loaded, dirty, saved, saving, profilesWithCurrent, save } = draft;
+  const { settings, loaded, dirty, saved, saving, save } = draft;
   const providerTest = useProviderTest(settings.activeProvider);
   const { testing, notice, availability } = providerTest;
   const error = draft.error || providerTest.error;
@@ -37,16 +29,12 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
   useEffect(() => setVisibleKey(false), [settings.activeProfileId, settings.activeProvider]);
   function update(patch: Partial<UserSettings>) {
     if (patch.activeProfileId || patch.activeProvider) setVisibleKey(false);
-    draft.update(patch);
+    draft.edit({ type: 'settings', patch });
     providerTest.clear();
   }
   function config(patch: Partial<UserSettings['openaiCompatible']>) {
-    update({ openaiCompatible: { ...settings.openaiCompatible, ...patch } });
-  }
-  function switchProfile(id: string) {
-    const profiles = profilesWithCurrent(),
-      p = profiles.find((p) => p.id === id);
-    if (p) update({ profiles, activeProfileId: id, openaiCompatible: p.config });
+    draft.edit({ type: 'remote', patch });
+    providerTest.clear();
   }
   const test = (mode: 'endpoint' | 'generation' | 'prepare') => providerTest.test(mode, settings);
   if (!loaded)
@@ -59,7 +47,7 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
           <button
             type="button"
             className="btn"
-            disabled={draft.resettingInvalidSettings}
+            disabled={draft.resettingInvalidSettings || draft.blocked}
             onClick={draft.resetInvalidSettings}
           >
             {draft.resettingInvalidSettings
@@ -67,6 +55,9 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
               : 'Back up and reset settings'}
           </button>
         )}
+        <button className="btn" disabled={saving} onClick={draft.reload}>
+          Reload saved settings
+        </button>
       </div>
     ) : (
       <p role="status">Loading settings…</p>
@@ -83,7 +74,7 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
           <button
             className="btn"
             disabled={testing || planBusy || configuration.presets.length >= 32}
-            onClick={draft.addPreset}
+            onClick={() => draft.edit({ type: 'add-preset', id: crypto.randomUUID() })}
           >
             Add preset
           </button>
@@ -96,7 +87,7 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
               disabled={planBusy}
               value={draft.selectedPresetId}
               onChange={(event) => {
-                draft.selectPreset(event.target.value);
+                draft.edit({ type: 'select-preset', id: event.target.value });
                 providerTest.clear();
               }}
             >
@@ -113,18 +104,7 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
               <input
                 maxLength={80}
                 value={selectedPreset.name}
-                onChange={(event) =>
-                  update({
-                    configuration: {
-                      ...configuration,
-                      presets: configuration.presets.map((preset) =>
-                        preset.id === selectedPreset.id
-                          ? { ...preset, name: event.target.value }
-                          : preset,
-                      ),
-                    },
-                  })
-                }
+                onChange={(event) => draft.edit({ type: 'preset-name', name: event.target.value })}
               />
             </label>
           )}
@@ -225,7 +205,10 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
                   <select
                     aria-label="Saved profile"
                     value={settings.activeProfileId}
-                    onChange={(e) => switchProfile(e.target.value)}
+                    onChange={(e) => {
+                      draft.edit({ type: 'select-profile', id: e.target.value });
+                      providerTest.clear();
+                    }}
                   >
                     {settings.profiles?.map((p) => (
                       <option key={p.id} value={p.id}>
@@ -237,17 +220,8 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
                 <button
                   className="btn"
                   onClick={() => {
-                    const id = crypto.randomUUID();
-                    const profile = {
-                      id,
-                      name: `Profile ${(settings.profiles?.length || 0) + 1}`,
-                      config: { ...DEFAULT_SETTINGS.openaiCompatible, apiKey: '' },
-                    };
-                    update({
-                      profiles: [...profilesWithCurrent(), profile],
-                      activeProfileId: id,
-                      openaiCompatible: profile.config,
-                    });
+                    draft.edit({ type: 'add-profile', id: crypto.randomUUID() });
+                    providerTest.clear();
                   }}
                 >
                   New profile
@@ -259,13 +233,7 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
                   value={
                     settings.profiles?.find((p) => p.id === settings.activeProfileId)?.name || ''
                   }
-                  onChange={(e) =>
-                    update({
-                      profiles: settings.profiles?.map((p) =>
-                        p.id === settings.activeProfileId ? { ...p, name: e.target.value } : p,
-                      ),
-                    })
-                  }
+                  onChange={(e) => draft.edit({ type: 'profile-name', name: e.target.value })}
                 />
               </label>
               <div className="row small">
@@ -278,9 +246,6 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
                       config({
                         baseUrl: p.baseUrl,
                         model: p.model,
-                        ...(origin(p.baseUrl) !== origin(settings.openaiCompatible.baseUrl)
-                          ? { apiKey: '' }
-                          : {}),
                       })
                     }
                   >
@@ -296,9 +261,6 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
                   onChange={(e) =>
                     config({
                       baseUrl: e.target.value,
-                      ...(origin(e.target.value) !== origin(settings.openaiCompatible.baseUrl)
-                        ? { apiKey: '' }
-                        : {}),
                     })
                   }
                 />
@@ -375,7 +337,7 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
           <button
             className="btn danger"
             disabled={testing || planBusy || configuration.presets.length <= 1}
-            onClick={draft.removePreset}
+            onClick={() => draft.edit({ type: 'remove-preset' })}
           >
             Remove preset
           </button>
@@ -383,8 +345,8 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
       </section>
       <RecipeSettings
         configuration={configuration}
-        presetId={draft.selectedPresetId}
-        onChange={(configuration) => update({ configuration })}
+        recipeId={draft.selectedRecipeId}
+        onEdit={draft.edit}
       />
       <section className="panel settings-section">
         <h3>Reading</h3>
@@ -477,9 +439,27 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
           <span className="small muted" role="status">
             {dirty ? 'Unsaved changes' : saved ? 'Saved' : ''}
           </span>
-          <button className="btn primary" disabled={testing || saving || planBusy} onClick={save}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
+          <div className="row">
+            {draft.blocked && (
+              <button
+                className="btn"
+                disabled={testing || saving || planBusy}
+                onClick={() => {
+                  providerTest.clear();
+                  void draft.reload();
+                }}
+              >
+                Reload saved settings
+              </button>
+            )}
+            <button
+              className="btn primary"
+              disabled={testing || saving || planBusy || draft.blocked}
+              onClick={save}
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
         </div>
       </div>
     </fieldset>

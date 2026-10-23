@@ -34,6 +34,10 @@ Use the root [artifact policy](../../docs/artifacts.md) for test outputs and cle
 
 Read the [browser-testing skill](../../.agents/skills/saul-browser-testing/SKILL.md).
 
-## Shared agent skills
+## Document owners
 
-Read [local mappings](docs/agent-skills.md) before using shared skills.
+Shared skills use the root [glossary](../../GLOSSARY.md), with
+[Saul terms](GLOSSARY.md) for browser-specific meaning. Consequential decisions
+belong in [architecture](docs/architecture.md); checks and diagnosis belong in
+[testing](docs/testing.md). Shared design application and adoption use
+[the root workflow](../../design/SKILL.md). Keep generic skills at user scope.

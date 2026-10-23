@@ -6,7 +6,7 @@ import {
   validateCall,
   type ToolArgs,
   type ToolName,
-} from '../native/protocol.mjs';
+} from '../native/protocol.mts';
 import {
   validateReading,
   sourcePage,

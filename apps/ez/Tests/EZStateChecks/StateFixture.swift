@@ -11,7 +11,7 @@ import Foundation
     let single: Recipe
     let multi: Recipe
 
-    init(directory: URL) throws {
+    init(directory: URL, attemptExecution: AttemptExecution? = nil) throws {
         self.directory = directory
         let option = ModelOption(catalog: [
             "visibility": "list", "slug": "fixture",
@@ -31,7 +31,7 @@ import Foundation
         // Seed before AppModel init so tests never read personal UserDefaults.
         try ConfigurationStore(directory: directory).save(config)
         history = try HistoryStore(directory: directory)
-        model = AppModel(historyDirectory: directory, offline: true)
+        model = AppModel(historyDirectory: directory, offline: true, attemptExecution: attemptExecution)
         model.models = [option]
     }
     func snapshot() throws -> HistoryEntry {

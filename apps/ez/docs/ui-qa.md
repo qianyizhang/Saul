@@ -45,6 +45,23 @@ capture error after a window closes/hides, rebind the visible main window; do no
 assume the action failed or repeatedly capture a stale window. Use current element
 indices from each fresh accessibility tree, never a checked-in list of AX indices.
 
+## Unsaved answer recovery
+
+Quit any existing surface preview, then launch its built bundle with
+`open 'dist/EZ Surface Preview.app' --args --unsaved-attempt`. This explicit mode
+uses a synthetic request and disposable history; ordinary preview mode continues
+to block Send. Its first terminal save fails and Save again succeeds.
+
+1. Confirm the main answer and History row say Unsaved. Expand Save error and
+   Inspect input/output; neither should claim the answer was saved.
+2. Open Quick Lookup and use Minimum panel. Confirm Unsaved, Save again, Copy and
+   Export are reachable in both Minimum Mode settings and light/dark appearance.
+3. Choose New, type a different draft, and select the Unsaved history row again.
+   The answer and save recovery remain available; the draft stays unchanged.
+4. Select Save again. Unsaved disappears only after the local append succeeds;
+   the answer and current draft do not change. Cancel an Export dialog without
+   affecting the attempt.
+
 ## Installed selected-text journey
 
 Use the installed `~/Applications/EZ.app`, after quitting any other EZ build.

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdtemp, readFile, writeFile, rm, symlink, link } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { compileDesign, generate } from '../design/generate.mjs';
+import { compileDesign, generate } from '../design/generate.mts';
 
 // A small independent contract keeps legitimate edits to the user's identity from breaking fixtures.
 const contract = `---

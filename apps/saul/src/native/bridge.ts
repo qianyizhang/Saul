@@ -1,5 +1,5 @@
 import { workspaceSender } from '../contracts/reading';
-import { HOST_NAME } from '../../native/protocol.mjs';
+import { HOST_NAME } from '../../native/protocol.mts';
 import { handleTabCall } from './tabs';
 
 export const ENABLED_KEY = 'saul_native_enabled';

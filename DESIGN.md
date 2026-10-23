@@ -158,6 +158,17 @@ task. Group comparable values by meaning and unit; use alignment and typography
 to distinguish labels from values. Place caveats beside the claim they qualify.
 Keep the displayed answer, editable draft and saved configuration visibly distinct.
 
+In EZ, when a terminal answer cannot be saved, keep the available answer attached to its
+attempt and show **Unsaved** with Copy/Export and an explicit save recovery action.
+**Save again** writes the retained result; it never starts generation. Keep
+this notice visible after navigating away and back, including in Minimum Mode.
+Explain that unsaved output must be saved or exported before quitting.
+
+A stale Settings save must preserve the local draft and selection. Show the
+conflict beside Save and offer an explicit reload of the current saved settings.
+Confirm discarding a dirty draft before reloading. An unknown save outcome also
+requires reloading before another save; never silently overwrite or merge it.
+
 Input labels remain identifiable after typing, especially in multi-field forms.
 Disclosures name what they reveal and have a full-row activation target. Opening
 one preserves selection, draft and reading position. Essential actions, errors

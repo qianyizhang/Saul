@@ -1,7 +1,22 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { ReadingRunner } from '../src/reading/runner';
 import type { DbCall, DbRequest, Passage, Submission, RunStatus } from '../src/types/storage';
 const mocks = vi.hoisted(() => ({ remote: vi.fn(), local: vi.fn() }));
+
+const attemptContract = JSON.parse(
+  readFileSync(new URL('../../../contracts/fixtures/attempts.json', import.meta.url), 'utf8'),
+) as {
+  version: number;
+  cases: {
+    id: string;
+    text: string;
+    providerOutcome: 'complete' | 'error' | 'eof' | 'cancel';
+    initialSaveFails: boolean;
+    finalSaveFails: boolean;
+    expected: { providerCalls: number; hasOutput: boolean; savedSuccess: boolean };
+  }[];
+};
 vi.mock('../src/models/openai-compatible', () => ({ streamOpenAICompatible: mocks.remote }));
 // Exercise queue scheduling independently of the temporary product availability switch.
 vi.mock('../src/models/chrome-ai', () => ({
@@ -87,6 +102,54 @@ beforeEach(() => {
   });
   mocks.local.mockReset().mockImplementation(mocks.remote);
 });
+for (const scenario of attemptContract.cases) {
+  it(`satisfies shared Attempt contract: ${scenario.id}`, async () => {
+    expect(attemptContract.version).toBe(1);
+    const db = store();
+    if (scenario.initialSaveFails) db.failSubmit();
+    if (scenario.finalSaveFails) db.failFinish(2);
+    mocks.remote.mockImplementation(async function* (_config, _system, _user, signal: AbortSignal) {
+      yield { type: 'delta', text: scenario.text };
+      if (scenario.providerOutcome === 'cancel') {
+        await new Promise<void>((resolve) => {
+          if (signal.aborted) resolve();
+          else signal.addEventListener('abort', () => resolve(), { once: true });
+        });
+      } else if (scenario.providerOutcome === 'error') {
+        throw new Error('Provider disconnected');
+      } else if (scenario.providerOutcome === 'complete') {
+        yield { type: 'complete' };
+      }
+    });
+    const runner = new ReadingRunner(db.call, () => {});
+    const current = () =>
+      runner.decorateRun('passage', {
+        id: scenario.id,
+        status: db.rows.get(scenario.id)?.status ?? 'queued',
+        responseRaw: db.rows.get(scenario.id)?.raw ?? '',
+        provider: 'openai-compatible',
+        model: 'model',
+        createdAt: 1,
+      });
+    if (scenario.initialSaveFails) {
+      await expect(runner.submit(submission(scenario.id), 'secret')).rejects.toThrow(
+        'Storage unavailable',
+      );
+    } else {
+      await runner.submit(submission(scenario.id), 'secret');
+      if (scenario.providerOutcome === 'cancel') {
+        await vi.waitFor(() => expect(db.rows.get(scenario.id)?.raw).toBe(scenario.text));
+        await runner.stop('passage');
+      }
+      await vi.waitFor(() =>
+        expect(['completed', 'failed', 'interrupted', 'cancelled']).toContain(current().status),
+      );
+    }
+    expect(mocks.remote).toHaveBeenCalledTimes(scenario.expected.providerCalls);
+    expect(current().responseRaw).toBe(scenario.expected.hasOutput ? scenario.text : '');
+    expect(db.rows.get(scenario.id)?.status === 'completed').toBe(scenario.expected.savedSuccess);
+  });
+}
 it('never starts a provider when durable submission fails', async () => {
   const db = store();
   db.failSubmit();

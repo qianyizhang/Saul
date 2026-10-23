@@ -5,7 +5,7 @@ import {
   getFirstHistory,
   openFirstPageExplanation,
 } from './driver.ts';
-import type { PlanRequest, PlanEvent } from '../../native/plan-protocol.mjs';
+import type { PlanRequest, PlanEvent } from '../../native/plan-protocol.mts';
 
 test('ChatGPT provider settings route reading streams, preserve partial failures, and switch back', async ({
   sandbox,
@@ -327,7 +327,7 @@ test('missing ChatGPT helper shows setup recovery without altering the existing 
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await popup.getByLabel('Provider', { exact: true }).selectOption('chatgpt-plan');
   await expect(popup.getByRole('alert')).toContainText('helper');
-  await expect(popup.getByText('node native/install.mjs', { exact: false })).toBeVisible();
+  await expect(popup.getByText('pnpm native:install', { exact: false })).toBeVisible();
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(
     popup.getByText('Choose a ChatGPT account and model.', { exact: true }),

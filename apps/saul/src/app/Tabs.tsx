@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { MoreHorizontal } from 'lucide-react';
 import { ActiveSummary, openSummary } from './Summaries';
 import { sendWorkspaceMessage } from '../storage/client';
-import { tabLayoutRevision } from '../../native/tab-layout.mjs';
-import type { TabEdit, TabSnapshot, TabView } from '../../native/protocol.mjs';
+import { tabLayoutRevision } from '../../native/tab-layout.mts';
+import type { TabEdit, TabSnapshot, TabView } from '../../native/protocol.mts';
 
 const empty: TabSnapshot = { windows: [], tabs: [], groups: [] };
 const hostname = (url: string) => {

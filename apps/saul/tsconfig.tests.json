@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "types": ["node", "chrome"],
+    "skipLibCheck": true,
+    "noEmit": true,
+    "jsx": "react-jsx"
+  },
+  "include": [
+    "scripts/*.mts",
+    "tests/*.mts",
+    "tests/*.ts",
+    "vitest.config.ts",
+    "wxt.config.ts",
+    "src/types/assets.d.ts"
+  ]
+}

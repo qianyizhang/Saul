@@ -1,10 +1,9 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
-  backupAndResetInvalidSettings,
+  createSettingsOwner,
   DEFAULT_SETTINGS,
   getSettings,
   InvalidStoredSettingsError,
-  saveSettings,
   validateProviderSettings,
 } from '../src/storage/settings';
 
@@ -157,7 +156,7 @@ it.each([
 it('does not silently replace unreadable settings with defaults or write over them', async () => {
   get.mockRejectedValue(new Error('Storage unavailable'));
   await expect(getSettings()).rejects.toThrow('Could not read saved settings');
-  await expect(saveSettings({ responseLanguage: 'Chinese' })).rejects.toThrow(
+  await expect(createSettingsOwner()({ action: 'read' })).rejects.toThrow(
     'Could not read saved settings',
   );
   expect(set).not.toHaveBeenCalled();
@@ -169,7 +168,11 @@ it('backs up the current invalid value and resets settings in one write', async 
     saul_user_settings: invalid,
     saul_user_settings_recovery_backup: { older: true },
   });
-  await expect(backupAndResetInvalidSettings()).resolves.toEqual({
+  const owner = createSettingsOwner();
+  const state = await owner({ action: 'read' });
+  if (state.state !== 'invalid') throw new Error('Expected invalid settings');
+  await expect(owner({ action: 'reset', baseline: state.revision })).resolves.toMatchObject({
+    state: 'ready',
     settings: DEFAULT_SETTINGS,
     reset: true,
   });
@@ -182,7 +185,11 @@ it('backs up the current invalid value and resets settings in one write', async 
 
 it('does not overwrite settings that became valid before recovery was confirmed', async () => {
   get.mockResolvedValue({ saul_user_settings: DEFAULT_SETTINGS });
-  await expect(backupAndResetInvalidSettings()).resolves.toEqual({
+  const owner = createSettingsOwner();
+  const state = await owner({ action: 'read' });
+  if (state.state !== 'ready') throw new Error('Expected ready settings');
+  await expect(owner({ action: 'reset', baseline: state.revision })).resolves.toMatchObject({
+    state: 'ready',
     settings: DEFAULT_SETTINGS,
     reset: false,
   });
@@ -197,9 +204,16 @@ it('allows a later retry without losing an existing provider profile', async () 
   };
   get
     .mockRejectedValueOnce(new Error('Storage unavailable'))
-    .mockResolvedValueOnce({ saul_user_settings: stored });
+    .mockResolvedValue({ saul_user_settings: stored });
   await expect(getSettings()).rejects.toThrow();
-  await saveSettings({ responseLanguage: 'Chinese' });
+  const owner = createSettingsOwner();
+  const state = await owner({ action: 'read' });
+  if (state.state !== 'ready') throw new Error('Expected ready settings');
+  await owner({
+    action: 'commit',
+    baseline: state.revision,
+    settings: { ...state.settings, responseLanguage: 'Chinese' },
+  });
   expect(set).toHaveBeenCalledWith({
     saul_user_settings: { ...stored, responseLanguage: 'Chinese' },
   });

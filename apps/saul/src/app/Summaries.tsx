@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { PlanAccount } from '../../native/plan-protocol.mjs';
-import type { SummaryProgress } from '../../native/protocol.mjs';
+import type { PlanAccount } from '../../native/plan-protocol.mts';
+import type { SummaryProgress } from '../../native/protocol.mts';
 import { planCall } from '../models/chatgpt-plan';
 import { getSettings } from '../storage/settings';
 import { sendDigestMessage, sendWorkspaceMessage } from '../storage/client';

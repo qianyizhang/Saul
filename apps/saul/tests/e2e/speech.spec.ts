@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures.ts';
-import type { PlanRequest, PlanEvent } from '../../native/plan-protocol.mjs';
+import type { PlanRequest, PlanEvent } from '../../native/plan-protocol.mts';
 
 test('speech widget keeps OAuth scope, supports cancellation and shows audio or endpoint rejection', async ({
   sandbox,

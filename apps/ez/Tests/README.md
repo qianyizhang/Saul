@@ -8,7 +8,7 @@ native Swift executables, without XCTest, Swift Testing, or third-party packages
 | --- | --- |
 | `EZChecks/` | Core behavior: templates, presets, configuration, history, launcher, identity, Responses, authentication |
 | `EZChecks/Fixtures/` | Synthetic credentials, signed identities, per-session HTTP fixtures |
-| `EZStateChecks/` | AppModel actions with a fresh offline model and seeded configuration per case |
+| `EZStateChecks/` | AppModel actions with fresh offline storage and controlled execution adapters where needed |
 | `Support/` | Named-case runner, source-location assertions, bounded fixture signals |
 
 ```sh
@@ -37,6 +37,11 @@ directory is unique and removed after success or failure. Construct each fixture
 inside the case and close HTTP sessions / shut down models with `defer`.
 AppModel fixtures seed configuration before initialization to avoid personal
 UserDefaults. Never use real account credentials, Keychain, or app history.
+Attempt cases explicitly supply the production `AttemptExecution` module with
+controlled credential, stream and append adapters, then call AppModel Send, Stop,
+Save again and deletion actions. Ordinary offline models still refuse Send.
+The shared `contracts/fixtures/attempts.json` scenarios exercise both apps' common
+saved-outcome rules without harmonizing their storage or status types.
 
 Assert an observable contract. `expect` reports file and line; `expectEqual`
 also reports expected and actual values. Use `expectThrows` / `expectAsyncThrows`

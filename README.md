@@ -14,9 +14,9 @@ credentials and local records remain app-owned. Mobile and two-way sync are futu
 Start with [selective installation](docs/setup.md). From the repository root:
 
 ```sh
-node scripts/setup.mjs --components extension --dry-run
-node scripts/setup.mjs --components extension --prepare
-node scripts/setup.mjs --components ez --dry-run
+node scripts/setup.mts --components extension --dry-run
+node scripts/setup.mts --components extension --prepare
+node scripts/setup.mts --components ez --dry-run
 ```
 
 To install EZ on this Mac, quit it and run `make -C apps/ez install`; the existing

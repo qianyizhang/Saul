@@ -172,8 +172,9 @@ struct QuickLookupView: View {
 
     private func result(_ entry: HistoryEntry) -> some View {
         VStack(alignment: .leading, spacing: 10) {
+            UnsavedAttemptNotice(model: model, entry: entry)
             LookupAnswerText(entry: entry, activity: model.selectedResponseActivity, compact: true)
-            if entry.status != "pending" && entry.status != "completed" {
+            if !["pending", "completed", "unsaved"].contains(entry.status) {
                 Text(entry.status.capitalized).font(AppStyle.caption).foregroundStyle(.orange)
             }
             if let error = entry.error, !notices.contains(error) {

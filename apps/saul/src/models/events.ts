@@ -3,4 +3,4 @@ export type ModelEvent =
   | { type: 'delta'; text: string }
   | { type: 'activity'; phase: 'waiting' | 'thinking' }
   | { type: 'complete' };
-export { IncompleteGeneration } from '../../native/sse.mjs';
+export { IncompleteGeneration } from '../../native/sse.mts';

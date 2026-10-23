@@ -42,6 +42,16 @@ outcome, and accepts explicit cancellation. Both adapters must:
 
 Concurrency, source capture, anchors and storage engines are app-specific.
 
+[Attempt fixtures](fixtures/attempts.json) run through both production execution
+owners: Saul's ReadingRunner and EZ's AttemptExecution via AppModel actions. They
+cover initial-save failure, completed and saved output, terminal-save failure,
+provider failure, missing completion and cancellation. The common assertions are
+provider-call count, retained output and saved success, not matching status enums.
+EZ projects a failed terminal save as **Unsaved** and retries only that frozen
+terminal record. Saul retains its existing failed/save-failed projection and
+durable recovery before an explicit new attempt. Neither app reports saved success
+from a provider completion signal alone.
+
 ## Accounts and models
 
 The conceptual interface exposes identity, permission, available models and

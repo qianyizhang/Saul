@@ -4,7 +4,7 @@ import {
   validatePlanRequest,
   type PlanRequest,
   type PlanEvent,
-} from '../../native/plan-protocol.mjs';
+} from '../../native/plan-protocol.mts';
 import { workspaceSender } from '../contracts/reading';
 
 // Native messaging is available in the background, not the offscreen runner.

@@ -1,24 +1,18 @@
-import { useState } from 'react';
 import type { ReadingConfiguration, Recipe } from '../types';
-import {
-  DEFAULT_RECIPE_SYSTEM_PROMPT,
-  parseTemplate,
-  TEMPLATE_FIELDS,
-} from '../models/configuration';
+import type { SettingsEdit } from '../models/settings-draft';
+import { parseTemplate, TEMPLATE_FIELDS } from '../models/configuration';
 
 export function RecipeSettings({
   configuration,
-  presetId,
-  onChange,
+  recipeId,
+  onEdit,
 }: {
   configuration: ReadingConfiguration;
-  presetId: string;
-  onChange: (value: ReadingConfiguration) => void;
+  recipeId: string;
+  onEdit: (edit: SettingsEdit) => void;
 }) {
-  const [selectedId, setSelectedId] = useState(configuration.selectedRecipeId);
-  const [error, setError] = useState('');
   const recipe =
-    configuration.recipes.find((item) => item.id === selectedId) || configuration.recipes[0]!;
+    configuration.recipes.find((item) => item.id === recipeId) || configuration.recipes[0]!;
   let templateError = '';
   try {
     parseTemplate(recipe.template);
@@ -26,56 +20,17 @@ export function RecipeSettings({
     templateError = (error as Error).message;
   }
   function update(patch: Partial<Recipe>) {
-    onChange({
-      ...configuration,
-      recipes: configuration.recipes.map((item) =>
-        item.id === recipe.id ? { ...item, ...patch } : item,
-      ),
-    });
-    setError('');
-  }
-  function add() {
-    const id = crypto.randomUUID();
-    let name = 'New recipe';
-    for (
-      let suffix = 2;
-      configuration.recipes.some((item) => item.name.toLowerCase() === name.toLowerCase());
-      suffix++
-    )
-      name = `New recipe ${suffix}`;
-    onChange({
-      ...configuration,
-      recipes: [
-        ...configuration.recipes,
-        {
-          id,
-          name,
-          presetId,
-          template: '{{text}}',
-          systemPrompt: DEFAULT_RECIPE_SYSTEM_PROMPT,
-        },
-      ],
-    });
-    setSelectedId(id);
-    setError('');
-  }
-  function remove() {
-    if (recipe.id === configuration.selectedRecipeId) {
-      setError('Choose another default recipe before removing this one.');
-      return;
-    }
-    onChange({
-      ...configuration,
-      recipes: configuration.recipes.filter((item) => item.id !== recipe.id),
-    });
-    setSelectedId(configuration.selectedRecipeId);
-    setError('');
+    onEdit({ type: 'recipe', patch });
   }
   return (
     <section className="panel settings-section" aria-label="Recipes">
       <div className="row between">
         <h3>Recipes</h3>
-        <button className="btn" disabled={configuration.recipes.length >= 32} onClick={add}>
+        <button
+          className="btn"
+          disabled={configuration.recipes.length >= 32}
+          onClick={() => onEdit({ type: 'add-recipe', id: crypto.randomUUID() })}
+        >
           Add recipe
         </button>
       </div>
@@ -84,7 +39,7 @@ export function RecipeSettings({
         <select
           aria-label="Default recipe"
           value={configuration.selectedRecipeId}
-          onChange={(event) => onChange({ ...configuration, selectedRecipeId: event.target.value })}
+          onChange={(event) => onEdit({ type: 'default-recipe', id: event.target.value })}
         >
           {configuration.recipes.map((item) => (
             <option key={item.id} value={item.id}>
@@ -99,8 +54,7 @@ export function RecipeSettings({
           aria-label="Edit recipe"
           value={recipe.id}
           onChange={(event) => {
-            setSelectedId(event.target.value);
-            setError('');
+            onEdit({ type: 'select-recipe', id: event.target.value });
           }}
         >
           {configuration.recipes.map((item) => (
@@ -171,16 +125,11 @@ export function RecipeSettings({
         <button
           className="btn danger"
           disabled={configuration.recipes.length <= 1}
-          onClick={remove}
+          onClick={() => onEdit({ type: 'remove-recipe' })}
         >
           Remove recipe
         </button>
       </div>
-      {error && (
-        <p className="notice error" role="alert">
-          {error}
-        </p>
-      )}
     </section>
   );
 }

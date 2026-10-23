@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { planCall } from '../models/chatgpt-plan';
-import type { PlanAccount, PlanModel } from '../../native/plan-protocol.mjs';
+import type { PlanAccount, PlanModel } from '../../native/plan-protocol.mts';
 import type { UserSettings } from '../types';
-import { planModelDefaults, planModelIssue } from '../../native/plan-models.mjs';
+import { planModelDefaults, planModelIssue } from '../../native/plan-models.mts';
 import { SpeechTest } from './SpeechTest';
 import { useMinimumMode } from './useMinimumMode';
 
@@ -416,11 +416,11 @@ export function ChatGPTPlanSettings({
       <details open={helperReady === false}>
         <summary>ChatGPT helper setup</summary>
         <p className="small muted">
-          From your Saul checkout, install the local helper for this extension. It stores OAuth
-          credentials on this computer, outside browser storage. Node 24 or later is required.
+          From apps/saul, build and install the local helper for this extension. It stores OAuth
+          credentials on this computer, outside browser storage. Use Node 24.
         </p>
         <code className="code">
-          node native/install.mjs --chatgpt --extension-id {chrome.runtime.id}
+          pnpm native:install --chatgpt --extension-id {chrome.runtime.id}
         </code>
         <p className="small muted">
           Then retry Continue with ChatGPT. This helper is separate from Codex tab access.

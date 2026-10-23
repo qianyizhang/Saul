@@ -59,15 +59,44 @@ The board refreshes every ten seconds while visible, pausing during a drag, an o
 
 ## Implementation and verification
 
-| File                                         | Responsibility                                                       |
-| -------------------------------------------- | -------------------------------------------------------------------- |
-| [App protocol](../native/app-protocol.mjs)   | Shared MCP-only schemas, visibility and resource metadata            |
-| [Workspace service](../native/workspace.mjs) | Validation, projection, expiring approvals and verified execution    |
-| [MCP server](../native/mcp.mjs)              | Resource delivery and serialized tool dispatch                       |
-| [UI](../native/ui/workspace.js)              | Standard initialization, results, tool calls and user messages       |
-| [Native installer](../native/install.mjs)    | Copies app code and self-contained UI into the existing installation |
+| File                                           | Responsibility                                                    |
+| ---------------------------------------------- | ----------------------------------------------------------------- |
+| [App protocol](../native/app-protocol.mts)     | Shared MCP-only schemas, visibility and resource metadata         |
+| [Workspace service](../native/workspace.mts)   | Validation, projection, expiring approvals and verified execution |
+| [MCP server](../native/mcp.mts)                | Resource delivery and serialized tool dispatch                    |
+| [UI](../native/ui/workspace.ts)                | Board state, rendering and user actions                           |
+| [Host adapter](../native/ui/host-adapter.ts)   | SDK lifecycle, capability checks, calls, messages and teardown    |
+| [Board resource](../native/board-resource.mts) | Process-frozen HTML and content-derived resource identity         |
+| [Native installer](../native/install.mts)      | Stages and activates a complete immutable helper generation       |
 
-`pnpm verify:connection` checks the installed tool catalog, HTML resource and live tab inventory. Unit tests cover proposal validation, stale/expired/replaced approvals and partial failures. The disposable-browser test renders the real app in a test MCP host, exercises drag-and-drop, keyboard moves, filtering, pins/groups, stale previews and its message bridge, and applies a plan against real Chromium tabs. This does not by itself establish rendering in the installed Codex desktop host.
+`pnpm build:board` bundles the pinned official MCP Apps SDK locally; `pnpm mcp`
+builds the complete runtime before starting the emitted server. The delivered
+HTML contains all scripts and styles; it needs no CDN, package resolution or network
+connection. Its resource URI includes the document hash, and a server process
+freezes that document on startup. Only `saul_workspace_show` requests a rendered
+board. Proposal results update the existing board through the host's tool-result
+notification.
+
+The verifier reads the resource URI advertised by the installed server. It does
+not import or compare checkout HTML, so checking an older retained generation
+does not require rebuilding the current board. Group creation uses local button
+and keyboard handlers and works when the host forbids HTML form submissions.
+
+The host adapter registers notifications before initialization and checks host
+capabilities before exposing actions. Teardown stops polling, aborts pending local
+requests and disables actions while retaining the visible draft. Timeouts and
+connection loss report an uncertain outcome; they never resend an action. The SDK
+owns request IDs and separates host requests from replies to app requests.
+
+`pnpm verify:connection` checks the installed tool catalog, HTML resource and live
+tab inventory. Unit tests use the independent SDK AppBridge with overlapping
+request IDs, rejected initialization, missing capabilities, tool errors, timeouts
+and teardown. The disposable-browser host renders the exact HTML returned by the
+MCP server in an opaque sandboxed frame under CSP. It exercises drag-and-drop,
+keyboard moves, filtering, pins/groups, stale previews and messages, and applies a
+plan against real Chromium tabs. Hosts that deny local storage show a useful
+preference-save error. These checks do not establish rendering in an installed
+Codex desktop connection; that acceptance remains a separate installed-host check.
 
 Validation timing on 2026-10-19: three isolated dry-run samples per version against
 175 live tabs in eight windows, with native names available in every sample.

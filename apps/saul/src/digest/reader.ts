@@ -1,4 +1,4 @@
-import type { SummaryProgress } from '../../native/protocol.mjs';
+import type { SummaryProgress } from '../../native/protocol.mts';
 import type { DigestBatch } from './types';
 import { runnerRequest } from '../storage/client';
 import { id as validId } from '../contracts/reading';

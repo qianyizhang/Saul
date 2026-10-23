@@ -29,7 +29,7 @@ repos:
         pass_filenames: false
         always_run: true
       - id: types
-        name: Browser types
+        name: Strict TypeScript across source and tests
         entry: pnpm typecheck
         language: system
         pass_filenames: false

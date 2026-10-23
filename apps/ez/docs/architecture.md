@@ -15,7 +15,8 @@ defines configuration, template inputs, preset overrides, and historical snapsho
 | --- | --- |
 | `Sources/EZ/EZApp.swift` | Native window and app commands |
 | `ContentView` / `SettingsView` / `AppStyle` | Lookup interface, account settings, shared appearance |
-| `Sources/EZ/AppModel.swift` | User actions, selected account/model, task lifecycle, visible errors |
+| `Sources/EZ/AppModel.swift` | User actions, selected account/model, attempt projection, visible errors |
+| `AttemptExecution` | Frozen attempt, provider task, cancellation, durable outcome, save-only recovery |
 | `ChatGPTAuth` | OAuth registration, validated identity, consent, refresh, logout |
 | `LoopbackListener` | Bounded HTTP callback listener bound only to 127.0.0.1 |
 | `OIDC` | PKCE and RS256 identity verification using CryptoKit/Security |
@@ -146,9 +147,27 @@ See [local signing and installation](releasing.md#local-signing-and-installation
 
 ## Persistence contract
 
-History entries carry `schemaVersion: 1` and UUID identity. Append before sending;
-append again on completion, interruption, or failure. Retain partial visible text
-on cancellation. Record requested and, when returned, actual service tier separately.
+History entries carry `schemaVersion: 1` and UUID identity. `AttemptExecution`
+appends before requesting credentials or sending, then appends the terminal snapshot
+before publishing a saved outcome. It owns cancellation and rejects callbacks from
+older attempts. AppModel and both lookup surfaces project that same lifecycle.
+Record requested and, when returned, actual service tier separately.
+
+A failed terminal append retains the exact completed, interrupted, or failed snapshot
+in memory by UUID and presents **Unsaved** with its own save error. The response,
+provider error, frozen input, metrics and tier stay attached to that attempt. New
+lookup, History selection and hiding a surface preserve it. **Save again** only
+repeats that snapshot's history append, without authentication, prompt preparation,
+or another provider request. It is unavailable during an active request or pending
+launcher submission. Successful persistence restores the original terminal outcome;
+a failed retry preserves Unsaved. Copy and Export remain available. Successful
+lookup deletion also removes its recovery snapshot; failed deletion preserves it.
+
+Unsaved is a transient projection, not a new on-disk status or recovery store.
+Latest-snapshot-per-UUID loading makes save-only retries safe after an uncertain
+write/flush failure. Bytes never persisted cannot survive quitting EZ; startup
+retains the existing pending-to-interrupted classification and never resubmits.
+Global storage warnings describe startup/history-load problems, not attempt durability.
 Optional response metrics retain server-reported input/output/reasoning counts and
 client-observed stream timing; older history remains readable with unknown metrics.
 Both surfaces expose token counts and timing in Details; disabling Minimum Mode

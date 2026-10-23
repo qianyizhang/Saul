@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { planCall } from '../models/chatgpt-plan';
-import type { PlanAccount } from '../../native/plan-protocol.mjs';
+import type { PlanAccount } from '../../native/plan-protocol.mts';
 
 export function SpeechTest({
   account,

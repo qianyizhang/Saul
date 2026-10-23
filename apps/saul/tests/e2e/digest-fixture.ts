@@ -1,5 +1,5 @@
 import type { Worker } from '@playwright/test';
-import type { PlanRequest, PlanEvent } from '../../native/plan-protocol.mjs';
+import type { PlanRequest, PlanEvent } from '../../native/plan-protocol.mts';
 export async function installDigestProvider(worker: Worker, hold = false) {
   await worker.evaluate((hold) => {
     const state = {

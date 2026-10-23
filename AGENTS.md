@@ -16,6 +16,12 @@ For UI changes, read [DESIGN.md](DESIGN.md) and complete the
 [feature UI review](design/SKILL.md#feature-ui-review). Generate tokens with
 `pnpm design:generate`; `pnpm design:check` verifies all surfaces on macOS.
 
+Author maintained JavaScript-family logic in strict TypeScript, including helpers,
+the board, tooling and tests. Keep JavaScript only for small tool-required config
+files or generated output; do not maintain declaration twins or parallel JS sources.
+Compiler boundaries and emission rationale live in the
+[TypeScript decision](docs/architecture.md#typescript-maintenance).
+
 Use Node 24 and the packageManager pinned in package.json for JavaScript tooling.
 `pnpm check` runs shared, browser and native gates on macOS. CI separates Linux
 browser checks from native checks. For browser tests, read the

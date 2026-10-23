@@ -41,7 +41,7 @@ export function NativeBridge() {
       setError('Could not copy. Select the command and copy it manually.');
     }
   }
-  const install = `node scripts/setup.mjs --extension-id ${chrome.runtime.id}`;
+  const install = `node scripts/setup.mts --components tabs --extension-id ${chrome.runtime.id}`;
   return (
     <section className="panel stack">
       <label className="toggle">
@@ -121,19 +121,21 @@ export function NativeBridge() {
         <summary>Connect Codex · setup and troubleshooting</summary>
         <div className="stack" style={{ marginTop: 12 }}>
           <p className="small muted">
-            1. From your Saul checkout, run this setup command. It builds Saul, installs the helper,
-            registers Codex and checks the connection:
+            1. From the monorepo root, run this command to build and install the tab helper. Add
+            --codex only for a new Codex registration. For an existing helper, follow docs/setup.md
+            before upgrading:
           </p>
           <code className="code">{install}</code>
           <button className="btn" onClick={() => copy('install', install)}>
             {copied === 'install' ? 'Copied setup command' : 'Copy setup command'}
           </button>
           <p className="small muted">
-            2. Reload Saul in Chrome after the build, enable access above and choose Reconnect. The
-            setup command will guide you through verification.
+            2. Enable access above and choose Reconnect. From the monorepo root, run pnpm --dir
+            apps/saul verify:connection to check the connection.
           </p>
           <p className="small muted">
-            3. Start a fresh Codex chat to load the tools. Ask Codex to preview a tab sort.
+            3. After current work finishes, fully quit and reopen Codex to load the installed tools.
+            Ask Codex to preview a tab sort.
           </p>
           <p className="small muted">
             Host missing? Check that the installed extension ID matches this one. After updating

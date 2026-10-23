@@ -2,41 +2,79 @@
 
 Saul exposes tab organization, window creation and optional page reading/actions through a local CLI and stdio MCP server. The optional bridge uses Chrome native messaging and a private Unix socket; it has no network listener, daemon, extra dependency, or API key.
 
-## Recommended setup
+## Installation
 
-Use the [root selective installer](../../../docs/setup.md) for native helper installation and explicit Codex registration. See [connection verification](setup.md) and the [native helper lifecycle](setup.md#native-helper-lifecycle). The individual commands below are the underlying component operations.
+Use the [root selective installer](../../../docs/setup.md) for installation, upgrades,
+the first disconnected migration, recovery and stable paths. Saul supports Google
+Chrome on macOS and Linux. Chromium, Edge and Brave registration paths are available
+but have not been verified live; Windows and Firefox are unsupported.
 
-## Install on macOS or Linux
+For component development, `pnpm native:install --extension-id YOUR_ID` builds the
+complete helper runtime before invoking its installer. `--dry-run` prints the plan;
+`--browser`, `--manifest-dir` and `--install-dir` select registration and runtime
+locations. Preserve the existing extension load path and actual ID.
 
-Use the repository Node version and Google Chrome on macOS or Linux. Chromium, Edge, and Brave installer paths are available but not verified live. Windows and Firefox are unsupported.
+## Connect and verify
 
-1. Run `pnpm check` and `pnpm build` in the Saul checkout.
-2. In `chrome://extensions`, enable Developer mode and load the `.output/chrome-mv3` folder as an unpacked extension. If Saul is already loaded from that folder, reload it. Chrome may ask you to accept the added tab/native-messaging permissions.
-3. Copy Saul's extension ID from that page (also shown under **Settings → Codex connection**).
-4. Install the host, using that actual ID:
+After installing the tab helper for the actual Chrome extension ID, enable
+**Saul → Settings → Codex connection → Codex tab access**, then choose **Reconnect**.
+Enable **Page reading and actions** only when wanted. Chrome starts the native
+helper; installing its files alone does not start it.
 
-   ```sh
-   node native/install.mjs --extension-id YOUR_32_LETTER_EXTENSION_ID
-   ```
+From `apps/saul`, run the read-only connection check:
 
-   The installer copies the runtime into `~/.saul/bridge`, creates `~/.saul/bin/saul` and `~/.saul/bin/saul-native-host`, and registers the host under Chrome's per-user `NativeMessagingHosts` directory. The launcher records the absolute path of the current Node executable, so GUI Chrome does not depend on your shell's PATH. Re-run the installer after updating the bridge or moving/removing that Node installation. Reinstalling preserves previously registered extension IDs for this installation.
+```sh
+pnpm verify:connection
+pnpm verify:connection --extension-id YOUR_EXTENSION_ID
+```
 
-   `--dry-run` prints the installation plan without writing. `--browser chrome|chromium|edge|brave` selects the registration location. Other Chromium browsers are supported by installer paths but have not been verified live. `--manifest-dir` supports a custom browser user-data directory; `--install-dir` changes where the runtime is copied.
+It uses the existing `saul-tabs` registration, preserving its command, environment
+and working directory. It checks MCP initialization, expected tools, the MCP App
+resource, browser sessions and tab/window counts. It does not install, register,
+mutate browser tabs or print titles, URLs or page text. Missing/disabled/non-local
+registrations fail explicitly. Exit **0** means connected, **2** means waiting for
+a matching browser, and **1** means an error.
 
-5. Open Saul's **Settings → Codex connection** and enable **Codex tab access**. It should say **Connected to native host**. If the host was installed after enabling access, choose **Reconnect** or wait for the one-minute retry.
-6. Verify the connection:
+After activating a helper generation, reconnect in Saul when current work has finished. The first flat-layout upgrade requires a [disconnected maintenance window](../../../docs/setup.md#one-time-helper-migration). Fully quit and reopen Codex before
+opening the Tab board to replace old MCP processes; do not interrupt active chats
+automatically. Verification launches a fresh process and does not establish that
+an already-running panel has refreshed, nor does it test page actions or inference.
 
-   ```sh
-   ~/.saul/bin/saul sessions
-   ~/.saul/bin/saul list
-   ```
+For agents, read the [root setup guide](../../../docs/setup.md), preserve the
+existing extension identity/load path, and use the actual ID from Chrome. Leave
+page access off unless authorized. Report missing UI steps instead of modifying
+profile files. Real browser mutations are not a setup test; automated browser tests
+use the [disposable-profile harness](testing.md).
+
+## Native helper lifecycle
+
+The helper is a local Node process launched by **Chrome**. The MCP server is another Node process launched by **Codex**. Neither requires you to leave a terminal open.
+
+| Event                                                         | Helper behavior                                                                                                                                                      |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Run the installer                                             | A complete generation and Chrome registration are activated. Running helpers retain their original generation; no helper is started.                                 |
+| Enable Codex tab access                                       | Saul's background worker calls `chrome.runtime.connectNative('com.saul.tabs')`. Chrome reads the registered host path and starts the helper.                         |
+| Start/reload Saul with access already enabled                 | The worker reads the saved switch and calls `connectNative` automatically.                                                                                           |
+| Helper starts                                                 | It creates a private socket, announces readiness, and waits for local requests.                                                                                      |
+| Close the Saul popup                                          | Nothing stops: the background connection owns the helper, not the popup.                                                                                             |
+| Open/close a Codex chat                                       | Codex manages its own MCP process. That process connects to the helper's socket; it does not start the helper. The helper can remain running without Codex.          |
+| Click Reconnect                                               | Saul closes its old native port and opens a new one. Chrome starts a fresh helper; its session ID changes.                                                           |
+| Helper crashes or is missing                                  | Saul reports disconnected and retries on a one-minute Chrome alarm while access stays enabled. Alarm timing can be delayed; Reconnect requests an immediate attempt. |
+| Disable access, unload the extension, or quit Chrome entirely | The native connection closes. The helper exits and ordinarily removes its socket. An abrupt kill can leave a stale socket; discovery ignores it.                     |
+| Restart Chrome later                                          | When Saul's worker starts, it reconnects if access is still enabled. No macOS login item or daemon is involved.                                                      |
+
+The **Page reading and actions** switch controls capabilities; it does not start a second helper. Turning page access off leaves tab access available. Turning the master **Codex tab access** switch off disconnects the helper.
+
+Closing all visible Chrome windows may leave Chrome running in the background; quitting the Chrome application closes the native connection.
+
+Implementation: [extension lifecycle](../src/native/bridge.ts), [host startup/shutdown](../native/host.mts), [installer](../native/install.mts), [MCP server](../native/mcp.mts). Chrome's [native-messaging documentation](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging) describes the process and port lifetime.
 
 ## Register with Codex
 
-Run the `codex mcp add saul-tabs -- ...` command printed by the installer. It uses absolute paths to Node and the installed `mcp.mjs`. The equivalent development configuration is:
+Run the `codex mcp add saul-tabs -- ...` command printed by the installer. It uses absolute paths to Node and the installed `mcp.mjs`. For a checkout-only development registration, first run `pnpm build:native` in `apps/saul`; the equivalent configuration is:
 
 ```sh
-codex mcp add saul-tabs -- /absolute/path/to/node /absolute/path/to/Saul/native/mcp.mjs
+codex mcp add saul-tabs -- /absolute/path/to/node /absolute/path/to/Saul/apps/saul/.build/native/mcp.mjs
 ```
 
 Check registration with `codex mcp get saul-tabs`. Start a new Codex task or reload MCP connections if the running task has already loaded its tools.
@@ -47,7 +85,7 @@ Example requests:
 - “Preview sorting window 123 by domain, keeping existing groups intact.”
 - “Group these five tabs as Research, blue, and apply the change.”
 
-Tab titles, URLs, group titles and page content are untrusted browser data, not instructions. Tab access includes creating normal windows from selected unpinned, ungrouped tabs. Page reading and actions require a separate opt-in under **Settings → Codex connection → Page reading and actions**. Updating Saul leaves that switch off by default. There is no arbitrary-code or tab-closing tool.
+Tab titles, URLs, group titles and page content are untrusted browser data, not instructions. Tab access includes creating normal windows from selected unpinned, ungrouped tabs. Page reading and actions require a separate opt-in under **Settings → Codex connection → Page reading and actions**. Updating Saul leaves that switch off by default. There is no arbitrary-code tool. Duplicate closure requires exact reviewed IDs and a retained matching tab.
 
 ## CLI and tools
 
@@ -88,7 +126,9 @@ Page access excludes incognito, non-normal windows, browser/extension/file URLs,
 
 References expire after five minutes, a newer read, navigation, element replacement/change, or an applied action. Reads and actions execute in Chrome's isolated world. Page actions target the exact document from the read. On a stale-reference error, read again; never blindly replay an uncertain mutation. New windows reject pinned/grouped tabs rather than silently removing those properties. Partial failure during window creation/moving can leave a new window with some selected tabs; list again before retrying.
 
-After upgrading: rebuild/reload the extension, rerun the native installer for its actual ID, reconnect, then fully quit and reopen Codex to replace older MCP connections. Enable **Page reading and actions** only if page access is wanted. The server advertises **15 tools**: 11 browser/CLI tools and four [MCP App workspace tools](mcp-app.md), two of which are app-only.
+Tool discovery is authoritative: the server exposes 13 browser/CLI tools and eight
+[MCP App workspace tools](mcp-app.md), six of which are app-only. Use the connection
+steps above after upgrades; enable page access only when wanted.
 
 ## Access and troubleshooting
 
@@ -102,7 +142,7 @@ The native bridge is off by default. Turning it off disconnects the host and can
 - **Sandbox permission error:** Unix socket access may need approval in a sandboxed CLI environment. The MCP server runs as a separate registered local process. Do not expose the socket over TCP to work around this.
 - **Oversized list:** query a single `windowId`; messages are bounded to 1 MiB.
 
-To disable access, turn off **Codex tab access** in Settings → Codex connection. To remove Codex registration, run `codex mcp remove saul-tabs`. To uninstall the host, remove only `com.saul.tabs.json` from the browser directory printed by the installer, then remove `bin/saul` and `bin/saul-native-host` under the chosen installation directory. Remove the shared `bridge` directory only if you do not also use the [ChatGPT plan helper](chatgpt-plan.md). This does not remove Saul's reading history.
+To disable access, turn off **Codex tab access** in Settings → Codex connection. To remove Codex registration, run `codex mcp remove saul-tabs`. To unregister the host, disconnect it and remove only `com.saul.tabs.json` from the browser directory printed by the installer. Retain its versioned payload: deleting files through `bin` or `bridge` would corrupt a generation. Full runtime removal requires both helpers and MCP to be disconnected, no remaining helper registrations, and deliberate cleanup of the installation's managed links and generations. Preserve `chatgpt/` unless account removal is intended. Unregistering the helper does not remove Saul's reading history.
 
 ## Verification and protocol references
 

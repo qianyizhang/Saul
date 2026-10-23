@@ -2,6 +2,7 @@ import type { UserSettings } from '../types';
 import { DEFAULT_SYSTEM_PROMPT } from '../models/prompts';
 import { CHROME_AI_ENABLED, CHROME_AI_DISABLED_MESSAGE } from '../models/chrome-ai';
 import { normalizeConfiguration, starterConfiguration } from '../models/configuration';
+import { validateSettingsRequest, type SettingsState } from '../contracts/settings';
 
 const DEFAULT_CONNECTION_SETTINGS: UserSettings = {
   activeProvider: 'openai-compatible',
@@ -272,7 +273,11 @@ async function readStoredSettings(): Promise<unknown> {
 
 export async function getSettings(): Promise<UserSettings> {
   const stored = await readStoredSettings();
-  if (stored === undefined) return DEFAULT_SETTINGS;
+  return settingsFromStored(stored);
+}
+
+function settingsFromStored(stored: unknown): UserSettings {
+  if (stored === undefined) return structuredClone(DEFAULT_SETTINGS);
   try {
     return normalizeSettings(stored);
   } catch (err) {
@@ -281,55 +286,81 @@ export async function getSettings(): Promise<UserSettings> {
   }
 }
 
-export interface SettingsRecoveryResult {
-  settings: UserSettings;
-  reset: boolean;
+async function revisionOf(stored: unknown): Promise<string> {
+  // Hash the raw record, including unknown fields, without exposing credentials
+  // in a revision or rewriting legacy records merely because they were read.
+  // Chrome may reorder object keys on storage round trips; array order matters.
+  const serialized = JSON.stringify(stored, (_key, value: unknown) =>
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : value,
+  );
+  const bytes = new TextEncoder().encode(serialized ?? 'absent');
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-export async function backupAndResetInvalidSettings(): Promise<SettingsRecoveryResult> {
-  const stored = await readStoredSettings();
-  if (stored === undefined) return { settings: DEFAULT_SETTINGS, reset: false };
+export interface SettingsStorage {
+  read(): Promise<unknown>;
+  write(values: Record<string, unknown>): Promise<void>;
+}
 
-  try {
-    const settings = normalizeSettings(stored);
-    return { settings, reset: false };
-  } catch {
-    // The user explicitly chose recovery after the settings screen reported invalid data.
-  }
+/** One instance in the background serializes every configuration read and write. */
+export function createSettingsOwner(
+  storage: SettingsStorage = {
+    read: readStoredSettings,
+    write: (values) => chrome.storage.local.set(values),
+  },
+): (request: unknown) => Promise<SettingsState> {
+  let pending: Promise<unknown> = Promise.resolve();
+  return (value) => {
+    // Freeze direct callers too; Chrome messages already arrive as copies.
+    const request: unknown = structuredClone(value);
+    const result = pending.then(async (): Promise<SettingsState> => {
+      validateSettingsRequest(request);
+      const stored = await storage.read();
+      const revision = await revisionOf(stored);
+      if (request.action !== 'read' && request.baseline !== revision)
+        return {
+          state: 'conflict',
+          error:
+            'Settings changed in another surface. Your draft is still here. Reload saved settings to continue.',
+        };
 
-  try {
-    await chrome.storage.local.set({
-      [RECOVERY_BACKUP_KEY]: stored,
-      [SETTINGS_STORAGE_KEY]: DEFAULT_SETTINGS,
+      if (request.action === 'commit') {
+        settingsFromStored(stored); // Invalid originals require explicit backed-up recovery.
+        // Normalize and validate in the write owner, not only in the form.
+        const settings = normalizeSettings(request.settings);
+        validateProviderSettings(settings);
+        await storage.write({ [SETTINGS_STORAGE_KEY]: settings });
+        return { state: 'ready', settings, revision: await revisionOf(settings) };
+      }
+
+      try {
+        return {
+          state: 'ready',
+          revision,
+          settings: settingsFromStored(stored),
+          ...(request.action === 'reset' ? { reset: false } : {}),
+        };
+      } catch (error) {
+        if (!(error instanceof InvalidStoredSettingsError)) throw error;
+        if (request.action === 'read') return { state: 'invalid', revision, error: error.message };
+      }
+      const settings = structuredClone(DEFAULT_SETTINGS);
+      try {
+        await storage.write({
+          [RECOVERY_BACKUP_KEY]: stored,
+          [SETTINGS_STORAGE_KEY]: settings,
+        });
+      } catch (cause) {
+        throw new Error('Could not back up and reset saved settings. Try again.', { cause });
+      }
+      return { state: 'ready', revision: await revisionOf(settings), settings, reset: true };
     });
-  } catch (err) {
-    throw new Error('Could not back up and reset saved settings. Try again.', { cause: err });
-  }
-  return { settings: DEFAULT_SETTINGS, reset: true };
-}
-
-export async function saveSettings(settings: Partial<UserSettings>): Promise<UserSettings> {
-  const current = await getSettings();
-  const updated: UserSettings = {
-    ...current,
-    ...settings,
-    openaiCompatible: {
-      ...current.openaiCompatible,
-      ...(settings.openaiCompatible || {}),
-    },
-    chromeAi: {
-      ...current.chromeAi,
-      ...(settings.chromeAi || {}),
-    },
-    contextPolicy: {
-      ...current.contextPolicy,
-      ...(settings.contextPolicy || {}),
-    },
+    pending = result.catch(() => {});
+    return result;
   };
-  updated.configuration = normalizeConfiguration(updated.configuration, updated);
-
-  await chrome.storage.local.set({ [SETTINGS_STORAGE_KEY]: updated });
-  return updated;
 }
 
 export async function initStorageSecurity(): Promise<void> {

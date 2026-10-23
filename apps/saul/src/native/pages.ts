@@ -1,4 +1,4 @@
-import { validateCall, type ToolResults } from '../../native/protocol.mjs';
+import { validateCall, type ToolResults } from '../../native/protocol.mts';
 
 export const PAGE_ACCESS_KEY = 'saul_native_page_enabled';
 type PageResult = ToolResults['saul_page_read' | 'saul_page_act' | 'saul_page_navigate'];

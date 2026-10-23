@@ -8,7 +8,7 @@ import {
   type TabSnapshot,
   type ToolResults,
   type BrowserTool,
-} from '../../native/protocol.mjs';
+} from '../../native/protocol.mts';
 
 type Args = unknown;
 type Tab = chrome.tabs.Tab;

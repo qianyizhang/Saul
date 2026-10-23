@@ -4,13 +4,27 @@ import ts from 'typescript-eslint';
 
 export default ts.config(
   {
-    ignores: ['.output/**', '.wxt/**', '.pnpm-store/**', 'coverage/**'],
+    ignores: ['.output/**', '.wxt/**', '.build/**', '.pnpm-store/**', 'coverage/**'],
+  },
+  {
+    files: ['**/*.{js,mjs,cjs}'],
+    ignores: ['eslint.config.mjs'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'Program',
+          message:
+            'Author maintained logic in strict TypeScript. JavaScript is reserved for generated output and the ESLint config.',
+        },
+      ],
+    },
   },
   js.configs.recommended,
-  { files: ['native/ui/*.js'], languageOptions: { globals: globals.browser } },
+  { files: ['native/ui/*.ts'], languageOptions: { globals: globals.browser } },
   ...ts.configs.recommended,
   {
-    files: ['**/*.{ts,tsx,mjs}'],
+    files: ['**/*.{ts,tsx,mts}'],
     rules: {
       '@typescript-eslint/no-unused-vars': [
         'error',
@@ -36,11 +50,11 @@ export default ts.config(
     },
   },
   {
-    files: ['native/**/*.mjs', 'scripts/**/*.mjs', 'design/**/*.mjs', '*.mjs', '*.ts'],
+    files: ['native/**/*.mts', 'scripts/**/*.mts', 'design/**/*.mts', '*.mjs', '*.ts'],
     languageOptions: { globals: globals.node },
   },
   {
-    files: ['tests/**/*.{ts,mjs}'],
+    files: ['tests/**/*.{ts,mts}'],
     languageOptions: { globals: { ...globals.node, ...globals.browser, chrome: 'readonly' } },
   },
   {
@@ -50,6 +64,10 @@ export default ts.config(
   {
     files: ['entrypoints/content.tsx'],
     languageOptions: { globals: { defineContentScript: 'readonly' } },
+  },
+  {
+    files: ['native/window-names.jxa.ts'],
+    rules: { '@typescript-eslint/no-unused-vars': ['error', { varsIgnorePattern: '^run$' }] },
   },
   // Playwright inspects fixture names from the destructured first argument.
   { files: ['tests/e2e/**/*.ts'], rules: { 'no-empty-pattern': 'off' } },

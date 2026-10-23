@@ -5,7 +5,7 @@ import { validateDigest } from '../src/digest/contracts';
 import { DigestRunner } from '../src/digest/runner';
 import type { DigestBatch, DigestSource } from '../src/digest/types';
 import type { DbCall, DbRequest } from '../src/types/storage';
-import type { PlanEvent, PlanRequest } from '../native/plan-protocol.mjs';
+import type { PlanEvent, PlanRequest } from '../native/plan-protocol.mts';
 const pair = { en: 'A concrete explanation.', zh: '具体解释。' };
 const summary = {
   lead: pair,

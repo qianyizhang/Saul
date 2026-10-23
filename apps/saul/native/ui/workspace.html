@@ -70,7 +70,7 @@
         <p id="pin-reason" class="muted" hidden>
           Pinned tabs can be summarized. Deselect them to group or move.
         </p>
-        <form id="group-form" class="row" hidden>
+        <div id="group-form" class="row" role="group" aria-label="Create tab group" hidden>
           <input
             id="group-title"
             aria-label="Group name"
@@ -78,9 +78,9 @@
             maxlength="200"
           />
           <select id="group-window" aria-label="Group destination window"></select>
-          <button id="create-group">Create group</button>
+          <button id="create-group" type="button">Create group</button>
           <select id="existing-group" aria-label="Add to group"></select>
-        </form>
+        </div>
       </section>
       <div id="board" class="board">
         <div class="empty">Your open Chrome windows will appear here.</div>

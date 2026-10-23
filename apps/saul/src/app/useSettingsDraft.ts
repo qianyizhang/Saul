@@ -1,240 +1,189 @@
 import { useEffect, useRef, useState } from 'react';
+import type { SettingsState } from '../contracts/settings';
 import {
-  backupAndResetInvalidSettings,
-  getSettings,
-  InvalidStoredSettingsError,
-  saveSettings,
-  DEFAULT_SETTINGS,
-  validateProviderSettings,
-} from '../storage/settings';
-import type { UserSettings, ProviderProfile } from '../types';
-import {
-  configurationFor,
-  presetFromSettings,
-  settingsForPreset,
-  validateConfiguration,
-} from '../models/configuration';
+  createSettingsDraft,
+  editSettingsDraft,
+  settingsForSave,
+  type SettingsEdit,
+} from '../models/settings-draft';
+import { DEFAULT_SETTINGS } from '../storage/settings';
+import { requestSettings, SettingsDeliveryError } from '../storage/settings-client';
 
-function settingsDraft(settings: UserSettings): UserSettings {
-  const activeProfileId = settings.activeProfileId || 'default';
-  const normalized = {
-    ...settings,
-    activeProfileId,
-    profiles: settings.profiles?.length
-      ? settings.profiles
-      : [
-          {
-            id: activeProfileId,
-            name: 'Default',
-            config: settings.openaiCompatible,
-          },
-        ],
-  };
-  const configuration = configurationFor(settings);
-  const recipe = configuration.recipes.find((item) => item.id === configuration.selectedRecipeId)!;
-  const preset = configuration.presets.find((item) => item.id === recipe.presetId)!;
-  return { ...settingsForPreset(normalized, preset, true), configuration };
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'Settings could not be loaded.';
-}
+const message = (error: unknown) =>
+  error instanceof Error ? error.message : 'Settings could not be loaded.';
 
 export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
-  const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
-  const [selectedPresetId, setSelectedPresetId] = useState('preset-current');
+  const [form, setForm] = useState(() => createSettingsDraft(DEFAULT_SETTINGS));
+  const formRef = useRef(form);
+  const baseline = useRef<string | undefined>(undefined);
+  const running = useRef(false);
+  const mounted = useRef(true);
   const [loaded, setLoaded] = useState(false),
     [dirty, setDirty] = useState(false),
     [saved, setSaved] = useState(false),
     [saving, setSaving] = useState(false),
     [error, setError] = useState(''),
+    [blocked, setBlocked] = useState(false),
     [canResetInvalidSettings, setCanResetInvalidSettings] = useState(false),
     [resettingInvalidSettings, setResettingInvalidSettings] = useState(false),
     [recoveryNotice, setRecoveryNotice] = useState('');
-  const savingRef = useRef(false);
+
+  function replaceForm(next: typeof form) {
+    formRef.current = next;
+    setForm(next);
+  }
+  function receiveLoaded(result: SettingsState) {
+    if (result.state === 'conflict') {
+      setError(result.error);
+      setBlocked(true);
+      return;
+    }
+    baseline.current = result.revision;
+    setBlocked(false);
+    if (result.state === 'invalid') {
+      setError(result.error);
+      setCanResetInvalidSettings(true);
+      setLoaded(false);
+      setDirty(false);
+      setSaved(false);
+      return;
+    }
+    replaceForm(createSettingsDraft(result.settings));
+    setLoaded(true);
+    setDirty(false);
+    setSaved(false);
+    setBlocked(false);
+    setError('');
+    setCanResetInvalidSettings(false);
+  }
+
   useEffect(() => {
     let active = true;
-    getSettings()
-      .then((s) => {
-        if (!active) return;
-        const next = settingsDraft(s);
-        setSettings(next);
-        const configuration = configurationFor(next);
-        setSelectedPresetId(
-          configuration.recipes.find((recipe) => recipe.id === configuration.selectedRecipeId)!
-            .presetId,
-        );
-        setLoaded(true);
-      })
-      .catch((e) => {
-        if (!active) return;
-        setError(errorMessage(e));
-        setCanResetInvalidSettings(e instanceof InvalidStoredSettingsError);
-      });
+    mounted.current = true;
+    requestSettings({ action: 'read' }).then(
+      (result) => {
+        if (active) receiveLoaded(result);
+      },
+      (cause) => {
+        if (active) setError(message(cause));
+      },
+    );
     return () => {
       active = false;
+      mounted.current = false;
     };
   }, []);
   useEffect(() => {
     onDirty?.(dirty);
-    const warn = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
     };
     if (dirty) window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty, onDirty]);
-  function update(patch: Partial<UserSettings>) {
-    if (savingRef.current) return;
-    setSettings((s) => {
-      const next = { ...s, ...patch };
-      const configuration = configurationFor(next);
-      const selected = configuration.presets.find((preset) => preset.id === selectedPresetId);
-      return {
-        ...next,
-        configuration: selected
-          ? {
-              ...configuration,
-              presets: configuration.presets.map((preset) =>
-                preset.id === selected.id
-                  ? presetFromSettings(next, selected.id, selected.name)
-                  : preset,
-              ),
-            }
-          : configuration,
-      };
-    });
-    setDirty(true);
-    setSaved(false);
-    setError('');
-    setRecoveryNotice('');
-  }
-  function profilesWithCurrent(): ProviderProfile[] {
-    return (settings.profiles || []).map((p) =>
-      p.id === settings.activeProfileId ? { ...p, config: settings.openaiCompatible } : p,
-    );
-  }
-  function selectPreset(id: string) {
-    const preset = configurationFor(settings).presets.find((item) => item.id === id);
-    if (!preset || savingRef.current) return;
-    setSettings(settingsForPreset({ ...settings, profiles: profilesWithCurrent() }, preset, true));
-    setSelectedPresetId(id);
-    setError('');
-    setSaved(false);
-  }
-  function addPreset() {
-    if (savingRef.current) return;
-    const configuration = configurationFor(settings);
-    const id = crypto.randomUUID();
-    let name = 'New preset';
-    for (
-      let suffix = 2;
-      configuration.presets.some((preset) => preset.name.toLowerCase() === name.toLowerCase());
-      suffix++
-    )
-      name = `New preset ${suffix}`;
-    setSettings({
-      ...settings,
-      configuration: {
-        ...configuration,
-        presets: [...configuration.presets, presetFromSettings(settings, id, name)],
-      },
-    });
-    setSelectedPresetId(id);
-    setDirty(true);
-    setSaved(false);
-    setError('');
-  }
-  function removePreset() {
-    if (savingRef.current) return;
-    const configuration = configurationFor(settings);
-    const used = configuration.recipes.filter((recipe) => recipe.presetId === selectedPresetId);
-    if (used.length) {
-      setError(
-        `This preset is used by ${used.map((recipe) => recipe.name).join(', ')}. Choose another default preset for those recipes first.`,
-      );
-      return;
+
+  function edit(action: SettingsEdit) {
+    if (running.current) return;
+    try {
+      replaceForm(editSettingsDraft(formRef.current, action));
+      if (action.type !== 'select-preset' && action.type !== 'select-recipe') setDirty(true);
+      setSaved(false);
+      if (!blocked) setError('');
+      setRecoveryNotice('');
+    } catch (cause) {
+      setError(message(cause));
     }
-    const presets = configuration.presets.filter((preset) => preset.id !== selectedPresetId);
-    if (!presets.length) {
-      setError('Keep at least one preset.');
-      return;
-    }
-    const next = {
-      ...settings,
-      profiles: profilesWithCurrent(),
-      configuration: { ...configuration, presets },
-    };
-    setSettings(settingsForPreset(next, presets[0]!, true));
-    setSelectedPresetId(presets[0]!.id);
-    setDirty(true);
-    setSaved(false);
-    setError('');
   }
   async function save() {
-    if (savingRef.current) return;
-    savingRef.current = true;
+    if (running.current || blocked || !baseline.current) return;
+    running.current = true;
     setSaving(true);
     setError('');
     try {
-      validateConfiguration(configurationFor(settings));
-      validateProviderSettings(settings);
-      const next = { ...settings, profiles: profilesWithCurrent() };
-      await saveSettings(next);
-      setSettings(next);
+      const result = await requestSettings({
+        action: 'commit',
+        baseline: baseline.current,
+        settings: settingsForSave(formRef.current),
+      });
+      if (!mounted.current) return;
+      if (result.state !== 'ready') {
+        setError(result.error);
+        setBlocked(true);
+        return;
+      }
+      baseline.current = result.revision;
+      replaceForm({ ...formRef.current, settings: result.settings });
       setDirty(false);
       setSaved(true);
-    } catch (e) {
-      setError(errorMessage(e));
+    } catch (cause) {
+      if (!mounted.current) return;
+      setError(message(cause));
+      if (cause instanceof SettingsDeliveryError) setBlocked(true);
     } finally {
-      savingRef.current = false;
-      setSaving(false);
+      running.current = false;
+      if (mounted.current) setSaving(false);
+    }
+  }
+  async function reload() {
+    if (running.current) return;
+    if (dirty && !window.confirm('Discard your draft and reload the latest saved settings?'))
+      return;
+    running.current = true;
+    setSaving(true);
+    try {
+      const result = await requestSettings({ action: 'read' });
+      if (mounted.current) {
+        receiveLoaded(result);
+        setRecoveryNotice('');
+      }
+    } catch (cause) {
+      if (mounted.current) setError(message(cause));
+    } finally {
+      running.current = false;
+      if (mounted.current) setSaving(false);
     }
   }
   async function resetInvalidSettings() {
-    if (!canResetInvalidSettings || resettingInvalidSettings) return;
+    if (!canResetInvalidSettings || running.current || blocked || !baseline.current) return;
+    running.current = true;
     setResettingInvalidSettings(true);
     try {
-      const recovered = await backupAndResetInvalidSettings();
-      setError('');
-      setSettings(settingsDraft(recovered.settings));
-      const configuration = configurationFor(recovered.settings);
-      setSelectedPresetId(
-        configuration.recipes.find((recipe) => recipe.id === configuration.selectedRecipeId)!
-          .presetId,
-      );
-      setLoaded(true);
-      setCanResetInvalidSettings(false);
-      setDirty(false);
-      setSaved(false);
-      setRecoveryNotice(
-        recovered.reset
-          ? 'Defaults restored. The previous saved settings remain in a local recovery backup.'
-          : 'Saved settings changed and now load without a reset.',
-      );
-    } catch (e) {
-      setError(errorMessage(e));
+      const result = await requestSettings({ action: 'reset', baseline: baseline.current });
+      if (!mounted.current) return;
+      receiveLoaded(result);
+      if (result.state === 'ready')
+        setRecoveryNotice(
+          result.reset
+            ? 'Defaults restored. The previous saved settings remain in a local recovery backup.'
+            : 'Saved settings changed and now load without a reset.',
+        );
+    } catch (cause) {
+      if (mounted.current) {
+        setError(message(cause));
+        if (cause instanceof SettingsDeliveryError) setBlocked(true);
+      }
     } finally {
-      setResettingInvalidSettings(false);
+      running.current = false;
+      if (mounted.current) setResettingInvalidSettings(false);
     }
   }
   return {
-    settings,
+    settings: form.settings,
+    selectedPresetId: form.presetId,
+    selectedRecipeId: form.recipeId,
     loaded,
     dirty,
     saved,
     saving,
     error,
+    blocked,
     canResetInvalidSettings,
     resettingInvalidSettings,
     recoveryNotice,
-    update,
-    profilesWithCurrent,
-    selectedPresetId,
-    selectPreset,
-    addPreset,
-    removePreset,
+    edit,
     save,
+    reload,
     resetInvalidSettings,
   };
 }

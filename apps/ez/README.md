@@ -49,6 +49,11 @@ confirm. Deletion removes its saved snapshots from this Mac and cannot be undone
 it is unavailable while a request or launcher submission is active. Your current
 draft is preserved.
 
+If an answer cannot be saved, it stays marked **Unsaved** with **Save again**.
+That action retries only the local save; it never generates another answer. New
+lookup and History keep the answer available in memory. Save or export it before
+quitting EZ.
+
 Completed Spell Check answers with recognized corrected-text or changes labels
 show an Original / Corrected comparison: paragraph-aligned columns, highlighted
 edits, and expandable explanations. Narrow windows show the correction first.

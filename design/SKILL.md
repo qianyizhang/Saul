@@ -43,13 +43,13 @@ a separate design document is needed only for a new reusable decision.
 
 ## Generate
 
-`generate.mjs` uses the pinned `@google/design.md@0.4.0` parser/linter and
+`generate.mts` uses the pinned `@google/design.md@0.4.0` parser/linter and
 `prettier@3.6.2` from the owning project's dependencies. Native output also needs
 `xcrun swift-format` (Apple Command Line Tools). It can run from here against another project:
 
 ```sh
-node /path/to/design/generate.mjs --source /target/DESIGN.md --css /target/assets/design-tokens.css
-node /path/to/design/generate.mjs --source /target/DESIGN.md --swift /target/Sources/DesignTokens.swift
+node /path/to/design/generate.mts --source /target/DESIGN.md --css /target/assets/design-tokens.css
+node /path/to/design/generate.mts --source /target/DESIGN.md --swift /target/Sources/DesignTokens.swift
 ```
 
 Copy this directory with the contract to make a standalone kit; install the pinned

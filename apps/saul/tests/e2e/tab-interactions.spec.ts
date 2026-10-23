@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures.ts';
-import { openWorkspace, captureWorkspace } from './workspace-fixture.ts';
+import { openWorkspace, captureWorkspace, matchWorkspaceWindow } from './workspace-fixture.ts';
 import { installDigestProvider } from './digest-fixture.ts';
-import type { TabSnapshot } from '../../native/protocol.mjs';
+import type { TabSnapshot } from '../../native/protocol.mts';
 test.use({ browserToolsFixtures: true });
 
 test('Window scopes live selection, edits groups directly, preserves pins and offers guarded Undo', async ({
@@ -155,6 +155,16 @@ test('Tab board groups across windows, moves directly without deduplication, and
   expect(
     ((await call('saul_tabs_list')) as TabSnapshot).tabs.filter((t) => t.url === article.url()),
   ).toHaveLength(2);
+  await ui.getByRole('button', { name: 'Group', exact: true }).click();
+  await ui.getByRole('textbox', { name: 'Group name' }).fill('Keyboard group');
+  await ui.getByRole('textbox', { name: 'Group name' }).press('Enter');
+  await expect
+    .poll(async () => {
+      const snapshot = (await call('saul_tabs_list')) as TabSnapshot;
+      const groupId = snapshot.tabs.find((tab) => tab.id === articleId)!.groupId;
+      return snapshot.groups.find((group) => group.id === groupId)?.title;
+    })
+    .toBe('Keyboard group');
   const opening = context.waitForEvent('page');
   await ui.getByRole('button', { name: 'Summarize', exact: true }).click();
   const summary = await opening;
@@ -196,6 +206,7 @@ test('group drags preserve metadata and individual tab drops join and leave grou
     },
     { a, b, origin: fixtureServer.origin },
   );
+  await matchWorkspaceWindow(host);
   await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
   const target = ui.locator('.window[data-window-id="' + setup.destination + '"]');
   await ui.locator('[data-group-id="' + setup.groupId + '"]').dragTo(target.locator('.window-end'));
@@ -214,6 +225,7 @@ test('group drags preserve metadata and individual tab drops join and leave grou
     async (url) => chrome.windows.create({ url, focused: false }),
     fixtureServer.origin + '/article#unrelated',
   );
+  await matchWorkspaceWindow(host);
   await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
   await expect(ui.getByRole('button', { name: 'Undo', exact: true })).toBeVisible();
   await ui.getByRole('button', { name: 'Undo', exact: true }).click();
