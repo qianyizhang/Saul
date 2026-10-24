@@ -8,6 +8,14 @@ there. The directory is ignored by Git and formatting.
 
 ## Layout and retention
 
+Follow installed `practices/artifacts.md`: one bundle per major outcome, with its
+README owning the outcome, source reference, final checks, limits and retention.
+Routine passing checks need no saved log or checksum receipt. Promote useful
+decisions and results, then delete spent bundles at closeout. Review leftovers
+older than 30 days; continued retention needs a named use and next review date.
+The benchmark records below support retained measurements and keep their own
+source/conditions; ordinary verification paperwork has no indefinite exemption.
+
 | Output                             | Location relative to repository root                | Retention                                    |
 | ---------------------------------- | --------------------------------------------------- | -------------------------------------------- |
 | Browser tests                      | `.artifacts/saul/e2e/<run>/{results,report}/`       | Disposable after review                      |
