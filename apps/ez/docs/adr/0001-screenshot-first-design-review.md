@@ -1,6 +1,6 @@
 # ADR 0001: Screenshot-first design review
 
-- **Status:** Historical decision; procedure transferred to `gui-review` on 2026-10-14
+- **Status:** Historical decision; reusable procedures are owned by shared review skills
 - **Date:** 2026-10-14
 - **Scope:** EZ design discussions and visual feedback
 
@@ -17,11 +17,13 @@ The accepted approach was native screenshots with boxes/comments, deferring an
 interactive web mockup until a redesign needed it. The intended review carrier
 was an HTML page opened in Codex's browser panel for annotation.
 
-On 2026-10-14 the reusable procedure moved to the user-scope
-`gui-review` skill installed at user scope.
-That skill is the single source of truth for preparing and refreshing annotation
-surfaces. This ADR preserves EZ's rationale and decision history; it no longer
-owns operational instructions. EZ's native behavior and design contracts remain
+On 2026-10-14 the reusable screenshot procedure moved to the user-scope
+`gui-review` skill.
+It owns small screenshot-annotation rounds. Since 2026-10-27, structured maps
+and journey reports use `ui-discussion`; [local skill mappings](../agent-skills.md)
+own that routing. Portable report terms and presentation remain in the shared
+skill. This ADR preserves EZ's rationale and decision history, not operational
+instructions. EZ's native behavior and design contracts remain
 in [architecture](../architecture.md) and [design](../design.md).
 
 ## Consequences
