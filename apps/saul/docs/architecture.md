@@ -153,6 +153,11 @@ exact selected tab IDs. Snapshot metadata records source-window labels per item;
 older saved summaries remain readable. Polling reads active progress or the
 open reader, never the entire summary history on a recurring timer.
 
+`src/digest/context-menu.ts` registers **Saul Summarize** on installation/update.
+Its trusted click handler sends only the clicked tab ID to the existing reader
+owner. One-page readers open beside the source tab; the reader keeps account
+resolution, generation, persistence and recovery on the same path as tab selections.
+
 ## Source layout
 
 The portable [design contract](../../../DESIGN.md) generates CSS for the extension and

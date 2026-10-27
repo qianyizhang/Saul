@@ -9,8 +9,10 @@ export async function openSummaryReader(args: { tabIds?: number[]; id?: string }
   if (args.id && !validId(args.id)) throw new Error('Invalid summary ID.');
   if (args.id)
     await runnerRequest({ operation: 'digest', message: { action: 'get', id: args.id } });
+  let source: chrome.tabs.Tab | undefined;
   if (args.tabIds) {
     const tabs = await Promise.all(args.tabIds.map((id) => chrome.tabs.get(id)));
+    if (tabs.length === 1) source = tabs[0];
     for (const windowId of new Set(tabs.map((t) => t.windowId))) {
       const window = await chrome.windows.get(windowId);
       if (window.incognito || window.type !== 'normal')
@@ -21,6 +23,9 @@ export async function openSummaryReader(args: { tabIds?: number[]; id?: string }
   const query = args.tabIds ? '?tabs=' + args.tabIds.join(',') : '';
   await chrome.tabs.create({
     url: chrome.runtime.getURL('/library.html#summary/' + encodeURIComponent(id) + query),
+    ...(source
+      ? { windowId: source.windowId, index: source.index + 1, openerTabId: source.id }
+      : {}),
   });
   return { id };
 }

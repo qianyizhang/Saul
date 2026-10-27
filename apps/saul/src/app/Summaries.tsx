@@ -68,7 +68,8 @@ export function SummaryHistory() {
       )}
       {!loading && !entries.length && (
         <p className="empty">
-          No saved summaries. Select tabs in Window or Tab board, then Summarize.
+          No saved summaries. Right-click a page and choose Saul Summarize, or select tabs in
+          Window.
         </p>
       )}
       {loading && <p role="status">Loading…</p>}
@@ -104,6 +105,7 @@ export function SummaryReader({ route }: { route: string }) {
     new URLSearchParams(route.split('?')[1]).get('tabs')?.split(',').map(Number),
   );
   const [batch, setBatch] = useState<DigestBatch>();
+  const [source, setSource] = useState<{ title: string; url: string }>();
   const [accounts, setAccounts] = useState<PlanAccount[]>([]);
   const [account, setAccount] = useState('');
   const [error, setError] = useState('');
@@ -147,6 +149,10 @@ export function SummaryReader({ route }: { route: string }) {
           return;
         } catch (e) {
           if (!tabIds || !(e as Error).message.includes('no longer exists')) throw e;
+        }
+        if (tabIds?.length === 1) {
+          const tab = await chrome.tabs.get(tabIds[0]!);
+          setSource({ title: tab.title || 'Untitled page', url: tab.url || '' });
         }
         const [result, settings] = await Promise.all([
           planCall({ action: 'accounts' }),
@@ -216,14 +222,39 @@ export function SummaryReader({ route }: { route: string }) {
   const multipleWindows = new Set(batch?.items.map((i) => i.windowId)).size > 1;
   const done = batch?.items.filter((i) => i.status === 'completed').length || 0;
   const settled = batch?.items.filter((i) => !activeItem(i)).length || 0;
+  const singleItem = batch?.items.length === 1 ? batch.items[0] : undefined;
+  const single = batch ? Boolean(singleItem) : tabIds?.length === 1;
+  const page = singleItem || source;
+  const pageUrl = page && sourceUrl(page.url);
+  const status = singleItem
+    ? {
+        queued: 'Waiting to summarize…',
+        capturing: 'Reading page…',
+        running: 'Generating summary…',
+        completed: 'Summary ready',
+        cancelled: 'Summary stopped',
+        interrupted: 'Summary interrupted',
+        failed: 'Could not summarize page',
+        skipped: 'Page unavailable',
+      }[singleItem.status]
+    : `${done} of ${batch?.items.length || 0} summarized · ${settled} processed${running ? ' · Working…' : ''}`;
   return (
     <article className="summary-reader stack" aria-label="Summary reader">
+      <a className="small" href="#summaries">
+        ← Saved summaries
+      </a>
       <header className="row between">
         <div>
-          <h2>{batch?.windowTitle || 'Summary'}</h2>
-          <p className="small muted">
-            {batch ? new Date(batch.createdAt).toLocaleString() : 'Preparing selected tabs…'}
-          </p>
+          <h2>{single ? page?.title || 'Page summary' : batch?.windowTitle || 'Summary'}</h2>
+          {single && pageUrl ? (
+            <a className="small" href={pageUrl} target="_blank" rel="noreferrer">
+              Open source · {new URL(pageUrl).hostname}
+            </a>
+          ) : (
+            <p className="small muted">
+              {batch ? new Date(batch.createdAt).toLocaleString() : 'Preparing selected tabs…'}
+            </p>
+          )}
         </div>
         {batch && (
           <button className="btn" onClick={download}>
@@ -267,10 +298,7 @@ export function SummaryReader({ route }: { route: string }) {
       {batch && (
         <>
           <div className="row between">
-            <p role="status">
-              {done} of {batch.items.length} summarized · {settled} processed
-              {running ? ' · Working…' : ''}
-            </p>
+            <p role="status">{status}</p>
             {running && (
               <button className="btn" disabled={busy} onClick={() => void control('stop')}>
                 Stop
@@ -315,19 +343,23 @@ export function SummaryReader({ route }: { route: string }) {
           <ol className="summary-items">
             {batch.items.map((item) => (
               <li key={item.index}>
-                <div className="small muted">
-                  {multipleWindows ? (item.windowTitle || batch.windowTitle) + ' · ' : ''}
-                  {item.status === 'completed' ? '' : item.status}
-                </div>
-                <h3>
-                  {sourceUrl(item.url) ? (
-                    <a href={item.url} target="_blank" rel="noreferrer">
-                      {item.title}
-                    </a>
-                  ) : (
-                    item.title
-                  )}
-                </h3>
+                {!single && (
+                  <div className="small muted">
+                    {multipleWindows ? (item.windowTitle || batch.windowTitle) + ' · ' : ''}
+                    {item.status === 'completed' ? '' : item.status}
+                  </div>
+                )}
+                {!single && (
+                  <h3>
+                    {sourceUrl(item.url) ? (
+                      <a href={item.url} target="_blank" rel="noreferrer">
+                        {item.title}
+                      </a>
+                    ) : (
+                      item.title
+                    )}
+                  </h3>
+                )}
                 {item.error && (
                   <p className={item.status === 'skipped' ? 'small muted' : 'notice error'}>
                     {item.error}

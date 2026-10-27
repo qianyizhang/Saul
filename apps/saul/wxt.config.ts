@@ -18,6 +18,7 @@ export default defineConfig({
     description:
       'Local-first AI concept explorer with inline term tooltips and customizable models.',
     permissions: [
+      'contextMenus',
       'storage',
       'unlimitedStorage',
       'offscreen',

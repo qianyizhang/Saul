@@ -1,5 +1,6 @@
 import { snapshotSelection, captureTab } from '../src/digest/capture';
 import { validateDigest } from '../src/digest/contracts';
+import { initSummaryContextMenu } from '../src/digest/context-menu';
 import { initPlanBridge } from '../src/native/plan';
 import {
   createSettingsOwner,
@@ -186,6 +187,7 @@ async function openSource(selectionId: string) {
   await deliverSource(tab.id);
 }
 export default defineBackground(() => {
+  initSummaryContextMenu();
   const settings = createSettingsOwner();
   initStorageSecurity();
   initNativeBridge();

@@ -366,6 +366,11 @@ Add concrete motion/effect tokens and platform mappings when an actual effect is
 
 ### Summaries
 
+The page context menu offers **Saul Summarize** for the clicked HTTP(S) tab.
+For one page, open the reader beside its source and lead with the page title,
+an explicit source link and plain-language progress. Avoid repeating the title
+or batch counts for one page. Keep multi-tab results in their existing order.
+
 Summarize opens a reader immediately. A summary represents one explicit
 selection, possibly across windows, retaining tab order and source-window
 labels. Results and source captures persist; the reader is disposable and

@@ -115,6 +115,11 @@ See [native messaging](native-messaging.md).
 
 ### Summaries
 
+Right-click a web page and choose **Saul Summarize** to summarize that tab's
+loaded page text, even when the click is on a link or selected text. It does
+not summarize the link destination or only the selection. The reader opens
+beside the source tab and shows its page title, source link and progress.
+
 **Select all → Summarize** summarizes a window; a smaller selection summarizes
 only those tabs. A selection across windows produces one saved summary in
 display order with source-window labels.

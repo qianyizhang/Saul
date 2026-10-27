@@ -687,6 +687,11 @@ progress::-webkit-progress-value {
   font-family: var(--design-font-subject);
   font-size: var(--design-size-subject);
   font-weight: var(--design-weight-subject);
+  overflow-wrap: anywhere;
+}
+.summary-reader header > div {
+  min-width: 0;
+  flex: 1 1 240px;
 }
 .summary-reader .translation {
   margin-top: 4px;
