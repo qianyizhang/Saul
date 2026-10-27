@@ -257,7 +257,12 @@ Use the same concepts with surface-specific inputs: EZ collects recipe fields in
 a draft; Saul supplies the selected passage and enabled page context. Saved
 attempts retain their original prompts and model choices when configuration is
 edited. Recipe and preset names are personal data, not fixed navigation labels.
-The two apps do not sync configuration, accounts, or history.
+ChatGPT model presets share one local store: editing a name, model, effort or speed
+in either app updates new requests in both. Model choices come from each app's
+signed-in account catalog. Use Model, Effort (including Default), and Speed with
+Standard/Fast choices in both editors. Keep unsupported saved choices visible;
+disable unsupported Fast selection. Open editors preserve drafts and require Reload
+after a conflicting save. Recipes, accounts, API connections and history stay app-owned.
 
 ## Keyboard and focus
 

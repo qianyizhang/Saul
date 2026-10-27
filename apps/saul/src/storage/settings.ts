@@ -158,6 +158,14 @@ function normalizeSettings(value: unknown): UserSettings {
 
   const settings: UserSettings = {
     ...DEFAULT_SETTINGS,
+    ...(stored.sharedPresetRevision === undefined
+      ? {}
+      : {
+          sharedPresetRevision: optionalNumber(
+            stored.sharedPresetRevision,
+            'shared preset revision',
+          ),
+        }),
     activeProvider,
     openaiCompatible,
     ...(stored.chatgptPlan === undefined
@@ -276,6 +284,11 @@ export async function getSettings(): Promise<UserSettings> {
   return settingsFromStored(stored);
 }
 
+export interface SharedPresetAccess {
+  load(settings: UserSettings): Promise<UserSettings>;
+  save(settings: UserSettings): Promise<UserSettings>;
+}
+
 function settingsFromStored(stored: unknown): UserSettings {
   if (stored === undefined) return structuredClone(DEFAULT_SETTINGS);
   try {
@@ -311,6 +324,7 @@ export function createSettingsOwner(
     read: readStoredSettings,
     write: (values) => chrome.storage.local.set(values),
   },
+  shared?: SharedPresetAccess,
 ): (request: unknown) => Promise<SettingsState> {
   let pending: Promise<unknown> = Promise.resolve();
   return (value) => {
@@ -319,7 +333,33 @@ export function createSettingsOwner(
     const result = pending.then(async (): Promise<SettingsState> => {
       validateSettingsRequest(request);
       const stored = await storage.read();
-      const revision = await revisionOf(stored);
+      let loaded: UserSettings | undefined;
+      try {
+        loaded = settingsFromStored(stored);
+        if (shared) loaded = await shared.load(loaded);
+      } catch (error) {
+        if (!(error instanceof InvalidStoredSettingsError)) throw error;
+      }
+      // The only migration write: retain remapped recipe IDs and local account bindings.
+      if (
+        request.action === 'read' &&
+        shared &&
+        loaded?.sharedPresetRevision !== undefined &&
+        settingsFromStored(stored).sharedPresetRevision === undefined
+      ) {
+        await storage.write({ [SETTINGS_STORAGE_KEY]: loaded });
+        return {
+          state: 'ready',
+          settings: loaded,
+          revision: await revisionOf({
+            stored: loaded,
+            sharedRevision: loaded.sharedPresetRevision,
+          }),
+        };
+      }
+      const revision = await revisionOf(
+        shared ? { stored, sharedRevision: loaded?.sharedPresetRevision } : stored,
+      );
       if (request.action !== 'read' && request.baseline !== revision)
         return {
           state: 'conflict',
@@ -330,24 +370,40 @@ export function createSettingsOwner(
       if (request.action === 'commit') {
         settingsFromStored(stored); // Invalid originals require explicit backed-up recovery.
         // Normalize and validate in the write owner, not only in the form.
-        const settings = normalizeSettings(request.settings);
+        let settings = normalizeSettings(request.settings);
         validateProviderSettings(settings);
-        await storage.write({ [SETTINGS_STORAGE_KEY]: settings });
-        return { state: 'ready', settings, revision: await revisionOf(settings) };
+        if (shared) settings = await shared.save(settings);
+        try {
+          await storage.write({ [SETTINGS_STORAGE_KEY]: settings });
+        } catch (cause) {
+          if (!shared) throw cause;
+          throw new Error(
+            'Settings could not be saved. Shared presets may already be saved; reload saved settings before saving again.',
+            { cause },
+          );
+        }
+        return {
+          state: 'ready',
+          settings,
+          revision: await revisionOf(
+            shared ? { stored: settings, sharedRevision: settings.sharedPresetRevision } : settings,
+          ),
+        };
       }
 
       try {
         return {
           state: 'ready',
           revision,
-          settings: settingsFromStored(stored),
+          settings: loaded ?? settingsFromStored(stored),
           ...(request.action === 'reset' ? { reset: false } : {}),
         };
       } catch (error) {
         if (!(error instanceof InvalidStoredSettingsError)) throw error;
         if (request.action === 'read') return { state: 'invalid', revision, error: error.message };
       }
-      const settings = structuredClone(DEFAULT_SETTINGS);
+      let settings = structuredClone(DEFAULT_SETTINGS);
+      if (shared) settings = await shared.load(settings);
       try {
         await storage.write({
           [RECOVERY_BACKUP_KEY]: stored,
@@ -356,7 +412,14 @@ export function createSettingsOwner(
       } catch (cause) {
         throw new Error('Could not back up and reset saved settings. Try again.', { cause });
       }
-      return { state: 'ready', revision: await revisionOf(settings), settings, reset: true };
+      return {
+        state: 'ready',
+        revision: await revisionOf(
+          shared ? { stored: settings, sharedRevision: settings.sharedPresetRevision } : settings,
+        ),
+        settings,
+        reset: true,
+      };
     });
     pending = result.catch(() => {});
     return result;

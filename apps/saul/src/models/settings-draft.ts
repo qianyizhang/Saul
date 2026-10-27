@@ -85,7 +85,8 @@ export function createSettingsDraft(source: UserSettings): SettingsDraft {
   const activeProfileId = settings.activeProfileId || 'default';
   const configuration = configurationFor(settings);
   const recipe = configuration.recipes.find((item) => item.id === configuration.selectedRecipeId)!;
-  const preset = configuration.presets.find((item) => item.id === recipe.presetId)!;
+  const preset =
+    configuration.presets.find((item) => item.id === recipe.presetId) ?? configuration.presets[0];
   const normalized = {
     ...settings,
     activeProfileId,
@@ -95,8 +96,8 @@ export function createSettingsDraft(source: UserSettings): SettingsDraft {
     configuration,
   };
   return {
-    settings: settingsForPreset(normalized, preset, true),
-    presetId: preset.id,
+    settings: preset ? settingsForPreset(normalized, preset, true) : normalized,
+    presetId: preset?.id ?? '',
     recipeId: recipe.id,
   };
 }
@@ -259,7 +260,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
 
 export function settingsForSave(draft: SettingsDraft): UserSettings {
   const settings = withCurrentProfile(draft.settings);
-  validateConfiguration(configurationFor(settings));
+  validateConfiguration(configurationFor(settings), settings.sharedPresetRevision !== undefined);
   validateProviderSettings(settings);
   return structuredClone(settings);
 }

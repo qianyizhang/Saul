@@ -67,6 +67,9 @@ export function RecipeSettings({
             value={recipe.presetId}
             onChange={(event) => update({ presetId: event.target.value })}
           >
+            {!configuration.presets.some((preset) => preset.id === recipe.presetId) && (
+              <option value={recipe.presetId}>Unavailable preset</option>
+            )}
             {configuration.presets.map((preset) => (
               <option key={preset.id} value={preset.id}>
                 {preset.name}

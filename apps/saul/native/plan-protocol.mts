@@ -1,4 +1,9 @@
 import { isRecord } from './value.mts';
+import {
+  validateSharedPresets,
+  type SharedPreset,
+  type SharedPresets,
+} from './shared-presets-contract.mts';
 export interface PlanAccount {
   id: string;
   label: string;
@@ -14,6 +19,9 @@ export interface PlanModel {
   isDefault: boolean;
 }
 export type PlanRequest =
+  | { action: 'presets-read' }
+  | { action: 'presets-import'; presets: SharedPreset[] }
+  | { action: 'presets-save'; revision: number; presets: SharedPreset[] }
   | { action: 'accounts' }
   | { action: 'login'; accountId?: string; consent?: boolean }
   | { action: 'logout'; accountId: string }
@@ -30,6 +38,9 @@ export type PlanRequest =
     };
 export type PlanControlRequest = Exclude<PlanRequest, { action: 'generate' }>;
 export interface PlanResults {
+  'presets-read': { library: SharedPresets };
+  'presets-import': { library: SharedPresets };
+  'presets-save': { library: SharedPresets };
   accounts: { accounts: PlanAccount[] };
   login: { account: PlanAccount };
   logout: { account: PlanAccount; warning?: string };
@@ -55,6 +66,9 @@ const text = (v: unknown, max: number): v is string =>
 export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
   if (!isRecord(v)) throw new Error('Invalid plan request');
   const operations: Record<string, string[]> = {
+    'presets-read': [],
+    'presets-import': ['presets'],
+    'presets-save': ['revision', 'presets'],
     accounts: [],
     login: ['accountId', 'consent'],
     logout: ['accountId'],
@@ -65,6 +79,16 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
   const keys = typeof v.action === 'string' ? operations[v.action] : undefined;
   if (!Array.isArray(keys) || Object.keys(v).some((k) => k !== 'action' && !keys.includes(k)))
     throw new Error('Unsupported plan operation');
+  if (v.action === 'presets-read') return;
+  if (v.action === 'presets-import' || v.action === 'presets-save') {
+    validateSharedPresets(v.presets);
+    if (
+      v.action === 'presets-save' &&
+      (!Number.isSafeInteger(v.revision) || Number(v.revision) < 0)
+    )
+      throw new Error('Invalid shared preset revision.');
+    return;
+  }
   if (v.action !== 'accounts' && v.action !== 'login' && !text(v.accountId, 256))
     throw new Error('Choose a ChatGPT account');
   if (
@@ -118,6 +142,9 @@ export function validatePlanResult<T extends PlanControlRequest>(
 ): asserts value is PlanResult<T> {
   const validators: Record<PlanControlRequest['action'], (v: Record<string, unknown>) => boolean> =
     {
+      'presets-read': sharedLibrary,
+      'presets-import': sharedLibrary,
+      'presets-save': sharedLibrary,
       accounts: (v) => Array.isArray(v.accounts) && v.accounts.every(account),
       login: (v) => account(v.account),
       logout: (v) =>
@@ -136,4 +163,19 @@ export function validatePlanResult<T extends PlanControlRequest>(
     !validators[request.action](value)
   )
     throw new Error('ChatGPT helper returned an invalid reply. Update the helper and retry.');
+}
+
+function sharedLibrary(value: Record<string, unknown>): boolean {
+  if (
+    !record(value.library) ||
+    !Number.isSafeInteger(value.library.revision) ||
+    Number(value.library.revision) < 0
+  )
+    return false;
+  try {
+    validateSharedPresets(value.library.presets);
+    return true;
+  } catch {
+    return false;
+  }
 }

@@ -2,9 +2,9 @@ import { snapshotSelection, captureTab } from '../src/digest/capture';
 import { validateDigest } from '../src/digest/contracts';
 import { initSummaryContextMenu } from '../src/digest/context-menu';
 import { initPlanBridge } from '../src/native/plan';
+import { sharedPresets } from '../src/storage/shared-presets';
 import {
   createSettingsOwner,
-  getSettings,
   initStorageSecurity,
   SETTINGS_STORAGE_KEY,
 } from '../src/storage/settings';
@@ -36,6 +36,12 @@ import type { DbCall, DbRequest, Passage, RunInput } from '../src/types/storage'
 import type { ResolvedContext, SelectionSnapshot } from '../src/types';
 
 const db: DbCall = (message) => runnerRequest({ operation: 'db', message: message as DbRequest });
+const settingsOwner = createSettingsOwner(undefined, sharedPresets);
+async function currentSettings() {
+  const result = await settingsOwner({ action: 'read' });
+  if (result.state !== 'ready') throw new Error(result.error);
+  return result.settings;
+}
 async function owned(selectionId: string, url: string): Promise<Passage> {
   const p = await db({ type: 'DB_PASSAGE', payload: { selectionId } });
   if (!p || p.snapshot.page.url !== url)
@@ -51,7 +57,7 @@ async function submit(
   recipeId?: string,
   runId?: string,
 ) {
-  const settings = await getSettings();
+  const settings = await currentSettings();
   let prepared: { input: RunInput; credential: string };
   if (regenerate && !recipeId) {
     const original = await db({ type: 'DB_INPUT', payload: { selectionId: snapshot.id, runId } });
@@ -83,7 +89,7 @@ async function reading(
       await setErrorNotificationsMuted(request.muted);
       return {};
     case 'policy': {
-      const settings = await getSettings();
+      const settings = await currentSettings();
       const configuration = configurationFor(settings);
       return {
         policy: settings.contextPolicy,
@@ -188,7 +194,7 @@ async function openSource(selectionId: string) {
 }
 export default defineBackground(() => {
   initSummaryContextMenu();
-  const settings = createSettingsOwner();
+  const settings = settingsOwner;
   initStorageSecurity();
   initNativeBridge();
   initPlanBridge();

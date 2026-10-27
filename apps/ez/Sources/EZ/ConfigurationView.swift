@@ -21,6 +21,24 @@ struct ConfigurationView: View {
                 if let error = model.configurationError {
                     Text(error).font(AppStyle.caption).foregroundStyle(.red).textSelection(.enabled)
                 }
+                HStack {
+                    Text("Model presets are shared with Saul. Accounts and recipes stay in each app.")
+                        .font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
+                    Spacer()
+                    Button("Reload saved settings") {
+                        let reload = {
+                            model.refreshConfiguration()
+                            preset = model.configuration.presets.first
+                            recipe = model.configuration.recipes.first
+                        }
+                        if presetIsDirty || recipeIsDirty {
+                            pendingSelection = reload
+                            confirmSelection = true
+                        } else {
+                            reload()
+                        }
+                    }
+                }
                 presetSection
                 recipeSection
                 if !model.minimumMode {
@@ -96,8 +114,11 @@ struct ConfigurationView: View {
 
     private var presetEditor: some View {
         VStack(alignment: .leading, spacing: 10) {
-            TextField("Name", text: presetBinding(\.name)).textFieldStyle(.roundedBorder)
-                .accessibilityLabel("Preset name")
+            HStack(spacing: 8) {
+                Text("Preset name").frame(width: 100, alignment: .leading)
+                TextField("Preset name", text: presetBinding(\.name)).textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("Preset name")
+            }
             let modelSelection = Binding(
                 get: { preset?.model ?? "" },
                 set: { value in
@@ -122,7 +143,8 @@ struct ConfigurationView: View {
                 model.models.first { $0.model == preset?.model }?.supportedReasoningEfforts.map(
                     \.reasoningEffort) ?? []
             let effortOptions: [SelectorOption<String>] =
-                (efforts.contains(preset?.effort ?? "")
+                [.init(value: "", title: "Default")]
+                + (efforts.contains(preset?.effort ?? "") || preset?.effort.isEmpty != false
                     ? []
                     : [
                         .init(
@@ -131,7 +153,15 @@ struct ConfigurationView: View {
                                 ? "\(preset!.effort.capitalized) (unavailable)" : "Default")
                     ]) + efforts.map { .init(value: $0, title: $0.capitalized) }
             SelectorPicker("Effort", options: effortOptions, selection: presetBinding(\.effort))
-            Toggle("Fast", isOn: presetBinding(\.fast)).toggleStyle(.checkbox)
+            let supportsFast = model.models.first { $0.model == preset?.model }?.fastTier != nil
+            SelectorPicker(
+                "Speed",
+                options: [
+                    .init(value: false, title: "Standard"),
+                    .init(
+                        value: true, title: supportsFast ? "Fast" : "Fast (unavailable)",
+                        enabled: supportsFast),
+                ], selection: presetBinding(\.fast))
             Text("Fast requests priority service and may use more plan allowance.")
                 .font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
             if let preset, let issue = preset.availabilityError(in: model.models) {
@@ -195,9 +225,15 @@ struct ConfigurationView: View {
     private var recipeEditor: some View {
         VStack(alignment: .leading, spacing: 10) {
             TextField("Recipe name", text: recipeBinding(\.name)).textFieldStyle(.roundedBorder)
+            let presetOptions: [SelectorOption<UUID>] =
+                (model.configuration.presets.contains { $0.id == recipe?.presetID }
+                    ? []
+                    : [
+                        .init(value: recipe!.presetID, title: "Unavailable preset")
+                    ]) + model.configuration.presets.map { .init(value: $0.id, title: $0.name) }
             SelectorPicker(
                 "Default preset",
-                options: model.configuration.presets.map { .init(value: $0.id, title: $0.name) },
+                options: presetOptions,
                 selection: recipeBinding(\.presetID))
             Text("Prompt").font(.subheadline.weight(.medium))
             TextEditor(text: recipeBinding(\.template)).font(.system(size: 12, design: .monospaced))
@@ -307,12 +343,16 @@ struct ConfigurationView: View {
         }
         do {
             try model.saveConfiguration(updated)
-            preset = item
+            preset = model.configuration.presets.first { $0.id == item.id }
             presetMessage = "Preset saved."
         } catch { presetMessage = error.localizedDescription }
     }
     private func saveRecipe() {
         guard var item = recipe else { return }
+        guard model.configuration.presets.contains(where: { $0.id == item.presetID }) else {
+            recipeMessage = "Choose an available default preset before saving this recipe."
+            return
+        }
         item.name = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
         var updated = model.configuration
         if let index = updated.recipes.firstIndex(where: { $0.id == item.id }) {

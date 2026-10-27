@@ -5,6 +5,7 @@ struct SelectorOption<Value: Equatable>: Equatable {
     var value: Value
     var title: String
     var symbol: String? = nil
+    var enabled = true
 }
 
 /// The native control fills the allocated width; its title never determines the hitbox.
@@ -41,6 +42,7 @@ private struct NativeSelector<Value: Equatable>: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeNSView(context: Context) -> WheelPopUpButton {
         let view = WheelPopUpButton(frame: .zero, pullsDown: false)
+        view.menu?.autoenablesItems = false
         view.controlSize = .small
         view.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         view.target = context.coordinator
@@ -57,6 +59,7 @@ private struct NativeSelector<Value: Equatable>: NSViewRepresentable {
             for option in options {
                 // addItem(withTitle:) deduplicates equal titles; menu items must retain distinct values.
                 let item = NSMenuItem(title: option.title, action: nil, keyEquivalent: "")
+                item.isEnabled = option.enabled
                 if let symbol = option.symbol {
                     item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
                 }
@@ -74,7 +77,9 @@ private struct NativeSelector<Value: Equatable>: NSViewRepresentable {
         var options: [SelectorOption<Value>] = []
         init(_ parent: NativeSelector) { self.parent = parent }
         @objc func changed(_ sender: NSPopUpButton) {
-            guard parent.options.indices.contains(sender.indexOfSelectedItem) else { return }
+            guard parent.options.indices.contains(sender.indexOfSelectedItem),
+                parent.options[sender.indexOfSelectedItem].enabled
+            else { return }
             let value = parent.options[sender.indexOfSelectedItem].value
             guard parent.selection.wrappedValue != value else { return }
             parent.selection.wrappedValue = value
@@ -111,8 +116,9 @@ private final class WheelPopUpButton: NSPopUpButton {
             return
         }
         guard let step = wheel.step(event) else { return }
-        let next = max(0, min(numberOfItems - 1, indexOfSelectedItem + step))
-        guard next != indexOfSelectedItem else { return }
+        var next = indexOfSelectedItem + step
+        while (0..<numberOfItems).contains(next), item(at: next)?.isEnabled != true { next += step }
+        guard (0..<numberOfItems).contains(next), next != indexOfSelectedItem else { return }
         selectItem(at: next)
         sendAction(action, to: target)
     }

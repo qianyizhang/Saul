@@ -24,6 +24,7 @@ defines configuration, template inputs, preset overrides, and historical snapsho
 | `ResponsesClient` | Account model discovery and stateless streamed Responses requests |
 | `ResponseAccumulator` / `SSEParser` | Wire-event parsing and terminal completion checks |
 | `HistoryStore` | Owner-only, locked JSONL snapshots, deletion, and recovery |
+| `SharedPresetsStore` | Local JSON model presets shared with Saul; one-time import and stale-save detection |
 
 ## Direct plan-backed requests
 

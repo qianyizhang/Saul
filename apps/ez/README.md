@@ -135,8 +135,11 @@ A cold start may also show EZ's main window.
 ## Configure presets and recipes
 
 Open **Settings → Configuration**. A **model preset** names a model, effort, and
-Fast/Standard choice, for example `lit`. A **recipe** selects a default preset and
-contains the entire prompt. Add `{{fuzzy term}}` and `{{fuzzy context}}` to create
+Fast/Standard choice. ChatGPT presets are shared with Saul through one local store;
+existing presets import once. Save in either app, then reopen or reload the other
+app's Settings. Accounts, recipes and history stay in each app. A shared preset
+imported into Saul needs a local account selection. A **recipe** selects a default
+preset and contains the entire prompt. Add `{{fuzzy term}}` and `{{fuzzy context}}` to create
 two inputs with those placeholders. Repeated names share one field; all fields
 are required. Templates support substitution only, without Jinja expressions.
 Save each edited preset/recipe explicitly. Unsaved edits survive Settings section

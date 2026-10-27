@@ -104,6 +104,10 @@ private struct MainWindowView: View {
             .onAppear {
                 quickLookup.setOpenMain { openWindow(id: "main") }
             }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) {
+                _ in
+                if !model.showSettings { model.refreshConfiguration() }
+            }
     }
 }
 

@@ -5,6 +5,7 @@ import { validatePlanRequest } from './plan-protocol.mts';
 import { RESOURCE } from './plan-auth.mts';
 import { planError, responsesBody, responseEvents } from './responses.mts';
 import { planModels, planModelIssue } from './plan-models.mts';
+import { SharedPresetsStore } from './shared-presets.mts';
 
 const changedCatalog = () =>
   new Error('ChatGPT model choices changed while preparing this request. Retry.');
@@ -15,7 +16,9 @@ export class PlanService {
   blocked: Set<string>;
   catalogs: Map<string, PlanModel[]>;
   loadingCatalogs: Map<string, { controller: AbortController; promise?: Promise<PlanModel[]> }>;
-  constructor(auth: PlanService['auth'], fetcher = fetch) {
+  readonly presets: SharedPresetsStore;
+  constructor(auth: PlanService['auth'], fetcher = fetch, presets = new SharedPresetsStore()) {
+    this.presets = presets;
     this.auth = auth;
     this.fetcher = fetcher;
     this.blocked = new Set();
@@ -69,6 +72,15 @@ export class PlanService {
   async run(request: unknown, emit: (event: PlanEvent) => void, signal?: AbortSignal) {
     validatePlanRequest(request);
     switch (request.action) {
+      case 'presets-read':
+        emit({ type: 'result', library: this.presets.read() });
+        return;
+      case 'presets-import':
+        emit({ type: 'result', library: this.presets.import(request.presets) });
+        return;
+      case 'presets-save':
+        emit({ type: 'result', library: this.presets.save(request.revision, request.presets) });
+        return;
       case 'accounts':
         emit({ type: 'result', accounts: await this.auth.accounts() });
         return;

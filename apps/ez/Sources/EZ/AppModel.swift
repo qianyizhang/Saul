@@ -82,7 +82,8 @@ import EZCore
                 storageWarning =
                     "Skipped \(loaded.damagedLines) damaged history lines. Original bytes are preserved."
             }
-            let configStore = ConfigurationStore(directory: directory)
+            let configStore = ConfigurationStore(
+                directory: directory, shared: offline ? nil : SharedPresetsStore())
             configurationStore = configStore
             do {
                 if let saved = try configStore.load() {
@@ -94,6 +95,7 @@ import EZCore
                         effort: offline ? "low" : UserDefaults.standard.string(forKey: "effort") ?? "low",
                         fast: !offline && UserDefaults.standard.bool(forKey: "fast"))
                     try configStore.save(configuration)
+                    configuration = try configStore.load() ?? configuration
                 }
                 configurationLoaded = true
                 selectedRecipeID = configuration.recipes.first?.id
@@ -184,6 +186,7 @@ import EZCore
         replayEntry?.recipeSnapshot ?? configuration.recipes.first { $0.id == selectedRecipeID }
     }
     func openSettings(_ section: SettingsSection = .configuration) {
+        if !showSettings { refreshConfiguration() }
         settingsSection = section
         showSettings = true
     }
@@ -280,11 +283,12 @@ import EZCore
         updated.unassignedStarterID = nil
         do {
             try configurationStore?.save(updated)
-            configuration = updated
+            configuration = try configurationStore?.load() ?? updated
         } catch { configurationError = "Starter preset could not be saved. \(error.localizedDescription)" }
     }
     func chooseRecipe(_ id: UUID?) {
         guard !busy, !launcherPending else { return }
+        if !showSettings { refreshConfiguration() }
         selectedRecipeID = id
         replayEntry = nil
         overridePresetID = nil
@@ -309,12 +313,23 @@ import EZCore
             saved.unassignedStarterID = nil
         }
         try store.save(saved)
-        configuration = saved
+        configuration = try store.load() ?? saved
         configurationError = nil
         if replayEntry == nil && !saved.recipes.contains(where: { $0.id == selectedRecipeID }) {
             chooseRecipe(saved.recipes.first?.id)
         } else {
             inputValues = inputValues.filter { inputFields.contains($0.key) }
+        }
+    }
+    func refreshConfiguration() {
+        guard !busy, !launcherPending, let store = configurationStore else { return }
+        do {
+            if let saved = try store.load() { configuration = saved }
+            configurationLoaded = true
+            configurationError = nil
+        } catch {
+            configurationLoaded = false
+            configurationError = "Shared presets could not be loaded. \(error.localizedDescription)"
         }
     }
     func prepareSelectedText(_ text: String) throws {
@@ -415,6 +430,7 @@ import EZCore
         } catch { self.error = error.localizedDescription }
     }
     func send() {
+        refreshConfiguration()
         guard canSend, let recipe = currentRecipe, let preset = currentPreset, let attemptExecution else {
             return
         }

@@ -212,7 +212,7 @@ export function ChatGPTPlanSettings({
           </select>
         </label>
         <label className="field">
-          ChatGPT model
+          Model
           <select
             aria-label="ChatGPT model"
             value={value.model}

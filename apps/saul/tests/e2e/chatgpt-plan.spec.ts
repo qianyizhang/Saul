@@ -6,6 +6,7 @@ import {
   openFirstPageExplanation,
 } from './driver.ts';
 import type { PlanRequest, PlanEvent } from '../../native/plan-protocol.mts';
+import type { SharedPresets } from '../../native/shared-presets-contract.mts';
 
 test('ChatGPT provider settings route reading streams, preserve partial failures, and switch back', async ({
   sandbox,
@@ -17,6 +18,27 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   // Replace only the OS transport. UI, sender validation, offscreen runner and
   // durable database are production code; no native registration or real quota.
   await worker.evaluate(() => {
+    let library: SharedPresets = { revision: 0, presets: [] };
+    chrome.runtime.sendNativeMessage = (async (
+      _host: string,
+      message: { id: string; request: PlanRequest },
+    ) => {
+      const request = message.request;
+      if (request.action === 'presets-save') {
+        if (request.revision !== library.revision)
+          return {
+            id: message.id,
+            event: { type: 'error', message: 'Shared presets changed. Reload saved settings.' },
+          };
+        library = { revision: library.revision + 1, presets: request.presets };
+      } else if (request.action === 'presets-import') {
+        library = {
+          revision: library.revision + 1,
+          presets: [...library.presets, ...request.presets],
+        };
+      }
+      return { id: message.id, event: { type: 'result', library } };
+    }) as typeof chrome.runtime.sendNativeMessage;
     const state = {
       requests: [] as PlanRequest[],
       fail: false,

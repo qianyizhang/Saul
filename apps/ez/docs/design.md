@@ -51,7 +51,9 @@ Shared account actions use Continue with ChatGPT, Cancel, Add account, Enable pl
 usage, Refresh models, Manage usage, and Sign out. EZ and Saul use the same direct
 ChatGPT flow with separate saved sign-ins. Both expose named model presets and
 editable recipes with a default preset; native form fields and browser selection
-context remain surface-specific. Configuration and history are not synchronized.
+context remain surface-specific. ChatGPT presets share the local store described
+in the [shared contract](../../../contracts/README.md#accounts-and-models); recipes,
+accounts and history stay app-owned.
 
 New lookups place the composer below the heading. Saved answers emphasize Copy
 and Use again; More contains Export and Delete. Quick Lookup uses the same

@@ -54,34 +54,45 @@ public struct ModelOption: Identifiable {
     public var quickEffort: String {
         ["none", "minimal", "low"].first(where: { choice in
             supportedReasoningEfforts.contains { $0.reasoningEffort == choice }
-        }) ?? defaultReasoningEffort
+        })
+            ?? (supportedReasoningEfforts.contains { $0.reasoningEffort == defaultReasoningEffort }
+                ? defaultReasoningEffort : supportedReasoningEfforts.first?.reasoningEffort ?? "")
     }
     public init?(catalog: [String: Any]) {
-        guard catalog["visibility"] as? String == "list", let slug = catalog["slug"] as? String else {
+        func text(_ value: Any?, max: Int = 256) -> String? {
+            guard let value = value as? String,
+                !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                value.utf16.count <= max
+            else { return nil }
+            return value
+        }
+        guard catalog["visibility"] as? String == "list", let slug = text(catalog["slug"]) else {
             return nil
         }
         id = slug
         model = slug
-        displayName = catalog["display_name"] as? String ?? slug
+        displayName = text(catalog["display_name"], max: 1000) ?? slug
         defaultReasoningEffort =
-            catalog["default_reasoning_level"] as? String ?? catalog["default_reasoning_effort"] as? String
-            ?? ""
+            text(catalog["default_reasoning_level"] ?? catalog["default_reasoning_effort"], max: 64) ?? ""
         let values =
-            catalog["supported_reasoning_levels"] as? [[String: Any]] ?? catalog[
-                "supported_reasoning_efforts"] as? [[String: Any]] ?? []
-        supportedReasoningEfforts = values.compactMap { value in
-            guard let effort = value["effort"] as? String ?? value["reasoning_effort"] as? String else {
+            (catalog["supported_reasoning_levels"] ?? catalog["supported_reasoning_efforts"]) as? [Any] ?? []
+        var seen = Set<String>()
+        supportedReasoningEfforts = values.compactMap { raw in
+            guard let value = raw as? [String: Any],
+                let effort = text(value["effort"] ?? value["reasoning_effort"], max: 64),
+                seen.insert(effort).inserted
+            else {
                 return nil
             }
             return Effort(reasoningEffort: effort, description: value["description"] as? String ?? "")
         }
-        serviceTiers = (catalog["service_tiers"] as? [[String: Any]])?.compactMap { value in
-            guard let id = value["id"] as? String else { return nil }
+        serviceTiers = (catalog["service_tiers"] as? [Any])?.compactMap { raw in
+            guard let value = raw as? [String: Any], let id = text(value["id"]) else { return nil }
             return Tier(
                 id: id, name: value["name"] as? String ?? id,
                 description: value["description"] as? String ?? "")
         }
-        additionalSpeedTiers = catalog["additional_speed_tiers"] as? [String]
+        additionalSpeedTiers = (catalog["additional_speed_tiers"] as? [Any])?.compactMap { $0 as? String }
         isDefault = catalog["is_default"] as? Bool ?? false
     }
 }

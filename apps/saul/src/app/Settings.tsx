@@ -65,6 +65,9 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
     <fieldset className="stack settings-layout settings-fields" disabled={saving}>
       <section className="panel settings-section" aria-label="AI">
         <h3>AI</h3>
+        <p className="small muted">
+          ChatGPT model presets are shared with EZ. Accounts and recipes stay in each app.
+        </p>
         {configuration.presets.length > 1 && (
           <p className="small muted">Editing model preset: {selectedPreset?.name}</p>
         )}
@@ -325,6 +328,7 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
                 {configuration.presets.map((preset) => (
                   <option key={preset.id} value={preset.id}>
                     {preset.name}
+                    {preset.provider === 'chatgpt-plan' ? ' · ChatGPT plan' : ''}
                   </option>
                 ))}
               </select>

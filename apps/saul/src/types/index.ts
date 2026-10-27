@@ -97,6 +97,7 @@ export interface ReadingConfiguration {
 }
 
 export interface UserSettings {
+  sharedPresetRevision?: number;
   profiles?: ProviderProfile[];
   activeProfileId?: string;
   responseLanguage?: string;

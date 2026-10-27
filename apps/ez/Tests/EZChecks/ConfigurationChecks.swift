@@ -5,6 +5,35 @@ import Foundation
 
 @MainActor func configurationChecks() -> [CheckCase] {
     [
+        CheckCase("configuration: shared presets migrate once and reject stale edits") { directory in
+            let shared = SharedPresetsStore(url: directory.appendingPathComponent("settings.json"))
+            try Data("{\"appearance\":{\"theme\":\"dark\"}}".utf8).write(to: shared.url)
+            let local = ConfigurationStore(directory: directory.appendingPathComponent("ez"))
+            let config = Configuration.starters(model: "fixture", effort: "low", fast: false)
+            try local.save(config)
+            let ez = ConfigurationStore(directory: directory.appendingPathComponent("ez"), shared: shared)
+            var loaded = try ez.load()!
+            try expectEqual(loaded.presets, config.presets, "Migration changed preset identity")
+            let oldRevision = loaded.sharedPresetRevision!
+            var changed = loaded.presets
+            changed[0].name = "Edited in Saul"
+            let saved = try shared.save(changed, revision: oldRevision)
+            loaded.presets[0].effort = "high"
+            try expectThrows(EZError.self) { try ez.save(loaded) }
+            try expectEqual(try ez.load()!.presets[0].name, "Edited in Saul", "Other app edit was lost")
+            _ = try shared.save([], revision: saved.revision)
+            try expect(try ez.load()!.presets.isEmpty, "Deleted shared presets were reimported")
+            var repaired = try ez.load()!
+            repaired.presets = [ModelPreset(name: "Replacement", model: "fixture", effort: "", fast: false)]
+            try ez.save(repaired)
+            try expectEqual(
+                try ez.load()!.presets[0].name, "Replacement", "Missing recipe references blocked recovery")
+            let document =
+                try JSONSerialization.jsonObject(with: Data(contentsOf: shared.url)) as? [String: Any]
+            try expectEqual(
+                (document?["appearance"] as? [String: String])?["theme"], "dark",
+                "Other settings were overwritten")
+        },
         CheckCase("configuration: configuration round trip, empty collections, and reference validation") {
             directory in
             let f = RecipeFixture()

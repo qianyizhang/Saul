@@ -21,11 +21,9 @@ public struct ModelPreset: Codable, Equatable, Identifiable {
             return
                 "Preset ‘\(name)’ needs \(model.isEmpty ? "a model" : model). Choose an available model in Configuration."
         }
-        if option.supportedReasoningEfforts.isEmpty {
-            if !effort.isEmpty {
-                return "Preset ‘\(name)’ specifies effort, but this model does not advertise effort choices."
-            }
-        } else if !option.supportedReasoningEfforts.contains(where: { $0.reasoningEffort == effort }) {
+        if !effort.isEmpty
+            && !option.supportedReasoningEfforts.contains(where: { $0.reasoningEffort == effort })
+        {
             return "Preset ‘\(name)’ requests unsupported effort ‘\(effort)’. Edit it in Configuration."
         }
         if fast && option.fastTier == nil {
@@ -134,6 +132,7 @@ public struct PromptTemplate {
 
 public struct Configuration: Codable, Equatable {
     public var schemaVersion = 1
+    public var sharedPresetRevision: Int?
     public var presets: [ModelPreset]
     public var recipes: [Recipe]
     public var unassignedStarterID: UUID?
@@ -178,7 +177,7 @@ public struct Configuration: Codable, Equatable {
             throw EZError("Duplicate configuration IDs. Original file is preserved.")
         }
         for recipe in recipes {
-            guard presets.contains(where: { $0.id == recipe.presetID }) else {
+            guard sharedPresetRevision != nil || presets.contains(where: { $0.id == recipe.presetID }) else {
                 throw EZError("Recipe ‘\(recipe.name)’ needs an existing default preset.")
             }
             _ = try PromptTemplate(recipe.template)
@@ -198,7 +197,11 @@ public struct Configuration: Codable, Equatable {
 
 public final class ConfigurationStore {
     public let url: URL
-    public init(directory: URL) { url = directory.appendingPathComponent("configuration.json") }
+    private let shared: SharedPresetsStore?
+    public init(directory: URL, shared: SharedPresetsStore? = nil) {
+        url = directory.appendingPathComponent("configuration.json")
+        self.shared = shared
+    }
 
     public func load() throws -> Configuration? {
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
@@ -206,13 +209,37 @@ public final class ConfigurationStore {
         guard data.count <= 1_048_576 else {
             throw EZError("Configuration file is too large. Original file is preserved.")
         }
-        let result = try JSONDecoder().decode(Configuration.self, from: data)
+        var result = try JSONDecoder().decode(Configuration.self, from: data)
         try result.validate()
+        if let shared {
+            let migrating = result.sharedPresetRevision == nil
+            let library = try migrating ? shared.migrate(result.presets) : shared.read()
+            result.presets = library.presets
+            result.sharedPresetRevision = library.revision
+            if migrating { try writeLocal(result) }
+        }
         return result
     }
 
     public func save(_ configuration: Configuration) throws {
         try configuration.validate()
+        var saved = configuration
+        if let shared {
+            let library =
+                try configuration.sharedPresetRevision.map {
+                    try shared.save(configuration.presets, revision: $0)
+                } ?? shared.migrate(configuration.presets)
+            saved.presets = library.presets
+            saved.sharedPresetRevision = library.revision
+        }
+        do { try writeLocal(saved) } catch {
+            if shared == nil { throw error }
+            throw EZError(
+                "Configuration could not be saved. Shared presets may already be saved; reload before editing again. \(error.localizedDescription)"
+            )
+        }
+    }
+    private func writeLocal(_ configuration: Configuration) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         let data = try encoder.encode(configuration)

@@ -224,19 +224,26 @@ export function normalizeConfiguration(
       };
     }),
   };
-  validateConfiguration(configuration);
+  validateConfiguration(configuration, settings.sharedPresetRevision !== undefined);
   return configuration;
 }
 
-export function validateConfiguration(configuration: ReadingConfiguration): void {
+export function validateConfiguration(configuration: ReadingConfiguration, shared = false): void {
   if (configuration.schemaVersion !== 1) throw new Error('Unsupported configuration version.');
   for (const [label, items] of [
     ['presets', configuration.presets],
     ['recipes', configuration.recipes],
   ] as const) {
-    if (!items.length || items.length > 32) throw new Error(`Keep between 1 and 32 ${label}.`);
+    if (
+      (!items.length && !(shared && label === 'presets')) ||
+      items.length > (label === 'presets' ? 128 : 32)
+    )
+      throw new Error(`Keep between 1 and ${label === 'presets' ? 128 : 32} ${label}.`);
     const names = items.map((item) => item.name.trim().toLocaleLowerCase());
-    if (names.some((name) => !name) || new Set(names).size !== names.length)
+    const identities = items.map(
+      (item) => `${'provider' in item ? item.provider : ''}:${item.name.trim().toLowerCase()}`,
+    );
+    if (names.some((name) => !name) || new Set(identities).size !== identities.length)
       throw new Error(`Names must be nonempty and unique within ${label}.`);
     const ids = items.map((item) => item.id);
     if (ids.some((id) => !id) || new Set(ids).size !== ids.length)
@@ -245,7 +252,7 @@ export function validateConfiguration(configuration: ReadingConfiguration): void
   if (!configuration.recipes.some((recipe) => recipe.id === configuration.selectedRecipeId))
     throw new Error('Choose an existing default recipe.');
   for (const recipe of configuration.recipes) {
-    if (!configuration.presets.some((preset) => preset.id === recipe.presetId))
+    if (!shared && !configuration.presets.some((preset) => preset.id === recipe.presetId))
       throw new Error(`Recipe “${recipe.name}” needs an existing default preset.`);
     parseTemplate(recipe.template);
     if (new TextEncoder().encode(recipe.systemPrompt).length > 32768)

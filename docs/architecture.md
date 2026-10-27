@@ -124,10 +124,11 @@ migration are future decisions, informed by the provider's supported authorizati
 
 ## Data ownership
 
-Each app retains its current configuration, credentials and history. There is no
-shared-record format, recipe import workflow, sync queue, remote library or Git
-sync in this migration. Future two-way sync must first define stable identities,
-revision/conflict rules, deletion/retention and device-local connection binding.
+ChatGPT model presets share one local JSON document through native Swift and
+Node adapters; [the shared contract](../contracts/README.md#accounts-and-models)
+defines migration, revisions and account binding. Each app retains its recipes,
+credentials and history. There is no recipe import, sync queue, remote library or
+Git sync. Multi-device sync remains separate work.
 
 ## Naming reminder
 

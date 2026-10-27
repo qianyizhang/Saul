@@ -113,7 +113,17 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
         return;
       }
       baseline.current = result.revision;
-      replaceForm({ ...formRef.current, settings: result.settings });
+      const selected = formRef.current.settings.configuration?.presets.find(
+        (p) => p.id === formRef.current.presetId,
+      );
+      const migrated = result.settings.configuration?.presets.find(
+        (p) => p.name === selected?.name && p.provider === selected?.provider,
+      );
+      replaceForm({
+        ...formRef.current,
+        settings: result.settings,
+        presetId: migrated?.id ?? formRef.current.presetId,
+      });
       setDirty(false);
       setSaved(true);
     } catch (cause) {

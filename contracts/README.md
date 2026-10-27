@@ -1,8 +1,7 @@
 # Shared behavior and interfaces
 
-This is the shared semantic contract, implemented separately in TypeScript and
-Swift. It does not define a shared database, wire protocol, credential store or
-cross-app recipe import format. Existing persisted formats remain authoritative.
+This is the shared semantic contract, implemented in TypeScript and Swift.
+Model presets use one local store; credentials, recipes and history remain app-owned.
 
 ## Recipe preparation
 
@@ -53,6 +52,29 @@ durable recovery before an explicit new attempt. Neither app reports saved succe
 from a provider completion signal alone.
 
 ## Accounts and models
+
+ChatGPT model presets share `~/Library/Application Support/Little Clarity/settings.json`.
+The JSON document has a `modelPresets` section containing `revision` and `presets`.
+Preset saves preserve all other sections. Each preset has a UUID `id`,
+`name`, `model`, `effort` (empty means Default), and `fast`. Only these fields cross
+apps. Saves replace the file atomically; stale editor revisions require Reload and
+preserve the draft. This beta uses last-save-wins if both apps save simultaneously;
+there is no sync service or cross-process transaction manager.
+
+Both editors show Model, Effort and Standard/Fast speed. Fast is selectable only
+when the account catalog advertises it. Unsupported saved choices remain visible
+and block execution. New model selections prefer advertised none/minimal/low,
+then the advertised default, then the first effort, and start at Standard.
+
+Each app imports its old ChatGPT presets once. Duplicate names get numeric
+suffixes; preset IDs and recipe references are preserved or remapped locally.
+After migration the shared store owns these presets. Deleted presets stay deleted;
+recipes referencing them need another explicit choice. Imported presets in Saul
+need an explicit local account selection. API and on-device presets remain Saul-owned.
+Swift and Node read the same JSON file; Saul accesses it through its existing ChatGPT helper.
+Neither app needs the other app running. Settings load/reload and new requests
+read the current store; EZ also reads on activation outside Settings. Open editors
+keep their drafts until Save or Reload. Historical and prepared requests stay frozen.
 
 The conceptual interface exposes identity, permission, available models and
 supported options, then resolves an explicitly selected local connection for

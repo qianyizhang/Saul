@@ -61,7 +61,9 @@ test('dismiss, refresh and closing the source do not cancel; actual runner loss 
     page = await context.newPage();
     await page.goto(server.origin + '/article');
     await view(page);
+    const previousAttempt = (await getFirstHistory(popup)).latest.id;
     await page.getByRole('button', { name: 'Regenerate', exact: true }).click();
+    await expect.poll(async () => (await history(popup))[0]?.latest.id).not.toBe(previousAttempt);
     await expect
       .poll(async () => (await history(popup))[0]?.latest.responseRaw.length)
       .toBeGreaterThan(0);

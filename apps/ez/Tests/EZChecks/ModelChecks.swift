@@ -17,6 +17,19 @@ import Foundation
             try expect(
                 ModelOption(catalog: ["visibility": "list", "slug": "test"])?.fastTier == nil,
                 "Invented Fast capability")
+            let invalidDefault = ModelOption(catalog: [
+                "visibility": "list", "slug": "test", "default_reasoning_level": "retired",
+                "supported_reasoning_levels": [
+                    false, ["effort": "high"], ["effort": "high"], ["effort": ""],
+                ],
+            ])!
+            try expect(
+                invalidDefault.quickEffort == "high" && invalidDefault.supportedReasoningEfforts.count == 1,
+                "Invalid or duplicate catalog options changed defaults")
+            try expect(
+                ModelPreset(name: "Default", model: "test", effort: "", fast: false)
+                    .availabilityError(in: [invalidDefault]) == nil,
+                "Default effort should omit the request option")
         },
         CheckCase("preset: presets refuse unavailable models, effort, and Fast without fallback") {
             _ in
