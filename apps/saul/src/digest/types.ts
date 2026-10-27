@@ -20,6 +20,7 @@ export type ItemStatus =
   | 'cancelled'
   | 'skipped';
 export interface DigestSource {
+  title?: string;
   text: string;
   capturedAt: number;
   truncated: boolean;
@@ -55,9 +56,39 @@ export interface DigestBatch extends DigestMeta {
   items: DigestItem[];
 }
 export type DigestOverview = Pick<DigestMeta, 'id' | 'windowTitle' | 'createdAt'>;
+export interface DigestComparison {
+  index: number;
+  text?: import('../reading/input-change').TextChange;
+  fields: string[];
+  error?: string;
+  checkedAt?: number;
+}
+export interface DigestInspection {
+  saved?: DigestSource;
+  current?: DigestSource;
+  comparison?: DigestComparison;
+}
+export interface DigestResolution {
+  batch?: DigestBatch;
+  comparisons: DigestComparison[];
+}
 export interface DigestOperations {
+  resolve: {
+    request: { action: 'resolve'; id: string; tabIds: number[] };
+    result: DigestResolution;
+  };
+  inspect: {
+    request: { action: 'inspect'; id: string; index: number; tabId?: number };
+    result: DigestInspection;
+  };
   start: {
-    request: { action: 'start'; id: string; tabIds: number[]; accountId: string };
+    request: {
+      action: 'start';
+      id: string;
+      tabIds: number[];
+      accountId: string;
+      regenerate?: boolean;
+    };
     result: DigestBatch;
   };
   active: { request: { action: 'active' }; result: DigestBatch | undefined };
@@ -73,6 +104,7 @@ export const activeItem = (item: DigestItem) =>
   ['queued', 'capturing', 'running'].includes(item.status);
 
 export interface DigestDbOperations {
+  DB_DIGEST_FIND: { payload: { urls: string[] }; result: DigestBatch | undefined };
   DB_DIGEST_CREATE: { payload: DigestBatch; result: DigestBatch };
   DB_DIGEST_GET: { payload: { id: string }; result: DigestBatch };
   DB_DIGEST_LIST: { payload: undefined; result: DigestOverview[] };

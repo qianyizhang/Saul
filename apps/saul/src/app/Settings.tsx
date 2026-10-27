@@ -6,6 +6,7 @@ import { useProviderTest } from './useProviderTest';
 import { CHROME_AI_ENABLED, CHROME_AI_DISABLED_MESSAGE } from '../models/chrome-ai';
 import { configurationFor } from '../models/configuration';
 import { RecipeSettings } from './RecipeSettings';
+import { SUMMARY_ACTION_ID, SUMMARY_CLOSE_ID } from '../digest/actions';
 
 const presets = [
   { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
@@ -21,6 +22,39 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
   const error = draft.error || providerTest.error;
   const [visibleKey, setVisibleKey] = useState(false);
   const [planBusy, setPlanBusy] = useState(false);
+  const [summaryShortcut, setSummaryShortcut] = useState('Loading…');
+  const [closeShortcut, setCloseShortcut] = useState('Loading…');
+  useEffect(() => {
+    let disposed = false;
+    const refresh = () => {
+      void chrome.commands.getAll().then(
+        (commands) => {
+          if (!disposed) {
+            setCloseShortcut(
+              commands.find((command) => command.name === SUMMARY_CLOSE_ID)?.shortcut ||
+                'Not assigned',
+            );
+            setSummaryShortcut(
+              commands.find((command) => command.name === SUMMARY_ACTION_ID)?.shortcut ||
+                'Not assigned',
+            );
+          }
+        },
+        () => {
+          if (!disposed) {
+            setSummaryShortcut('Unavailable');
+            setCloseShortcut('Unavailable');
+          }
+        },
+      );
+    };
+    refresh();
+    window.addEventListener('focus', refresh);
+    return () => {
+      disposed = true;
+      window.removeEventListener('focus', refresh);
+    };
+  }, []);
   const configuration = configurationFor(settings);
   const selectedPreset = configuration.presets.find(
     (preset) => preset.id === draft.selectedPresetId,
@@ -436,6 +470,14 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
         <summary>Shortcuts</summary>
         <dl>
           <div>
+            <dt>Summarize current page</dt>
+            <dd>{summaryShortcut}</dd>
+          </div>
+          <div>
+            <dt>Close summary panel</dt>
+            <dd>{closeShortcut}</dd>
+          </div>
+          <div>
             <dt>Explain selection</dt>
             <dd>⌘ / Ctrl + Enter</dd>
           </div>
@@ -460,6 +502,13 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
             <dd>Alt + Shift + L</dd>
           </div>
         </dl>
+        <button
+          type="button"
+          className="btn quiet"
+          onClick={() => void chrome.tabs.create({ url: 'chrome://extensions/shortcuts' })}
+        >
+          Configure Chrome shortcuts
+        </button>
       </details>
       <div className="settings-save">
         {error && (

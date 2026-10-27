@@ -282,6 +282,15 @@ Keep shortcut reference in menus/Settings, not permanent “press X to do Y” b
 Closing a reading card leaves work running. Restore useful focus when a disclosure
 or transient surface closes. Every essential action must also work by click or tap.
 
+Saul's browser command **Saul Summarize** uses **Control+S (⌃S)** on macOS,
+leaving **Command+S** with Chrome. Other platforms default to **Alt+Shift+S**.
+**Control+W (⌃W)** closes only the summary panel in the current window; closing
+keeps generation running. Other platforms use **Alt+Shift+W**. The panel also
+offers Close. **Command+W** remains Chrome's tab command.
+Settings → Shortcuts shows Chrome's actual binding and opens Chrome's shortcut
+configuration; show an unassigned binding explicitly. The command summarizes
+only the current regular HTTP(S) page through the same action as the context menu.
+
 ## Mobile direction
 
 Mobile is a future surface, not a shipped app or a sync promise. Reuse these
@@ -347,7 +356,12 @@ labels must convey the distinction without color. Preserve whitespace and litera
 markup, wrap long lines, and provide Copy per block with honest failure feedback.
 Show partial, empty, and unavailable data explicitly. A queued request is prepared,
 not proof of delivery. This is retained model text, not an HTTP/event log or hidden
-reasoning. No extra request, credential capture, or debug-mode prerequisite.
+reasoning. No extra model request, credential capture, or debug-mode prerequisite.
+Large blocks use searchable, bounded sections with Previous/Next and a full-text
+Copy action. Keep literal text selectable and wrapped; mount one section at a time.
+For summaries, show capture time, size and coverage before the source, with saved
+and current input as explicit views. Comparing reads loaded page text on demand;
+never silently replace the generation's saved input.
 
 Use a clear primary action per task, quiet secondary actions, and explicit destructive
 labels. Search, lists, selection, focus, tooltips, notices, and loading feedback must
@@ -372,7 +386,9 @@ Add concrete motion/effect tokens and platform mappings when an actual effect is
 ### Summaries
 
 The page context menu offers **Saul Summarize** for the clicked HTTP(S) tab.
-For one page, open the reader beside its source and lead with the page title,
+Chrome reading actions open the summary in the browser's side panel and keep
+the source tab active. The panel retains its current summary across tab switches;
+opening another summary deliberately replaces its view. For one page, lead with the page title,
 an explicit source link and plain-language progress. Avoid repeating the title
 or batch counts for one page. Keep multi-tab results in their existing order.
 
@@ -388,3 +404,13 @@ and two to four concrete points; limits stay visible, deeper material is
 collapsed. Keep successful and processed counts distinct. Completion must
 never steal focus or open another tab. Explain capture limitations for
 video/audio pages; page text is not the media itself.
+
+Repeated Summarize actions reuse the latest saved selection, matching exact URLs
+and tab order, or reopen its active run. Put **Saved summary reused**, its original
+date, and the input comparison before the answer. Show exact matches, whitespace
+changes, token additions/removals and changed request fields separately; never call
+a token estimate semantic equivalence. Unknown capture state stays explicit.
+**Run again** captures current input in a new saved attempt; **Retry unfinished**
+uses the original frozen input. Repeated reading requests also disclose reuse and
+offer **Run again with current input**; their normal Regenerate keeps saved input.
+No age threshold or estimated change score silently starts generation.

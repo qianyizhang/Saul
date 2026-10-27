@@ -24,6 +24,20 @@ export function digestStore(db: Database, request: Request): unknown {
     };
   };
   switch (request.type) {
+    case 'DB_DIGEST_FIND': {
+      // Match the exact ordered URL selection; retain settled partial/failed attempts too.
+      // Source text stays in SQLite until comparison/inspection explicitly needs it.
+      const row = db.selectObject(
+        `SELECT b.id FROM digest_batch b
+        WHERE (SELECT count(*) FROM digest_item i WHERE i.batch_id=b.id)=?
+        AND NOT EXISTS (SELECT 1 FROM digest_item i WHERE i.batch_id=b.id
+          AND (json_extract(i.data,'$.url') != json_extract(?, '$[' || i.position || ']')
+            OR json_extract(i.data,'$.status') IN ('queued','capturing','running')))
+        ORDER BY b.created_at DESC, b.rowid DESC LIMIT 1`,
+        [request.payload.urls.length, JSON.stringify(request.payload.urls)],
+      );
+      return row ? get(String(row.id)) : undefined;
+    }
     case 'DB_DIGEST_CREATE': {
       const { items, ...meta } = request.payload;
       db.transaction(() => {

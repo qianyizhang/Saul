@@ -52,6 +52,16 @@ provider event followed by a successful save.
 - Native CSS Custom Highlights mark exact, unambiguous occurrences without wrapping or replacing page text.
 - Missing or ambiguous passages remain accessible from the page list and library with location unavailable.
 
+Reading reuse resolves in SQLite before credentials are required. It preserves the
+submission ledger, including deleted-submission tombstones. Exact anchors remain
+the primary identity; a changed surrounding context may match only with the same
+selected text and offsets plus a matching DOM location or unchanged leading
+context. Equal words at separate offsets do not share an answer. The reuse review
+compares the displayed attempt's saved prompt, context, instructions and model
+choices against prepared current input, without credential validation or inference.
+Explicit current-input runs retain the previous attempt; ordinary Regenerate keeps
+the frozen request.
+
 ## Trust boundaries
 
 Validators in `src/contracts/` restrict operations by sender:
@@ -148,15 +158,32 @@ separate feature. Wire and storage renames require explicit migrations.
 The existing offscreen document hosts the digest runner alongside reading jobs. Both use the same database worker and native ChatGPT transport; digest generation calls the existing plan adapter with a frozen account, prompt, model and effort. Digest control actions serialize, generation uses two concurrent workers, and there is no automatic retry. All workers settle before a stop/delete/retry control can complete. Schema version 2 adds digest metadata and item/source rows without rewriting reading data. Restart reconciliation marks unfinished items interrupted. The UI polls saved/live state while mounted and renders English before Chinese from validated pairs; raw model text is never interpreted as HTML.
 
 `src/app/Summaries.tsx` owns saved-summary history and live reading under
-`library.html#summary/<id>`. A new reader resolves account choice and sends the
-exact selected tab IDs. Snapshot metadata records source-window labels per item;
+`library.html#summary/<id>`. A new reader checks saved input reuse before account
+choice and sends the exact selected tab IDs. Snapshot metadata records source-window labels per item;
 older saved summaries remain readable. Polling reads active progress or the
 open reader, never the entire summary history on a recurring timer.
 
-`src/digest/context-menu.ts` registers **Saul Summarize** on installation/update.
-Its trusted click handler sends only the clicked tab ID to the existing reader
-owner. One-page readers open beside the source tab; the reader keeps account
-resolution, generation, persistence and recovery on the same path as tab selections.
+`src/digest/actions.ts` registers **Saul Summarize** on installation/update.
+The context menu and Chrome command share one handler. Chrome UI actions use
+`src/digest/panel.ts` to open `summary-panel.html` synchronously in the browser
+gesture, with the selected route in trusted session storage per window. The panel
+reuses the summary history and reader components and their existing account,
+generation, persistence and recovery boundaries. Routes survive panel closure
+within the browser session. Resolving a reused result persists its saved ID,
+so reopening the panel never replays a temporary selection request.
+External native/Tab board requests retain `openSummaryReader` and full-reader URLs;
+they have no browser gesture with which to open Chrome's side panel.
+
+Summary reuse lives in the digest runner/store. `DB_DIGEST_FIND` matches ordered
+URLs without changing schema or copying output; current captures are compared with
+frozen item/source rows and then discarded. Read-only resolve/inspect actions do
+not block Stop. For a saved selection, Run again creates a new ID and captures fresh
+sources. A final start-time lookup also prevents a second reader from duplicating
+an existing active or settled selection. Page comparison failures preserve the saved
+answer and remain visible. No recurring capture, semantic cache or expiry timer is
+used. Summary inspection assembles the exact user prompt through the same function
+as generation; the shared `InspectionText` renders at most one 6,000-character
+section per block, searches all sections and copies the complete original text.
 
 ## Source layout
 

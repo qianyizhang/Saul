@@ -8,6 +8,7 @@ import type { Passage } from '../types/storage';
 import { PassageMarkers } from '../reading/markers';
 import { FloatingTrigger } from './FloatingTrigger';
 import { ExplanationCard, runLabel } from './ExplanationCard';
+import type { InputComparison } from '../reading/input-change';
 type Captured = NonNullable<ReturnType<typeof captureSelection>>;
 export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) {
   const [passages, setPassages] = useState<Passage[]>([]),
@@ -20,6 +21,11 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
   const [, redraw] = useState(0);
   const [errorsMuted, setErrorsMuted] = useState<boolean | null>(null);
   const [minimum, setMinimum] = useState(true);
+  const [reuse, setReuse] = useState<{
+    id: string;
+    selection: Captured;
+    comparison?: InputComparison;
+  }>();
   const [recipes, setRecipes] = useState<ReadingOperations['policy']['result']['recipes']>([]);
   const [defaultRecipeId, setDefaultRecipeId] = useState(EXPLAIN_RECIPE_ID);
   const [recipeChoice, setRecipeChoice] = useState<string | null>(null);
@@ -49,6 +55,8 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
   activeRef.current = activeId;
   const active = passages.find((p) => p.snapshot.id === activeId);
   function open(id: string, scroll = false) {
+    setReuse(undefined);
+    activeRef.current = id;
     setActiveId(id);
     setCaptured(null);
     setList(false);
@@ -263,39 +271,49 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
       setBusy(false);
     }
   }
-  async function explain(selection: Captured | null = captured) {
+  async function explain(selection: Captured | null = captured, regenerate = false) {
     if (!selection || busy) return;
     const requestedRecipeId = recipeChoice || (recipes.length ? defaultRecipeId : undefined);
-    const known = passages.find((p) => {
-      const attachment = markers.current?.attachments.get(p.snapshot.id);
-      return (
-        attachment?.state === 'attached' &&
-        selection.range.compareBoundaryPoints(Range.START_TO_START, attachment.range) === 0 &&
-        selection.range.compareBoundaryPoints(Range.END_TO_END, attachment.range) === 0
-      );
-    });
     setBusy(true);
     try {
       const { policy, selectedRecipeId } = await sendReadingMessage({ action: 'policy' });
       const recipeId = requestedRecipeId || selectedRecipeId;
       if (location.href !== selection.snapshot.page.url)
         throw new Error('The page changed. Select the passage again.');
-      if (known && (known.latest.recipe?.id || EXPLAIN_RECIPE_ID) === recipeId) {
-        open(known.snapshot.id);
-        return;
+      const context = buildResolvedContext(selection.snapshot, selection.range, policy);
+      async function showReuse(id: string) {
+        open(id);
+        setReuse({ id, selection: selection! });
+        try {
+          const comparison = await sendReadingMessage({
+            action: 'review',
+            selectionId: id,
+            context,
+            recipeId,
+          });
+          if (activeRef.current === id) setReuse({ id, selection: selection!, comparison });
+        } catch (error) {
+          if (activeRef.current === id)
+            setReuse({
+              id,
+              selection: selection!,
+              comparison: { fields: [], error: (error as Error).message },
+            });
+        }
       }
       const result = await sendReadingMessage({
         action: 'submit',
-        submissionId: selection.snapshot.id,
+        submissionId: regenerate ? crypto.randomUUID() : selection.snapshot.id,
         snapshot: selection.snapshot,
-        context: buildResolvedContext(selection.snapshot, selection.range, policy),
+        context,
         recipeId,
+        ...(regenerate ? { regenerate: true } : {}),
       });
       if (location.href !== selection.snapshot.page.url) return;
       setCaptured(null);
       window.getSelection()?.removeAllRanges();
       await refreshRef.current();
-      if (result.reused && result.passageId) open(result.passageId);
+      if (result.reused && result.passageId) await showReuse(result.passageId);
       else setToast({ text: 'Waiting…', id: result.passageId });
     } catch (error) {
       setToast({ text: (error as Error).message, error: true });
@@ -412,6 +430,14 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
           pinned={pinned}
           busy={busy}
           minimum={minimum}
+          reuse={
+            reuse?.id === active.snapshot.id
+              ? reuse.comparison || { fields: [], error: 'Checking current input…' }
+              : undefined
+          }
+          onRunCurrent={
+            reuse?.id === active.snapshot.id ? () => void explain(reuse.selection, true) : undefined
+          }
           onPin={() => setPinned((v) => !v)}
           onClose={() => {
             setActiveId(null);

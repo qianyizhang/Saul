@@ -16,6 +16,7 @@ import type {
 } from '../types/storage';
 import { EXPLAIN_RECIPE_ID } from '../models/configuration';
 import { inspectionInput } from '../reading/inspection';
+import type { SelectionSnapshot } from '../types';
 
 type Row = Record<string, SqlValue>;
 const latest = `(SELECT rowid FROM llm_run WHERE selection_id = s.id ORDER BY created_at DESC, rowid DESC LIMIT 1)`;
@@ -137,21 +138,58 @@ export class SaulDatabase {
       unread: !!completed && completed.viewedAt === undefined,
     };
   }
+  private anchorKey(s: SelectionSnapshot): string {
+    return JSON.stringify([
+      s.anchor.exact,
+      s.anchor.prefix,
+      s.anchor.suffix,
+      s.anchor.textStart,
+      s.anchor.textEnd,
+    ]);
+  }
+  private findSelection(s: SelectionSnapshot): string | undefined {
+    // Context can change without changing the selected occurrence. The fallback
+    // requires exact text offsets plus a DOM location or unchanged leading context.
+    // Text alone never matches, so separate occurrences remain separate.
+    const matches = this.rows(
+      `SELECT s.id FROM selection s JOIN page p ON p.id=s.page_id
+      WHERE p.url=? AND (s.id=? OR s.anchor_key=? OR
+        (s.anchor_exact=? AND s.text_start=? AND s.text_end=? AND
+          ((? != '' AND s.dom_path=?) OR (? != '' AND s.prefix=?))))`,
+      [
+        s.page.url,
+        s.id,
+        this.anchorKey(s),
+        s.anchor.exact,
+        s.anchor.textStart ?? null,
+        s.anchor.textEnd ?? null,
+        s.anchor.domPath || '',
+        s.anchor.domPath || '',
+        s.anchor.prefix,
+        s.anchor.prefix,
+      ],
+    );
+    return matches.length === 1 ? String(matches[0]!.id) : undefined;
+  }
+  private submittedSelection(submissionId: string, url: string): string | undefined {
+    const existing = this.rows(
+      'SELECT q.selection_id,p.url FROM submission q LEFT JOIN selection s ON s.id=q.selection_id LEFT JOIN page p ON p.id=s.page_id WHERE q.id = ?',
+      [submissionId],
+    )[0];
+    if (!existing) return;
+    if (!existing.selection_id)
+      throw new Error(
+        'This submitted passage was deleted. Select the text again to create a new passage.',
+      );
+    if (existing.url !== url) throw new Error('This submission belongs to another page.');
+    return String(existing.selection_id);
+  }
   private submit(payload: Submission): DbOperations['DB_SUBMIT']['result'] {
     let result!: DbOperations['DB_SUBMIT']['result'];
     this.db.transaction(() => {
-      const existing = this.rows(
-        'SELECT q.selection_id,p.url FROM submission q LEFT JOIN selection s ON s.id=q.selection_id LEFT JOIN page p ON p.id=s.page_id WHERE q.id = ?',
-        [payload.submissionId],
-      )[0];
-      if (existing) {
-        if (!existing.selection_id)
-          throw new Error(
-            'This submitted passage was deleted. Select the text again to create a new passage.',
-          );
-        if (existing.url !== payload.snapshot.page.url)
-          throw new Error('This submission belongs to another page.');
-        result = { passageId: String(existing.selection_id) };
+      const submitted = this.submittedSelection(payload.submissionId, payload.snapshot.page.url);
+      if (submitted) {
+        result = { passageId: submitted };
         return;
       }
       const { snapshot: s, input } = payload;
@@ -160,18 +198,9 @@ export class SaulDatabase {
         [nanoid(), s.page.url, s.page.canonicalUrl || null, s.page.title, s.capturedAt, Date.now()],
       );
       const pageId = this.rows('SELECT id FROM page WHERE url=?', [s.page.url])[0]!.id!;
-      const key = JSON.stringify([
-        s.anchor.exact,
-        s.anchor.prefix,
-        s.anchor.suffix,
-        s.anchor.textStart,
-        s.anchor.textEnd,
-      ]);
-      const known = this.rows(
-        'SELECT id FROM selection WHERE page_id=? AND (id=? OR anchor_key=?)',
-        [pageId, s.id, key],
-      )[0];
-      const selectionId = known ? String(known.id) : s.id;
+      const key = this.anchorKey(s);
+      const known = this.findSelection(s);
+      const selectionId = known || s.id;
       const prior = known
         ? this.rows(
             'SELECT input_json,status FROM llm_run WHERE selection_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1',
@@ -263,6 +292,28 @@ export class SaulDatabase {
   }
   private executeReady(message: DbRequest): unknown {
     switch (message.type) {
+      case 'DB_READING_RESOLVE': {
+        const { snapshot, submissionId, recipeId } = message.payload;
+        const submitted = this.submittedSelection(submissionId, snapshot.page.url);
+        if (submitted) return submitted;
+        const selectionId = this.findSelection(snapshot);
+        if (!selectionId) return;
+        const prior = this.rows(
+          'SELECT input_json FROM llm_run WHERE selection_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1',
+          [selectionId],
+        )[0];
+        if (!prior) return;
+        const input: RunInput | undefined = prior.input_json
+          ? JSON.parse(String(prior.input_json))
+          : undefined;
+        if ((input?.recipe?.id || EXPLAIN_RECIPE_ID) !== recipeId) return;
+        this.write('INSERT INTO submission(id,selection_id) VALUES (?,?)', [
+          submissionId,
+          selectionId,
+        ]);
+        return selectionId;
+      }
+      case 'DB_DIGEST_FIND':
       case 'DB_DIGEST_CREATE':
       case 'DB_DIGEST_GET':
       case 'DB_DIGEST_LIST':

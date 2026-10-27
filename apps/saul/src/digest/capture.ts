@@ -66,6 +66,7 @@ export function extractPage(expectedUrl: string): DigestSource {
     throw new Error('Not enough readable text. Load the page and try a new summary.');
   const truncated = text.length > 120000;
   return {
+    title: document.title,
     text: text.slice(0, 120000),
     capturedAt: Date.now(),
     truncated,

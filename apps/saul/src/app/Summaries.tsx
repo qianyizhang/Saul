@@ -6,14 +6,31 @@ import { getSettings } from '../storage/settings';
 import { sendDigestMessage, sendWorkspaceMessage } from '../storage/client';
 import { activeItem, type DigestBatch, type DigestOverview, type Pair } from '../digest/types';
 import { digestHtml, sourceUrl } from '../digest/html';
+import { openSummaryPanel } from '../digest/panel';
+import type { DigestComparison } from '../digest/types';
+import { ComparisonNote, SummaryInspection } from './SummaryInspection';
 
-export async function openSummary(tabIds: number[]) {
-  return sendWorkspaceMessage({ action: 'command', method: 'saul_summary_open', args: { tabIds } });
+export function openSummary(tabIds: number[], windowId: number) {
+  return openSummaryPanel(windowId, { tabIds });
 }
-function openSaved(id: string) {
-  return sendWorkspaceMessage({ action: 'command', method: 'saul_summary_open', args: { id } });
+function useSummaryWindow() {
+  const [windowId, setWindowId] = useState<number>();
+  useEffect(() => {
+    let disposed = false;
+    void chrome.windows
+      .getCurrent()
+      .then((window) => {
+        if (!disposed) setWindowId(window.id);
+      })
+      .catch((error) => console.warn('[Saul] Could not identify the summary window', error));
+    return () => {
+      disposed = true;
+    };
+  }, []);
+  return windowId;
 }
 export function ActiveSummary() {
+  const windowId = useSummaryWindow();
   const [active, setActive] = useState<SummaryProgress | null>(null);
   useEffect(() => {
     let disposed = false;
@@ -44,13 +61,19 @@ export function ActiveSummary() {
         className="small summary-progress"
         href={chrome.runtime.getURL('/library.html#summary/' + active.id)}
         target="_blank"
+        onClick={(event) => {
+          event.preventDefault();
+          if (windowId !== undefined)
+            void openSummaryPanel(windowId, { id: active.id }).catch(console.warn);
+        }}
       >
         Summarizing {active.completed} of {active.total} · Open
       </a>
     )
   );
 }
-export function SummaryHistory() {
+export function SummaryHistory({ onOpen }: { onOpen?: (id: string) => void } = {}) {
+  const windowId = useSummaryWindow();
   const [entries, setEntries] = useState<DigestOverview[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -78,7 +101,14 @@ export function SummaryHistory() {
           <li key={entry.id}>
             <button
               className="summary-entry"
-              onClick={() => void openSaved(entry.id).catch((e: Error) => setError(e.message))}
+              disabled={!onOpen && windowId === undefined}
+              onClick={() => {
+                if (onOpen) onOpen(entry.id);
+                else if (windowId !== undefined)
+                  void openSummaryPanel(windowId, { id: entry.id }).catch((e: Error) =>
+                    setError(e.message),
+                  );
+              }}
             >
               <strong>{entry.windowTitle}</strong>
               <span className="small muted">{new Date(entry.createdAt).toLocaleString()}</span>
@@ -99,20 +129,41 @@ function Bilingual({ pair }: { pair: Pair }) {
     </>
   );
 }
-export function SummaryReader({ route }: { route: string }) {
-  const [id] = useState(() => decodeURIComponent(route.split('?')[0]!.slice('#summary/'.length)));
+export function SummaryReader({
+  route,
+  sidePanel = false,
+  onClose,
+  onResolved,
+}: {
+  route: string;
+  sidePanel?: boolean;
+  onClose?: () => void;
+  onResolved?: (id: string) => Promise<void>;
+}) {
+  const [id, setId] = useState(() =>
+    decodeURIComponent(route.split('?')[0]!.slice('#summary/'.length)),
+  );
   const [tabIds] = useState(() =>
     new URLSearchParams(route.split('?')[1]).get('tabs')?.split(',').map(Number),
   );
   const [batch, setBatch] = useState<DigestBatch>();
+  const [reused, setReused] = useState(false);
+  const [comparisons, setComparisons] = useState<DigestComparison[]>([]);
   const [source, setSource] = useState<{ title: string; url: string }>();
   const [accounts, setAccounts] = useState<PlanAccount[]>([]);
   const [account, setAccount] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const initialized = useRef(false);
+  const live = useRef(true);
+  useEffect(() => {
+    live.current = true;
+    return () => {
+      live.current = false;
+    };
+  }, []);
   const start = useCallback(
-    async (accountId: string) => {
+    async (accountId: string, regenerate = false) => {
       setBusy(true);
       setError('');
       try {
@@ -127,17 +178,39 @@ export function SummaryReader({ route }: { route: string }) {
           throw new Error(
             'GPT-6 Luna with medium effort is unavailable. Refresh models in Settings.',
           );
-        if (!tabIds?.length) throw new Error('The selection is missing.');
-        const result = await sendDigestMessage({ action: 'start', id, tabIds, accountId });
+        const selected = tabIds || batch?.items.map((item) => item.tabId);
+        if (!selected?.length) throw new Error('The selection is missing.');
+        if (regenerate && batch) {
+          for (const [index, tabId] of selected.entries()) {
+            const tab = await chrome.tabs.get(tabId);
+            if (tab.url !== batch.items[index]?.url)
+              throw new Error(
+                'A source tab changed or closed. Use Saul Summarize on the page you want.',
+              );
+          }
+        }
+        const targetId = regenerate ? crypto.randomUUID() : id;
+        const result = await sendDigestMessage({
+          action: 'start',
+          id: targetId,
+          tabIds: selected,
+          accountId,
+          ...(regenerate ? { regenerate: true } : {}),
+        });
+        if (!live.current) return;
+        setId(result.id);
         setBatch(result);
-        history.replaceState(null, '', '#summary/' + id);
+        setReused(result.id !== targetId);
+        setComparisons([]);
+        history.replaceState(null, '', '#summary/' + encodeURIComponent(result.id));
+        await onResolved?.(result.id);
       } catch (e) {
         setError((e as Error).message);
       } finally {
         setBusy(false);
       }
     },
-    [id, tabIds],
+    [id, tabIds, batch, onResolved],
   );
   useEffect(() => {
     if (initialized.current) return;
@@ -145,10 +218,28 @@ export function SummaryReader({ route }: { route: string }) {
     void (async () => {
       try {
         try {
-          setBatch(await sendDigestMessage({ action: 'get', id }));
+          const existing = await sendDigestMessage({ action: 'get', id });
+          if (!live.current) return;
+          setBatch(existing);
+          await onResolved?.(existing.id);
           return;
         } catch (e) {
           if (!tabIds || !(e as Error).message.includes('no longer exists')) throw e;
+        }
+        if (tabIds?.length) {
+          setBusy(true);
+          const resolved = await sendDigestMessage({ action: 'resolve', id, tabIds });
+          if (!live.current) return;
+          setBusy(false);
+          if (resolved.batch) {
+            setId(resolved.batch.id);
+            setBatch(resolved.batch);
+            setReused(true);
+            setComparisons(resolved.comparisons);
+            history.replaceState(null, '', '#summary/' + encodeURIComponent(resolved.batch.id));
+            await onResolved?.(resolved.batch.id);
+            return;
+          }
         }
         if (tabIds?.length === 1) {
           const tab = await chrome.tabs.get(tabIds[0]!);
@@ -158,6 +249,7 @@ export function SummaryReader({ route }: { route: string }) {
           planCall({ action: 'accounts' }),
           getSettings(),
         ]);
+        if (!live.current) return;
         const eligible = result.accounts.filter((a) => a.signedIn && a.planEnabled);
         setAccounts(eligible);
         const chosen =
@@ -169,9 +261,10 @@ export function SummaryReader({ route }: { route: string }) {
           setError('Sign in with ChatGPT and enable plan usage in Settings to summarize tabs.');
       } catch (e) {
         setError((e as Error).message);
+        setBusy(false);
       }
     })();
-  }, [id, start, tabIds]);
+  }, [id, start, tabIds, onResolved]);
   const running = Boolean(batch?.items.some(activeItem));
   useEffect(() => {
     if (!running) return;
@@ -240,9 +333,16 @@ export function SummaryReader({ route }: { route: string }) {
     : `${done} of ${batch?.items.length || 0} summarized · ${settled} processed${running ? ' · Working…' : ''}`;
   return (
     <article className="summary-reader stack" aria-label="Summary reader">
-      <a className="small" href="#summaries">
-        ← Saved summaries
-      </a>
+      <div className="row between">
+        <a className="small" href="#summaries">
+          ← Saved summaries
+        </a>
+        {onClose && (
+          <button className="btn quiet" onClick={onClose} aria-label="Close summary panel">
+            Close
+          </button>
+        )}
+      </div>
       <header className="row between">
         <div>
           <h2>{single ? page?.title || 'Page summary' : batch?.windowTitle || 'Summary'}</h2>
@@ -291,12 +391,43 @@ export function SummaryReader({ route }: { route: string }) {
               Start summary
             </button>
           )}
-          {!accounts.length && error && <a href="#settings">Open Settings</a>}
+          {!accounts.length && error && (
+            <a
+              href={sidePanel ? chrome.runtime.getURL('/library.html#settings') : '#settings'}
+              target={sidePanel ? '_blank' : undefined}
+              rel={sidePanel ? 'noreferrer' : undefined}
+            >
+              Open Settings
+            </a>
+          )}
           {busy && <p role="status">Starting…</p>}
         </div>
       )}
       {batch && (
         <>
+          {reused && (
+            <aside className="notice summary-reuse" aria-label="Saved summary reused">
+              <strong>
+                {running
+                  ? 'Existing summary reopened'
+                  : batch.items.every((item) => item.status === 'completed')
+                    ? 'Saved summary reused'
+                    : 'Saved attempt reopened'}
+              </strong>
+              <p className="small">
+                {new Date(batch.createdAt).toLocaleString()} · No new model request.
+              </p>
+              {comparisons.map((comparison) => (
+                <div key={comparison.index}>
+                  {!single && <p className="small">{batch.items[comparison.index]?.title}</p>}
+                  <ComparisonNote comparison={comparison} />
+                </div>
+              ))}
+              {!comparisons.length && (
+                <p className="small">Current page input has not been compared.</p>
+              )}
+            </aside>
+          )}
           <div className="row between">
             <p role="status">{status}</p>
             {running && (
@@ -312,6 +443,15 @@ export function SummaryReader({ route }: { route: string }) {
                   Retry unfinished
                 </button>
               )}
+            {!running && (
+              <button
+                className="btn quiet"
+                disabled={busy}
+                onClick={() => void start(batch.accountId, true)}
+              >
+                {busy ? 'Starting…' : 'Run again'}
+              </button>
+            )}
           </div>
           {running && (
             <progress aria-label="Summary progress" value={settled} max={batch.items.length} />
@@ -340,6 +480,14 @@ export function SummaryReader({ route }: { route: string }) {
               </button>
             )}
           </details>
+          {singleItem && (
+            <SummaryInspection
+              key={batch.id}
+              batch={batch}
+              item={singleItem}
+              tabId={tabIds?.[0] ?? singleItem.tabId}
+            />
+          )}
           <ol className="summary-items">
             {batch.items.map((item) => (
               <li key={item.index}>
@@ -364,6 +512,14 @@ export function SummaryReader({ route }: { route: string }) {
                   <p className={item.status === 'skipped' ? 'small muted' : 'notice error'}>
                     {item.error}
                   </p>
+                )}
+                {!single && (
+                  <SummaryInspection
+                    key={batch.id + ':' + item.index}
+                    batch={batch}
+                    item={item}
+                    tabId={tabIds?.[item.index] ?? item.tabId}
+                  />
                 )}
                 {item.summary && (
                   <>

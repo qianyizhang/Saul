@@ -1,47 +1,6 @@
 import { useState } from 'react';
+import { InspectionText as TextBlock } from './InspectionText';
 import type { RunResult } from '../types/storage';
-
-function TextBlock({
-  label,
-  text,
-  response = false,
-}: {
-  label: string;
-  text: string;
-  response?: boolean;
-}) {
-  const [copied, setCopied] = useState<{ text: string; notice: string }>();
-  return (
-    <section className="saul-inspection-block" data-response={response} aria-label={label}>
-      <div className="saul-inspection-heading">
-        <strong>{label}</strong>
-        <button
-          type="button"
-          disabled={!text}
-          aria-label={`Copy ${label}`}
-          onClick={async () => {
-            try {
-              await navigator.clipboard.writeText(text);
-              setCopied({ text, notice: 'Copied' });
-            } catch {
-              setCopied({ text, notice: 'Could not copy. Select the text and copy it manually.' });
-            }
-          }}
-        >
-          Copy
-        </button>
-      </div>
-      {copied?.text === text && <p role="status">{copied.notice}</p>}
-      {text ? (
-        <pre tabIndex={0} aria-label={`${label} text`}>
-          {text}
-        </pre>
-      ) : (
-        <p className="saul-inspection-note">No text recorded.</p>
-      )}
-    </section>
-  );
-}
 
 export function InputOutputInspector({ run }: { run: RunResult }) {
   const [open, setOpen] = useState(false);

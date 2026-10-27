@@ -52,6 +52,12 @@ open explanation's active job. **Escape** dismisses the reading surface without
 cancelling work. **Command/Ctrl+,** opens Settings inside the extension workspace.
 The existing **Alt+Shift+E/L** shortcuts remain. Browser shortcuts stay with Chrome.
 
+**Control+S (⌃S)** on macOS summarizes the current page; **Command+S** still
+saves the page in Chrome. Other platforms default to **Alt+Shift+S**. This is
+a Chrome extension command, active only in Chrome on regular HTTP(S) tabs.
+**Settings → Shortcuts** shows its actual assignment. Use **Configure Chrome
+shortcuts** to change it or assign it if Chrome reports a conflict.
+
 The full workspace provides:
 
 - search across selected text, readable explanations, concept notes, titles, and URLs;
@@ -118,14 +124,22 @@ See [native messaging](native-messaging.md).
 Right-click a web page and choose **Saul Summarize** to summarize that tab's
 loaded page text, even when the click is on a link or selected text. It does
 not summarize the link destination or only the selection. The reader opens
-beside the source tab and shows its page title, source link and progress.
+in Chrome's side panel, keeping the source tab active, and shows its page title,
+source link and progress. The context menu, Control+S, Window selections and
+saved-summary buttons use this panel. Switching tabs keeps the current summary;
+closing the panel leaves its background work running. Opening a saved summary
+does not regenerate it. Settings recovery opens the full Settings workspace.
+
+External Tab board/native commands retain the full reader because Chrome requires
+a direct browser gesture to open a side panel. Existing reader URLs remain valid.
 
 **Select all → Summarize** summarizes a window; a smaller selection summarizes
 only those tabs. A selection across windows produces one saved summary in
 display order with source-window labels.
 
-Summarize immediately opens a reader in Chrome. It starts using the configured
-eligible ChatGPT account, or asks for an account when the choice is ambiguous.
+Summarize immediately opens a reader in Chrome. It first checks for a saved
+selection. For new work, it uses the configured eligible ChatGPT account, or asks
+for an account when the choice is ambiguous.
 The profile remains GPT-6 Luna, medium effort, concise English followed by
 equivalent Simplified Chinese. Missing capability blocks explicitly; no
 provider or billing fallback is chosen.
@@ -154,6 +168,28 @@ Details. Export creates a self-contained snapshot, including incomplete states.
 Completion does not open a second tab or steal focus. Tab surfaces retain only
 a compact link to active summary progress. Summary deletion remains separate
 from passage History's Clear all action.
+
+### Saved input and reuse
+
+Repeated **Saul Summarize** reopens the latest saved summary for the exact ordered
+URL selection, or its active run. Before any new account/model call, Saul compares
+loaded text with the saved capture. An upfront notice shows the original date,
+text change estimate, changed instructions/title/coverage, or a capture error.
+**Run again** explicitly captures current input in a new saved summary. **Retry
+unfinished** retains the original input. Closing with **Control+W** on macOS
+(**Alt+Shift+W** elsewhere) closes only the panel and leaves work running.
+
+Each summary offers **Inspect input/output**: capture time, character count,
+coverage, literal source text, instructions and the exact assembled prompt and raw
+response. **Compare current page** reads the loaded source again, without a model
+request. Saved/current views remain distinct. Large text is searched across all
+sections and displayed one bounded section at a time; Copy includes the full text.
+Token additions/removals estimate lexical change, not meaning or edit distance;
+changes outside truncated or unloaded input cannot be measured.
+
+Repeated reading actions reopen the saved result, disclose input changes, and
+offer **Run again with current input**. Regenerate in the normal action row keeps
+the saved request. Reading and summary inspectors share the large-text viewer.
 
 ## Compatibility
 

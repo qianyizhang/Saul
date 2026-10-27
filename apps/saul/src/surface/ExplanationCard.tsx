@@ -6,6 +6,7 @@ import { AnnotatedTextView } from './AnnotatedTextView';
 import { useAnchoredPosition } from './useAnchoredPosition';
 import { InputOutputInspector } from './InputOutputInspector';
 import { RunDetails } from './RunDetails';
+import { changeLabel, type InputComparison } from '../reading/input-change';
 export const runLabel = (status: RunStatus) =>
   ({
     queued: 'Waiting…',
@@ -17,6 +18,8 @@ export const runLabel = (status: RunStatus) =>
     cancelled: 'Stopped',
   })[status];
 interface Props {
+  reuse?: InputComparison;
+  onRunCurrent?: () => void;
   range: Range | null;
   passage: Passage;
   pinned: boolean;
@@ -41,6 +44,8 @@ export function ExplanationCard({
   onPin,
   onBookmark,
   loadRuns,
+  reuse,
+  onRunCurrent,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const moreButton = useRef<HTMLButtonElement>(null);
@@ -147,6 +152,22 @@ export function ExplanationCard({
         aria-hidden="true"
       />
       <div className="px-4 py-3 overflow-y-auto min-h-16">
+        {reuse && (
+          <aside className="saul-reuse" aria-label="Saved result reused">
+            <strong>{active ? 'Existing request reopened' : 'Saved result reused'}</strong>
+            <p>No new model request.</p>
+            <p>
+              {reuse.error ||
+                (reuse.text ? changeLabel(reuse.text) : 'Current input not verified.')}
+            </p>
+            {reuse.fields.length > 0 && <p>Also changed: {reuse.fields.join(', ')}</p>}
+            {!active && onRunCurrent && (
+              <button type="button" disabled={busy} onClick={onRunCurrent}>
+                Run again with current input
+              </button>
+            )}
+          </aside>
+        )}
         {!range && <p className="text-xs text-muted mb-3">Source location unavailable.</p>}
         {latest.error && (
           <p role="alert" className="text-sm text-danger bg-danger-wash p-3 rounded-control mb-3">

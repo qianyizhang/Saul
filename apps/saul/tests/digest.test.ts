@@ -41,6 +41,12 @@ function fixture() {
   const sources = new Map<number, DigestSource>();
   const db = vi.fn(async (r: DbRequest) => {
     switch (r.type) {
+      case 'DB_DIGEST_FIND':
+        return saved?.items.every(
+          (item, index) => item.status === 'completed' && item.url === r.payload.urls[index],
+        ) && saved.items.length === r.payload.urls.length
+          ? structuredClone(saved)
+          : undefined;
       case 'DB_DIGEST_RECOVER':
         return;
       case 'DB_DIGEST_CREATE':
@@ -323,4 +329,58 @@ it('a storage failure aborts a sibling stream before a new control can proceed',
   const current = (await runner.request({ action: 'get', id: 'digest-test' })) as DigestBatch;
   expect(current.error).toContain('disk full');
   expect(current.items[0]!.status).toBe('interrupted');
+});
+
+it('reuses saved output before inference, measures changed input, and keeps a cache when capture fails', async () => {
+  const f = fixture(),
+    generate = vi.fn(success);
+  const runner = new DigestRunner(f.db, f.capture, generate);
+  await runner.request(
+    { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
+    batch(),
+  );
+  await waitDone(runner);
+  const next = batch();
+  next.id = 'new-click';
+  const same = (await runner.request(
+    { action: 'resolve', id: next.id, tabIds: [0, 1, 2] },
+    next,
+  )) as import('../src/digest/types').DigestResolution;
+  expect(same.batch?.id).toBe('digest-test');
+  expect(same.comparisons.every((c) => c.text?.kind === 'same')).toBe(true);
+  f.capture.mockResolvedValue({
+    text: 'Frozen article with a new finding',
+    coverage: 'Visible only',
+    capturedAt: 2,
+    truncated: false,
+  });
+  const changed = (await runner.request(
+    { action: 'resolve', id: next.id, tabIds: [0, 1, 2] },
+    next,
+  )) as import('../src/digest/types').DigestResolution;
+  expect(changed.comparisons[0]?.text).toMatchObject({ kind: 'changed', added: 4 });
+  f.capture.mockRejectedValue(new Error('Source tab unavailable'));
+  const unavailable = (await runner.request(
+    { action: 'resolve', id: next.id, tabIds: [0, 1, 2] },
+    next,
+  )) as import('../src/digest/types').DigestResolution;
+  expect(unavailable.batch?.id).toBe('digest-test');
+  expect(unavailable.comparisons[0]?.error).toContain('Source tab unavailable');
+  const reused = (await runner.request(
+    { action: 'start', id: next.id, tabIds: [0, 1, 2], accountId: 'other' },
+    next,
+  )) as DigestBatch;
+  expect(reused.id).toBe('digest-test');
+  expect(generate).toHaveBeenCalledTimes(3);
+  expect(f.get().items.every((item) => item.status === 'completed')).toBe(true);
+});
+it('validates inspection indices, comparison selections and explicit regeneration flags', () => {
+  for (const request of [
+    { action: 'inspect', id: 'saved', index: -1 },
+    { action: 'inspect', id: 'saved', index: 0, tabId: -1 },
+    { action: 'resolve', id: 'new', tabIds: [1, 1] },
+    { action: 'start', id: 'new', tabIds: [1], accountId: 'a', regenerate: 'true' },
+  ])
+    expect(() => validateDigest(request)).toThrow();
+  expect(() => validateDigest({ action: 'inspect', id: 'saved', index: 0 })).not.toThrow();
 });

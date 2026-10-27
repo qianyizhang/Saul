@@ -4,7 +4,7 @@ import type { PlanRequest } from '../../native/plan-protocol.mts';
 import type { DigestBatch } from '../../src/digest/types';
 import { readFile } from 'node:fs/promises';
 
-test('selected summary opens immediately, runs two streams, survives closure and persists with export', async ({
+test('programmatic summary opens immediately, runs two streams, survives closure and persists with export', async ({
   sandbox,
   fixtureServer,
 }, info) => {
@@ -39,7 +39,19 @@ test('selected summary opens immediately, runs two streams, survives closure and
   for (let i = 0; i < 3; i++)
     await popup.getByRole('checkbox', { name: 'Select Summary source ' + i, exact: true }).check();
   const readerPromise = context.waitForEvent('page');
-  await popup.getByRole('button', { name: 'Summarize', exact: true }).click();
+  await popup.evaluate(
+    async (urls) => {
+      const tabs = await chrome.tabs.query({});
+      const tabIds = urls.map((url) => tabs.find((tab) => tab.url === url)!.id!);
+      await chrome.runtime.sendMessage({
+        type: 'WORKSPACE_TABS',
+        action: 'command',
+        method: 'saul_summary_open',
+        args: { tabIds },
+      });
+    },
+    sources.map((source) => source.url()),
+  );
   const reader = await readerPromise;
   await expect(reader.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
   await expect

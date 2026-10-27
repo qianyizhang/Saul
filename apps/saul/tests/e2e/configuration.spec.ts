@@ -43,7 +43,7 @@ test('named presets and recipes save, choose their models, and create a new atte
   const article = await context.newPage();
   await article.goto(fixtureServer.origin + '/article');
   await selectRecipe(article, 'recipe-explain');
-  await expect.poll(async () => (await getFirstHistory(popup)).latest.status).toBe('completed');
+  await expect.poll(async () => (await getHistory(popup))[0]?.latest.status).toBe('completed');
   const first = await getFirstHistory(popup);
   await selectRecipe(article, 'recipe-lookup');
   await expect

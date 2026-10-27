@@ -682,6 +682,10 @@ progress::-webkit-progress-value {
   max-width: 820px;
   margin-inline: auto;
 }
+.shell.summary-panel {
+  padding: 16px;
+  width: 100%;
+}
 .summary-reader h2 {
   margin: 0;
   font-family: var(--design-font-subject);
@@ -737,4 +741,10 @@ progress::-webkit-progress-value {
 }
 .summary-points {
   list-style: disc;
+}
+.summary-reuse {
+  border-left: 3px solid var(--design-color-primary);
+}
+.summary-reuse p {
+  margin: 4px 0 0;
 }

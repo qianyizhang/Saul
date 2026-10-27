@@ -80,6 +80,10 @@ export interface HistoryItem {
 }
 
 export interface DbOperations extends DigestDbOperations {
+  DB_READING_RESOLVE: {
+    payload: { snapshot: SelectionSnapshot; submissionId: string; recipeId: string };
+    result: string | undefined;
+  };
   DB_SUBMIT: { payload: Submission; result: { passageId: string; run?: QueuedRun } };
   DB_RECOVER: { payload: undefined; result: void };
   DB_CLAIM: { payload: { runId: string }; result: boolean };

@@ -3,6 +3,10 @@ import type { Passage, RunResult } from '../types/storage';
 
 type EmptyResult = Record<string, never>;
 export interface ReadingOperations {
+  review: {
+    request: { action: 'review'; selectionId: string; context: ResolvedContext; recipeId?: string };
+    result: import('../reading/input-change').InputComparison;
+  };
   list: { request: { action: 'list' }; result: { passages: Passage[] } };
   policy: {
     request: { action: 'policy' };
@@ -23,6 +27,7 @@ export interface ReadingOperations {
       snapshot: SelectionSnapshot;
       context: ResolvedContext;
       recipeId?: string;
+      regenerate?: boolean;
     };
     result: { passageId: string; reused: boolean };
   };
@@ -119,6 +124,13 @@ export function validateReading(v: unknown): asserts v is ReadingRequest {
         id(v.submissionId) &&
         validSnapshot(v.snapshot) &&
         validContext(v.context) &&
+        (v.regenerate === undefined || typeof v.regenerate === 'boolean') &&
+        (v.recipeId === undefined || id(v.recipeId));
+      break;
+    case 'review':
+      valid =
+        id(v.selectionId) &&
+        validContext(v.context) &&
         (v.recipeId === undefined || id(v.recipeId));
       break;
     case 'mute-errors':
@@ -148,7 +160,7 @@ export function workspaceSender(sender: chrome.runtime.MessageSender): boolean {
   return (
     sender.id === chrome.runtime.id &&
     !!sender.url &&
-    ['popup.html', 'library.html'].some(
+    ['popup.html', 'library.html', 'summary-panel.html'].some(
       (path) => sender.url!.split(/[?#]/)[0] === chrome.runtime.getURL(path),
     )
   );

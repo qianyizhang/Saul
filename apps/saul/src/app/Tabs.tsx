@@ -313,7 +313,10 @@ export function Tabs() {
               disabled={busy}
               onClick={() => {
                 setBusy(true);
-                void openSummary(chosen.map((t) => t.id))
+                void openSummary(
+                  chosen.map((t) => t.id),
+                  windowId!,
+                )
                   .catch((e: Error) => setError(e.message))
                   .finally(() => setBusy(false));
               }}

@@ -1,6 +1,7 @@
 import { snapshotSelection, captureTab } from '../src/digest/capture';
+import { compareRunInput } from '../src/reading/input-change';
 import { validateDigest } from '../src/digest/contracts';
-import { initSummaryContextMenu } from '../src/digest/context-menu';
+import { initSummaryActions } from '../src/digest/actions';
 import { initPlanBridge } from '../src/native/plan';
 import { sharedPresets } from '../src/storage/shared-presets';
 import {
@@ -116,11 +117,50 @@ async function reading(
         selection: snapshot.text,
         pageUrl: request.context.pageUrl ? url : '',
       };
-      return submit(snapshot, context, request.submissionId, false, undefined, request.recipeId);
+      if (!request.regenerate) {
+        const recipeId =
+          request.recipeId || configurationFor(await currentSettings()).selectedRecipeId;
+        const selectionId = await db({
+          type: 'DB_READING_RESOLVE',
+          payload: { snapshot, submissionId: request.submissionId, recipeId },
+        });
+        if (selectionId) return { passageId: selectionId, reused: true };
+      }
+      return submit(
+        snapshot,
+        context,
+        request.submissionId,
+        request.regenerate === true,
+        undefined,
+        request.recipeId,
+      );
     }
     default: {
       const passage = await owned(request.selectionId, url);
       switch (request.action) {
+        case 'review': {
+          const before = await db({
+            type: 'DB_INPUT',
+            payload: {
+              selectionId: request.selectionId,
+              runId: passage.completed?.id || passage.latest.id,
+            },
+          });
+          if (!before) return { fields: [], error: 'The original input was not recorded.' };
+          try {
+            const settings = await currentSettings();
+            const after = prepareRecipeRun(
+              settings,
+              request.context,
+              request.recipeId || configurationFor(settings).selectedRecipeId,
+              undefined,
+              true,
+            ).input;
+            return compareRunInput(before, after);
+          } catch (error) {
+            return { fields: [], error: error instanceof Error ? error.message : String(error) };
+          }
+        }
         case 'regenerate': {
           const context = await db({
             type: 'DB_CONTEXT',
@@ -193,7 +233,7 @@ async function openSource(selectionId: string) {
   await deliverSource(tab.id);
 }
 export default defineBackground(() => {
-  initSummaryContextMenu();
+  initSummaryActions();
   const settings = settingsOwner;
   initStorageSecurity();
   initNativeBridge();
@@ -327,7 +367,9 @@ export default defineBackground(() => {
         validateDigest(request.message);
         const r = request.message;
         const snapshot =
-          r.action === 'start' ? await snapshotSelection(r.id, r.tabIds, r.accountId) : undefined;
+          r.action === 'start' || r.action === 'resolve'
+            ? await snapshotSelection(r.id, r.tabIds, r.action === 'start' ? r.accountId : '')
+            : undefined;
         return runnerRequest({ operation: 'digest', message: r, snapshot });
       }
       if (request.type === 'WORKSPACE_TABS') return workspaceCall(request);

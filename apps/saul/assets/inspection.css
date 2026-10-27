@@ -113,3 +113,68 @@
     min-height: 44px;
   }
 }
+.saul-inspection-search {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  color: var(--design-color-muted);
+}
+.saul-inspection-search input {
+  min-width: 0;
+  width: 100%;
+  background: var(--design-color-surface);
+  color: var(--design-color-ink);
+  border: 1px solid var(--design-color-line);
+  border-radius: var(--design-radius-control);
+  padding: 8px;
+  font: inherit;
+}
+.saul-inspection-pages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.saul-inspection-pages button {
+  padding: 6px 10px;
+  border: 1px solid var(--design-color-line);
+  border-radius: var(--design-radius-control);
+  color: var(--design-color-ink);
+  background: var(--design-color-surface);
+  font: inherit;
+  cursor: pointer;
+}
+.saul-inspection-pages button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.saul-inspection-pages button[aria-pressed='true'] {
+  color: var(--design-color-primary);
+  border-color: currentColor;
+}
+.saul-inspection-block mark {
+  background: var(--design-color-warning-wash);
+  color: var(--design-color-ink);
+}
+.saul-inspector details > summary {
+  width: 100%;
+}
+.saul-reuse {
+  border-left: 3px solid var(--design-color-primary);
+  background: var(--design-color-wash);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+.saul-reuse p {
+  margin: 4px 0;
+}
+.saul-reuse button {
+  color: var(--design-color-primary);
+  padding: 6px 0;
+  text-decoration: underline;
+  cursor: pointer;
+}

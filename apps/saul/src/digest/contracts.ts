@@ -5,7 +5,9 @@ export function validateDigest(v: unknown): asserts v is DigestRequest {
   const keys: Record<string, string[]> = {
     list: [],
     active: [],
-    start: ['id', 'tabIds', 'accountId'],
+    start: ['id', 'tabIds', 'accountId', 'regenerate'],
+    resolve: ['id', 'tabIds'],
+    inspect: ['id', 'index', 'tabId'],
     get: ['id'],
     stop: ['id'],
     retry: ['id'],
@@ -16,15 +18,22 @@ export function validateDigest(v: unknown): asserts v is DigestRequest {
     !Object.hasOwn(keys, v.action) ||
     Object.keys(v).some((k) => k !== 'action' && !keys[v.action as string]!.includes(k)) ||
     (!['list', 'active'].includes(v.action) && !id(v.id)) ||
-    (v.action === 'start' &&
+    (['start', 'resolve'].includes(v.action) &&
       (!Array.isArray(v.tabIds) ||
         !v.tabIds.length ||
         v.tabIds.length > 1000 ||
         new Set(v.tabIds).size !== v.tabIds.length ||
-        !v.tabIds.every((id) => Number.isSafeInteger(id) && id >= 0) ||
-        typeof v.accountId !== 'string' ||
+        !v.tabIds.every((id) => Number.isSafeInteger(id) && id >= 0))) ||
+    (v.action === 'start' &&
+      (typeof v.accountId !== 'string' ||
         !v.accountId ||
-        v.accountId.length > 256))
+        v.accountId.length > 256 ||
+        (v.regenerate !== undefined && typeof v.regenerate !== 'boolean'))) ||
+    (v.action === 'inspect' &&
+      (!Number.isSafeInteger(v.index) ||
+        (v.index as number) < 0 ||
+        (v.index as number) >= 1000 ||
+        (v.tabId !== undefined && (!Number.isSafeInteger(v.tabId) || (v.tabId as number) < 0))))
   )
     throw new Error('Invalid digest request');
 }

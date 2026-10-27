@@ -1,3 +1,14 @@
+import type { DigestItem, DigestSource } from './types';
+
+export function summaryUserPrompt(item: DigestItem, source: DigestSource): string {
+  return JSON.stringify({
+    title: item.title,
+    url: item.url,
+    coverage: source.coverage,
+    text: source.text,
+  });
+}
+
 import type { Pair, Summary } from './types';
 import { record } from '../contracts/reading';
 

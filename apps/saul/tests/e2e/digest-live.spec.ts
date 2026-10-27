@@ -67,7 +67,16 @@ test('live installed helper summarizes three public tabs and exports a durable d
   for (const title of titles)
     await popup.getByRole('checkbox', { name: 'Select ' + title, exact: true }).check();
   const opening = context.waitForEvent('page');
-  await popup.getByRole('button', { name: 'Summarize', exact: true }).click();
+  await popup.evaluate(async (urls) => {
+    const tabs = await chrome.tabs.query({});
+    const tabIds = urls.map((url) => tabs.find((tab) => tab.url === url)!.id!);
+    await chrome.runtime.sendMessage({
+      type: 'WORKSPACE_TABS',
+      action: 'command',
+      method: 'saul_summary_open',
+      args: { tabIds },
+    });
+  }, urls);
   popup = await opening;
   await expect(popup.getByRole('button', { name: 'Stop', exact: true })).toBeVisible({
     timeout: 30_000,

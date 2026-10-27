@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures.ts';
 import { installDigestProvider } from './digest-fixture.ts';
 
-test('page summary uses the registered action and keeps single-page reading clear', async ({
+test('full reader links remain compatible and keep single-page reading clear', async ({
   sandbox,
   fixtureServer,
 }, info) => {
@@ -19,21 +19,16 @@ test('page summary uses the registered action and keeps single-page reading clea
     source.url(),
   );
   const readerPromise = context.waitForEvent('page');
-  if (process.env.SAUL_CONTEXT_MENU_MANUAL) {
-    test.setTimeout(180_000);
-    console.log('Ready for native context-menu click in disposable Chrome.');
-  } else {
-    await popup.evaluate(
-      (tabId) =>
-        chrome.runtime.sendMessage({
-          type: 'WORKSPACE_TABS',
-          action: 'command',
-          method: 'saul_summary_open',
-          args: { tabIds: [tabId] },
-        }),
-      sourceTab.id!,
-    );
-  }
+  await popup.evaluate(
+    (tabId) =>
+      chrome.runtime.sendMessage({
+        type: 'WORKSPACE_TABS',
+        action: 'command',
+        method: 'saul_summary_open',
+        args: { tabIds: [tabId] },
+      }),
+    sourceTab.id!,
+  );
   const reader = await readerPromise;
   await expect(
     reader.getByRole('heading', { name: 'How gradient descent finds a minimum' }),
@@ -83,6 +78,25 @@ test('page summary uses the registered action and keeps single-page reading clea
   ).toHaveCount(1);
   await reader.goto(savedUrl);
   await expect(reader.getByRole('status')).toHaveText('Summary ready');
+  await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  const shortcuts = popup.locator('details.shortcuts');
+  await shortcuts.locator('summary').click();
+  const command = await popup.evaluate(async () =>
+    (await chrome.commands.getAll()).find((command) => command.name === 'saul-summarize'),
+  );
+  expect(command?.shortcut).toBeTruthy();
+  await expect(
+    shortcuts.locator('dl > div').filter({ hasText: 'Summarize current page' }),
+  ).toContainText(command!.shortcut!);
+  await popup.screenshot({
+    path: info.outputPath('summary-shortcut-settings.png'),
+    fullPage: true,
+  });
+  const configurationPromise = context.waitForEvent('page');
+  await shortcuts.getByRole('button', { name: 'Configure Chrome shortcuts' }).click();
+  const configuration = await configurationPromise;
+  await expect(configuration).toHaveURL('chrome://extensions/shortcuts');
+  await configuration.close();
 });
 
 test('single-page setup failure keeps the source and settings recovery visible', async ({

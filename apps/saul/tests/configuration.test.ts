@@ -236,3 +236,21 @@ it('a recipe explicitly selects its ChatGPT account, model, effort and speed ind
   });
   expect(prepared.credential).toBe('');
 });
+
+it('reviews current input without requiring a credential, while generation still validates it', async () => {
+  const settings = configured();
+  settings.openaiCompatible.apiKey = '';
+  settings.profiles![0]!.config.apiKey = '';
+  const recipeId = configurationFor(settings).selectedRecipeId;
+  expect(() => prepareRecipeRun(settings, context, recipeId)).toThrow();
+  const before = prepareRecipeRun(settings, context, recipeId, undefined, true).input;
+  const after = structuredClone(before);
+  after.systemPrompt += '\nChanged instructions';
+  after.userPrompt += '\nA new finding';
+  after.remote.model = 'another-model';
+  const { compareRunInput } = await import('../src/reading/input-change');
+  expect(compareRunInput(before, after)).toMatchObject({
+    text: { kind: 'changed', added: 3 },
+    fields: ['Instructions', 'Model settings'],
+  });
+});

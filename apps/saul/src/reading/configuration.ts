@@ -40,6 +40,7 @@ export function prepareRecipeRun(
   context: ResolvedContext,
   recipeId: string,
   instruction?: string,
+  inspectOnly = false,
 ): { input: RunInput; credential: string } {
   const configuration = configurationFor(settings);
   const recipe = configuration.recipes.find((item) => item.id === recipeId);
@@ -48,7 +49,7 @@ export function prepareRecipeRun(
   if (!preset)
     throw new Error(`Recipe “${recipe.name}” needs its default preset. Choose one in Settings.`);
   const selected = settingsForPreset(settings, preset);
-  validateProviderSettings(selected);
+  if (!inspectOnly) validateProviderSettings(selected);
   const remote = {
     baseUrl: selected.openaiCompatible.baseUrl,
     model: selected.openaiCompatible.model,
@@ -74,7 +75,7 @@ export function prepareRecipeRun(
     recipe: structuredClone(recipe),
     preset: structuredClone(preset),
   };
-  return { input, credential: credentialForFrozenInput(settings, input) };
+  return { input, credential: inspectOnly ? '' : credentialForFrozenInput(settings, input) };
 }
 
 export function prepareFrozenRun(
