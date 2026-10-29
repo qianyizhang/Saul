@@ -60,6 +60,9 @@ importers:
       lucide-react:
         specifier: ^1.47.0
         version: 1.47.0(react@19.2.8)
+      marked:
+        specifier: 18.0.13
+        version: 18.0.13
       nanoid:
         specifier: ^6.0.1
         version: 6.0.1

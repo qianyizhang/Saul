@@ -151,11 +151,24 @@ then uses the existing trusted extension digest boundary.
 
 ## Summary ownership
 
+The optional [custom action](custom-actions.md) replaces one Summarize slot.
+`src/actions/manager.ts` owns builder/selection transitions in the offscreen runtime;
+trusted background messages own storage access because offscreen Chrome exposes
+runtime only. `src/actions/run.ts` brokers model calls through existing provider
+and credential owners. `native/action-host.mts` is the independently installed
+`com.saul.actions` host. Its store stages without evaluation; explicit Load
+initializes a revision worker, and the selected revision changes only after a
+successful export check and selection save. Digest jobs retain frozen action
+source/preset, model-call inspection, cancellation and persistence. Reuse includes
+revision and preset identity. The built-in path and both PDF capture paths remain
+available without the action host. Detailed lifecycle, budgets and retention live
+in the action contract above.
+
 **Summary** is the user-facing term. `digest` remains the implementation name in
 `src/digest/`, internal messages and persisted SQLite records; it does not name a
 separate feature. Wire and storage renames require explicit migrations.
 
-`src/digest/` owns the fixed bilingual summary contract, capture, runner, persistence operations, and safe standalone HTML renderer. The workspace sends validated digest actions through the background; only the background snapshots selected tabs, and only the offscreen runner can request page captures. Content scripts cannot start or inspect digests. HTML capture uses isolated-world scripting and validates the original URL before and after reading.
+`src/digest/` owns the built-in bilingual summary contract, capture, runner, persistence operations, and safe standalone HTML renderer. The workspace sends validated digest actions through the background; only the background snapshots selected tabs, and only the offscreen runner can request page captures. Content scripts cannot start or inspect digests. HTML capture uses isolated-world scripting and validates the original URL before and after reading.
 
 PDF preparation splits browser authority from two processing implementations.
 `capture.ts` checks the selected HTTP(S) tab and identifies PDF pathnames or
@@ -192,7 +205,7 @@ must be updated to accept attachments. Source input and coverage use existing
 JSON source rows; PDF bytes are never persisted. See the
 [PDF capture contract](product.md#summaries) for triggers, bounds and limitations.
 
-The existing offscreen document hosts the digest runner alongside reading jobs. Both use the same database worker and native ChatGPT transport; digest generation calls the existing plan adapter with a frozen account, prompt, model and effort. Digest control actions serialize, generation uses two concurrent workers, and there is no automatic retry. All workers settle before a stop/delete/retry control can complete. Schema version 2 adds digest metadata and item/source rows without rewriting reading data. Restart reconciliation marks unfinished items interrupted. The UI polls saved/live state while mounted and renders English before Chinese from validated pairs; raw model text is never interpreted as HTML.
+The existing offscreen document hosts the digest runner alongside reading jobs. Both use the same database worker; built-in digest generation uses the native ChatGPT transport and calls the existing plan adapter with a frozen account, prompt, model and effort. Digest control actions serialize, generation uses two concurrent workers, and there is no automatic retry. All workers settle before a stop/delete/retry control can complete. Schema version 2 adds digest metadata and item/source rows without rewriting reading data. Restart reconciliation marks unfinished items interrupted. The UI polls saved/live state while mounted and renders built-in English before Chinese from validated pairs; raw model text is never interpreted as HTML.
 
 `src/app/Summaries.tsx` owns saved-summary history and live reading under
 `library.html#summary/<id>`. A new reader checks saved input reuse before account

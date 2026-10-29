@@ -121,6 +121,14 @@ See [native messaging](native-messaging.md).
 
 ### Summaries
 
+The built-in behavior below remains the default. **Settings → Summaries →
+Customize Summarize** can replace it with one explicitly loaded local action.
+Create/revise uses a chosen saved preset, then checks and previews a candidate
+without running it. Load/Replace initializes trusted code; the next Summarize
+invokes it once per page. Custom results use safe text/Markdown, their own frozen
+preset, and the existing reader/Stop/history controls. See
+[custom actions](custom-actions.md) for the versioned interface and recovery.
+
 Right-click a web page and choose **Saul Summarize** to summarize that tab's
 loaded page text, even when the click is on a link or selected text. It does
 not summarize the link destination or only the selection. The reader opens

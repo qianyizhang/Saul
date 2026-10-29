@@ -37,7 +37,7 @@ interface SetupOptions {
 type Command = { command: string; args: string[]; cwd: string; env: NodeJS.ProcessEnv };
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const choices = ['extension', 'chatgpt', 'tabs', 'ez'];
+const choices = ['extension', 'chatgpt', 'tabs', 'actions', 'ez'];
 export const help = `Selective setup (run from any directory)
 
   node scripts/setup.mts --components extension --dry-run
@@ -49,6 +49,7 @@ Components:
   extension  Chrome extension; API-provider reading and local history work alone
   chatgpt    Optional Node helper for ChatGPT sign-in, inference and summaries
   tabs       Optional Node helper for external tab tools and native window names
+  actions    Optional Node helper for custom Summarize actions
   ez         Independent native macOS app (no Node runtime dependency)
 
 Options:
@@ -97,13 +98,13 @@ export function createPlan(
     );
   if (options.verify && (options.skipBuild || options.codex || options.migrateLegacy))
     throw new Error('--verify cannot combine with --skip-build, --codex or --migrate-legacy.');
-  if (options.migrateLegacy && !components.some((v) => ['tabs', 'chatgpt'].includes(v)))
+  if (options.migrateLegacy && !components.some((v) => ['tabs', 'chatgpt', 'actions'].includes(v)))
     throw new Error('--migrate-legacy requires a helper component.');
   if (options.codex && !components.includes('tabs'))
     throw new Error('--codex requires the tabs component.');
   if (components.includes('ez') && platform !== 'darwin')
     throw new Error('EZ requires macOS; select browser components on this platform.');
-  const hasHelper = components.some((v) => ['chatgpt', 'tabs'].includes(v));
+  const hasHelper = components.some((v) => ['chatgpt', 'tabs', 'actions'].includes(v));
   if (hasHelper && !options.prepare && !/^[a-p]{32}$/.test(options.extensionId ?? ''))
     throw new Error(
       'Helpers need --extension-id from chrome://extensions. Prepare/load the extension first.',
@@ -128,7 +129,7 @@ export function createPlan(
   }
   const applicationsDir = resolve(options.applicationsDir ?? join(home, 'Applications'));
   const hosts = components
-    .filter((v) => ['chatgpt', 'tabs'].includes(v))
+    .filter((v) => ['chatgpt', 'tabs', 'actions'].includes(v))
     .map((component) => ({
       ...installationPlan({
         extensionId: options.extensionId ?? 'a'.repeat(32),
@@ -137,6 +138,7 @@ export function createPlan(
         platform,
         home,
         chatgpt: component === 'chatgpt',
+        component: component as 'tabs' | 'chatgpt' | 'actions',
       }),
     }));
   const commands: Command[] = [];
@@ -281,7 +283,7 @@ export async function executePlan(
         throw new Error(`Host registration mismatch: ${host.component}`);
       if ((await realpath(manifest.path)) !== (await realpath(host.manifest.path)))
         throw new Error(`Host registration mismatch: ${host.component}`);
-      if (verifyInstallation(host.root, host.component as 'tabs' | 'chatgpt').legacy)
+      if (verifyInstallation(host.root, host.component as 'tabs' | 'chatgpt' | 'actions').legacy)
         legacyHelpers = true;
     }
     if (plan.components.includes('ez'))

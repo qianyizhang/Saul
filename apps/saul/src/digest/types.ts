@@ -40,6 +40,9 @@ export type DigestCapture =
   | DigestTextSource
   | { pdf: { url: string; title?: string; unverified?: boolean } };
 export interface DigestItem {
+  finalText?: string;
+  progress?: string;
+  calls?: { instructions: string; input: string; output: string; complete: boolean }[];
   index: number;
   tabId: number;
   windowId?: number;
@@ -56,6 +59,7 @@ export interface DigestItem {
   sourceKind?: 'pdf-url';
 }
 export interface DigestMeta {
+  action?: import('../actions/contract').FrozenAction;
   pdfProcessing?: PdfProcessing; // Missing on old batches means local parsing.
   id: string;
   windowTitle: string;
@@ -120,7 +124,11 @@ export const activeItem = (item: DigestItem) =>
   ['queued', 'capturing', 'running'].includes(item.status);
 
 export interface DigestDbOperations {
-  DB_DIGEST_FIND: { payload: { urls: string[] }; result: DigestBatch | undefined };
+  DB_DIGEST_ACTION_REVISIONS: { payload: undefined; result: string[] };
+  DB_DIGEST_FIND: {
+    payload: { urls: string[]; actionRevision?: string; actionPresetId?: string };
+    result: DigestBatch | undefined;
+  };
   DB_DIGEST_CREATE: { payload: DigestBatch; result: DigestBatch };
   DB_DIGEST_GET: { payload: { id: string }; result: DigestBatch };
   DB_DIGEST_LIST: { payload: undefined; result: DigestOverview[] };

@@ -42,9 +42,12 @@ function fixture() {
   const db = vi.fn(async (r: DbRequest) => {
     switch (r.type) {
       case 'DB_DIGEST_FIND':
-        return saved?.items.every(
-          (item, index) => item.status === 'completed' && item.url === r.payload.urls[index],
-        ) && saved.items.length === r.payload.urls.length
+        return saved?.action?.revision.revision === r.payload.actionRevision &&
+          saved?.action?.presetId === r.payload.actionPresetId &&
+          saved?.items.every(
+            (item, index) => item.status === 'completed' && item.url === r.payload.urls[index],
+          ) &&
+          saved.items.length === r.payload.urls.length
           ? structuredClone(saved)
           : undefined;
       case 'DB_DIGEST_RECOVER':
@@ -451,4 +454,141 @@ it('validates inspection indices, comparison selections and explicit regeneratio
   ])
     expect(() => validateDigest(request)).toThrow();
   expect(() => validateDigest({ action: 'inspect', id: 'saved', index: 0 })).not.toThrow();
+});
+
+function customBatch(revision = 'a'.repeat(64)): DigestBatch {
+  return {
+    ...batch(),
+    action: {
+      revision: {
+        contractVersion: 1,
+        revision,
+        name: 'Custom',
+        description: '',
+        language: 'typescript',
+        source: 'export default () => "answer";',
+        createdAt: 1,
+        approved: true,
+      },
+      presetId: 'action-preset',
+      input: {
+        provider: 'chatgpt-plan',
+        plan: { accountId: 'frozen', model: 'chosen', effort: 'low' },
+        remote: { baseUrl: '', model: '', temperature: 0.3 },
+        local: { topK: 3, temperature: 0.3 },
+        systemPrompt: '',
+        userPrompt: '',
+        context: { selection: '', pageTitle: '', pageUrl: '' },
+      },
+    },
+  };
+}
+it('runs custom actions per page with two-page concurrency and pins code and preset while the selection changes', async () => {
+  const f = fixture();
+  const releases = new Map<number, () => void>();
+  const calls: string[] = [];
+  let active = 0,
+    maximum = 0;
+  const custom = vi.fn(async (b: DigestBatch, item: DigestBatch['items'][number]) => {
+    calls.push(b.action!.revision.revision + ':' + b.action!.input!.plan!.model);
+    active++;
+    maximum = Math.max(maximum, active);
+    await new Promise<void>((resolve) => releases.set(item.index, resolve));
+    active--;
+    return 'Final ' + item.index;
+  });
+  const builtIn = vi.fn(success);
+  const runner = new DigestRunner(f.db, f.capture, builtIn, custom);
+  const original = customBatch();
+  await runner.request(
+    { action: 'start', id: original.id, tabIds: [0, 1, 2], accountId: 'ignored' },
+    original,
+  );
+  await vi.waitFor(() => expect(releases.size).toBe(2));
+  const newChoice = customBatch('b'.repeat(64));
+  const resolution = await runner.request(
+    { action: 'resolve', id: 'new', tabIds: [0, 1, 2] },
+    newChoice,
+  );
+  expect(resolution).toEqual({ comparisons: [] });
+  releases.get(1)!();
+  await vi.waitFor(() => expect(releases.has(2)).toBe(true));
+  releases.get(2)!();
+  releases.get(0)!();
+  await waitDone(runner);
+  expect(maximum).toBe(2);
+  expect(builtIn).not.toHaveBeenCalled();
+  expect(calls).toEqual(Array(3).fill('a'.repeat(64) + ':chosen'));
+  expect(f.get().items.map((item) => item.finalText)).toEqual(['Final 0', 'Final 1', 'Final 2']);
+  expect(f.get().items.every((item) => item.summary === undefined)).toBe(true);
+});
+it('keeps custom intermediate output separate from a failed final result without replay', async () => {
+  const f = fixture();
+  const custom = vi.fn(async (_b: DigestBatch, item: DigestBatch['items'][number]) => {
+    item.raw = 'intermediate model response';
+    item.calls = [
+      {
+        instructions: 'Frozen instructions',
+        input: 'Captured source',
+        output: item.raw,
+        complete: true,
+      },
+    ];
+    throw new Error('Module failed after model completion');
+  });
+  const runner = new DigestRunner(f.db, f.capture, success, custom);
+  await runner.request(
+    { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'unused' },
+    customBatch(),
+  );
+  await waitDone(runner);
+  expect(custom).toHaveBeenCalledTimes(2);
+  expect(f.get().items[0]).toMatchObject({ status: 'failed', raw: 'intermediate model response' });
+  expect(f.get().items[0]?.finalText).toBeUndefined();
+  expect(digestHtml(f.get())).not.toContain('<pre>intermediate model response</pre>');
+});
+it('a custom terminal save failure aborts its sibling and removes the unsaved final projection', async () => {
+  const f = fixture();
+  const db = f.mock.getMockImplementation()!;
+  f.mock.mockImplementation(async (r) => {
+    if (r.type === 'DB_DIGEST_ITEM' && r.payload.item.status === 'completed')
+      throw new Error('disk full');
+    return db(r);
+  });
+  const custom = vi.fn(
+    async (
+      _b: DigestBatch,
+      item: DigestBatch['items'][number],
+      _source: DigestSource,
+      _key: string,
+      signal: AbortSignal,
+    ) => {
+      if (item.index === 0) return 'Unsaved final';
+      await new Promise<void>((resolve) =>
+        signal.addEventListener('abort', () => resolve(), { once: true }),
+      );
+      signal.throwIfAborted();
+      return 'unreachable';
+    },
+  );
+  const runner = new DigestRunner(f.db, f.capture, success, custom);
+  await runner.request(
+    { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'unused' },
+    customBatch(),
+  );
+  await waitDone(runner);
+  const current = (await runner.request({ action: 'get', id: 'digest-test' })) as DigestBatch;
+  expect(current.error).toContain('disk full');
+  expect(current.items[0]?.finalText).toBeUndefined();
+  expect(custom).toHaveBeenCalledTimes(2);
+});
+it('exports custom final text safely with its actual action and preset labels', () => {
+  const b = customBatch();
+  b.items[0]!.status = 'completed';
+  b.items[0]!.finalText = '<script>danger()</script> **plain export**';
+  const html = digestHtml(b);
+  expect(html).toContain('&lt;script&gt;danger()');
+  expect(html).not.toContain('<script>');
+  expect(html).toContain('Custom · Saved preset');
+  expect(html).not.toContain('GPT-6 Luna');
 });

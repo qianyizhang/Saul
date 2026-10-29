@@ -1,5 +1,6 @@
 import { chromium, type BrowserContext } from '@playwright/test';
 import { createServer } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -35,11 +36,17 @@ export async function createFixtureServer(
   >();
   const documentRequests: string[] = [];
   const pendingDocuments = new Set<() => void>();
+  const handlers = new Map<string, (request: IncomingMessage, response: ServerResponse) => void>();
   const server = createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     if (req.method === 'OPTIONS') {
       res.writeHead(204).end();
+      return;
+    }
+    const handler = handlers.get(new URL(req.url || '/', 'http://fixture').pathname);
+    if (handler) {
+      handler(req, res);
       return;
     }
     const document = documents.get(new URL(req.url || '/', 'http://fixture').pathname);
@@ -135,6 +142,11 @@ export async function createFixtureServer(
   });
   return {
     origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    setHandler: (
+      path: string,
+      handler: (request: IncomingMessage, response: ServerResponse) => void,
+    ) => handlers.set(path, handler),
+    clearHandlers: () => handlers.clear(),
     requests,
     setDocument: (path: string, document: NonNullable<ReturnType<typeof documents.get>>) =>
       documents.set(path, document),

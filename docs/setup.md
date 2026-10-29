@@ -9,11 +9,15 @@ EZ can also be built/installed directly with Make and Apple tools without Node.
 | `extension` | Chrome; Node 24 and pinned pnpm to build                     | EZ, helpers, Codex                   |
 | `chatgpt`   | Installed extension ID, Node 24, native host registration    | EZ, Codex                            |
 | `tabs`      | Installed extension ID, Node 24, native host registration    | EZ, Codex unless registering MCP     |
+| `actions`   | Installed extension ID, Node 24, native host registration    | EZ, tabs helper, Codex               |
 | `ez`        | macOS, Apple tools, pinned signing identity for installation | Saul, helper, Node at runtime, Codex |
 
 Chrome on-device inference remains disabled. Extension-only reading can use an
-OpenAI-compatible provider. ChatGPT sign-in/inference and tab summaries require
-`chatgpt`; external tab tools and native Chrome window names require `tabs`.
+OpenAI-compatible provider. ChatGPT sign-in/inference and built-in tab summaries
+require `chatgpt`; external tab tools and native Chrome window names require `tabs`.
+Custom Summarize actions require the optional `actions` helper and an existing
+saved model preset. A ChatGPT preset still requires `chatgpt`. The action host
+does not take over credentials. See [custom actions](../apps/saul/docs/custom-actions.md).
 
 ## First installation
 
@@ -65,8 +69,8 @@ points into it. Chrome's host paths, `bin/saul`, and the existing Codex command
 running process keeps its original modules and board assets while new connections
 use the activated version. Installation never kills, resends, or restarts work.
 
-Tab and ChatGPT payloads are separate within a generation. Updating one copies the
-other installed payload and its Node/proxy configuration unchanged. Credentials stay
+Tab, ChatGPT and action payloads are separate within a generation. Updating one copies the
+other installed payloads and their Node/proxy configuration unchanged. Credentials stay
 in `~/.saul/chatgpt`; socket state stays in its existing runtime directory. Neither
 is part of a generation. Registrations retain their exact extension IDs and the
 selected helper's existing allowed origins. Preserve each installation-time Node

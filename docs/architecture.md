@@ -70,9 +70,11 @@ extension build. Personal installations were not changed or reconnected.
 
 ## Installation
 
-Extension, ChatGPT helper, tab helper and native app are explicit setup selections.
+Extension, ChatGPT helper, tab helper, action helper and native app are explicit setup selections.
 The extension works with an OpenAI-compatible provider without a native app or helper.
-ChatGPT plan features and summaries need the ChatGPT helper. External tab access
+ChatGPT plan features and built-in summaries need the ChatGPT helper. Custom
+Summarize modules use a third optional action helper and retain their selected
+provider's credential owner. External tab access
 and native window names need the tab helper. Codex registration is separate.
 
 The optional setup CLI runs with Node; the native installed app does not.

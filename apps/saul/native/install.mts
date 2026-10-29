@@ -7,6 +7,7 @@ import {
   installHelpers,
   restoreGeneration,
   shellQuote,
+  type Component,
 } from './installation.mts';
 import { errorMessage } from './transport.mts';
 
@@ -27,7 +28,7 @@ async function main() {
   });
   if (values.help) {
     console.log(
-      'Usage: pnpm native:install --extension-id <ID> [--components tabs,chatgpt] [--chatgpt] [--dry-run]\nAdvanced: --browser chrome --install-dir <directory> --manifest-dir <NativeMessagingHosts directory>\nLegacy upgrades require a disconnect/reconnect maintenance window and --migrate-legacy.\nExplicit recovery: --install-dir <directory> --restore-generation <printed generation ID>.',
+      'Usage: pnpm native:install --extension-id <ID> [--components tabs,chatgpt,actions] [--chatgpt] [--dry-run]\nAdvanced: --browser chrome --install-dir <directory> --manifest-dir <NativeMessagingHosts directory>\nLegacy upgrades require a disconnect/reconnect maintenance window and --migrate-legacy.\nExplicit recovery: --install-dir <directory> --restore-generation <printed generation ID>.',
     );
     return;
   }
@@ -59,9 +60,13 @@ async function main() {
     components: values.components?.split(',') ?? [values.chatgpt ? 'chatgpt' : 'tabs'],
   };
   const plans = options.components.map((component) => {
-    if (!['tabs', 'chatgpt'].includes(component))
-      throw new Error('Choose helper components: tabs,chatgpt.');
-    return installationPlan({ ...options, chatgpt: component === 'chatgpt' });
+    if (!['tabs', 'chatgpt', 'actions'].includes(component))
+      throw new Error('Choose helper components: tabs,chatgpt,actions.');
+    return installationPlan({
+      ...options,
+      component: component as Component,
+      chatgpt: component === 'chatgpt',
+    });
   });
   if (values['dry-run']) {
     console.log(JSON.stringify(plans.length === 1 ? plans[0] : plans, null, 2));

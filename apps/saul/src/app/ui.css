@@ -682,6 +682,16 @@ progress::-webkit-progress-value {
   max-width: 820px;
   margin-inline: auto;
 }
+.action-answer {
+  overflow-wrap: anywhere;
+}
+.action-answer pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: var(--design-space-md);
+  background: var(--design-color-subtle);
+  border-radius: var(--design-radius-control);
+}
 .shell.summary-panel {
   padding: 16px;
   width: 100%;

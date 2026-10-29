@@ -399,6 +399,16 @@ Add concrete motion/effect tokens and platform mappings when an actual effect is
 
 ### Summaries
 
+Custom Summarize has one home under Settings → Summaries, behind Customize
+Summarize. Keep request and builder preset together; show the checked source and
+action preset before explicit Load/Replace. Checking never loads code, and loading
+never starts a page run. Local file checking and rollback belong in a named
+disclosure. Preserve unsubmitted editor fields within the current tab through
+navigation and reload. In the reader, show the saved action/preset in Details, keep progress
+and Stop visible during work, and distinguish intermediate model output in
+inspection from the action's completed text/Markdown answer. Built-in bilingual
+summaries retain their existing layout.
+
 The page context menu offers **Saul Summarize** for the clicked HTTP(S) tab.
 Chrome reading actions open the summary in the browser's side panel and keep
 the source tab active. The panel retains its current summary across tab switches;
@@ -413,7 +423,7 @@ closing it does not cancel work. Keep **Export HTML**, **Stop**, **Retry
 unfinished**, coverage and failures in the reader. History offers **Passages**
 and **Summaries**. Tab surfaces show only a compact active-progress link.
 
-English precedes equivalent Simplified Chinese. The first read has one lead
+In the built-in summary, English precedes equivalent Simplified Chinese. The first read has one lead
 and two to four concrete points; limits stay visible, deeper material is
 collapsed. Keep successful and processed counts distinct. Completion must
 never steal focus or open another tab. Explain capture limitations for

@@ -1,6 +1,6 @@
 import { isRecord } from './value.mts';
 import { errorMessage } from './transport.mts';
-export type Component = 'tabs' | 'chatgpt';
+export type Component = 'tabs' | 'chatgpt' | 'actions';
 type InstallationFs = typeof fs;
 interface NativeManifest {
   name: string;
@@ -61,6 +61,7 @@ export interface InstallOptions {
   platform?: string;
   home?: string;
   chatgpt?: boolean;
+  component?: Component;
   components?: string[];
   migrateLegacy?: boolean;
 }
@@ -82,6 +83,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { PLAN_HOST } from './plan-protocol.mts';
 import { HOST_NAME } from './protocol.mts';
+import { ACTION_HOST } from './action-protocol.mts';
 
 export const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 const sourceRoot = dirname(fileURLToPath(import.meta.url));
@@ -98,6 +100,13 @@ const proxyKeys = [
 const entries: Record<string, string[]> = {
   tabs: ['host.mjs', 'cli.mjs', 'mcp.mjs', 'board-web.mjs'],
   chatgpt: ['plan-host.mjs'],
+  actions: ['action-host.mjs'],
+};
+const hostNames = { tabs: HOST_NAME, chatgpt: PLAN_HOST, actions: ACTION_HOST };
+const launchers = {
+  tabs: 'saul-native-host',
+  chatgpt: 'saul-chatgpt-host',
+  actions: 'saul-action-host',
 };
 export const payloadFiles: Record<string, string[]> = {
   tabs: [
@@ -144,6 +153,18 @@ export const payloadFiles: Record<string, string[]> = {
     'sse.mjs',
     'installation-paths.mjs',
   ],
+  actions: [
+    'value.mjs',
+    'protocol.mjs',
+    'transport.mjs',
+    'installation-paths.mjs',
+    'action-host.mjs',
+    'action-protocol.mjs',
+    'action-store.mjs',
+    'action-check.mjs',
+    'action-runtime.mjs',
+    'action-worker.mjs',
+  ],
 };
 const uuidPattern = '[a-f\\d]{8}-[a-f\\d]{4}-[a-f\\d]{4}-[a-f\\d]{4}-[a-f\\d]{12}';
 const generationPattern = new RegExp(`^g-${uuidPattern}$`);
@@ -160,6 +181,7 @@ export function installationPlan({
   platform = process.platform,
   home = homedir(),
   chatgpt = false,
+  component: selectedComponent,
 }: InstallOptions) {
   if (!/^[a-p]{32}$/.test(extensionId ?? ''))
     throw new Error('--extension-id must be the 32-letter ID shown in chrome://extensions');
@@ -180,7 +202,7 @@ export function installationPlan({
   if (!browsers[platform]?.[browser])
     throw new Error('Supported: macOS/Linux; chrome, chromium, edge, brave');
   const root = resolve(installDir ?? join(home, '.saul'));
-  const component = chatgpt ? 'chatgpt' : 'tabs';
+  const component = selectedComponent ?? (chatgpt ? 'chatgpt' : 'tabs');
   return {
     root,
     bin: join(root, 'bin'),
@@ -188,12 +210,17 @@ export function installationPlan({
     component,
     manifestPath: join(
       resolve(manifestDir ?? join(home, browsers[platform][browser], 'NativeMessagingHosts')),
-      `${chatgpt ? PLAN_HOST : HOST_NAME}.json`,
+      `${hostNames[component]}.json`,
     ),
     manifest: {
-      name: chatgpt ? PLAN_HOST : HOST_NAME,
-      description: chatgpt ? 'Saul ChatGPT plan provider' : 'Saul local tab bridge',
-      path: join(root, 'bin', chatgpt ? 'saul-chatgpt-host' : 'saul-native-host'),
+      name: hostNames[component],
+      description:
+        component === 'actions'
+          ? 'Saul custom summary actions'
+          : component === 'chatgpt'
+            ? 'Saul ChatGPT plan provider'
+            : 'Saul local tab bridge',
+      path: join(root, 'bin', launchers[component]),
       type: 'stdio',
       allowed_origins: [`chrome-extension://${extensionId}/`],
     },
@@ -335,9 +362,8 @@ function receipt(root: string, name: string, io: InstallationFs): LoadedGenerati
       typeof helper.manifestPath !== 'string' ||
       !isAbsolute(helper.manifestPath) ||
       !isRecord(helper.manifest) ||
-      helper.manifest.name !== (component === 'tabs' ? HOST_NAME : PLAN_HOST) ||
-      helper.manifest?.path !==
-        join(root, 'bin', component === 'tabs' ? 'saul-native-host' : 'saul-chatgpt-host') ||
+      helper.manifest.name !== hostNames[component as Component] ||
+      helper.manifest?.path !== join(root, 'bin', launchers[component as Component]) ||
       helper.manifest?.type !== 'stdio' ||
       !Array.isArray(helper.manifest?.allowed_origins) ||
       !helper.manifest.allowed_origins.length ||
@@ -421,7 +447,9 @@ function recover(root: string, io: InstallationFs) {
     if (
       !known.has(item.path) ||
       !isAbsolute(item.path ?? '') ||
-      ![`${HOST_NAME}.json`, `${PLAN_HOST}.json`].includes(basename(item.path)) ||
+      !Object.values(hostNames)
+        .map((name) => `${name}.json`)
+        .includes(basename(item.path)) ||
       (item.after !== null && typeof item.after !== 'string') ||
       (item.before !== null &&
         (typeof item.before?.data !== 'string' ||
@@ -660,10 +688,14 @@ export async function installHelpers(
 ) {
   const components = [...new Set(options.components ?? [options.chatgpt ? 'chatgpt' : 'tabs'])];
   if (!components.length || components.some((c) => !entries[c]))
-    throw new Error('Choose helper components: tabs,chatgpt.');
+    throw new Error('Choose helper components: tabs,chatgpt,actions.');
   // Validate plans before creating an installation directory.
   components.forEach((component) =>
-    installationPlan({ ...options, chatgpt: component === 'chatgpt' }),
+    installationPlan({
+      ...options,
+      component: component as Component,
+      chatgpt: component === 'chatgpt',
+    }),
   );
   const root = canonicalRoot(options.installDir ?? join(options.home ?? homedir(), '.saul'), io);
   const release = lock(root, io);
@@ -692,6 +724,7 @@ export async function installHelpers(
       const plan = installationPlan({
         ...options,
         installDir: root,
+        component: component as Component,
         chatgpt: component === 'chatgpt',
       });
       directory(dirname(plan.manifestPath), io, true);
@@ -764,6 +797,18 @@ export async function installHelpers(
           const dependency =
             jose ?? dirname(fileURLToPath(import.meta.resolve('jose/package.json')));
           copyTree(io.realpathSync(dependency), join(payload, 'node_modules', 'jose'), io);
+        }
+        if (component === 'actions') {
+          const dependency = dirname(fileURLToPath(import.meta.resolve('typescript/package.json')));
+          for (const file of [
+            'package.json',
+            'lib/typescript.js',
+            'LICENSE.txt',
+            'ThirdPartyNoticeText.txt',
+          ])
+            copyTree(join(dependency, file), join(payload, 'node_modules', 'typescript', file), io);
+        }
+        if (component === 'chatgpt' || component === 'actions') {
           writeFile(
             join(payload, 'installation-root.json'),
             JSON.stringify({ version: 1, root }),
@@ -789,7 +834,7 @@ export async function installHelpers(
             ['saul-native-host', 'host.mjs'],
             ['saul', 'cli.mjs'],
           ]
-        : [['saul-chatgpt-host', 'plan-host.mjs']]) {
+        : [[launchers[component as Component], entries[component][0]]]) {
         const proxy = Object.entries(config.proxy)
           .map(([key, value]) => `export ${key}=${shellQuote(value)}\n`)
           .join('');
@@ -877,7 +922,7 @@ export function verifyInstallation(
   if (selected.legacy) {
     if (!entries[component]) throw new Error(`Unknown helper: ${component}`);
     directory(join(root, 'bin'), io);
-    regular(join(root, 'bin', component === 'tabs' ? 'saul-native-host' : 'saul-chatgpt-host'), io);
+    regular(join(root, 'bin', launchers[component]), io);
     regular(join(root, 'bridge', entries[component][0]), io);
     return { legacy: true as const, generation: null, previous: null };
   }

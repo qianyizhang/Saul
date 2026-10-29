@@ -314,6 +314,7 @@ export class SaulDatabase {
         return selectionId;
       }
       case 'DB_DIGEST_FIND':
+      case 'DB_DIGEST_ACTION_REVISIONS':
       case 'DB_DIGEST_CREATE':
       case 'DB_DIGEST_GET':
       case 'DB_DIGEST_LIST':

@@ -2,6 +2,8 @@ import type { DigestBatch, DigestRequest, DigestResult } from '../digest/types';
 import type { DbOperations, DbRequest, DbType, Reply, Submission } from '../types/storage';
 import type { ReadingRequest, ReadingResultFor } from '../contracts/reading';
 import type { WorkspaceRequest, WorkspaceResultFor } from '../native/workspace';
+import type { ActionRequest, ActionState } from '../actions/contract';
+import type { RunInput } from '../types/storage';
 
 let creatingOffscreen: Promise<void> | null = null;
 export async function ensureOffscreenDocument(): Promise<void> {
@@ -43,8 +45,16 @@ export function sendWorkspaceMessage<T extends WorkspaceRequest>(
 export function sendDigestMessage<T extends DigestRequest>(message: T): Promise<DigestResult<T>> {
   return request({ target: 'saul-digest', message });
 }
+export function sendActionMessage(message: ActionRequest): Promise<ActionState> {
+  return request({ target: 'saul-action', message });
+}
 export type RunnerRequest =
-  | { operation: 'digest'; message: DigestRequest; snapshot?: DigestBatch }
+  | {
+      operation: 'action';
+      message: ActionRequest;
+      prepared?: { input: RunInput; credential: string };
+    }
+  | { operation: 'digest'; message: DigestRequest; snapshot?: DigestBatch; credential?: string }
   | { operation: 'db'; message: DbRequest }
   | { operation: 'submit'; submission: Submission; credential: string }
   | { operation: 'stop'; selectionId: string }

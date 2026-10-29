@@ -57,6 +57,17 @@ test('unsupported combinations and missing helper identity fail before execution
   );
 });
 
+test('custom actions are an independent third helper selection with their own registration', () => {
+  const plan = createPlan({ components: 'actions', extensionId: id, skipBuild: true }, environment);
+  assert.equal(plan.hosts.length, 1);
+  assert.equal(plan.hosts[0].component, 'actions');
+  assert.equal(plan.hosts[0].manifest.name, 'com.saul.actions');
+  assert.equal(plan.hosts[0].manifest.path, '/fixture/home/.saul/bin/saul-action-host');
+  assert(plan.commands[0].args.includes('actions'));
+  assert(!plan.commands.some((c) => c.command === 'codex'));
+  assert.throws(() => createPlan({ components: 'actions' }, environment));
+});
+
 test('prepare builds without installing or registering; verification has no install commands', () => {
   const plan = createPlan({ components: 'extension,chatgpt,tabs,ez', prepare: true }, environment);
   assert.deepEqual(

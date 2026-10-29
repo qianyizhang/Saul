@@ -41,6 +41,9 @@ web-ext.config.ts
 # Disposable diagnostics (see docs/artifacts.md)
 /.artifacts/
 
+# User action revisions when running an emitted helper from this checkout
+/apps/saul/actions/
+
 # Native build and development tools
 .build/
 .cache/

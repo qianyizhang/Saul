@@ -3,6 +3,14 @@ import { compareRunInput } from '../src/reading/input-change';
 import { validateDigest } from '../src/digest/contracts';
 import { initSummaryActions } from '../src/digest/actions';
 import { initPlanBridge } from '../src/native/plan';
+import { initActionBridge } from '../src/native/actions';
+import {
+  ACTION_STATE_KEY,
+  actionState,
+  validateActionRequest,
+  validateActionState,
+} from '../src/actions/contract';
+import { prepareActionPreset } from '../src/actions/configuration';
 import { sharedPresets } from '../src/storage/shared-presets';
 import {
   createSettingsOwner,
@@ -238,6 +246,7 @@ export default defineBackground(() => {
   initStorageSecurity();
   initNativeBridge();
   initPlanBridge();
+  initActionBridge();
   void db({ type: 'DB_UNREAD', payload: undefined })
     .then((count) => chrome.action.setBadgeText({ text: count ? String(count) : '' }))
     .catch((error) => console.warn('[Saul] Could not restore reading state', error));
@@ -312,6 +321,8 @@ export default defineBackground(() => {
     if (
       ![
         'saul-digest',
+        'saul-action',
+        'saul-action-state',
         'saul-digest-capture',
         'saul-reading',
         'saul-workspace',
@@ -324,6 +335,20 @@ export default defineBackground(() => {
     )
       return false;
     (async () => {
+      if (request.target === 'saul-action-state') {
+        if (
+          sender.id !== chrome.runtime.id ||
+          sender.tab ||
+          sender.url !== chrome.runtime.getURL('offscreen.html')
+        )
+          throw new Error('Runner only');
+        if (request.action === 'read') return actionState();
+        if (request.action !== 'write' || !request.state || typeof request.state !== 'object')
+          throw new Error('Invalid action state write.');
+        validateActionState(request.state);
+        await chrome.storage.local.set({ [ACTION_STATE_KEY]: request.state });
+        return request.state;
+      }
       if (request.target === 'saul-digest-capture') {
         if (
           sender.id !== chrome.runtime.id ||
@@ -363,10 +388,24 @@ export default defineBackground(() => {
       }
       if (!workspaceSender(sender)) throw new Error('Extension workspace only');
       if (request.target === 'saul-settings') return settings(request.message);
+      if (request.target === 'saul-action') {
+        validateActionRequest(request.message);
+        const r = request.message;
+        let prepared;
+        if (r.action === 'build' || r.action === 'load')
+          prepared = prepareActionPreset(await currentSettings(), r.presetId);
+        if (r.action === 'restore') {
+          const previous = (await actionState()).previous;
+          if (!previous) throw new Error('No previous working action.');
+          prepareActionPreset(await currentSettings(), previous.presetId);
+        }
+        return runnerRequest({ operation: 'action', message: r, prepared });
+      }
       if (request.target === 'saul-digest') {
         validateDigest(request.message);
         const r = request.message;
         let snapshot;
+        let credential = '';
         if (r.action === 'start' || r.action === 'resolve') {
           // Unreadable settings must not block reopening saved work. Only a new
           // run requires a validated preference; comparisons can use its saved mode.
@@ -382,8 +421,25 @@ export default defineBackground(() => {
             preference?.state === 'ready' ? preference.settings.summaryPdfProcessing : undefined,
           );
           if (preference?.state !== 'ready') delete snapshot.pdfProcessing;
+          const selected = (await actionState()).selected;
+          if (selected) {
+            snapshot.action = structuredClone(selected);
+            snapshot.prompt = selected.revision.source;
+            if (r.action === 'start') {
+              const prepared = prepareActionPreset(await currentSettings(), selected.presetId);
+              snapshot.action.input = prepared.input;
+              credential = prepared.credential;
+            }
+          }
         }
-        return runnerRequest({ operation: 'digest', message: r, snapshot });
+        if (r.action === 'retry') {
+          const saved = await db({ type: 'DB_DIGEST_GET', payload: { id: r.id } });
+          if (saved.action) {
+            if (!saved.action.input) throw new Error('The saved action preset is unavailable.');
+            credential = prepareFrozenRun(await currentSettings(), saved.action.input).credential;
+          }
+        }
+        return runnerRequest({ operation: 'digest', message: r, snapshot, credential });
       }
       if (request.type === 'WORKSPACE_TABS') return workspaceCall(request);
       if (request.target === 'saul-open-source') {

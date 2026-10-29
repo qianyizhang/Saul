@@ -29,12 +29,19 @@ export function digestStore(db: Database, request: Request): unknown {
       // Source text stays in SQLite until comparison/inspection explicitly needs it.
       const row = db.selectObject(
         `SELECT b.id FROM digest_batch b
-        WHERE (SELECT count(*) FROM digest_item i WHERE i.batch_id=b.id)=?
+        WHERE COALESCE(json_extract(b.data,'$.action.revision.revision'),'')=?
+        AND COALESCE(json_extract(b.data,'$.action.presetId'),'')=?
+        AND (SELECT count(*) FROM digest_item i WHERE i.batch_id=b.id)=?
         AND NOT EXISTS (SELECT 1 FROM digest_item i WHERE i.batch_id=b.id
           AND (json_extract(i.data,'$.url') != json_extract(?, '$[' || i.position || ']')
             OR json_extract(i.data,'$.status') IN ('queued','capturing','running')))
         ORDER BY b.created_at DESC, b.rowid DESC LIMIT 1`,
-        [request.payload.urls.length, JSON.stringify(request.payload.urls)],
+        [
+          request.payload.actionRevision || '',
+          request.payload.actionPresetId || '',
+          request.payload.urls.length,
+          JSON.stringify(request.payload.urls),
+        ],
       );
       return row ? get(String(row.id)) : undefined;
     }
@@ -56,6 +63,12 @@ export function digestStore(db: Database, request: Request): unknown {
     }
     case 'DB_DIGEST_GET':
       return get(request.payload.id);
+    case 'DB_DIGEST_ACTION_REVISIONS':
+      return db
+        .selectObjects(
+          "SELECT DISTINCT json_extract(data,'$.action.revision.revision') AS revision FROM digest_batch WHERE json_extract(data,'$.action.revision.revision') IS NOT NULL",
+        )
+        .map((r) => String(r.revision));
     case 'DB_DIGEST_LIST':
       return db
         .selectObjects('SELECT id,created_at,data FROM digest_batch ORDER BY created_at DESC')

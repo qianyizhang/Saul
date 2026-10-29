@@ -171,6 +171,12 @@ export function SummaryInspection({
           <details>
             <summary>Saved instructions</summary>
             <InspectionText label="Instructions" text={batch.prompt} />
+            {batch.action && (
+              <p className="small muted">
+                {batch.action.revision.name} · contract 1 · revision{' '}
+                {batch.action.revision.revision} · {batch.action.input?.preset?.name}
+              </p>
+            )}
           </details>
           {value?.comparison?.fields.includes('Instructions') && (
             <details>
@@ -186,7 +192,7 @@ export function SummaryInspection({
                 : 'The saved prompt is the exact user message. It includes the original page title, URL, coverage and text.'}{' '}
               Saved input describes what was prepared; only completed output confirms completion.
             </p>
-            {value?.saved && (
+            {value?.saved && !batch.action && (
               <InspectionText label="Prompt · user" text={summaryUserPrompt(item, value.saved)} />
             )}
             {value?.saved?.kind === 'pdf-url' && (
@@ -200,6 +206,30 @@ export function SummaryInspection({
               />
             )}
             <InspectionText label="Response · raw text" text={item.raw} response />
+            {item.calls?.map((call, index) => (
+              <details key={index}>
+                <summary>
+                  Model call {index + 1} ·{' '}
+                  {call.complete ? 'complete response' : 'incomplete response'}
+                </summary>
+                <InspectionText label="Call instructions" text={call.instructions} />
+                <InspectionText label="Call input" text={call.input} />
+                <InspectionText
+                  label="Intermediate output · not the final answer"
+                  text={call.output}
+                  response
+                />
+              </details>
+            ))}
+            {batch.action && (
+              <InspectionText
+                label={
+                  item.status === 'completed' ? 'Final action result' : 'No completed action result'
+                }
+                text={item.status === 'completed' ? item.finalText || '' : ''}
+                response
+              />
+            )}
           </details>
         </div>
       )}

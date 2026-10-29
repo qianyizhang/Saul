@@ -7,6 +7,7 @@ import { CHROME_AI_ENABLED, CHROME_AI_DISABLED_MESSAGE } from '../models/chrome-
 import { configurationFor } from '../models/configuration';
 import { RecipeSettings } from './RecipeSettings';
 import { SUMMARY_ACTION_ID, SUMMARY_CLOSE_ID } from '../digest/actions';
+import { ActionSettings } from './ActionSettings';
 
 const presets = [
   { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
@@ -417,6 +418,7 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
           text only. This setting applies to new summaries and Run again; Retry keeps the saved
           method.
         </p>
+        <ActionSettings presets={configuration.presets} settingsDirty={dirty} />
       </section>
       <section className="panel settings-section">
         <h3>Reading</h3>

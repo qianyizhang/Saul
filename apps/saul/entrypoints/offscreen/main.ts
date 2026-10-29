@@ -5,6 +5,8 @@ import type { DbCall, Reply } from '../../src/types/storage';
 import type { RunnerRequest } from '../../src/storage/client';
 import { ReadingRunner } from '../../src/reading/runner';
 import { backgroundSender } from '../../src/contracts/reading';
+import { ActionManager } from '../../src/actions/manager';
+import type { ActionState } from '../../src/actions/contract';
 
 const worker = new DatabaseWorker();
 let nextId = 0;
@@ -38,6 +40,23 @@ const changed = (url: string) => {
   void chrome.runtime.sendMessage({ target: 'saul-events', url }).catch(() => undefined);
 };
 const digest = new DigestRunner(db, captureSummarySource);
+// Chrome offscreen documents expose runtime only. Trusted storage stays behind the background.
+async function actionStateRequest(action: 'read' | 'write', state?: ActionState) {
+  const response: Reply<ActionState> = await chrome.runtime.sendMessage({
+    target: 'saul-action-state',
+    action,
+    state,
+  });
+  if (!response?.success) throw new Error(response?.error || 'Action settings could not be saved.');
+  return response.result;
+}
+const actions = new ActionManager(db, undefined, {
+  read: () => actionStateRequest('read'),
+  write: async (state) => {
+    await actionStateRequest('write', state);
+  },
+});
+void actions.ready.catch(() => undefined);
 void digest.ready.catch(() => undefined);
 const runner = new ReadingRunner(db, changed);
 // Reconciliation starts once per actual offscreen incarnation, never per UI/worker connection.
@@ -53,7 +72,9 @@ chrome.runtime.onMessage.addListener(
       await runner.ready;
       switch (message.operation) {
         case 'digest':
-          return digest.request(message.message, message.snapshot);
+          return digest.request(message.message, message.snapshot, message.credential);
+        case 'action':
+          return actions.request(message.message, message.prepared);
         case 'submit':
           return runner.submit(message.submission, message.credential);
         case 'stop':

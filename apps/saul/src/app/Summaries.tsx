@@ -3,12 +3,22 @@ import type { PlanAccount } from '../../native/plan-protocol.mts';
 import type { SummaryProgress } from '../../native/protocol.mts';
 import { planCall } from '../models/chatgpt-plan';
 import { getSettings } from '../storage/settings';
-import { sendDigestMessage, sendWorkspaceMessage } from '../storage/client';
+import { sendActionMessage, sendDigestMessage, sendWorkspaceMessage } from '../storage/client';
 import { activeItem, type DigestBatch, type DigestOverview, type Pair } from '../digest/types';
 import { digestHtml, sourceUrl } from '../digest/html';
 import { openSummaryPanel } from '../digest/panel';
 import type { DigestComparison } from '../digest/types';
 import { ComparisonNote, SummaryInspection } from './SummaryInspection';
+import { ActionText } from './ActionText';
+
+async function summaryAccounts() {
+  const [result, settings] = await Promise.all([planCall({ action: 'accounts' }), getSettings()]);
+  const accounts = result.accounts.filter((a) => a.signedIn && a.planEnabled);
+  const chosen =
+    accounts.find((a) => a.id === settings.chatgptPlan?.accountId)?.id ||
+    (accounts.length === 1 ? accounts[0]!.id : '');
+  return { accounts, chosen };
+}
 
 export function openSummary(tabIds: number[], windowId: number) {
   return openSummaryPanel(windowId, { tabIds });
@@ -167,17 +177,28 @@ export function SummaryReader({
       setBusy(true);
       setError('');
       try {
-        const catalog = await planCall({ action: 'models', accountId });
-        if (
-          !catalog.models.some(
-            (m) =>
-              m.slug === 'gpt-6-luna' &&
-              m.supportedReasoningEfforts.some((e) => e.effort === 'medium'),
+        const custom = (await sendActionMessage({ action: 'status' })).selected;
+        let runAccountId = accountId;
+        if (!custom) {
+          if (regenerate && batch?.action) {
+            runAccountId = (await summaryAccounts()).chosen;
+            if (!runAccountId)
+              throw new Error(
+                'Choose an eligible ChatGPT account in Settings before running the built-in summary.',
+              );
+          }
+          const catalog = await planCall({ action: 'models', accountId: runAccountId });
+          if (
+            !catalog.models.some(
+              (m) =>
+                m.slug === 'gpt-6-luna' &&
+                m.supportedReasoningEfforts.some((e) => e.effort === 'medium'),
+            )
           )
-        )
-          throw new Error(
-            'GPT-6 Luna with medium effort is unavailable. Refresh models in Settings.',
-          );
+            throw new Error(
+              'GPT-6 Luna with medium effort is unavailable. Refresh models in Settings.',
+            );
+        }
         const selected = tabIds || batch?.items.map((item) => item.tabId);
         if (!selected?.length) throw new Error('The selection is missing.');
         if (regenerate && batch) {
@@ -194,7 +215,7 @@ export function SummaryReader({
           action: 'start',
           id: targetId,
           tabIds: selected,
-          accountId,
+          accountId: runAccountId,
           ...(regenerate ? { regenerate: true } : {}),
         });
         if (!live.current) return;
@@ -245,16 +266,13 @@ export function SummaryReader({
           const tab = await chrome.tabs.get(tabIds[0]!);
           setSource({ title: tab.title || 'Untitled page', url: tab.url || '' });
         }
-        const [result, settings] = await Promise.all([
-          planCall({ action: 'accounts' }),
-          getSettings(),
-        ]);
+        if ((await sendActionMessage({ action: 'status' })).selected) {
+          await start('custom-action');
+          return;
+        }
+        const { accounts: eligible, chosen } = await summaryAccounts();
         if (!live.current) return;
-        const eligible = result.accounts.filter((a) => a.signedIn && a.planEnabled);
         setAccounts(eligible);
-        const chosen =
-          eligible.find((a) => a.id === settings.chatgptPlan?.accountId)?.id ||
-          (eligible.length === 1 ? eligible[0]!.id : '');
         setAccount(chosen);
         if (chosen) await start(chosen);
         else if (!eligible.length)
@@ -464,8 +482,11 @@ export function SummaryReader({
           <details>
             <summary>Details</summary>
             <p className="small muted">
-              English → 简体中文 · Luna medium. Summaries and prepared input are saved locally.
-              Closing this reader does not stop work.
+              {batch.action
+                ? `${batch.action.revision.name} · ${batch.action.input?.preset?.name || 'Saved preset'} · revision ${batch.action.revision.revision.slice(0, 10)}.`
+                : 'English → 简体中文 · Luna medium.'}{' '}
+              Summaries and prepared input are saved locally. Closing this reader does not stop
+              work.
             </p>
             {!running && (
               <button
@@ -512,6 +533,14 @@ export function SummaryReader({
                   <p className={item.status === 'skipped' ? 'small muted' : 'notice error'}>
                     {item.error}
                   </p>
+                )}
+                {item.progress && activeItem(item) && (
+                  <p role="status" className="small muted">
+                    {item.progress}
+                  </p>
+                )}
+                {item.status === 'completed' && item.finalText && (
+                  <ActionText text={item.finalText} />
                 )}
                 {item.sourceKind === 'pdf-url' && (
                   <p className="small muted">

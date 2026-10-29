@@ -12,7 +12,7 @@ export function chatgptDirectory(moduleUrl: string | URL) {
   } catch (error) {
     if (
       errorCode(error) === 'ENOENT' &&
-      !/[/\\]generations[/\\]g-[a-f\d-]{36}[/\\]chatgpt$/.test(directory)
+      !/[/\\]generations[/\\]g-[a-f\d-]{36}[/\\](?:chatgpt|actions)$/.test(directory)
     )
       return join(directory, '..', 'chatgpt');
     throw new Error('Invalid helper installation data root.', { cause: error });
