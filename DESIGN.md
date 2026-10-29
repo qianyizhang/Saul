@@ -10,17 +10,17 @@ colors:
   on-primary: '#ffffff'
   on-primary-dark: '#14251d'
   canvas: '#fafaf7'
-  canvas-dark: '#20211f'
+  canvas-dark: '#1e1e1e'
   surface: '#ffffff'
-  surface-dark: '#292b27'
+  surface-dark: '#262626'
   subtle: '#f0f1eb'
-  subtle-dark: '#30332e'
+  subtle-dark: '#303030'
   ink: '#242722'
-  ink-dark: '#e8e9e2'
+  ink-dark: '#e8e8e8'
   muted: '#62685d'
-  muted-dark: '#b3b9ae'
+  muted-dark: '#b5b5b5'
   line: '#d7dcd1'
-  line-dark: '#454b40'
+  line-dark: '#484848'
   wash: '#eaf2ec'
   wash-dark: '#253d31'
   danger: '#a3312a'
@@ -106,6 +106,10 @@ paired `-dark` colors as this contract's explicit appearance convention.
 
 Use the green primary for actions, selection, and meaningful emphasis. Neutral
 canvas, surface, and subtle layers separate content without competing with it.
+Dark neutral layers, text and dividers use achromatic grays. Keep green confined
+to actions, focus and meaningful selection or emphasis; do not tint whole reading
+surfaces or ordinary cards. Use wash for these accent states, not as another
+background layer. A structural container alone does not imply selection or status.
 Muted text stays readable. Danger and warning always accompany a text explanation.
 Pair each color with its `-dark` value in dark appearance. Native controls may use
 system semantic surfaces; preserve the shared accent and content hierarchy.

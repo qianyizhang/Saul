@@ -1,16 +1,16 @@
-/* Generated from DESIGN.md · SHA-256 06fb2b823b6d14138a713678c761ec8d20a3a1d0fddfb68b7400ed3aca47d4df. Do not edit. */
+/* Generated from DESIGN.md · SHA-256 6daeab30a439961efda2a467a019a1fa498a993c2157aa698e63539181721f3b. Do not edit. */
 :root,
 :host {
   color-scheme: light dark;
   --design-color-primary: light-dark(#296e59, #6ec2a1);
   --design-color-primary-hover: light-dark(#205642, #84d1b1);
   --design-color-on-primary: light-dark(#ffffff, #14251d);
-  --design-color-canvas: light-dark(#fafaf7, #20211f);
-  --design-color-surface: light-dark(#ffffff, #292b27);
-  --design-color-subtle: light-dark(#f0f1eb, #30332e);
-  --design-color-ink: light-dark(#242722, #e8e9e2);
-  --design-color-muted: light-dark(#62685d, #b3b9ae);
-  --design-color-line: light-dark(#d7dcd1, #454b40);
+  --design-color-canvas: light-dark(#fafaf7, #1e1e1e);
+  --design-color-surface: light-dark(#ffffff, #262626);
+  --design-color-subtle: light-dark(#f0f1eb, #303030);
+  --design-color-ink: light-dark(#242722, #e8e8e8);
+  --design-color-muted: light-dark(#62685d, #b5b5b5);
+  --design-color-line: light-dark(#d7dcd1, #484848);
   --design-color-wash: light-dark(#eaf2ec, #253d31);
   --design-color-danger: light-dark(#a3312a, #f3a79e);
   --design-color-danger-wash: light-dark(#fff0ed, #472a28);

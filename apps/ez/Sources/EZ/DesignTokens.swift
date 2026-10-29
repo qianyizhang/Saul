@@ -1,4 +1,4 @@
-// Generated from DESIGN.md · SHA-256 06fb2b823b6d14138a713678c761ec8d20a3a1d0fddfb68b7400ed3aca47d4df. Do not edit.
+// Generated from DESIGN.md · SHA-256 6daeab30a439961efda2a467a019a1fa498a993c2157aa698e63539181721f3b. Do not edit.
 import SwiftUI
 
 enum DesignTokens {
@@ -35,7 +35,7 @@ enum DesignTokens {
         nsColor: NSColor(name: "Little Clarity.canvas") { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
                 return NSColor(
-                    srgbRed: 0.12549019607843137, green: 0.12941176470588237, blue: 0.12156862745098039,
+                    srgbRed: 0.11764705882352941, green: 0.11764705882352941, blue: 0.11764705882352941,
                     alpha: 1)
             }
             return NSColor(
@@ -45,7 +45,7 @@ enum DesignTokens {
         nsColor: NSColor(name: "Little Clarity.surface") { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
                 return NSColor(
-                    srgbRed: 0.1607843137254902, green: 0.16862745098039217, blue: 0.15294117647058825,
+                    srgbRed: 0.14901960784313725, green: 0.14901960784313725, blue: 0.14901960784313725,
                     alpha: 1)
             }
             return NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
@@ -53,7 +53,9 @@ enum DesignTokens {
     static let `subtle` = Color(
         nsColor: NSColor(name: "Little Clarity.subtle") { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
-                return NSColor(srgbRed: 0.18823529411764706, green: 0.2, blue: 0.1803921568627451, alpha: 1)
+                return NSColor(
+                    srgbRed: 0.18823529411764706, green: 0.18823529411764706, blue: 0.18823529411764706,
+                    alpha: 1)
             }
             return NSColor(
                 srgbRed: 0.9411764705882353, green: 0.9450980392156862, blue: 0.9215686274509803, alpha: 1)
@@ -62,7 +64,7 @@ enum DesignTokens {
         nsColor: NSColor(name: "Little Clarity.ink") { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
                 return NSColor(
-                    srgbRed: 0.9098039215686274, green: 0.9137254901960784, blue: 0.8862745098039215, alpha: 1
+                    srgbRed: 0.9098039215686274, green: 0.9098039215686274, blue: 0.9098039215686274, alpha: 1
                 )
             }
             return NSColor(
@@ -72,7 +74,7 @@ enum DesignTokens {
         nsColor: NSColor(name: "Little Clarity.muted") { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
                 return NSColor(
-                    srgbRed: 0.7019607843137254, green: 0.7254901960784313, blue: 0.6823529411764706, alpha: 1
+                    srgbRed: 0.7098039215686275, green: 0.7098039215686275, blue: 0.7098039215686275, alpha: 1
                 )
             }
             return NSColor(
@@ -82,8 +84,8 @@ enum DesignTokens {
         nsColor: NSColor(name: "Little Clarity.line") { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
                 return NSColor(
-                    srgbRed: 0.27058823529411763, green: 0.29411764705882354, blue: 0.25098039215686274,
-                    alpha: 1)
+                    srgbRed: 0.2823529411764706, green: 0.2823529411764706, blue: 0.2823529411764706, alpha: 1
+                )
             }
             return NSColor(
                 srgbRed: 0.8431372549019608, green: 0.8627450980392157, blue: 0.8196078431372549, alpha: 1)
