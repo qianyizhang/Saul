@@ -57,18 +57,46 @@ valid image dimensions alone do not prove icon packaging succeeded.
 5. Restart the app. Confirm the saved account and history reload.
 6. For related changes, check cancellation, search, copy, export, and keyboard
    shortcuts. Test live logout only when willing to end that app session.
-7. For Quick Lookup, check focus return after Esc, draft preservation after hiding,
+7. For Quick Lookup, check focus return after Esc, fresh shortcut/menu invocation,
    main-window handoff, minimum size, full-screen Spaces, and multiple displays.
    Check conflicts with the global shortcut and the menu-bar fallback.
 8. Use `make surface-preview` for disposable native fixtures, including selector
    hitboxes, waiting/thinking/streaming, and narrow layouts. Preview fixtures cannot
    establish live account, inference, hardware scrolling, or system Reduce Motion behavior.
-   Follow the [fixed native UI journeys](ui-qa.md) for composition, reading, Settings,
-   long-form keyboard navigation, and recovery.
+
+Follow the [fixed native UI journeys](ui-qa.md) for composition, reading, Settings,
+long-form keyboard navigation, and recovery.
+
+## Fresh invocation and selection autofill — 2026-10-24
+
+`make format`, `EZ_SWIFTPM_DISABLE_SANDBOX=1 make check`, Node 24
+`pnpm design:check`, and the pinned-signature `make app` build passed. The state
+suite covers fresh context/history retention, exact Unicode autofill, size limits,
+empty fallback, explicit Send, and late fills during typing or active work.
+The production-view surface preview confirmed blank focused input after an answer
+and after a dismissed draft, history retention, streaming preservation with Stop,
+and the new Shortcuts settings layout in light Minimum Mode.
+The signed bundle was subsequently installed at `~/Applications/EZ.app`; the
+installer verified the existing signing requirement and retained the previous
+bundle for rollback. Installed and built executables compared equal. Accessibility
+access was enabled by the user; live autofill testing remains pending. Actual global-hotkey delivery,
+cross-app selection with Accessibility access, dark/Standard presentation and
+live inference remain separate acceptance checks; offline fixtures do not prove them.
 
 Do not capture or commit credentials, authorization URLs, or personal query data.
 Use synthetic inputs. A connected badge proves sign-in only; a model picker proves
 catalog discovery only; completed inference proves that request succeeded.
+
+## Quick Lookup closeout review — 2026-10-29
+
+The isolated source candidate passed the full repository gate: 63 core checks,
+45 native state checks, installer failure checks and native script typechecks.
+The production-view preview showed a blank focused first input after invoking
+Quick Lookup from a saved answer, retained that answer in History after Escape,
+and displayed readable selection-autofill guidance in dark Standard Settings.
+This offline review does not establish global-hotkey delivery, live cross-app
+selection capture or provider behavior. Those installed acceptance checks remain
+pending as described above.
 
 ## Current evidence — 2026-10-22
 

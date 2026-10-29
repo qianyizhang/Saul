@@ -236,14 +236,23 @@ from the compact execution panel.
 
 Quick Lookup is a native, nonactivating `NSPanel` hosting SwiftUI. **Control–Option–Space**
 is registered with Carbon's hotkey API while EZ is running; it does not monitor global
-keystrokes or request Accessibility permission. Registration failures are visible in
+keystrokes or require Accessibility permission for opening. Registration failures are visible in
 both the panel and menu-bar menu, which remains an alternate entry point. The panel
 appears on the pointer's display and can accompany other apps and full-screen Spaces.
 It takes keyboard focus without activating EZ; hiding it releases that focus.
 
 The panel and main window share one `AppModel`: recipe, draft inputs, preset override,
-selection, account, request lifecycle, and history. Opening it preserves the
-current draft/result; New lookup explicitly clears the draft/result when idle.
+selection, account, request lifecycle, and history. Shortcut/menu invocation uses
+`showFreshLookup`, which starts a new lookup when idle. Plain `show` preserves
+prepared Services/Raycast inputs. The surface contract owns the invocation behavior.
+With Accessibility access, `SelectedTextCapture` reads only the frontmost external
+app's focused element's selected text, once per idle invocation. Reads run off the
+UI actor with a 150 ms messaging timeout per AX call. No clipboard or document-body
+fallback is used. Missing permission, unsupported/empty selections, and text above
+16,384 UTF-8 bytes leave the lookup empty. Settings → Shortcuts provides an explicit
+Accessibility settings action; invocation never prompts for permission. Autofill
+only prepares the first field and never submits. Dismissal or a new invocation
+cancels the pending fill; changed drafts, active work and Settings reject late results.
 There is only one request at a time. Escape, Command–W, and toggling the hotkey hide
 the panel without cancelling or discarding work; Command–period stops generation.
 Command–Return sends, and Command–N starts a new lookup. Shutdown cancels the request

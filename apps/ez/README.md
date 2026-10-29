@@ -70,8 +70,16 @@ fields until **Edit draft**; **New**, **Stop**, and **Copy** stay reachable as
 appropriate. Use the
 actions menu for Configuration. **Esc** hides the panel and returns keyboard focus to
 your work. A running answer continues while hidden; **⌘ .** stops it. **⌘ N** starts
-a new lookup. Drafts and answers are shared with the full window, and reopening
-the panel preserves them. Use its history button to open the main window. Closing
+a new lookup. Invoking Quick Lookup through the shortcut or menu starts an empty
+lookup when idle: it clears previous inputs and the displayed answer, keeps the
+selected recipe, restores its default preset, and focuses the first input. With
+Accessibility access, selected text from the active app fills the first input when
+that app supports it; otherwise the input stays empty. Enable access through
+**Settings → Shortcuts → Accessibility settings**. This reads only on invocation,
+leaves the clipboard alone, and never sends automatically. A running
+request or pending launcher submission is preserved. Previous answers remain in
+History. Pressing the shortcut while the panel has focus hides it. Drafts and answers
+are shared with the full window. Use its history button to open the main window. Closing
 the full window leaves EZ available through the menu bar; **Quit EZ** exits it.
 If another app holds the shortcut, EZ displays a warning and menu access still works.
 

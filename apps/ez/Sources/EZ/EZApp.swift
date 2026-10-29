@@ -132,7 +132,7 @@ private struct LookupCommands: Commands {
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
             commandButton(.newLookup)
-            Button("Quick Lookup") { quickLookup.show() }
+            Button("Quick Lookup") { quickLookup.showFreshLookup() }
         }
         CommandMenu("Lookup") {
             commandButton(.send)
@@ -165,7 +165,7 @@ private struct LookupMenu: View {
     @ObservedObject var quickLookup: QuickLookupController
 
     var body: some View {
-        Button("Quick Lookup · ⌃⌥ Space") { quickLookup.show() }
+        Button("Quick Lookup · ⌃⌥ Space") { quickLookup.showFreshLookup() }
         Button("Open EZ & history") { quickLookup.showMain() }
         Button("Account & settings…") { quickLookup.showMain(settings: true, section: .account) }
         if let error = quickLookup.shortcutError { Text(error) }

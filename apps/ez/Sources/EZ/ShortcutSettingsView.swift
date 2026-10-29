@@ -43,6 +43,7 @@ struct ShortcutSettingsView: View {
     @State private var recording: LookupCommand?
     @State private var message: String?
     @State private var recordingError: String?
+    @State private var selectionAllowed = false
 
     var body: some View {
         ScrollView {
@@ -83,6 +84,20 @@ struct ShortcutSettingsView: View {
                     MetadataRow("Settings", value: "⌘,")
                     MetadataRow("Hide panel", value: "Esc / ⌘W")
                 }.font(AppStyle.caption).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Selection autofill").font(.headline)
+                    Text(
+                        "Quick Lookup fills its first input with selected text from the active app when available; otherwise it starts empty. It never sends automatically or changes the clipboard."
+                    ).font(AppStyle.caption).foregroundStyle(.secondary)
+                    HStack {
+                        Text(
+                            selectionAllowed
+                                ? "Accessibility access allowed" : "Requires Accessibility access")
+                        Spacer()
+                        Button("Accessibility settings…") { SelectedTextCapture.openPermissionSettings() }
+                            .disabled(model.offline)
+                    }.font(AppStyle.caption)
+                }
                 HStack {
                     Button("Use Chrome navigation") { chromeNavigation() }
                     Spacer()
@@ -98,6 +113,11 @@ struct ShortcutSettingsView: View {
                 }
                 if let message { Text(message).font(AppStyle.caption) }
             }.padding(24)
+        }
+        .onAppear { selectionAllowed = SelectedTextCapture.isAllowed }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) {
+            _ in
+            selectionAllowed = SelectedTextCapture.isAllowed
         }
         .sheet(isPresented: Binding(get: { recording != nil }, set: { if !$0 { recording = nil } })) {
             if let command = recording {

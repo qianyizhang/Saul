@@ -15,6 +15,7 @@ import SwiftUI
     private var keyMonitor: Any?
     private var openMain: (() -> Void)?
     private var started = false
+    private var selectionTask: Task<Void, Never>?
 
     init(model: AppModel) { self.model = model }
 
@@ -57,7 +58,25 @@ import SwiftUI
     }
 
     func toggle() {
-        if panel?.isVisible == true && panel?.isKeyWindow == true { hide() } else { show() }
+        if panel?.isVisible == true && panel?.isKeyWindow == true { hide() } else { showFreshLookup() }
+    }
+
+    func showFreshLookup() {
+        let source = NSWorkspace.shared.frontmostApplication
+        newQuery()
+        show()
+        guard !model.offline, !model.busy, !model.launcherPending, !model.signingIn,
+            !model.showSettings, SelectedTextCapture.isAllowed,
+            let source, source.processIdentifier != ProcessInfo.processInfo.processIdentifier
+        else { return }
+        let revision = model.draftRevision
+        selectionTask = Task { [weak self] in
+            let text = await SelectedTextCapture.read(from: source.processIdentifier)
+            guard !Task.isCancelled, let self, self.isVisible,
+                self.model.draftRevision == revision
+            else { return }
+            self.model.fillQuickLookupSelection(text)
+        }
     }
 
     func show() {
@@ -136,6 +155,7 @@ import SwiftUI
     }
 
     func hide() {
+        selectionTask?.cancel()
         isVisible = false
         panel?.orderOut(nil)
     }
@@ -162,6 +182,7 @@ import SwiftUI
     }
 
     func newQuery() {
+        selectionTask?.cancel()
         guard !model.busy, !model.launcherPending else { return }
         launcherError = nil
         model.newQuery()
@@ -176,6 +197,7 @@ import SwiftUI
     }
 
     func shutdown() {
+        selectionTask?.cancel()
         if let hotKey { UnregisterEventHotKey(hotKey) }
         if let eventHandler { RemoveEventHandler(eventHandler) }
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }

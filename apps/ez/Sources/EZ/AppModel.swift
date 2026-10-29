@@ -332,6 +332,15 @@ import EZCore
             configurationError = "Shared presets could not be loaded. \(error.localizedDescription)"
         }
     }
+    func fillQuickLookupSelection(_ text: String?) {
+        guard !busy, !launcherPending, !signingIn, !showSettings,
+            selection == nil, inputValues.values.allSatisfy({ $0.isEmpty }),
+            let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            text.utf8.count <= 16_384, let field = inputFields.first
+        else { return }
+        inputValues = [field: text]
+    }
+
     func prepareSelectedText(_ text: String) throws {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             text.utf8.count <= 16_384

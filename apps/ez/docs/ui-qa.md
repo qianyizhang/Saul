@@ -33,6 +33,14 @@ Never substitute personal account/history data for these fixtures.
 | 10. Appearance and activity | Answer and Thinking in light/dark; Waiting/Streaming; Reduce motion; minimum/wide panel | Text/actions remain visible. Waiting and thinking are distinguishable; Stop stays reachable. No spinner duplication; reduced motion removes travel. Simulated fixture state is not live streaming evidence. |
 | 11. Minimum Mode | Empty → toggle Minimum Mode off/on; Answer → Quick Lookup → actions → Minimum Mode; Settings → Minimum Mode | Both surfaces share the mode without losing draft, preset override, or selected answer. Minimum Mode hides routine hints and metric strips; Details retains metrics and exact request metadata. Blocked and Signed out retain their notices and recovery controls. |
 | 12. Menu priority | Quick Lookup → actions menu → physical Esc → physical Esc | Verify that the first Escape closes the menu and keeps the panel visible; the second hides the panel. This remains a direct-keyboard acceptance check. |
+| 13. Fresh invocation | Answer → Invoke Quick Lookup; type a draft → Esc → Invoke Quick Lookup; repeat in Standard view and with Streaming | Idle invocation clears old inputs/answer, focuses the first input and retains history/recipe. Streaming preserves the active request. Show Quick Lookup remains a preserving fixture action. |
+
+Installed selection autofill requires separate acceptance: grant EZ Accessibility
+access from Settings → Shortcuts, select text in another app, and press ⌃⌥Space.
+Verify exact first-field text and explicit Send; repeat without a selection and
+without permission (empty lookup), with unsupported source apps, and while typing
+or hiding during capture (no late overwrite/reappearance). The offline preview
+never reads another app's selection or requests permission.
 
 For menu-priority checks, send keys without refocusing the window. Computer Use
 can click to focus before sending Escape, which dismisses the menu first and
