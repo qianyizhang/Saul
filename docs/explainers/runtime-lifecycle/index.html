@@ -1,0 +1,1741 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Where Saul runs</title>
+    <style id="design-tokens">
+      /* Generated from DESIGN.md · SHA-256 eeca49df21a5638b580406f22e78f334c5d60e40565f0d662534d324a7f222ea. Do not edit. */
+      :root,
+      :host {
+        color-scheme: light dark;
+        --design-color-primary: light-dark(#296e59, #6ec2a1);
+        --design-color-primary-hover: light-dark(#205642, #84d1b1);
+        --design-color-on-primary: light-dark(#ffffff, #14251d);
+        --design-color-canvas: light-dark(#fafaf7, #1e1e1e);
+        --design-color-surface: light-dark(#ffffff, #262626);
+        --design-color-subtle: light-dark(#f0f1eb, #303030);
+        --design-color-ink: light-dark(#242722, #e8e8e8);
+        --design-color-muted: light-dark(#62685d, #b5b5b5);
+        --design-color-line: light-dark(#d7dcd1, #484848);
+        --design-color-wash: light-dark(#eaf2ec, #253d31);
+        --design-color-danger: light-dark(#a3312a, #f3a79e);
+        --design-color-danger-wash: light-dark(#fff0ed, #472a28);
+        --design-color-warning: light-dark(#805417, #e2bd83);
+        --design-color-warning-wash: light-dark(#f7efdf, #403425);
+        --design-color-window-blue: light-dark(#356a99, #8ebde5);
+        --design-color-window-violet: light-dark(#78539a, #c4a3e2);
+        --design-color-window-rose: light-dark(#a34f69, #e4a0b6);
+        --design-font-subject: ui-serif, Georgia, serif;
+        --design-size-subject: 24px;
+        --design-leading-subject: 1.3;
+        --design-weight-subject: 500;
+        --design-font-body: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        --design-size-body: 15px;
+        --design-leading-body: 1.65;
+        --design-weight-body: 400;
+        --design-font-control: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        --design-size-control: 14px;
+        --design-leading-control: 1.5;
+        --design-weight-control: 500;
+        --design-font-caption: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        --design-size-caption: 12px;
+        --design-leading-caption: 1.5;
+        --design-weight-caption: 400;
+        --design-radius-control: 8px;
+        --design-radius-panel: 12px;
+        --design-radius-composer: 14px;
+        --design-radius-pill: 9999px;
+        --design-space-xs: 4px;
+        --design-space-sm: 8px;
+        --design-space-md: 12px;
+        --design-space-lg: 16px;
+        --design-space-xl: 24px;
+        --design-space-reading: 32px;
+      }
+      :root[data-theme='light'],
+      :host([data-theme='light']) {
+        color-scheme: light;
+      }
+      :root[data-theme='dark'],
+      :host([data-theme='dark']) {
+        color-scheme: dark;
+      }
+    </style>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--design-color-canvas);
+        color: var(--design-color-ink);
+        font:
+          15px/1.55 system-ui,
+          sans-serif;
+      }
+      main {
+        max-width: 1030px;
+        margin: auto;
+        padding: 36px 24px 60px;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      h1,
+      h2 {
+        font: 500 30px/1.2 var(--design-font-subject);
+      }
+      h1 {
+        font-size: clamp(30px, 4vw, 42px);
+        margin: 8px 0 12px;
+      }
+      h2 {
+        font-size: 25px;
+        margin-bottom: 12px;
+      }
+      h3 {
+        font-size: 16px;
+        font-weight: 600;
+      }
+      p + p {
+        margin-top: 10px;
+      }
+      button {
+        font: inherit;
+        color: inherit;
+      }
+      a {
+        color: var(--design-color-primary);
+        text-underline-offset: 3px;
+      }
+      code {
+        font:
+          0.88em/1.5 ui-monospace,
+          SFMono-Regular,
+          Consolas,
+          monospace;
+        overflow-wrap: anywhere;
+      }
+      small,
+      .muted {
+        color: var(--design-color-muted);
+      }
+      small {
+        font-size: 13px;
+      }
+      .eyebrow {
+        color: var(--design-color-muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .intro {
+        max-width: 750px;
+        font-size: 17px;
+      }
+      .terms {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 28px;
+        padding: 18px 0;
+        margin: 22px 0 26px;
+        border-block: 1px solid var(--design-color-line);
+      }
+      .terms strong {
+        margin-right: 5px;
+      }
+      section {
+        margin-top: 34px;
+      }
+      button,
+      summary {
+        -webkit-tap-highlight-color: transparent;
+      }
+      button:focus-visible,
+      a:focus-visible,
+      summary:focus-visible,
+      input:focus-visible + label {
+        outline: 3px solid var(--design-color-primary);
+        outline-offset: 3px;
+      }
+      .map {
+        display: grid;
+        grid-template-columns: 1.16fr 1fr;
+        gap: 18px;
+        margin-top: 16px;
+      }
+      .zone {
+        padding: 18px;
+        border: 1px solid var(--design-color-line);
+        border-radius: 10px;
+        background: var(--design-color-surface);
+      }
+      .zone h3 {
+        margin-bottom: 3px;
+      }
+      .node {
+        display: block;
+        width: 100%;
+        text-align: left;
+        border: 0;
+        border-radius: 7px;
+        padding: 11px 14px;
+        margin-top: 10px;
+        background: var(--design-color-subtle);
+        cursor: pointer;
+      }
+      .node:hover,
+      .chip:hover {
+        background: var(--design-color-wash);
+      }
+      .node strong,
+      .node small {
+        display: block;
+      }
+      .node strong::after {
+        content: ' ⓘ';
+        color: var(--design-color-muted);
+        font-weight: 400;
+      }
+      .nest {
+        border-left: 2px solid var(--design-color-line);
+        margin-top: 12px;
+        padding-left: 12px;
+      }
+      .arrow {
+        text-align: center;
+        color: var(--design-color-muted);
+        font-size: 13px;
+        padding-top: 8px;
+      }
+      .stack {
+        display: grid;
+        gap: 16px;
+        align-content: start;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        margin-top: 11px;
+      }
+      .chip {
+        padding: 7px 11px;
+        border: 1px solid var(--design-color-line);
+        border-radius: 6px;
+        background: var(--design-color-surface);
+        cursor: pointer;
+        font-size: 14px;
+      }
+      .routes {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        margin-top: 18px;
+      }
+      .route {
+        border-top: 1px solid var(--design-color-line);
+        padding-top: 12px;
+      }
+      .route strong {
+        display: block;
+        margin-bottom: 4px;
+      }
+      .route p {
+        font-size: 14px;
+      }
+      .note {
+        margin-top: 16px;
+        font-size: 14px;
+      }
+      [popover] {
+        position: fixed;
+        inset: 0;
+        margin: auto;
+        width: min(580px, calc(100vw - 32px));
+        max-height: calc(100dvh - 36px);
+        overflow: auto;
+        overscroll-behavior: contain;
+        border: 1px solid var(--design-color-line);
+        border-radius: 12px;
+        padding: 24px;
+        background: var(--design-color-surface);
+        color: var(--design-color-ink);
+        box-shadow: 0 16px 64px color-mix(in srgb, var(--design-color-ink) 18%, transparent);
+      }
+      [popover]::backdrop {
+        background: color-mix(in srgb, var(--design-color-ink) 10%, transparent);
+      }
+      .overlay-head {
+        display: flex;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: var(--design-color-surface);
+        align-items: flex-start;
+        gap: 16px;
+        justify-content: space-between;
+        margin-bottom: 18px;
+      }
+      .overlay-head h2 {
+        font-family: system-ui, sans-serif;
+        font-size: 22px;
+        margin-bottom: 5px;
+      }
+      .close {
+        flex: none;
+        width: 36px;
+        height: 36px;
+        border: 1px solid var(--design-color-line);
+        border-radius: 50%;
+        cursor: pointer;
+        background: var(--design-color-surface);
+        font-size: 22px;
+        line-height: 1;
+      }
+      .close:hover {
+        background: var(--design-color-subtle);
+      }
+      .facts {
+        display: grid;
+        grid-template-columns: 76px 1fr;
+        gap: 12px 16px;
+        margin: 0;
+      }
+      .facts dt {
+        font-weight: 600;
+      }
+      .facts dd {
+        margin: 0;
+        min-width: 0;
+      }
+      .technical {
+        margin-top: 18px;
+        padding-top: 12px;
+        border-top: 1px solid var(--design-color-line);
+        font-size: 14px;
+      }
+      summary {
+        cursor: pointer;
+        font-weight: 500;
+      }
+      .technical p {
+        margin-top: 10px;
+      }
+      .scenario-switch {
+        margin-top: 16px;
+      }
+      .scenario-switch input {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+      }
+      .scenario-switch label {
+        display: inline-block;
+        padding: 8px 12px;
+        margin: 0 4px 10px 0;
+        border: 1px solid var(--design-color-line);
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      .scenario-switch input:checked + label {
+        background: var(--design-color-primary);
+        color: var(--design-color-on-primary);
+        border-color: var(--design-color-primary);
+      }
+      .scenario {
+        display: none;
+        padding: 18px;
+        border: 1px solid var(--design-color-line);
+        border-radius: 8px;
+        background: var(--design-color-surface);
+      }
+      #close-view:checked ~ .scenarios .view-scenario,
+      #press-stop:checked ~ .scenarios .stop-scenario,
+      #restart:checked ~ .scenarios .restart-scenario,
+      #disconnect:checked ~ .scenarios .disconnect-scenario {
+        display: block;
+      }
+      .lifeline {
+        display: grid;
+        grid-template-columns: 140px 1fr;
+        gap: 8px 14px;
+        margin: 14px 0 0;
+      }
+      .lifeline dt {
+        font-weight: 500;
+      }
+      .lifeline dd {
+        margin: 0;
+        padding: 7px 10px;
+        border-radius: 4px;
+        background: var(--design-color-wash);
+      }
+      .lifeline .ended {
+        background: var(--design-color-subtle);
+      }
+      .lifeline .paused {
+        background: var(--design-color-warning-wash);
+      }
+      .diagram-scroll {
+        overflow-x: auto;
+        margin-top: 16px;
+      }
+      .sequence {
+        display: block;
+        width: 100%;
+        min-width: 710px;
+        height: auto;
+        color: var(--design-color-ink);
+      }
+      .sequence .box {
+        fill: var(--design-color-subtle);
+      }
+      .sequence .line {
+        stroke: var(--design-color-line);
+        stroke-dasharray: 4 5;
+      }
+      .sequence .call {
+        stroke: var(--design-color-primary);
+        stroke-width: 1.6;
+      }
+      .sequence text {
+        fill: currentColor;
+        font:
+          13px system-ui,
+          sans-serif;
+      }
+      .sequence .caption {
+        fill: var(--design-color-muted);
+        font-size: 12px;
+      }
+      .future-zone {
+        margin-top: 12px;
+        padding: 12px;
+        border-radius: 8px;
+        border: 1px dashed var(--design-color-warning);
+      }
+      .future-zone .eyebrow {
+        color: var(--design-color-warning);
+      }
+      .future-zone .node {
+        background: var(--design-color-warning-wash);
+      }
+      .contract-list {
+        margin: 10px 0 0;
+        padding-left: 20px;
+      }
+      .contract-list li + li {
+        margin-top: 8px;
+      }
+      .journey {
+        margin: 0;
+        padding-left: 24px;
+      }
+      .journey li {
+        padding-left: 4px;
+      }
+      .journey li + li {
+        margin-top: 10px;
+      }
+      .reload-figure {
+        margin: 18px 0;
+        padding: 14px;
+        background: var(--design-color-subtle);
+        border-radius: 7px;
+      }
+      .reload-figure figcaption {
+        font-weight: 600;
+        margin-bottom: 10px;
+      }
+      .revision-row {
+        display: grid;
+        grid-template-columns: 116px 1fr;
+        gap: 8px;
+        margin-top: 8px;
+        font-size: 14px;
+      }
+      .revision-row strong {
+        font-weight: 500;
+      }
+      .reference {
+        margin-top: 28px;
+        border-top: 1px solid var(--design-color-line);
+        padding-top: 18px;
+      }
+      .reference summary {
+        font-size: 17px;
+      }
+      .table-wrap {
+        overflow-x: auto;
+        margin-top: 16px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th,
+      td {
+        padding: 10px 12px;
+        text-align: left;
+        vertical-align: top;
+        border-bottom: 1px solid var(--design-color-line);
+      }
+      th {
+        font-weight: 600;
+      }
+      .sources {
+        display: flex;
+        gap: 8px 22px;
+        flex-wrap: wrap;
+        padding: 16px 0;
+        list-style: none;
+      }
+      footer {
+        margin-top: 28px;
+        font-size: 13px;
+        color: var(--design-color-muted);
+      }
+      @media (max-width: 700px) {
+        main {
+          padding: 25px 16px 44px;
+        }
+        .map,
+        .routes {
+          grid-template-columns: 1fr;
+        }
+        .terms {
+          gap: 8px;
+        }
+        .terms span {
+          width: 100%;
+        }
+        [popover] {
+          padding: 20px;
+        }
+        .facts {
+          grid-template-columns: 1fr;
+          gap: 3px;
+        }
+        .facts dd {
+          margin-bottom: 9px;
+        }
+        .lifeline {
+          grid-template-columns: 1fr;
+          gap: 3px;
+        }
+        .lifeline dd {
+          margin-bottom: 7px;
+        }
+      }
+      @media print {
+        [popover] {
+          display: block;
+          position: static;
+          width: auto;
+          max-height: none;
+          overflow: visible;
+          box-shadow: none;
+          margin: 20px 0;
+          break-inside: avoid;
+        }
+        .close {
+          display: none;
+        }
+        .scenario {
+          display: block;
+          margin-bottom: 12px;
+        }
+        .scenario-switch label {
+          display: none;
+        }
+        details::details-content {
+          content-visibility: visible;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">Saul / EZ · Runtime guide</p>
+        <h1>Where Saul runs</h1>
+        <p class="intro">
+          Chrome holds the jobs. Local helpers handle ChatGPT and external tab access. Click a part
+          to see when it starts and stops.
+        </p>
+      </header>
+      <div class="terms">
+        <span><strong>Helper</strong> A local program</span
+        ><span><strong>Bridge</strong> Passes messages</span
+        ><span><strong>Runner</strong> Manages a job</span>
+      </div>
+      <section aria-label="Runtime map">
+        <div class="map">
+          <div class="zone">
+            <h3>Inside Chrome</h3>
+            <small>Browser contexts, not necessarily separate OS processes.</small>
+            <button class="node" type="button" popovertarget="ui">
+              <strong>Reader & page UI</strong><small>Shows results and captures selections</small>
+            </button>
+            <div class="arrow" aria-hidden="true">↓ messages</div>
+            <button class="node" type="button" popovertarget="background">
+              <strong>Background service worker</strong
+              ><small>Routes requests · contains both bridges</small>
+            </button>
+            <div class="arrow" aria-hidden="true">↓ jobs and storage requests</div>
+            <div class="nest">
+              <button class="node" type="button" popovertarget="offscreen">
+                <strong>Hidden offscreen document</strong
+                ><small>Holds both runners and the database worker</small>
+              </button>
+              <button class="node" type="button" popovertarget="reading">
+                <strong>ReadingRunner</strong><small>Passage explanations</small>
+              </button>
+              <button class="node" type="button" popovertarget="digest">
+                <strong>DigestRunner</strong><small>Page and PDF summaries</small>
+              </button>
+              <button class="node" type="button" popovertarget="database">
+                <strong>Database worker → SQLite</strong
+                ><small>Saves history in Chrome’s private storage</small>
+              </button>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="zone">
+              <h3>Local Node programs</h3>
+              <small>Two current helpers; one proposed action helper.</small>
+              <button class="node" type="button" popovertarget="plan">
+                <strong>ChatGPT plan helper</strong
+                ><small><code>com.saul.chatgpt</code> · accounts and generation</small>
+              </button>
+              <button class="node" type="button" popovertarget="tabs">
+                <strong>Tab helper</strong
+                ><small><code>com.saul.tabs</code> · external control of Chrome tabs</small>
+              </button>
+              <div class="future-zone">
+                <p class="eyebrow">Proposed · not implemented</p>
+                <button class="node" type="button" popovertarget="action-host">
+                  <strong>Action helper → your module</strong>
+                  <small>Third Node helper · loads your JS/TS action</small>
+                </button>
+                <div class="chips">
+                  <button class="chip" type="button" popovertarget="action-reload">
+                    Create & reload
+                  </button>
+                </div>
+              </div>
+              <p class="note">External clients connect to the tab helper:</p>
+              <div class="chips">
+                <button class="chip" type="button" popovertarget="mcp">MCP server</button
+                ><button class="chip" type="button" popovertarget="cli">CLI</button
+                ><button class="chip" type="button" popovertarget="board">Board server</button>
+              </div>
+            </div>
+            <div class="zone">
+              <h3>Separate Swift app</h3>
+              <button class="node" type="button" popovertarget="ez">
+                <strong>EZ → AttemptExecution</strong
+                ><small>Own accounts, requests and history</small>
+              </button>
+            </div>
+            <div>
+              <small>Temporary work</small>
+              <div class="chips">
+                <button class="chip" type="button" popovertarget="pdf">PDF extraction</button
+                ><button class="chip" type="button" popovertarget="oauth">Sign-in callback</button
+                ><button class="chip" type="button" popovertarget="window-names">
+                  Window-name script
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="routes">
+          <div class="route">
+            <strong>Summary calls</strong>
+            <p>DigestRunner → plan bridge → ChatGPT helper → OpenAI</p>
+          </div>
+          <div class="route">
+            <strong>Tab commands</strong>
+            <p>MCP / CLI / board → socket → tab helper → tab bridge → Chrome</p>
+          </div>
+        </div>
+        <p class="note">
+          <strong>“Native host” means outside Chrome.</strong> Saul’s hosts use Node. They are
+          separate from EZ.
+        </p>
+      </section>
+
+      <section id="lifecycle">
+        <h2>What happens when…</h2>
+        <div class="scenario-switch" role="group" aria-label="Choose a lifecycle event">
+          <input type="radio" name="event" id="close-view" checked /><label for="close-view"
+            >Close reader</label
+          >
+          <input type="radio" name="event" id="press-stop" /><label for="press-stop"
+            >Press Stop</label
+          >
+          <input type="radio" name="event" id="restart" /><label for="restart"
+            >Restart Chrome</label
+          >
+          <input type="radio" name="event" id="disconnect" /><label for="disconnect"
+            >Disable tab access</label
+          >
+          <div class="scenarios" aria-live="polite">
+            <div class="scenario view-scenario">
+              <h3>The view closes. Work continues.</h3>
+              <dl class="lifeline">
+                <dt>Reader</dt>
+                <dd class="ended">Closes; reopen to see progress or results.</dd>
+                <dt>Runner + request</dt>
+                <dd>Keep running in offscreen.</dd>
+                <dt>Saved data</dt>
+                <dd>Stays in SQLite. Reopening does not send again.</dd>
+              </dl>
+            </div>
+            <div class="scenario stop-scenario">
+              <h3>The job stops. Its host can stay alive.</h3>
+              <dl class="lifeline">
+                <dt>DigestRunner</dt>
+                <dd class="paused">Aborts and waits for both item workers to settle.</dd>
+                <dt>Plan request</dt>
+                <dd class="ended">Cancellation reaches the helper.</dd>
+                <dt>Reader + data</dt>
+                <dd>Stay available, including saved partial results.</dd>
+              </dl>
+            </div>
+            <div class="scenario restart-scenario">
+              <h3>Execution ends. Saved records remain.</h3>
+              <dl class="lifeline">
+                <dt>Chrome + helpers</dt>
+                <dd class="ended">Browser contexts end; native pipes close.</dd>
+                <dt>Next offscreen</dt>
+                <dd class="paused">Marks unfinished work interrupted. Does not resend.</dd>
+                <dt>Data</dt>
+                <dd>Saved rows and account files remain; unsaved text is lost.</dd>
+                <dt>External clients</dt>
+                <dd>MCP and board servers may stay open without Chrome.</dd>
+              </dl>
+            </div>
+            <div class="scenario disconnect-scenario">
+              <h3>Only external tab access ends.</h3>
+              <dl class="lifeline">
+                <dt>Tab bridge + helper</dt>
+                <dd class="ended">Disconnects, stops retrying and removes its socket.</dd>
+                <dt>Tab commands</dt>
+                <dd class="paused">Queued work stops. An operation already running may finish.</dd>
+                <dt>Summaries</dt>
+                <dd>Use the separate ChatGPT path and can continue.</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>One new summary</h2>
+        <p>
+          Capture → save input → generate → validate → save result. A repeated selection can reopen
+          saved work instead.
+        </p>
+        <div class="diagram-scroll">
+          <svg
+            class="sequence"
+            viewBox="0 0 980 395"
+            role="img"
+            aria-labelledby="seq-title seq-desc"
+          >
+            <title id="seq-title">New summary: reader to runner to helper to saved result</title>
+            <desc id="seq-desc">
+              The reader submits intent through the background worker to DigestRunner. The runner
+              asks the background to capture the source, saves it through the database worker, calls
+              the plan helper through the plan bridge, receives model text and completion, validates
+              and saves the result. The reader polls job state and can close independently.
+            </desc>
+            <defs>
+              <marker
+                id="arrowhead"
+                markerWidth="7"
+                markerHeight="7"
+                refX="6"
+                refY="3.5"
+                orient="auto"
+              >
+                <path d="M0 0L7 3.5L0 7" fill="var(--design-color-primary)" />
+              </marker>
+            </defs>
+            <rect class="box" x="10" y="10" width="160" height="43" rx="6" />
+            <rect class="box" x="210" y="10" width="165" height="43" rx="6" />
+            <rect class="box" x="410" y="10" width="165" height="43" rx="6" />
+            <rect class="box" x="610" y="10" width="165" height="43" rx="6" />
+            <rect class="box" x="810" y="10" width="160" height="43" rx="6" />
+            <text x="90" y="36" text-anchor="middle">Reader UI</text>
+            <text x="292" y="36" text-anchor="middle">Background</text>
+            <text x="492" y="36" text-anchor="middle">DigestRunner</text>
+            <text x="692" y="36" text-anchor="middle">Plan helper</text>
+            <text x="890" y="36" text-anchor="middle">DB worker</text>
+            <path class="line" d="M90 55V375M292 55V375M492 55V375M692 55V375M890 55V375" />
+            <path class="call" marker-end="url(#arrowhead)" d="M90 95H492" />
+            <text x="110" y="85">Start intent → freeze selection + account</text>
+            <path class="call" marker-end="url(#arrowhead)" d="M492 145H292" />
+            <text x="314" y="133">Capture source via Chrome</text>
+            <path class="call" marker-end="url(#arrowhead)" d="M492 190H890" />
+            <text x="548" y="179">Save source + running item</text>
+            <path class="call" marker-end="url(#arrowhead)" d="M492 235H692" />
+            <text x="510" y="224">Generate via plan bridge</text>
+            <path class="call" marker-end="url(#arrowhead)" d="M692 280H492" />
+            <text x="511" y="268">Deltas + completion event</text>
+            <path class="call" marker-end="url(#arrowhead)" d="M492 325H890" />
+            <text x="548" y="314">Validate bilingual JSON → save</text>
+            <path class="call" marker-end="url(#arrowhead)" d="M492 368H90" />
+            <text x="110" y="356">Reader polls state through background; renders saved result</text>
+            <text class="caption" x="610" y="390">
+              Plan helper makes the OpenAI HTTP/SSE request.
+            </text>
+          </svg>
+        </div>
+        <p class="note">
+          The arrows combine message hops. Plan calls pass through the background bridge. Only a
+          validated, saved result counts as success.
+        </p>
+      </section>
+
+      <details class="reference">
+        <summary>File paths, sources & survey notes</summary>
+        <p class="note">
+          Defaults below can be changed at installation. Code files, running processes and stored
+          data have different lifetimes.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Path</th>
+                <th scope="col">Contains</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>apps/saul/native/*.mts</code></td>
+                <td>Helper and server source code</td>
+              </tr>
+              <tr>
+                <td><code>apps/saul/.build/native/</code></td>
+                <td>Built .mjs, JXA and board files</td>
+              </tr>
+              <tr>
+                <td><code>~/.saul/generations/g-&lt;UUID&gt;/</code></td>
+                <td>Installed code; each running process keeps its original generation</td>
+              </tr>
+              <tr>
+                <td><code>~/.saul/bridge</code> · <code>~/.saul/bin</code></td>
+                <td>Managed links and launchers for new processes</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>~/Library/Application Support/Google/Chrome/NativeMessagingHosts/</code>
+                </td>
+                <td>
+                  Registration files: <code>com.saul.tabs.json</code> and
+                  <code>com.saul.chatgpt.json</code>
+                </td>
+              </tr>
+              <tr>
+                <td><code>~/.saul/run/&lt;session&gt;.sock</code></td>
+                <td>Tab helper connection; new ID on reconnect</td>
+              </tr>
+              <tr>
+                <td><code>~/.saul/chatgpt/accounts.json</code></td>
+                <td>Saul’s private account registrations and tokens</td>
+              </tr>
+              <tr>
+                <td><code>OPFS: /saul-opfs → /saul.sqlite3</code></td>
+                <td>Saved Saul history in Chrome’s private storage</td>
+              </tr>
+              <tr>
+                <td><code>~/Library/Application Support/Little Clarity/settings.json</code></td>
+                <td>Shared model presets; no shared accounts or history</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>~/Applications/EZ.app</code> ·
+                  <code>~/Library/Application Support/EZ/</code>
+                </td>
+                <td>EZ app and local data; credentials stay in Keychain</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">
+          <strong>Build → install → reconnect.</strong> Editing or rebuilding source does not
+          replace code in an already-running helper.
+        </p>
+        <ul class="sources">
+          <li><a href="../../architecture.md">Architecture</a></li>
+          <li><a href="../../../apps/saul/docs/product.md">Saul behavior</a></li>
+          <li><a href="../../../apps/saul/docs/native-messaging.md">Tab connection</a></li>
+          <li><a href="../../../apps/saul/docs/chatgpt-plan.md">ChatGPT connection</a></li>
+          <li><a href="../../../apps/ez/docs/architecture.md">EZ</a></li>
+          <li><a href="../../setup.md">Installation</a></li>
+        </ul>
+        <p class="note">
+          Survey reviewed: 29 October 2026, <code>dc724fc</code>. Source map, not a live trace.
+          Installed versions may differ.
+        </p>
+        <p class="note">
+          <strong>Current limits:</strong>
+          <a href="../../../apps/saul/docs/architecture.md">Saul architecture</a> marks Chrome AI
+          disabled, matching <a href="../../../apps/saul/src/models/chrome-ai.ts">the flag</a>. PDF
+          summaries attach the URL by default; local extraction is optional.
+        </p>
+        <p class="note">
+          <a href="README.md">Scope and verification</a> ·
+          <a
+            href="https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle"
+            >Chrome worker lifetime</a
+          >
+          ·
+          <a href="https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging"
+            >Native messaging</a
+          >
+        </p>
+      </details>
+      <footer>
+        Local guide · No model calls or background work. Click a card; Escape or click outside to
+        close it.
+      </footer>
+    </main>
+
+    <article id="ui" popover="auto" role="dialog" aria-labelledby="ui-title">
+      <div class="overlay-head">
+        <div>
+          <h2 id="ui-title">Reader & page UI</h2>
+          <small>Chrome views and content script</small>
+        </div>
+        <button
+          class="close"
+          type="button"
+          popovertarget="ui"
+          popovertargetaction="hide"
+          aria-label="Close reader details"
+          autofocus
+        >
+          ×
+        </button>
+      </div>
+      <dl class="facts">
+        <dt>Where</dt>
+        <dd>Side panel, extension tabs, popup and source-page context.</dd>
+        <dt>Starts</dt>
+        <dd>You open a view, or the content script mounts on a page.</dd>
+        <dt>Stops</dt>
+        <dd>Close the view, navigate the source page or reload the extension.</dd>
+        <dt>Remains</dt>
+        <dd>Jobs continue in offscreen. Saved answers remain in SQLite.</dd>
+      </dl>
+      <details class="technical">
+        <summary>Names & sources</summary>
+        <p>
+          Panel route: Chrome session storage. A source closed before capture fails that capture.
+        </p>
+        <p>
+          <a href="../../../apps/saul/src/digest/panel.ts">panel.ts</a> ·
+          <a href="../../../apps/saul/src/digest/actions.ts">actions.ts</a> ·
+          <a href="../../../apps/saul/entrypoints/content.tsx">content.tsx</a>
+        </p>
+      </details>
+    </article>
+    <article id="background" popover="auto" role="dialog" aria-labelledby="background-title">
+      <div class="overlay-head">
+        <div>
+          <h2 id="background-title">Background worker</h2>
+          <small>Chrome’s request router</small>
+        </div>
+        <button
+          class="close"
+          type="button"
+          popovertarget="background"
+          popovertargetaction="hide"
+          aria-label="Close background details"
+          autofocus
+        >
+          ×
+        </button>
+      </div>
+      <dl class="facts">
+        <dt>Starts</dt>
+        <dd>Chrome wakes it for extension events.</dd>
+        <dt>Does</dt>
+        <dd>Validates messages, saves settings, dispatches capture and connects helpers.</dd>
+        <dt>Stops</dt>
+        <dd>Normally after about 30 s idle. Native connections extend its life.</dd>
+        <dt>Restarts</dt>
+        <dd>Rebuilds its state. Can reuse the existing offscreen document.</dd>
+      </dl>
+      <details class="technical">
+        <summary>Bridge names & sources</summary>
+        <p>
+          <code>initPlanBridge()</code> routes ChatGPT calls. <code>initNativeBridge()</code> routes
+          external tab commands. Both run here; neither is a separate process.
+        </p>
+        <p>Losing a plan connection fails pending calls. Restart does not resume the stream.</p>
+        <p>
+          <a href="../../../apps/saul/entrypoints/background.ts">background.ts</a> ·
+          <a href="../../../apps/saul/src/native/plan.ts">plan.ts</a> ·
+          <a href="../../../apps/saul/src/native/bridge.ts">bridge.ts</a>
+        </p>
+      </details>
+    </article>
+    <article id="offscreen" popover="auto" role="dialog" aria-labelledby="offscreen-title">
+      <div class="overlay-head">
+        <div>
+          <h2 id="offscreen-title">Offscreen document</h2>
+          <small>An invisible Chrome page: <code>offscreen.html</code></small>
+        </div>
+        <button
+          class="close"
+          type="button"
+          popovertarget="offscreen"
+          popovertargetaction="hide"
+          aria-label="Close offscreen details"
+          autofocus
+        >
+          ×
+        </button>
+      </div>
+      <dl class="facts">
+        <dt>Starts</dt>
+        <dd>First job or database request; reuses the document if it exists.</dd>
+        <dt>Holds</dt>
+        <dd>Both runners and one database worker.</dd>
+        <dt>Stops</dt>
+        <dd>Browser exit, extension reload/disable or context loss. No app idle-close timer.</dd>
+        <dt>Restarts</dt>
+        <dd>Marks unfinished records interrupted. Does not send requests again.</dd>
+      </dl>
+      <details class="technical">
+        <summary>Names & sources</summary>
+        <p>
+          <code>ensureOffscreenDocument()</code> creates it for <code>WORKERS</code>. Recovery runs
+          once per document, not whenever the reader reopens.
+        </p>
+        <p>
+          <a href="../../../apps/saul/src/storage/client.ts">storage/client.ts</a> ·
+          <a href="../../../apps/saul/entrypoints/offscreen/main.ts">offscreen/main.ts</a>
+        </p>
+      </details>
+    </article>
+    <article id="reading" popover="auto" role="dialog" aria-labelledby="reading-title">
+      <div class="overlay-head">
+        <div>
+          <h2 id="reading-title">ReadingRunner</h2>
+          <small>Passage job manager inside offscreen</small>
+        </div>
+        <button
+          class="close"
+          type="button"
+          popovertarget="reading"
+          popovertargetaction="hide"
+          aria-label="Close reading runner details"
+          autofocus
+        >
+          ×
+        </button>
+      </div>
+      <dl class="facts">
+        <dt>Starts</dt>
+        <dd>A passage request is saved, then queued.</dd>
+        <dt>Does</dt>
+        <dd>Calls the chosen provider and saves text checkpoints within 500 ms.</dd>
+        <dt>Stops</dt>
+        <dd>Completion, Stop/delete, error or offscreen loss.</dd>
+        <dt>Restarts</dt>
+        <dd>Unfinished jobs become interrupted. Only saved text survives.</dd>
+      </dl>
+      <details class="technical">
+        <summary>Limits & sources</summary>
+        <p>
+          Two jobs per remote provider. API-compatible reading calls HTTP directly; ChatGPT uses the
+          helper. Chrome on-device AI is disabled.
+        </p>
+        <p>
+          Success requires provider completion and a saved terminal record.
+          <code>DB_RECOVER</code> marks queued/running/saving rows <code>runner-lost</code>.
+        </p>
+        <p>
+          <a href="../../../apps/saul/src/reading/runner.ts">reading/runner.ts</a> ·
+          <a href="../../../apps/saul/src/models/provider.ts">provider.ts</a>
+        </p>
+      </details>
+    </article>
+    <article id="digest" popover="auto" role="dialog" aria-labelledby="digest-title">
+      <div class="overlay-head">
+        <div>
+          <h2 id="digest-title">DigestRunner</h2>
+          <small>Summary job manager inside offscreen</small>
+        </div>
+        <button
+          class="close"
+          type="button"
+          popovertarget="digest"
+          popovertargetaction="hide"
+          aria-label="Close summary runner details"
+          autofocus
+        >
+          ×
+        </button>
+      </div>
+      <dl class="facts">
+        <dt>Starts</dt>
+        <dd>New summary work. A repeated selection may reuse an existing answer.</dd>
+        <dt>Does</dt>
+        <dd>Captures sources, calls ChatGPT, checks bilingual JSON and saves results.</dd>
+        <dt>Stops</dt>
+        <dd>Completion, Stop, failure or offscreen loss. Stop waits for both workers.</dd>
+        <dt>Restarts</dt>
+        <dd>Unfinished items become interrupted. Retry is explicit.</dd>
+      </dl>
+      <details class="technical">
+        <summary>Limits, recovery & sources</summary>
+        <p>
+          One batch; two item workers. Fixed GPT-6 Luna / medium. Provider failure pauses new items;
+          capture/format failure affects one item. Storage failure stops the batch.
+        </p>
+        <p>
+          Raw summary text stays in memory while streaming; it is saved at item transitions, without
+          the reading runner’s 500 ms checkpoints. Retry uses saved sources when available; Run
+          again captures fresh sources.
+        </p>
+        <p><code>digest</code> is the internal name for Summary, not another feature.</p>
+        <p>
+          <a href="../../../apps/saul/src/digest/runner.ts">digest/runner.ts</a> ·
+          <a href="../../../apps/saul/src/digest/store.ts">digest/store.ts</a>
+        </p>
+      </details>
+    </article>
+    <article id="database" popover="auto" role="dialog" aria-labelledby="database-title">
+      <div class="overlay-head">
+        <div>
+          <h2 id="database-title">Database worker</h2>
+          <small>SQLite-WASM in a Web Worker</small>
+        </div>
+        <button
+          class="close"
+          type="button"
+          popovertarget="database"
+          popovertargetaction="hide"
+          aria-label="Close database details"
+          autofocus
+        >
+          ×
+        </button>
+      </div>
+      <dl class="facts">
+        <dt>Starts</dt>
+        <dd>Created with offscreen. SQLite opens on the first operation.</dd>
+        <dt>Does</dt>
+        <dd>Processes database requests one at a time.</dd>
+        <dt>Stops</dt>
+        <dd>Offscreen ends or the worker fails.</dd>
+        <dt>Remains</dt>
+        <dd>Committed rows survive browser restart in Chrome’s private filesystem.</dd>
+      </dl>
+      <details class="technical">
+        <summary>Storage & sources</summary>
+        <p>
+          <code>/saul-opfs</code> and <code>/saul.sqlite3</code> are browser-private paths, not
+          paths at your Mac’s root. Removing the extension or clearing its data can remove history.
+        </p>
+        <p>A worker failure rejects pending requests; there is no silent in-memory fallback.</p>
+        <p>
+          <a href="../../../apps/saul/src/storage/db-worker.ts">db-worker.ts</a> ·
+          <a href="../../../apps/saul/src/storage/db.ts">db.ts</a>
+        </p>
+      </details>
+    </article>
+    <article id="action-host" popover="auto" role="dialog" aria-labelledby="action-host-title">
+      <div class="overlay-head">
+        <div>
+          <h2 id="action-host-title">Action helper → your module</h2>
+          <small>Proposed third Node helper · not implemented</small>
+        </div>
+        <button
+          class="close"
+          type="button"
+          popovertarget="action-host"
+          popovertargetaction="hide"
+          aria-label="Close proposed action helper details"
+          autofocus
+        >
+          ×
+        </button>
+      </div>
+      <dl class="facts">
+        <dt>Helper</dt>
+        <dd>A separate local Node process, alongside the ChatGPT and tab helpers.</dd>
+        <dt>Module</dt>
+        <dd>Your trusted JS/TS file, loaded inside that process. Not another program.</dd>
+        <dt>Receives</dt>
+        <dd>Captured sources and frozen run choices; credentials stay with their owner.</dd>
+        <dt>Owns</dt>
+        <dd>Your workflow: prepare input, request generation and shape the result.</dd>
+        <dt>Returns</dt>
+        <dd>Typed result data. Saul validates, saves and renders it; no executable HTML.</dd>
+        <dt>Saul owns</dt>
+        <dd>Capture checks, account access, job state, Stop and durable history.</dd>
+      </dl>
+      <details class="technical">
+        <summary>Draft contracts & open decisions</summary>
+        <p>
+          Proposed route: Chrome background → native messaging → action helper → your module. The
+          other helpers keep their existing jobs; the ChatGPT helper still owns credentials.
+        </p>
+        <ul class="contract-list">
+          <li>
+            <strong>Call:</strong> Summarize runs the selected handler. Loading or reloading a
+            module does not invoke the handler.
+          </li>
+          <li>
+            <strong>Access:</strong> generation goes through a bound host interface to the existing
+            credential owner. The interface exposes neither raw tokens nor direct database access.
+          </li>
+          <li>
+            <strong>Stop / loss:</strong> cancellation reaches the run and its helper requests. Save
+            an honest terminal state; never resend automatically after uncertain loss.
+          </li>
+          <li>
+            <strong>Scope:</strong> one action slot and one module; existing summary is the default.
+            Explicit Reload, no file watcher.
+          </li>
+        </ul>
+        <p>
+          <strong>Still open:</strong> host start/idle/shutdown rules, result schema, code-revision
+          retention and cancellation of child processes. Agent execution needs that last contract
+          before it is enabled.
+        </p>
+        <p>
+          <strong>Trust:</strong> the interface is not a security sandbox. A Node module still has
+          its process’s OS permissions.
+        </p>
+        <p>
+          Design proposal from this discussion; no installed host name, transport or source file
+          exists yet.
+        </p>
+      </details>
+    </article>
+    <article id="action-reload" popover="auto" role="dialog" aria-labelledby="action-reload-title">
+      <div class="overlay-head">
+        <div>
+          <h2 id="action-reload-title">Create an action, then hot-load it</h2>
+          <small>Proposed journey · uses your connected ChatGPT account</small>
+        </div>
+        <button
+          class="close"
+          type="button"
+          popovertarget="action-reload"
+          popovertargetaction="hide"
+          aria-label="Close create and reload details"
+          autofocus
+        >
+          ×
+        </button>
+      </div>
+      <ol class="journey">
+        <li>
+          <strong>Ask in Saul.</strong> “Make an action that lists the claims and missing evidence.”
+          Saul supplies the action contract to GPT.
+        </li>
+        <li>
+          <strong>Receive a candidate.</strong> GPT returns metadata and one self-contained script
+          in a fixed response format.
+        </li>
+        <li>
+          <strong>Stage and check.</strong> The action helper stores a candidate revision and checks
+          syntax and contract shape. It does not run the script yet.
+        </li>
+        <li>
+          <strong>Choose Load or Replace.</strong> Saul shows what changes. Your click allows code
+          loading; it does not submit a page for generation.
+        </li>
+        <li>
+          <strong>Use the action.</strong> The next Summarize runs the new revision. Existing
+          summary stays the default until you replace it.
+        </li>
+      </ol>
+      <figure
+        class="reload-figure"
+        aria-label="Replacement changes future runs, while an existing run keeps its original revision. These arrows show event order, not measured time."
+      >
+        <figcaption>What changes at Replace?</figcaption>
+        <div class="revision-row">
+          <span>Already running</span><strong>v1 → finishes → old worker closes</strong>
+        </div>
+        <div class="revision-row">
+          <span>Next run</span><strong>v2 ready → selected → starts on click</strong>
+        </div>
+      </figure>
+      <p>
+        <strong>Hot reload replaces the loaded revision.</strong> It does not rewrite a running
+        function or restart Chrome, sign-in or the helper.
+      </p>
+      <details class="technical">
+        <summary>Load mechanics, failures & limits</summary>
+        <ul class="contract-list">
+          <li>
+            <strong>Before Load:</strong> check the contract version, metadata, entry declaration,
+            syntax, size and allowed imports. Store files only in a managed action directory.
+          </li>
+          <li>
+            <strong>After permission to load:</strong> start a fresh Node worker for v2. Import and
+            verify its actual exports. Initializing a JS module executes its top-level code.
+          </li>
+          <li>
+            <strong>Switch:</strong> only after v2 is ready, update the selected revision for new
+            runs. Keep v1 until its active runs finish. Each run records the action ID and revision.
+          </li>
+          <li>
+            <strong>Failure:</strong> syntax, import or initialization errors leave v1 selected.
+            Discard the failed worker. This preserves selection; it cannot undo side effects from
+            code already executed during loading.
+          </li>
+          <li>
+            <strong>No silent runs:</strong> Reload does not invoke the action handler. Failed
+            generation is reported, not automatically sent again.
+          </li>
+          <li>
+            <strong>First version:</strong> one module, explicit Load/Replace, no watcher, npm
+            installation or agent loop. File edits use the same stage/check/load path.
+          </li>
+        </ul>
+        <p>
+          <strong>Valid is not the same as trusted.</strong> Checks can establish the format, not
+          prove an arbitrary script’s behavior. The interface hides tokens, but Node workers still
+          have local OS permissions; they are not a security sandbox.
+        </p>
+        <p>
+          <strong>Existing support:</strong> the plan helper can return generated text; no model
+          tool-calling is needed for this journey. Generation UI, candidate storage, validation and
+          worker replacement still need implementation.
+        </p>
+        <p>
+          A prompt in Saul can use its saved eligible account. A reply in chatgpt.com does not
+          install local code by itself; it would need an import or explicit integration.
+        </p>
+        <p>
+          <a href="../../../apps/saul/native/responses.mts">Current text generation request</a> ·
+          <a href="../../../apps/saul/native/plan-protocol.mts">Current plan protocol</a> ·
+          <a href="https://nodejs.org/docs/latest-v24.x/api/worker_threads.html"
+            >Node worker lifecycle</a
+          >
+        </p>
+      </details>
+    </article>
+    <article id="plan" popover="auto" role="dialog" aria-labelledby="plan-title">
+      <div class="overlay-head">
+        <div>
+          <h2 id="plan-title">ChatGPT plan helper</h2>
+          <small>Node process · <code>com.saul.chatgpt</code></small>
+        </div>
+        <button
+          class="close"
+          type="button"
+          popovertarget="plan"
+          popovertargetaction="hide"
+          aria-label="Close ChatGPT helper details"
+          autofocus
+        >
+          ×
+        </button>
+      </div>
+      <dl class="facts">
+        <dt>Starts</dt>
+        <dd>Chrome launches it on the first plan operation.</dd>
+        <dt>Does</dt>
+        <dd>Owns Saul login, tokens, refresh and ChatGPT HTTP/SSE calls.</dd>
+        <dt>Stops</dt>
+        <dd>Native pipe closes, a pipe fails or the process gets a stop signal. No idle timer.</dd>
+        <dt>Reconnects</dt>
+        <dd>A later request can reconnect. Failed calls are not replayed.</dd>
+      </dl>
+      <details class="technical">
+        <summary>Connection, limits & sources</summary>
+        <p>
+          <code>saul-chatgpt-host → plan-host.mjs</code>. PlanService, PlanAuth and PlanStore are
+          objects inside this process.
+        </p>
+        <p>
+          The background’s <code>initPlanBridge()</code> reuses one native port.
+          <code>planEvents()</code> is a client adapter, not another process. Each operation has its
+          own caller port.
+        </p>
+        <p>
+          Closing a caller cancels non-login work. Login survives popup closure. Summary’s caller is
+          offscreen, so closing the reader does not cancel it.
+        </p>
+        <p>
+          Host deadline: 180 s, or 310 s for login. Bridge watchdog: 190 s / 320 s. These are
+          limits, not observed durations.
+        </p>
+        <p>
+          No general shell, user-module or tab interface. Speech experiments use this same helper.
+        </p>
+        <p>
+          <a href="../../../apps/saul/src/native/plan.ts">plan bridge</a> ·
+          <a href="../../../apps/saul/native/plan-host.mts">plan-host.mts</a> ·
+          <a href="../../../apps/saul/src/models/chatgpt-plan.ts">planEvents</a>
+        </p>
+      </details>
+    </article>
+    <article id="tabs" popover="auto" role="dialog" aria-labelledby="tabs-title">
+      <div class="overlay-head">
+        <div>
+          <h2 id="tabs-title">Tab helper</h2>
+          <small>Node process · <code>com.saul.tabs</code></small>
+        </div>
+        <button
+          class="close"
+          type="button"
+          popovertarget="tabs"
+          popovertargetaction="hide"
+          aria-label="Close tab helper details"
+          autofocus
+        >
+          ×
+        </button>
+      </div>
+      <dl class="facts">
+        <dt>Starts</dt>
+        <dd>Chrome launches it when you enable Codex tab access.</dd>
+        <dt>Does</dt>
+        <dd>Connects local clients to Chrome through a private Unix socket.</dd>
+        <dt>Stops</dt>
+        <dd>
+          Disable access, close the native pipe, encounter a pipe error or send a stop signal.
+        </dd>
+        <dt>Reconnects</dt>
+        <dd>The bridge tries every minute while enabled. New connection, new session ID.</dd>
+      </dl>
+      <details class="technical">
+        <summary>Limits & sources</summary>
+        <p>
+          <code>saul-native-host → host.mjs</code>. The background’s
+          <code>initNativeBridge()</code> owns the port and retry alarm. Access defaults to off.
+        </p>
+        <p>
+          Shutdown removes the socket. Discovery ignores stale sockets left by crashes. Private
+          directory/file modes: 0700/0600.
+        </p>
+        <p>
+          Browser response deadline: 30 s; client/socket deadline: 35 s. A mutation already running
+          may finish after disconnect. Inspect tabs before retrying an uncertain change.
+        </p>
+        <p>
+          <a href="../../../apps/saul/src/native/bridge.ts">bridge.ts</a> ·
+          <a href="../../../apps/saul/native/host.mts">host.mts</a> ·
+          <a href="../../../apps/saul/native/client.mts">client.mts</a>
+        </p>
+      </details>
+    </article>
+    <article id="mcp" popover="auto" role="dialog" aria-labelledby="mcp-title">
+      <div class="overlay-head">
+        <div>
+          <h2 id="mcp-title">saul-tabs MCP server</h2>
+          <small>Node process · <code>mcp.mts</code></small>
+        </div>
+        <button
+          class="close"
+          type="button"
+          popovertarget="mcp"
+          popovertargetaction="hide"
+          aria-label="Close MCP server details"
+          autofocus
+        >
+          ×
+        </button>
+      </div>
+      <dl class="facts">
+        <dt>Starts</dt>
+        <dd>Codex or another MCP client launches it.</dd>
+        <dt>Does</dt>
+        <dd>Exposes tab tools and serves the Tab board UI. Uses the tab helper’s socket.</dd>
+        <dt>Stops</dt>
+        <dd>The MCP client disconnects or ends the process.</dd>
+        <dt>Remains</dt>
+        <dd>Closing the board view does not disconnect the server. Chrome can be absent.</dd>
+      </dl>
+      <details class="technical">
+        <summary>Board state & sources</summary>
+        <p>
+          JSON-RPC over stdin/stdout. No self-restart supervisor. Without Chrome, discovery still
+          works; browser operations fail.
+        </p>
+        <p>
+          BoardService, workspace logic and LogStore are objects in this process. Restart loses
+          in-memory proposals and interaction tokens. Diagnostics can remain on disk.
+        </p>
+        <p>
+          <a href="../../../apps/saul/native/mcp.mts">mcp.mts</a> ·
+          <a href="../../../apps/saul/native/board-service.mts">board-service.mts</a>
+        </p>
+      </details>
+    </article>
+    <article id="cli" popover="auto" role="dialog" aria-labelledby="cli-title">
+      <div class="overlay-head">
+        <div>
+          <h2 id="cli-title">Saul CLI</h2>
+          <small>One terminal command · <code>cli.mts</code></small>
+        </div>
+        <button
+          class="close"
+          type="button"
+          popovertarget="cli"
+          popovertargetaction="hide"
+          aria-label="Close CLI details"
+          autofocus
+        >
+          ×
+        </button>
+      </div>
+      <dl class="facts">
+        <dt>Starts</dt>
+        <dd>You run a Saul terminal command.</dd>
+        <dt>Does</dt>
+        <dd>Finds the connected browser session, sends a tab command and prints its result.</dd>
+        <dt>Stops</dt>
+        <dd>After the result or error. It is not a daemon.</dd>
+        <dt>Again</dt>
+        <dd>A later command starts a new process.</dd>
+      </dl>
+      <details class="technical">
+        <summary>Sessions & sources</summary>
+        <p>
+          If multiple browser sessions are connected, choose one explicitly. Session IDs change on
+          reconnect.
+        </p>
+        <p>
+          <a href="../../../apps/saul/native/cli.mts">cli.mts</a> ·
+          <a href="../../../apps/saul/native/client.mts">client.mts</a>
+        </p>
+      </details>
+    </article>
+    <article id="board" popover="auto" role="dialog" aria-labelledby="board-title">
+      <div class="overlay-head">
+        <div>
+          <h2 id="board-title">Standalone board server</h2>
+          <small>Node process · <code>board-web.mts</code></small>
+        </div>
+        <button
+          class="close"
+          type="button"
+          popovertarget="board"
+          popovertargetaction="hide"
+          aria-label="Close board server details"
+          autofocus
+        >
+          ×
+        </button>
+      </div>
+      <dl class="facts">
+        <dt>Starts</dt>
+        <dd>You run <code>pnpm --dir apps/saul board</code>.</dd>
+        <dt>Does</dt>
+        <dd>
+          Serves the Tab board on a temporary localhost port. Connects through the tab helper.
+        </dd>
+        <dt>Stops</dt>
+        <dd>You stop the server process. Closing its browser page does not stop it.</dd>
+        <dt>Again</dt>
+        <dd>No automatic restart is configured.</dd>
+      </dl>
+      <details class="technical">
+        <summary>Shared logic, data & sources</summary>
+        <p>
+          Uses the same BoardService and UI as MCP mode, with a local HTTP adapter. Summarize opens
+          a Chrome reader; its source text and credentials do not go through the board.
+        </p>
+        <p>
+          Metadata diagnostics default to
+          <code>~/.local/state/mcp-apps/saul-tab-board/&lt;instance&gt;</code>. On a new service
+          instance, recognized inactive sessions are pruned after seven days or beyond eight
+          sessions; live owners are retained. Environment overrides can change the root.
+        </p>
+        <p>
+          <a href="../../../apps/saul/native/board-web.mts">board-web.mts</a> ·
+          <a href="../../../apps/saul/native/board-http.mts">board-http.mts</a> ·
+          <a href="../../../apps/saul/native/diagnostic-store.mts">diagnostic-store.mts</a>
+        </p>
+      </details>
+    </article>
+    <article id="ez" popover="auto" role="dialog" aria-labelledby="ez-title">
+      <div class="overlay-head">
+        <div>
+          <h2 id="ez-title">EZ · AttemptExecution</h2>
+          <small>Inside EZ.app · Swift, independent of Saul</small>
+        </div>
+        <button
+          class="close"
+          type="button"
+          popovertarget="ez"
+          popovertargetaction="hide"
+          aria-label="Close EZ details"
+          autofocus
+        >
+          ×
+        </button>
+      </div>
+      <dl class="facts">
+        <dt>Starts</dt>
+        <dd>Open EZ. Explicit Send starts one lookup Task.</dd>
+        <dt>Does</dt>
+        <dd>Saves a pending entry, authenticates, generates and saves the result.</dd>
+        <dt>Stops</dt>
+        <dd>Completion, Stop, error or quitting EZ. Hiding a view preserves work.</dd>
+        <dt>Restarts</dt>
+        <dd>Pending entries become interrupted. Requests are not sent again.</dd>
+      </dl>
+      <details class="technical">
+        <summary>Recovery, data & sources</summary>
+        <p>
+          AppModel owns the workspace; AttemptExecution owns the job. A failed final save keeps the
+          result in memory as Unsaved. Save again retries storage only. Unsaved bytes do not survive
+          quitting.
+        </p>
+        <p>
+          History: <code>~/Library/Application Support/EZ/history.jsonl</code>. Credentials:
+          Keychain. Only model presets are shared with Saul.
+        </p>
+        <p>
+          <a href="../../../apps/ez/Sources/EZ/EZApp.swift">EZApp.swift</a> ·
+          <a href="../../../apps/ez/Sources/EZ/AppModel.swift">AppModel.swift</a> ·
+          <a href="../../../apps/ez/Sources/EZCore/AttemptExecution.swift"
+            >AttemptExecution.swift</a
+          >
+        </p>
+      </details>
+    </article>
+    <article id="pdf" popover="auto" role="dialog" aria-labelledby="pdf-title">
+      <div class="overlay-head">
+        <div>
+          <h2 id="pdf-title">PDF extraction</h2>
+          <small>Temporary PDF.js task inside offscreen</small>
+        </div>
+        <button
+          class="close"
+          type="button"
+          popovertarget="pdf"
+          popovertargetaction="hide"
+          aria-label="Close PDF details"
+          autofocus
+        >
+          ×
+        </button>
+      </div>
+      <dl class="facts">
+        <dt>Starts</dt>
+        <dd>You choose Local PDF processing in Settings before starting the summary.</dd>
+        <dt>Does</dt>
+        <dd>Downloads bytes and extracts text with packaged PDF.js worker resources.</dd>
+        <dt>Stops</dt>
+        <dd>Success, failure, Stop or timeout. Cleanup destroys the extraction task.</dd>
+        <dt>Remains</dt>
+        <dd>Extracted source text is saved. Downloaded bytes are temporary.</dd>
+      </dl>
+      <details class="technical">
+        <summary>Limits & sources</summary>
+        <p>
+          Local extraction: 30 s, 20 MiB, 200 pages, 120,000 characters. No OCR or chart/image
+          understanding. Fetched PDF may differ from the open viewer.
+        </p>
+        <p>
+          The default attaches the PDF URL through the plan helper without downloading or parsing it
+          in Saul. OpenAI must be able to access that URL; exact page coverage is unobserved. Retry
+          reads the saved URL again. A provider error never switches to local extraction.
+        </p>
+        <p>
+          <a href="../../../apps/saul/src/digest/source.ts">source.ts</a> ·
+          <a href="../../../apps/saul/src/digest/pdf.ts">pdf.ts</a>
+        </p>
+      </details>
+    </article>
+    <article id="oauth" popover="auto" role="dialog" aria-labelledby="oauth-title">
+      <div class="overlay-head">
+        <div>
+          <h2 id="oauth-title">Sign-in callback</h2>
+          <small>Temporary HTTP listener inside the plan helper</small>
+        </div>
+        <button
+          class="close"
+          type="button"
+          popovertarget="oauth"
+          popovertargetaction="hide"
+          aria-label="Close sign-in details"
+          autofocus
+        >
+          ×
+        </button>
+      </div>
+      <dl class="facts">
+        <dt>Starts</dt>
+        <dd>Continue with ChatGPT.</dd>
+        <dt>Where</dt>
+        <dd><code>127.0.0.1:&lt;temporary port&gt;/auth/callback</code></dd>
+        <dt>Stops</dt>
+        <dd>Success, error, cancellation or the 300 s inner login deadline.</dd>
+        <dt>Remains</dt>
+        <dd>Saved account registration and tokens; not the listener or pending sign-in state.</dd>
+      </dl>
+      <details class="technical">
+        <summary>Source</summary>
+        <p>
+          No separate daemon. Cleanup closes the listener and its connections.
+          <a href="../../../apps/saul/native/plan-auth.mts">plan-auth.mts</a>
+        </p>
+      </details>
+    </article>
+    <article id="window-names" popover="auto" role="dialog" aria-labelledby="window-names-title">
+      <div class="overlay-head">
+        <div>
+          <h2 id="window-names-title">Window-name script</h2>
+          <small>Short-lived macOS JXA process</small>
+        </div>
+        <button
+          class="close"
+          type="button"
+          popovertarget="window-names"
+          popovertargetaction="hide"
+          aria-label="Close window-name details"
+          autofocus
+        >
+          ×
+        </button>
+      </div>
+      <dl class="facts">
+        <dt>Starts</dt>
+        <dd>A supported Chrome window-name read or update is requested.</dd>
+        <dt>Does</dt>
+        <dd>Runs <code>osascript -l JavaScript</code> with <code>window-names.jxa</code>.</dd>
+        <dt>Stops</dt>
+        <dd>Result, error or the 15 s timeout.</dd>
+        <dt>Again</dt>
+        <dd>A new operation starts another process. No background daemon.</dd>
+      </dl>
+      <details class="technical">
+        <summary>Source</summary>
+        <p>
+          JXA means JavaScript for Automation. It is separate from the proposed user-module host. A
+          preliminary process check has a 3 s timeout.
+        </p>
+        <p><a href="../../../apps/saul/native/window-names.mts">window-names.mts</a></p>
+      </details>
+    </article>
+  </body>
+</html>
