@@ -32,7 +32,9 @@ test('the board composer retains a newer draft while chat delivery is pending', 
   await attach.check();
   await captureWorkspace(host, ui, info.outputPath('composer-pending.png'));
   await host.evaluate(() => document.dispatchEvent(new Event('release-message')));
-  await expect(ui.locator('#status')).toHaveText('Sent to chat');
+  await expect(ui.locator('#send-status')).toHaveText(
+    'Accepted by host. Check this chat for arrival and a response.',
+  );
   await expect(draft).toHaveValue('Next message, written while the first one is being delivered');
   await expect(draft).toBeVisible();
   await expect(attach).toBeChecked();
@@ -58,7 +60,7 @@ test('the board composer retains the draft and attachment after rejected chat de
   await draft.fill('Keep this request after a failed send');
   await attach.check();
   await ui.getByRole('button', { name: 'Send', exact: true }).click();
-  await expect(ui.locator('#status')).toContainText('Message delivery refused');
+  await expect(ui.locator('#send-status')).toContainText('Message delivery refused');
   await expect(draft).toHaveValue('Keep this request after a failed send');
   await expect(draft).toBeVisible();
   await expect(attach).toBeChecked();
@@ -68,7 +70,9 @@ test('the board composer retains the draft and attachment after rejected chat de
   expect(await ui.locator('body').evaluate((body) => body.scrollWidth <= innerWidth)).toBe(true);
   await captureWorkspace(host, ui, info.outputPath('composer-error-narrow-dark.png'));
   await ui.getByRole('button', { name: 'Send', exact: true }).click();
-  await expect(ui.locator('#status')).toHaveText('Sent to chat');
+  await expect(ui.locator('#send-status')).toHaveText(
+    'Accepted by host. Check this chat for arrival and a response.',
+  );
   await expect(ui.locator('#request')).toHaveValue('');
   await expect(attach).not.toBeChecked();
   await expect(ui.locator('#composer > summary')).toBeFocused();

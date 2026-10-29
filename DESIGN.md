@@ -155,6 +155,15 @@ success to one line. Connection management belongs in Settings. The board compos
 message directly; an unchecked attachment control adds only the browser session,
 revision and selected tab IDs when chosen.
 
+The Tab board keeps an accessible **App info (ⓘ)** control in both Codex and
+standalone web mode. Info, registered Tools, Conversation flow and Interactions
+are named disclosures; exact frozen inputs/results stay out of the default board.
+Each send offers **Inspect send**. A host acknowledgment means **Accepted by host**;
+conversation arrival remains separately observed. Standalone uses **Copy message**
+and the same tab operations, including reviewed Apply. Automatic diagnostics save
+metadata only; payloads stay live until an explicit selected-interaction capture.
+Show the canonical log path, retention, masking and recording failures in Info.
+
 Use one heading for the current task. Avoid repeating the selected navigation label,
 adding a slogan above an input, or boxing every history row. A new lookup puts its
 inputs near the heading; a saved answer gives that space back to reading. Keep

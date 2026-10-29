@@ -7,6 +7,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { BOARD_URI } from '../../.build/native/board-resource.mjs';
+import { createBoardService } from '../../native/board-service.mts';
 import { createWorkspace } from '../../native/workspace.mts';
 import {
   createWindowNames,
@@ -149,13 +150,14 @@ export async function openWorkspace(
       await (name === 'saul_sessions' ? rawCall(name, { ...args }) : decorated(name, { ...args })),
     );
   const workspace = createWorkspace({ call });
+  const service = createBoardService({ workspace, resourceUri: BOARD_URI });
   const messages: unknown[] = [];
   const workspaceCalls: string[] = [];
   await host.exposeFunction('workspaceCall', async (name: string, args: unknown) => {
     workspaceCalls.push(name);
     if (name === 'saul_workspace_propose' && proposalDelay)
       await new Promise((resolve) => setTimeout(resolve, proposalDelay));
-    return workspace(name, args);
+    return service.call(name, args);
   });
   await host.exposeFunction('recordMessage', (message: unknown) => {
     messages.push(message);
@@ -195,6 +197,7 @@ export async function openWorkspace(
     session,
     messages,
     workspaceCalls,
+    service,
     article,
     reader,
   };

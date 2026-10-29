@@ -106,3 +106,41 @@ one required move after. These measurements exclude Codex UI transport time and
 never applied a layout or replaced the live app's draft.
 
 References: [OpenAI MCP App UI](https://developers.openai.com/plugins/build/chatgpt-ui), [conversation panels](https://developers.openai.com/plugins/build/extensions), [MCP Apps standard](https://modelcontextprotocol.io/extensions/apps/overview).
+
+## Standalone board and shared diagnostics
+
+Run `pnpm board` from `apps/saul` to open the same board through a loopback HTTP
+server. Open the URL printed by the command; its fragment holds a per-process
+access token. The server accepts API calls only from its own origin with that
+token. Closing the command stops the server. A connected Saul tab helper is
+still required for Chrome operations; Codex is not. The installed equivalent is
+`node ~/.saul/bridge/board-web.mjs` (the installation's Node executable must be
+available). Standalone uses **Copy message**, preserving the draft and making no
+conversation request. Its direct tab edits and reviewed Apply call the same
+workspace service as MCP.
+
+**App info (ⓘ)** remains available in both modes. Info identifies the build by
+its content-addressed resource URI, the connection, log path and recording health.
+Tools comes from the actual MCP registration list. Conversation flow contains
+labelled plain-message and selected-context fixtures; they execute nothing.
+Interactions exposes frozen application-boundary requests, responses and errors.
+**Inspect send** selects the last send; inventory refresh does not erase its
+status. Accepted by host is not proof of arrival or an assistant reply.
+
+The native board service is the sole diagnostic file writer. By default it uses
+`${XDG_STATE_HOME:-~/.local/state}/mcp-apps/saul-tab-board/<instance>/`;
+`MCP_APP_LOG_ROOT` overrides the directory above the app name. Automatic
+`app.jsonl` and `server.jsonl` contain metadata only. Payloads remain in bounded
+live memory and may be lost on close/restart. Known credentials, including board
+approval and interaction tokens, are masked; each payload is capped at 64 KiB.
+App-origin reports remain untrusted app observations, with separate IDs from
+server operations. Inspection never repeats the action or enters chat context.
+
+**Save diagnostic capture** persists only the selected interaction's retained
+masked observations. Captures are limited to 8 per server session and 2 MiB each.
+Metadata rotates at 2 MiB per source, keeping one previous file. On startup, the
+service prunes recognized inactive sessions older than 7 days or beyond the latest
+8; live processes, symlinks and unknown directories are excluded. Info discloses
+this policy and write failures. Diagnostic read/write operations are app-only;
+visibility is not authentication. Browser requests also pass the loopback token
+and origin gates. HTTP and MCP call the same validated diagnostic definitions.

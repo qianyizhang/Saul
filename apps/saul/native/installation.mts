@@ -96,7 +96,7 @@ const proxyKeys = [
   'no_proxy',
 ];
 const entries: Record<string, string[]> = {
-  tabs: ['host.mjs', 'cli.mjs', 'mcp.mjs'],
+  tabs: ['host.mjs', 'cli.mjs', 'mcp.mjs', 'board-web.mjs'],
   chatgpt: ['plan-host.mjs'],
 };
 export const payloadFiles: Record<string, string[]> = {
@@ -112,6 +112,12 @@ export const payloadFiles: Record<string, string[]> = {
     'mcp.mjs',
     'app-protocol.mjs',
     'board-resource.mjs',
+    'board-service.mjs',
+    'board-web.mjs',
+    'board-http.mjs',
+    'diagnostic-events.mjs',
+    'diagnostic-protocol.mjs',
+    'diagnostic-store.mjs',
     'workspace.mjs',
     'tab-layout.mjs',
     'window-labels.mjs',

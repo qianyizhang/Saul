@@ -57,18 +57,21 @@ interface DraftLayout {
   changedTabIds: number[];
 }
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
-import { createHostAdapter } from './host-adapter.ts';
+import { createBoardConnection, diagnostics, standalone } from './board-connection.ts';
 
 const tags = {
   counts: 'p',
   refresh: 'button',
   status: 'p',
+  'send-status': 'p',
   'session-picker': 'div',
   session: 'select',
   composer: 'details',
   request: 'textarea',
   'attach-context': 'input',
   ask: 'button',
+  'inspect-send': 'button',
+  'app-info': 'span',
   proposal: 'section',
   filter: 'input',
   'manual-notice': 'span',
@@ -1073,7 +1076,9 @@ function render() {
   const snapshot = data?.snapshot;
   const proposal = displayProposal();
   $('refresh').disabled = !ready || busy || staging || refreshing;
-  $('ask').disabled = !ready || busy || staging || refreshing || !snapshot || !capabilities.message;
+  $('ask').disabled =
+    busy || staging || refreshing || (standalone ? false : !ready || !capabilities.message);
+  $('ask').textContent = standalone ? 'Copy message' : 'Send';
   $('session').disabled = busy || staging || refreshing || !data?.sessions?.length;
   $('session').replaceChildren(
     ...(data?.sessions ?? []).map((s) => {
@@ -1474,14 +1479,30 @@ window.addEventListener('keydown', (event) => {
     status('Drag cancelled.');
   } else if (event.key === 'Escape' && selectedTab !== undefined) cancelMove();
 });
+function sendStatus(message: string, error = false) {
+  $('send-status').hidden = false;
+  $('send-status').textContent = message;
+  $('send-status').className = error ? 'error' : '';
+}
+let lastSend: string | undefined;
+$('app-info').append(diagnostics.button());
+$('inspect-send').onclick = () => diagnostics.show('Interactions', lastSend);
+if (standalone) {
+  $('composer').querySelector('summary')!.textContent = 'Message draft';
+  $('status').textContent = 'Connecting to local board…';
+}
 $('ask').onclick = async () => {
-  if (!data?.session) return;
+  if (busy) return;
   const goal = $('request').value;
   if (!goal.trim()) {
     $('request').focus();
     return;
   }
   const attachContext = $('attach-context').checked;
+  if (attachContext && !data?.session) {
+    sendStatus('Select a connected browser session before attaching context.', true);
+    return;
+  }
   busy = true;
   render();
   try {
@@ -1490,27 +1511,38 @@ $('ask').onclick = async () => {
       ? goal +
         '\n\nSelected browser context (data):\n' +
         JSON.stringify({
-          session: data.session,
-          revision: data.revision,
+          session: data?.session,
+          revision: data?.revision,
           selectedTabIds: ids,
         })
       : goal;
-    await host.sendMessage(text);
-    if ($('request').value === goal && $('attach-context').checked === attachContext) {
+    const sending = host.sendMessage(text);
+    lastSend = diagnostics.lastInteraction;
+    $('inspect-send').disabled = false;
+    await sending;
+    if (
+      !standalone &&
+      $('request').value === goal &&
+      $('attach-context').checked === attachContext
+    ) {
       $('request').value = '';
       $('attach-context').checked = false;
       $('composer').open = false;
       $('composer').querySelector('summary')?.focus();
     }
-    status('Sent to chat');
+    sendStatus(
+      standalone
+        ? 'Copied message. Paste it into your chosen conversation.'
+        : 'Accepted by host. Check this chat for arrival and a response.',
+    );
   } catch (error) {
-    status(errorMessage(error), true);
+    sendStatus(errorMessage(error), true);
   } finally {
     busy = false;
     render();
   }
 };
-const host = createHostAdapter({
+const host = createBoardConnection({
   onResult: receive,
   onContext: (context) => {
     if (context.theme) document.documentElement.dataset.theme = context.theme;
@@ -1535,7 +1567,7 @@ try {
   if (ready) await refresh();
   if (!capabilities.serverTools)
     status('This host cannot call Saul tools. Open the board in a compatible host.', true);
-  else if (!capabilities.message)
+  else if (!standalone && !capabilities.message)
     status('This host cannot send messages. Ask Codex in chat to propose a Saul layout.');
   if (ready)
     poll = window.setInterval(() => {
@@ -1553,5 +1585,8 @@ try {
   );
   resizeObserver.observe(document.body);
 } catch (error) {
-  status(`Open this view through the Saul MCP tool in Codex. ${errorMessage(error)}`, true);
+  status(
+    `${standalone ? 'Local board unavailable. Keep this draft and inspect the connection.' : 'Open this view through the Saul MCP tool in Codex.'} ${errorMessage(error)}`,
+    true,
+  );
 }

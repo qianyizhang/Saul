@@ -16,12 +16,16 @@ const uncertain =
 /** Own the host lifecycle; board actions never handle protocol IDs or notifications. */
 export function createHostAdapter(
   { onResult, onContext, onClose, onError }: HostCallbacks = {},
-  options: { app?: App; timeout?: number } = {},
+  options: {
+    app?: App;
+    timeout?: number;
+    observe?: <T>(method: string, request: unknown, action: () => Promise<T>) => Promise<T>;
+  } = {},
 ) {
   const app =
     options.app ??
     new App(
-      { name: 'Saul Tab board', version: '1.2.0' },
+      { name: 'Saul Tab board', version: '1.4.0' },
       { availableDisplayModes: ['inline', 'fullscreen'] },
       { autoResize: false },
     );
@@ -53,6 +57,9 @@ export function createHostAdapter(
   app.onclose = stop;
   app.onerror = (error) => onError?.(error);
 
+  const observe =
+    options.observe ??
+    (<T>(_method: string, _request: unknown, action: () => Promise<T>) => action());
   function requireCapability(name: 'serverTools' | 'message') {
     if (state !== 'connected') throw new Error('The Saul host connection is not available.');
     if (!app.getHostCapabilities()?.[name])
@@ -104,12 +111,16 @@ export function createHostAdapter(
     },
     callTool(name: string, args: CallToolRequest['params']['arguments']) {
       return perform('serverTools', () =>
-        app.callServerTool({ name, arguments: args }, requestOptions()),
+        observe(name, { name, arguments: args }, () =>
+          app.callServerTool({ name, arguments: args }, requestOptions()),
+        ),
       );
     },
     sendMessage(text: string) {
       return perform('message', () =>
-        app.sendMessage({ role: 'user', content: [{ type: 'text', text }] }, requestOptions()),
+        observe('ui/message', { role: 'user', content: [{ type: 'text', text }] }, () =>
+          app.sendMessage({ role: 'user', content: [{ type: 'text', text }] }, requestOptions()),
+        ),
       );
     },
     resize(height: number) {

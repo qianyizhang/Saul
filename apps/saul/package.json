@@ -31,7 +31,8 @@
     "format:check": "prettier --check . --ignore-path ../../.prettierignore",
     "verify:connection": "node scripts/verify-connection.mts",
     "build:board": "node scripts/build-native.mts",
-    "build:native": "node scripts/build-native.mts"
+    "build:native": "node scripts/build-native.mts",
+    "board": "node scripts/build-native.mts && node .build/native/board-web.mjs"
   },
   "dependencies": {
     "@floating-ui/dom": "^1.8.0",

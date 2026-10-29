@@ -336,6 +336,41 @@ describe('native transport', () => {
       { cwd: unrelatedCwd },
     );
     expect(mcp).toMatchObject({ code: 0, stderr: '' });
+    const web = spawn(process.execPath, [join(installDir, 'bridge/board-web.mjs')], {
+      cwd: unrelatedCwd,
+      env: process.env,
+    });
+    children.push(web);
+    const url = await new Promise<string>((resolve, reject) => {
+      let output = '';
+      const timeout = setTimeout(
+        () => reject(new Error('Installed standalone board did not start')),
+        5000,
+      );
+      web.once('exit', () => {
+        clearTimeout(timeout);
+        reject(new Error('Installed standalone board exited before listening'));
+      });
+      web.stdout.on('data', (chunk) => {
+        output += String(chunk);
+        const match = /Saul Tab board: (http:\/\/127\.0\.0\.1:\d+\/#[a-f0-9]+)/.exec(output);
+        if (match) {
+          clearTimeout(timeout);
+          resolve(match[1]);
+        }
+      });
+    });
+    const local = new URL(url);
+    const diagnostic = await fetch(local.origin + '/api', {
+      method: 'POST',
+      headers: { Origin: local.origin, Authorization: `Bearer ${local.hash.slice(1)}` },
+      body: JSON.stringify({ name: 'diagnostics_info' }),
+    });
+    expect((await diagnostic.json()).structuredContent).toMatchObject({
+      version: '1.4.0',
+      health: 'recording',
+    });
+
     const responses = mcp.stdout
       .trim()
       .split('\n')

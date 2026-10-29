@@ -1,3 +1,4 @@
+import { DIAGNOSTIC_TOOLS } from './diagnostic-protocol.mts';
 import type { ProposalWindow } from './workspace-contract.mts';
 import type { TabEdit } from './protocol.mts';
 type Manual = { session: string; interactionToken?: string };
@@ -167,7 +168,7 @@ export const APP_TOOLS = [
     { appOnly: true, readOnly: false },
   ),
 ];
-export const MCP_TOOLS = [...TOOLS, ...APP_TOOLS];
+export const MCP_TOOLS = [...TOOLS, ...APP_TOOLS, ...DIAGNOSTIC_TOOLS];
 // Resource bytes belong to the server generation, never to the schema or verifier.
 export function mcpTools(resourceUri: string) {
   return MCP_TOOLS.map((definition) =>

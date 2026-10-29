@@ -18,7 +18,9 @@
             <p id="counts"></p>
           </div>
         </div>
-        <button id="refresh" disabled>Refresh</button>
+        <div class="row">
+          <span id="app-info"></span><button id="refresh" disabled>Refresh</button>
+        </div>
       </header>
       <p id="status" role="status" aria-live="polite">Connecting to Codex…</p>
       <div id="session-picker" class="toolbar" hidden>
@@ -39,9 +41,11 @@
           <div class="row">
             <label><input id="attach-context" type="checkbox" /> Attach browser selection</label
             ><button id="ask" class="primary" disabled>Send</button>
+            <button id="inspect-send" type="button" disabled>Inspect send</button>
           </div>
         </div>
       </details>
+      <p id="send-status" role="status" aria-live="polite" hidden></p>
       <section id="proposal" hidden aria-label="Proposed changes"></section>
       <div class="toolbar">
         <input id="filter" type="search" aria-label="Filter tabs" placeholder="Find a tab…" />
