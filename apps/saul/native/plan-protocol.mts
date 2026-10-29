@@ -18,6 +18,26 @@ export interface PlanModel {
   fastTier?: string;
   isDefault: boolean;
 }
+export interface PdfUrlAttachment {
+  type: 'pdf-url';
+  url: string;
+}
+export function validPdfUrlAttachment(value: unknown): value is PdfUrlAttachment {
+  if (
+    !isRecord(value) ||
+    Object.keys(value).some((key) => !['type', 'url'].includes(key)) ||
+    value.type !== 'pdf-url' ||
+    typeof value.url !== 'string' ||
+    value.url.length > 16_384
+  )
+    return false;
+  try {
+    const url = new URL(value.url);
+    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
 export type PlanRequest =
   | { action: 'presets-read' }
   | { action: 'presets-import'; presets: SharedPreset[] }
@@ -35,6 +55,7 @@ export type PlanRequest =
       fast?: boolean;
       systemPrompt: string;
       userPrompt: string;
+      attachments?: PdfUrlAttachment[];
     };
 export type PlanControlRequest = Exclude<PlanRequest, { action: 'generate' }>;
 export interface PlanResults {
@@ -74,7 +95,7 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
     logout: ['accountId'],
     models: ['accountId'],
     speech: ['accountId', 'input', 'voice'],
-    generate: ['accountId', 'model', 'effort', 'fast', 'systemPrompt', 'userPrompt'],
+    generate: ['accountId', 'model', 'effort', 'fast', 'systemPrompt', 'userPrompt', 'attachments'],
   };
   const keys = typeof v.action === 'string' ? operations[v.action] : undefined;
   if (!Array.isArray(keys) || Object.keys(v).some((k) => k !== 'action' && !keys.includes(k)))
@@ -111,6 +132,10 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
       typeof v.systemPrompt !== 'string' ||
       v.systemPrompt.length > 100000 ||
       !text(v.userPrompt, 200000) ||
+      (v.attachments !== undefined &&
+        (!Array.isArray(v.attachments) ||
+          v.attachments.length !== 1 ||
+          !v.attachments.every(validPdfUrlAttachment))) ||
       (v.effort !== undefined && (typeof v.effort !== 'string' || v.effort.length > 64)) ||
       (v.fast !== undefined && typeof v.fast !== 'boolean'))
   )

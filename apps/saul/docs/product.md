@@ -156,11 +156,47 @@ bounded to 120,000 characters. Video, audio, images, frames, linked pages,
 collapsed and unloaded content are not read. Source changes and unreadable
 pages report their limitations. Restricted pages are skipped.
 
+Settings → Summaries → **PDF processing** selects the default for new summaries
+and **Run again**. It is a Saul preference, independent of shared model presets.
+**PDF URL attachment (server)** is the default. Saul sends the PDF URL as a
+Responses `input_file` to the same selected ChatGPT account, without downloading,
+uploading or locally parsing PDF bytes. OpenAI is asked to read the whole document,
+including text and page images, subject to model and provider limits. Local page
+and text cutoffs do not apply. The URL must be reachable by OpenAI without the
+browser's cookies; private, password-protected, expired or unsupported inputs may
+fail. No API-key billing or local-parsing fallback is chosen automatically.
+
+Server input records retain the exact attachment URL and prepared time, not the
+PDF contents or OpenAI's extracted text. **Retry unfinished** reuses that URL and
+method; the remote document may have changed. Inspection and reuse comparisons
+state that contents were not verified, even for an identical URL. Comparing or
+reopening saved work does not ask OpenAI to fetch it or send another model request.
+Older summaries retain their original captured text and local retry behavior.
+
+**Local parsing · send text** downloads the selected document using available
+site cookies and extracts text with bundled PDF.js. Capture happens for new
+summaries, Run again and current-input comparisons (including repeated Summarize).
+Opening saved history alone does not download the document. The downloaded
+version can differ from the one already open in Chrome's viewer.
+
+Local PDF capture stops at 20 MiB, 200 pages, 120,000 characters, or 30 seconds.
+Coverage reports the pages read, pages without extractable text and truncation;
+the last included page may be partial. Images, charts and scanned text are not
+read, and text/table order may be imperfect. Password protection, missing text,
+invalid documents and download/access failures are explicit errors. No OCR,
+linked-document traversal, local-file access or automatic retry is performed.
+Stop cancels downloading/parsing; source-tab changes or closure reject a late
+capture before saving or generation. PDF bytes are temporary; extracted text
+uses the same local storage, inspection and frozen-source retry as HTML sources.
+Changing the default never regenerates an existing result; reuse discloses a
+changed processing choice and **Run again** explicitly prepares new input.
+
 Summaries and captured text persist in local SQLite. The reader is a disposable
 view: closing it never stops processing or deletes data. Reopening never
 regenerates results. Browser/extension restart marks unfinished work interrupted
 and never automatically spends quota again. **Retry unfinished** explicitly
-retries using frozen sources when available.
+retries using frozen text or the saved attachment URL when available. A saved URL
+freezes the request, not the remote file contents.
 
 History separates **Passages** and **Summaries**. The reader contains progress,
 Stop, Retry unfinished, source coverage, **Export HTML**, and deletion under
@@ -173,16 +209,17 @@ from passage History's Clear all action.
 
 Repeated **Saul Summarize** reopens the latest saved summary for the exact ordered
 URL selection, or its active run. Before any new account/model call, Saul compares
-loaded text with the saved capture. An upfront notice shows the original date,
+current source text with the saved capture. An upfront notice shows the original date,
 text change estimate, changed instructions/title/coverage, or a capture error.
 **Run again** explicitly captures current input in a new saved summary. **Retry
 unfinished** retains the original input. Closing with **Control+W** on macOS
 (**Alt+Shift+W** elsewhere) closes only the panel and leaves work running.
 
 Each summary offers **Inspect input/output**: capture time, character count,
-coverage, literal source text, instructions and the exact assembled prompt and raw
-response. **Compare current page** reads the loaded source again, without a model
-request. Saved/current views remain distinct. Large text is searched across all
+coverage, saved source input, instructions and the exact assembled prompt and raw
+response. **Compare current page** reads the current source again, downloading
+the current document for local PDFs, without a model request. URL attachments
+compare metadata only and cannot establish unchanged contents. Saved/current views remain distinct. Large text is searched across all
 sections and displayed one bounded section at a time; Copy includes the full text.
 Token additions/removals estimate lexical change, not meaning or edit distance;
 changes outside truncated or unloaded input cannot be measured.

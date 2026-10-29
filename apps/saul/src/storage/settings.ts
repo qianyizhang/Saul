@@ -26,6 +26,7 @@ const DEFAULT_CONNECTION_SETTINGS: UserSettings = {
 };
 export const DEFAULT_SETTINGS: UserSettings = {
   ...DEFAULT_CONNECTION_SETTINGS,
+  summaryPdfProcessing: 'attachment',
   configuration: starterConfiguration(DEFAULT_CONNECTION_SETTINGS),
 };
 
@@ -155,9 +156,16 @@ function normalizeSettings(value: unknown): UserSettings {
     }
   }
   const customPromptTemplate = optionalString(stored.customPromptTemplate, 'custom prompt');
+  const summaryPdfProcessing =
+    stored.summaryPdfProcessing === undefined
+      ? DEFAULT_SETTINGS.summaryPdfProcessing
+      : stored.summaryPdfProcessing;
+  if (summaryPdfProcessing !== 'attachment' && summaryPdfProcessing !== 'local')
+    throw new Error('Saved PDF processing must be attachment or local.');
 
   const settings: UserSettings = {
     ...DEFAULT_SETTINGS,
+    summaryPdfProcessing,
     ...(stored.sharedPresetRevision === undefined
       ? {}
       : {

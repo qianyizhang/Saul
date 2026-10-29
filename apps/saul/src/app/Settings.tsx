@@ -396,6 +396,28 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
           </fieldset>
         </details>
       </section>
+      <section className="panel settings-section" aria-label="Summaries">
+        <h3>Summaries</h3>
+        <label className="field">
+          PDF processing
+          <select
+            aria-label="PDF processing"
+            value={settings.summaryPdfProcessing ?? 'attachment'}
+            onChange={(event) =>
+              update({ summaryPdfProcessing: event.target.value as 'attachment' | 'local' })
+            }
+          >
+            <option value="attachment">PDF URL attachment (server)</option>
+            <option value="local">Local parsing · send text</option>
+          </select>
+        </label>
+        <p className="small muted">
+          PDF URL attachment lets OpenAI read text and page images from the link, without a download
+          by Saul. The link must work without your browser sign-in. Local parsing sends extracted
+          text only. This setting applies to new summaries and Run again; Retry keeps the saved
+          method.
+        </p>
+      </section>
       <section className="panel settings-section">
         <h3>Reading</h3>
         <div className="settings-pair">

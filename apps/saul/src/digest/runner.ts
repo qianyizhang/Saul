@@ -1,6 +1,6 @@
 import type { DbCall } from '../types/storage';
 import { planEvents } from '../models/chatgpt-plan';
-import { parseSummary, SUMMARY_PROMPT, summaryUserPrompt } from './summary';
+import { parseSummary, SUMMARY_PROMPT, summaryRequestInput } from './summary';
 import { compareText } from '../reading/input-change';
 import {
   activeItem,
@@ -10,9 +10,14 @@ import {
   type DigestSource,
   type DigestComparison,
   type DigestInspection,
+  type PdfProcessing,
 } from './types';
 
-type Capture = (item: DigestItem) => Promise<DigestSource>;
+type Capture = (
+  item: DigestItem,
+  signal?: AbortSignal,
+  pdfProcessing?: PdfProcessing,
+) => Promise<DigestSource>;
 export class DigestRunner {
   readonly ready: Promise<void>;
   private batch?: DigestBatch;
@@ -53,7 +58,13 @@ export class DigestRunner {
       const queue = [...snapshot.items];
       const compare = async () => {
         for (let item = queue.shift(); item; item = queue.shift()) {
-          const inspected = await this.inspect(batch, batch.items[item.index]!, item.tabId, item);
+          const inspected = await this.inspect(
+            batch,
+            batch.items[item.index]!,
+            item.tabId,
+            item,
+            snapshot.pdfProcessing ?? batch.pdfProcessing ?? 'local',
+          );
           comparisons[item.index] = inspected.comparison!;
         }
       };
@@ -142,6 +153,7 @@ export class DigestRunner {
     item: DigestItem,
     tabId?: number,
     currentItem?: DigestItem,
+    currentProcessing = batch.pdfProcessing ?? 'local',
   ): Promise<DigestInspection> {
     const saved = await this.db({
       type: 'DB_DIGEST_SOURCE',
@@ -154,7 +166,7 @@ export class DigestRunner {
       comparison.fields.push('Model settings');
     if (currentItem && currentItem.title !== item.title) comparison.fields.push('Page title');
     try {
-      const current = await this.capture({ ...item, tabId });
+      const current = await this.capture({ ...item, tabId }, undefined, currentProcessing);
       comparison.checkedAt = current.capturedAt;
       if (
         current.title !== undefined &&
@@ -163,10 +175,18 @@ export class DigestRunner {
       )
         comparison.fields.push('Page title');
       if (saved) {
-        comparison.text = compareText(saved.text, current.text);
+        if (
+          (saved.kind === 'pdf-url' || current.kind === 'pdf-url') &&
+          (batch.pdfProcessing ?? 'local') !== currentProcessing
+        )
+          comparison.fields.push('PDF processing');
+        if (saved.kind === 'pdf-url' || current.kind === 'pdf-url') {
+          comparison.notice =
+            'PDF contents not compared. URL attachments are read by OpenAI during generation; a matching URL does not prove unchanged contents.';
+        } else comparison.text = compareText(saved.text, current.text);
         if (saved.coverage !== current.coverage || saved.truncated !== current.truncated)
           comparison.fields.push('Source coverage');
-      } else comparison.error = 'The original source text is unavailable.';
+      } else comparison.error = 'The original source input is unavailable.';
       return { saved, current, comparison };
     } catch (error) {
       comparison.error = error instanceof Error ? error.message : String(error);
@@ -227,7 +247,8 @@ export class DigestRunner {
     });
     if (!source) {
       try {
-        source = await this.capture(item);
+        signal.throwIfAborted();
+        source = await this.capture(item, signal, batch.pdfProcessing ?? 'local');
       } catch (error) {
         item.status = signal.aborted ? 'cancelled' : 'failed';
         item.error = String(error instanceof Error ? error.message : error);
@@ -238,6 +259,8 @@ export class DigestRunner {
     item.coverage = source.coverage;
     item.truncated = source.truncated;
     item.capturedAt = source.capturedAt;
+    if (source.kind === 'pdf-url') item.sourceKind = 'pdf-url';
+    else delete item.sourceKind;
     item.status = signal.aborted ? 'cancelled' : 'running';
     await this.save(batch, item, source);
     if (signal.aborted) return;
@@ -251,7 +274,7 @@ export class DigestRunner {
           model: batch.model,
           effort: batch.effort,
           systemPrompt: batch.prompt,
-          userPrompt: summaryUserPrompt(item, source),
+          ...summaryRequestInput(item, source),
         },
         signal,
       )) {
@@ -269,6 +292,9 @@ export class DigestRunner {
     } catch (error) {
       item.status = signal.aborted ? 'cancelled' : 'failed';
       item.error = String(error instanceof Error ? error.message : error);
+      if (source.kind === 'pdf-url' && providerFailed && !signal.aborted)
+        item.error +=
+          ' PDF URL attachment failed; OpenAI must be able to fetch the URL and the model must support PDF input. No local fallback was used. Choose Local PDF processing in Settings and Run again to send extracted text instead.';
       if (providerFailed && !signal.aborted) pause();
     }
     await this.save(batch, item);

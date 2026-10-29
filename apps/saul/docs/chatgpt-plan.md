@@ -27,11 +27,11 @@ silently replaces a saved choice.
 
 ## Supported request surface
 
-| Provider          | Authentication                                                 | Inference                        | Options                                                                                                                             |
-| ----------------- | -------------------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| ChatGPT plan      | OAuth authorization code with PKCE and validated OIDC identity | Public `/v1/responses`, HTTP/SSE | `model`, `instructions`, complete text `input`, `store: false`, `stream: true`, catalog-supported reasoning effort and service tier |
-| OpenAI compatible | Profile-specific API key or unauthenticated loopback           | `/chat/completions`, HTTP/SSE    | Existing model, temperature and token-limit behavior                                                                                |
-| Chrome on-device  | Temporarily disabled                                           | Retained for later verification  | Choose ChatGPT plan or OpenAI compatible explicitly                                                                                 |
+| Provider          | Authentication                                                 | Inference                        | Options                                                                                                                                                   |
+| ----------------- | -------------------------------------------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ChatGPT plan      | OAuth authorization code with PKCE and validated OIDC identity | Public `/v1/responses`, HTTP/SSE | `model`, `instructions`, text input with optional PDF URL file input, `store: false`, `stream: true`, catalog-supported reasoning effort and service tier |
+| OpenAI compatible | Profile-specific API key or unauthenticated loopback           | `/chat/completions`, HTTP/SSE    | Existing model, temperature and token-limit behavior                                                                                                      |
+| Chrome on-device  | Temporarily disabled                                           | Retained for later verification  | Choose ChatGPT plan or OpenAI compatible explicitly                                                                                                       |
 
 Plan mode sends no temperature, output-token limit, stored conversation ID, background job, or tools. It sends the captured context needed for each explanation or follow-up. Only `response.completed` marks successful generation; failed, incomplete and disconnected streams retain honest partial-output status. A usage-limit failure pauses new requests in the helper. Use **Manage usage**, then deliberately **Refresh models** to resume attempts; successful model listing does not guarantee the limit has reset.
 
@@ -39,6 +39,26 @@ Standard requests the default service tier. Fast requests the account catalog's
 advertised faster tier and may use more plan allowance; it does not promise a
 particular latency or prove which tier ultimately served the response. The helper
 validates the model's capabilities again before inference.
+
+## PDF URL attachments
+
+PDF summaries default to a URL attachment on the same Responses route. The helper
+maps a validated `pdf-url` attachment to `input_file.file_url` alongside the text
+message. It does not call the Files upload API, download the PDF or switch accounts
+or billing providers. Model/URL rejection stays explicit. Update the existing
+helper as well as the extension before using this new request field. See
+[PDF behavior](product.md#summaries) and [verification](testing.md#pdf-summaries).
+
+The [direct-flow limits](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)
+support file input for accepting models but exclude the Files upload API. The
+[file-input guide](https://developers.openai.com/api/docs/guides/file-inputs)
+defines PDF URL input and text/page-image processing. On October 29, 2026, one
+live request with Saul's existing eligible account, `gpt-6-luna`, medium effort
+and the supplied public Herzlinger PDF URL returned `response.completed` and a
+document-specific English–Chinese summary. Saul downloaded/uploaded no PDF bytes.
+This establishes that account/model/URL combination on that date, not universal
+access or a guarantee that every page was read; the API does not return extracted
+text or an exact page-coverage record.
 
 ## Credentials and sign-out
 

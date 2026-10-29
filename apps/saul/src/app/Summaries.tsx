@@ -370,8 +370,8 @@ export function SummaryReader({
       {!batch && tabIds && (
         <div className="stack">
           <p className="small muted">
-            Summarizes loaded tab text with your ChatGPT account. Video, audio, images, and unloaded
-            content are not read.
+            Summarizes selected tabs with your ChatGPT account. Web pages use loaded text; PDFs use
+            the PDF processing choice saved in Settings.
           </p>
           {accounts.length > 1 && (
             <label className="field">
@@ -464,7 +464,7 @@ export function SummaryReader({
           <details>
             <summary>Details</summary>
             <p className="small muted">
-              English → 简体中文 · Luna medium. Summaries and captured text are saved locally.
+              English → 简体中文 · Luna medium. Summaries and prepared input are saved locally.
               Closing this reader does not stop work.
             </p>
             {!running && (
@@ -513,6 +513,12 @@ export function SummaryReader({
                     {item.error}
                   </p>
                 )}
+                {item.sourceKind === 'pdf-url' && (
+                  <p className="small muted">
+                    PDF URL attachment. Original document contents are not stored; Retry asks OpenAI
+                    to read the URL again and may use a newer version.
+                  </p>
+                )}
                 {!single && (
                   <SummaryInspection
                     key={batch.id + ':' + item.index}
@@ -558,7 +564,8 @@ export function SummaryReader({
                     <p className="small muted">{item.coverage}</p>
                     {item.capturedAt && (
                       <p className="small muted">
-                        Captured {new Date(item.capturedAt).toLocaleString()}
+                        {item.sourceKind === 'pdf-url' ? 'Prepared' : 'Captured'}{' '}
+                        {new Date(item.capturedAt).toLocaleString()}
                       </p>
                     )}
                   </details>

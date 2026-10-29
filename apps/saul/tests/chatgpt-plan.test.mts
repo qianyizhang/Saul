@@ -145,6 +145,66 @@ it('rejects unsupported bridge operations and caller-supplied endpoints or token
   expect(() => validatePlanRequest(generate)).not.toThrow();
   expect(() => validatePlanRequest({ ...generate, systemPrompt: '' })).not.toThrow();
 });
+it('validates bounded PDF URL attachments and emits Responses file_url input without uploading bytes', () => {
+  const attachment = { type: 'pdf-url' as const, url: 'https://example.com/download?id=49' };
+  const request = { ...generate, attachments: [attachment] };
+  expect(() => validatePlanRequest(request)).not.toThrow();
+  if (request.attachments[0]?.type !== 'pdf-url') throw new Error('Expected PDF URL');
+  // Validate/narrow the external shape before crossing the typed helper interface.
+  validatePlanRequest(request);
+  expect(responsesBody(request).input).toEqual([
+    {
+      role: 'user',
+      content: [
+        { type: 'input_text', text: generate.userPrompt },
+        { type: 'input_file', file_url: attachment.url },
+      ],
+    },
+  ]);
+  for (const attachments of [
+    [],
+    [attachment, attachment],
+    null,
+    'url',
+    [{ ...attachment, url: 'file:///private.pdf' }],
+    [{ ...attachment, url: 'javascript:alert(1)' }],
+    [{ ...attachment, url: 'https://name:secret@example.com/a.pdf' }],
+    [{ ...attachment, url: 'https://example.com/' + 'x'.repeat(16384) }],
+    [{ ...attachment, file_data: 'bytes' }],
+    [{ type: 'image', url: attachment.url }],
+  ])
+    expect(() => validatePlanRequest({ ...generate, attachments })).toThrow();
+});
+it('forwards PDF URLs through the authenticated Responses request without a Files call or local fetch', async () => {
+  saved();
+  const auth = new PlanAuth(store, { jwks });
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify({ models: [{ visibility: 'list', slug: generate.model }] })),
+    )
+    .mockResolvedValueOnce(
+      sse(
+        { type: 'response.output_text.delta', delta: 'PDF result' },
+        { type: 'response.completed' },
+      ),
+    );
+  const service = new PlanService(auth, fetcher);
+  const events: PlanEvent[] = [];
+  await service.run(
+    { ...generate, attachments: [{ type: 'pdf-url', url: 'https://example.com/paper.pdf' }] },
+    (event) => events.push(event),
+  );
+  expect(fetcher.mock.calls.map(([url]) => new URL(String(url)).pathname)).toEqual([
+    '/v1/models',
+    '/v1/responses',
+  ]);
+  expect(JSON.parse(fetcher.mock.calls[1]![1].body).input[0].content[1]).toEqual({
+    type: 'input_file',
+    file_url: 'https://example.com/paper.pdf',
+  });
+  expect(events).toEqual([{ type: 'delta', text: 'PDF result' }, { type: 'complete' }]);
+});
 it('loads the account catalog, streams with OAuth, and never retries quota failures or changes billing', async () => {
   saved();
   const auth = new PlanAuth(store, { jwks });

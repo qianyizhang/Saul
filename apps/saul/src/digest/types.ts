@@ -19,13 +19,26 @@ export type ItemStatus =
   | 'interrupted'
   | 'cancelled'
   | 'skipped';
-export interface DigestSource {
+export type PdfProcessing = 'attachment' | 'local';
+interface SourceMeta {
   title?: string;
-  text: string;
   capturedAt: number;
   truncated: boolean;
   coverage: string;
 }
+export interface DigestTextSource extends SourceMeta {
+  kind?: 'text'; // Existing persisted text captures have no discriminant.
+  text: string;
+}
+export interface DigestPdfSource extends SourceMeta {
+  kind: 'pdf-url';
+  attachment: import('../../native/plan-protocol.mts').PdfUrlAttachment;
+}
+export type DigestSource = DigestTextSource | DigestPdfSource;
+// Local PDF bytes stay in the offscreen document; messages carry only this target.
+export type DigestCapture =
+  | DigestTextSource
+  | { pdf: { url: string; title?: string; unverified?: boolean } };
 export interface DigestItem {
   index: number;
   tabId: number;
@@ -40,8 +53,10 @@ export interface DigestItem {
   coverage?: string;
   truncated?: boolean;
   capturedAt?: number;
+  sourceKind?: 'pdf-url';
 }
 export interface DigestMeta {
+  pdfProcessing?: PdfProcessing; // Missing on old batches means local parsing.
   id: string;
   windowTitle: string;
   windowId: number;
@@ -62,6 +77,7 @@ export interface DigestComparison {
   fields: string[];
   error?: string;
   checkedAt?: number;
+  notice?: string;
 }
 export interface DigestInspection {
   saved?: DigestSource;

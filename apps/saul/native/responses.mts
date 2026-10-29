@@ -1,5 +1,5 @@
 import { isRecord } from './value.mts';
-import type { PlanEvent } from './plan-protocol.mts';
+import type { PlanEvent, PdfUrlAttachment } from './plan-protocol.mts';
 import { eventData } from './sse.mts';
 
 export class ResponseFailure extends Error {
@@ -40,14 +40,34 @@ export function responsesBody(
     effort,
     systemPrompt,
     userPrompt,
-  }: { model: string; effort?: string; systemPrompt: string; userPrompt: string },
+    attachments,
+  }: {
+    model: string;
+    effort?: string;
+    systemPrompt: string;
+    userPrompt: string;
+    attachments?: PdfUrlAttachment[];
+  },
   serviceTier = 'default',
 ) {
   // This allowlist is deliberately separate from Chat Completions options.
   return {
     model,
     ...(systemPrompt ? { instructions: systemPrompt } : {}),
-    input: [{ role: 'user', content: userPrompt }],
+    input: [
+      {
+        role: 'user',
+        content: attachments?.length
+          ? [
+              { type: 'input_text', text: userPrompt },
+              ...attachments.map((attachment) => ({
+                type: 'input_file',
+                file_url: attachment.url,
+              })),
+            ]
+          : userPrompt,
+      },
+    ],
     store: false,
     stream: true,
     service_tier: serviceTier === 'fast' ? 'priority' : serviceTier,

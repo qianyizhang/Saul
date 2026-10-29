@@ -50,6 +50,58 @@ pnpm benchmark
 An existing-build run verifies that snapshot, not newer source edits. Do not rebuild a shared checkout while another task owns its bundle.
 Concurrent suites must use distinct `SAUL_TEST_RUN=<scope>` values. This isolates both results and HTML reports; Playwright clears its results directory at startup. Run names use letters, digits, underscores and hyphens.
 
+## PDF summaries
+
+`tests/e2e/pdf-attachment.spec.ts` exercises the default URL-attachment flow through
+real summary actions, storage and Settings. It proves that Saul makes no PDF
+download, compares no unobserved text, retains the exact file URL across restart
+and Retry, preserves saved results when the default changes, and never falls back
+after a provider error. It inspects the setting and URL inspector at narrow widths
+in light/dark appearances. Model replies use the native messaging fixture.
+`tests/chatgpt-plan.test.mts` verifies the actual Responses `input_file.file_url`
+shape and that the native owner calls Models/Responses without a Files API call.
+
+`tests/e2e/pdf-summary.spec.ts` exercises real PDF.js and its packaged worker
+through summary actions, persistence and inspection, explicitly selecting Local
+processing for its disposable profile. It covers Chrome's PDF
+viewer, extensionless/query URLs, mixed/scanned pages, character/page limits,
+password protection, damaged documents, access/login responses, byte limits,
+Stop (including a parser worker that cannot reply), the real 30-second deadline,
+navigation, closure and frozen-source retry after restart. Unit cases in
+`tests/pdf.test.ts` cover streaming limits, network errors and the capture deadline.
+Provider replies use the deterministic digest fixture; these checks consume no
+live model quota and do not establish summary quality.
+
+To include the public Herzlinger example, download the supplied PDF into root
+`.artifacts/saul/pdf-capture/herzlinger.pdf`, then run from `apps/saul`:
+
+```sh
+SAUL_PDF_EXAMPLE="$PWD/../../.artifacts/saul/pdf-capture/herzlinger.pdf" SAUL_TEST_RUN=pdf-capture pnpm exec playwright test tests/e2e/pdf-summary.spec.ts
+```
+
+The opt-in case serves those exact PDF bytes through the fixture server. It
+verifies extraction, the 49-page document count, coverage and the exact source
+sent to the mocked provider. To test the original public URL directly, set
+`SAUL_PDF_EXAMPLE_URL` to that URL instead of `SAUL_PDF_EXAMPLE`, and run the same
+file with `-g Herzlinger`. Downloading/parsing is real in both modes; provider
+replies stay mocked. Neither mode proves live site-cookie authentication.
+Do not commit the downloaded document. Rebuild before testing changed sources.
+
+For an explicit **live server parsing** check, run from `apps/saul`:
+
+```sh
+node --use-env-proxy scripts/probe-pdf-summary.mts PUBLIC_PDF_URL
+```
+
+This consumes plan allowance for exactly one Responses request. It requires one
+eligible existing Saul account and uses its app-owned refresh owner, `gpt-6-luna`
+and medium effort. It sends a PDF URL, downloads/uploads no PDF bytes, prints no
+credentials or account identifier, and stops after success or failure. There is
+no account/model/billing fallback or automatic retry. This verifies live file input
+and bilingual output through the source helper; it does not install or reload the
+personal extension/helper. Browser tests separately verify the summary UI and
+concise-output contract with deterministic provider replies.
+
 ## Test layers
 
 | Layer          | Scope                                                                                                           |

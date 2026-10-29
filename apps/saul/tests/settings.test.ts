@@ -35,6 +35,16 @@ it('uses defaults for absent settings and retains nested defaults for older reco
     includePageMetadata: false,
   });
 });
+it('defaults PDFs to URL attachments, persists an explicit local choice, and rejects invalid saved modes', async () => {
+  get.mockResolvedValue({ saul_user_settings: {} });
+  expect((await getSettings()).summaryPdfProcessing).toBe('attachment');
+  get.mockResolvedValue({ saul_user_settings: { summaryPdfProcessing: 'local' } });
+  expect((await getSettings()).summaryPdfProcessing).toBe('local');
+  for (const summaryPdfProcessing of ['auto', true, null, 0]) {
+    get.mockResolvedValue({ saul_user_settings: { summaryPdfProcessing } });
+    await expect(getSettings()).rejects.toThrow(/PDF processing/);
+  }
+});
 
 it('normalizes partial legacy provider records without dropping nested defaults', async () => {
   get.mockResolvedValue({

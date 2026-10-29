@@ -13,7 +13,7 @@ export function ComparisonNote({ comparison }: { comparison: DigestComparison })
           ? `Current input not verified: ${comparison.error}`
           : comparison.text
             ? changeLabel(comparison.text)
-            : 'Source comparison unavailable'}
+            : comparison.notice || 'Source comparison unavailable'}
       </p>
       {comparison.fields.length > 0 && <p>Also changed: {comparison.fields.join(', ')}</p>}
     </div>
@@ -68,8 +68,7 @@ export function SummaryInspection({
             {item.status} · {new Date(batch.createdAt).toLocaleString()}
           </p>
           <p className="saul-inspection-note">
-            Saved generation input. Current page text is read only when you choose Compare. No model
-            request.
+            Saved generation input. Compare checks the current source without a model request.
           </p>
           {error && <p role="alert">{error}</p>}
           {busy && <p role="status">Reading input…</p>}
@@ -81,11 +80,13 @@ export function SummaryInspection({
           {value?.comparison && (
             <>
               <ComparisonNote comparison={value.comparison} />
-              <p className="saul-inspection-note">
-                Token counts estimate additions/removals, not meaning or edit distance. Token
-                inventories do not quantify reordering. Changes outside the capture cannot be
-                measured.
-              </p>
+              {value.comparison.text && (
+                <p className="saul-inspection-note">
+                  Token counts estimate additions/removals, not meaning or edit distance. Token
+                  inventories do not quantify reordering. Changes outside the capture cannot be
+                  measured.
+                </p>
+              )}
             </>
           )}
           {value?.current && (
@@ -118,14 +119,20 @@ export function SummaryInspection({
                   <dd>{item.url}</dd>
                 </div>
                 <div>
-                  <dt>Captured</dt>
+                  <dt>{source.kind === 'pdf-url' ? 'Prepared' : 'Captured'}</dt>
                   <dd>{new Date(source.capturedAt).toLocaleString()}</dd>
                 </div>
                 <div>
-                  <dt>Characters</dt>
+                  <dt>{source.kind === 'pdf-url' ? 'Input type' : 'Characters'}</dt>
                   <dd>
-                    {source.text.length.toLocaleString()}
-                    {source.truncated ? ' · truncated' : ''}
+                    {source.kind === 'pdf-url' ? (
+                      'PDF URL attachment'
+                    ) : (
+                      <>
+                        {source.text.length.toLocaleString()}
+                        {source.truncated ? ' · truncated' : ''}
+                      </>
+                    )}
                   </dd>
                 </div>
                 <div>
@@ -133,15 +140,32 @@ export function SummaryInspection({
                   <dd>{source.coverage}</dd>
                 </div>
               </dl>
-              <InspectionText
-                key={view}
-                label={view === 'saved' ? 'Captured page text' : 'Current page text'}
-                text={source.text}
-              />
+              {source.kind === 'pdf-url' ? (
+                <>
+                  <a href={source.attachment.url} target="_blank" rel="noreferrer">
+                    Open PDF URL
+                  </a>
+                  <InspectionText
+                    key={view}
+                    label="PDF URL attachment"
+                    text={JSON.stringify(
+                      { type: 'input_file', file_url: source.attachment.url },
+                      null,
+                      2,
+                    )}
+                  />
+                </>
+              ) : (
+                <InspectionText
+                  key={view}
+                  label={view === 'saved' ? 'Captured page text' : 'Current page text'}
+                  text={source.text}
+                />
+              )}
             </>
           ) : (
             !busy && (
-              <p className="saul-inspection-note">No source text recorded for this attempt.</p>
+              <p className="saul-inspection-note">No source input recorded for this attempt.</p>
             )
           )}
           <details>
@@ -157,12 +181,23 @@ export function SummaryInspection({
           <details>
             <summary>Saved request and response</summary>
             <p className="saul-inspection-note">
-              The saved prompt is the exact user message. It includes the original page title, URL,
-              coverage and text. Saved input describes what was prepared; only completed output
-              confirms completion.
+              {value?.saved?.kind === 'pdf-url'
+                ? "The saved prompt is the exact text message. PDF URL attachments are listed separately; the provider's extracted text is not returned."
+                : 'The saved prompt is the exact user message. It includes the original page title, URL, coverage and text.'}{' '}
+              Saved input describes what was prepared; only completed output confirms completion.
             </p>
             {value?.saved && (
               <InspectionText label="Prompt · user" text={summaryUserPrompt(item, value.saved)} />
+            )}
+            {value?.saved?.kind === 'pdf-url' && (
+              <InspectionText
+                label="Saved file input"
+                text={JSON.stringify(
+                  { type: 'input_file', file_url: value.saved.attachment.url },
+                  null,
+                  2,
+                )}
+              />
             )}
             <InspectionText label="Response · raw text" text={item.raw} response />
           </details>

@@ -22,6 +22,19 @@ export async function createFixtureServer(
   let ending = options.ending || 'done';
   let gated = options.gated ?? false;
   const pending = new Set<() => void>();
+  const documents = new Map<
+    string,
+    {
+      body: Uint8Array | string;
+      type?: string;
+      status?: number;
+      redirect?: string;
+      gated?: boolean;
+      length?: number;
+    }
+  >();
+  const documentRequests: string[] = [];
+  const pendingDocuments = new Set<() => void>();
   const server = createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -29,7 +42,25 @@ export async function createFixtureServer(
       res.writeHead(204).end();
       return;
     }
-    if (req.url === '/v1/models') {
+    const document = documents.get(new URL(req.url || '/', 'http://fixture').pathname);
+    if (document) {
+      documentRequests.push(req.url!);
+      res.writeHead(document.status || 200, {
+        'Content-Type': document.type || 'application/pdf',
+        ...(document.redirect ? { Location: document.redirect } : {}),
+        ...(document.length !== undefined ? { 'Content-Length': document.length } : {}),
+      });
+      const body = Buffer.from(document.body);
+      const finish = () => {
+        pendingDocuments.delete(finish);
+        res.end(body.subarray(8));
+      };
+      res.write(body.subarray(0, 8));
+      if (document.gated) {
+        pendingDocuments.add(finish);
+        res.once('close', () => pendingDocuments.delete(finish));
+      } else finish();
+    } else if (req.url === '/v1/models') {
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ data: [{ id: 'test-model' }] }));
     } else if (req.url === '/v1/chat/completions') {
@@ -105,6 +136,13 @@ export async function createFixtureServer(
   return {
     origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
     requests,
+    setDocument: (path: string, document: NonNullable<ReturnType<typeof documents.get>>) =>
+      documents.set(path, document),
+    documentRequests,
+    pendingDocumentsCount: () => pendingDocuments.size,
+    releaseDocuments: () => {
+      for (const finish of [...pendingDocuments]) finish();
+    },
     setEnding: (value: 'done' | 'eof' | 'length') => {
       ending = value;
     },

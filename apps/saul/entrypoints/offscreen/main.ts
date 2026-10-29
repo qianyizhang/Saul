@@ -1,5 +1,5 @@
 import { DigestRunner } from '../../src/digest/runner';
-import type { DigestSource } from '../../src/digest/types';
+import { captureSummarySource } from '../../src/digest/source';
 import DatabaseWorker from '../../src/storage/db-worker?worker';
 import type { DbCall, Reply } from '../../src/types/storage';
 import type { RunnerRequest } from '../../src/storage/client';
@@ -37,14 +37,7 @@ const db: DbCall = (message) =>
 const changed = (url: string) => {
   void chrome.runtime.sendMessage({ target: 'saul-events', url }).catch(() => undefined);
 };
-const digest = new DigestRunner(db, async (item) => {
-  const reply: Reply<DigestSource> = await chrome.runtime.sendMessage({
-    target: 'saul-digest-capture',
-    item,
-  });
-  if (!reply?.success) throw new Error(reply?.error || 'Capture failed.');
-  return reply.result;
-});
+const digest = new DigestRunner(db, captureSummarySource);
 void digest.ready.catch(() => undefined);
 const runner = new ReadingRunner(db, changed);
 // Reconciliation starts once per actual offscreen incarnation, never per UI/worker connection.

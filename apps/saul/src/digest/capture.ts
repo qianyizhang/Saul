@@ -1,11 +1,12 @@
 import { getWindowLabels } from '../native/window-labels';
 import { SUMMARY_PROMPT } from './summary';
-import type { DigestBatch, DigestItem, DigestSource } from './types';
+import type { DigestBatch, DigestItem, DigestCapture, PdfProcessing } from './types';
 
 export async function snapshotSelection(
   id: string,
   tabIds: number[],
   accountId: string,
+  pdfProcessing: PdfProcessing = 'attachment',
 ): Promise<DigestBatch> {
   const tabs = await Promise.all(tabIds.map((id) => chrome.tabs.get(id)));
   const windowIds = [...new Set(tabs.map((t) => t.windowId))];
@@ -25,6 +26,7 @@ export async function snapshotSelection(
     id,
     windowId: windowIds[0]!,
     accountId,
+    pdfProcessing,
     windowTitle:
       windowIds.length === 1 ? windowName(windowIds[0]!) : tabs.length + ' selected tabs',
     createdAt: Date.now(),
@@ -47,9 +49,17 @@ export async function snapshotSelection(
   };
 }
 // Runs in the isolated page world. It must be self-contained for executeScript.
-export function extractPage(expectedUrl: string): DigestSource {
+export function extractPage(expectedUrl: string): DigestCapture {
   if (location.href !== expectedUrl)
     throw new Error('The tab navigated. Start a new summary for its current page.');
+  // Chrome's top-level PDF wrapper exposes an embed, not the document text.
+  // Do not follow PDFs embedded alongside an ordinary article.
+  if (
+    document.contentType === 'application/pdf' ||
+    (document.querySelector('embed[type="application/pdf"], object[type="application/pdf"]') &&
+      (document.body?.innerText.trim().length || 0) < 100)
+  )
+    return { pdf: { url: expectedUrl, title: document.title } };
   const candidates = Array.from(
     document.querySelectorAll<HTMLElement>(
       'article, main, [role="main"], .entry-content, .post-content',
@@ -73,20 +83,31 @@ export function extractPage(expectedUrl: string): DigestSource {
     coverage: `Visible ${root === document.body ? 'page' : 'article'} text and loaded discussion only; no video or audio content, linked pages, images, collapsed or unloaded content.${truncated ? ' Limited to the first 120,000 characters.' : ''}`,
   };
 }
-export async function captureTab(item: DigestItem): Promise<DigestSource> {
+export async function verifyCaptureTab(item: DigestItem): Promise<void> {
   const tab = await chrome.tabs.get(item.tabId);
   if (tab.incognito || tab.url !== item.url || !/^https?:\/\//.test(item.url))
     throw new Error('Source tab changed or is unavailable. Start a new summary.');
   if (tab.discarded || tab.status !== 'complete')
     throw new Error('Tab is unloaded or still loading. Load it, then retry.');
-  const results = await chrome.scripting.executeScript({
-    target: { tabId: item.tabId },
-    func: extractPage,
-    args: [item.url],
-  });
-  const result = results[0]?.result;
-  if ((await chrome.tabs.get(item.tabId)).url !== item.url)
-    throw new Error('Tab navigated while capturing. Start a new summary.');
-  if (!result?.text) throw new Error('Page text could not be read.');
+}
+export async function captureTab(item: DigestItem): Promise<DigestCapture> {
+  await verifyCaptureTab(item);
+  const pdf = { pdf: { url: item.url, title: item.title } };
+  if (/\.pdf$/i.test(new URL(item.url).pathname)) return pdf;
+  let result: DigestCapture | undefined;
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: item.tabId },
+      func: extractPage,
+      args: [item.url],
+    });
+    result = results[0]?.result;
+  } catch {
+    // Some Chrome versions deny injection into the PDF wrapper. A bounded
+    // download may identify an extensionless PDF; HTML is never used as fallback.
+    result = { pdf: { ...pdf.pdf, unverified: true } };
+  }
+  await verifyCaptureTab(item);
+  if (!result) throw new Error('Page text could not be read.');
   return result;
 }

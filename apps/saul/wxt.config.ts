@@ -1,9 +1,29 @@
 import { defineConfig } from 'wxt';
 import tailwindcss from '@tailwindcss/vite';
+import { readdir } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
+  hooks: {
+    async 'build:publicAssets'(_wxt, files) {
+      // Text extraction can need built-in CMaps/fonts. Ship these with PDF.js,
+      // including their licenses, rather than fetching runtime code or assets.
+      const root = new URL('./node_modules/pdfjs-dist/', import.meta.url);
+      for (const folder of ['cmaps', 'standard_fonts']) {
+        for (const name of await readdir(new URL(folder + '/', root)))
+          files.push({
+            absoluteSrc: fileURLToPath(new URL(folder + '/' + name, root)),
+            relativeDest: 'pdf/' + folder + '/' + name,
+          });
+      }
+      files.push({
+        absoluteSrc: fileURLToPath(new URL('LICENSE', root)),
+        relativeDest: 'pdf/LICENSE',
+      });
+    },
+  },
   vite: () => ({
     plugins: [tailwindcss()],
     server: {

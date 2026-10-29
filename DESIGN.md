@@ -364,8 +364,9 @@ reasoning. No extra model request, credential capture, or debug-mode prerequisit
 Large blocks use searchable, bounded sections with Previous/Next and a full-text
 Copy action. Keep literal text selectable and wrapped; mount one section at a time.
 For summaries, show capture time, size and coverage before the source, with saved
-and current input as explicit views. Comparing reads loaded page text on demand;
-never silently replace the generation's saved input.
+and current input as explicit views. Comparing reads current source text on demand
+(fetching the current document for local PDFs); URL attachments compare metadata
+only. Never silently replace the generation's saved input.
 
 Use a clear primary action per task, quiet secondary actions, and explicit destructive
 labels. Search, lists, selection, focus, tooltips, notices, and loading feedback must
@@ -408,6 +409,20 @@ and two to four concrete points; limits stay visible, deeper material is
 collapsed. Keep successful and processed counts distinct. Completion must
 never steal focus or open another tab. Explain capture limitations for
 video/audio pages; page text is not the media itself.
+
+Online PDFs use the same reader, progress, failure and inspection surfaces. Keep
+**PDF processing** in Settings → Summaries, independent of model presets. Default
+to **PDF URL attachment (server)**; offer **Local parsing · send text**. Saving
+changes the default for new summaries and Run again. Retry keeps the saved method.
+URL attachments send the link to OpenAI without a Saul download. Explain beside
+the result that source contents are not stored and Retry may read a newer version.
+The inspector shows Prepared time and the exact file URL input; it must not invent
+extracted text, character counts, page coverage or a Text unchanged result.
+Keep local PDF coverage in the existing Source coverage disclosure: pages read,
+pages with no extractable text, truncation and the current-document download.
+Do not imply that local parsing read images or scanned text. Use the existing
+failure area for unavailable URLs, model support, download, password and OCR-required
+errors; never silently switch processing methods.
 
 Repeated Summarize actions reuse the latest saved selection, matching exact URLs
 and tab order, or reopen its active run. Put **Saved summary reused**, its original

@@ -1,4 +1,4 @@
-import { snapshotSelection, captureTab } from '../src/digest/capture';
+import { snapshotSelection, captureTab, verifyCaptureTab } from '../src/digest/capture';
 import { compareRunInput } from '../src/reading/input-change';
 import { validateDigest } from '../src/digest/contracts';
 import { initSummaryActions } from '../src/digest/actions';
@@ -331,7 +331,7 @@ export default defineBackground(() => {
           sender.tab
         )
           throw new Error('Runner only');
-        return captureTab(request.item);
+        return request.verifyOnly ? verifyCaptureTab(request.item) : captureTab(request.item);
       }
       if (request.target === 'saul-events') {
         if (
@@ -366,10 +366,23 @@ export default defineBackground(() => {
       if (request.target === 'saul-digest') {
         validateDigest(request.message);
         const r = request.message;
-        const snapshot =
-          r.action === 'start' || r.action === 'resolve'
-            ? await snapshotSelection(r.id, r.tabIds, r.action === 'start' ? r.accountId : '')
-            : undefined;
+        let snapshot;
+        if (r.action === 'start' || r.action === 'resolve') {
+          // Unreadable settings must not block reopening saved work. Only a new
+          // run requires a validated preference; comparisons can use its saved mode.
+          const preference = await settingsOwner({ action: 'read' }).catch(() => undefined);
+          if (r.action === 'start' && preference?.state !== 'ready')
+            throw new Error(
+              preference?.error || 'Settings could not be read. Open Settings and retry.',
+            );
+          snapshot = await snapshotSelection(
+            r.id,
+            r.tabIds,
+            r.action === 'start' ? r.accountId : '',
+            preference?.state === 'ready' ? preference.settings.summaryPdfProcessing : undefined,
+          );
+          if (preference?.state !== 'ready') delete snapshot.pdfProcessing;
+        }
         return runnerRequest({ operation: 'digest', message: r, snapshot });
       }
       if (request.type === 'WORKSPACE_TABS') return workspaceCall(request);

@@ -83,6 +83,50 @@ async function waitDone(r: DigestRunner) {
   });
 }
 describe('window digests', () => {
+  it('sends saved PDF URL attachments on retry, discloses unverified contents, and compares changed processing modes without inference', async () => {
+    const f = fixture();
+    const source: DigestSource = {
+      kind: 'pdf-url',
+      attachment: { type: 'pdf-url', url: 'https://example.com/paper.pdf' },
+      coverage: 'PDF URL; contents are not frozen.',
+      truncated: false,
+      capturedAt: 1,
+    };
+    const capture = vi.fn(async (): Promise<DigestSource> => source);
+    const generate = vi.fn(async function* (_request: PlanRequest) {
+      yield* success();
+    });
+    const r = new DigestRunner(f.db, capture, generate);
+    const b = { ...batch(), pdfProcessing: 'attachment' as const };
+    await r.request({ action: 'start', id: b.id, tabIds: [0, 1, 2], accountId: b.accountId }, b);
+    await waitDone(r);
+    expect(generate.mock.calls[0]?.[0]).toMatchObject({ attachments: [source.attachment] });
+    expect(f.get().items[0]?.sourceKind).toBe('pdf-url');
+    const unchanged = (await r.request(
+      { action: 'resolve', id: 'new-summary', tabIds: [0, 1, 2] },
+      b,
+    )) as { comparisons: { text?: unknown; notice?: string }[] };
+    expect(unchanged.comparisons[0]?.text).toBeUndefined();
+    expect(unchanged.comparisons[0]?.notice).toContain('matching URL does not prove');
+    capture.mockResolvedValue({
+      text: 'Locally extracted text',
+      truncated: false,
+      capturedAt: 2,
+      coverage: 'Local PDF',
+    });
+    const changed = (await r.request(
+      { action: 'resolve', id: 'new-summary', tabIds: [0, 1, 2] },
+      { ...b, pdfProcessing: 'local' },
+    )) as { comparisons: { fields: string[] }[] };
+    expect(changed.comparisons[0]?.fields).toContain('PDF processing');
+    expect(generate).toHaveBeenCalledTimes(3);
+    f.get().items[0]!.status = 'cancelled';
+    const captures = capture.mock.calls.length;
+    await r.request({ action: 'retry', id: b.id });
+    await waitDone(r);
+    expect(capture).toHaveBeenCalledTimes(captures);
+    expect(generate.mock.calls.at(-1)?.[0]).toMatchObject({ attachments: [source.attachment] });
+  });
   it('rejects reversed languages and verbose output, accepts concise pairs', () => {
     expect(parseSummary(raw)).toEqual(summary);
     expect(() =>
@@ -200,6 +244,30 @@ describe('window digests', () => {
     expect(f.get().items.map((i) => i.status)).toEqual(['failed', 'failed', 'interrupted']);
     expect(f.get().items[0]!.error).toContain('Usage limit');
     expect(f.get().items[0]!.raw).toBe('partial');
+  });
+  it('Stop aborts in-flight capture without persisting late input or calling a provider', async () => {
+    const f = fixture();
+    const capture = vi.fn(
+      (_item: unknown, signal?: AbortSignal) =>
+        new Promise<DigestSource>((_resolve, reject) => {
+          signal!.addEventListener('abort', () => reject(new Error('Stopped.')), { once: true });
+        }),
+    );
+    const generate = vi.fn(success);
+    const r = new DigestRunner(f.db, capture, generate);
+    await r.request(
+      { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
+      batch(),
+    );
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(2));
+    await r.request({ action: 'stop', id: 'digest-test' });
+    expect(f.get().items.map((i) => i.status)).toEqual(['cancelled', 'cancelled', 'cancelled']);
+    expect(generate).not.toHaveBeenCalled();
+    expect(
+      f.mock.mock.calls.some(
+        ([request]) => request.type === 'DB_DIGEST_ITEM' && request.payload.source,
+      ),
+    ).toBe(false);
   });
   it('retains malformed output as failed and continues other tabs without automatic retries', async () => {
     const f = fixture();

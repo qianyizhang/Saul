@@ -153,7 +153,42 @@ then uses the existing trusted extension digest boundary.
 `src/digest/`, internal messages and persisted SQLite records; it does not name a
 separate feature. Wire and storage renames require explicit migrations.
 
-`src/digest/` owns the fixed bilingual summary contract, capture, runner, persistence operations, and safe standalone HTML renderer. The workspace sends validated digest actions through the background; only the background snapshots selected tabs, and only the offscreen runner can request page captures. Content scripts cannot start or inspect digests. Capture uses isolated-world scripting and validates the original URL before and after reading.
+`src/digest/` owns the fixed bilingual summary contract, capture, runner, persistence operations, and safe standalone HTML renderer. The workspace sends validated digest actions through the background; only the background snapshots selected tabs, and only the offscreen runner can request page captures. Content scripts cannot start or inspect digests. HTML capture uses isolated-world scripting and validates the original URL before and after reading.
+
+PDF preparation splits browser authority from two processing implementations.
+`capture.ts` checks the selected HTTP(S) tab and identifies PDF pathnames or
+top-level viewer metadata. `source.ts` runs in the existing offscreen document and
+chooses the batch's frozen `pdfProcessing` preference. New batches default to
+`attachment`; a missing preference on an old batch means `local`. Settings owns
+the saved default; snapshots freeze it before work begins. Content is a union of
+legacy-compatible text captures and PDF URL attachments, persisted in existing
+JSON source rows without a database schema change.
+
+Attachment mode validates the URL, removes the viewer fragment, revalidates the
+tab and saves the exact URL. It never fetches or stores PDF bytes. The digest's
+single request assembler supplies a text message plus a typed attachment. The
+native `PlanRequest` allowlist accepts at most one bounded HTTP(S) PDF URL, with no
+URL userinfo, arbitrary content parts, bytes, credentials or caller-supplied
+endpoint. `responsesBody` maps it to `input_file.file_url` alongside `input_text`;
+text-only callers keep their existing request shape. The helper uses the same
+OAuth owner and Responses route, never the unsupported Files upload route. Model
+or URL rejection remains an explicit provider failure with no processing fallback.
+Saved URLs freeze request identity, not document bytes; reuse/inspection compare
+metadata without asserting text equality or making an inference call.
+
+Local mode passes the runner's Stop signal through capture and revalidates the
+source tab after extraction. When Chrome denies injection, only local mode may
+identify an extensionless PDF with a bounded signature-validated download;
+downloaded HTML is never summarized as a fallback. Attachment mode requires an
+identifiable PDF rather than forwarding an unreadable HTML page as a file.
+`pdf.ts` owns the credentialed fetch, signature check, limits, extraction and cleanup.
+PDF.js and its worker, CMaps, fonts and licenses ship inside the extension. An
+explicit module worker avoids PDF.js's blob-wrapper/fake-worker fallback under
+extension CSP; each capture terminates its worker on completion or cancellation.
+No new helper installation type or browser permission is needed; existing helpers
+must be updated to accept attachments. Source input and coverage use existing
+JSON source rows; PDF bytes are never persisted. See the
+[PDF capture contract](product.md#summaries) for triggers, bounds and limitations.
 
 The existing offscreen document hosts the digest runner alongside reading jobs. Both use the same database worker and native ChatGPT transport; digest generation calls the existing plan adapter with a frozen account, prompt, model and effort. Digest control actions serialize, generation uses two concurrent workers, and there is no automatic retry. All workers settle before a stop/delete/retry control can complete. Schema version 2 adds digest metadata and item/source rows without rewriting reading data. Restart reconciliation marks unfinished items interrupted. The UI polls saved/live state while mounted and renders English before Chinese from validated pairs; raw model text is never interpreted as HTML.
 

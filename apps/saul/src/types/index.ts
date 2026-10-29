@@ -97,6 +97,7 @@ export interface ReadingConfiguration {
 }
 
 export interface UserSettings {
+  summaryPdfProcessing?: 'attachment' | 'local';
   sharedPresetRevision?: number;
   profiles?: ProviderProfile[];
   activeProfileId?: string;
