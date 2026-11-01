@@ -1,6 +1,11 @@
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider, createFixtureServer, taggedAnswer } from './support.ts';
-import { explainSelection, getFirstHistory, openFirstPageExplanation } from './driver.ts';
+import {
+  explainSelection,
+  getFirstHistory,
+  getHistory,
+  openFirstPageExplanation,
+} from './driver.ts';
 
 test('inspection matches the submitted request, retains literal output, and survives settings changes and restart', async ({
   sandbox,
@@ -14,7 +19,7 @@ test('inspection matches the submitted request, retains literal output, and surv
   const article = await context.newPage();
   await article.goto(fixtureServer.origin + '/article');
   await explainSelection(article);
-  await expect.poll(async () => (await getFirstHistory(popup)).latest.status).toBe('completed');
+  await expect.poll(async () => (await getHistory(popup))[0]?.latest.status).toBe('completed');
   const saved = await getFirstHistory(popup);
   const body = JSON.parse(fixtureServer.requests[initial]!.body) as {
     messages: { role: string; content: string }[];
@@ -101,7 +106,7 @@ test('interrupted inspection preserves literal markup and identifies incomplete 
     const article = await context.newPage();
     await article.goto(server.origin + '/article');
     await explainSelection(article);
-    await expect.poll(async () => (await getFirstHistory(popup)).latest.status).toBe('interrupted');
+    await expect.poll(async () => (await getHistory(popup))[0]?.latest.status).toBe('interrupted');
     await openFirstPageExplanation(article);
     const inspector = article.locator('.saul-card > div > .saul-inspector');
     await inspector.locator(':scope > summary').click();
