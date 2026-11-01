@@ -12,6 +12,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { request } from 'node:http';
+import { tmpdir } from 'node:os';
 import { createBoardService } from '../native/board-service.mts';
 import { startBoardWeb } from '../.build/native/board-http.mjs';
 import { Recorder, snapshot } from '../native/diagnostic-events.mts';
@@ -22,7 +23,7 @@ afterEach(() => {
   for (const path of roots.splice(0)) rmSync(path, { recursive: true, force: true });
 });
 function service() {
-  const logRoot = mkdtempSync('/private/tmp/saul-board-observability-');
+  const logRoot = mkdtempSync(join(tmpdir(), 'saul-board-observability-'));
   roots.push(logRoot);
   return createBoardService({ logRoot, resourceUri: BOARD_URI });
 }
@@ -149,7 +150,7 @@ it('standalone HTTP preserves Unicode split across network chunks', async () => 
 });
 
 it('retention prunes only recognized inactive sessions and preserves live, unknown and linked data', () => {
-  const root = mkdtempSync('/private/tmp/saul-retention-');
+  const root = mkdtempSync(join(tmpdir(), 'saul-retention-'));
   roots.push(root);
   const app = join(root, 'saul-tab-board');
   mkdirSync(app);
@@ -177,7 +178,7 @@ it('retention prunes only recognized inactive sessions and preserves live, unkno
   for (const path of [live, unknown, linked]) expect(existsSync(path)).toBe(true);
 });
 it('storage failure retains live observations and rejects captures without changing actions', async () => {
-  const root = mkdtempSync('/private/tmp/saul-storage-failure-');
+  const root = mkdtempSync(join(tmpdir(), 'saul-storage-failure-'));
   roots.push(root);
   writeFileSync(join(root, 'saul-tab-board'), 'not a directory');
   const board = createBoardService({ resourceUri: BOARD_URI, logRoot: root });
