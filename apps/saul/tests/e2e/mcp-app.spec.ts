@@ -351,6 +351,8 @@ test('shared window labels load initially and duplicate removals stay editable u
   expect(await ui.locator('body').evaluate((body) => body.scrollWidth <= innerWidth)).toBe(true);
   await captureWorkspace(host, ui, info.outputPath('duplicate-mobile.png'));
   await host.setViewportSize({ width: 1100, height: 900 });
+  // Real pointer input must not depend on capture-only viewport side effects.
+  await matchWorkspaceWindow(host);
   await host.evaluate(() => window.fixtureHost.theme('dark'));
   await captureWorkspace(host, ui, info.outputPath('duplicate-dark.png'));
   await ui.getByRole('button', { name: 'Apply', exact: true }).click();
