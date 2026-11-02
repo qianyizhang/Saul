@@ -34,6 +34,4 @@ source, credentials or durable evidence there.
 Installed extension identity, bundle/signing identity and credential-store IDs are migration contracts,
 not branding strings. See [setup](docs/setup.md) before changing installed paths.
 
-Before any push, read the [publication hold](docs/migration.md#publication-hold).
-The combined history includes private EZ history, while the configured Saul remote
-is public. Destination visibility remains undecided; this migration stays local.
+Before any push, read the [publication decision](docs/migration.md#publication-decision).

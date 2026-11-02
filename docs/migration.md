@@ -6,12 +6,15 @@ histories are preserved (Saul `c5561df`, EZ `5e96905`; import `af526ac`, migrati
 `0fe5829`). Install EZ with `make -C apps/ez install` after quitting it.
 See [selective setup](setup.md) for signing prerequisites and other components.
 
-## Publication hold
+## Publication decision
 
-EZ was private and Saul public on GitHub when inspected on 2026-10-20. The user
-chose to keep the migration local until destination visibility is decided.
-Do not push the combined history or archive either copy of EZ before that decision
-and a verified destination push. The original EZ checkout remains intact for recovery.
+EZ was private and Saul public on GitHub when inspected on 2026-10-20. The initial
+decision held the migration locally until destination visibility was chosen.
+On 2026-11-02, the user confirmed the current public `qianyizhang/Saul` remote as
+the destination and authorized syncing the integrated main there. The earlier
+publication hold is resolved; normal repository checks still govern pushes.
+The original EZ checkout remains intact for recovery; this decision does not
+authorize archiving or deleting it.
 
 ## Installed identities and artifacts
 
