@@ -101,7 +101,7 @@ private struct SurfacePreviewControls: View {
             }.padding(12)
             HStack(spacing: 20) {
                 Button("Invoke Quick Lookup") { controller.toggle() }
-                Toggle("Minimum Mode", isOn: $model.minimumMode)
+                Toggle("Min Mode", isOn: $model.minimumMode)
                 Toggle("Reduce motion (main preview)", isOn: $reduceMotion)
             }.toggleStyle(.checkbox).font(.caption).padding(.bottom, 6)
             Text(

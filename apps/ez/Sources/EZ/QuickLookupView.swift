@@ -93,7 +93,7 @@ struct QuickLookupView: View {
                 Image(systemName: "sidebar.left")
             }.help("Open EZ & history").accessibilityLabel("Open EZ & history")
             Menu {
-                Toggle("Minimum Mode", isOn: $model.minimumMode)
+                Toggle("Min Mode", isOn: $model.minimumMode)
                 Divider()
                 Button("Settings…") { controller.showMain(settings: true) }
                 Button("Account…") { controller.showMain(settings: true, section: .account) }

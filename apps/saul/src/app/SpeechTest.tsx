@@ -77,7 +77,7 @@ export function SpeechTest({
         <ActionLabel short="Speech" full="Speech test · experimental" />
       </summary>
       <div className="stack">
-        <p className="small muted">
+        <p className="small muted standard-only">
           Test speech with the selected ChatGPT account. Availability is unconfirmed; no API-key
           fallback. Audio is AI-generated.
         </p>
@@ -133,7 +133,7 @@ export function SpeechTest({
         {audio && (
           <audio controls src={audio} aria-label="Generated speech" style={{ width: '100%' }} />
         )}
-        <p className="small muted">
+        <p className="small muted standard-only">
           Uses gpt-4o-mini-tts at /v1/audio/speech. This Speech API model is scheduled to shut down
           January 6, 2027. Text and audio are not saved to history.
         </p>

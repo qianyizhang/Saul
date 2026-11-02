@@ -31,7 +31,7 @@ The previous installed bundle is retained for rollback.
 
 In EZ, open **Settings → Accounts → Connect**, finish sign-in
 in your browser, and allow ChatGPT plan usage. Choose a recipe, fill its inputs,
-then press **⌘ Return**. **Minimum Mode** is on by default: the draft sits below
+then press **⌘ Return**. **Min Mode** is on by default: the draft sits below
 the new-lookup heading, answers get a quiet reading view, and **Details** holds
 request settings, token counts, and timing. Turn it off in Settings → Preferences or Quick
 Lookup's actions menu to restore extra guidance and the persistent metrics footer.
@@ -40,8 +40,8 @@ allowance. Metrics are saved with new lookups; older history has no metrics.
 **⌘ N** starts a new lookup and **⌘ .** stops generation.
 Settings uses the same focused design as Saul: Overview, Models, Recipes,
 Preferences, Accounts and Shortcuts. One editor is shown at a time and section
-changes preserve drafts. Minimum Mode assumes a familiar user: everyday controls
-stay visible, with one-word or symbol-only actions and detailed help on demand.
+changes preserve drafts. Min Mode assumes a familiar user: everyday controls
+stay visible, with one-word or symbol-only actions. Turn Min Mode off for explanatory help.
 
 Selected answers open in a reading view. **Edit** reveals your current inputs;
 **Hide** returns to reading, and **More → Reuse** restores the saved request.
@@ -70,7 +70,7 @@ or choose **Quick Lookup** from EZ’s menu-bar icon. Type or paste text and pre
 **⌘ Return** after filling the recipe's inputs. The panel starts small and grows
 for results; long forms and answers scroll. Choose a preset override in the panel’s
 preset selector. Click its information button for exact request choices and the
-displayed answer's actual service tier. In Minimum Mode, an answer hides the input
+displayed answer's actual service tier. In Min Mode, an answer hides the input
 fields until **Edit**; **New**, **Stop**, and **Copy** stay reachable as
 appropriate. Use the
 actions menu for Settings. **Esc** hides the panel and returns keyboard focus to

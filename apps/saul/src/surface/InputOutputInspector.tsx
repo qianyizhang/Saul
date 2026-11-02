@@ -14,7 +14,7 @@ export function InputOutputInspector({ run }: { run: RunResult }) {
       {open && (
         <div className="saul-inspection-content">
           <p className="saul-inspection-note">{run.status}</p>
-          <p className="saul-inspection-note">
+          <p className="saul-inspection-note standard-only">
             Saved text for this attempt. Context fields are included in the assembled prompt.
           </p>
           {run.status === 'queued' && (

@@ -38,7 +38,7 @@ Opening a completed answer marks it read. Dismissing a notification does not. Er
 
 The popup opens directly to History. Search and bookmarks stay visible; export and deletion of the entire library are under **Export and manage history**. The full workspace uses the same views with a wider reading area.
 
-**Minimum Mode** is the default expert everyday view, following [DESIGN.md](../../../DESIGN.md#minimum-mode).
+**Min Mode** is the default expert everyday view, following [DESIGN.md](../../../DESIGN.md#min-mode).
 It shows the current input/answer, recipe or preset choice, essential state and primary
 actions. Routine subtext is omitted; buttons use one clear word or a familiar symbol,
 with complete accessible names and tooltips. More/Details retain uncommon operations,

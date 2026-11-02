@@ -236,10 +236,14 @@ struct ContentView: View {
                     Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
                 }
             }
-            if !model.minimumMode { InputOutputInspector(entry: entry).id(entry.id) }
+            if !model.minimumMode {
+                InputOutputInspector(entry: entry, minimum: model.minimumMode).id(entry.id)
+            }
             DisclosureGroup("Details") {
                 LookupDetails(entry: entry).padding(.top, 8)
-                if model.minimumMode { InputOutputInspector(entry: entry).id(entry.id) }
+                if model.minimumMode {
+                    InputOutputInspector(entry: entry, minimum: model.minimumMode).id(entry.id)
+                }
             }.font(AppStyle.caption).disclosureGroupStyle(FullRowDisclosureStyle())
         }
     }

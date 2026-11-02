@@ -261,7 +261,7 @@ export function Settings({
                   <p className="notice">{CHROME_AI_DISABLED_MESSAGE}</p>
                 ) : (
                   <div className="stack">
-                    <p className="muted">
+                    <p className="muted standard-only">
                       Chrome's built-in Gemini Nano runs locally after a separate model download.
                     </p>
                     <p className="small" role="status">
@@ -314,7 +314,7 @@ export function Settings({
                         <ActionLabel short="Test" full="Test generation" />
                       </button>
                     </div>
-                    <p className="small muted">
+                    <p className="small muted standard-only">
                       Preparation checks readiness. Test generation verifies that the model returns
                       text. Use the full workspace to keep setup open during a download.
                     </p>
@@ -436,7 +436,7 @@ export function Settings({
                           </button>
                         </div>
                       </label>
-                      <p className="small muted">
+                      <p className="small muted standard-only">
                         Each profile keeps its own key. Changing endpoint origin clears the current
                         key.
                       </p>
@@ -478,7 +478,7 @@ export function Settings({
                           <ActionLabel short="Test" full="Test generation" />
                         </button>
                       </div>
-                      <p className="small muted">
+                      <p className="small muted standard-only">
                         Generation sends a short sample prompt using the current form values.
                       </p>
                     </div>
@@ -504,7 +504,7 @@ export function Settings({
             <option value="local">Local parsing · send text</option>
           </select>
         </label>
-        <details>
+        <details className="standard-only">
           <summary>Details</summary>
           <p className="small muted">
             PDF URL attachment lets OpenAI read text and page images from the link, without a
@@ -585,7 +585,7 @@ export function Settings({
               <ActionLabel short="Context" full="Include with selected text" />
             </summary>
             <div className="stack settings-disclosure">
-              <p className="small muted">
+              <p className="small muted standard-only">
                 Checked page information is sent to your model with the selection.
               </p>
               {(

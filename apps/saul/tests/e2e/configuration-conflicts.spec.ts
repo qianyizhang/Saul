@@ -39,7 +39,7 @@ test('two Settings surfaces retain a stale draft until deliberate reload', async
 
   for (const minimum of [true, false]) {
     await settingsSection(other, 'Preferences');
-    await other.getByRole('checkbox', { name: 'Minimum Mode', exact: true }).setChecked(minimum);
+    await other.getByRole('checkbox', { name: 'Min Mode', exact: true }).setChecked(minimum);
     for (const width of [440, 1000]) {
       await other.setViewportSize({ width, height: 700 });
       for (const colorScheme of ['light', 'dark'] as const) {
@@ -140,7 +140,7 @@ test('an appearance change in another surface does not conflict with a settings 
   const other = await context.newPage();
   await other.goto(popup.url().replace('popup.html', 'library.html'));
   await settingsSection(other, 'Preferences');
-  await other.getByRole('checkbox', { name: 'Minimum Mode', exact: true }).uncheck();
+  await other.getByRole('checkbox', { name: 'Min Mode', exact: true }).uncheck();
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
   await expect(popup.getByRole('alert')).toHaveCount(0);

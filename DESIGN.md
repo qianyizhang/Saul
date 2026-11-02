@@ -180,7 +180,7 @@ Keep the displayed answer, editable draft and saved configuration visibly distin
 In EZ, when a terminal answer cannot be saved, keep the available answer attached to its
 attempt and show **Unsaved** with Copy/Export and an explicit save recovery action.
 **Save again** writes the retained result; it never starts generation. Keep
-this notice visible after navigating away and back, including in Minimum Mode.
+this notice visible after navigating away and back, including in Min Mode.
 Explain that unsaved output must be saved or exported before quitting.
 
 A stale Settings save must preserve the local draft and selection. Show the
@@ -197,12 +197,15 @@ Evaluate a feature in its surrounding screen and sibling surfaces. Finish the
 [feature UI review](design/SKILL.md#feature-ui-review) before claiming visual
 completion; a build or token check alone does not establish readability.
 
-## Minimum Mode
+## Min Mode
 
-Minimum Mode is the default **expert everyday view**: assume the user already
+Min Mode is the default **expert everyday view**: assume the user already
 knows the app and normally needs only its common tasks. Show current inputs and
 answers, recipe/preset choices, essential state and the next useful action.
 Omit routine explanatory subtext, repeated facts, coaching and decorative labels.
+Remove help-only disclosures and documentation links entirely in Min Mode; do not
+move explanatory paragraphs behind Details. Disclosures remain for controls,
+recorded data and actionable recovery.
 Keep uncommon operations in named More, Details or Settings destinations. Revealing
 one task must not expand unrelated editors into the same page.
 
@@ -211,9 +214,9 @@ accessible names and tooltips. Prefer Send, Stop, Copy, Save, Reuse, Edit, Add,
 Remove, Reload and Connect. Dynamic user-authored names, selected values and
 keyboard bindings are not action wording. Destructive confirmations retain their
 exact scope. Save retries only persistence; regeneration remains a distinct action.
-Errors, unsaved work, unavailable choices and billing/permission consequences remain
-visible. Minimum Mode never hides information needed to avoid losing work or
-understand a consequential action.
+Errors, unsaved work and unavailable choices remain visible. Keep action scope and
+billing/permission meaning in control names, tooltips and consequential confirmations,
+without permanent explanatory paragraphs.
 
 It is reversible in
 Settings (or the board's View options), independent of model configuration, and
@@ -222,7 +225,7 @@ pages and reading cards share it. The embedded board keeps its own preference.
 There is no cross-app or cross-device preference sync. At compact preset selectors,
 omit the default Standard speed suffix; keep Fast visible. Exact speed remains in Details.
 
-| Always available                                                | Minimum Mode                                                     | Standard view                     |
+| Always available                                                | Min Mode                                                         | Standard view                     |
 | --------------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------- |
 | Current content, inputs, Send/Explain, Stop, Copy               | Visible                                                          | Visible                           |
 | Errors, interrupted or unsaved work, missing account/model      | Visible with a useful next action                                | Same                              |
@@ -231,7 +234,7 @@ omit the default Standard speed suffix; keep Fast visible. Exact speed remains i
 | Follow-ups, export, deletion                                    | More or an explicit disclosure                                   | May appear in the action row      |
 | Repeated instructions, keyboard coaching, local-storage slogans | Omitted                                                          | Brief guidance may appear         |
 
-Minimum changes presentation, never execution or retention. It does not clear a
+Min Mode changes presentation, never execution or retention. It does not clear a
 draft, alter a recipe, mute errors, change providers, send a request, or skip a
 confirmation. Empty space is preferable to a new tip. Keep accessibility labels,
 tooltips and focus indicators even when visible labels are shortened.
@@ -277,7 +280,7 @@ opening the entry reveals the full selection and answer.
 
 In Standard view use **Continue with ChatGPT**, **Cancel**, **Add account**, **Enable plan usage**,
 **Refresh models**, **Manage usage**, and **Sign out** for the same account actions.
-Minimum Mode shows Connect, Cancel, Add, Enable, Refresh, Usage and Disconnect,
+Min Mode shows Connect, Cancel, Add, Enable, Refresh, Usage and Disconnect,
 with the full action retained in its accessible name and tooltip.
 Both surfaces use ChatGPT's direct sign-in flow and account model catalog. Each
 app keeps its own sign-ins; signing in or out of one does not change the other.
@@ -364,7 +367,7 @@ explicit reasoning event. Stop the light when answer text arrives; keep a
 **Saved**. Show **Connecting…**, **Waiting for answer…**, or **Thinking…** from
 actual runner/provider signals, never a timer. Keep queued work labelled
 **Waiting…**. Reduced motion uses a static centered light. Keep the textual
-status visible in Minimum Mode and reserve the divider height to avoid jumps.
+status visible in Min Mode and reserve the divider height to avoid jumps.
 
 ### Answer details
 
@@ -383,7 +386,7 @@ already available for the same answer. Use full-row disclosure targets.
 ### Input/output inspection
 
 Offer **Inspect input/output** on each answer and earlier attempt, collapsed by
-default in both Minimum Mode and Standard view. Inspect the recorded attempt,
+default in both Min Mode and Standard view. Inspect the recorded attempt,
 never the current draft or settings. Keep its status beside the content; model identity belongs in Details.
 Use labelled, selectable blocks for **Instructions**, **Context / inputs**,
 **Prompt · user**, and **Response · raw text**. Context shows the saved source

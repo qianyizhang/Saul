@@ -36,14 +36,16 @@ window, Quick Lookup and Settings states through [native UI journeys](ui-qa.md),
 including filled fields, long/missing values, errors and both presentation modes.
 Keep screenshots outside Git and record evidence limits in [verification](verification.md).
 
-## Minimum Mode
+## Min Mode
 
-Minimum Mode follows the shared [expert everyday policy](../../../DESIGN.md#minimum-mode).
+Min Mode follows the shared [expert everyday policy](../../../DESIGN.md#min-mode).
 It is local to EZ, shared by the main window and Quick Lookup, and defaults on.
 Settings → Preferences and Quick Lookup’s menu expose the same preference.
 Routine subtext and redundant icon/text pairs disappear. Short action words retain
 complete accessible names and help. Errors, blocked choices, unsaved answers and
-billing/permission consequences remain visible.
+recovery actions remain visible. Help-only disclosures, documentation links and gray
+explanatory paragraphs are absent in Min Mode. Accounts uses one aligned action row;
+History places its title and Reveal action on the same row.
 
 Settings uses native sidebar sections: Overview, Models, Recipes, Preferences,
 Accounts and Shortcuts. Models and Recipes share one mounted draft owner but show
@@ -51,7 +53,7 @@ one editor at a time; navigating sections preserves both drafts. Switching the
 selected item still requires saving or explicitly discarding its edits. Overview
 shows current recipe/preset/account state and routes to the relevant editor.
 
-A saved answer prioritizes Copy. Minimum Mode puts Reuse, Export and Delete in More,
+A saved answer prioritizes Copy. Min Mode puts Reuse, Export and Delete in More,
 and input/output inspection inside Details. Edit reveals the retained draft; Hide
 returns to reading. Standard view retains the longer action names and guidance.
 The compact preset selector omits the routine Standard suffix; requested Fast
@@ -62,7 +64,7 @@ remains explicit, and complete recorded choices remain in Details.
 `make surface-preview` builds `dist/EZ Surface Preview.app` from production views.
 It uses disposable offline storage, blocks account/inference actions, and does not
 register the global shortcut. Choose empty, multi-input, answer, streaming, blocked,
-or no-recipes fixtures; toggle Minimum Mode, open its actual Quick Lookup panel,
+or no-recipes fixtures; toggle Min Mode, open its actual Quick Lookup panel,
 and inspect light/dark, resizing, preset overrides, and main-window handoff.
 **Minimum panel** applies the
 current state's minimum size. Fixture streaming is simulated. All three preview
@@ -113,7 +115,7 @@ and list items occupy shared, top-aligned rows whose height follows the taller s
 paragraph splits and merges stay together, and unmatched paragraphs leave an empty
 opposite cell. Narrow windows and Quick Lookup show Corrected first with Original
 in a disclosure. Explanatory notes sit under Why these changes. Unrecognized responses keep the ordinary answer view
-with long original text collapsed. In Minimum Mode, the literal full response remains in Details → Inspect on both lookup surfaces. Standard Mode also exposes the main-window inspector directly.
+with long original text collapsed. In Min Mode, the literal full response remains in Details → Inspect on both lookup surfaces. Standard Mode also exposes the main-window inspector directly.
 
 Disclosure headers use a shared full-width button with a minimum 32-point height.
 The chevron, label, and remaining header space all toggle expansion; the expanded

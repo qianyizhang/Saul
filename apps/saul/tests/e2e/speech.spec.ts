@@ -93,7 +93,7 @@ test('speech widget keeps OAuth scope, supports cancellation and shows audio or 
   await expect(widget.locator('audio')).toHaveCount(0);
   for (const minimum of [true, false]) {
     await settingsSection(popup, 'Preferences');
-    await popup.getByRole('checkbox', { name: /Minimum Mode/ }).setChecked(minimum);
+    await popup.getByRole('checkbox', { name: /Min Mode/ }).setChecked(minimum);
     await expect(popup.getByRole('dialog', { name: "You're using your ChatGPT plan" })).toHaveCount(
       0,
     );

@@ -105,14 +105,16 @@ struct SettingsView: View {
     private var preferencesBody: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Preferences").font(AppStyle.subject)
-            Toggle("Minimum Mode", isOn: $model.minimumMode).toggleStyle(.switch)
+            Toggle("Min Mode", isOn: $model.minimumMode).toggleStyle(.switch)
             if !model.minimumMode {
                 Text(
                     "Everyday controls for familiar users. Reveal guidance and uncommon actions when needed."
                 )
                 .font(AppStyle.caption).foregroundStyle(.secondary)
             }
-            Text("Saves immediately.").font(AppStyle.caption).foregroundStyle(.secondary)
+            if !model.minimumMode {
+                Text("Saves immediately.").font(AppStyle.caption).foregroundStyle(.secondary)
+            }
             Spacer()
         }.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -146,58 +148,64 @@ struct SettingsView: View {
                                 "Connect your eligible ChatGPT account and allow EZ to use your plan. Credentials stay in macOS Keychain. Model availability and limits depend on your account."
                             ).font(.caption).foregroundStyle(.secondary)
                         }
-                        DisclosureGroup("Keychain") {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(
-                                    "EZ saves sign-in tokens in its own Keychain record so you can stay signed in. It does not store your ChatGPT password or read other apps’ passwords."
-                                )
-                                Text(
-                                    "Allow Once approves this access; Always Allow remembers permission for this app and item. Deny prevents access to the saved sign-in. A local development rebuild may prompt again."
-                                )
-                                Link(
-                                    "Permissions",
-                                    destination: URL(
-                                        string: "https://support.apple.com/guide/keychain-access/kyca1243/mac"
-                                    )!)
-                            }.font(.caption).foregroundStyle(.secondary).padding(.top, 6)
-                        }.font(.caption)
-                        HStack {
-                            if model.signingIn {
-                                ProgressView().controlSize(.small)
-                                Text("Finish signing in in your browser.").font(.caption)
-                                Button("Cancel") { model.cancelLogin() }
-                            } else if model.signedIn {
-                                Button(model.minimumMode ? "Disconnect" : "Sign out") {
-                                    Task { await model.signOut() }
-                                }.help("Sign out").accessibilityLabel("Sign out")
-                                if !model.planEnabled {
-                                    Button(model.minimumMode ? "Enable" : "Enable plan usage") {
-                                        model.signIn(enablePlan: true)
-                                    }.help("Enable plan usage").accessibilityLabel("Enable plan usage")
-                                }
-                                Button(model.minimumMode ? "Add" : "Add account") {
-                                    model.signIn(newAccount: true)
-                                }.help("Add account").accessibilityLabel("Add account")
-                            } else {
-                                Button(model.minimumMode ? "Connect" : "Continue with ChatGPT") {
-                                    model.signIn()
-                                }.help("Continue with ChatGPT").accessibilityLabel("Continue with ChatGPT")
-                                    .buttonStyle(
-                                        .borderedProminent)
-                                if !model.profiles.isEmpty {
+                        if !model.minimumMode {
+                            DisclosureGroup("Keychain") {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(
+                                        "EZ saves sign-in tokens in its own Keychain record so you can stay signed in. It does not store your ChatGPT password or read other apps’ passwords."
+                                    )
+                                    Text(
+                                        "Allow Once approves this access; Always Allow remembers permission for this app and item. Deny prevents access to the saved sign-in. A local development rebuild may prompt again."
+                                    )
+                                    Link(
+                                        "Permissions",
+                                        destination: URL(
+                                            string:
+                                                "https://support.apple.com/guide/keychain-access/kyca1243/mac"
+                                        )!)
+                                }.font(.caption).foregroundStyle(.secondary).padding(.top, 6)
+                            }.font(.caption)
+                        }
+                        HStack(spacing: 8) {
+                            Group {
+                                if model.signingIn {
+                                    ProgressView().controlSize(.small)
+                                    Text("Finish signing in in your browser.").font(.caption)
+                                    Button("Cancel") { model.cancelLogin() }
+                                } else if model.signedIn {
+                                    Button(model.minimumMode ? "Disconnect" : "Sign out") {
+                                        Task { await model.signOut() }
+                                    }.help("Sign out").accessibilityLabel("Sign out")
+                                    if !model.planEnabled {
+                                        Button(model.minimumMode ? "Enable" : "Enable plan usage") {
+                                            model.signIn(enablePlan: true)
+                                        }.help("Enable plan usage").accessibilityLabel("Enable plan usage")
+                                    }
                                     Button(model.minimumMode ? "Add" : "Add account") {
                                         model.signIn(newAccount: true)
                                     }.help("Add account").accessibilityLabel("Add account")
+                                } else {
+                                    Button(model.minimumMode ? "Connect" : "Continue with ChatGPT") {
+                                        model.signIn()
+                                    }.help("Continue with ChatGPT").accessibilityLabel(
+                                        "Continue with ChatGPT"
+                                    )
+                                    .buttonStyle(
+                                        .borderedProminent)
+                                    if !model.profiles.isEmpty {
+                                        Button(model.minimumMode ? "Add" : "Add account") {
+                                            model.signIn(newAccount: true)
+                                        }.help("Add account").accessibilityLabel("Add account")
+                                    }
                                 }
-                            }
-                        }.disabled(model.offline || model.busy || model.connecting)
-                        HStack {
+                            }.disabled(model.offline || model.busy || model.connecting)
+                            Spacer()
                             Link(
                                 model.minimumMode ? "Usage" : "Manage usage",
                                 destination: URL(string: "https://chatgpt.com/settings/usage")!
                             )
                             .help("Manage usage").accessibilityLabel("Manage usage")
-                            Spacer()
+                            .buttonStyle(.bordered)
                             Button(
                                 model.connecting
                                     ? "Loading…" : (model.minimumMode ? "Refresh" : "Refresh models")
@@ -206,37 +214,46 @@ struct SettingsView: View {
                             }.help("Refresh models").accessibilityLabel("Refresh models").disabled(
                                 model.offline || model.busy || model.connecting || model.signingIn
                                     || !model.planEnabled)
-                        }.font(.caption)
+                        }.controlSize(.regular)
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
                 }
                 GroupBox {
                     VStack(alignment: .leading, spacing: 10) {
-                        Label("Local history", systemImage: "externaldrive").font(.headline)
-                        Button(model.minimumMode ? "Reveal" : "Show in Finder") { model.revealHistory() }
-                            .help("Show in Finder").accessibilityLabel("Show in Finder").disabled(
-                                model.offline)
-                        DisclosureGroup("Details") {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(
-                                    "Queries and answers are saved as plain text on this Mac. Each new query is sent to OpenAI; previous lookups are not included."
-                                )
-                                Text(model.directory.appendingPathComponent("history.jsonl").path)
-                                    .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
-                            }.font(.caption).foregroundStyle(.secondary).padding(.top, 6)
-                        }.font(.caption)
+                        HStack {
+                            Label(
+                                model.minimumMode ? "History" : "Local history", systemImage: "externaldrive"
+                            ).font(.headline)
+                            Spacer()
+                            Button(model.minimumMode ? "Reveal" : "Show in Finder") { model.revealHistory() }
+                                .help("Show in Finder").accessibilityLabel("Show in Finder").disabled(
+                                    model.offline)
+                        }
+                        if !model.minimumMode {
+                            DisclosureGroup("Details") {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(
+                                        "Queries and answers are saved as plain text on this Mac. Each new query is sent to OpenAI; previous lookups are not included."
+                                    )
+                                    Text(model.directory.appendingPathComponent("history.jsonl").path)
+                                        .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                                }.font(.caption).foregroundStyle(.secondary).padding(.top, 6)
+                            }.font(.caption)
+                        }
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
                 }
                 if let error = model.error {
                     Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
                 }
-                HStack {
-                    Text("EZ \(version)")
-                    Spacer()
-                    Link(
-                        model.minimumMode ? "Documentation" : "Sign-in documentation",
-                        destination: URL(
-                            string: "https://developers.openai.com/siwc/token-sharing-open-source")!)
-                }.font(.caption).foregroundStyle(.secondary)
+                if !model.minimumMode {
+                    HStack {
+                        Text("EZ \(version)")
+                        Spacer()
+                        Link(
+                            "Sign-in documentation",
+                            destination: URL(
+                                string: "https://developers.openai.com/siwc/token-sharing-open-source")!)
+                    }.font(.caption).foregroundStyle(.secondary)
+                }
             }.padding(26)
         }
     }

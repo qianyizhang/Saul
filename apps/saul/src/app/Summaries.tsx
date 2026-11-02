@@ -425,7 +425,7 @@ export function SummaryReader({
       )}
       {!batch && tabIds && (
         <div className="stack">
-          <p className="small muted">
+          <p className="small muted standard-only">
             Summarizes selected tabs with your ChatGPT account. Web pages use loaded text; PDFs use
             the PDF processing choice saved in Settings.
           </p>
@@ -537,8 +537,10 @@ export function SummaryReader({
               {batch.action
                 ? `${batch.action.revision.name} · ${batch.action.input?.preset?.name || 'Saved preset'} · revision ${batch.action.revision.revision.slice(0, 10)}.`
                 : 'English → 简体中文 · Luna medium.'}{' '}
-              Summaries and prepared input are saved locally. Closing this reader does not stop
-              work.
+              <span className="standard-only">
+                Summaries and prepared input are saved locally. Closing this reader does not stop
+                work.
+              </span>
             </p>
             {!running && (
               <button

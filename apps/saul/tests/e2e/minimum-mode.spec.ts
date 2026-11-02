@@ -9,7 +9,7 @@ import {
   openFirstPageExplanation,
 } from './driver.ts';
 
-test('Minimum Mode defaults on, updates open surfaces, and persists independently of provider drafts', async ({
+test('Min Mode defaults on, updates open surfaces, and persists independently of provider drafts', async ({
   sandbox,
   fixtureServer,
 }) => {
@@ -58,7 +58,7 @@ test('Minimum Mode defaults on, updates open surfaces, and persists independentl
 
   await popup.keyboard.press('ControlOrMeta+,');
   await settingsSection(popup, 'Preferences');
-  const toggle = popup.getByRole('checkbox', { name: 'Minimum Mode', exact: false });
+  const toggle = popup.getByRole('checkbox', { name: 'Min Mode', exact: false });
   await expect(toggle).toBeChecked();
   await settingsSection(popup, 'Models');
   await popup.getByLabel('API connection', { exact: true }).click();
@@ -82,15 +82,13 @@ test('Minimum Mode defaults on, updates open surfaces, and persists independentl
   await expect(popup.locator('main')).toHaveAttribute('data-minimum', 'false');
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await settingsSection(popup, 'Preferences');
-  await expect(
-    popup.getByRole('checkbox', { name: 'Minimum Mode', exact: false }),
-  ).not.toBeChecked();
+  await expect(popup.getByRole('checkbox', { name: 'Min Mode', exact: false })).not.toBeChecked();
   const restoredArticle = await context.newPage();
   await restoredArticle.goto(fixtureServer.origin + '/article');
   await openFirstPageExplanation(restoredArticle);
   await expect(restoredArticle.getByRole('button', { name: 'Simpler', exact: true })).toBeVisible();
   await settingsSection(popup, 'Preferences');
-  await popup.getByRole('checkbox', { name: 'Minimum Mode', exact: false }).check();
+  await popup.getByRole('checkbox', { name: 'Min Mode', exact: false }).check();
   await expect(restoredArticle.getByRole('button', { name: 'Simpler', exact: true })).toHaveCount(
     0,
   );
@@ -107,7 +105,7 @@ test('appearance failure is visible and an unreadable provider record does not b
   await settingsSection(popup, 'Models');
   await expect(popup.getByRole('alert')).toContainText('Saved provider is not supported');
   await settingsSection(popup, 'Preferences');
-  const toggle = popup.getByRole('checkbox', { name: 'Minimum Mode', exact: false });
+  const toggle = popup.getByRole('checkbox', { name: 'Min Mode', exact: false });
   await settingsSection(popup, 'Preferences');
   await toggle.uncheck();
   await expect(toggle).not.toBeChecked();
@@ -177,7 +175,7 @@ test('a failed appearance save preserves a newer preference from another surface
     }) as typeof chrome.storage.local.set;
   });
   await settingsSection(popup, 'Preferences');
-  const toggle = popup.getByRole('checkbox', { name: 'Minimum Mode', exact: false });
+  const toggle = popup.getByRole('checkbox', { name: 'Min Mode', exact: false });
   await settingsSection(popup, 'Preferences');
   await toggle.uncheck();
   await expect(toggle).toBeDisabled();
@@ -281,7 +279,7 @@ test('shared shortcuts explain only source selection, dismiss without cancelling
   }
 });
 
-test('Minimum Mode stays usable at narrow touch widths with visible errors and essential actions', async ({
+test('Min Mode stays usable at narrow touch widths with visible errors and essential actions', async ({
   sandbox,
 }, info) => {
   const server = await createFixtureServer('A partially delivered explanation.', { ending: 'eof' });

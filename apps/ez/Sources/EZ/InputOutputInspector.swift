@@ -4,20 +4,23 @@ import SwiftUI
 
 struct InputOutputInspector: View {
     let entry: HistoryEntry
+    var minimum = false
 
     var body: some View {
         DisclosureGroup("Inspect") {
             VStack(alignment: .leading, spacing: 12) {
                 Text(entry.status.capitalized)
                     .font(AppStyle.caption).foregroundStyle(.secondary)
-                Text(
-                    entry.status == "unsaved"
-                        ? "This answer has not been saved. Input fields are included in the assembled prompt."
-                        : entry.status == "pending"
-                            ? "Text for this running lookup. Input fields are included in the assembled prompt."
-                            : "Saved text for this lookup. Input fields are included in the assembled prompt."
-                )
-                .font(AppStyle.caption).foregroundStyle(.secondary)
+                if !minimum {
+                    Text(
+                        entry.status == "unsaved"
+                            ? "This answer has not been saved. Input fields are included in the assembled prompt."
+                            : entry.status == "pending"
+                                ? "Text for this running lookup. Input fields are included in the assembled prompt."
+                                : "Saved text for this lookup. Input fields are included in the assembled prompt."
+                    )
+                    .font(AppStyle.caption).foregroundStyle(.secondary)
+                }
                 if let error = entry.error {
                     Text(error).font(AppStyle.caption).foregroundStyle(.red)
                 }

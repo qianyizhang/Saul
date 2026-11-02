@@ -70,7 +70,7 @@ export function SummaryInspection({
           <p className="saul-inspection-note">
             {item.status} · {new Date(batch.createdAt).toLocaleString()}
           </p>
-          <p className="saul-inspection-note">
+          <p className="saul-inspection-note standard-only">
             Saved generation input. Compare checks the current source without a model request.
           </p>
           {error && <p role="alert">{error}</p>}
@@ -90,7 +90,7 @@ export function SummaryInspection({
             <>
               <ComparisonNote comparison={value.comparison} />
               {value.comparison.text && (
-                <p className="saul-inspection-note">
+                <p className="saul-inspection-note standard-only">
                   Token counts estimate additions/removals, not meaning or edit distance. Token
                   inventories do not quantify reordering. Changes outside the capture cannot be
                   measured.
@@ -214,7 +214,7 @@ export function SummaryInspection({
             <summary aria-label="Saved request and response" title="Saved request and response">
               <ActionLabel short="Payload" full="Saved request and response" />
             </summary>
-            <p className="saul-inspection-note">
+            <p className="saul-inspection-note standard-only">
               {value?.saved?.kind === 'pdf-url'
                 ? "The saved prompt is the exact text message. PDF URL attachments are listed separately; the provider's extracted text is not returned."
                 : 'The saved prompt is the exact user message. It includes the original page title, URL, coverage and text.'}{' '}

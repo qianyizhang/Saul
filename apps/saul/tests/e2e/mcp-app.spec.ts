@@ -504,7 +504,7 @@ test('compact board keeps tab controls discoverable and cancels rename and move 
   await expect(handle).toBeFocused();
   expect(revision((await call('saul_tabs_list')) as TabSnapshot)).toBe(revision(before));
   await ui.getByLabel('View options', { exact: true }).click();
-  const minimumMode = ui.getByRole('checkbox', { name: 'Minimum Mode', exact: true });
+  const minimumMode = ui.getByRole('checkbox', { name: 'Min Mode', exact: true });
   await expect(minimumMode).toBeChecked();
   await minimumMode.uncheck();
   await expect(ui.locator('.help.guidance')).toBeVisible();

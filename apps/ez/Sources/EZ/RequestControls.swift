@@ -71,7 +71,7 @@ struct RequestDetails: View {
                 if showsAnswer, let entry = model.selectedEntry {
                     Text("Answer details").font(.headline)
                     LookupDetails(entry: entry)
-                    InputOutputInspector(entry: entry).id(entry.id)
+                    InputOutputInspector(entry: entry, minimum: model.minimumMode).id(entry.id)
                     Divider()
                     DisclosureGroup("Next lookup") { draftDetails.padding(.top, 8) }
                         .font(AppStyle.caption)
@@ -101,7 +101,7 @@ struct RequestDetails: View {
                 Text("A preset override lasts until New lookup or a recipe change.")
                     .font(AppStyle.caption).foregroundStyle(.secondary)
             }
-            if model.fast {
+            if model.fast && !model.minimumMode {
                 Text("Fast requests priority service and may use more plan allowance.")
                     .font(AppStyle.caption).foregroundStyle(.secondary)
             }

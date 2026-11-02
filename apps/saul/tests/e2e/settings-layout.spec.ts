@@ -3,7 +3,7 @@ import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider, createFixtureServer } from './support.ts';
 
-test('focused settings preserves drafts across sections and keeps Minimum Mode concise', async ({
+test('focused settings preserves drafts across sections and keeps Min Mode concise', async ({
   sandbox,
   fixtureServer,
 }, info) => {
@@ -24,6 +24,7 @@ test('focused settings preserves drafts across sections and keeps Minimum Mode c
   expect(await edit.innerText()).toBe('Recipes');
   await edit.focus();
   await popup.keyboard.press('Enter');
+  await expect(popup.getByLabel('Template syntax', { exact: true })).toBeHidden();
   await popup.getByLabel('Recipe name', { exact: true }).fill('Careful reading');
   await settingsSection(popup, 'Models');
   await expect(popup.getByLabel('Model name', { exact: true })).toHaveValue('draft-model');

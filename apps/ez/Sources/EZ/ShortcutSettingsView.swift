@@ -129,8 +129,9 @@ struct ShortcutSettingsView: View {
             if let command = recording {
                 VStack(spacing: 18) {
                     Text(command.title).font(.headline)
-                    Text("Press a shortcut with Command or Control. Esc cancels.")
-                        .font(AppStyle.caption)
+                    if !model.minimumMode {
+                        Text("Press a shortcut with Command or Control. Esc cancels.").font(AppStyle.caption)
+                    }
                     ShortcutCapture(
                         onKey: { binding in
                             do {

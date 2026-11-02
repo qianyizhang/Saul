@@ -261,7 +261,7 @@ export function ActionSettings({
               </button>
             )}
           </div>
-          <p className="small muted">
+          <p className="small muted standard-only">
             Create/revise uses one model request. Review the checked code, then Save and select.
             Saving keeps a Call preset you can select again. The next Call Saul runs the selected
             preset.
@@ -291,7 +291,7 @@ export function ActionSettings({
                 presets={presets}
                 onChange={(value) => edit({ actionPreset: value })}
               />
-              <p className="small muted">
+              <p className="small muted standard-only">
                 One run per page · Up to three model calls · Five minutes. Load runs trusted local
                 code with your OS permissions. Initialization effects cannot be undone.
               </p>
@@ -341,7 +341,7 @@ export function ActionSettings({
               >
                 <ActionLabel short="Check" full="Check file" />
               </button>
-              <p className="small muted">
+              <p className="small muted standard-only">
                 Check file only reads and checks code. Review its candidate, then Save and select to
                 reload an edit. No file watching.
               </p>
@@ -372,7 +372,7 @@ export function ActionSettings({
               {state?.raw && (
                 <InspectionText label="Builder response · may be incomplete" text={state.raw} />
               )}
-              <p className="small muted">Optional helper setup:</p>
+              <p className="small muted standard-only">Optional helper setup:</p>
               <InspectionText
                 label="Setup command"
                 text={`node scripts/setup.mts --components actions --extension-id ${chrome.runtime.id}`}

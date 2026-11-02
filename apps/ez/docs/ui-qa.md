@@ -31,7 +31,7 @@ Never substitute personal account/history data for these fixtures.
 | 8. Shortcuts | Settings → Shortcuts → record New lookup → Esc | Escape cancels recording and returns to Settings; it must not execute lookup navigation. Existing bindings remain unchanged. |
 | 9. Recovery | Blocked; then No recipes → Configure recipes | Saved/partial answer remains readable with storage/error notices. No recipes gives one clear configuration action rather than unusable model controls. |
 | 10. Appearance and activity | Answer and Thinking in light/dark; Waiting/Streaming; Reduce motion; minimum/wide panel | Text/actions remain visible. Waiting and thinking are distinguishable; Stop stays reachable. No spinner duplication; reduced motion removes travel. Simulated fixture state is not live streaming evidence. |
-| 11. Minimum Mode | Empty → toggle Minimum Mode off/on; Answer → Quick Lookup → actions → Minimum Mode; Settings → Preferences → Minimum Mode | Both surfaces share the mode without losing draft, preset override, or selected answer. Minimum Mode hides routine hints and metric strips; Details retains metrics and exact request metadata. Blocked and Signed out retain their notices and recovery controls. |
+| 11. Min Mode | Empty → toggle Min Mode off/on; Answer → Quick Lookup → actions → Min Mode; Settings → Preferences → Min Mode | Both surfaces share the mode without losing draft, preset override, or selected answer. Min Mode hides routine hints and metric strips; Details retains metrics and exact request metadata. Blocked and Signed out retain their notices and recovery controls. |
 | 12. Menu priority | Quick Lookup → actions menu → physical Esc → physical Esc | Verify that the first Escape closes the menu and keeps the panel visible; the second hides the panel. This remains a direct-keyboard acceptance check. |
 | 13. Fresh invocation | Answer → Invoke Quick Lookup; type a draft → Esc → Invoke Quick Lookup; repeat in Standard view and with Streaming | Idle invocation clears old inputs/answer, focuses the first input and retains history/recipe. Streaming preserves the active request. Show Quick Lookup remains a preserving fixture action. |
 
@@ -63,7 +63,7 @@ to block Send. Its first terminal save fails and Save again succeeds.
 1. Confirm the main answer and History row say Unsaved. Expand Save error and
    Inspect input/output; neither should claim the answer was saved.
 2. Open Quick Lookup and use Minimum panel. Confirm Unsaved, Save again, Copy and
-   Export are reachable in both Minimum Mode settings and light/dark appearance.
+   Export are reachable in both Min Mode settings and light/dark appearance.
 3. Choose New, type a different draft, and select the Unsaved history row again.
    The answer and save recovery remain available; the draft stays unchanged.
 4. Select Save again. Unsaved disappears only after the local append succeeds;

@@ -102,7 +102,7 @@ struct ConfigurationView: View {
                     Divider()
                     if preset != nil {
                         presetEditor
-                    } else {
+                    } else if !model.minimumMode {
                         Text("Add a preset to choose a model, effort, and speed.").foregroundStyle(.secondary)
                     }
                 }
@@ -162,8 +162,10 @@ struct ConfigurationView: View {
                     .init(
                         value: true, title: supportsFast ? "Fast" : "Fast (unavailable)",
                         enabled: supportsFast),
-                ], selection: presetBinding(\.fast))
-            if preset?.fast == true || !model.minimumMode {
+                ], selection: presetBinding(\.fast)
+            )
+            .help("Fast requests priority service and may use more plan allowance.")
+            if !model.minimumMode {
                 Text("Fast may use more plan allowance.").font(AppStyle.caption).foregroundStyle(
                     AppStyle.secondaryText)
             }
@@ -209,7 +211,7 @@ struct ConfigurationView: View {
                                     .background(
                                         recipe?.id == item.id ? AppStyle.accent.opacity(0.12) : .clear,
                                         in: RoundedRectangle(cornerRadius: 6))
-                            }.buttonStyle(.plain)
+                            }
                         }
                         if model.configuration.recipes.isEmpty {
                             Text("No recipes yet").foregroundStyle(.secondary)
@@ -218,7 +220,7 @@ struct ConfigurationView: View {
                     Divider()
                     if recipe != nil {
                         recipeEditor
-                    } else {
+                    } else if !model.minimumMode {
                         Text("Add a recipe with a prompt and a default preset.").foregroundStyle(.secondary)
                     }
                 }
@@ -250,13 +252,7 @@ struct ConfigurationView: View {
                 .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
                 .accessibilityLabel("Prompt template")
-            if model.minimumMode {
-                DisclosureGroup("Syntax") {
-                    templateHint.padding(.top, 4)
-                }.font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
-            } else {
-                templateHint
-            }
+            if !model.minimumMode { templateHint }
             if let template = try? PromptTemplate(recipe?.template ?? "") {
                 DisclosureGroup(
                     model.minimumMode

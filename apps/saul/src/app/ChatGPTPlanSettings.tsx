@@ -316,6 +316,7 @@ export function ChatGPTPlanSettings({
             Speed
             <select
               aria-label="ChatGPT speed"
+              title="Fast requests priority service and may use more plan allowance."
               value={value.fast ? 'fast' : 'standard'}
               disabled={!!busy || speechBusy || loadingModels || testing || !selectedModel}
               onChange={(event) => onChange({ ...value, fast: event.target.value === 'fast' })}
@@ -434,7 +435,9 @@ export function ChatGPTPlanSettings({
               <ActionLabel short="Test" full="Test generation" />
             </button>
           </div>
-          <p className="small muted">Tests send a sample prompt using your ChatGPT plan.</p>
+          <p className="small muted standard-only">
+            Tests send a sample prompt using your ChatGPT plan.
+          </p>
           {helperReady === true && (
             <p className="small muted standard-only">ChatGPT helper connected.</p>
           )}
@@ -451,14 +454,14 @@ export function ChatGPTPlanSettings({
             <summary aria-label="ChatGPT helper setup" title="ChatGPT helper setup">
               <ActionLabel short="Setup" full="ChatGPT helper setup" />
             </summary>
-            <p className="small muted">
+            <p className="small muted standard-only">
               From apps/saul, build and install the local helper for this extension. It stores OAuth
               credentials on this computer, outside browser storage. Use Node 24.
             </p>
             <code className="code">
               pnpm native:install --chatgpt --extension-id {chrome.runtime.id}
             </code>
-            <p className="small muted">
+            <p className="small muted standard-only">
               Then retry Continue with ChatGPT. This helper is separate from Codex tab access.
             </p>
           </details>
@@ -475,11 +478,11 @@ export function ChatGPTPlanSettings({
           </details>
         </div>
       </details>
-      <p className="small muted">
+      <p className="small muted standard-only">
         ChatGPT requests use plan allowance. API connections are billed separately.
       </p>
       {value.fast && (
-        <p className="small muted">
+        <p className="small muted standard-only">
           Fast requests priority service and may use more plan allowance.
         </p>
       )}

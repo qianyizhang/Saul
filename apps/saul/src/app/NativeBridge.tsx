@@ -45,7 +45,10 @@ export function NativeBridge() {
   const install = `node scripts/setup.mts --components tabs --extension-id ${chrome.runtime.id}`;
   return (
     <section className="panel stack">
-      <label className="toggle">
+      <label
+        className="toggle"
+        title="Allow local tools to read tab titles and URLs and organize tabs."
+      >
         <strong>Codex tab access</strong>
         <input
           type="checkbox"
@@ -60,11 +63,14 @@ export function NativeBridge() {
           }}
         />
       </label>
-      <p className="small muted">
+      <p className="small muted standard-only">
         Let local tools read tab titles and URLs and organize tabs. Incognito is excluded. You can
         use the Window tab without enabling Codex access.
       </p>
-      <label className="toggle">
+      <label
+        className="toggle"
+        title="Allow connected local tools to read pages, click, fill fields and navigate. Clicks may submit forms or change website data."
+      >
         <strong>Page reading and actions</strong>
         <input
           type="checkbox"
@@ -82,7 +88,7 @@ export function NativeBridge() {
           }}
         />
       </label>
-      <p className="small muted">
+      <p className="small muted standard-only">
         Also let connected local tools read visible web page text, click controls, fill text fields,
         and navigate tabs. Clicks may submit forms or change website data. Requires Codex tab
         access.
@@ -126,30 +132,38 @@ export function NativeBridge() {
           <ActionLabel short="Setup" full="Connect Codex · setup and troubleshooting" />
         </summary>
         <div className="stack" style={{ marginTop: 12 }}>
-          <p className="small muted">
+          <p className="small muted standard-only">
             1. From the monorepo root, run this command to build and install the tab helper. Add
             --codex only for a new Codex registration. For an existing helper, follow docs/setup.md
             before upgrading:
           </p>
           <code className="code">{install}</code>
-          <button className="btn" onClick={() => copy('install', install)}>
-            {copied === 'install' ? 'Copied setup command' : 'Copy setup command'}
+          <button
+            className="btn"
+            onClick={() => copy('install', install)}
+            aria-label={copied === 'install' ? 'Copied setup command' : 'Copy setup command'}
+            title="Copy setup command"
+          >
+            <ActionLabel
+              short={copied === 'install' ? 'Copied' : 'Copy'}
+              full={copied === 'install' ? 'Copied setup command' : 'Copy setup command'}
+            />
           </button>
-          <p className="small muted">
+          <p className="small muted standard-only">
             2. Enable access above and choose Reconnect. From the monorepo root, run pnpm --dir
             apps/saul verify:connection to check the connection.
           </p>
-          <p className="small muted">
+          <p className="small muted standard-only">
             3. After current work finishes, fully quit and reopen Codex to load the installed tools.
             Ask Codex to preview a tab sort.
           </p>
-          <p className="small muted">
+          <p className="small muted standard-only">
             Host missing? Check that the installed extension ID matches this one. After updating
             Node or the bridge, rerun the installer and reconnect. With multiple browser profiles,
             choose a session explicitly.
           </p>
           <code className="code">Extension ID: {chrome.runtime.id}</code>
-          <p className="small muted">
+          <p className="small muted standard-only">
             Programs running as your OS user can access the bridge while enabled. Turning access off
             stops new requests.
           </p>

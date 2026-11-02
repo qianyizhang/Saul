@@ -9,14 +9,14 @@ export function PresentationSettings({
     <section className="settings-section" aria-label="Appearance">
       <label className="toggle">
         <span>
-          <strong>Minimum Mode</strong>
+          <strong>Min Mode</strong>
           <span className="small muted preference-description standard-only">
             Everyday controls for familiar users. Reveal guidance and uncommon actions when needed.
           </span>
         </span>
         <input
           type="checkbox"
-          aria-label="Minimum Mode"
+          aria-label="Min Mode"
           checked={preference.minimum}
           disabled={!preference.loaded || preference.saving}
           onChange={(event) => void preference.toggle(event.target.checked)}

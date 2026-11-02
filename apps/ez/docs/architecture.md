@@ -89,15 +89,15 @@ and Quick Lookup's Details popover share this native view. It reads history only
 it does not regenerate prompts, send requests or retain HTTP/SSE logs. Legacy
 instructions that were not saved are labelled unavailable rather than reconstructed
 from current mode defaults. Incomplete output retains its lookup status and error.
-Input validation uses a fixed-height hint, and both surfaces scroll
-keyboard-focused inputs into view.
+Input validation keeps actionable blockers visible and omits routine hints in Min Mode.
+Both surfaces scroll keyboard-focused inputs into view.
 
-Minimum Mode is enabled by default and shared by both native lookup surfaces
+Min Mode is enabled by default and shared by both native lookup surfaces
 through `AppModel.minimumMode`. It hides repeated guidance, shortcut reminders,
 decorative copy, and persistent response metrics. It never hides actionable
 errors, sign-in/storage blockers, generation state, or unsaved-edit guards. The
 Settings toggle and Quick Lookup actions menu change the same UserDefaults
-preference. Offline previews always start with Minimum Mode on and never read or
+preference. Offline previews always start with Min Mode on and never read or
 write this personal preference. The preference is local to EZ; there is no
 cross-product or device synchronization. Switching modes changes presentation
 only and preserves the shared draft, preset override, and selected answer.
@@ -171,7 +171,7 @@ retains the existing pending-to-interrupted classification and never resubmits.
 Global storage warnings describe startup/history-load problems, not attempt durability.
 Optional response metrics retain server-reported input/output/reasoning counts and
 client-observed stream timing; older history remains readable with unknown metrics.
-Both surfaces expose token counts and timing in Details; disabling Minimum Mode
+Both surfaces expose token counts and timing in Details; disabling Min Mode
 also pins a compact status line below the composer/actions. Response tokens mean
 output minus reasoning and can include non-visible formatting tokens. Missing
 reasoning is unknown, not zero. TTFT uses a monotonic
@@ -266,7 +266,7 @@ answers scroll independently of the actions. Its preset selector changes overrid
 directly; the adjacent information button opens the shared `RequestDetails` popover.
 The main-window `RequestControls` uses that same details view without duplicating
 selectors. The popover separates next-request choices from the displayed answer's recorded choices and actual service tier.
-In Minimum Mode, selecting an answer hides the panel's input fields and replaces
+In Min Mode, selecting an answer hides the panel's input fields and replaces
 the recipe picker with the answer's saved recipe name, and the preset selector
 with its saved preset name and requested speed. Exact
 model and service tier information remains in Details. Edit
@@ -366,4 +366,4 @@ back to a single unhighlighted pair.
 file for recovery. Subsequent loads and saves use the scoped JSON section; shared
 model definitions remain in `modelPresets`. Section revisions reject stale saves.
 Account selection and credentials never belong to a model preset. Native shortcuts,
-Minimum Mode and window placement retain their existing local stores.
+Min Mode and window placement retain their existing local stores.

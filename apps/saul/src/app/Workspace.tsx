@@ -163,7 +163,7 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
               aria-label="Preferences"
             >
               <h3>Preferences</h3>
-              <p className="small muted">Saves immediately.</p>
+              <p className="small muted standard-only">Saves immediately.</p>
               <PresentationSettings preference={presentation} />
               <NotificationSettings />
             </section>
@@ -173,7 +173,7 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
               aria-label="Connections"
             >
               <h3>Connections</h3>
-              <p className="small muted">Access changes save immediately.</p>
+              <p className="small muted standard-only">Access changes save immediately.</p>
               <NativeBridge />
             </section>
           </div>

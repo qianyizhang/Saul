@@ -98,7 +98,7 @@ export function RecipeSettings({
             {templateError}
           </p>
         )}
-        <details>
+        <details className="standard-only">
           <summary aria-label="Template syntax" title="Template syntax">
             <ActionLabel short="Syntax" full="Template syntax" />
           </summary>
