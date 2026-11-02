@@ -152,21 +152,21 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
             ))}
           </nav>
           <div className="settings-content">
-            <Settings
-              onDirty={markSettingsDirty}
-              section={settingsSection}
-              onSectionChange={setSettingsSection}
-            />
             <section
               hidden={settingsSection !== 'preferences'}
               className="panel settings-section"
               aria-label="Preferences"
             >
-              <h3>Preferences</h3>
+              <h3 className="view-title">Preferences</h3>
               <p className="small muted standard-only">Saves immediately.</p>
               <PresentationSettings preference={presentation} />
               <NotificationSettings />
             </section>
+            <Settings
+              onDirty={markSettingsDirty}
+              section={settingsSection}
+              onSectionChange={setSettingsSection}
+            />
             <section
               hidden={settingsSection !== 'connections'}
               className="settings-section"
