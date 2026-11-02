@@ -441,6 +441,10 @@ test('compact board keeps tab controls discoverable and cancels rename and move 
 }, info) => {
   const { ui, host, popup, call, article } = await openWorkspace(sandbox, fixtureServer);
   await host.setViewportSize({ width: 1100, height: 900 });
+  // Exercise real frame scrolling instead of clicks below the native input area.
+  await host.locator('iframe').evaluate((frame) => {
+    frame.style.height = '700px';
+  });
   const windowIds = await popup.evaluate(async (origin) => {
     const ids: number[] = [];
     for (let w = 0; w < 2; w++) {
