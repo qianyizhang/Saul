@@ -282,6 +282,7 @@ export async function createSandbox(options: SandboxOptions = {}) {
 
   return {
     profile,
+    diagnosticsRoot: path.join(root, 'diagnostics'),
     async launch() {
       await closeBrowser();
       context = await chromium.launchPersistentContext(profile, {

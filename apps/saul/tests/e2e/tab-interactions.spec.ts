@@ -1,3 +1,4 @@
+import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { openWorkspace, captureWorkspace, matchWorkspaceWindow } from './workspace-fixture.ts';
 import { installDigestProvider } from './digest-fixture.ts';
@@ -66,10 +67,12 @@ test('both tab surfaces show readable titles while retaining original browser da
   await host.evaluate(() => window.fixtureHost.theme('dark'));
   expect(await ui.locator('body').evaluate((body) => body.scrollWidth <= innerWidth)).toBe(true);
   await captureWorkspace(host, ui, info.outputPath('readable-board-dark.png'));
-  await boardRow.screenshot({ path: info.outputPath('readable-tab-row.png') });
+  if (reviewScreenshots)
+    await boardRow.screenshot({ path: info.outputPath('readable-tab-row.png') });
   await popup.setViewportSize({ width: 390, height: 850 });
   await expect(popup.getByRole('checkbox', { name: 'Select Research', exact: true })).toBeVisible();
-  await popup.screenshot({ path: info.outputPath('readable-window-light.png'), fullPage: true });
+  if (reviewScreenshots)
+    await popup.screenshot({ path: info.outputPath('readable-window-light.png'), fullPage: true });
   expect(requests).toEqual([]);
 });
 
@@ -160,7 +163,8 @@ test('Window scopes live selection, edits groups directly, preserves pins and of
   expect(await worker.evaluate(async (id) => (await chrome.tabs.get(id)).pinned, initial.pin)).toBe(
     true,
   );
-  await popup.screenshot({ path: info.outputPath('window.png'), fullPage: true });
+  if (reviewScreenshots)
+    await popup.screenshot({ path: info.outputPath('window.png'), fullPage: true });
 });
 
 test('Tab board groups across windows, moves directly without deduplication, and opens the shared summary reader', async ({
@@ -240,7 +244,8 @@ test('Tab board groups across windows, moves directly without deduplication, and
   await expect(summary.getByRole('status')).toContainText('2 of 2 summarized');
   await captureWorkspace(host, ui, info.outputPath('tab-board.png'));
   await host.setViewportSize({ width: 440, height: 850 });
-  await host.screenshot({ path: info.outputPath('tab-board-narrow.png'), fullPage: true });
+  if (reviewScreenshots)
+    await host.screenshot({ path: info.outputPath('tab-board-narrow.png'), fullPage: true });
   expect(
     await ui.locator('body').evaluate(() => document.documentElement.scrollWidth <= innerWidth),
   ).toBe(true);

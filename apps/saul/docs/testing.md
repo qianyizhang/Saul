@@ -127,6 +127,19 @@ benchmarks use `.artifacts/saul/benchmark/<run>/`. The default run name is `late
 Failures retain traces, screenshots and console logs. Set `SAUL_TEST_RUN` for
 named runs rather than overriding `--output` or the reporter destination.
 All diagnostics are disposable under the [artifact policy](../../../docs/artifacts.md).
+Routine named screenshots for visual review are opt-in with
+`SAUL_CAPTURE_REVIEW=1`. Behavioral, layout, viewport and appearance assertions
+still run without it. Failure screenshots, console logs and tracing (including
+trace images) remain enabled regardless of this flag. Successful runs discard
+their traces. Explicit live-helper and supplied-example PDF runs retain their
+promised captures under their existing opt-ins.
+
+Enable review captures when checking a UI change, for example:
+
+```sh
+SAUL_CAPTURE_REVIEW=1 SAUL_TEST_RUN=ui-review pnpm exec playwright test tests/e2e/ui-layout.spec.ts
+```
+
 The commands below run from `apps/saul`:
 
 ```sh

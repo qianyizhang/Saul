@@ -1,60 +1,64 @@
 import { CHROME_AI_ENABLED } from '../../src/models/chrome-ai';
 import { test, expect } from './fixtures.ts';
-import { configureFixtureProvider, createFixtureServer, seedHistory } from './support.ts';
+import { configureFixtureProvider, createFixtureServer } from './support.ts';
+import { seedPersistedHistory } from './database-harness.ts';
 import { getFirstHistory, sendDb, sendWorkspace as tabs } from './driver.ts';
-test('library bookmarks, explanation search, punctuation and pagination survive restart', async ({
-  sandbox,
-  fixtureServer,
-}) => {
-  const browser = await sandbox.launch();
-  let { popup } = browser;
-  await seedHistory(browser, fixtureServer.origin, 35);
-  await popup.goto(popup.url().replace('popup.html', 'library.html') + '#history');
-  await expect(popup.locator('.history-entry')).toHaveCount(30);
-  await popup.getByRole('button', { name: 'Next', exact: true }).click();
-  await expect(popup.locator('.history-entry')).toHaveCount(5);
-  const first = popup.locator('.history-entry').first();
-  const title = await first.locator('.history-title').textContent();
-  await first.getByRole('button', { name: 'Bookmark', exact: true }).click();
-  await popup.getByRole('button', { name: 'Bookmarks', exact: true }).click();
-  await expect(popup.locator('.history-entry')).toHaveCount(1);
-  await popup.getByPlaceholder('Search history').fill('velocity');
-  await expect(popup.locator('.history-entry')).toHaveCount(1);
-  await popup.getByPlaceholder('Search history').fill('"(NOT):*');
-  await expect(popup.getByText('No matching highlights.')).toBeVisible();
-  await expect(popup.getByRole('alert')).toHaveCount(0);
-  await popup.getByPlaceholder('Search history').fill('');
-  await popup.locator('.history-title').click();
-  await expect(popup.getByRole('button', { name: 'gradient', exact: true })).toBeVisible();
-  await popup.getByRole('button', { name: 'gradient', exact: true }).focus();
-  await expect(popup.getByRole('tooltip')).toContainText('Steepest increase');
-  await popup.getByRole('button', { name: 'gradient', exact: true }).click();
-  await popup.getByRole('button', { name: 'History', exact: true }).hover();
-  await expect(popup.getByRole('tooltip')).toBeVisible();
-  await expect(popup.getByRole('tooltip')).toContainText('Steepest increase');
-  ({ popup } = await sandbox.launch());
-  await popup.getByRole('button', { name: 'History', exact: true }).click();
-  await popup.getByRole('button', { name: 'Bookmarks', exact: true }).click();
-  await expect(popup.locator('.history-title')).toHaveText([title!]);
-});
+const seededTest = test.extend({ databaseFixtures: true });
+seededTest(
+  'library bookmarks, explanation search, punctuation and pagination survive restart',
+  async ({ sandbox, fixtureServer }) => {
+    const browser = await sandbox.launch();
+    let { popup } = browser;
+    await seedPersistedHistory(browser, fixtureServer.origin, 35);
+    await popup.goto(popup.url().replace('popup.html', 'library.html') + '#history');
+    await expect(popup.locator('.history-entry')).toHaveCount(30);
+    await popup.getByRole('button', { name: 'Next', exact: true }).click();
+    await expect(popup.locator('.history-entry')).toHaveCount(5);
+    const first = popup.locator('.history-entry').first();
+    const title = await first.locator('.history-title').textContent();
+    await first.getByRole('button', { name: 'Bookmark', exact: true }).click();
+    await popup.getByRole('button', { name: 'Bookmarks', exact: true }).click();
+    await expect(popup.locator('.history-entry')).toHaveCount(1);
+    await popup.getByPlaceholder('Search history').fill('velocity');
+    await expect(popup.locator('.history-entry')).toHaveCount(1);
+    await popup.getByPlaceholder('Search history').fill('"(NOT):*');
+    await expect(popup.getByText('No matching highlights.')).toBeVisible();
+    await expect(popup.getByRole('alert')).toHaveCount(0);
+    await popup.getByPlaceholder('Search history').fill('');
+    await popup.locator('.history-title').click();
+    await expect(popup.getByRole('button', { name: 'gradient', exact: true })).toBeVisible();
+    await popup.getByRole('button', { name: 'gradient', exact: true }).focus();
+    await expect(popup.getByRole('tooltip')).toContainText('Steepest increase');
+    await popup.getByRole('button', { name: 'gradient', exact: true }).click();
+    await popup.getByRole('button', { name: 'History', exact: true }).hover();
+    await expect(popup.getByRole('tooltip')).toBeVisible();
+    await expect(popup.getByRole('tooltip')).toContainText('Steepest increase');
+    ({ popup } = await sandbox.launch());
+    await popup.getByRole('button', { name: 'History', exact: true }).click();
+    await popup.getByRole('button', { name: 'Bookmarks', exact: true }).click();
+    await expect(popup.locator('.history-title')).toHaveText([title!]);
+  },
+);
 
-test('export includes more than 1000 records and readable concept notes', async ({
-  sandbox,
-  fixtureServer,
-}) => {
-  const browser = await sandbox.launch();
-  const { popup } = browser;
-  await seedHistory(browser, fixtureServer.origin, 1005, {
-    prefix: 'export',
-    response: 'A <term note="Direction of change">gradient</term>.',
-  });
-  const exported = await sendDb(popup, { type: 'DB_EXPORT_MARKDOWN', payload: undefined });
-  expect(exported).toContain('Total Selections: 1005');
-  expect(exported).toContain('Selection export-0');
-  expect(exported).toContain('Selection export-1004');
-  expect(exported).toContain('**gradient:** Direction of change');
-  expect(exported).not.toContain('<term');
-});
+seededTest(
+  'export includes more than 1000 records and readable concept notes',
+  async ({ sandbox, fixtureServer }) => {
+    const browser = await test.step('Launch isolated export fixture', () => sandbox.launch());
+    const { popup } = browser;
+    await test.step('Seed 1005 persisted records', () =>
+      seedPersistedHistory(browser, fixtureServer.origin, 1005, {
+        prefix: 'export',
+        response: 'A <term note="Direction of change">gradient</term>.',
+      }));
+    const exported = await test.step('Export persisted records through the public route', () =>
+      sendDb(popup, { type: 'DB_EXPORT_MARKDOWN', payload: undefined }));
+    expect(exported).toContain('Total Selections: 1005');
+    expect(exported).toContain('Selection export-0');
+    expect(exported).toContain('Selection export-1004');
+    expect(exported).toContain('**gradient:** Direction of change');
+    expect(exported).not.toContain('<term');
+  },
+);
 
 test('provider profiles preserve their own credentials and clear keys across origins', async ({
   sandbox,

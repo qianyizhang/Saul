@@ -1,3 +1,4 @@
+import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { installDigestProvider } from './digest-fixture.ts';
 import {
@@ -87,7 +88,8 @@ test('summary reuse compares input without inference; inspection searches large 
     expect(await changed.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
-    await changed.screenshot({ path: info.outputPath(`summary-inspection-${colorScheme}.png`) });
+    if (reviewScreenshots)
+      await changed.screenshot({ path: info.outputPath(`summary-inspection-${colorScheme}.png`) });
   }
   expect(await requests()).toBe(initial);
   await changed.getByRole('button', { name: 'Run again', exact: true }).click();
@@ -141,7 +143,7 @@ test('repeated reading actions disclose reuse and input drift, then explicitly r
   await explainSelection(source);
   await expect(notice).toContainText('Text changed');
   expect(fixtureServer.requests.length).toBe(initial + 1);
-  await source.screenshot({ path: info.outputPath('reading-reuse.png') });
+  if (reviewScreenshots) await source.screenshot({ path: info.outputPath('reading-reuse.png') });
   await notice.getByRole('button', { name: 'Run again with current input', exact: true }).click();
   await expect.poll(() => fixtureServer.requests.length).toBe(initial + 2);
   await expect.poll(async () => (await getHistory(popup))[0]?.latest.status).toBe('completed');

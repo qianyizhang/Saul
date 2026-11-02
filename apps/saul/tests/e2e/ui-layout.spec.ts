@@ -1,3 +1,4 @@
+import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider, createFixtureServer, taggedAnswer } from './support.ts';
 
@@ -10,7 +11,8 @@ test('compact workspace supports reading, tab controls and reachable settings', 
   await popup.setViewportSize({ width: 440, height: 600 });
   await expect(popup.getByRole('button', { name: 'History', exact: true })).toBeVisible();
   await expect(popup.getByText('No highlights recorded yet.')).toBeVisible();
-  await popup.screenshot({ path: info.outputPath('01-reading.png'), fullPage: true });
+  if (reviewScreenshots)
+    await popup.screenshot({ path: info.outputPath('01-reading.png'), fullPage: true });
   await configureFixtureProvider(popup, fixtureServer.origin);
   const article = await context.newPage();
   await article.goto(fixtureServer.origin + '/article');
@@ -20,16 +22,18 @@ test('compact workspace supports reading, tab controls and reachable settings', 
   await article.getByRole('button', { name: 'Explain', exact: true }).click();
   await article.getByRole('button', { name: 'View', exact: true }).click();
   await expect(article.getByRole('button', { name: 'Regenerate', exact: true })).toBeVisible();
-  await article.screenshot({ path: info.outputPath('02-explanation.png') });
+  if (reviewScreenshots) await article.screenshot({ path: info.outputPath('02-explanation.png') });
   await popup.getByRole('button', { name: 'History', exact: true }).click();
   await expect(popup.locator('.history-title')).toHaveCount(1);
   await popup.locator('.history-title').click();
-  await popup.screenshot({ path: info.outputPath('03-history.png'), fullPage: true });
+  if (reviewScreenshots)
+    await popup.screenshot({ path: info.outputPath('03-history.png'), fullPage: true });
   await popup.getByRole('button', { name: 'Window', exact: true }).click();
   await expect(popup.locator('.tab-row').first()).toBeVisible();
   await expect(popup.getByLabel('Codex tab access')).toBeHidden();
   await expect(popup.getByRole('button', { name: 'Group', exact: true })).toHaveCount(0);
-  await popup.screenshot({ path: info.outputPath('04-tabs.png'), fullPage: true });
+  if (reviewScreenshots)
+    await popup.screenshot({ path: info.outputPath('04-tabs.png'), fullPage: true });
   await popup
     .getByRole('checkbox', { name: 'Select Calculus reading fixture', exact: true })
     .check();
@@ -50,7 +54,7 @@ test('compact workspace supports reading, tab controls and reachable settings', 
   await expect(popup.getByLabel('AI service', { exact: true })).toBeVisible();
   const save = popup.getByRole('button', { name: 'Save', exact: true });
   await expect(save).toBeInViewport();
-  await popup.screenshot({ path: info.outputPath('05-settings.png') });
+  if (reviewScreenshots) await popup.screenshot({ path: info.outputPath('05-settings.png') });
   await popup.getByLabel('Model name', { exact: true }).fill('');
   await save.click();
   await expect(popup.getByRole('alert')).toBeInViewport();
@@ -72,15 +76,17 @@ test('compact workspace supports reading, tab controls and reachable settings', 
   }
   await popup.goto(popup.url().replace('popup.html', 'library.html'));
   await expect(popup.locator('.history-title')).toHaveCount(1);
-  await popup.screenshot({ path: info.outputPath('06-full-workspace.png') });
+  if (reviewScreenshots) await popup.screenshot({ path: info.outputPath('06-full-workspace.png') });
   for (const colorScheme of ['light', 'dark'] as const) {
     await popup.emulateMedia({ colorScheme, reducedMotion: 'reduce' });
     await article.emulateMedia({ colorScheme, reducedMotion: 'reduce' });
-    await popup.screenshot({
-      path: info.outputPath(`07-library-${colorScheme}.png`),
-      fullPage: true,
-    });
-    await article.screenshot({ path: info.outputPath(`08-overlay-${colorScheme}.png`) });
+    if (reviewScreenshots)
+      await popup.screenshot({
+        path: info.outputPath(`07-library-${colorScheme}.png`),
+        fullPage: true,
+      });
+    if (reviewScreenshots)
+      await article.screenshot({ path: info.outputPath(`08-overlay-${colorScheme}.png`) });
     // Readability uses actual painted colors in both isolated extension contexts.
     for (const [page, content, surface] of [
       [popup, '.history-title', '.history-entry'],
@@ -137,7 +143,8 @@ test('shared appearance supports concept notes, page lists, errors and reduced-m
         .first()
         .evaluate((el) => getComputedStyle(el).animationName),
     ).toBe('none');
-    await article.screenshot({ path: info.outputPath('09-streaming-reduced-motion.png') });
+    if (reviewScreenshots)
+      await article.screenshot({ path: info.outputPath('09-streaming-reduced-motion.png') });
     server.releaseAll();
     await expect(article.getByRole('button', { name: 'Regenerate', exact: true })).toBeVisible();
     const term = article.getByRole('button', { name: 'gradient', exact: true });
@@ -156,14 +163,16 @@ test('shared appearance supports concept notes, page lists, errors and reduced-m
     );
     for (const colorScheme of ['light', 'dark'] as const) {
       await article.emulateMedia({ colorScheme, reducedMotion: 'reduce' });
-      await article.screenshot({ path: info.outputPath(`10-concept-note-${colorScheme}.png`) });
+      if (reviewScreenshots)
+        await article.screenshot({ path: info.outputPath(`10-concept-note-${colorScheme}.png`) });
     }
     await term.press('Escape');
     await expect(article.getByRole('tooltip')).toHaveCount(0);
     await article.getByRole('button', { name: 'Close explanation' }).click();
     await article.getByRole('button', { name: 'Page explanations', exact: true }).click();
     await expect(article.getByRole('region', { name: 'Page explanations' })).toBeVisible();
-    await article.screenshot({ path: info.outputPath('11-page-list-dark.png') });
+    if (reviewScreenshots)
+      await article.screenshot({ path: info.outputPath('11-page-list-dark.png') });
     await article.getByRole('button', { name: 'Page explanations', exact: true }).click();
     server.setEnding('eof');
     await article.locator('#second').click({ clickCount: 3 });
@@ -178,14 +187,16 @@ test('shared appearance supports concept notes, page lists, errors and reduced-m
     await expect(
       article.getByRole('button', { name: 'Retry explanation', exact: true }),
     ).toBeVisible();
-    await article.screenshot({ path: info.outputPath('13-incomplete-card-dark.png') });
+    if (reviewScreenshots)
+      await article.screenshot({ path: info.outputPath('13-incomplete-card-dark.png') });
     await article.getByRole('button', { name: 'Close explanation' }).click();
     // A missing remote key rejects at submission, before any network request.
     await configureFixtureProvider(popup, 'https://api.openai.com');
     await article.locator('#third').click({ clickCount: 3 });
     await article.getByRole('button', { name: 'Explain', exact: true }).click();
     await expect(article.getByRole('alert')).toContainText('API key is missing');
-    await article.screenshot({ path: info.outputPath('12-error-notification-dark.png') });
+    if (reviewScreenshots)
+      await article.screenshot({ path: info.outputPath('12-error-notification-dark.png') });
   } finally {
     await server.close();
   }
@@ -253,9 +264,10 @@ test('answer metadata stays aligned and readable in cards and history at compact
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
           true,
         );
-        await page.screenshot({
-          path: info.outputPath(`metadata-${name}-${width}-${colorScheme}.png`),
-        });
+        if (reviewScreenshots)
+          await page.screenshot({
+            path: info.outputPath(`metadata-${name}-${width}-${colorScheme}.png`),
+          });
       }
     }
   }

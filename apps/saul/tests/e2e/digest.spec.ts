@@ -1,3 +1,4 @@
+import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { installDigestProvider } from './digest-fixture.ts';
 import type { PlanRequest } from '../../native/plan-protocol.mts';
@@ -100,13 +101,15 @@ test('programmatic summary opens immediately, runs two streams, survives closure
       (r) => r.action === 'generate' && r.userPrompt.includes('loaded discussion counterargument'),
     ),
   ).toBe(true);
-  await reopened.screenshot({ path: info.outputPath('summary-reader.png'), fullPage: true });
+  if (reviewScreenshots)
+    await reopened.screenshot({ path: info.outputPath('summary-reader.png'), fullPage: true });
   await reopened.setViewportSize({ width: 420, height: 760 });
   await reopened.emulateMedia({ colorScheme: 'dark' });
-  await reopened.screenshot({
-    path: info.outputPath('summary-reader-dark-narrow.png'),
-    fullPage: true,
-  });
+  if (reviewScreenshots)
+    await reopened.screenshot({
+      path: info.outputPath('summary-reader-dark-narrow.png'),
+      fullPage: true,
+    });
   expect(await reopened.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
     true,
   );

@@ -1,5 +1,6 @@
 import type { BrowserContext } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
+import { reviewScreenshots } from './artifacts.ts';
 
 // Chrome exposes native side panels as "other" CDP targets, not Playwright Pages.
 // Attach within the existing sandbox; no second browser or launch configuration.
@@ -79,6 +80,7 @@ export async function summaryPanelDriver(context: BrowserContext) {
       }, name);
     },
     async screenshot(path: string) {
+      if (!reviewScreenshots) return;
       const { data } = await send<{ data: string }>('Page.captureScreenshot', { format: 'png' });
       await writeFile(path, Buffer.from(data, 'base64'));
     },

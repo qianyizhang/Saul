@@ -1,3 +1,4 @@
+import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider, createFixtureServer, taggedAnswer } from './support.ts';
 import {
@@ -341,10 +342,11 @@ test('Minimum Mode stays usable at narrow touch widths with visible errors and e
           }
           // A full-page screenshot can restore the viewport and reset touch.
           // Measure the emulated layout first, then capture that same layout.
-          await page.screenshot({
-            path: info.outputPath(`${name}-${width}-${colorScheme}.png`),
-            fullPage: name === 'history',
-          });
+          if (reviewScreenshots)
+            await page.screenshot({
+              path: info.outputPath(`${name}-${width}-${colorScheme}.png`),
+              fullPage: name === 'history',
+            });
         }
       }
     }

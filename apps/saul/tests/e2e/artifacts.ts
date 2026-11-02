@@ -1,6 +1,9 @@
 import { defineConfig } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 
+// Curated review PNGs are separate from always-on failure screenshots/traces.
+export const reviewScreenshots = process.env.SAUL_CAPTURE_REVIEW === '1';
+
 export function artifactConfig(suite: 'e2e' | 'benchmark') {
   const run = process.env.SAUL_TEST_RUN ?? 'latest';
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(run)) {
@@ -12,6 +15,7 @@ export function artifactConfig(suite: 'e2e' | 'benchmark') {
     reporter: [
       ['list'],
       ['html', { open: 'never', outputFolder: fileURLToPath(new URL('report/', directory)) }],
+      ['json', { outputFile: fileURLToPath(new URL('results.json', directory)) }],
     ],
   });
 }

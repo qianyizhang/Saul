@@ -1,3 +1,4 @@
+import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 
 test('two Settings surfaces retain a stale draft until deliberate reload', async ({
@@ -43,11 +44,12 @@ test('two Settings surfaces retain a stale draft until deliberate reload', async
         expect(await other.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
           true,
         );
-        await other.screenshot({
-          path: info.outputPath(
-            `conflict-${minimum ? 'minimum' : 'standard'}-${width}-${colorScheme}.png`,
-          ),
-        });
+        if (reviewScreenshots)
+          await other.screenshot({
+            path: info.outputPath(
+              `conflict-${minimum ? 'minimum' : 'standard'}-${width}-${colorScheme}.png`,
+            ),
+          });
       }
     }
   }

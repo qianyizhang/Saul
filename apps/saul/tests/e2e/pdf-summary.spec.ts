@@ -1,6 +1,8 @@
+import { reviewScreenshots } from './artifacts.ts';
 import { readFile } from 'node:fs/promises';
 import type { Page, Worker } from '@playwright/test';
 import { test, expect } from './fixtures.ts';
+import type { ExtensionSandbox } from './support.ts';
 import { installDigestProvider, openDigestReader as openReader } from './digest-fixture.ts';
 import { pdfFixture } from '../pdf-fixture.ts';
 import type { PlanRequest } from '../../native/plan-protocol.mts';
@@ -8,12 +10,13 @@ import type { DigestBatch, DigestInspection } from '../../src/digest/types';
 
 // This suite remains the local-parser regression; server attachments have their
 // own suite and never opt into this preference implicitly.
-test.beforeEach(async ({ sandbox }) => {
-  const { popup } = await sandbox.launch();
-  await popup.evaluate(async () => {
+async function launchLocalPdf(sandbox: ExtensionSandbox) {
+  const browser = await sandbox.launch();
+  await browser.popup.evaluate(async () => {
     await chrome.storage.local.set({ saul_user_settings: { summaryPdfProcessing: 'local' } });
   });
-});
+  return browser;
+}
 
 const evidence =
   'A PDF contains readable source evidence about health care innovation and the incentives needed for a viable business model. ';
@@ -48,7 +51,7 @@ test('PDF viewer capture supports query strings and extensionless documents, wit
   const bytes = pdfFixture([evidence.repeat(4), evidence.repeat(3)]);
   fixtureServer.setDocument('/paper.pdf', { body: bytes });
   fixtureServer.setDocument('/download', { body: bytes });
-  const { context, popup, worker } = await sandbox.launch();
+  const { context, popup, worker } = await launchLocalPdf(sandbox);
   await installDigestProvider(worker);
   const cspErrors: string[] = [];
   context.on('console', (message) => {
@@ -70,7 +73,8 @@ test('PDF viewer capture supports query strings and extensionless documents, wit
     await expect(
       reader.getByRole('region', { name: 'Captured page text', exact: true }).locator('pre'),
     ).toContainText('[Page 2]');
-    await reader.screenshot({ path: info.outputPath('pdf-summary.png'), fullPage: true });
+    if (reviewScreenshots)
+      await reader.screenshot({ path: info.outputPath('pdf-summary.png'), fullPage: true });
     const existing = await generations(worker);
     fixtureServer.setDocument(path.startsWith('/paper') ? '/paper.pdf' : '/download', {
       body: pdfFixture([evidence.repeat(2) + 'New evidence changes the document.']),
@@ -84,6 +88,9 @@ test('PDF viewer capture supports query strings and extensionless documents, wit
     fixtureServer.setDocument(path.startsWith('/paper') ? '/paper.pdf' : '/download', {
       body: bytes,
     });
+    await repeated.close();
+    await reader.close();
+    await source.close();
   }
   expect(cspErrors).toEqual([]);
   expect(await generations(worker)).toHaveLength(2);
@@ -94,7 +101,7 @@ test('PDF source persists across restart; retry uses frozen text after its tab c
   fixtureServer,
 }) => {
   fixtureServer.setDocument('/retry.pdf', { body: pdfFixture([evidence.repeat(4)]) });
-  const { context, popup, worker } = await sandbox.launch();
+  const { context, popup, worker } = await launchLocalPdf(sandbox);
   await installDigestProvider(worker, true);
   const source = await context.newPage();
   await source.goto(fixtureServer.origin + '/retry.pdf');
@@ -142,7 +149,7 @@ test('PDF coverage discloses mixed image-only pages, the character cap and the p
       truncated: true,
     },
   ];
-  const { context, popup, worker } = await sandbox.launch();
+  const { context, popup, worker } = await launchLocalPdf(sandbox);
   await installDigestProvider(worker);
   for (const value of cases) {
     fixtureServer.setDocument(value.path, { body: value.bytes });
@@ -155,11 +162,13 @@ test('PDF coverage discloses mixed image-only pages, the character cap and the p
     expect(saved.coverage).toContain(value.coverage);
     expect(saved.truncated).toBe(value.truncated);
     expect(saved.text.length).toBeLessThanOrEqual(120_000);
+    await reader.close();
+    await source.close();
   }
 });
 
 test('PDF failures stay visible and never reach generation', async ({ sandbox, fixtureServer }) => {
-  const { context, popup, worker } = await sandbox.launch();
+  const { context, popup, worker } = await launchLocalPdf(sandbox);
   await installDigestProvider(worker);
   const cases = [
     { path: '/scan.pdf', document: { body: pdfFixture([null, null]) }, error: 'need OCR' },
@@ -204,6 +213,11 @@ test('PDF failures stay visible and never reach generation', async ({ sandbox, f
     await expect(reader.getByRole('status')).toHaveText('Could not summarize page');
     await expect(reader.getByText(value.error, { exact: false })).toBeVisible();
     expect((await inspect(reader)).saved).toBeUndefined();
+    // Prove failure cleanup before closing tabs can cancel any remaining work.
+    expect(await generations(worker)).toHaveLength(0);
+    await expect.poll(() => fixtureServer.pendingDocumentsCount()).toBe(0);
+    await reader.close();
+    await source.close();
   }
   expect(await generations(worker)).toHaveLength(0);
   await expect.poll(() => fixtureServer.pendingDocumentsCount()).toBe(0);
@@ -213,7 +227,7 @@ test('Stop aborts a PDF download; navigation or source closure rejects a late ca
   sandbox,
   fixtureServer,
 }) => {
-  const { context, popup, worker } = await sandbox.launch();
+  const { context, popup, worker } = await launchLocalPdf(sandbox);
   await installDigestProvider(worker);
   for (const action of ['stop', 'navigate', 'close'] as const) {
     const path = '/' + action + '.pdf';
@@ -237,6 +251,8 @@ test('Stop aborts a PDF download; navigation or source closure rejects a late ca
       await expect(reader.getByRole('status')).toHaveText('Could not summarize page');
     }
     expect((await inspect(reader)).saved).toBeUndefined();
+    await reader.close();
+    if (!source.isClosed()) await source.close();
   }
   expect(await generations(worker)).toHaveLength(0);
 });
@@ -245,7 +261,7 @@ test('Stop terminates the PDF parser worker without waiting for its reply', asyn
   sandbox,
   fixtureServer,
 }) => {
-  const { context, popup, worker } = await sandbox.launch();
+  const { context, popup, worker } = await launchLocalPdf(sandbox);
   await installDigestProvider(worker);
   fixtureServer.setDocument('/busy.pdf', {
     body: '<html><title>Busy PDF fixture</title></html>',
@@ -290,7 +306,7 @@ test('the capture deadline aborts a stalled PDF response without generation', as
   sandbox,
   fixtureServer,
 }) => {
-  const { context, popup, worker } = await sandbox.launch();
+  const { context, popup, worker } = await launchLocalPdf(sandbox);
   await installDigestProvider(worker);
   fixtureServer.setDocument('/timeout.pdf', {
     body: '<html><title>Timeout PDF fixture</title></html>',
@@ -325,7 +341,7 @@ test('the Herzlinger example yields real PDF text and honest coverage', async ({
     fixtureServer.setDocument('/herzlinger.pdf', {
       body: await readFile(process.env.SAUL_PDF_EXAMPLE!),
     });
-  const { context, popup, worker } = await sandbox.launch();
+  const { context, popup, worker } = await launchLocalPdf(sandbox);
   await installDigestProvider(worker);
   const source = await context.newPage();
   await source.goto(liveUrl || fixtureServer.origin + '/herzlinger.pdf?utm_source=chatgpt.com');

@@ -2,10 +2,55 @@
 import sqlite3InitModule, { type Database } from '@sqlite.org/sqlite-wasm';
 import wasmUrl from '@sqlite.org/sqlite-wasm/sqlite3.wasm?url';
 import { SaulDatabase } from '../../src/storage/db';
-import { migrate } from '../../src/storage/schema';
-import type { DbRequest } from '../../src/types/storage';
+import { migrate, searchableResponse } from '../../src/storage/schema';
+import type { RunInput } from '../../src/types/storage';
+import type { DatabaseFixtureRequest, HistorySeed } from './database-harness';
 
 const repository = new SaulDatabase();
+async function seedHistory({ origin, count, options }: HistorySeed) {
+  const db = await rawDatabase();
+  if (Number(db.selectValue('SELECT count(*) FROM selection')) !== 0)
+    throw new Error('History seeding requires a fresh fixture database.');
+  const raw =
+    options.response || 'A <term note="Steepest increase">gradient</term> explains velocity.';
+  // This prepares persisted fixture data, not a submission/lifecycle test.
+  // One transaction avoids thousands of individual OPFS commits.
+  db.transaction(() => {
+    db.exec({
+      sql: 'INSERT INTO page(id,url,title,first_seen_at,last_seen_at) VALUES (?,?,?,1,1)',
+      bind: ['seed-page', origin + '/article', options.title || 'Calculus notes'],
+    });
+    for (let i = 0; i < count; i++) {
+      const id = `${options.prefix || 'item'}-${i}`;
+      const text = `Selection ${id}`;
+      const input = {
+        provider: 'openai-compatible',
+        remote: { baseUrl: origin + '/v1', model: 'test-model', temperature: 0.3 },
+        local: { temperature: 0.3, topK: 3 },
+        systemPrompt: 'test',
+        userPrompt: 'test',
+        context: { selection: text, pageTitle: '', pageUrl: '' },
+      } satisfies RunInput;
+      db.exec({
+        sql: "INSERT INTO selection(id,page_id,text,prefix,suffix,text_start,text_end,created_at,anchor_exact) VALUES (?,'seed-page',?,'','',?,?,?,?)",
+        bind: [id, text, i, i + text.length, i + 1, text],
+      });
+      db.exec({
+        sql: "INSERT INTO llm_run(id,selection_id,widget_id,provider,model,prompt_version,prompt_raw,context_json,input_json,response_raw,latency_ms,status,created_at,viewed_at,submission_id) VALUES (?,?,'explain','openai-compatible','test-model','2','test',?,?,?,1,'completed',?,?,?)",
+        bind: [id, id, JSON.stringify(input.context), JSON.stringify(input), raw, i + 1, i + 1, id],
+      });
+      db.exec({ sql: 'INSERT INTO submission(id,selection_id) VALUES (?,?)', bind: [id, id] });
+      db.exec({
+        sql: 'INSERT INTO explanation_fts(rowid,body) SELECT rowid,? FROM llm_run WHERE id=?',
+        bind: [searchableResponse(raw), id],
+      });
+    }
+  });
+  return {
+    selections: Number(db.selectValue('SELECT count(*) FROM selection')),
+    completed: Number(db.selectValue("SELECT count(*) FROM llm_run WHERE status='completed'")),
+  };
+}
 async function rawDatabase() {
   await repository.init();
   return (repository as unknown as { db: Database }).db;
@@ -155,21 +200,16 @@ async function migrationChecks(legacy: string) {
     db.close();
   }
 }
-self.onmessage = async ({
-  data,
-}: MessageEvent<{
-  action: 'scale' | 'migrate' | 'db';
-  runs?: number;
-  legacy?: string;
-  message?: DbRequest;
-}>) => {
+self.onmessage = async ({ data }: MessageEvent<DatabaseFixtureRequest>) => {
   try {
     const result =
       data.action === 'scale'
         ? await scale(data.runs!)
         : data.action === 'migrate'
           ? await migrationChecks(data.legacy!)
-          : await repository.execute(data.message!);
+          : data.action === 'seed-history'
+            ? await seedHistory(data.seed)
+            : await repository.execute(data.message);
     self.postMessage({ success: true, result });
   } catch (e) {
     self.postMessage({ success: false, error: String(e) });

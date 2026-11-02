@@ -1,3 +1,4 @@
+import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider, createFixtureServer } from './support.ts';
 import { getFirstHistory, getHistory, openFirstPageExplanation, sendDb } from './driver.ts';
@@ -86,9 +87,11 @@ test('named presets and recipes save, choose their models, and create a new atte
       expect(await popup.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       );
-      await popup.screenshot({ path: info.outputPath(`recipes-${width}-${scheme}.png`) });
+      if (reviewScreenshots)
+        await popup.screenshot({ path: info.outputPath(`recipes-${width}-${scheme}.png`) });
       await popup.getByLabel('Preset', { exact: true }).scrollIntoViewIfNeeded();
-      await popup.screenshot({ path: info.outputPath(`presets-${width}-${scheme}.png`) });
+      if (reviewScreenshots)
+        await popup.screenshot({ path: info.outputPath(`presets-${width}-${scheme}.png`) });
       await article.setViewportSize({ width, height: 700 });
       await article.emulateMedia({ colorScheme: scheme });
       const cdp = await context.newCDPSession(article);
@@ -100,7 +103,8 @@ test('named presets and recipes save, choose their models, and create a new atte
       expect(box.height).toBeGreaterThanOrEqual(44);
       expect(box.x).toBeGreaterThanOrEqual(0);
       expect(box.x + box.width).toBeLessThanOrEqual(width);
-      await article.screenshot({ path: info.outputPath(`recipe-picker-${width}-${scheme}.png`) });
+      if (reviewScreenshots)
+        await article.screenshot({ path: info.outputPath(`recipe-picker-${width}-${scheme}.png`) });
       await article.keyboard.press('Escape');
     }
   }

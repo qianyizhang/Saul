@@ -1,3 +1,4 @@
+import { reviewScreenshots } from './artifacts.ts';
 import { CHROME_AI_ENABLED } from '../../src/models/chrome-ai';
 import { test, expect } from './fixtures.ts';
 import { explainSelection, getHistory, getFirstHistory } from './driver.ts';
@@ -44,7 +45,8 @@ test('on-device provider respects the temporary availability switch', async ({ s
     ).toBeDisabled();
     await expect(popup.getByText('On-device model is ready.', { exact: true })).toHaveCount(0);
   }
-  await popup.screenshot({ path: info.outputPath('chrome-ai-availability.png'), fullPage: true });
+  if (reviewScreenshots)
+    await popup.screenshot({ path: info.outputPath('chrome-ai-availability.png'), fullPage: true });
 });
 
 test.describe('on-device provider with a deterministic model fixture', () => {

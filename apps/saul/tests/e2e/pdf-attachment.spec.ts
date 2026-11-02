@@ -1,3 +1,4 @@
+import { reviewScreenshots } from './artifacts.ts';
 import type { Page, Worker } from '@playwright/test';
 import { test, expect } from './fixtures.ts';
 import { installDigestProvider, openDigestReader } from './digest-fixture.ts';
@@ -89,12 +90,13 @@ test('default PDF URL attachments never download bytes, do not claim text equali
       expect(await reader.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       );
-      await reader.screenshot({
-        path: info.outputPath(
-          `attachment-${path.startsWith('/attached') ? 'pdf' : 'extensionless'}-${colorScheme}.png`,
-        ),
-        fullPage: true,
-      });
+      if (reviewScreenshots)
+        await reader.screenshot({
+          path: info.outputPath(
+            `attachment-${path.startsWith('/attached') ? 'pdf' : 'extensionless'}-${colorScheme}.png`,
+          ),
+          fullPage: true,
+        });
     }
   }
 });
@@ -116,7 +118,8 @@ test('PDF processing saves through Settings; changing it preserves old results a
     await popup.emulateMedia({ colorScheme });
     await popup.setViewportSize({ width: 420, height: 850 });
     await popup.getByLabel('PDF processing', { exact: true }).scrollIntoViewIfNeeded();
-    await popup.screenshot({ path: info.outputPath(`pdf-settings-${colorScheme}.png`) });
+    if (reviewScreenshots)
+      await popup.screenshot({ path: info.outputPath(`pdf-settings-${colorScheme}.png`) });
   }
   await popup.reload();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();

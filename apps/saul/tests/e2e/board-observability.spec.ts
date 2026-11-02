@@ -1,14 +1,16 @@
+import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { openWorkspace, matchWorkspaceWindow } from './workspace-fixture.ts';
 import { startBoardWeb } from '../../.build/native/board-http.mjs';
 import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 test.use({ browserToolsFixtures: true });
 test('live board exposes exact send, catalog, metadata health and a scoped capture', async ({
   sandbox,
   fixtureServer,
 }, info) => {
   const { ui, host, messages, service } = await openWorkspace(sandbox, fixtureServer);
+  expect(service.store.directory.startsWith(sandbox.diagnosticsRoot + sep)).toBe(true);
   await ui.getByRole('button', { name: 'App info', exact: true }).click();
   const dialog = ui.getByRole('dialog');
   await expect(dialog).toContainText('Metadata on disk');
@@ -48,10 +50,11 @@ test('live board exposes exact send, catalog, metadata health and a scoped captu
   await matchWorkspaceWindow(host);
   await host.evaluate(() => window.fixtureHost.theme('dark'));
   expect(await dialog.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
-  await host.screenshot({
-    path: info.outputPath('saul-observability-dark-narrow.png'),
-    fullPage: true,
-  });
+  if (reviewScreenshots)
+    await host.screenshot({
+      path: info.outputPath('saul-observability-dark-narrow.png'),
+      fullPage: true,
+    });
 });
 test('standalone board edits real fixture tabs, copies a draft and inspects HTTP boundaries without a host', async ({
   sandbox,
@@ -89,10 +92,11 @@ test('standalone board edits real fixture tabs, copies a draft and inspects HTTP
     await expect(page.getByRole('dialog')).toContainText(service.store.instance);
     await page.getByRole('button', { name: 'Interactions', exact: true }).click();
     await expect(page.getByRole('dialog')).toContainText('saul_workspace_edit');
-    await page.screenshot({
-      path: info.outputPath('saul-standalone-observability.png'),
-      fullPage: true,
-    });
+    if (reviewScreenshots)
+      await page.screenshot({
+        path: info.outputPath('saul-standalone-observability.png'),
+        fullPage: true,
+      });
     await page.close();
   } finally {
     await new Promise<void>((resolve) => local.server.close(() => resolve()));

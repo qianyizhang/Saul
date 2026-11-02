@@ -1,3 +1,4 @@
+import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider } from './support.ts';
 
@@ -42,10 +43,11 @@ test('settings keeps essentials visible and preserves drafts through disclosures
       expect(await popup.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       );
-      await popup.screenshot({
-        path: info.outputPath(`settings-${width}-${colorScheme}.png`),
-        fullPage: true,
-      });
+      if (reviewScreenshots)
+        await popup.screenshot({
+          path: info.outputPath(`settings-${width}-${colorScheme}.png`),
+          fullPage: true,
+        });
     }
   }
 });
@@ -78,7 +80,8 @@ test('long saved passages remain scannable until opened', async ({
       ),
     ).toBeLessThanOrEqual(3.1);
     expect((await popup.getByLabel('Search history').boundingBox())!.width).toBeGreaterThan(200);
-    await popup.screenshot({ path: info.outputPath(`history-${width}.png`) });
+    if (reviewScreenshots)
+      await popup.screenshot({ path: info.outputPath(`history-${width}.png`) });
     await popup.locator('.history-title').click();
     expect(
       await preview.evaluate(

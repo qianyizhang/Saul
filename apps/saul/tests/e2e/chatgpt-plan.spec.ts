@@ -1,3 +1,4 @@
+import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import {
   explainSelection,
@@ -217,7 +218,8 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   for (const colorScheme of ['light', 'dark'] as const) {
     await popup.emulateMedia({ colorScheme });
     await popup.getByRole('button', { name: 'Settings', exact: true }).scrollIntoViewIfNeeded();
-    await popup.screenshot({ path: testInfo.outputPath(`settings-chatgpt-${colorScheme}.png`) });
+    if (reviewScreenshots)
+      await popup.screenshot({ path: testInfo.outputPath(`settings-chatgpt-${colorScheme}.png`) });
   }
 
   await popup.getByText('Model options', { exact: true }).click();
@@ -239,7 +241,8 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   });
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
-  await popup.screenshot({ path: testInfo.outputPath('chatgpt-settings.png'), fullPage: true });
+  if (reviewScreenshots)
+    await popup.screenshot({ path: testInfo.outputPath('chatgpt-settings.png'), fullPage: true });
   await popup.reload();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(popup.getByLabel('AI service', { exact: true })).toHaveValue('chatgpt-plan');
@@ -285,7 +288,7 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   await expect(card.getByRole('status')).toHaveText('Waiting for answer…');
   await send({ type: 'activity', phase: 'thinking' });
   await expect(card.getByRole('status')).toHaveText('Thinking…');
-  await card.screenshot({ path: testInfo.outputPath('thinking-light.png') });
+  if (reviewScreenshots) await card.screenshot({ path: testInfo.outputPath('thinking-light.png') });
   await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
   await page.setViewportSize({ width: 390, height: 720 });
   await expect
@@ -295,7 +298,8 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
         .evaluate((el) => getComputedStyle(el, '::after').animationName),
     )
     .toBe('none');
-  await card.screenshot({ path: testInfo.outputPath('thinking-dark-reduced-motion.png') });
+  if (reviewScreenshots)
+    await card.screenshot({ path: testInfo.outputPath('thinking-dark-reduced-motion.png') });
   await send({ type: 'delta', text: 'A' });
   await expect(card.locator('.saul-reading')).toHaveText('A');
   await send({ type: 'delta', text: ' plan-backed explanation.' });

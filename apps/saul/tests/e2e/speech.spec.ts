@@ -1,3 +1,4 @@
+import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import type { PlanRequest, PlanEvent } from '../../native/plan-protocol.mts';
 
@@ -80,7 +81,8 @@ test('speech widget keeps OAuth scope, supports cancellation and shows audio or 
   await widget.getByRole('button', { name: 'Test speech', exact: true }).click();
   await expect(widget.getByRole('status')).toContainText('Speech received');
   await expect(widget.locator('audio')).toHaveAttribute('src', /^blob:/);
-  await widget.screenshot({ path: info.outputPath('speech-audio-controls.png') });
+  if (reviewScreenshots)
+    await widget.screenshot({ path: info.outputPath('speech-audio-controls.png') });
   await worker.evaluate(() => {
     (globalThis as unknown as { speechFixture: { mode: string } }).speechFixture.mode = 'error';
   });
@@ -98,9 +100,10 @@ test('speech widget keeps OAuth scope, supports cancellation and shows audio or 
         expect(
           await popup.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
         ).toBe(true);
-        await widget.screenshot({
-          path: info.outputPath(`speech-${minimum}-${width}-${colorScheme}.png`),
-        });
+        if (reviewScreenshots)
+          await widget.screenshot({
+            path: info.outputPath(`speech-${minimum}-${width}-${colorScheme}.png`),
+          });
       }
   }
   const sent = await worker.evaluate(() =>

@@ -1,6 +1,7 @@
 import type { ToolName, ToolArgs } from '../../native/protocol.mts';
 import { validateToolResult } from '../../native/results.mts';
 import { expect } from './fixtures.ts';
+import { reviewScreenshots } from './artifacts.ts';
 import type { FrameLocator, Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
@@ -27,7 +28,7 @@ const hostBundle = build({
   logLevel: 'silent',
 }).then((result) => result.outputFiles[0]!.text);
 
-function deliveredBoard() {
+function deliveredBoard(logRoot: string) {
   const output = execFileSync(process.execPath, [resolve('.build/native/mcp.mjs')], {
     input:
       JSON.stringify({
@@ -37,6 +38,7 @@ function deliveredBoard() {
         params: { uri: BOARD_URI },
       }) + '\n',
     encoding: 'utf8',
+    env: { ...process.env, MCP_APP_LOG_ROOT: logRoot },
     maxBuffer: 4 * 1024 * 1024,
     timeout: 10000,
   });
@@ -64,6 +66,7 @@ export async function matchWorkspaceWindow(host: Page) {
 }
 
 export async function captureWorkspace(host: Page, ui: FrameLocator, path: string) {
+  if (!reviewScreenshots) return;
   // Expand the fixture frame for an uncropped capture; do not alter app styles or controls.
   const height = await ui.locator('body').evaluate(() => {
     window.scrollTo(0, 0);
@@ -150,7 +153,11 @@ export async function openWorkspace(
       await (name === 'saul_sessions' ? rawCall(name, { ...args }) : decorated(name, { ...args })),
     );
   const workspace = createWorkspace({ call });
-  const service = createBoardService({ workspace, resourceUri: BOARD_URI });
+  const service = createBoardService({
+    workspace,
+    resourceUri: BOARD_URI,
+    logRoot: sandbox.diagnosticsRoot,
+  });
   const messages: unknown[] = [];
   const workspaceCalls: string[] = [];
   await host.exposeFunction('workspaceCall', async (name: string, args: unknown) => {
@@ -162,7 +169,7 @@ export async function openWorkspace(
   await host.exposeFunction('recordMessage', (message: unknown) => {
     messages.push(message);
   });
-  const html = deliveredBoard();
+  const html = deliveredBoard(sandbox.diagnosticsRoot);
   await host.route('**/saul-app', (route) =>
     route.fulfill({
       contentType: 'text/html',

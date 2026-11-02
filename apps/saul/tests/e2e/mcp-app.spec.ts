@@ -1,3 +1,4 @@
+import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { revision } from '../../native/workspace.mts';
 import type { TabSnapshot } from '../../native/protocol.mts';
@@ -409,7 +410,8 @@ test('drag feedback follows the pointer, scrolls while held and commits manual m
   await expect
     .poll(() => sourceCard.locator('.tabs').evaluate((list) => list.scrollTop))
     .toBeGreaterThan(scroll + 30);
-  await host.screenshot({ path: info.outputPath('smooth-drag-held.png'), fullPage: true });
+  if (reviewScreenshots)
+    await host.screenshot({ path: info.outputPath('smooth-drag-held.png'), fullPage: true });
   await host.keyboard.press('Escape');
   await host.mouse.up();
   await expect(ui.locator('.drag-ghost')).toHaveCount(0);

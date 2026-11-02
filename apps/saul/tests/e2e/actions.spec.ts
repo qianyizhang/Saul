@@ -1,3 +1,4 @@
+import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures';
 import { configureFixtureProvider } from './driver';
 import { installDigestProvider, openDigestReader } from './digest-fixture';
@@ -162,16 +163,18 @@ test('creates and explicitly loads a real local action, renders safely, isolates
         expect(await popup.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
           true,
         );
-        await popup.screenshot({
-          path: info.outputPath(`action-builder-${width}-${colorScheme}.png`),
-          fullPage: true,
-        });
+        if (reviewScreenshots)
+          await popup.screenshot({
+            path: info.outputPath(`action-builder-${width}-${colorScheme}.png`),
+            fullPage: true,
+          });
         await changed.setViewportSize({ width, height: 800 });
         await changed.emulateMedia({ colorScheme });
-        await changed.screenshot({
-          path: info.outputPath(`action-answer-${width}-${colorScheme}.png`),
-          fullPage: true,
-        });
+        if (reviewScreenshots)
+          await changed.screenshot({
+            path: info.outputPath(`action-answer-${width}-${colorScheme}.png`),
+            fullPage: true,
+          });
       }
     const savedUrl = changed.url();
     helper.kill();

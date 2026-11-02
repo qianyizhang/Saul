@@ -1,3 +1,4 @@
+import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider, createFixtureServer, taggedAnswer } from './support.ts';
 import {
@@ -90,7 +91,8 @@ test('inspection matches the submitted request, retains literal output, and surv
       expect(await popup.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       );
-      await popup.screenshot({ path: info.outputPath(`inspection-${width}-${colorScheme}.png`) });
+      if (reviewScreenshots)
+        await popup.screenshot({ path: info.outputPath(`inspection-${width}-${colorScheme}.png`) });
     }
   }
   expect(fixtureServer.requests.length).toBe(initial + 1);
@@ -115,7 +117,8 @@ test('interrupted inspection preserves literal markup and identifies incomplete 
     expect(await response.locator('pre').textContent()).toBe(taggedAnswer);
     await expect(response.locator('term')).toHaveCount(0);
     await response.scrollIntoViewIfNeeded();
-    await article.screenshot({ path: info.outputPath('interrupted-inspection.png') });
+    if (reviewScreenshots)
+      await article.screenshot({ path: info.outputPath('interrupted-inspection.png') });
     expect(server.requests).toHaveLength(1);
   } finally {
     await server.close();

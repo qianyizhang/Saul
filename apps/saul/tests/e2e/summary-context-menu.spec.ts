@@ -1,3 +1,4 @@
+import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { installDigestProvider } from './digest-fixture.ts';
 
@@ -45,7 +46,11 @@ test('full reader links remain compatible and keep single-page reading clear', a
   expect(readerTab.windowId).toBe(sourceTab.windowId);
   expect(readerTab.index).toBe(sourceTab.index + 1);
   expect(readerTab.openerTabId).toBe(sourceTab.id);
-  await reader.screenshot({ path: info.outputPath('single-summary-running.png'), fullPage: true });
+  if (reviewScreenshots)
+    await reader.screenshot({
+      path: info.outputPath('single-summary-running.png'),
+      fullPage: true,
+    });
   await reader.getByRole('button', { name: 'Stop', exact: true }).click();
   await expect(reader.getByRole('status')).toHaveText('Summary stopped');
   await worker.evaluate(() => {
@@ -58,17 +63,19 @@ test('full reader links remain compatible and keep single-page reading clear', a
   await expect(reader.getByText('A concise source-backed finding.', { exact: true })).toHaveCount(
     3,
   );
-  await reader.screenshot({ path: info.outputPath('single-summary-ready.png'), fullPage: true });
+  if (reviewScreenshots)
+    await reader.screenshot({ path: info.outputPath('single-summary-ready.png'), fullPage: true });
   const savedUrl = reader.url();
   await source.close();
   await reader.reload();
   await expect(reader.getByRole('status')).toHaveText('Summary ready');
   await reader.setViewportSize({ width: 360, height: 760 });
   await reader.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
-  await reader.screenshot({
-    path: info.outputPath('single-summary-dark-narrow.png'),
-    fullPage: true,
-  });
+  if (reviewScreenshots)
+    await reader.screenshot({
+      path: info.outputPath('single-summary-dark-narrow.png'),
+      fullPage: true,
+    });
   expect(await reader.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
     true,
   );
@@ -85,13 +92,14 @@ test('full reader links remain compatible and keep single-page reading clear', a
     (await chrome.commands.getAll()).find((command) => command.name === 'saul-summarize'),
   );
   expect(command?.shortcut).toBeTruthy();
-  await expect(
-    shortcuts.locator('dl > div').filter({ hasText: 'Summarize current page' }),
-  ).toContainText(command!.shortcut!);
-  await popup.screenshot({
-    path: info.outputPath('summary-shortcut-settings.png'),
-    fullPage: true,
-  });
+  await expect(shortcuts.locator('dl > div').filter({ hasText: 'Call Saul' })).toContainText(
+    command!.shortcut!,
+  );
+  if (reviewScreenshots)
+    await popup.screenshot({
+      path: info.outputPath('summary-shortcut-settings.png'),
+      fullPage: true,
+    });
   const configurationPromise = context.waitForEvent('page');
   await shortcuts.getByRole('button', { name: 'Configure Chrome shortcuts' }).click();
   const configuration = await configurationPromise;
@@ -130,7 +138,8 @@ test('single-page setup failure keeps the source and settings recovery visible',
   await expect(reader.getByRole('alert')).toBeVisible();
   await expect(reader.getByRole('link', { name: 'Open Settings' })).toBeVisible();
   await expect(reader.getByRole('heading', { name: 'Calculus reading fixture' })).toBeVisible();
-  await reader.screenshot({ path: info.outputPath('single-summary-setup.png'), fullPage: true });
+  if (reviewScreenshots)
+    await reader.screenshot({ path: info.outputPath('single-summary-setup.png'), fullPage: true });
   await reader.getByRole('link', { name: 'Open Settings' }).click();
   await expect(reader).toHaveURL(/#settings$/);
 });

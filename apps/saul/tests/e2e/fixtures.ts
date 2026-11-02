@@ -10,11 +10,17 @@ import {
 
 export { expect } from '@playwright/test';
 export const test = base.extend<
-  { sandbox: ExtensionSandbox; browserToolsFixtures: boolean; chromeAiFixtures: boolean },
+  {
+    sandbox: ExtensionSandbox;
+    browserToolsFixtures: boolean;
+    chromeAiFixtures: boolean;
+    databaseFixtures: boolean;
+  },
   { fixtureServer: FixtureServer }
 >({
   browserToolsFixtures: [false, { option: true }],
   chromeAiFixtures: [false, { option: true }],
+  databaseFixtures: [false, { option: true }],
   fixtureServer: [
     async ({}, use) => {
       const server = await createFixtureServer();
@@ -26,13 +32,14 @@ export const test = base.extend<
     },
     { scope: 'worker' },
   ],
-  sandbox: async ({ browserToolsFixtures, chromeAiFixtures }, use, info) => {
+  sandbox: async ({ browserToolsFixtures, chromeAiFixtures, databaseFixtures }, use, info) => {
     const artifactsDir = info.outputPath('browser');
     const sandbox = await createSandbox({
       headless: !process.env.HEADED,
       artifactsDir,
       browserToolsFixtures,
       chromeAiFixtures,
+      databaseFixtures,
     });
     try {
       await use(sandbox);
