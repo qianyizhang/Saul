@@ -47,9 +47,9 @@ test('named presets and recipes save, choose their models, and create a new atte
   const first = await getFirstHistory(popup);
   await selectRecipe(article, 'recipe-lookup');
   await expect
-    .poll(async () => (await getFirstHistory(popup)).latest.recipe?.id)
+    .poll(async () => (await getHistory(popup))[0]?.latest.recipe?.id)
     .toBe('recipe-lookup');
-  await expect.poll(async () => (await getFirstHistory(popup)).latest.status).toBe('completed');
+  await expect.poll(async () => (await getHistory(popup))[0]?.latest.status).toBe('completed');
   expect(await getHistory(popup)).toHaveLength(1);
   expect(
     await sendDb(popup, { type: 'DB_RUNS', payload: { selectionId: first.selectionId } }),
@@ -116,7 +116,7 @@ test('failed different-recipe attempts keep shown-answer metadata; Retry and fol
     const article = await context.newPage();
     await article.goto(server.origin + '/article');
     await selectRecipe(article, 'recipe-explain');
-    await expect.poll(async () => (await getFirstHistory(popup)).latest.status).toBe('completed');
+    await expect.poll(async () => (await getHistory(popup))[0]?.latest.status).toBe('completed');
     const saved = await getFirstHistory(popup);
     await popup.getByRole('button', { name: 'Settings', exact: true }).click();
     await popup.getByLabel('Model name', { exact: true }).fill('model-b');
@@ -124,7 +124,7 @@ test('failed different-recipe attempts keep shown-answer metadata; Retry and fol
     await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
     server.setEnding('eof');
     await selectRecipe(article, 'recipe-lookup');
-    await expect.poll(async () => (await getFirstHistory(popup)).latest.status).toBe('interrupted');
+    await expect.poll(async () => (await getHistory(popup))[0]?.latest.status).toBe('interrupted');
     await openFirstPageExplanation(article);
     const card = article.getByRole('region', { name: 'Saul explanation' });
     await card.getByRole('button', { name: 'More', exact: true }).click();
@@ -148,12 +148,12 @@ test('failed different-recipe attempts keep shown-answer metadata; Retry and fol
     await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
     await card.getByRole('button', { name: 'Retry explanation', exact: true }).click();
     await expect.poll(() => server.requests.length).toBe(3);
-    await expect.poll(async () => (await getFirstHistory(popup)).latest.status).toBe('interrupted');
+    await expect.poll(async () => (await getHistory(popup))[0]?.latest.status).toBe('interrupted');
     expect(sentRequest(server, 2)).toEqual(sentRequest(server, 1));
     server.setEnding('done');
     await card.getByRole('button', { name: 'Simpler', exact: true }).click();
     await expect.poll(() => server.requests.length).toBe(4);
-    await expect.poll(async () => (await getFirstHistory(popup)).latest.status).toBe('completed');
+    await expect.poll(async () => (await getHistory(popup))[0]?.latest.status).toBe('completed');
     const followup = sentRequest(server, 3);
     expect(followup.model).toBe('test-model');
     expect(followup.messages.find((message) => message.role === 'system')).toEqual(

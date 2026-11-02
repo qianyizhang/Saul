@@ -1,6 +1,11 @@
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider, createFixtureServer, taggedAnswer } from './support.ts';
-import { explainSelection, getFirstHistory, openFirstPageExplanation } from './driver.ts';
+import {
+  explainSelection,
+  getFirstHistory,
+  getHistory,
+  openFirstPageExplanation,
+} from './driver.ts';
 
 test('Minimum Mode defaults on, updates open surfaces, and persists independently of provider drafts', async ({
   sandbox,
@@ -276,7 +281,7 @@ test('Minimum Mode stays usable at narrow touch widths with visible errors and e
     const article = await context.newPage();
     await article.goto(server.origin + '/article');
     await explainSelection(article);
-    await expect.poll(async () => (await getFirstHistory(popup)).latest.status).toBe('interrupted');
+    await expect.poll(async () => (await getHistory(popup))[0]?.latest.status).toBe('interrupted');
     await openFirstPageExplanation(article);
     const card = article.getByRole('region', { name: 'Saul explanation' });
     await expect(card.getByRole('alert')).toBeVisible();

@@ -3,7 +3,7 @@ import { installDigestProvider } from './digest-fixture.ts';
 import {
   configureFixtureProvider,
   explainSelection,
-  getFirstHistory,
+  getHistory,
   openFirstPageExplanation,
 } from './driver.ts';
 
@@ -126,7 +126,7 @@ test('repeated reading actions disclose reuse and input drift, then explicitly r
   await source.goto(fixtureServer.origin + '/article');
   const initial = fixtureServer.requests.length;
   await explainSelection(source);
-  await expect.poll(async () => (await getFirstHistory(popup)).latest.status).toBe('completed');
+  await expect.poll(async () => (await getHistory(popup))[0]?.latest.status).toBe('completed');
   await openFirstPageExplanation(source);
   await source.getByRole('button', { name: 'Close explanation', exact: true }).click();
   await explainSelection(source);
@@ -144,7 +144,7 @@ test('repeated reading actions disclose reuse and input drift, then explicitly r
   await source.screenshot({ path: info.outputPath('reading-reuse.png') });
   await notice.getByRole('button', { name: 'Run again with current input', exact: true }).click();
   await expect.poll(() => fixtureServer.requests.length).toBe(initial + 2);
-  await expect.poll(async () => (await getFirstHistory(popup)).latest.status).toBe('completed');
+  await expect.poll(async () => (await getHistory(popup))[0]?.latest.status).toBe('completed');
   expect(fixtureServer.requests.at(-1)!.body).toContain(
     'Updated context for the same selected passage',
   );
