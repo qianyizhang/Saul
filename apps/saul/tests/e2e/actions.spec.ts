@@ -231,7 +231,7 @@ test('retains incomplete model output on helper loss and Stop; no replay or comp
     await reader.getByRole('button', { name: 'Retry unfinished' }).click();
     await expect.poll(() => requests).toBe(2);
     await reader.getByRole('button', { name: 'Stop', exact: true }).click();
-    await expect(reader.getByRole('status')).toContainText('Summary stopped');
+    await expect(reader.getByRole('status').filter({ hasText: 'Summary stopped' })).toBeVisible();
     expect(requests).toBe(2);
     await expect(reader.locator('.action-answer')).toHaveCount(0);
   } finally {
