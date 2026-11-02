@@ -1,3 +1,4 @@
+import { ActionLabel } from '../surface/ActionLabel';
 import { useEffect, useRef, useState } from 'react';
 import { planCall } from '../models/chatgpt-plan';
 import type { PlanAccount, PlanModel } from '../../native/plan-protocol.mts';
@@ -12,6 +13,7 @@ export function ChatGPTPlanSettings({
   test,
   testing,
   saved,
+  visible = true,
   onBusyChange,
 }: {
   value: NonNullable<UserSettings['chatgptPlan']>;
@@ -19,6 +21,7 @@ export function ChatGPTPlanSettings({
   test: () => void;
   testing: boolean;
   saved: boolean;
+  visible?: boolean;
   onBusyChange?: (busy: boolean) => void;
 }) {
   const { minimum } = useMinimumMode();
@@ -104,9 +107,9 @@ export function ChatGPTPlanSettings({
     };
   }, [accounts, minimum]);
   useEffect(() => {
-    if (welcome && !minimum) welcomeDialog.current?.showModal();
+    if (welcome && !minimum && visible) welcomeDialog.current?.showModal();
     else welcomeDialog.current?.close();
-  }, [welcome, minimum]);
+  }, [welcome, minimum, visible]);
   // Restore the catalog after returning from the browser, just as after login.
   useEffect(() => {
     setModels([]);
@@ -243,8 +246,10 @@ export function ChatGPTPlanSettings({
               className="btn primary"
               disabled={!!busy || speechBusy || testing}
               onClick={() => login()}
+              aria-label="Continue with ChatGPT"
+              title="Continue with ChatGPT"
             >
-              Continue with ChatGPT
+              <ActionLabel short="Connect" full="Continue with ChatGPT" />
             </button>
           )}
           {active?.signedIn && !active.planEnabled && (
@@ -252,8 +257,10 @@ export function ChatGPTPlanSettings({
               className="btn"
               disabled={!!busy || speechBusy || testing}
               onClick={() => login(false, true)}
+              aria-label="Enable plan usage"
+              title="Enable plan usage"
             >
-              Enable plan usage
+              <ActionLabel short="Enable" full="Enable plan usage" />
             </button>
           )}
         </div>
@@ -278,7 +285,9 @@ export function ChatGPTPlanSettings({
         </div>
       )}
       <details>
-        <summary>Model options</summary>
+        <summary aria-label="Model options" title="Model options">
+          <ActionLabel short="Options" full="Model options" />
+        </summary>
         <div className="stack settings-disclosure">
           {(!!selectedModel?.supportedReasoningEfforts.length || !!value.effort) && (
             <label className="field">
@@ -331,7 +340,9 @@ export function ChatGPTPlanSettings({
         </p>
       )}
       <details>
-        <summary>Manage accounts</summary>
+        <summary aria-label="Manage accounts" title="Manage accounts">
+          <ActionLabel short="Accounts" full="Manage accounts" />
+        </summary>
         <div className="settings-disclosure">
           <div className="row">
             <button
@@ -348,16 +359,20 @@ export function ChatGPTPlanSettings({
                   }
                 })
               }
+              aria-label="Refresh accounts"
+              title="Refresh accounts"
             >
-              Refresh accounts
+              <ActionLabel short="Refresh" full="Refresh accounts" />
             </button>
             {accounts.length > 0 && (
               <button
                 className="btn"
                 disabled={!!busy || speechBusy || testing}
                 onClick={() => login(true)}
+                aria-label="Add account"
+                title="Add account"
               >
-                Add account
+                <ActionLabel short="Add" full="Add account" />
               </button>
             )}
             {active?.signedIn && (
@@ -376,23 +391,29 @@ export function ChatGPTPlanSettings({
                     );
                   })
                 }
+                aria-label="Sign out"
+                title="Sign out"
               >
-                Sign out
+                <ActionLabel short="Disconnect" full="Sign out" />
               </button>
             )}
           </div>
         </div>
       </details>
       <details open={helperReady === false}>
-        <summary>Connection and tests</summary>
+        <summary aria-label="Connection and tests" title="Connection and tests">
+          <ActionLabel short="Tests" full="Connection and tests" />
+        </summary>
         <div className="stack settings-disclosure">
           <div className="row">
             <button
               className="btn"
               disabled={!!busy || speechBusy || loadingModels || testing || !active?.planEnabled}
               onClick={() => operation('models', (signal) => loadModels(value.accountId, signal))}
+              aria-label="Refresh models"
+              title="Refresh models"
             >
-              Refresh models
+              <ActionLabel short="Refresh" full="Refresh models" />
             </button>
             <button
               className="btn"
@@ -407,17 +428,29 @@ export function ChatGPTPlanSettings({
                 !!modelIssue
               }
               onClick={test}
+              aria-label="Test generation"
+              title="Test generation"
             >
-              Test generation
+              <ActionLabel short="Test" full="Test generation" />
             </button>
           </div>
           <p className="small muted">Tests send a sample prompt using your ChatGPT plan.</p>
-          {helperReady === true && <p className="small muted">ChatGPT helper connected.</p>}
-          <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">
-            Manage usage
+          {helperReady === true && (
+            <p className="small muted standard-only">ChatGPT helper connected.</p>
+          )}
+          <a
+            href="https://chatgpt.com/settings/usage"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Manage usage"
+            title="Manage usage"
+          >
+            <ActionLabel short="Usage" full="Manage usage" />
           </a>
           <details open={helperReady === false}>
-            <summary>ChatGPT helper setup</summary>
+            <summary aria-label="ChatGPT helper setup" title="ChatGPT helper setup">
+              <ActionLabel short="Setup" full="ChatGPT helper setup" />
+            </summary>
             <p className="small muted">
               From apps/saul, build and install the local helper for this extension. It stores OAuth
               credentials on this computer, outside browser storage. Use Node 24.
@@ -430,7 +463,9 @@ export function ChatGPTPlanSettings({
             </p>
           </details>
           <details>
-            <summary>Experimental tools</summary>
+            <summary aria-label="Experimental tools" title="Experimental tools">
+              <ActionLabel short="Experimental" full="Experimental tools" />
+            </summary>
             <SpeechTest
               key={active?.id || 'none'}
               account={active}
@@ -458,7 +493,7 @@ export function ChatGPTPlanSettings({
           {notice}
         </p>
       )}
-      {!minimum && welcome && (
+      {!minimum && welcome && visible && (
         <dialog
           ref={welcomeDialog}
           onCancel={() => setWelcome(false)}
@@ -479,8 +514,10 @@ export function ChatGPTPlanSettings({
                 .catch(() => setError('Could not save confirmation.'))
                 .finally(() => setWelcome(false));
             }}
+            aria-label="Got it"
+            title="Got it"
           >
-            Got it
+            <ActionLabel short="Done" full="Got it" />
           </button>
         </dialog>
       )}

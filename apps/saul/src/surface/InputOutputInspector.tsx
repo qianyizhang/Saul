@@ -1,3 +1,4 @@
+import { ActionLabel } from './ActionLabel';
 import { useState } from 'react';
 import { InspectionText as TextBlock } from './InspectionText';
 import type { RunResult } from '../types/storage';
@@ -7,7 +8,9 @@ export function InputOutputInspector({ run }: { run: RunResult }) {
   const input = run.inspection;
   return (
     <details className="saul-inspector" onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary>Inspect input/output</summary>
+      <summary aria-label="Inspect input/output" title="Inspect input/output">
+        <ActionLabel short="Inspect" full="Inspect input/output" />
+      </summary>
       {open && (
         <div className="saul-inspection-content">
           <p className="saul-inspection-note">{run.status}</p>
@@ -22,7 +25,9 @@ export function InputOutputInspector({ run }: { run: RunResult }) {
             <>
               <TextBlock label="Instructions" text={input.systemPrompt} />
               <details className="saul-inspection-context">
-                <summary>Context / inputs</summary>
+                <summary aria-label="Context / inputs">
+                  <ActionLabel short="Inputs" full="Context / inputs" />
+                </summary>
                 {(
                   [
                     ['Selected text', input.context.selection],

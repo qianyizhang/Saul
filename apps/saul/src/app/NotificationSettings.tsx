@@ -58,7 +58,9 @@ export function NotificationSettings() {
           onChange={(e) => void toggle(e.target.checked)}
         />
       </label>
-      <p className="small muted">Errors remain visible in explanations and Settings.</p>
+      <p className="small muted standard-only">
+        Errors remain visible in explanations and Settings.
+      </p>
       {error && (
         <p className="notice error" role="alert">
           {error}

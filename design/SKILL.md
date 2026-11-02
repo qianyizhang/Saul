@@ -44,7 +44,7 @@ a separate design document is needed only for a new reusable decision.
 ## Generate
 
 `generate.mts` uses the pinned `@google/design.md@0.4.0` parser/linter and
-`prettier@3.6.2` from the owning project's dependencies. Native output also needs
+Prettier version pinned in the owning project's `package.json`. Native output also needs
 `xcrun swift-format` (Apple Command Line Tools). It can run from here against another project:
 
 ```sh

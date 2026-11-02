@@ -3,8 +3,20 @@ import Combine
 import EZCore
 
 @MainActor final class AppModel: ObservableObject {
-    enum SettingsSection { case configuration, account, shortcuts }
-    @Published var settingsSection: SettingsSection = .configuration
+    enum SettingsSection: String, CaseIterable {
+        case overview, configuration, recipes, preferences, account, shortcuts
+        var title: String {
+            switch self {
+            case .overview: "Overview"
+            case .configuration: "Models"
+            case .recipes: "Recipes"
+            case .preferences: "Preferences"
+            case .account: "Accounts"
+            case .shortcuts: "Shortcuts"
+            }
+        }
+    }
+    @Published var settingsSection: SettingsSection = .overview
     @Published private(set) var configuration = Configuration()
     @Published var selectedRecipeID: UUID?
     @Published var overridePresetID: UUID?
@@ -185,7 +197,7 @@ import EZCore
     var currentRecipe: Recipe? {
         replayEntry?.recipeSnapshot ?? configuration.recipes.first { $0.id == selectedRecipeID }
     }
-    func openSettings(_ section: SettingsSection = .configuration) {
+    func openSettings(_ section: SettingsSection = .overview) {
         if !showSettings { refreshConfiguration() }
         settingsSection = section
         showSettings = true

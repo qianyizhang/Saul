@@ -35,7 +35,7 @@ try {
     await article.locator('#concept').click({ clickCount: 3 });
     await article.getByRole('button', { name: 'Explain', exact: true }).click();
     await article.getByRole('button', { name: 'View', exact: true }).click();
-    await article.getByRole('button', { name: 'Regenerate', exact: true }).waitFor();
+    await article.getByRole('button', { name: 'Copy explanation', exact: true }).waitFor();
     await popup.getByRole('button', { name: 'History', exact: true }).click();
     await popup
       .locator('.history-title')

@@ -38,29 +38,24 @@ Keep screenshots outside Git and record evidence limits in [verification](verifi
 
 ## Minimum Mode
 
-Minimum Mode is the default personal-use presentation, shared in name and intent
-with Saul. EZ saves its own preference in UserDefaults. Settings and Quick Lookup's
-actions menu expose the same toggle; offline fixtures keep it in memory only.
-The mode removes taglines, repeated instructions, routine shortcut reminders, and
-pinned token/timing strips. Request metadata and clearly labeled metrics stay in
-Details. Actionable errors, sign-in blockers, unsaved changes, and generation
-controls remain visible. Turning the mode off restores guidance and persistent
-metrics without changing the current draft or request choices.
+Minimum Mode follows the shared [expert everyday policy](../../../DESIGN.md#minimum-mode).
+It is local to EZ, shared by the main window and Quick Lookup, and defaults on.
+Settings → Preferences and Quick Lookup’s menu expose the same preference.
+Routine subtext and redundant icon/text pairs disappear. Short action words retain
+complete accessible names and help. Errors, blocked choices, unsaved answers and
+billing/permission consequences remain visible.
 
-Shared account actions use Continue with ChatGPT, Cancel, Add account, Enable plan
-usage, Refresh models, Manage usage, and Sign out. EZ and Saul use the same direct
-ChatGPT flow with separate saved sign-ins. Both expose named model presets and
-editable recipes with a default preset; native form fields and browser selection
-context remain surface-specific. ChatGPT presets share the local store described
-in the [shared contract](../../../contracts/README.md#accounts-and-models); recipes,
-accounts and history stay app-owned.
+Settings uses native sidebar sections: Overview, Models, Recipes, Preferences,
+Accounts and Shortcuts. Models and Recipes share one mounted draft owner but show
+one editor at a time; navigating sections preserves both drafts. Switching the
+selected item still requires saving or explicitly discarding its edits. Overview
+shows current recipe/preset/account state and routes to the relevant editor.
 
-New lookups place the composer below the heading. Saved answers emphasize Copy
-and Use again; More contains Export and Delete. Quick Lookup uses the same
-reading/editing separation, hiding the fields behind Edit draft when an answer is
-selected in Minimum Mode. These are native presentations of the shared behavior
-contract; the future mobile direction is recorded in the surface contract and is
-not a shipped mobile implementation.
+A saved answer prioritizes Copy. Minimum Mode puts Reuse, Export and Delete in More,
+and input/output inspection inside Details. Edit reveals the retained draft; Hide
+returns to reading. Standard view retains the longer action names and guidance.
+The compact preset selector omits the routine Standard suffix; requested Fast
+remains explicit, and complete recorded choices remain in Details.
 
 ## Offline previews
 
@@ -94,14 +89,14 @@ Lookup dropdowns use stable-width native popup buttons with the entire control
 available for click and hover scrolling, independent of title length. The compact
 header recipe control fills its available space; the footer preset control stays
 250 points wide and has an adjacent information button for request details.
-Settings sections use a fixed-width segmented control. The offline surface preview
+Settings sections use a native sidebar. The offline surface preview
 includes **Selector hitboxes** with long names and one-character alternatives.
 
 ## Native regression review
 
 Use the [fixed UI journeys](ui-qa.md) for first-run, composition, history, settings,
 long forms, recovery, and light/dark review. The main window gives selected answers
-reading space and reveals the current draft through **Edit draft**; **Hide draft**
+reading space and reveals the current draft through **Edit**; **Hide**
 returns to reading. Preset/request details are progressive disclosures. Form hints
 reserve a stable line, and Tab navigation scrolls the focused field into view.
 The surface preview includes a **Signed out** fixture and resets search with each
@@ -118,7 +113,7 @@ and list items occupy shared, top-aligned rows whose height follows the taller s
 paragraph splits and merges stay together, and unmatched paragraphs leave an empty
 opposite cell. Narrow windows and Quick Lookup show Corrected first with Original
 in a disclosure. Explanatory notes sit under Why these changes. Unrecognized responses keep the ordinary answer view
-with long original text collapsed. The literal full response remains in Inspect input/output on both lookup surfaces.
+with long original text collapsed. In Minimum Mode, the literal full response remains in Details → Inspect on both lookup surfaces. Standard Mode also exposes the main-window inspector directly.
 
 Disclosure headers use a shared full-width button with a minimum 32-point height.
 The chevron, label, and remaining header space all toggle expansion; the expanded

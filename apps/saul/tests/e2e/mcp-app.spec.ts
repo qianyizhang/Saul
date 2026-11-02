@@ -503,7 +503,7 @@ test('compact board keeps tab controls discoverable and cancels rename and move 
   await expect(ui.locator('#move-controls')).toBeHidden();
   await expect(handle).toBeFocused();
   expect(revision((await call('saul_tabs_list')) as TabSnapshot)).toBe(revision(before));
-  await ui.getByText('View options', { exact: true }).click();
+  await ui.getByLabel('View options', { exact: true }).click();
   const minimumMode = ui.getByRole('checkbox', { name: 'Minimum Mode', exact: true });
   await expect(minimumMode).toBeChecked();
   await minimumMode.uncheck();
@@ -519,9 +519,9 @@ test('compact board keeps tab controls discoverable and cancels rename and move 
   await expect(ui.locator('html')).toHaveAttribute('data-minimum', 'true');
   await expect(ui.locator('.window')).toHaveCount(3);
   expect(revision((await call('saul_tabs_list')) as TabSnapshot)).toBe(revision(before));
-  await ui.getByText('View options', { exact: true }).click();
+  await ui.getByLabel('View options', { exact: true }).click();
   await minimumMode.check();
-  await ui.getByText('View options', { exact: true }).click();
+  await ui.getByLabel('View options', { exact: true }).click();
   await captureWorkspace(host, ui, info.outputPath('board-light.png'));
   await host.evaluate(() => window.fixtureHost.theme('dark'));
   await expect(ui.locator('html')).toHaveAttribute('data-theme', 'dark');

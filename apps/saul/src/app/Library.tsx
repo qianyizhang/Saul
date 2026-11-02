@@ -1,3 +1,4 @@
+import { ActionLabel } from '../surface/ActionLabel';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bookmark, ExternalLink, Trash2, Download, ChevronDown } from 'lucide-react';
 import { useRefreshOnFocus } from './useRefreshOnFocus';
@@ -246,11 +247,20 @@ export function Library({
                     <RunDetails
                       key={`details-${(item.completed || item.latest).id}`}
                       run={item.completed || item.latest}
-                    />
-                    <InputOutputInspector
-                      key={(item.completed || item.latest).id}
-                      run={item.completed || item.latest}
-                    />
+                    >
+                      {minimum && (
+                        <InputOutputInspector
+                          key={(item.completed || item.latest).id}
+                          run={item.completed || item.latest}
+                        />
+                      )}
+                    </RunDetails>
+                    {!minimum && (
+                      <InputOutputInspector
+                        key={(item.completed || item.latest).id}
+                        run={item.completed || item.latest}
+                      />
+                    )}
                     <details className="history-more">
                       <summary>More</summary>
                       {runs
@@ -298,15 +308,19 @@ export function Library({
         </div>
       )}
       <details className="library-tools">
-        <summary>Export and manage history</summary>
+        <summary aria-label="Export and manage history" title="Export and manage history">
+          <ActionLabel short="Manage" full="Export and manage history" />
+        </summary>
         <div className="row between">
           <button
             className="btn"
             disabled={actionBusy}
+            aria-label="Export to Markdown"
+            title="Export to Markdown"
             onClick={() => action(async () => downloadMarkdown(await exportKnowledgeMarkdown()))}
           >
             <Download size={16} />
-            Export to Markdown
+            <ActionLabel short="Export" full="Export to Markdown" />
           </button>
           <button
             className="btn danger"
@@ -318,8 +332,10 @@ export function Library({
                   setPage(0);
                 });
             }}
+            aria-label="Clear All"
+            title="Clear All"
           >
-            Clear All
+            <ActionLabel short="Clear" full="Clear All" />
           </button>
         </div>
         <p className="small muted standard-only">

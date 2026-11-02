@@ -28,6 +28,12 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
     [resettingInvalidSettings, setResettingInvalidSettings] = useState(false),
     [recoveryNotice, setRecoveryNotice] = useState('');
 
+  function markDirty(value: boolean) {
+    // Navigation can follow the input event before React effects run.
+    setDirty(value);
+    onDirty?.(value);
+  }
+
   function replaceForm(next: typeof form) {
     formRef.current = next;
     setForm(next);
@@ -44,13 +50,13 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
       setError(result.error);
       setCanResetInvalidSettings(true);
       setLoaded(false);
-      setDirty(false);
+      markDirty(false);
       setSaved(false);
       return;
     }
     replaceForm(createSettingsDraft(result.settings));
     setLoaded(true);
-    setDirty(false);
+    markDirty(false);
     setSaved(false);
     setBlocked(false);
     setError('');
@@ -74,20 +80,19 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
     };
   }, []);
   useEffect(() => {
-    onDirty?.(dirty);
     const warn = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = '';
     };
     if (dirty) window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
-  }, [dirty, onDirty]);
+  }, [dirty]);
 
   function edit(action: SettingsEdit) {
     if (running.current) return;
     try {
       replaceForm(editSettingsDraft(formRef.current, action));
-      if (action.type !== 'select-preset' && action.type !== 'select-recipe') setDirty(true);
+      if (action.type !== 'select-preset' && action.type !== 'select-recipe') markDirty(true);
       setSaved(false);
       if (!blocked) setError('');
       setRecoveryNotice('');
@@ -124,7 +129,7 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
         settings: result.settings,
         presetId: migrated?.id ?? formRef.current.presetId,
       });
-      setDirty(false);
+      markDirty(false);
       setSaved(true);
     } catch (cause) {
       if (!mounted.current) return;

@@ -1,3 +1,5 @@
+import { summaryMore } from './driver.ts';
+import { settingsSection } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures';
 import { configureFixtureProvider } from './driver';
@@ -18,22 +20,25 @@ test('unsubmitted action fields survive navigation and reload without a model ca
   const { popup } = await sandbox.launch();
   await configureFixtureProvider(popup, fixtureServer.origin);
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await popup.getByText('Customize Call Saul', { exact: true }).click();
+  await settingsSection(popup, 'Summaries');
+  await popup.getByLabel('Customize Call Saul', { exact: true }).click();
   await popup.getByLabel('Action request', { exact: true }).fill('Keep this unsent request 中文.');
-  await popup.getByText('Local module and recovery', { exact: true }).click();
+  await popup.getByLabel('Local module and recovery', { exact: true }).click();
   await popup.getByLabel('Module file path', { exact: true }).fill('/tmp/my-summary.ts');
   await popup.getByRole('button', { name: 'History', exact: true }).click();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await popup.getByText('Customize Call Saul', { exact: true }).click();
+  await settingsSection(popup, 'Summaries');
+  await popup.getByLabel('Customize Call Saul', { exact: true }).click();
   await expect(popup.getByLabel('Action request', { exact: true })).toHaveValue(
     'Keep this unsent request 中文.',
   );
   await popup.reload();
-  await popup.getByText('Customize Call Saul', { exact: true }).click();
+  await settingsSection(popup, 'Summaries');
+  await popup.getByLabel('Customize Call Saul', { exact: true }).click();
   await expect(popup.getByLabel('Action request', { exact: true })).toHaveValue(
     'Keep this unsent request 中文.',
   );
-  await popup.getByText('Local module and recovery', { exact: true }).click();
+  await popup.getByLabel('Local module and recovery', { exact: true }).click();
   await expect(popup.getByLabel('Module file path', { exact: true })).toHaveValue(
     '/tmp/my-summary.ts',
   );
@@ -87,7 +92,8 @@ test('creates and explicitly loads a real local action, renders safely, isolates
     await helper.install(worker);
     await configureFixtureProvider(popup, fixtureServer.origin);
     await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-    await popup.getByText('Customize Call Saul', { exact: true }).click();
+    await settingsSection(popup, 'Summaries');
+    await popup.getByLabel('Customize Call Saul', { exact: true }).click();
     await popup
       .getByLabel('Action request', { exact: true })
       .fill('Explain the main claim and its weakest evidence.');
@@ -124,8 +130,8 @@ test('creates and explicitly loads a real local action, renders safely, isolates
       .poll(async () => (await request(popup, { action: 'status' })).selected?.revision.name)
       .toBe(candidate.name);
     expect(calls).toHaveLength(2);
-    await reader.getByText('Inspect input/output', { exact: true }).click();
-    await reader.getByText('Saved request and response', { exact: true }).click();
+    await reader.getByLabel('Inspect input/output', { exact: true }).click();
+    await reader.getByLabel('Saved request and response', { exact: true }).click();
     await expect(
       reader.getByText('Model call 1 · complete response', { exact: true }),
     ).toBeVisible();
@@ -159,7 +165,7 @@ test('creates and explicitly loads a real local action, renders safely, isolates
       for (const colorScheme of ['light', 'dark'] as const) {
         await popup.setViewportSize({ width, height: 800 });
         await popup.emulateMedia({ colorScheme });
-        await popup.getByText('Customize Call Saul', { exact: true }).scrollIntoViewIfNeeded();
+        await popup.getByLabel('Customize Call Saul', { exact: true }).scrollIntoViewIfNeeded();
         expect(await popup.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
           true,
         );
@@ -231,8 +237,8 @@ test('retains incomplete model output on helper loss and Stop; no replay or comp
     helper.kill();
     await expect(reader.getByRole('button', { name: 'Retry unfinished' })).toBeVisible();
     await expect(reader.locator('.action-answer')).toHaveCount(0);
-    await reader.getByText('Inspect input/output', { exact: true }).click();
-    await reader.getByText('Saved request and response', { exact: true }).click();
+    await reader.getByLabel('Inspect input/output', { exact: true }).click();
+    await reader.getByLabel('Saved request and response', { exact: true }).click();
     await expect(
       reader.getByText('Model call 1 · incomplete response', { exact: true }),
     ).toBeVisible();
@@ -278,6 +284,7 @@ test('Run again after restoring the built-in action uses its eligible account ra
     await expect(reader.locator('.action-answer')).toHaveText('Custom answer');
     const customUrl = reader.url();
     await request(popup, { action: 'builtin' });
+    await summaryMore(reader);
     await reader.getByRole('button', { name: 'Run again', exact: true }).click();
     await expect(reader.locator('p[lang="en"]').first()).toHaveText(
       'A concise source-backed finding.',

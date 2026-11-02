@@ -1,3 +1,4 @@
+import { ActionLabel } from '../surface/ActionLabel';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PlanAccount } from '../../native/plan-protocol.mts';
 import type { SummaryProgress } from '../../native/protocol.mts';
@@ -120,7 +121,9 @@ export function SummaryHistory({ onOpen }: { onOpen?: (id: string) => void } = {
               }}
             >
               <strong>{entry.windowTitle}</strong>
-              <span className="small muted">{new Date(entry.createdAt).toLocaleString()}</span>
+              <span className="small muted standard-only">
+                {new Date(entry.createdAt).toLocaleString()}
+              </span>
             </button>
           </li>
         ))}
@@ -351,8 +354,13 @@ export function SummaryReader({
   return (
     <article className="summary-reader stack" aria-label="Summary reader">
       <div className="row between">
-        <a className="small" href="#summaries">
-          ← Saved summaries
+        <a
+          className="small"
+          href="#summaries"
+          aria-label="← Saved summaries"
+          title="← Saved summaries"
+        >
+          <ActionLabel short="History" full="← Saved summaries" />
         </a>
         {onClose && (
           <button className="btn quiet" onClick={onClose} aria-label="Close summary panel">
@@ -374,9 +382,40 @@ export function SummaryReader({
           )}
         </div>
         {batch && (
-          <button className="btn" onClick={download}>
-            Export HTML
+          <button
+            className="btn standard-only"
+            onClick={download}
+            aria-label="Export HTML"
+            title="Export HTML"
+          >
+            <ActionLabel short="Export" full="Export HTML" />
           </button>
+        )}
+        {batch && (
+          <details className="minimum-only summary-tools">
+            <summary>More</summary>
+            <div className="row">
+              <button
+                className="btn"
+                aria-label="Export HTML"
+                title="Export HTML"
+                onClick={download}
+              >
+                Export
+              </button>
+              {!running && (
+                <button
+                  className="btn"
+                  aria-label="Run again"
+                  title="Run again with current settings"
+                  disabled={busy}
+                  onClick={() => void start(batch.accountId, true)}
+                >
+                  Regenerate
+                </button>
+              )}
+            </div>
+          </details>
         )}
       </header>
       {error && (
@@ -404,8 +443,14 @@ export function SummaryReader({
             </label>
           )}
           {!busy && accounts.length > 0 && (
-            <button className="btn primary" disabled={!account} onClick={() => void start(account)}>
-              Start summary
+            <button
+              className="btn primary"
+              disabled={!account}
+              onClick={() => void start(account)}
+              aria-label="Start summary"
+              title="Start summary"
+            >
+              <ActionLabel short="Summarize" full="Start summary" />
             </button>
           )}
           {!accounts.length && error && (
@@ -413,8 +458,10 @@ export function SummaryReader({
               href={sidePanel ? chrome.runtime.getURL('/library.html#settings') : '#settings'}
               target={sidePanel ? '_blank' : undefined}
               rel={sidePanel ? 'noreferrer' : undefined}
+              aria-label="Open Settings"
+              title="Open Settings"
             >
-              Open Settings
+              <ActionLabel short="Settings" full="Open Settings" />
             </a>
           )}
           {busy && <p role="status">Starting…</p>}
@@ -456,13 +503,19 @@ export function SummaryReader({
               batch.items.some((i) =>
                 ['failed', 'interrupted', 'cancelled'].includes(i.status),
               ) && (
-                <button className="btn" disabled={busy} onClick={() => void control('retry')}>
-                  Retry unfinished
+                <button
+                  className="btn"
+                  disabled={busy}
+                  onClick={() => void control('retry')}
+                  aria-label="Retry unfinished"
+                  title="Retry unfinished"
+                >
+                  <ActionLabel short="Retry" full="Retry unfinished" />
                 </button>
               )}
             {!running && (
               <button
-                className="btn quiet"
+                className="btn quiet standard-only"
                 disabled={busy}
                 onClick={() => void start(batch.accountId, true)}
               >
@@ -495,8 +548,10 @@ export function SummaryReader({
                   if (confirm('Delete this saved summary and captured source text?'))
                     void control('delete');
                 }}
+                aria-label="Delete summary"
+                title="Delete summary"
               >
-                Delete summary
+                <ActionLabel short="Delete" full="Delete summary" />
               </button>
             )}
           </details>
@@ -574,7 +629,9 @@ export function SummaryReader({
                       item.summary.terms.length > 0 ||
                       item.summary.question) && (
                       <details>
-                        <summary>Go deeper</summary>
+                        <summary aria-label="Go deeper" title="Go deeper">
+                          <ActionLabel short="More" full="Go deeper" />
+                        </summary>
                         {[
                           ...item.summary.flow,
                           ...item.summary.terms,
@@ -588,7 +645,9 @@ export function SummaryReader({
                 )}
                 {(item.coverage || item.capturedAt) && (
                   <details>
-                    <summary>Source coverage</summary>
+                    <summary aria-label="Source coverage" title="Source coverage">
+                      <ActionLabel short="Coverage" full="Source coverage" />
+                    </summary>
                     <p className="small muted">{item.coverage}</p>
                     {item.capturedAt && (
                       <p className="small muted">

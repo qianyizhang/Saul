@@ -12,13 +12,15 @@ struct UnsavedAttemptNotice: View {
                     Label("Unsaved", systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.orange)
                     Spacer()
-                    Button("Save again") { model.saveAgain(entry.id) }
+                    Button(model.minimumMode ? "Save" : "Save again") { model.saveAgain(entry.id) }.help(
+                        "Save again"
+                    ).accessibilityLabel("Save again")
                         .disabled(!model.canSaveAgain)
                     Button("Export…") { model.export(entry) }
                 }
                 Text("Save or export this answer before quitting EZ.")
                     .foregroundStyle(.secondary)
-                DisclosureGroup("Save error") {
+                DisclosureGroup("Error") {
                     Text(message).textSelection(.enabled).padding(.top, 4)
                 }.disclosureGroupStyle(FullRowDisclosureStyle())
             }

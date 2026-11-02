@@ -1,3 +1,4 @@
+import { settingsSection } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 
@@ -6,12 +7,16 @@ test('two Settings surfaces retain a stale draft until deliberate reload', async
 }, info) => {
   const { popup, context } = await sandbox.launch();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(popup, 'Models');
   const other = await context.newPage();
   await other.goto(popup.url().replace('popup.html', 'library.html'));
+  await settingsSection(other, 'Models');
   await expect(other.getByLabel('Model name', { exact: true })).toBeVisible();
-  await popup.getByText('Edit recipes', { exact: true }).click();
+  await settingsSection(popup, 'Reading');
+  await popup.getByLabel('Edit recipes', { exact: true }).click();
   await popup.getByLabel('Recipe name', { exact: true }).fill('Saved in first surface');
-  await other.getByText('Edit recipes', { exact: true }).click();
+  await settingsSection(other, 'Reading');
+  await other.getByLabel('Edit recipes', { exact: true }).click();
   await other.getByLabel('Edit recipe', { exact: true }).selectOption('recipe-lookup');
   await other.getByLabel('Prompt template', { exact: true }).fill('Keep this draft: {{text}}');
   await other.getByLabel('Response language', { exact: true }).selectOption('Chinese');
@@ -33,6 +38,7 @@ test('two Settings surfaces retain a stale draft until deliberate reload', async
   expect(stored).not.toHaveProperty('responseLanguage');
 
   for (const minimum of [true, false]) {
+    await settingsSection(other, 'Preferences');
     await other.getByRole('checkbox', { name: 'Minimum Mode', exact: true }).setChecked(minimum);
     for (const width of [440, 1000]) {
       await other.setViewportSize({ width, height: 700 });
@@ -53,6 +59,7 @@ test('two Settings surfaces retain a stale draft until deliberate reload', async
       }
     }
   }
+  await settingsSection(other, 'Reading');
   other.once('dialog', (dialog) => dialog.dismiss());
   const reload = other.getByRole('button', { name: 'Reload saved settings', exact: true });
   await reload.focus();
@@ -75,7 +82,8 @@ test('an uncertain commit reply keeps the draft and never sends the commit again
 }) => {
   const { popup } = await sandbox.launch();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await popup.getByText('Edit recipes', { exact: true }).click();
+  await settingsSection(popup, 'Reading');
+  await popup.getByLabel('Edit recipes', { exact: true }).click();
   await popup.getByLabel('Recipe name', { exact: true }).fill('Saved but acknowledgement lost');
   await popup.evaluate(() => {
     const original = chrome.runtime.sendMessage.bind(chrome.runtime) as (
@@ -126,10 +134,12 @@ test('an appearance change in another surface does not conflict with a settings 
 }) => {
   const { popup, context } = await sandbox.launch();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await popup.getByText('Edit recipes', { exact: true }).click();
+  await settingsSection(popup, 'Reading');
+  await popup.getByLabel('Edit recipes', { exact: true }).click();
   await popup.getByLabel('Recipe name', { exact: true }).fill('Personal recipe');
   const other = await context.newPage();
   await other.goto(popup.url().replace('popup.html', 'library.html'));
+  await settingsSection(other, 'Preferences');
   await other.getByRole('checkbox', { name: 'Minimum Mode', exact: true }).uncheck();
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(popup.getByText('Saved', { exact: true })).toBeVisible();

@@ -1,3 +1,4 @@
+import { settingsSection } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider, createFixtureServer, taggedAnswer } from './support.ts';
@@ -23,7 +24,7 @@ test('Minimum Mode defaults on, updates open surfaces, and persists independentl
   const card = article.getByRole('region', { name: 'Saul explanation' });
   await expect(card.getByRole('status')).toHaveText('Saved');
   await expect(card.getByRole('button', { name: 'Copy explanation' })).toBeVisible();
-  await expect(card.getByRole('button', { name: 'Bookmark', exact: true })).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Bookmark', exact: true })).toHaveCount(0);
   await expect(card.getByRole('button', { name: 'Simpler', exact: true })).toHaveCount(0);
   await card.getByRole('button', { name: 'More', exact: true }).click();
   await expect(card.getByRole('button', { name: 'Simpler', exact: true })).toBeVisible();
@@ -56,13 +57,13 @@ test('Minimum Mode defaults on, updates open surfaces, and persists independentl
   await expect(library.getByRole('button', { name: 'Delete highlight' })).toBeVisible();
 
   await popup.keyboard.press('ControlOrMeta+,');
+  await settingsSection(popup, 'Preferences');
   const toggle = popup.getByRole('checkbox', { name: 'Minimum Mode', exact: false });
   await expect(toggle).toBeChecked();
-  await popup
-    .locator('summary')
-    .filter({ hasText: /^API connection$/ })
-    .click();
+  await settingsSection(popup, 'Models');
+  await popup.getByLabel('API connection', { exact: true }).click();
   await popup.getByLabel('Base URL', { exact: true }).fill('invalid endpoint');
+  await settingsSection(popup, 'Preferences');
   await toggle.uncheck();
   await expect(popup.locator('main')).toHaveAttribute('data-minimum', 'false');
   await expect(library.locator('main')).toHaveAttribute('data-minimum', 'false');
@@ -80,6 +81,7 @@ test('Minimum Mode defaults on, updates open surfaces, and persists independentl
   ({ popup, context } = await sandbox.launch());
   await expect(popup.locator('main')).toHaveAttribute('data-minimum', 'false');
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(popup, 'Preferences');
   await expect(
     popup.getByRole('checkbox', { name: 'Minimum Mode', exact: false }),
   ).not.toBeChecked();
@@ -87,6 +89,7 @@ test('Minimum Mode defaults on, updates open surfaces, and persists independentl
   await restoredArticle.goto(fixtureServer.origin + '/article');
   await openFirstPageExplanation(restoredArticle);
   await expect(restoredArticle.getByRole('button', { name: 'Simpler', exact: true })).toBeVisible();
+  await settingsSection(popup, 'Preferences');
   await popup.getByRole('checkbox', { name: 'Minimum Mode', exact: false }).check();
   await expect(restoredArticle.getByRole('button', { name: 'Simpler', exact: true })).toHaveCount(
     0,
@@ -101,8 +104,11 @@ test('appearance failure is visible and an unreadable provider record does not b
     chrome.storage.local.set({ saul_user_settings: { activeProvider: 'unknown' } }),
   );
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(popup, 'Models');
   await expect(popup.getByRole('alert')).toContainText('Saved provider is not supported');
+  await settingsSection(popup, 'Preferences');
   const toggle = popup.getByRole('checkbox', { name: 'Minimum Mode', exact: false });
+  await settingsSection(popup, 'Preferences');
   await toggle.uncheck();
   await expect(toggle).not.toBeChecked();
   await popup.evaluate(() => {
@@ -151,6 +157,7 @@ test('a failed appearance save preserves a newer preference from another surface
 }) => {
   const { popup, context } = await sandbox.launch();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(popup, 'Models');
   const other = await context.newPage();
   await other.goto(popup.url().replace('popup.html', 'library.html'));
   await popup.evaluate(() => {
@@ -169,7 +176,9 @@ test('a failed appearance save preserves a newer preference from another surface
       });
     }) as typeof chrome.storage.local.set;
   });
+  await settingsSection(popup, 'Preferences');
   const toggle = popup.getByRole('checkbox', { name: 'Minimum Mode', exact: false });
+  await settingsSection(popup, 'Preferences');
   await toggle.uncheck();
   await expect(toggle).toBeDisabled();
   await other.evaluate(() => chrome.storage.local.set({ saul_minimum_mode: false }));
@@ -330,7 +339,6 @@ test('Minimum Mode stays usable at narrow touch widths with visible errors and e
               : [
                   card.getByRole('button', { name: 'Copy explanation' }),
                   card.getByRole('button', { name: 'Retry explanation' }),
-                  card.getByRole('button', { name: 'Bookmark', exact: true }),
                   card.getByRole('button', { name: 'More', exact: true }),
                 ];
           for (const button of buttons) {

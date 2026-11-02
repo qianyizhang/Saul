@@ -91,7 +91,9 @@ from current settings or claim to retain raw HTTP/SSE traffic.
 Legacy settings migrate to an Explain recipe and a Current preset; prompt roles,
 the active connection, and the selected model are preserved. Recipes contain
 literal prompt templates and reference a default preset. Presets identify a
-provider and its connection/account with model options; they contain no keys.
+provider, API connection profile where applicable, and model options; they contain no keys.
+ChatGPT presets do not select an account. Saul uses its app-selected account; legacy
+preset account fields remain historical data only.
 The existing model controls edit the selected preset, so there is one authority
 for each model choice.
 

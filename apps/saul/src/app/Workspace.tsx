@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { Library } from './Library';
 import { Settings } from './Settings';
@@ -8,6 +8,7 @@ import { NativeBridge } from './NativeBridge';
 import { useMinimumMode } from './useMinimumMode';
 import { PresentationSettings } from './PresentationSettings';
 import { NotificationSettings } from './NotificationSettings';
+import { SETTINGS_SECTIONS, type SettingsSection } from './settings-sections';
 
 type View = 'history' | 'tabs' | 'settings' | 'summaries' | 'summary';
 function viewFromHash(): View {
@@ -19,7 +20,11 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
   const presentation = useMinimumMode();
   const [route, setRoute] = useState(location.hash);
   const [view, setView] = useState<View>(viewFromHash);
-  const [settingsDirty, setSettingsDirty] = useState(false);
+  const settingsDirty = useRef(false);
+  const markSettingsDirty = useCallback((dirty: boolean) => {
+    settingsDirty.current = dirty;
+  }, []);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>('overview');
   useEffect(() => {
     const labels: Record<View, string> = {
       history: 'History',
@@ -34,16 +39,16 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
   const navigate = useCallback(
     (next: View) => {
       if (next === view) return;
-      if (settingsDirty && !window.confirm('Discard unsaved settings?')) {
+      if (settingsDirty.current && !window.confirm('Discard unsaved settings?')) {
         history.replaceState(null, '', `#${view}`);
         return;
       }
-      setSettingsDirty(false);
+      settingsDirty.current = false;
       setView(next);
       if (next !== 'summary') location.hash = next;
       window.scrollTo(0, 0);
     },
-    [view, settingsDirty],
+    [view],
   );
   useEffect(() => {
     const onHashChange = () => {
@@ -72,7 +77,10 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
     };
   }, [navigate]);
   return (
-    <main className={`shell ${popup ? 'popup' : ''}`} data-minimum={presentation.minimum}>
+    <main
+      className={`shell ${popup ? 'popup' : ''} ${view === 'settings' ? 'settings-shell' : ''}`}
+      data-minimum={presentation.minimum}
+    >
       <header className="masthead">
         <div className="brand">
           <h1>Saul</h1>
@@ -130,19 +138,45 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
       )}
       {view === 'tabs' && <Tabs />}
       {view === 'settings' && (
-        <div className="stack settings-layout">
-          <Settings onDirty={setSettingsDirty} />
-          <section className="panel settings-section" aria-label="Preferences">
-            <h3>Preferences</h3>
-            <p className="small muted">Changes here save immediately.</p>
-            <PresentationSettings preference={presentation} />
-            <NotificationSettings />
-          </section>
-          <details>
-            <summary>Codex connection</summary>
-            <p className="small muted">Access changes save immediately.</p>
-            <NativeBridge />
-          </details>
+        <div className="settings-workspace">
+          <nav className="settings-navigation" aria-label="Settings sections">
+            {SETTINGS_SECTIONS.map(([id, label]) => (
+              <button
+                type="button"
+                key={id}
+                aria-current={settingsSection === id ? 'page' : undefined}
+                onClick={() => setSettingsSection(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+          <div className="settings-content">
+            <Settings
+              onDirty={markSettingsDirty}
+              section={settingsSection}
+              onSectionChange={setSettingsSection}
+            />
+            <section
+              hidden={settingsSection !== 'preferences'}
+              className="panel settings-section"
+              aria-label="Preferences"
+            >
+              <h3>Preferences</h3>
+              <p className="small muted">Saves immediately.</p>
+              <PresentationSettings preference={presentation} />
+              <NotificationSettings />
+            </section>
+            <section
+              hidden={settingsSection !== 'connections'}
+              className="settings-section"
+              aria-label="Connections"
+            >
+              <h3>Connections</h3>
+              <p className="small muted">Access changes save immediately.</p>
+              <NativeBridge />
+            </section>
+          </div>
         </div>
       )}
     </main>

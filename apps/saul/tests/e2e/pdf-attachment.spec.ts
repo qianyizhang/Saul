@@ -1,3 +1,5 @@
+import { summaryMore } from './driver.ts';
+import { settingsSection } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import type { Page, Worker } from '@playwright/test';
 import { test, expect } from './fixtures.ts';
@@ -31,6 +33,7 @@ async function requests(worker: Worker) {
 }
 async function choosePdfProcessing(settings: Page, mode: 'local' | 'attachment') {
   await settings.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(settings, 'Summaries');
   await settings.getByLabel('PDF processing', { exact: true }).selectOption(mode);
   await settings.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(settings.getByText('Saved', { exact: true })).toBeVisible();
@@ -117,12 +120,14 @@ test('PDF processing saves through Settings; changing it preserves old results a
   for (const colorScheme of ['light', 'dark'] as const) {
     await popup.emulateMedia({ colorScheme });
     await popup.setViewportSize({ width: 420, height: 850 });
+    await settingsSection(popup, 'Summaries');
     await popup.getByLabel('PDF processing', { exact: true }).scrollIntoViewIfNeeded();
     if (reviewScreenshots)
       await popup.screenshot({ path: info.outputPath(`pdf-settings-${colorScheme}.png`) });
   }
   await popup.reload();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(popup, 'Models');
   await expect(popup.getByLabel('PDF processing', { exact: true })).toHaveValue('local');
   const reused = await openDigestReader(context, popup, worker, source.url());
   await expect(reused.getByRole('complementary', { name: 'Saved summary reused' })).toContainText(
@@ -130,6 +135,7 @@ test('PDF processing saves through Settings; changing it preserves old results a
   );
   expect(id(reused)).toBe(originalId);
   expect(await requests(worker)).toHaveLength(1);
+  await summaryMore(reused);
   await reused.getByRole('button', { name: 'Run again', exact: true }).click();
   await expect.poll(() => id(reused)).not.toBe(originalId);
   await expect(reused.getByRole('status')).toHaveText('Summary ready');
@@ -150,6 +156,7 @@ test('PDF processing saves through Settings; changing it preserves old results a
     recovered.getByRole('complementary', { name: 'Saved summary reused' }),
   ).toBeVisible();
   expect(await requests(worker)).toHaveLength(generations);
+  await summaryMore(recovered);
   await recovered.getByRole('button', { name: 'Run again', exact: true }).click();
   await expect(recovered.getByRole('alert')).toContainText('Saved PDF processing');
   expect(await requests(worker)).toHaveLength(generations);

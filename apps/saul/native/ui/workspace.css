@@ -671,3 +671,13 @@ h2 {
     width: auto;
   }
 }
+
+.minimum-only {
+  display: none;
+}
+html[data-minimum='true'] .minimum-only {
+  display: inline;
+}
+html[data-minimum='true'] .standard-only {
+  display: none;
+}

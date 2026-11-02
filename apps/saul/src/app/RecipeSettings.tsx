@@ -1,3 +1,4 @@
+import { ActionLabel } from '../surface/ActionLabel';
 import type { ReadingConfiguration, Recipe } from '../types';
 import type { SettingsEdit } from '../models/settings-draft';
 import { parseTemplate, TEMPLATE_FIELDS } from '../models/configuration';
@@ -24,16 +25,22 @@ export function RecipeSettings({
   }
   return (
     <details>
-      <summary>Edit recipes</summary>
+      <summary aria-label="Edit recipes" title="Edit recipes">
+        <ActionLabel short="Recipes" full="Edit recipes" />
+      </summary>
       <div className="stack settings-disclosure">
-        <p className="small muted">Recipes tell Saul what to do with your selection.</p>
+        <p className="small muted standard-only">
+          Recipes tell Saul what to do with your selection.
+        </p>
         <div className="row between">
           <button
             className="btn"
             disabled={configuration.recipes.length >= 32}
             onClick={() => onEdit({ type: 'add-recipe', id: crypto.randomUUID() })}
+            aria-label="Add recipe"
+            title="Add recipe"
           >
-            Add recipe
+            <ActionLabel short="Add" full="Add recipe" />
           </button>
         </div>
         <label className="field">
@@ -92,7 +99,9 @@ export function RecipeSettings({
           </p>
         )}
         <details>
-          <summary>Template syntax</summary>
+          <summary aria-label="Template syntax" title="Template syntax">
+            <ActionLabel short="Syntax" full="Template syntax" />
+          </summary>
           <p className="small muted">
             {TEMPLATE_FIELDS.map((field) => `{{${field}}}`).join(' · ')}
           </p>
@@ -103,7 +112,9 @@ export function RecipeSettings({
           </p>
         </details>
         <details>
-          <summary>System instructions</summary>
+          <summary aria-label="System instructions" title="System instructions">
+            <ActionLabel short="Instructions" full="System instructions" />
+          </summary>
           <label className="field">
             <span className="sr-only">Recipe system instructions</span>
             <textarea
@@ -119,8 +130,10 @@ export function RecipeSettings({
             className="btn danger"
             disabled={configuration.recipes.length <= 1}
             onClick={() => onEdit({ type: 'remove-recipe' })}
+            aria-label="Remove recipe"
+            title="Remove recipe"
           >
-            Remove recipe
+            <ActionLabel short="Remove" full="Remove recipe" />
           </button>
         </div>
       </div>

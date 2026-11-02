@@ -1,54 +1,101 @@
+import { settingsSection } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
-import { configureFixtureProvider } from './support.ts';
+import { configureFixtureProvider, createFixtureServer } from './support.ts';
 
-test('settings keeps essentials visible and preserves drafts through disclosures', async ({
+test('focused settings preserves drafts across sections and keeps Minimum Mode concise', async ({
   sandbox,
   fixtureServer,
 }, info) => {
-  const { popup } = await sandbox.launch();
+  const { popup: toolbar, context } = await sandbox.launch();
+  const popup = await context.newPage();
+  await popup.goto(toolbar.url().replace('popup.html', 'library.html'));
   await configureFixtureProvider(popup, fixtureServer.origin);
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  for (const label of ['AI service', 'Model name', 'Default recipe', 'Response language']) {
-    await expect(popup.getByLabel(label, { exact: true })).toBeVisible();
-  }
-  for (const label of ['Preset name', 'Recipe name', 'API key', 'Section heading']) {
-    await expect(popup.getByLabel(label, { exact: true })).toBeHidden();
-  }
-  await expect(popup.getByText('Changes here save immediately.', { exact: true })).toBeVisible();
-  const edit = popup.getByText('Edit recipes', { exact: true });
+  await expect(popup.getByRole('main')).toHaveCount(1);
+  await expect(popup.getByLabel('Default recipe', { exact: true })).toBeVisible();
+  await expect(popup.getByLabel('Response language', { exact: true })).toBeVisible();
+  await expect(popup.getByLabel('Model name', { exact: true })).toBeHidden();
+  await settingsSection(popup, 'Models');
+  await popup.getByLabel('Model name', { exact: true }).fill('draft-model');
+  await expect(popup.getByRole('button', { name: 'Add preset', exact: true })).toHaveText('+');
+  await settingsSection(popup, 'Reading');
+  const edit = popup.getByLabel('Edit recipes', { exact: true });
+  expect(await edit.innerText()).toBe('Recipes');
   await edit.focus();
   await popup.keyboard.press('Enter');
   await popup.getByLabel('Recipe name', { exact: true }).fill('Careful reading');
-  await edit.click();
-  await popup.getByText('Include with selected text', { exact: true }).click();
-  await expect(
-    popup.getByText('Checked page information is sent to your model with the selection.'),
-  ).toBeVisible();
+  await settingsSection(popup, 'Models');
+  await expect(popup.getByLabel('Model name', { exact: true })).toHaveValue('draft-model');
+  await expect(popup.getByLabel('Recipe name', { exact: true })).toBeHidden();
+  await settingsSection(popup, 'Reading');
+  await expect(popup.getByLabel('Recipe name', { exact: true })).toHaveValue('Careful reading');
+  await popup.getByLabel('Include with selected text', { exact: true }).click();
   await popup.getByLabel('Section heading', { exact: true }).uncheck();
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
   await popup.reload();
+  await settingsSection(popup, 'Models');
+  await expect(popup.getByLabel('Model name', { exact: true })).toHaveValue('draft-model');
+  await settingsSection(popup, 'Reading');
   await edit.click();
   await expect(popup.getByLabel('Recipe name', { exact: true })).toHaveValue('Careful reading');
-  await edit.click();
-  await popup.getByText('Include with selected text', { exact: true }).click();
+  await popup.getByLabel('Include with selected text', { exact: true }).click();
   await expect(popup.getByLabel('Section heading', { exact: true })).not.toBeChecked();
-  await popup.getByText('Include with selected text', { exact: true }).click();
-  for (const width of [360, 640, 1000]) {
-    await popup.setViewportSize({ width, height: 720 });
-    for (const colorScheme of ['light', 'dark'] as const) {
-      await popup.emulateMedia({ colorScheme });
-      await popup.getByRole('button', { name: 'Settings', exact: true }).scrollIntoViewIfNeeded();
-      expect(await popup.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
-        true,
-      );
-      if (reviewScreenshots)
-        await popup.screenshot({
-          path: info.outputPath(`settings-${width}-${colorScheme}.png`),
-          fullPage: true,
-        });
+  for (const section of [
+    'Overview',
+    'Models',
+    'Reading',
+    'Summaries',
+    'Preferences',
+    'Connections',
+  ] as const) {
+    await settingsSection(popup, section);
+    for (const width of [390, 640, 1100]) {
+      await popup.setViewportSize({ width, height: 720 });
+      for (const colorScheme of ['light', 'dark'] as const) {
+        await popup.emulateMedia({ colorScheme });
+        expect(await popup.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
+        if (reviewScreenshots) {
+          await popup.bringToFront();
+          await popup.evaluate(
+            () =>
+              new Promise<void>((resolve) =>
+                requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+              ),
+          );
+          await popup.screenshot({
+            path: info.outputPath(`settings-${section}-${width}-${colorScheme}.png`),
+            animations: 'disabled',
+          });
+        }
+      }
     }
+  }
+});
+
+test('a provider test stays stoppable after visiting another settings section', async ({
+  sandbox,
+}) => {
+  const server = await createFixtureServer('A test response.', { gated: true });
+  try {
+    const { popup } = await sandbox.launch();
+    await configureFixtureProvider(popup, server.origin);
+    await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+    await settingsSection(popup, 'Models');
+    await popup.getByLabel('Model options and tests', { exact: true }).click();
+    await popup.getByRole('button', { name: 'Test generation', exact: true }).click();
+    await expect.poll(() => server.requests.length).toBe(1);
+    await settingsSection(popup, 'Preferences');
+    const stop = popup.getByRole('button', { name: 'Stop test', exact: true });
+    await expect(stop).toBeVisible();
+    await stop.click();
+    await expect(stop).toHaveCount(0);
+    expect(server.requests).toHaveLength(1);
+  } finally {
+    await server.close();
   }
 });
 
@@ -67,7 +114,9 @@ test('long saved passages remain scannable until opened', async ({
   await article.locator('#concept').click({ clickCount: 3 });
   await article.getByRole('button', { name: 'Explain', exact: true }).click();
   await article.getByRole('button', { name: 'View', exact: true }).click();
-  await expect(article.getByRole('button', { name: 'Regenerate', exact: true })).toBeVisible();
+  await expect(
+    article.getByRole('region', { name: 'Saul explanation' }).getByRole('status'),
+  ).toHaveText('Saved');
   await popup.getByRole('button', { name: 'History', exact: true }).click();
   await expect(popup.locator('.history-preview')).toHaveText(passage);
   for (const width of [360, 640]) {

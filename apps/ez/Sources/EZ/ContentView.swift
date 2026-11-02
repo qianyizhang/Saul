@@ -44,7 +44,9 @@ struct ContentView: View {
                         if model.busy {
                             Button("Stop", systemImage: "stop.fill") { model.stop() }
                         } else {
-                            Button("Edit draft", systemImage: "square.and.pencil") { showsComposer = true }
+                            Button(
+                                model.minimumMode ? "Edit" : "Edit draft", systemImage: "square.and.pencil"
+                            ) { showsComposer = true }.help("Edit draft").accessibilityLabel("Edit draft")
                         }
                     }.font(AppStyle.caption).padding(.horizontal, 24).padding(.vertical, 12)
                 }
@@ -57,6 +59,7 @@ struct ContentView: View {
             .background(Color(nsColor: .textBackgroundColor))
         }
         .tint(AppStyle.accent)
+        .labelStyle(EverydayLabelStyle(minimum: model.minimumMode))
         .disclosureGroupStyle(FullRowDisclosureStyle())
         .onChange(of: model.selection) { _, _ in showsComposer = false }
         .alert(
@@ -66,7 +69,7 @@ struct ContentView: View {
                 set: { if !$0 { lookupToDelete = nil } }
             ), presenting: lookupToDelete
         ) { entry in
-            Button("Delete lookup", role: .destructive) { model.deleteLookup(entry.id) }
+            Button("Delete", role: .destructive) { model.deleteLookup(entry.id) }
                 .disabled(!model.canDeleteLookup)
             Button("Cancel", role: .cancel) {}
         } message: { entry in
@@ -88,9 +91,12 @@ struct ContentView: View {
             Button {
                 model.newQuery()
             } label: {
-                Label("New lookup", systemImage: "plus").frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 6)
-            }.buttonStyle(.bordered).disabled(model.busy || model.launcherPending).padding(.horizontal, 16)
+                Label(model.minimumMode ? "New" : "New lookup", systemImage: "plus").frame(
+                    maxWidth: .infinity, alignment: .leading
+                )
+                .padding(.vertical, 6)
+            }.help("New lookup").accessibilityLabel("New lookup").buttonStyle(.bordered)
+                .disabled(model.busy || model.launcherPending).padding(.horizontal, 16)
             TextField("Search history", text: $model.search).textFieldStyle(.roundedBorder).padding(
                 .horizontal, 16)
             HStack {
@@ -105,12 +111,16 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 5) {
                         Text(entry.displayQuery).font(.system(size: 13, weight: .medium)).lineLimit(2)
                         HStack(spacing: 4) {
-                            Image(systemName: entry.recipeSymbol)
-                            Text(entry.recipeName)
+                            if !model.minimumMode {
+                                Image(systemName: entry.recipeSymbol)
+                                Text(entry.recipeName)
+                            }
                             if entry.status == "pending" {
-                                Text("· In progress")
+                                Text(model.minimumMode ? "In progress" : "· In progress")
                             } else if entry.status != "completed" {
-                                Text("· \(entry.status.capitalized)")
+                                Text(
+                                    model.minimumMode
+                                        ? entry.status.capitalized : "· \(entry.status.capitalized)")
                             }
                         }.font(.system(size: 10)).foregroundStyle(.secondary)
                     }.padding(.vertical, 5).tag(entry.id)
@@ -125,7 +135,9 @@ struct ContentView: View {
                             Text(model.search.isEmpty ? "No lookups yet" : "No matching lookups")
                                 .font(AppStyle.caption).foregroundStyle(.secondary)
                             if !model.search.isEmpty {
-                                Button("Clear search") { model.search = "" }.buttonStyle(.borderless)
+                                Button(model.minimumMode ? "Clear" : "Clear search") { model.search = "" }
+                                    .help("Clear search").accessibilityLabel("Clear search").buttonStyle(
+                                        .borderless)
                             }
                         }.frame(maxHeight: .infinity, alignment: .top).padding(.top, 16)
                     }
@@ -133,12 +145,14 @@ struct ContentView: View {
             Spacer(minLength: 0)
             Divider()
             Button {
-                model.openSettings(.account)
+                model.openSettings(model.signedIn ? .overview : .account)
             } label: {
                 HStack {
-                    Image(systemName: "person.crop.circle").font(.title3)
+                    if !model.minimumMode { Image(systemName: "person.crop.circle").font(.title3) }
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(model.signedIn ? "Settings" : "Connect ChatGPT").font(
+                        Text(
+                            model.signedIn ? "Settings" : (model.minimumMode ? "Connect" : "Connect ChatGPT")
+                        ).font(
                             .system(size: 12, weight: .medium))
                         if model.connecting || !model.minimumMode {
                             Text(model.connecting ? "Connecting…" : "Account & history")
@@ -146,7 +160,7 @@ struct ContentView: View {
                         }
                     }
                     Spacer()
-                    Image(systemName: "gearshape").foregroundStyle(.secondary)
+                    if !model.minimumMode { Image(systemName: "gearshape").foregroundStyle(.secondary) }
                 }.padding(6)
             }.buttonStyle(.plain).padding([.horizontal, .bottom], 12)
         }
@@ -166,8 +180,11 @@ struct ContentView: View {
                 Button {
                     model.openSettings(.account)
                 } label: {
-                    Label("Continue with ChatGPT", systemImage: "person.crop.circle")
-                }.buttonStyle(.borderedProminent).padding(.top, 4)
+                    Label(
+                        model.minimumMode ? "Connect" : "Continue with ChatGPT",
+                        systemImage: "person.crop.circle")
+                }.help("Continue with ChatGPT").accessibilityLabel("Continue with ChatGPT")
+                    .buttonStyle(.borderedProminent).padding(.top, 4)
                 if !model.minimumMode {
                     Text("Uses your eligible ChatGPT plan. No API key needed.")
                         .font(AppStyle.caption).foregroundStyle(.secondary)
@@ -194,12 +211,17 @@ struct ContentView: View {
                     } label: {
                         Label("Copy", systemImage: "doc.on.doc")
                     }.disabled(entry.response.isEmpty)
-                    Button {
-                        model.reuse(entry)
-                    } label: {
-                        Label("Use again", systemImage: "arrow.counterclockwise")
-                    }.disabled(model.busy || model.launcherPending)
+                    if !model.minimumMode {
+                        Button("Use again", systemImage: "arrow.counterclockwise") { model.reuse(entry) }
+                            .disabled(model.busy || model.launcherPending)
+                    }
                     Menu {
+                        if model.minimumMode {
+                            Button("Reuse") { model.reuse(entry) }.disabled(
+                                model.busy || model.launcherPending
+                            )
+                            .help("Restore this saved request as a draft").accessibilityLabel("Use again")
+                        }
                         Button("Export…", systemImage: "square.and.arrow.up") { model.export(entry) }
                         deleteButton(entry)
                     } label: {
@@ -214,9 +236,10 @@ struct ContentView: View {
                     Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
                 }
             }
-            InputOutputInspector(entry: entry).id(entry.id)
+            if !model.minimumMode { InputOutputInspector(entry: entry).id(entry.id) }
             DisclosureGroup("Details") {
                 LookupDetails(entry: entry).padding(.top, 8)
+                if model.minimumMode { InputOutputInspector(entry: entry).id(entry.id) }
             }.font(AppStyle.caption).disclosureGroupStyle(FullRowDisclosureStyle())
         }
     }
@@ -224,7 +247,7 @@ struct ContentView: View {
         Button(role: .destructive) {
             lookupToDelete = entry
         } label: {
-            Label("Delete lookup", systemImage: "trash")
+            Label(model.minimumMode ? "Delete" : "Delete lookup", systemImage: "trash")
         }.disabled(!model.canDeleteLookup)
     }
     private var composer: some View {
@@ -269,10 +292,10 @@ struct ContentView: View {
                         .help("Send · \(model.shortcuts.binding(for: .send).display)")
                     }
                 }.controlSize(.small).disabled(model.connecting)
-                Text(composerHint)
-                    .font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
-                    .lineLimit(1).help(composerHint)
-                    .frame(height: 16, alignment: .leading)
+                if !composerHint.isEmpty {
+                    Text(composerHint).font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }.frame(maxWidth: .infinity, alignment: .leading).padding(16).background(
             Color(nsColor: .controlBackgroundColor),

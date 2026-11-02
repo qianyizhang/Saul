@@ -1,3 +1,4 @@
+import { settingsSection } from './driver.ts';
 import { test, expect } from './fixtures.ts';
 import type { Page } from '@playwright/test';
 import type { ToolArgs, ToolName, ToolResults } from '../../native/protocol.mts';
@@ -41,7 +42,7 @@ test('page access is opt-in; reads, previews, fills, clicks and navigation rejec
   const tabId = inventory.tabs.find((tab) => tab.url === page.url())!.id;
   await expect(call(popup, 'saul_page_read', { tabId })).rejects.toThrow('Enable Page reading');
   await popup.goto(popup.url().replace('popup.html', 'library.html') + '#settings');
-  await popup.getByText('Codex connection', { exact: true }).click();
+  await settingsSection(popup, 'Connections');
   await popup.getByRole('checkbox', { name: 'Page reading and actions' }).check();
   let read = await call(popup, 'saul_page_read', { tabId });
   expect(read.text).toContain('Gradient descent');

@@ -1,3 +1,4 @@
+import { ActionLabel } from '../surface/ActionLabel';
 import { useEffect, useRef, useState } from 'react';
 import type { ModelPreset } from '../types';
 import { ACTION_FORM_LIMITS, type ActionRequest, type ActionState } from '../actions/contract';
@@ -66,9 +67,11 @@ function PresetField({
 export function ActionSettings({
   presets,
   settingsDirty,
+  onBuildingChange,
 }: {
   presets: ModelPreset[];
   settingsDirty: boolean;
+  onBuildingChange?: (building: boolean) => void;
 }) {
   const [state, setState] = useState<ActionState>();
   const [form, setForm] = useState(readForm);
@@ -116,6 +119,10 @@ export function ActionSettings({
     }
   }
   const building = state?.building;
+  useEffect(() => {
+    onBuildingChange?.(!!building);
+    return () => onBuildingChange?.(false);
+  }, [building, onBuildingChange]);
   useEffect(() => {
     if (!building) return;
     let disposed = false;
@@ -175,8 +182,7 @@ export function ActionSettings({
                 value={`${choice.revision.revision}:${choice.presetId}`}
               >
                 {choice.revision.name} ·{' '}
-                {presets.find((p) => p.id === choice.presetId)?.name || 'Unavailable model preset'}{' '}
-                · {choice.revision.revision.slice(0, 8)}
+                {presets.find((p) => p.id === choice.presetId)?.name || 'Unavailable model preset'}
               </option>
             ))}
           </select>
@@ -187,7 +193,9 @@ export function ActionSettings({
           if (event.currentTarget.open && !state && !busy) void request({ action: 'status' });
         }}
       >
-        <summary>Customize Call Saul</summary>
+        <summary aria-label="Customize Call Saul" title="Customize Call Saul">
+          <ActionLabel short="Customize" full="Customize Call Saul" />
+        </summary>
         <div className="stack settings-disclosure" aria-label="Summary action">
           <p role="status" className="small">
             {state?.blocked
@@ -231,9 +239,14 @@ export function ActionSettings({
               type="button"
               className="btn"
               disabled={disabled || !prompt.trim() || !presets.some((p) => p.id === builderPreset)}
+              aria-label={candidate || state?.selected ? 'Revise action' : 'Create action'}
+              title={candidate || state?.selected ? 'Revise action' : 'Create action'}
               onClick={() => void request({ action: 'build', prompt, presetId: builderPreset })}
             >
-              {candidate || state?.selected ? 'Revise action' : 'Create action'}
+              <ActionLabel
+                short={candidate || state?.selected ? 'Revise' : 'Create'}
+                full={candidate || state?.selected ? 'Revise action' : 'Create action'}
+              />
             </button>
             {building && (
               <button
@@ -241,8 +254,10 @@ export function ActionSettings({
                 className="btn"
                 disabled={busy}
                 onClick={() => void request({ action: 'stop' })}
+                aria-label="Stop creation"
+                title="Stop creation"
               >
-                Stop creation
+                <ActionLabel short="Stop" full="Stop creation" />
               </button>
             )}
           </div>
@@ -264,7 +279,9 @@ export function ActionSettings({
               <InspectionText label="Candidate source" text={candidate.source} />
               {state?.selected && candidate.revision !== state.selected.revision.revision && (
                 <details>
-                  <summary>Current selected source</summary>
+                  <summary aria-label="Current selected source" title="Current selected source">
+                    <ActionLabel short="Current" full="Current selected source" />
+                  </summary>
                   <InspectionText label="Selected source" text={state.selected.revision.source} />
                 </details>
               )}
@@ -281,6 +298,8 @@ export function ActionSettings({
               <button
                 type="button"
                 className="btn primary"
+                aria-label={alreadyLoaded ? 'Selected' : 'Save and select call preset'}
+                title="Save and select call preset"
                 disabled={disabled || !presets.some((p) => p.id === actionPreset) || alreadyLoaded}
                 onClick={() =>
                   void request({
@@ -290,12 +309,17 @@ export function ActionSettings({
                   })
                 }
               >
-                {alreadyLoaded ? 'Selected' : 'Save and select call preset'}
+                <ActionLabel
+                  short={alreadyLoaded ? 'Selected' : 'Select'}
+                  full={alreadyLoaded ? 'Selected' : 'Save and select call preset'}
+                />
               </button>
             </div>
           )}
           <details>
-            <summary>Local module and recovery</summary>
+            <summary aria-label="Local module and recovery" title="Local module and recovery">
+              <ActionLabel short="Recovery" full="Local module and recovery" />
+            </summary>
             <div className="stack settings-disclosure">
               <label className="field">
                 Module file path
@@ -312,8 +336,10 @@ export function ActionSettings({
                 className="btn"
                 disabled={disabled || !path.trim()}
                 onClick={() => void request({ action: 'file', path })}
+                aria-label="Check file"
+                title="Check file"
               >
-                Check file
+                <ActionLabel short="Check" full="Check file" />
               </button>
               <p className="small muted">
                 Check file only reads and checks code. Review its candidate, then Save and select to
@@ -325,8 +351,10 @@ export function ActionSettings({
                   className="btn"
                   disabled={disabled}
                   onClick={() => void request({ action: 'restore' })}
+                  aria-label="Restore previous action"
+                  title="Restore previous action"
                 >
-                  Restore previous action
+                  <ActionLabel short="Restore" full="Restore previous action" />
                 </button>
               )}
               {(state?.selected || state?.blocked) && (
@@ -335,8 +363,10 @@ export function ActionSettings({
                   className="btn"
                   disabled={disabled}
                   onClick={() => void request({ action: 'builtin' })}
+                  aria-label="Use built-in summary"
+                  title="Use built-in summary"
                 >
-                  Use built-in summary
+                  <ActionLabel short="Reset" full="Use built-in summary" />
                 </button>
               )}
               {state?.raw && (

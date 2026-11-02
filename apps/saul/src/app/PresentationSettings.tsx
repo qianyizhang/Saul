@@ -10,8 +10,8 @@ export function PresentationSettings({
       <label className="toggle">
         <span>
           <strong>Minimum Mode</strong>
-          <span className="small muted preference-description">
-            Show fewer secondary actions and details.
+          <span className="small muted preference-description standard-only">
+            Everyday controls for familiar users. Reveal guidance and uncommon actions when needed.
           </span>
         </span>
         <input

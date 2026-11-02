@@ -1,3 +1,4 @@
+import { settingsSection } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import type { PlanRequest, PlanEvent } from '../../native/plan-protocol.mts';
@@ -51,9 +52,10 @@ test('speech widget keeps OAuth scope, supports cancellation and shows audio or 
     }) as typeof chrome.runtime.connectNative;
   });
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(popup, 'Models');
   await popup.getByLabel('AI service', { exact: true }).selectOption('chatgpt-plan');
-  await popup.getByText('Connection and tests', { exact: true }).click();
-  await popup.getByText('Experimental tools', { exact: true }).click();
+  await popup.getByLabel('Connection and tests', { exact: true }).click();
+  await popup.getByLabel('Experimental tools', { exact: true }).click();
   const widget = popup
     .locator('details')
     .filter({ has: popup.locator(':scope > summary', { hasText: 'Speech test · experimental' }) });
@@ -90,7 +92,12 @@ test('speech widget keeps OAuth scope, supports cancellation and shows audio or 
   await expect(widget.getByRole('alert')).toContainText('HTTP 401');
   await expect(widget.locator('audio')).toHaveCount(0);
   for (const minimum of [true, false]) {
+    await settingsSection(popup, 'Preferences');
     await popup.getByRole('checkbox', { name: /Minimum Mode/ }).setChecked(minimum);
+    await expect(popup.getByRole('dialog', { name: "You're using your ChatGPT plan" })).toHaveCount(
+      0,
+    );
+    await settingsSection(popup, 'Models');
     if (!minimum) await popup.getByRole('button', { name: 'Got it', exact: true }).click();
     for (const width of [360, 1000])
       for (const colorScheme of ['light', 'dark'] as const) {

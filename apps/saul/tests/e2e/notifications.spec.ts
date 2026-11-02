@@ -1,3 +1,4 @@
+import { settingsSection } from './driver.ts';
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider } from './support.ts';
 import type { Page } from '@playwright/test';
@@ -41,13 +42,13 @@ test('mute from a toast applies across tabs and restart; Settings can unmute wit
   await explain(page);
   await expect(page.getByRole('alert')).toHaveCount(0);
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(popup, 'Preferences');
   const toggle = popup.getByRole('checkbox', { name: 'Mute error notifications' });
   await expect(toggle).toBeChecked();
-  await popup
-    .locator('summary')
-    .filter({ hasText: /^API connection$/ })
-    .click();
+  await settingsSection(popup, 'Models');
+  await popup.getByLabel('API connection', { exact: true }).click();
   await popup.getByLabel('Base URL', { exact: true }).fill('invalid endpoint');
+  await settingsSection(popup, 'Preferences');
   await toggle.uncheck();
   await expect
     .poll(() =>
@@ -97,8 +98,10 @@ test('no-response error can be muted even while reading storage is unavailable',
   await explain(page);
   await expect(page.getByRole('alert')).toHaveCount(0);
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(popup, 'Preferences');
   const toggle = popup.getByRole('checkbox', { name: 'Mute error notifications' });
   await expect(toggle).toBeChecked();
+  await settingsSection(popup, 'Preferences');
   await toggle.uncheck();
   // The checkbox updates optimistically; a new page must observe the committed preference.
   await expect

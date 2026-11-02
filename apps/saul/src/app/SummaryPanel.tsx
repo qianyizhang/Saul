@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useMinimumMode } from './useMinimumMode';
 import { SummaryHistory, SummaryReader } from './Summaries';
 import { closeSummaryPanel, summaryPanelKey, summaryPanelRoute } from '../digest/panel';
 
 export function SummaryPanel() {
+  const { minimum } = useMinimumMode();
   const [route, setRoute] = useState<string>();
   const [error, setError] = useState('');
   const [windowId, setWindowId] = useState<number>();
@@ -87,7 +89,7 @@ export function SummaryPanel() {
     };
   }, []);
   return (
-    <main className="shell summary-panel">
+    <main className="shell summary-panel" data-minimum={minimum}>
       {error && (
         <p role="alert" className="notice error">
           {error}

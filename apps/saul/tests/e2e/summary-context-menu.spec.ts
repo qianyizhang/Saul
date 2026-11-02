@@ -1,3 +1,4 @@
+import { settingsSection } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { installDigestProvider } from './digest-fixture.ts';
@@ -86,6 +87,7 @@ test('full reader links remain compatible and keep single-page reading clear', a
   await reader.goto(savedUrl);
   await expect(reader.getByRole('status')).toHaveText('Summary ready');
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(popup, 'Preferences');
   const shortcuts = popup.locator('details.shortcuts');
   await shortcuts.locator('summary').click();
   const command = await popup.evaluate(async () =>

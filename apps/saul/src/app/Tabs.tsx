@@ -1,3 +1,4 @@
+import { ActionLabel } from '../surface/ActionLabel';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MoreHorizontal } from 'lucide-react';
 import { ActiveSummary, openSummary } from './Summaries';
@@ -355,8 +356,13 @@ export function Tabs() {
                 maxLength={200}
                 onChange={(e) => setTitle(e.target.value)}
               />
-              <button className="btn" disabled={busy || !title.trim()}>
-                Create group
+              <button
+                className="btn"
+                disabled={busy || !title.trim()}
+                aria-label="Create group"
+                title="Create group"
+              >
+                <ActionLabel short="Create" full="Create group" />
               </button>
               {groups.length > 0 && (
                 <select

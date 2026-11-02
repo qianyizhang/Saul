@@ -1,3 +1,4 @@
+import { ActionLabel } from '../surface/ActionLabel';
 import { useEffect, useRef, useState } from 'react';
 import { planCall } from '../models/chatgpt-plan';
 import type { PlanAccount } from '../../native/plan-protocol.mts';
@@ -72,7 +73,9 @@ export function SpeechTest({
   };
   return (
     <details>
-      <summary>Speech test · experimental</summary>
+      <summary aria-label="Speech test · experimental" title="Speech test · experimental">
+        <ActionLabel short="Speech" full="Speech test · experimental" />
+      </summary>
       <div className="stack">
         <p className="small muted">
           Test speech with the selected ChatGPT account. Availability is unconfirmed; no API-key
@@ -99,16 +102,23 @@ export function SpeechTest({
           </select>
         </label>
         {busy ? (
-          <button className="btn" onClick={cancel}>
-            Stop speech request
+          <button
+            className="btn"
+            onClick={cancel}
+            aria-label="Stop speech request"
+            title="Stop speech request"
+          >
+            <ActionLabel short="Stop" full="Stop speech request" />
           </button>
         ) : (
           <button
             className="btn"
             disabled={disabled || !account?.signedIn || !account.planEnabled || !input.trim()}
             onClick={() => void run()}
+            aria-label="Test speech"
+            title="Test speech"
           >
-            Test speech
+            <ActionLabel short="Test" full="Test speech" />
           </button>
         )}
         {!account?.planEnabled && (

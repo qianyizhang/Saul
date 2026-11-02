@@ -1,3 +1,4 @@
+import { settingsSection } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider, createFixtureServer, taggedAnswer } from './support.ts';
@@ -21,7 +22,9 @@ test('compact workspace supports reading, tab controls and reachable settings', 
   await article.locator('#concept').click({ clickCount: 3 });
   await article.getByRole('button', { name: 'Explain', exact: true }).click();
   await article.getByRole('button', { name: 'View', exact: true }).click();
-  await expect(article.getByRole('button', { name: 'Regenerate', exact: true })).toBeVisible();
+  await expect(
+    article.getByRole('region', { name: 'Saul explanation' }).getByRole('status'),
+  ).toHaveText('Saved');
   if (reviewScreenshots) await article.screenshot({ path: info.outputPath('02-explanation.png') });
   await popup.getByRole('button', { name: 'History', exact: true }).click();
   await expect(popup.locator('.history-title')).toHaveCount(1);
@@ -39,25 +42,31 @@ test('compact workspace supports reading, tab controls and reachable settings', 
     .check();
   await expect(popup.getByRole('button', { name: 'Group', exact: true })).toBeEnabled();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  const connection = popup.locator('summary').filter({ hasText: /^Codex connection$/ });
+  await settingsSection(popup, 'Models');
+  const connection = popup
+    .getByRole('navigation', { name: 'Settings sections' })
+    .getByRole('button', { name: 'Connections', exact: true });
   await connection.focus();
   await popup.keyboard.press('Enter');
   await expect(popup.getByLabel('Codex tab access')).toBeVisible();
-  await popup.getByText('Connect Codex · setup and troubleshooting', { exact: true }).click();
+  await popup.getByLabel('Connect Codex · setup and troubleshooting', { exact: true }).click();
   await expect(
     popup
       .locator('code')
       .filter({ hasText: 'node scripts/setup.mts --components tabs --extension-id' }),
   ).toBeVisible();
-  await popup.getByText('Connect Codex · setup and troubleshooting', { exact: true }).click();
+  await popup.getByLabel('Connect Codex · setup and troubleshooting', { exact: true }).click();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(popup, 'Models');
   await expect(popup.getByLabel('AI service', { exact: true })).toBeVisible();
   const save = popup.getByRole('button', { name: 'Save', exact: true });
   await expect(save).toBeInViewport();
   if (reviewScreenshots) await popup.screenshot({ path: info.outputPath('05-settings.png') });
+  await settingsSection(popup, 'Models');
   await popup.getByLabel('Model name', { exact: true }).fill('');
   await save.click();
   await expect(popup.getByRole('alert')).toBeInViewport();
+  await settingsSection(popup, 'Models');
   await popup.getByLabel('Model name', { exact: true }).fill('changed-model');
   popup.once('dialog', (dialog) => dialog.dismiss());
   await popup.getByRole('button', { name: 'Window', exact: true }).click();
@@ -146,7 +155,9 @@ test('shared appearance supports concept notes, page lists, errors and reduced-m
     if (reviewScreenshots)
       await article.screenshot({ path: info.outputPath('09-streaming-reduced-motion.png') });
     server.releaseAll();
-    await expect(article.getByRole('button', { name: 'Regenerate', exact: true })).toBeVisible();
+    await expect(
+      article.getByRole('region', { name: 'Saul explanation' }).getByRole('status'),
+    ).toHaveText('Saved');
     const term = article.getByRole('button', { name: 'gradient', exact: true });
     await term.focus();
     await expect(article.getByRole('tooltip')).toBeVisible();
@@ -210,9 +221,11 @@ test('answer metadata stays aligned and readable in cards and history at compact
   const { popup, context } = await sandbox.launch();
   await configureFixtureProvider(popup, fixtureServer.origin);
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(popup, 'Models');
   const longModel = 'test-model-with-a-deliberately-long-identifier-for-wrapping';
+  await settingsSection(popup, 'Models');
   await popup.getByLabel('Model name', { exact: true }).fill(longModel);
-  await popup.getByText('Manage model presets', { exact: true }).click();
+  await settingsSection(popup, 'Models');
   await popup
     .getByLabel('Preset name', { exact: true })
     .fill('Careful reading with a deliberately long preset name');
@@ -223,7 +236,9 @@ test('answer metadata stays aligned and readable in cards and history at compact
   await article.locator('#concept').click({ clickCount: 3 });
   await article.getByRole('button', { name: 'Explain', exact: true }).click();
   await article.getByRole('button', { name: 'View', exact: true }).click();
-  await expect(article.getByRole('button', { name: 'Regenerate', exact: true })).toBeVisible();
+  await expect(
+    article.getByRole('region', { name: 'Saul explanation' }).getByRole('status'),
+  ).toHaveText('Saved');
   await popup.getByRole('button', { name: 'History', exact: true }).click();
   await popup.locator('.history-title').click();
   for (const [name, page] of [
@@ -232,7 +247,7 @@ test('answer metadata stays aligned and readable in cards and history at compact
   ] as const) {
     const details = page.locator('.saul-run-details').first();
     // Details is available without opening More; native summary supports keyboard activation.
-    await details.locator('summary').focus();
+    await details.locator(':scope > summary').focus();
     await page.keyboard.press('Enter');
     await expect(details).toHaveAttribute('open');
     await expect(details.locator('dt')).toHaveText([

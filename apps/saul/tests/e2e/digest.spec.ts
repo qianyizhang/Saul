@@ -1,3 +1,4 @@
+import { summaryMore } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { installDigestProvider } from './digest-fixture.ts';
@@ -78,6 +79,7 @@ test('programmatic summary opens immediately, runs two streams, survives closure
   await expect(reopened.getByRole('status')).toContainText('3 of 3 summarized');
   await expect(reopened.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0);
   const downloading = reopened.waitForEvent('download');
+  await summaryMore(reopened);
   await reopened.getByRole('button', { name: 'Export HTML' }).click();
   const html = await readFile((await (await downloading).path())!, 'utf8');
   expect(html).toContain('/article#summary=0');

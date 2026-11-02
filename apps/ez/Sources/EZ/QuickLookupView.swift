@@ -33,9 +33,11 @@ struct QuickLookupView: View {
                             Text("Connecting to ChatGPT…").font(AppStyle.caption).foregroundStyle(.secondary)
                         } else if needsSetup {
                             Button(
-                                !model.signedIn
-                                    ? "Connect ChatGPT"
-                                    : !model.planEnabled ? "Enable plan access" : "Open Configuration"
+                                model.minimumMode
+                                    ? (needsAccount ? "Connect" : "Settings")
+                                    : (!model.signedIn
+                                        ? "Connect ChatGPT"
+                                        : !model.planEnabled ? "Enable plan access" : "Open Configuration")
                             ) {
                                 controller.showMain(
                                     settings: true, section: needsAccount ? .account : .configuration)
@@ -64,6 +66,7 @@ struct QuickLookupView: View {
             minHeight: layout.minimumHeight, maxHeight: .infinity, alignment: .topLeading
         )
         .background(Color(nsColor: .windowBackgroundColor)).tint(AppStyle.accent)
+        .labelStyle(EverydayLabelStyle(minimum: model.minimumMode))
         .disclosureGroupStyle(FullRowDisclosureStyle())
         .ignoresSafeArea(.container, edges: .top)
         .onAppear {
@@ -92,7 +95,7 @@ struct QuickLookupView: View {
             Menu {
                 Toggle("Minimum Mode", isOn: $model.minimumMode)
                 Divider()
-                Button("Configuration…") { controller.showMain(settings: true) }
+                Button("Settings…") { controller.showMain(settings: true) }
                 Button("Account…") { controller.showMain(settings: true, section: .account) }
             } label: {
                 Image(systemName: "ellipsis")
@@ -117,7 +120,9 @@ struct QuickLookupView: View {
             )
             .disabled(model.busy || model.launcherPending)
             if model.minimumMode && model.selectedEntry != nil && !model.busy {
-                Button(showsInputs ? "Hide draft" : "Edit draft") { showsComposer.toggle() }
+                Button(showsInputs ? "Hide" : "Edit") { showsComposer.toggle() }
+                    .help(showsInputs ? "Hide draft" : "Edit draft")
+                    .accessibilityLabel(showsInputs ? "Hide draft" : "Edit draft")
                     .buttonStyle(.borderless)
             }
             Spacer()
@@ -142,7 +147,9 @@ struct QuickLookupView: View {
             } else if let entry = model.selectedEntry {
                 Text(
                     entry.presetSnapshot.map {
-                        "\($0.name) · \(entry.requestedServiceTier == nil ? "Standard" : "Fast")"
+                        model.minimumMode && entry.requestedServiceTier == nil
+                            ? $0.name
+                            : "\($0.name) · \(entry.requestedServiceTier == nil ? "Standard" : "Fast")"
                     } ?? "Details"
                 )
                 .lineLimit(1).help(entry.serviceDescription)

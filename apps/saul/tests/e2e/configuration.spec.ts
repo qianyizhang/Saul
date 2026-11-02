@@ -1,3 +1,4 @@
+import { settingsSection } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider, createFixtureServer } from './support.ts';
@@ -26,14 +27,18 @@ test('named presets and recipes save, choose their models, and create a new atte
   const initialRequests = fixtureServer.requests.length;
   await configureFixtureProvider(popup, fixtureServer.origin);
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(popup, 'Models');
   await expect(popup.getByLabel('Preset name', { exact: true })).toHaveValue('Current');
-  await popup.getByText('Manage model presets', { exact: true }).click();
+  await settingsSection(popup, 'Models');
   await popup.getByLabel('Preset name', { exact: true }).fill('Short');
   await popup.getByRole('button', { name: 'Add preset', exact: true }).click();
+  await settingsSection(popup, 'Models');
   await popup.getByLabel('Preset name', { exact: true }).fill('Careful');
+  await settingsSection(popup, 'Models');
   await popup.getByLabel('Model name', { exact: true }).fill('careful-model');
   const carefulId = await popup.getByLabel('Preset', { exact: true }).inputValue();
-  await popup.getByText('Edit recipes', { exact: true }).click();
+  await settingsSection(popup, 'Reading');
+  await popup.getByLabel('Edit recipes', { exact: true }).click();
   await popup.getByLabel('Edit recipe', { exact: true }).selectOption('recipe-lookup');
   await popup.getByLabel('Default preset', { exact: true }).selectOption(carefulId);
   await popup
@@ -76,19 +81,22 @@ test('named presets and recipes save, choose their models, and create a new atte
   await expect.poll(() => fixtureServer.requests.length).toBe(initialRequests + 3);
   expect(sentRequest(fixtureServer, initialRequests + 2).model).toBe('careful-model');
 
-  await popup.getByText('Edit recipes', { exact: true }).click();
-  await popup.getByText('Manage model presets', { exact: true }).click();
+  await settingsSection(popup, 'Reading');
+  await popup.getByLabel('Edit recipes', { exact: true }).click();
+  await settingsSection(popup, 'Models');
   for (const width of [360, 440]) {
     for (const scheme of ['light', 'dark'] as const) {
       await popup.setViewportSize({ width, height: 700 });
       await popup.emulateMedia({ colorScheme: scheme });
+      await settingsSection(popup, 'Reading');
       await popup.getByLabel('Edit recipe', { exact: true }).selectOption('recipe-lookup');
-      await popup.getByText('Edit recipes', { exact: true }).scrollIntoViewIfNeeded();
+      await popup.getByLabel('Edit recipes', { exact: true }).scrollIntoViewIfNeeded();
       expect(await popup.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       );
       if (reviewScreenshots)
         await popup.screenshot({ path: info.outputPath(`recipes-${width}-${scheme}.png`) });
+      await settingsSection(popup, 'Models');
       await popup.getByLabel('Preset', { exact: true }).scrollIntoViewIfNeeded();
       if (reviewScreenshots)
         await popup.screenshot({ path: info.outputPath(`presets-${width}-${scheme}.png`) });
@@ -123,6 +131,7 @@ test('failed different-recipe attempts keep shown-answer metadata; Retry and fol
     await expect.poll(async () => (await getHistory(popup))[0]?.latest.status).toBe('completed');
     const saved = await getFirstHistory(popup);
     await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+    await settingsSection(popup, 'Models');
     await popup.getByLabel('Model name', { exact: true }).fill('model-b');
     await popup.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
@@ -147,6 +156,7 @@ test('failed different-recipe attempts keep shown-answer metadata; Retry and fol
     });
     expect(attempts[0]!.inspection!.userPrompt).toBe(sentRequest(server, 1).messages[1]!.content);
     expect(attempts[1]!.inspection!.userPrompt).toBe(sentRequest(server, 0).messages[1]!.content);
+    await settingsSection(popup, 'Models');
     await popup.getByLabel('Model name', { exact: true }).fill('model-c');
     await popup.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
@@ -180,8 +190,10 @@ test('missing recipe context or connection blocks submission without using anoth
   const initialRequests = fixtureServer.requests.length;
   await configureFixtureProvider(popup, fixtureServer.origin);
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await popup.getByText('Edit recipes', { exact: true }).click();
-  await popup.getByText('Include with selected text', { exact: true }).click();
+  await settingsSection(popup, 'Reading');
+  await popup.getByLabel('Edit recipes', { exact: true }).click();
+  await settingsSection(popup, 'Reading');
+  await popup.getByLabel('Include with selected text', { exact: true }).click();
   await popup.getByLabel('Edit recipe', { exact: true }).selectOption('recipe-nudge');
   await popup.getByLabel('Prompt template', { exact: true }).fill('{{text}}\n{{heading}}');
   await popup.getByLabel('Section heading', { exact: true }).uncheck();

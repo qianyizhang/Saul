@@ -1,3 +1,4 @@
+import { summaryMore } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { installDigestProvider } from './digest-fixture.ts';
@@ -76,8 +77,8 @@ test('summary reuse compares input without inference; inspection searches large 
   await saved.getByLabel('Search Captured page text').fill('END-OF-CAPTURE');
   await expect(saved.locator('mark')).toHaveText('END-OF-CAPTURE');
   await inspector.getByRole('button', { name: 'Compare current page' }).click();
-  await expect(inspector.getByRole('button', { name: 'Current input', exact: true })).toBeVisible();
-  await inspector.getByRole('button', { name: 'Current input', exact: true }).click();
+  await expect(inspector.getByLabel('Current input', { exact: true })).toBeVisible();
+  await inspector.getByLabel('Current input', { exact: true }).click();
   await expect(
     inspector.getByRole('region', { name: 'Current page text', exact: true }).locator('pre'),
   ).toContainText('newly verified finding');
@@ -92,6 +93,7 @@ test('summary reuse compares input without inference; inspection searches large 
       await changed.screenshot({ path: info.outputPath(`summary-inspection-${colorScheme}.png`) });
   }
   expect(await requests()).toBe(initial);
+  await summaryMore(changed);
   await changed.getByRole('button', { name: 'Run again', exact: true }).click();
   await expect.poll(() => new URL(changed.url()).hash).not.toBe(savedRoute);
   await expect(changed.getByRole('status')).toHaveText('Summary ready');
@@ -109,7 +111,7 @@ test('summary reuse compares input without inference; inspection searches large 
   await expect(first.getByRole('status')).toHaveText('Summary ready');
   await changed.locator('.saul-inspector > summary').click();
   await changed.getByRole('button', { name: 'Compare current page' }).click();
-  await changed.getByRole('button', { name: 'Current input', exact: true }).click();
+  await changed.getByLabel('Current input', { exact: true }).click();
   await source.close();
   await changed.getByRole('button', { name: 'Compare current page' }).click();
   await expect(changed.locator('.saul-inspector')).toContainText('Current input not verified');

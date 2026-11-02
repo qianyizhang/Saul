@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { X, Copy, Check, RefreshCw, Pin, Bookmark, Square, ChevronDown } from 'lucide-react';
+import { X, Copy, Check, RefreshCw, Pin, Bookmark, Square } from 'lucide-react';
 import type { Passage, RunResult, RunStatus } from '../types/storage';
 import { TagStreamParser } from '../parser/tag-stream-parser';
 import { AnnotatedTextView } from './AnnotatedTextView';
@@ -89,7 +89,7 @@ export function ExplanationCard({
       aria-label="Copy explanation"
       onClick={copy}
     >
-      {copied ? <Check size={16} /> : <Copy size={16} />}
+      {!minimum && (copied ? <Check size={16} /> : <Copy size={16} />)}
       {copied ? 'Copied' : 'Copy'}
     </button>
   );
@@ -162,8 +162,14 @@ export function ExplanationCard({
             </p>
             {reuse.fields.length > 0 && <p>Also changed: {reuse.fields.join(', ')}</p>}
             {!active && onRunCurrent && (
-              <button type="button" disabled={busy} onClick={onRunCurrent}>
-                Run again with current input
+              <button
+                type="button"
+                disabled={busy}
+                onClick={onRunCurrent}
+                aria-label="Run again with current input"
+                title="Run again with current input"
+              >
+                {minimum ? 'Regenerate' : 'Run again with current input'}
               </button>
             )}
           </aside>
@@ -190,8 +196,10 @@ export function ExplanationCard({
             <InputOutputInspector key={latest.id} run={latest} />
           </details>
         )}
-        <RunDetails key={`details-${answer.id}`} run={answer} />
-        <InputOutputInspector key={answer.id} run={answer} />
+        <RunDetails key={`details-${answer.id}`} run={answer}>
+          {minimum && <InputOutputInspector key={answer.id} run={answer} />}
+        </RunDetails>
+        {!minimum && <InputOutputInspector key={answer.id} run={answer} />}
         {error && (
           <p role="alert" className="text-sm text-danger mt-2">
             {error}
@@ -205,6 +213,8 @@ export function ExplanationCard({
                   <button
                     className="px-2 py-1.5 text-xs rounded-control border border-line hover:bg-wash focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40"
                     key={label}
+                    aria-label={label}
+                    title={label}
                     disabled={busy}
                     onClick={() => {
                       setRuns(null);
@@ -212,13 +222,19 @@ export function ExplanationCard({
                       onRetry(label);
                     }}
                   >
-                    {label}
+                    {minimum
+                      ? { Simpler: 'Simpler', 'Give an example': 'Example', 'Go deeper': 'Deeper' }[
+                          label
+                        ]
+                      : label}
                   </button>
                 ))}
               </div>
             )}
             <button
               className={`${iconClass} text-xs`}
+              aria-label="Past attempts"
+              title="Past attempts"
               aria-expanded={runs !== null}
               onClick={() => {
                 if (runs) setRuns(null);
@@ -228,7 +244,7 @@ export function ExplanationCard({
                     .catch((e) => setError(e.message));
               }}
             >
-              Past attempts
+              {minimum ? 'Attempts' : 'Past attempts'}
             </button>
             {earlierRuns?.length === 0 && (
               <p className="text-xs text-muted">No earlier attempts.</p>
@@ -255,33 +271,37 @@ export function ExplanationCard({
             disabled={busy || latest.status === 'saving'}
             onClick={onStop}
           >
-            <Square size={14} />
+            {!minimum && <Square size={14} />}
             {latest.status === 'saving' ? 'Saving…' : 'Stop'}
           </button>
         ) : (
-          <button
-            className={`${iconClass} flex items-center gap-1 text-sm`}
-            aria-label={latest.status === 'completed' ? 'Regenerate' : 'Retry explanation'}
-            disabled={busy}
-            onClick={() => {
-              setRuns(null);
-              onRetry();
-            }}
-          >
-            <RefreshCw size={16} />
-            {latest.status === 'completed' ? 'Regenerate' : 'Retry'}
-          </button>
+          (!minimum || more || latest.status !== 'completed') && (
+            <button
+              className={`${iconClass} flex items-center gap-1 text-sm`}
+              aria-label={latest.status === 'completed' ? 'Regenerate' : 'Retry explanation'}
+              disabled={busy}
+              onClick={() => {
+                setRuns(null);
+                onRetry();
+              }}
+            >
+              {!minimum && <RefreshCw size={16} />}
+              {latest.status === 'completed' ? 'Regenerate' : 'Retry'}
+            </button>
+          )
         )}
         {active && copyButton}
-        <button
-          className={iconClass}
-          aria-label={passage.bookmarked ? 'Remove bookmark' : 'Bookmark'}
-          aria-pressed={passage.bookmarked}
-          disabled={busy}
-          onClick={onBookmark}
-        >
-          <Bookmark size={16} fill={passage.bookmarked ? 'currentColor' : 'none'} />
-        </button>
+        {(!minimum || more) && (
+          <button
+            className={iconClass}
+            aria-label={passage.bookmarked ? 'Remove bookmark' : 'Bookmark'}
+            aria-pressed={passage.bookmarked}
+            disabled={busy}
+            onClick={onBookmark}
+          >
+            <Bookmark size={16} fill={passage.bookmarked ? 'currentColor' : 'none'} />
+          </button>
+        )}
         {minimum && (
           <button
             ref={moreButton}
@@ -289,7 +309,7 @@ export function ExplanationCard({
             aria-expanded={more}
             onClick={() => setMore(!more)}
           >
-            More <ChevronDown size={14} className={more ? 'rotate-180' : ''} />
+            More
           </button>
         )}
       </div>

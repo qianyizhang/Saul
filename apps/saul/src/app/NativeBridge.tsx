@@ -1,3 +1,4 @@
+import { ActionLabel } from '../surface/ActionLabel';
 import { PAGE_ACCESS_KEY } from '../native/pages';
 import { useEffect, useState } from 'react';
 import {
@@ -118,7 +119,12 @@ export function NativeBridge() {
         </p>
       )}
       <details>
-        <summary>Connect Codex · setup and troubleshooting</summary>
+        <summary
+          aria-label="Connect Codex · setup and troubleshooting"
+          title="Connect Codex · setup and troubleshooting"
+        >
+          <ActionLabel short="Setup" full="Connect Codex · setup and troubleshooting" />
+        </summary>
         <div className="stack" style={{ marginTop: 12 }}>
           <p className="small muted">
             1. From the monorepo root, run this command to build and install the tab helper. Add

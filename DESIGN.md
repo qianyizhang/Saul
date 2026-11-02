@@ -199,11 +199,28 @@ completion; a build or token check alone does not establish readability.
 
 ## Minimum Mode
 
-Minimum Mode is the default presentation for personal use. It is reversible in
+Minimum Mode is the default **expert everyday view**: assume the user already
+knows the app and normally needs only its common tasks. Show current inputs and
+answers, recipe/preset choices, essential state and the next useful action.
+Omit routine explanatory subtext, repeated facts, coaching and decorative labels.
+Keep uncommon operations in named More, Details or Settings destinations. Revealing
+one task must not expand unrelated editors into the same page.
+
+Buttons show one clear word or a familiar symbol alone, not both. Keep complete
+accessible names and tooltips. Prefer Send, Stop, Copy, Save, Reuse, Edit, Add,
+Remove, Reload and Connect. Dynamic user-authored names, selected values and
+keyboard bindings are not action wording. Destructive confirmations retain their
+exact scope. Save retries only persistence; regeneration remains a distinct action.
+Errors, unsaved work, unavailable choices and billing/permission consequences remain
+visible. Minimum Mode never hides information needed to avoid losing work or
+understand a consequential action.
+
+It is reversible in
 Settings (or the board's View options), independent of model configuration, and
 saved locally on each surface. EZ's two windows share the setting; Saul's extension
 pages and reading cards share it. The embedded board keeps its own preference.
-There is no cross-app or cross-device preference sync.
+There is no cross-app or cross-device preference sync. At compact preset selectors,
+omit the default Standard speed suffix; keep Fast visible. Exact speed remains in Details.
 
 | Always available                                                | Minimum Mode                                                     | Standard view                     |
 | --------------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------- |
@@ -244,17 +261,24 @@ service tier only when it was returned and recorded, never inferred from Fast.
 
 ## Accounts, presets, and recipes
 
-Saul Settings leads with AI service, account/model and reading defaults. Keep
-preset management, recipe editing, model tuning and diagnostics in named
-disclosures. Essential meaning and billing distinctions remain visible in Minimum
-Mode. Put independent preferences after the configuration Save area and label
-their immediate-save behavior. The toolbar popup should support ordinary reading
+Settings uses focused sections in both apps. Overview leads with everyday choices;
+Models places the selected preset beside its editor; Reading/Recipes, Summaries
+(Saul), Preferences, and Connections/Accounts have separate destinations. Keep one
+editing task visible and preserve drafts when navigating between sections. Use a
+sidebar at desktop widths and a compact section control at narrow widths; a narrow
+preset selector replaces the list. EZ uses native controls and keeps its existing
+per-item save semantics. Saul retains one configuration draft and explicit Save.
+Keep model tuning and diagnostics in named disclosures. Essential meaning and billing distinctions remain visible in Minimum
+Mode. Give independent preferences their own section and label their immediate-save
+behavior. The toolbar popup should support ordinary reading
 and setup without requiring a full tab; use a wider desktop layout and verify
 its actual browser bounds. Collapsed History entries show a short passage preview;
 opening the entry reveals the full selection and answer.
 
-Use **Continue with ChatGPT**, **Cancel**, **Add account**, **Enable plan usage**,
+In Standard view use **Continue with ChatGPT**, **Cancel**, **Add account**, **Enable plan usage**,
 **Refresh models**, **Manage usage**, and **Sign out** for the same account actions.
+Minimum Mode shows Connect, Cancel, Add, Enable, Refresh, Usage and Disconnect,
+with the full action retained in its accessible name and tooltip.
 Both surfaces use ChatGPT's direct sign-in flow and account model catalog. Each
 app keeps its own sign-ins; signing in or out of one does not change the other.
 Account identity and permission to use the plan are separate states. Show recovery

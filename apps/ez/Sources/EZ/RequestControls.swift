@@ -20,7 +20,7 @@ struct PresetPicker: View {
         let name = saved ? "Saved: \(preset.name)" : preset.name
         guard showsSpeed else { return name }
         if model.minimumMode {
-            return "\(name) · \(preset.fast ? "Fast" : "Standard")"
+            return preset.fast ? "\(name) · Fast" : name
         }
         let override = !saved && model.overridePresetID == preset.id ? " · Override" : ""
         return name + override + (preset.fast ? " · Fast requested" : " · Standard")
@@ -80,7 +80,9 @@ struct RequestDetails: View {
                     Text("Next lookup").font(.headline)
                     draftDetails
                 }
-                Button("Presets & recipes…", action: onConfigure)
+                Button(model.minimumMode ? "Settings" : "Presets & recipes…", action: onConfigure).help(
+                    "Presets & recipes…"
+                ).accessibilityLabel("Presets & recipes…")
             }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
         }.frame(width: 380).frame(maxHeight: 520)
     }
@@ -146,9 +148,9 @@ struct RecipeInputs: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if model.inputFields.isEmpty {
-                Button("Configure recipes") {
-                    if let onConfigure { onConfigure() } else { model.openSettings() }
-                }
+                Button(model.minimumMode ? "Recipes" : "Configure recipes") {
+                    if let onConfigure { onConfigure() } else { model.openSettings(.recipes) }
+                }.help("Configure recipes").accessibilityLabel("Configure recipes")
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {

@@ -29,18 +29,23 @@ self-signing alone does not prevent Keychain prompts after upgrades. See
 [the Keychain limitation](docs/keychain.md#why-a-rebuild-can-ask-again).
 The previous installed bundle is retained for rollback.
 
-In EZ, open **Settings → Account & history → Continue with ChatGPT**, finish sign-in
+In EZ, open **Settings → Accounts → Connect**, finish sign-in
 in your browser, and allow ChatGPT plan usage. Choose a recipe, fill its inputs,
 then press **⌘ Return**. **Minimum Mode** is on by default: the draft sits below
 the new-lookup heading, answers get a quiet reading view, and **Details** holds
-request settings, token counts, and timing. Turn it off in Settings or Quick
+request settings, token counts, and timing. Turn it off in Settings → Preferences or Quick
 Lookup's actions menu to restore extra guidance and the persistent metrics footer.
 The choice is saved on this Mac. Check Settings → Manage usage for ChatGPT plan
 allowance. Metrics are saved with new lookups; older history has no metrics.
 **⌘ N** starts a new lookup and **⌘ .** stops generation.
-Selected answers open in a reading view. **Edit draft** reveals your current inputs;
-**Hide draft** returns to reading, and **Use again** restores the saved request.
-**Inspect input/output** shows the saved instructions, input fields, assembled
+Settings uses the same focused design as Saul: Overview, Models, Recipes,
+Preferences, Accounts and Shortcuts. One editor is shown at a time and section
+changes preserve drafts. Minimum Mode assumes a familiar user: everyday controls
+stay visible, with one-word or symbol-only actions and detailed help on demand.
+
+Selected answers open in a reading view. **Edit** reveals your current inputs;
+**Hide** returns to reading, and **More → Reuse** restores the saved request.
+**Details → Inspect** shows the saved instructions, input fields, assembled
 prompt and literal response with per-section Copy. It is also in Quick Lookup's
 Details popover, including for incomplete answers.
 You can copy answers, export Markdown, and search previous lookups. To delete a
@@ -49,7 +54,7 @@ confirm. Deletion removes its saved snapshots from this Mac and cannot be undone
 it is unavailable while a request or launcher submission is active. Your current
 draft is preserved.
 
-If an answer cannot be saved, it stays marked **Unsaved** with **Save again**.
+If an answer cannot be saved, it stays marked **Unsaved** with **Save** (Save again in Standard view).
 That action retries only the local save; it never generates another answer. New
 lookup and History keep the answer available in memory. Save or export it before
 quitting EZ.
@@ -66,9 +71,9 @@ or choose **Quick Lookup** from EZ’s menu-bar icon. Type or paste text and pre
 for results; long forms and answers scroll. Choose a preset override in the panel’s
 preset selector. Click its information button for exact request choices and the
 displayed answer's actual service tier. In Minimum Mode, an answer hides the input
-fields until **Edit draft**; **New**, **Stop**, and **Copy** stay reachable as
+fields until **Edit**; **New**, **Stop**, and **Copy** stay reachable as
 appropriate. Use the
-actions menu for Configuration. **Esc** hides the panel and returns keyboard focus to
+actions menu for Settings. **Esc** hides the panel and returns keyboard focus to
 your work. A running answer continues while hidden; **⌘ .** stops it. **⌘ N** starts
 a new lookup. Invoking Quick Lookup through the shortcut or menu starts an empty
 lookup when idle: it clears previous inputs and the displayed answer, keeps the

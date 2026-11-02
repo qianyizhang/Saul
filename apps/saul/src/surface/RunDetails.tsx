@@ -1,7 +1,9 @@
+import type { ReactNode } from 'react';
+import { ActionLabel } from './ActionLabel';
 import type { RunResult } from '../types/storage';
 
 /** Recorded facts for the displayed attempt, never the current provider draft. */
-export function RunDetails({ run }: { run: RunResult }) {
+export function RunDetails({ run, children }: { run: RunResult; children?: ReactNode }) {
   const provider =
     {
       'chatgpt-plan': 'ChatGPT plan',
@@ -33,13 +35,16 @@ export function RunDetails({ run }: { run: RunResult }) {
       {run.provider === 'chatgpt-plan' && (
         <a
           className="saul-usage-link"
+          aria-label="Manage usage"
+          title="Manage usage"
           href="https://chatgpt.com/settings/usage"
           target="_blank"
           rel="noreferrer"
         >
-          Manage usage
+          <ActionLabel short="Usage" full="Manage usage" />
         </a>
       )}
+      {children}
     </details>
   );
 }

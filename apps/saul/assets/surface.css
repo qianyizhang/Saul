@@ -95,3 +95,17 @@
     left: 38%;
   }
 }
+
+/* Shared by workspace pages and shadow-root reading surfaces. */
+.minimum-only {
+  display: none;
+}
+[data-minimum='true'] .minimum-only {
+  display: revert;
+}
+[data-minimum='true'] .standard-only {
+  display: none;
+}
+[data-minimum='true'] .btn:not(.icon) > svg {
+  display: none;
+}

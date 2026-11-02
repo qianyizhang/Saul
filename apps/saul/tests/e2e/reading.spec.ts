@@ -1,3 +1,4 @@
+import { readingMore } from './driver.ts';
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider, createFixtureServer } from './support.ts';
 import {
@@ -53,6 +54,7 @@ test('dismiss, refresh and closing the source do not cancel; actual runner loss 
     server.releaseAll();
     await expect.poll(async () => (await history(popup))[0]?.latest.status).toBe('completed');
     await view(page);
+    await readingMore(page);
     await page.getByRole('button', { name: 'Regenerate', exact: true }).click();
     await expect.poll(async () => (await history(popup))[0]?.latest.status).toBe('running');
     await page.close();
@@ -62,6 +64,7 @@ test('dismiss, refresh and closing the source do not cancel; actual runner loss 
     await page.goto(server.origin + '/article');
     await view(page);
     const previousAttempt = (await getFirstHistory(popup)).latest.id;
+    await readingMore(page);
     await page.getByRole('button', { name: 'Regenerate', exact: true }).click();
     await expect.poll(async () => (await history(popup))[0]?.latest.id).not.toBe(previousAttempt);
     await expect
@@ -214,6 +217,7 @@ for (const ending of ['eof', 'length'] as const)
       await expect.poll(async () => (await history(popup))[0]?.latest.status).toBe('completed');
       await view(page);
       server.setEnding(ending);
+      await readingMore(page);
       await page.getByRole('button', { name: 'Regenerate', exact: true }).click();
       await expect.poll(async () => (await history(popup))[0]?.latest.status).toBe('interrupted');
       const row = await getFirstHistory(popup);

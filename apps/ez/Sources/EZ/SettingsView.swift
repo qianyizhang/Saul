@@ -13,40 +13,110 @@ struct SettingsView: View {
             HStack {
                 Text("Settings").font(AppStyle.subject)
                 Spacer()
-                Toggle("Minimum Mode", isOn: $model.minimumMode)
-                    .toggleStyle(.switch).controlSize(.small)
                 Button("Done") {
                     if hasUnsavedChanges { confirmDiscard = true } else { dismiss() }
                 }.keyboardShortcut(.cancelAction)
             }.padding(22)
-            SettingsSectionPicker(selection: $model.settingsSection).frame(width: 400, height: 24)
-                .padding(.horizontal, 24).padding(.bottom, 16)
             Divider()
-            ZStack {
-                // Keep editor drafts and scroll position while visiting another section.
-                ConfigurationView(model: model, hasUnsavedChanges: $hasUnsavedChanges)
-                    .opacity(model.settingsSection == .configuration ? 1 : 0)
-                    .allowsHitTesting(model.settingsSection == .configuration)
-                    .disabled(model.settingsSection != .configuration)
-                    .accessibilityHidden(model.settingsSection != .configuration)
-                if model.settingsSection == .shortcuts {
-                    ShortcutSettingsView(model: model)
-                } else if model.settingsSection == .account {
-                    accountBody
+            HStack(alignment: .top, spacing: 0) {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(AppModel.SettingsSection.allCases, id: \.self) { section in
+                        Button {
+                            model.settingsSection = section
+                        } label: {
+                            Text(section.title).frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 12).padding(.vertical, 10)
+                                .background(
+                                    model.settingsSection == section ? AppStyle.accent.opacity(0.12) : .clear,
+                                    in: RoundedRectangle(cornerRadius: 6))
+                        }.buttonStyle(.plain)
+                            .accessibilityAddTraits(model.settingsSection == section ? .isSelected : [])
+                    }
+                    Spacer()
+                    if hasUnsavedChanges {
+                        Text("Unsaved edits").font(AppStyle.caption).foregroundStyle(.orange)
+                    }
+                }.padding(12).frame(width: 150)
+                Divider()
+                ZStack {
+                    // One mounted owner keeps both drafts when navigating between tasks.
+                    ConfigurationView(model: model, hasUnsavedChanges: $hasUnsavedChanges)
+                        .opacity(isConfiguration ? 1 : 0)
+                        .allowsHitTesting(isConfiguration)
+                        .disabled(!isConfiguration)
+                        .accessibilityHidden(!isConfiguration)
+                    if model.settingsSection == .shortcuts {
+                        ShortcutSettingsView(model: model)
+                    } else if model.settingsSection == .account {
+                        accountBody
+                    } else if model.settingsSection == .overview {
+                        overviewBody
+                    } else if model.settingsSection == .preferences {
+                        preferencesBody
+                    }
                 }
             }
-        }.frame(width: 760, height: 720).tint(AppStyle.accent)
+        }.frame(width: 880, height: 720).tint(AppStyle.accent)
+            .labelStyle(EverydayLabelStyle(minimum: model.minimumMode))
             .disclosureGroupStyle(FullRowDisclosureStyle())
             .interactiveDismissDisabled(hasUnsavedChanges)
             .alert("Discard unsaved edits?", isPresented: $confirmDiscard) {
-                Button("Keep editing", role: .cancel) {}
-                Button("Discard edits", role: .destructive) { dismiss() }
+                Button("Keep", role: .cancel) {}
+                Button("Discard", role: .destructive) { dismiss() }
             } message: {
                 Text(
-                    "Your preset or recipe has unsaved edits. Return to Configuration to save them before closing."
+                    "Your preset or recipe has unsaved edits. Return to Models or Recipes to save them before closing."
                 )
             }
     }
+    private var isConfiguration: Bool { [.configuration, .recipes].contains(model.settingsSection) }
+
+    private var overviewBody: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            if !model.minimumMode { Text("Your current reading choices.").foregroundStyle(.secondary) }
+            overviewRow("Recipe", value: model.currentRecipe?.name ?? "Unavailable", destination: .recipes)
+            overviewRow(
+                "Preset", value: model.currentPreset?.name ?? "Unavailable", destination: .configuration)
+            overviewRow(
+                "Account",
+                value: model.signedIn
+                    ? (model.planEnabled ? "Connected" : "Plan access needed") : "Not connected",
+                destination: .account)
+            Spacer()
+        }.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func overviewRow(_ label: String, value: String, destination: AppModel.SettingsSection)
+        -> some View
+    {
+        Button {
+            model.settingsSection = destination
+        } label: {
+            HStack {
+                Text(label)
+                Spacer()
+                Text(value).foregroundStyle(.secondary)
+                Image(systemName: "chevron.right").accessibilityHidden(true)
+            }
+            .padding(.vertical, 12).contentShape(Rectangle())
+        }.buttonStyle(.plain)
+    }
+
+    private var preferencesBody: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Preferences").font(AppStyle.subject)
+            Toggle("Minimum Mode", isOn: $model.minimumMode).toggleStyle(.switch)
+            if !model.minimumMode {
+                Text(
+                    "Everyday controls for familiar users. Reveal guidance and uncommon actions when needed."
+                )
+                .font(AppStyle.caption).foregroundStyle(.secondary)
+            }
+            Text("Saves immediately.").font(AppStyle.caption).foregroundStyle(.secondary)
+            Spacer()
+        }.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
     private var accountBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
@@ -76,7 +146,7 @@ struct SettingsView: View {
                                 "Connect your eligible ChatGPT account and allow EZ to use your plan. Credentials stay in macOS Keychain. Model availability and limits depend on your account."
                             ).font(.caption).foregroundStyle(.secondary)
                         }
-                        DisclosureGroup("Why does macOS ask for Keychain access?") {
+                        DisclosureGroup("Keychain") {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(
                                     "EZ saves sign-in tokens in its own Keychain record so you can stay signed in. It does not store your ChatGPT password or read other apps’ passwords."
@@ -85,7 +155,7 @@ struct SettingsView: View {
                                     "Allow Once approves this access; Always Allow remembers permission for this app and item. Deny prevents access to the saved sign-in. A local development rebuild may prompt again."
                                 )
                                 Link(
-                                    "About Keychain permissions",
+                                    "Permissions",
                                     destination: URL(
                                         string: "https://support.apple.com/guide/keychain-access/kyca1243/mac"
                                     )!)
@@ -97,27 +167,43 @@ struct SettingsView: View {
                                 Text("Finish signing in in your browser.").font(.caption)
                                 Button("Cancel") { model.cancelLogin() }
                             } else if model.signedIn {
-                                Button("Sign out") { Task { await model.signOut() } }
+                                Button(model.minimumMode ? "Disconnect" : "Sign out") {
+                                    Task { await model.signOut() }
+                                }.help("Sign out").accessibilityLabel("Sign out")
                                 if !model.planEnabled {
-                                    Button("Enable plan usage") { model.signIn(enablePlan: true) }
+                                    Button(model.minimumMode ? "Enable" : "Enable plan usage") {
+                                        model.signIn(enablePlan: true)
+                                    }.help("Enable plan usage").accessibilityLabel("Enable plan usage")
                                 }
-                                Button("Add account") { model.signIn(newAccount: true) }
+                                Button(model.minimumMode ? "Add" : "Add account") {
+                                    model.signIn(newAccount: true)
+                                }.help("Add account").accessibilityLabel("Add account")
                             } else {
-                                Button("Continue with ChatGPT") { model.signIn() }.buttonStyle(
-                                    .borderedProminent)
+                                Button(model.minimumMode ? "Connect" : "Continue with ChatGPT") {
+                                    model.signIn()
+                                }.help("Continue with ChatGPT").accessibilityLabel("Continue with ChatGPT")
+                                    .buttonStyle(
+                                        .borderedProminent)
                                 if !model.profiles.isEmpty {
-                                    Button("Add account") { model.signIn(newAccount: true) }
+                                    Button(model.minimumMode ? "Add" : "Add account") {
+                                        model.signIn(newAccount: true)
+                                    }.help("Add account").accessibilityLabel("Add account")
                                 }
                             }
                         }.disabled(model.offline || model.busy || model.connecting)
                         HStack {
                             Link(
-                                "Manage usage",
-                                destination: URL(string: "https://chatgpt.com/settings/usage")!)
+                                model.minimumMode ? "Usage" : "Manage usage",
+                                destination: URL(string: "https://chatgpt.com/settings/usage")!
+                            )
+                            .help("Manage usage").accessibilityLabel("Manage usage")
                             Spacer()
-                            Button(model.connecting ? "Loading…" : "Refresh models") {
+                            Button(
+                                model.connecting
+                                    ? "Loading…" : (model.minimumMode ? "Refresh" : "Refresh models")
+                            ) {
                                 Task { await model.connect() }
-                            }.disabled(
+                            }.help("Refresh models").accessibilityLabel("Refresh models").disabled(
                                 model.offline || model.busy || model.connecting || model.signingIn
                                     || !model.planEnabled)
                         }.font(.caption)
@@ -126,7 +212,9 @@ struct SettingsView: View {
                 GroupBox {
                     VStack(alignment: .leading, spacing: 10) {
                         Label("Local history", systemImage: "externaldrive").font(.headline)
-                        Button("Show in Finder") { model.revealHistory() }.disabled(model.offline)
+                        Button(model.minimumMode ? "Reveal" : "Show in Finder") { model.revealHistory() }
+                            .help("Show in Finder").accessibilityLabel("Show in Finder").disabled(
+                                model.offline)
                         DisclosureGroup("Details") {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(
@@ -145,7 +233,7 @@ struct SettingsView: View {
                     Text("EZ \(version)")
                     Spacer()
                     Link(
-                        "Sign-in documentation",
+                        model.minimumMode ? "Documentation" : "Sign-in documentation",
                         destination: URL(
                             string: "https://developers.openai.com/siwc/token-sharing-open-source")!)
                 }.font(.caption).foregroundStyle(.secondary)

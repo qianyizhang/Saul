@@ -1,3 +1,5 @@
+import { readingMore } from './driver.ts';
+import { settingsSection } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import {
@@ -170,6 +172,7 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
     ),
   ).toEqual({ library: [] });
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(popup, 'Models');
   await popup.getByLabel('AI service', { exact: true }).selectOption('chatgpt-plan');
   await expect(popup.getByPlaceholder('Optional for local models')).toHaveCount(0);
   await expect(popup.getByLabel(/Temperature/)).toHaveCount(0);
@@ -185,6 +188,7 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   popup = await context.newPage();
   await popup.goto(popupUrl);
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(popup, 'Models');
   await popup.getByLabel('AI service', { exact: true }).selectOption('chatgpt-plan');
   await expect(popup.getByText('ChatGPT helper connected.', { exact: true })).not.toBeVisible();
   await worker.evaluate(() => {
@@ -222,10 +226,10 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
       await popup.screenshot({ path: testInfo.outputPath(`settings-chatgpt-${colorScheme}.png`) });
   }
 
-  await popup.getByText('Model options', { exact: true }).click();
+  await popup.getByLabel('Model options', { exact: true }).click();
   await popup.getByLabel('ChatGPT effort', { exact: true }).selectOption('high');
   await popup.getByLabel('ChatGPT speed', { exact: true }).selectOption('fast');
-  await popup.getByText('Connection and tests', { exact: true }).click();
+  await popup.getByLabel('Connection and tests', { exact: true }).click();
   await popup.getByRole('button', { name: 'Test generation', exact: true }).click();
   await expect(popup.getByText(/Generation succeeded:/)).toBeVisible();
   expect(
@@ -245,6 +249,7 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
     await popup.screenshot({ path: testInfo.outputPath('chatgpt-settings.png'), fullPage: true });
   await popup.reload();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(popup, 'Models');
   await expect(popup.getByLabel('AI service', { exact: true })).toHaveValue('chatgpt-plan');
   await expect(popup.getByLabel('ChatGPT model', { exact: true })).toHaveValue(
     'plan-fixture-model',
@@ -256,7 +261,7 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
       globalThis as unknown as { planFixture: { reducedCapabilities: boolean } }
     ).planFixture.reducedCapabilities = true;
   });
-  await popup.getByText('Connection and tests', { exact: true }).click();
+  await popup.getByLabel('Connection and tests', { exact: true }).click();
   await popup.getByRole('button', { name: 'Refresh models', exact: true }).click();
   await expect(popup.getByRole('alert')).toContainText('saved effort');
   await expect(popup.getByRole('button', { name: 'Test generation', exact: true })).toBeDisabled();
@@ -339,6 +344,7 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   await worker.evaluate(() => {
     (globalThis as unknown as { planFixture: { fail: boolean } }).planFixture.fail = true;
   });
+  await readingMore(page);
   await page.getByRole('button', { name: 'Regenerate', exact: true }).click();
   await expect.poll(async () => (await getHistory(popup))[0]?.latest.status).toBe('failed');
   expect((await getFirstHistory(popup)).latest.responseRaw).toBe('A plan-backed explanation.');
@@ -362,7 +368,7 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
     (globalThis as unknown as { planFixture: { holdLogout: boolean } }).planFixture.holdLogout =
       true;
   });
-  await popup.getByText('Manage accounts', { exact: true }).click();
+  await popup.getByLabel('Manage accounts', { exact: true }).click();
   await popup.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(popup.getByText('Signing out…', { exact: true })).toBeVisible();
   await expect(popup.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0);
@@ -375,11 +381,9 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
     popup.getByRole('button', { name: 'Continue with ChatGPT', exact: true }),
   ).toBeVisible();
   await expect(popup.getByRole('button', { name: 'Test generation', exact: true })).toBeDisabled();
+  await settingsSection(popup, 'Models');
   await popup.getByLabel('AI service', { exact: true }).selectOption('openai-compatible');
-  await popup
-    .locator('summary')
-    .filter({ hasText: /^API connection$/ })
-    .click();
+  await popup.getByLabel('API connection', { exact: true }).click();
   await expect(popup.getByPlaceholder('Optional for local models')).toBeVisible();
   expect(fixtureServer.requests).toHaveLength(initialApiRequests); // No fallback to the API-key provider.
 });
@@ -389,6 +393,7 @@ test('missing ChatGPT helper shows setup recovery without altering the existing 
 }) => {
   const { popup } = await sandbox.launch();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(popup, 'Models');
   await popup.getByLabel('AI service', { exact: true }).selectOption('chatgpt-plan');
   await expect(popup.getByRole('alert')).toContainText('helper');
   await expect(popup.getByText('pnpm native:install', { exact: false })).toBeVisible();
@@ -396,10 +401,8 @@ test('missing ChatGPT helper shows setup recovery without altering the existing 
   await expect(
     popup.getByText('Choose a ChatGPT account and model.', { exact: true }),
   ).toBeVisible();
+  await settingsSection(popup, 'Models');
   await popup.getByLabel('AI service', { exact: true }).selectOption('openai-compatible');
-  await popup
-    .locator('summary')
-    .filter({ hasText: /^API connection$/ })
-    .click();
+  await popup.getByLabel('API connection', { exact: true }).click();
   await expect(popup.getByPlaceholder('Optional for local models')).toBeVisible();
 });

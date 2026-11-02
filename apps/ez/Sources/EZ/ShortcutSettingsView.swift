@@ -59,7 +59,7 @@ struct ShortcutSettingsView: View {
                     HStack {
                         VStack(alignment: .leading) {
                             Text(command.title)
-                            if let name = recipeName(command) {
+                            if !model.minimumMode, let name = recipeName(command) {
                                 Text(name).font(AppStyle.caption).foregroundStyle(.secondary)
                             }
                         }
@@ -86,27 +86,33 @@ struct ShortcutSettingsView: View {
                 }.font(AppStyle.caption).foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Selection autofill").font(.headline)
-                    Text(
-                        "Quick Lookup fills its first input with selected text from the active app when available; otherwise it starts empty. It never sends automatically or changes the clipboard."
-                    ).font(AppStyle.caption).foregroundStyle(.secondary)
+                    if !model.minimumMode {
+                        Text(
+                            "Quick Lookup fills its first input with selected text when available. It never sends automatically or changes the clipboard."
+                        )
+                        .font(AppStyle.caption).foregroundStyle(.secondary)
+                    }
                     HStack {
                         Text(
                             selectionAllowed
                                 ? "Accessibility access allowed" : "Requires Accessibility access")
                         Spacer()
-                        Button("Accessibility settings…") { SelectedTextCapture.openPermissionSettings() }
+                        Button(model.minimumMode ? "Permissions" : "Accessibility settings…") {
+                            SelectedTextCapture.openPermissionSettings()
+                        }.help("Accessibility settings…").accessibilityLabel("Accessibility settings…")
                             .disabled(model.offline)
                     }.font(AppStyle.caption)
                 }
                 HStack {
-                    Button("Use Chrome navigation") { chromeNavigation() }
+                    Button(model.minimumMode ? "Chrome" : "Use Chrome navigation") { chromeNavigation() }
+                        .help("Use Chrome navigation").accessibilityLabel("Use Chrome navigation")
                     Spacer()
-                    Button("Restore defaults") {
+                    Button(model.minimumMode ? "Reset" : "Restore defaults") {
                         do {
                             try model.restoreShortcuts()
                             message = "Default shortcuts restored."
                         } catch { message = error.localizedDescription }
-                    }
+                    }.help("Restore defaults").accessibilityLabel("Restore defaults")
                 }
                 if let error = model.shortcutSettingsError {
                     Text(error).font(AppStyle.caption).foregroundStyle(.red)
@@ -138,12 +144,12 @@ struct ShortcutSettingsView: View {
                         Text(recordingError).font(AppStyle.caption).foregroundStyle(.red)
                     }
                     HStack {
-                        Button("Clear shortcut") {
+                        Button(model.minimumMode ? "Clear" : "Clear shortcut") {
                             do {
                                 try model.saveShortcut(.unassigned, for: command)
                                 recording = nil
                             } catch { recordingError = error.localizedDescription }
-                        }
+                        }.help("Clear shortcut").accessibilityLabel("Clear shortcut")
                         Spacer()
                         Button("Cancel") { recording = nil }
                     }

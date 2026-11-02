@@ -30,7 +30,9 @@
         ></label>
       </div>
       <details id="composer" class="composer">
-        <summary>Ask Codex</summary>
+        <summary aria-label="Ask Codex">
+          <span class="minimum-only">Ask</span><span class="standard-only">Ask Codex</span>
+        </summary>
         <div class="composer-fields">
           <label for="request">How would you like to organize your tabs?</label>
           <textarea
@@ -41,7 +43,10 @@
           <div class="row">
             <label><input id="attach-context" type="checkbox" /> Attach browser selection</label
             ><button id="ask" class="primary" disabled>Send</button>
-            <button id="inspect-send" type="button" disabled>Inspect send</button>
+            <button id="inspect-send" type="button" disabled aria-label="Inspect send">
+              <span class="minimum-only">Inspect</span
+              ><span class="standard-only">Inspect send</span>
+            </button>
           </div>
         </div>
       </details>
@@ -82,7 +87,9 @@
             maxlength="200"
           />
           <select id="group-window" aria-label="Group destination window"></select>
-          <button id="create-group" type="button">Create group</button>
+          <button id="create-group" type="button" aria-label="Create group">
+            <span class="minimum-only">Create</span><span class="standard-only">Create group</span>
+          </button>
           <select id="existing-group" aria-label="Add to group"></select>
         </div>
       </section>
@@ -90,13 +97,18 @@
         <div class="empty">Your open Chrome windows will appear here.</div>
       </div>
       <details class="help-details">
-        <summary>View options</summary>
+        <summary aria-label="View options">
+          <span class="minimum-only">View</span><span class="standard-only">View options</span>
+        </summary>
         <label class="mode-setting"
           ><span>Minimum Mode</span><input id="minimum-mode" type="checkbox" checked
         /></label>
         <p id="preference-error" role="alert" hidden></p>
         <details>
-          <summary>Shortcuts & details</summary>
+          <summary aria-label="Shortcuts &amp; details">
+            <span class="minimum-only">Details</span
+            ><span class="standard-only">Shortcuts & details</span>
+          </summary>
           <p>
             Select tabs with checkboxes. Shift selects a range. Alt+Arrow moves a focused tab; Move
             to also works by keyboard. Escape cancels a drag.

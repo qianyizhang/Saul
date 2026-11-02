@@ -59,3 +59,18 @@ struct MetadataRow: View {
         .accessibilityElement(children: .combine)
     }
 }
+
+/// Familiar users get one word; explicit symbol-only controls retain their own labels.
+struct EverydayLabelStyle: LabelStyle {
+    let minimum: Bool
+    @ViewBuilder func makeBody(configuration: Configuration) -> some View {
+        if minimum {
+            configuration.title
+        } else {
+            HStack {
+                configuration.icon
+                configuration.title
+            }
+        }
+    }
+}

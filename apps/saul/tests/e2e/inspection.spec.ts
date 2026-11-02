@@ -1,3 +1,4 @@
+import { settingsSection } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider, createFixtureServer, taggedAnswer } from './support.ts';
@@ -28,7 +29,8 @@ test('inspection matches the submitted request, retains literal output, and surv
   expect(saved.latest.inspection!.systemPrompt).toBe(body.messages[0]!.content);
   expect(saved.latest.inspection!.userPrompt).toBe(body.messages[1]!.content);
   await openFirstPageExplanation(article);
-  const inspector = article.locator('.saul-card > div > .saul-inspector');
+  await article.locator('.saul-card > div > .saul-run-details > summary').click();
+  const inspector = article.locator('.saul-card > div > .saul-run-details > .saul-inspector');
   await inspector.locator(':scope > summary').click();
   expect(
     await inspector
@@ -42,14 +44,15 @@ test('inspection matches the submitted request, retains literal output, and surv
       .locator('pre')
       .textContent(),
   ).toBe(saved.responseRaw);
-  await inspector.getByText('Context / inputs', { exact: true }).click();
+  await inspector.getByLabel('Context / inputs', { exact: true }).click();
   await expect(
     inspector.getByRole('region', { name: 'Selected text', exact: true }).locator('pre'),
   ).toHaveText('Gradient descent');
 
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await popup.getByText('Edit recipes', { exact: true }).click();
-  await popup.getByText('System instructions', { exact: true }).click();
+  await settingsSection(popup, 'Reading');
+  await popup.getByLabel('Edit recipes', { exact: true }).click();
+  await popup.getByLabel('System instructions', { exact: true }).click();
   await popup
     .getByLabel('Recipe system instructions', { exact: true })
     .fill('Changed after generation');
@@ -60,7 +63,8 @@ test('inspection matches the submitted request, retains literal output, and surv
   const restored = await getFirstHistory(popup);
   expect(restored.latest.inspection).toEqual(saved.latest.inspection);
   await popup.locator('.history-title').click();
-  const historyInspector = popup.locator('.answer > .saul-inspector');
+  await popup.locator('.answer > .saul-run-details > summary').click();
+  const historyInspector = popup.locator('.answer > .saul-run-details > .saul-inspector');
   await historyInspector.locator(':scope > summary').click();
   expect(
     await historyInspector
@@ -110,7 +114,8 @@ test('interrupted inspection preserves literal markup and identifies incomplete 
     await explainSelection(article);
     await expect.poll(async () => (await getHistory(popup))[0]?.latest.status).toBe('interrupted');
     await openFirstPageExplanation(article);
-    const inspector = article.locator('.saul-card > div > .saul-inspector');
+    await article.locator('.saul-card > div > .saul-run-details > summary').click();
+    const inspector = article.locator('.saul-card > div > .saul-run-details > .saul-inspector');
     await inspector.locator(':scope > summary').click();
     await expect(inspector).toContainText('interrupted');
     const response = inspector.getByRole('region', { name: 'Response · raw text', exact: true });

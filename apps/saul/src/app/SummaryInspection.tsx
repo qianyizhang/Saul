@@ -1,3 +1,4 @@
+import { ActionLabel } from '../surface/ActionLabel';
 import { useState } from 'react';
 import type { DigestBatch, DigestComparison, DigestInspection, DigestItem } from '../digest/types';
 import { sendDigestMessage } from '../storage/client';
@@ -61,7 +62,9 @@ export function SummaryInspection({
         if (next && !value && !busy) void load();
       }}
     >
-      <summary>Inspect input/output</summary>
+      <summary aria-label="Inspect input/output" title="Inspect input/output">
+        <ActionLabel short="Inspect" full="Inspect input/output" />
+      </summary>
       {open && (
         <div className="saul-inspection-content">
           <p className="saul-inspection-note">
@@ -73,8 +76,14 @@ export function SummaryInspection({
           {error && <p role="alert">{error}</p>}
           {busy && <p role="status">Reading input…</p>}
           {tabId !== undefined && (
-            <button className="btn" disabled={busy} onClick={() => void load(true)}>
-              Compare current page
+            <button
+              className="btn"
+              disabled={busy}
+              onClick={() => void load(true)}
+              aria-label="Compare current page"
+              title="Compare current page"
+            >
+              <ActionLabel short="Compare" full="Compare current page" />
             </button>
           )}
           {value?.comparison && (
@@ -95,15 +104,19 @@ export function SummaryInspection({
                 type="button"
                 aria-pressed={view === 'saved'}
                 onClick={() => setView('saved')}
+                aria-label="Saved input"
+                title="Saved input"
               >
-                Saved input
+                <ActionLabel short="Saved" full="Saved input" />
               </button>
               <button
                 type="button"
                 aria-pressed={view === 'current'}
                 onClick={() => setView('current')}
+                aria-label="Current input"
+                title="Current input"
               >
-                Current input
+                <ActionLabel short="Current" full="Current input" />
               </button>
             </div>
           )}
@@ -142,8 +155,14 @@ export function SummaryInspection({
               </dl>
               {source.kind === 'pdf-url' ? (
                 <>
-                  <a href={source.attachment.url} target="_blank" rel="noreferrer">
-                    Open PDF URL
+                  <a
+                    href={source.attachment.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="Open PDF URL"
+                    title="Open PDF URL"
+                  >
+                    <ActionLabel short="Source" full="Open PDF URL" />
                   </a>
                   <InspectionText
                     key={view}
@@ -169,7 +188,9 @@ export function SummaryInspection({
             )
           )}
           <details>
-            <summary>Saved instructions</summary>
+            <summary aria-label="Saved instructions" title="Saved instructions">
+              <ActionLabel short="Saved" full="Saved instructions" />
+            </summary>
             <InspectionText label="Instructions" text={batch.prompt} />
             {batch.action && (
               <p className="small muted">
@@ -180,12 +201,19 @@ export function SummaryInspection({
           </details>
           {value?.comparison?.fields.includes('Instructions') && (
             <details>
-              <summary>Current summary instructions</summary>
+              <summary
+                aria-label="Current summary instructions"
+                title="Current summary instructions"
+              >
+                <ActionLabel short="Current" full="Current summary instructions" />
+              </summary>
               <InspectionText label="Current instructions" text={SUMMARY_PROMPT} />
             </details>
           )}
           <details>
-            <summary>Saved request and response</summary>
+            <summary aria-label="Saved request and response" title="Saved request and response">
+              <ActionLabel short="Payload" full="Saved request and response" />
+            </summary>
             <p className="saul-inspection-note">
               {value?.saved?.kind === 'pdf-url'
                 ? "The saved prompt is the exact text message. PDF URL attachments are listed separately; the provider's extracted text is not returned."

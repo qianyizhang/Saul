@@ -6,7 +6,7 @@ struct InputOutputInspector: View {
     let entry: HistoryEntry
 
     var body: some View {
-        DisclosureGroup("Inspect input/output") {
+        DisclosureGroup("Inspect") {
             VStack(alignment: .leading, spacing: 12) {
                 Text(entry.status.capitalized)
                     .font(AppStyle.caption).foregroundStyle(.secondary)
@@ -29,7 +29,7 @@ struct InputOutputInspector: View {
                     )
                     .font(AppStyle.caption).foregroundStyle(.secondary)
                 }
-                DisclosureGroup("Context / inputs") {
+                DisclosureGroup("Inputs") {
                     if let values = entry.inputValues, !values.isEmpty {
                         ForEach(values.keys.sorted(), id: \.self) { field in
                             InspectionTextBlock(label: field, text: values[field] ?? "")

@@ -38,15 +38,16 @@ Opening a completed answer marks it read. Dismissing a notification does not. Er
 
 The popup opens directly to History. Search and bookmarks stay visible; export and deletion of the entire library are under **Export and manage history**. The full workspace uses the same views with a wider reading area.
 
-**Minimum Mode** is on by default. It keeps source links and essential actions visible,
-removes routine instructions and repeated headings, and places follow-ups, past attempts,
-and selected-entry deletion under **More**. Model and timing information is under
-**Details**, directly below the answer. Details uses labelled columns for the saved
-attempt’s recipe, preset, provider, model, creation time and duration. Errors, active progress, incomplete results, and unsaved settings remain
-visible. Turn it off in Settings for the fuller presentation; the choice saves
-immediately and independently of provider drafts, and updates open page overlays.
+**Minimum Mode** is the default expert everyday view, following [DESIGN.md](../../../DESIGN.md#minimum-mode).
+It shows the current input/answer, recipe or preset choice, essential state and primary
+actions. Routine subtext is omitted; buttons use one clear word or a familiar symbol,
+with complete accessible names and tooltips. More/Details retain uncommon operations,
+regeneration, inspection and history management. Errors, unsaved work, unavailable
+choices and billing/permission consequences stay visible. Preferences save immediately,
+independently of configuration drafts, and update open extension surfaces, including
+the summary panel. The board keeps its own presentation preference.
 
-Shortcuts are listed in a Settings disclosure. **Command/Ctrl+Enter** explains an
+Shortcuts are listed in Settings → Preferences. **Command/Ctrl+Enter** explains an
 available source selection outside editable fields; **Command/Ctrl+.** stops the
 open explanation's active job. **Escape** dismisses the reading surface without
 cancelling work. **Command/Ctrl+,** opens Settings inside the extension workspace.
@@ -55,7 +56,7 @@ The existing **Alt+Shift+E/L** shortcuts remain. Browser shortcuts stay with Chr
 **Control+S (⌃S)** on macOS summarizes the current page; **Command+S** still
 saves the page in Chrome. Other platforms default to **Alt+Shift+S**. This is
 a Chrome extension command, active only in Chrome on regular HTTP(S) tabs.
-**Settings → Shortcuts** shows its actual assignment. Use **Configure Chrome
+**Settings → Preferences → Shortcuts** shows its actual assignment. Use **Configure Chrome
 shortcuts** to change it or assign it if Chrome reports a conflict.
 
 The full workspace provides:
@@ -68,6 +69,12 @@ The full workspace provides:
 SQLite-WASM stores the library in OPFS for the current browser profile. Data is local to that profile and remains until explicit deletion or browser-profile removal.
 
 ## Settings and models
+
+Settings has focused sections: Overview, Models, Reading, Summaries, Preferences
+and Connections. Overview leads with reading defaults; Models keeps the selected
+preset beside its fields, with a compact selector at narrow widths. Section changes
+preserve the mounted configuration draft. Save and conflict recovery remain reachable
+across sections; preferences and access retain their independent immediate-save behavior.
 
 - Named recipes pair editable prompts with a default model preset. Explain, Lookup, and Nudge are editable starters. A preset names the provider, connection/account, model, and supported options.
 - The existing prompt and model migrate into Explain and Current. Choosing another recipe for the same passage creates a new attempt; retry keeps the original request choices even after Settings changes.
@@ -116,7 +123,7 @@ Pinned/grouped tabs stay protected in automated proposals.
 On macOS Chrome, the native helper imports **Name Window** labels through
 AppleScript and verifies reviewed renames. Automation errors remain visible;
 other platforms use Saul labels. Connection and page-access settings live
-under **Settings → Codex connection**. External access is off by default.
+under **Settings → Connections**. External access is off by default.
 See [native messaging](native-messaging.md).
 
 ### Summaries

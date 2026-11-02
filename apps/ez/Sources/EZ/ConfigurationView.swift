@@ -22,10 +22,12 @@ struct ConfigurationView: View {
                     Text(error).font(AppStyle.caption).foregroundStyle(.red).textSelection(.enabled)
                 }
                 HStack {
-                    Text("Model presets are shared with Saul. Accounts and recipes stay in each app.")
-                        .font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
+                    if !model.minimumMode {
+                        Text("Model presets are shared with Saul. Accounts and recipes stay in each app.")
+                            .font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
+                    }
                     Spacer()
-                    Button("Reload saved settings") {
+                    Button(model.minimumMode ? "Reload" : "Reload saved settings") {
                         let reload = {
                             model.refreshConfiguration()
                             preset = model.configuration.presets.first
@@ -37,10 +39,9 @@ struct ConfigurationView: View {
                         } else {
                             reload()
                         }
-                    }
+                    }.help("Reload saved settings").accessibilityLabel("Reload saved settings")
                 }
-                presetSection
-                recipeSection
+                if model.settingsSection == .recipes { recipeSection } else { presetSection }
                 if !model.minimumMode {
                     Text(
                         "Saved on this Mac. Changes apply to new lookups; history keeps its original prompt and choices."
@@ -56,8 +57,8 @@ struct ConfigurationView: View {
             hasUnsavedChanges = dirty
         }
         .alert("Discard unsaved edits?", isPresented: $confirmSelection) {
-            Button("Keep editing", role: .cancel) { pendingSelection = nil }
-            Button("Discard edits", role: .destructive) {
+            Button("Keep", role: .cancel) { pendingSelection = nil }
+            Button("Discard", role: .destructive) {
                 let change = pendingSelection
                 pendingSelection = nil
                 change?()
@@ -73,14 +74,14 @@ struct ConfigurationView: View {
                 HStack {
                     Label("Model presets", systemImage: "slider.horizontal.3").font(.headline)
                     Spacer()
-                    Button("Add preset", systemImage: "plus") {
+                    Button(model.minimumMode ? "Add" : "Add preset", systemImage: "plus") {
                         let option = model.currentModel ?? model.models.first
                         selectPreset(
                             ModelPreset(
                                 name: "New preset", model: option?.model ?? "",
                                 effort: option?.supportedReasoningEfforts.isEmpty == false
                                     ? option!.quickEffort : "", fast: false))
-                    }
+                    }.help("Add preset").accessibilityLabel("Add preset")
                 }
                 HStack(alignment: .top, spacing: 18) {
                     VStack(alignment: .leading, spacing: 6) {
@@ -162,18 +163,23 @@ struct ConfigurationView: View {
                         value: true, title: supportsFast ? "Fast" : "Fast (unavailable)",
                         enabled: supportsFast),
                 ], selection: presetBinding(\.fast))
-            Text("Fast requests priority service and may use more plan allowance.")
-                .font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
+            if preset?.fast == true || !model.minimumMode {
+                Text("Fast may use more plan allowance.").font(AppStyle.caption).foregroundStyle(
+                    AppStyle.secondaryText)
+            }
             if let preset, let issue = preset.availabilityError(in: model.models) {
                 Text(issue).font(AppStyle.caption).foregroundStyle(.orange)
             }
             HStack {
-                Button("Save preset") { savePreset() }.buttonStyle(.borderedProminent).disabled(
-                    !presetIsDirty)
+                Button(model.minimumMode ? "Save" : "Save preset") { savePreset() }.help("Save preset")
+                    .accessibilityLabel("Save preset").buttonStyle(.borderedProminent).disabled(
+                        !presetIsDirty)
                 if presetIsDirty { Text("Unsaved edits").font(AppStyle.caption).foregroundStyle(.secondary) }
                 Spacer()
                 if model.configuration.presets.contains(where: { $0.id == preset?.id }) {
-                    Button("Remove preset", role: .destructive) { removePreset() }
+                    Button(model.minimumMode ? "Remove" : "Remove preset", role: .destructive) {
+                        removePreset()
+                    }.help("Remove preset").accessibilityLabel("Remove preset")
                 }
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
@@ -185,11 +191,12 @@ struct ConfigurationView: View {
                 HStack {
                     Label("Recipes", systemImage: "text.badge.plus").font(.headline)
                     Spacer()
-                    Button("Add recipe", systemImage: "plus") {
+                    Button(model.minimumMode ? "Add" : "Add recipe", systemImage: "plus") {
                         guard let defaultPreset = model.configuration.presets.first else { return }
                         selectRecipe(
                             Recipe(name: "New recipe", presetID: defaultPreset.id, template: "{{text}}"))
-                    }.disabled(model.configuration.presets.isEmpty)
+                    }.help("Add recipe").accessibilityLabel("Add recipe").disabled(
+                        model.configuration.presets.isEmpty)
                 }
                 HStack(alignment: .top, spacing: 18) {
                     VStack(alignment: .leading, spacing: 6) {
@@ -224,7 +231,9 @@ struct ConfigurationView: View {
 
     private var recipeEditor: some View {
         VStack(alignment: .leading, spacing: 10) {
+            Text("Recipe name").font(AppStyle.caption)
             TextField("Recipe name", text: recipeBinding(\.name)).textFieldStyle(.roundedBorder)
+                .accessibilityLabel("Recipe name")
             let presetOptions: [SelectorOption<UUID>] =
                 (model.configuration.presets.contains { $0.id == recipe?.presetID }
                     ? []
@@ -242,7 +251,7 @@ struct ConfigurationView: View {
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
                 .accessibilityLabel("Prompt template")
             if model.minimumMode {
-                DisclosureGroup("Template syntax") {
+                DisclosureGroup("Syntax") {
                     templateHint.padding(.top, 4)
                 }.font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
             } else {
@@ -250,7 +259,9 @@ struct ConfigurationView: View {
             }
             if let template = try? PromptTemplate(recipe?.template ?? "") {
                 DisclosureGroup(
-                    "Input preview · \(template.fields.count) field\(template.fields.count == 1 ? "" : "s")"
+                    model.minimumMode
+                        ? "Preview"
+                        : "Input preview · \(template.fields.count) field\(template.fields.count == 1 ? "" : "s")"
                 ) {
                     VStack(spacing: 8) {
                         ForEach(template.fields, id: \.self) { field in
@@ -263,12 +274,15 @@ struct ConfigurationView: View {
                 Text(templateError).font(AppStyle.caption).foregroundStyle(.orange)
             }
             HStack {
-                Button("Save recipe") { saveRecipe() }.buttonStyle(.borderedProminent).disabled(
-                    !recipeIsDirty)
+                Button(model.minimumMode ? "Save" : "Save recipe") { saveRecipe() }.help("Save recipe")
+                    .accessibilityLabel("Save recipe").buttonStyle(.borderedProminent).disabled(
+                        !recipeIsDirty)
                 if recipeIsDirty { Text("Unsaved edits").font(AppStyle.caption).foregroundStyle(.secondary) }
                 Spacer()
                 if model.configuration.recipes.contains(where: { $0.id == recipe?.id }) {
-                    Button("Remove recipe", role: .destructive) { removeRecipe() }
+                    Button(model.minimumMode ? "Remove" : "Remove recipe", role: .destructive) {
+                        removeRecipe()
+                    }.help("Remove recipe").accessibilityLabel("Remove recipe")
                 }
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
