@@ -295,7 +295,7 @@ Keep shortcut reference in menus/Settings, not permanent “press X to do Y” b
 Closing a reading card leaves work running. Restore useful focus when a disclosure
 or transient surface closes. Every essential action must also work by click or tap.
 
-Saul's browser command **Saul Summarize** uses **Control+S (⌃S)** on macOS,
+Saul's browser command **Call Saul** uses **Control+S (⌃S)** on macOS,
 leaving **Command+S** with Chrome. Other platforms default to **Alt+Shift+S**.
 **Control+W (⌃W)** closes only the summary panel in the current window; closing
 keeps generation running. Other platforms use **Alt+Shift+W**. The panel also
@@ -399,17 +399,21 @@ Add concrete motion/effect tokens and platform mappings when an actual effect is
 
 ### Summaries
 
-Custom Summarize has one home under Settings → Summaries, behind Customize
-Summarize. Keep request and builder preset together; show the checked source and
-action preset before explicit Load/Replace. Checking never loads code, and loading
-never starts a page run. Local file checking and rollback belong in a named
-disclosure. Preserve unsubmitted editor fields within the current tab through
-navigation and reload. In the reader, show the saved action/preset in Details, keep progress
-and Stop visible during work, and distinguish intermediate model output in
-inspection from the action's completed text/Markdown answer. Built-in bilingual
-summaries retain their existing layout.
+**Call Saul** is the page command (Control+S). **Call preset** selects the work;
+**Model preset** selects model capacity and options without an account binding.
+Settings → Summaries shows the Call preset selector before **Customize Call Saul**.
+**Summarize (default)** is always available. Saving a checked action with
+**Save and select call preset** retains older actions for later selection; switching
+to Summarize never deletes them. Keep the builder request and Builder preset together
+inside the customization disclosure. Show source and Model preset before saving.
+Checking never loads code; saving/selecting initializes trusted code without starting
+a page run. Local file checking and rollback belong in a named disclosure.
+Preserve unsubmitted editor fields within the tab through navigation and reload.
+In the reader, keep saved action/preset in Details, progress and Stop visible,
+and intermediate model output in inspection. Built-in bilingual summaries keep
+their existing layout.
 
-The page context menu offers **Saul Summarize** for the clicked HTTP(S) tab.
+The page context menu offers **Call Saul** for the clicked HTTP(S) tab.
 Chrome reading actions open the summary in the browser's side panel and keep
 the source tab active. The panel retains its current summary across tab switches;
 opening another summary deliberately replaces its view. For one page, lead with the page title,

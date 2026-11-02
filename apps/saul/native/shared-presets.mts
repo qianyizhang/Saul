@@ -4,6 +4,8 @@ import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { isRecord, errorCode } from './value.mts';
 import {
+  validScopedConfig,
+  validateScopedConfigValue,
   validateSharedPresets,
   type SharedPreset,
   type SharedPresets,
@@ -28,6 +30,42 @@ export class SharedPresetsStore {
     if (!isRecord(value)) throw new Error('Shared settings must be a JSON object.');
     return value;
   }
+  readScope(section: string): import('./shared-presets-contract.mts').ScopedConfig {
+    const apps = this.document().apps;
+    if (apps !== undefined && !isRecord(apps)) throw new Error('Invalid app settings.');
+    const saul = apps?.saul;
+    if (saul !== undefined && !isRecord(saul)) throw new Error('Invalid Saul settings.');
+    const value = saul?.[section];
+    if (value === undefined) return { revision: 0 };
+    if (!validScopedConfig(value))
+      throw new Error('Invalid scoped settings. Original file preserved.');
+    if (value.value !== undefined) validateScopedConfigValue(value.value);
+    return value;
+  }
+  saveScope(section: string, revision: number, value: Record<string, unknown>) {
+    validateScopedConfigValue(value);
+    if (this.readScope(section).revision !== revision)
+      throw new Error('Scoped settings changed. Reload before saving again.');
+    const saved = { revision: revision + 1, value };
+    const document = this.document();
+    const apps = isRecord(document.apps) ? document.apps : {};
+    const saul = isRecord(apps.saul) ? apps.saul : {};
+    this.writeDocument({ ...document, apps: { ...apps, saul: { ...saul, [section]: saved } } });
+    return saved;
+  }
+  private writeDocument(document: Record<string, unknown>) {
+    mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 });
+    const temporary = `${this.path}.${randomUUID()}.tmp`;
+    try {
+      writeFileSync(temporary, JSON.stringify(document, null, 2) + '\n', {
+        mode: 0o600,
+        flag: 'wx',
+      });
+      renameSync(temporary, this.path);
+    } finally {
+      rmSync(temporary, { force: true });
+    }
+  }
   read(): SharedPresets {
     const value = this.document().modelPresets;
     if (value === undefined) return { revision: 0, presets: [] };
@@ -47,17 +85,7 @@ export class SharedPresetsStore {
       );
     const saved = { revision: revision + 1, presets };
     const document = { ...this.document(), modelPresets: saved };
-    mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 });
-    const temporary = `${this.path}.${randomUUID()}.tmp`;
-    try {
-      writeFileSync(temporary, JSON.stringify(document, null, 2) + '\n', {
-        mode: 0o600,
-        flag: 'wx',
-      });
-      renameSync(temporary, this.path);
-    } finally {
-      rmSync(temporary, { force: true });
-    }
+    this.writeDocument(document);
     return saved;
   }
   import(presets: SharedPreset[]): SharedPresets {

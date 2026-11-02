@@ -102,7 +102,6 @@ export function presetFromSettings(settings: UserSettings, id: string, name: str
         name,
         provider: 'chatgpt-plan',
         model: settings.chatgptPlan?.model || '',
-        accountId: settings.chatgptPlan?.accountId || '',
         ...(settings.chatgptPlan?.effort === undefined
           ? {}
           : { effort: settings.chatgptPlan.effort }),
@@ -206,7 +205,6 @@ export function normalizeConfiguration(
         provider: preset.provider as ModelPreset['provider'],
         model: string(preset.model, 'Preset model', 256),
         profileId: optionalText(preset.profileId, 'Preset profile'),
-        accountId: optionalText(preset.accountId, 'Preset account'),
         temperature: optionalNumber(preset.temperature, 'Preset temperature'),
         topK: optionalNumber(preset.topK, 'Preset top K'),
         effort: optionalText(preset.effort, 'Preset effort'),
@@ -301,7 +299,7 @@ export function settingsForPreset(
       ...settings,
       activeProvider: preset.provider,
       chatgptPlan: {
-        accountId: preset.accountId || '',
+        accountId: settings.chatgptPlan?.accountId || '',
         model: preset.model,
         ...(preset.effort === undefined ? {} : { effort: preset.effort }),
         ...(preset.fast === undefined ? {} : { fast: preset.fast }),

@@ -18,7 +18,7 @@ export function initSummaryActions() {
         chrome.contextMenus.create(
           {
             id: SUMMARY_ACTION_ID,
-            title: 'Saul Summarize',
+            title: 'Call Saul',
             contexts: ['page', 'selection', 'link', 'image', 'video', 'audio'],
             documentUrlPatterns: ['http://*/*', 'https://*/*'],
           },

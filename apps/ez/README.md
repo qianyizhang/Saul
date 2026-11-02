@@ -145,8 +145,8 @@ A cold start may also show EZ's main window.
 Open **Settings → Configuration**. A **model preset** names a model, effort, and
 Fast/Standard choice. ChatGPT presets are shared with Saul through one local store;
 existing presets import once. Save in either app, then reopen or reload the other
-app's Settings. Accounts, recipes and history stay in each app. A shared preset
-imported into Saul needs a local account selection. A **recipe** selects a default
+app's Settings. Accounts, recipes and history stay in each app. Model presets never bind an account; each app uses its selected local account for
+a new run. A **recipe** selects a default
 preset and contains the entire prompt. Add `{{fuzzy term}}` and `{{fuzzy context}}` to create
 two inputs with those placeholders. Repeated names share one field; all fields
 are required. Templates support substitution only, without Jinja expressions.
@@ -203,7 +203,8 @@ Numbered and last-item navigation follow [Chrome’s shortcuts](https://support.
 
 - Queries/answers: `~/Library/Application Support/EZ/history.jsonl`, owner-only.
 - Credentials, issued client IDs, and host ID: macOS Keychain (`local.ez.app.chatgpt`).
-- Model presets and recipes: owner-only `~/Library/Application Support/EZ/configuration.json`.
+- Shared model presets: owner-only `~/Library/Application Support/Little Clarity/settings.json` → `modelPresets`.
+- EZ recipes/configuration: the same file → `apps.ez.configuration`; the old `EZ/configuration.json` remains a migration recovery copy.
 - Keyboard bindings: owner-only `~/Library/Application Support/EZ/shortcuts.json`.
 - Previous model/effort/Fast preferences seed the initial Current preset.
 - Build products: ignored `.build/` and `dist/`; regenerate them with `make app`.

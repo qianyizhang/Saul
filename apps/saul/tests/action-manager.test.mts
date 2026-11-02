@@ -284,3 +284,46 @@ it('freezes preset choices, excludes credentials from saved input and blocks cha
   expect(() => prepareFrozenRun(settings, prepared.input)).toThrow('endpoint has changed');
   expect(() => prepareActionPreset(settings, 'missing')).toThrow('existing saved preset');
 });
+
+it('keeps every saved call preset selectable across restart and built-in selection', async () => {
+  const manager = new ActionManager(db);
+  const choices = [];
+  for (let n = 0; n < 4; n++) {
+    const checked = await manager.request({
+      action: 'stage',
+      json: JSON.stringify({
+        ...module,
+        name: `Call ${n}`,
+        source: `export default () => "${n}";`,
+      }),
+    });
+    const state = await manager.request({
+      action: 'load',
+      revision: checked.candidate!.revision,
+      presetId: 'runner',
+    });
+    choices.push(state.selected!);
+  }
+  expect(saved.library).toHaveLength(4);
+  await manager.request({ action: 'builtin' });
+  const restarted = new ActionManager(db);
+  expect((await restarted.request({ action: 'status' })).selected).toBeUndefined();
+  const selected = await restarted.request({
+    action: 'select',
+    revision: choices[0]!.revision.revision,
+    presetId: 'runner',
+  });
+  expect(selected.selected).toEqual(choices[0]);
+  expect(selected.library).toHaveLength(4);
+  const missing = await restarted.request({
+    action: 'select',
+    revision: 'f'.repeat(64),
+    presetId: 'runner',
+  });
+  expect(missing.selected).toEqual(choices[0]);
+  expect(missing.error).toBeTruthy();
+  const prunes = vi.mocked(actionHost).mock.calls.filter(([r]) => r.action === 'prune');
+  const last = prunes.at(-1)![0];
+  if (last.action !== 'prune') throw new Error('Expected prune');
+  for (const choice of choices) expect(last.protect).toContain(choice.revision.revision);
+});

@@ -72,6 +72,15 @@ export class PlanService {
   async run(request: unknown, emit: (event: PlanEvent) => void, signal?: AbortSignal) {
     validatePlanRequest(request);
     switch (request.action) {
+      case 'config-read':
+        emit({ type: 'result', config: this.presets.readScope(request.section) });
+        return;
+      case 'config-save':
+        emit({
+          type: 'result',
+          config: this.presets.saveScope(request.section, request.revision, request.value),
+        });
+        return;
       case 'presets-read':
         emit({ type: 'result', library: this.presets.read() });
         return;

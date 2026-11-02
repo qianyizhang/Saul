@@ -1,15 +1,11 @@
+import { callPresetStorage } from '../src/storage/call-presets';
 import { snapshotSelection, captureTab, verifyCaptureTab } from '../src/digest/capture';
 import { compareRunInput } from '../src/reading/input-change';
 import { validateDigest } from '../src/digest/contracts';
 import { initSummaryActions } from '../src/digest/actions';
 import { initPlanBridge } from '../src/native/plan';
 import { initActionBridge } from '../src/native/actions';
-import {
-  ACTION_STATE_KEY,
-  actionState,
-  validateActionRequest,
-  validateActionState,
-} from '../src/actions/contract';
+import { actionState, validateActionRequest, validateActionState } from '../src/actions/contract';
 import { prepareActionPreset } from '../src/actions/configuration';
 import { sharedPresets } from '../src/storage/shared-presets';
 import {
@@ -45,6 +41,7 @@ import type { DbCall, DbRequest, Passage, RunInput } from '../src/types/storage'
 import type { ResolvedContext, SelectionSnapshot } from '../src/types';
 
 const db: DbCall = (message) => runnerRequest({ operation: 'db', message: message as DbRequest });
+const callPresets = callPresetStorage();
 const settingsOwner = createSettingsOwner(undefined, sharedPresets);
 async function currentSettings() {
   const result = await settingsOwner({ action: 'read' });
@@ -342,11 +339,11 @@ export default defineBackground(() => {
           sender.url !== chrome.runtime.getURL('offscreen.html')
         )
           throw new Error('Runner only');
-        if (request.action === 'read') return actionState();
+        if (request.action === 'read') return callPresets.read();
         if (request.action !== 'write' || !request.state || typeof request.state !== 'object')
           throw new Error('Invalid action state write.');
         validateActionState(request.state);
-        await chrome.storage.local.set({ [ACTION_STATE_KEY]: request.state });
+        await callPresets.write(request.state);
         return request.state;
       }
       if (request.target === 'saul-digest-capture') {
@@ -392,7 +389,7 @@ export default defineBackground(() => {
         validateActionRequest(request.message);
         const r = request.message;
         let prepared;
-        if (r.action === 'build' || r.action === 'load')
+        if (r.action === 'build' || r.action === 'load' || r.action === 'select')
           prepared = prepareActionPreset(await currentSettings(), r.presetId);
         if (r.action === 'restore') {
           const previous = (await actionState()).previous;

@@ -215,7 +215,7 @@ it('does not send a frozen request with credentials for an edited endpoint or re
   expect(() => prepareFrozenRun(settings, original)).toThrow('saved connection');
 });
 
-it('a recipe explicitly selects its ChatGPT account, model, effort and speed independently of active provider', () => {
+it('a model preset uses the selected local account and freezes it for retries', () => {
   const settings = configured();
   settings.configuration!.presets[0] = {
     id: 'preset-current',
@@ -226,10 +226,13 @@ it('a recipe explicitly selects its ChatGPT account, model, effort and speed ind
     effort: 'high',
     fast: true,
   };
+  settings.chatgptPlan = { accountId: 'selected-account', model: 'other' };
   const prepared = prepareRecipeRun(settings, context, configurationFor(settings).selectedRecipeId);
+  settings.chatgptPlan.accountId = 'next-account';
+  expect(prepareFrozenRun(settings, prepared.input).input.plan?.accountId).toBe('selected-account');
   expect(prepared.input.provider).toBe('chatgpt-plan');
   expect(prepared.input.plan).toEqual({
-    accountId: 'saved-account',
+    accountId: 'selected-account',
     model: 'plan-model',
     effort: 'high',
     fast: true,

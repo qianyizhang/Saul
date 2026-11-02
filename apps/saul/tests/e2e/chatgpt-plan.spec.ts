@@ -19,11 +19,23 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   // durable database are production code; no native registration or real quota.
   await worker.evaluate(() => {
     let library: SharedPresets = { revision: 0, presets: [] };
+    const sections: Record<string, { revision: number; value?: Record<string, unknown> }> = {};
     chrome.runtime.sendNativeMessage = (async (
       _host: string,
       message: { id: string; request: PlanRequest },
     ) => {
       const request = message.request;
+      if (request.action === 'config-read')
+        return {
+          id: message.id,
+          event: { type: 'result', config: sections[request.section] || { revision: 0 } },
+        };
+      if (request.action === 'config-save') {
+        if (request.revision !== (sections[request.section]?.revision || 0))
+          return { id: message.id, event: { type: 'error', message: 'Scoped settings changed.' } };
+        sections[request.section] = { revision: request.revision + 1, value: request.value };
+        return { id: message.id, event: { type: 'result', config: sections[request.section] } };
+      }
       if (request.action === 'presets-save') {
         if (request.revision !== library.revision)
           return {
@@ -55,7 +67,7 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
       holdLogout: false,
       finishLogout: () => {},
     };
-    Object.assign(globalThis, { planFixture: state });
+    Object.assign(globalThis, { planFixture: state, scopedConfigs: sections });
     chrome.runtime.connectNative = (() => {
       const listeners: ((m: { id: string; event: PlanEvent }) => void)[] = [];
       return {
@@ -145,6 +157,17 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
       } as unknown as chrome.runtime.Port;
     }) as typeof chrome.runtime.connectNative;
   });
+  const resetCall = await popup.evaluate(async () =>
+    chrome.runtime.sendMessage({ target: 'saul-action', message: { action: 'builtin' } }),
+  );
+  expect(resetCall.success).toBe(true);
+  expect(
+    await worker.evaluate(
+      () =>
+        (globalThis as unknown as { scopedConfigs: Record<string, { value: unknown }> })
+          .scopedConfigs.calls?.value,
+    ),
+  ).toEqual({ library: [] });
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await popup.getByLabel('AI service', { exact: true }).selectOption('chatgpt-plan');
   await expect(popup.getByPlaceholder('Optional for local models')).toHaveCount(0);

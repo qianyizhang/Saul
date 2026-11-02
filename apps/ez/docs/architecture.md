@@ -24,7 +24,7 @@ defines configuration, template inputs, preset overrides, and historical snapsho
 | `ResponsesClient` | Account model discovery and stateless streamed Responses requests |
 | `ResponseAccumulator` / `SSEParser` | Wire-event parsing and terminal completion checks |
 | `HistoryStore` | Owner-only, locked JSONL snapshots, deletion, and recovery |
-| `SharedPresetsStore` | Local JSON model presets shared with Saul; one-time import and stale-save detection |
+| `SharedPresetsStore` | Unified JSON model presets and EZ configuration scope; one-time import and stale-save detection |
 
 ## Direct plan-backed requests
 
@@ -358,3 +358,12 @@ so insertions/deletions do not shift later matches. Each row grows to its taller
 cell without fixed heights or independent scrolling. Narrow presentation retains
 the full text; the existing long-input limit also bounds alignment work and falls
 back to a single unhighlighted pair.
+
+## Unified configuration
+
+`ConfigurationStore` imports the local configuration into
+`Little Clarity/settings.json` → `apps.ez.configuration` once, retaining the old
+file for recovery. Subsequent loads and saves use the scoped JSON section; shared
+model definitions remain in `modelPresets`. Section revisions reject stale saves.
+Account selection and credentials never belong to a model preset. Native shortcuts,
+Minimum Mode and window placement retain their existing local stores.

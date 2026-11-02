@@ -1,7 +1,7 @@
 # Shared behavior and interfaces
 
 This is the shared semantic contract, implemented in TypeScript and Swift.
-Model presets use one local store; credentials, recipes and history remain app-owned.
+Model presets use one local store. App-specific configuration uses scoped sections; credentials and history remain app-owned.
 
 ## Recipe preparation
 
@@ -69,8 +69,10 @@ then the advertised default, then the first effort, and start at Standard.
 Each app imports its old ChatGPT presets once. Duplicate names get numeric
 suffixes; preset IDs and recipe references are preserved or remapped locally.
 After migration the shared store owns these presets. Deleted presets stay deleted;
-recipes referencing them need another explicit choice. Imported presets in Saul
-need an explicit local account selection. API and on-device presets remain Saul-owned.
+recipes referencing them need another explicit choice. Model presets never bind an account. Saul and EZ use their explicitly selected local
+account when preparing a new run, then freeze it for execution and retry. Legacy Saul
+preset account fields are ignored; selecting a preset cannot switch accounts.
+API and on-device presets remain Saul-scoped.
 Swift and Node read the same JSON file; Saul accesses it through its existing ChatGPT helper.
 Neither app needs the other app running. Settings load/reload and new requests
 read the current store; EZ also reads on activation outside Settings. Open editors
@@ -93,3 +95,45 @@ an app can opt into it. No account sharing or credential migration ships here.
 Minimum Mode, action placement, focus, error disclosure and input/output inspection.
 Platform controls and density remain bespoke. Build/fixture checks do not establish
 native visual or live-provider acceptance.
+
+## Unified configuration scopes
+
+The same JSON document holds `apps.saul.settings`, `apps.saul.calls`, and
+`apps.ez.configuration`. Each section has a numeric `revision` and object `value`;
+atomic replacement preserves sibling scopes and unknown root fields. Stale saves
+block before updating shared model presets. Browser scopes are limited to 750 KB
+of serialized UTF-8 JSON, leaving room under the 1 MiB native-message limit.
+As with model presets, simultaneous
+cross-process writes remain last-save-wins; this is not a transaction service.
+
+Saul stores preferences, connection metadata, recipes and non-plan model presets
+in its settings scope. API keys and the selected local ChatGPT account remain in
+trusted Chrome storage. Connection keys are restored only for the same connection
+and endpoint. Plan definitions come only from `modelPresets`. EZ stores recipes
+and configuration choices in its scope; its old configuration file is retained for
+recovery after migration. Neither app needs the other running.
+
+Call presets retain approved action source/revision and a model-preset reference.
+Saul's built-in Summarize remains selectable. Builder drafts, partial generation,
+errors and progress remain Chrome runtime state. Without the optional config
+helper, API-only Saul keeps its existing local settings and call library. Once
+unified settings are adopted, helper loss blocks saves rather than silently
+changing configuration owners.
+
+Further sharing candidates are literal recipe preparation and presentation
+preferences. Recipe input contracts differ between apps; custom actions currently
+have only a browser consumer. They remain app-scoped. Minimum Mode, EZ shortcuts,
+window placement and board layout still use app-local stores. Credentials,
+history and active execution are intentionally outside the unified config.
+
+### Example configurations
+
+[`config.example.json`](../config.example.json) is a credential-free complete shared
+configuration with two account-independent model presets and separate Saul/EZ
+recipes. [`config.calls.json`](fixtures/config.calls.json) adds a saved Call preset
+that returns a source title without inference. Summarize remains selected by default;
+the sample module is not pre-approved and is initialized only on explicit selection.
+Both examples are loaded by TypeScript and Swift production-store tests in temporary
+folders. Model names/options are illustrative; execution still checks the account's
+current catalog. They are not an account backup or an import command. Do not replace
+a personal settings file with an example; preserve existing presets, IDs and revisions.

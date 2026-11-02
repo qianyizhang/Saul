@@ -494,7 +494,7 @@ export function Settings({ onDirty }: { onDirty?: (dirty: boolean) => void }) {
         <summary>Shortcuts</summary>
         <dl>
           <div>
-            <dt>Summarize current page</dt>
+            <dt>Call Saul</dt>
             <dd>{summaryShortcut}</dd>
           </div>
           <div>

@@ -59,7 +59,7 @@ export default defineConfig({
       },
       'saul-summarize': {
         suggested_key: { default: 'Alt+Shift+S', mac: 'MacCtrl+S' },
-        description: 'Saul Summarize',
+        description: 'Call Saul',
       },
     },
     content_security_policy: {

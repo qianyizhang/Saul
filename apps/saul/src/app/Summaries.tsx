@@ -101,8 +101,7 @@ export function SummaryHistory({ onOpen }: { onOpen?: (id: string) => void } = {
       )}
       {!loading && !entries.length && (
         <p className="empty">
-          No saved summaries. Right-click a page and choose Saul Summarize, or select tabs in
-          Window.
+          No saved summaries. Right-click a page and choose Call Saul, or select tabs in Window.
         </p>
       )}
       {loading && <p role="status">Loading…</p>}
@@ -206,7 +205,7 @@ export function SummaryReader({
             const tab = await chrome.tabs.get(tabId);
             if (tab.url !== batch.items[index]?.url)
               throw new Error(
-                'A source tab changed or closed. Use Saul Summarize on the page you want.',
+                'A source tab changed or closed. Use Call Saul on the page you want.',
               );
           }
         }

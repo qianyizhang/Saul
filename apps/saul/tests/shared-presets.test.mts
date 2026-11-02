@@ -10,7 +10,7 @@ import {
   SETTINGS_STORAGE_KEY,
 } from '../src/storage/settings';
 
-it('shares edits, migrates once, preserves local account bindings, and refuses a stale settings save', async () => {
+it('shares edits, migrates once, keeps accounts outside presets, and refuses a stale settings save', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'saul-shared-presets-'));
   try {
     const store = new SharedPresetsStore(join(directory, 'settings.json'));
@@ -26,6 +26,8 @@ it('shares edits, migrates once, preserves local account bindings, and refuses a
             id: string;
             request: {
               action: string;
+              section: string;
+              value: Record<string, unknown>;
               revision: number;
               presets: Parameters<typeof store.import>[0];
             };
@@ -34,12 +36,21 @@ it('shares edits, migrates once, preserves local account bindings, and refuses a
           id,
           event: {
             type: 'result',
-            library:
-              request.action === 'presets-read'
-                ? store.read()
-                : request.action === 'presets-import'
-                  ? store.import(request.presets)
-                  : store.save(request.revision, request.presets),
+            ...(request.action.startsWith('config-')
+              ? {
+                  config:
+                    request.action === 'config-read'
+                      ? store.readScope(request.section)
+                      : store.saveScope(request.section, request.revision, request.value),
+                }
+              : {
+                  library:
+                    request.action === 'presets-read'
+                      ? store.read()
+                      : request.action === 'presets-import'
+                        ? store.import(request.presets)
+                        : store.save(request.revision, request.presets),
+                }),
           },
         }),
       },
@@ -77,6 +88,16 @@ it('shares edits, migrates once, preserves local account bindings, and refuses a
     expect(migrated.id).not.toBe('preset-current');
     expect(first.settings.configuration!.recipes[0]!.presetId).toBe(migrated.id);
     expect(store.read().presets[0]).not.toHaveProperty('accountId');
+    // Upgrades from the earlier shared-preset migration also persist scope adoption.
+    delete stored.scopedConfigRevision;
+    await owner({ action: 'read' });
+    expect(stored.scopedConfigRevision).toBeGreaterThan(0);
+    const scopedDraft = await sharedPresets.load(stored);
+    const modelsBeforeConflict = store.read();
+    const scope = store.readScope('settings');
+    store.saveScope('settings', scope.revision, { ...scope.value, responseLanguage: 'French' });
+    await expect(sharedPresets.save(scopedDraft)).rejects.toThrow();
+    expect(store.read()).toEqual(modelsBeforeConflict);
     const otherApp = store.read();
     otherApp.presets[0]!.name = 'Changed in EZ';
     otherApp.presets[0]!.fast = false;
@@ -88,7 +109,6 @@ it('shares edits, migrates once, preserves local account bindings, and refuses a
     if (second.state !== 'ready') throw new Error('Settings unavailable');
     expect(second.settings.configuration!.presets[0]).toMatchObject({
       name: 'Changed in EZ',
-      accountId: 'local-account',
       fast: false,
     });
     second.settings.configuration!.presets[0]!.effort = 'high';
@@ -107,6 +127,7 @@ it('shares edits, migrates once, preserves local account bindings, and refuses a
     if (invalid.state !== 'invalid') throw new Error('Invalid settings were accepted');
     const reset = await owner({ action: 'reset', baseline: invalid.revision });
     if (reset.state !== 'ready') throw new Error('Reset failed');
+    reset.settings.activeProvider = 'openai-compatible';
     expect(
       (await owner({ action: 'commit', baseline: reset.revision, settings: reset.settings })).state,
     ).toBe('ready');

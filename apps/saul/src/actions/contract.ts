@@ -8,6 +8,7 @@ export interface ActionChoice {
   presetId: string;
 }
 export interface ActionState {
+  library?: ActionChoice[];
   selected?: ActionChoice;
   previous?: ActionChoice;
   candidate?: ActionRevision;
@@ -27,6 +28,7 @@ export type ActionRequest =
   | { action: 'stage'; json: string }
   | { action: 'file'; path: string }
   | { action: 'load'; revision: string; presetId: string }
+  | { action: 'select'; revision: string; presetId: string }
   | { action: 'restore' }
   | { action: 'builtin' };
 export const ACTION_STATE_KEY = 'saul_summary_action_v1';
@@ -51,6 +53,7 @@ export function validateActionRequest(value: unknown): asserts value is ActionRe
     stage: ['json'],
     file: ['path'],
     load: ['revision', 'presetId'],
+    select: ['revision', 'presetId'],
     restore: [],
     builtin: [],
   };
@@ -75,7 +78,7 @@ export function validateActionRequest(value: unknown): asserts value is ActionRe
     )
       throw new Error('Invalid action ' + key + '.');
   }
-  if (value.action === 'load' && !validRevision(value.revision))
+  if ((value.action === 'load' || value.action === 'select') && !validRevision(value.revision))
     throw new Error('Invalid action revision.');
 }
 export async function actionState(): Promise<ActionState> {
@@ -89,6 +92,7 @@ export function validateActionState(value: unknown): asserts value is ActionStat
     Object.keys(value).some(
       (k) =>
         ![
+          'library',
           'selected',
           'previous',
           'candidate',
@@ -113,6 +117,13 @@ export function validateActionState(value: unknown): asserts value is ActionStat
     const { contractVersion, name, description, language, source } = v;
     validateActionModule({ contractVersion, name, description, language, source });
   };
+  if (value.library !== undefined) {
+    if (!Array.isArray(value.library) || value.library.length > 128)
+      throw new Error('Keep at most 128 call presets.');
+    for (const choice of value.library) validateActionState({ selected: choice });
+    const ids = value.library.map((c: ActionChoice) => `${c.revision.revision}:${c.presetId}`);
+    if (new Set(ids).size !== ids.length) throw new Error('Duplicate call presets.');
+  }
   for (const key of ['selected', 'previous'] as const)
     if (value[key] !== undefined) {
       const choice = value[key];

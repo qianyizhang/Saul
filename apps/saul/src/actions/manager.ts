@@ -1,13 +1,8 @@
+import { callPresetStorage } from '../storage/call-presets';
 import type { DbCall, RunInput } from '../types/storage';
 import { streamModel } from '../models/provider';
 import { actionHost } from './host';
-import {
-  ACTION_STATE_KEY,
-  BUILDER_PROMPT,
-  actionState,
-  type ActionRequest,
-  type ActionState,
-} from './contract';
+import { BUILDER_PROMPT, type ActionRequest, type ActionState } from './contract';
 import { validateActionModule } from '../../native/action-protocol.mts';
 
 export class ActionManager {
@@ -18,13 +13,23 @@ export class ActionManager {
   constructor(
     private db: DbCall,
     private generate = streamModel,
-    private storage = {
-      read: actionState,
-      write: (state: ActionState) => chrome.storage.local.set({ [ACTION_STATE_KEY]: state }),
-    },
+    private storage = callPresetStorage(),
   ) {
     this.ready = (async () => {
       this.state = await this.storage.read();
+      // Preserve both slots from the old single-action store on first load.
+      if (!this.state.library) {
+        this.state.library = [];
+        for (const choice of [this.state.previous, this.state.selected])
+          if (
+            choice &&
+            !this.state.library.some(
+              (c) =>
+                c.revision.revision === choice.revision.revision && c.presetId === choice.presetId,
+            )
+          )
+            this.state.library.push(choice);
+      }
       if (this.state.building) {
         this.state.building = false;
         this.state.error =
@@ -86,8 +91,20 @@ export class ActionManager {
             delete next.error;
             delete next.blocked;
           });
-        } else if (request.action === 'load' || request.action === 'restore') {
-          const choice = request.action === 'restore' ? this.state.previous : undefined;
+        } else if (
+          request.action === 'load' ||
+          request.action === 'restore' ||
+          request.action === 'select'
+        ) {
+          const choice =
+            request.action === 'restore'
+              ? this.state.previous
+              : request.action === 'select'
+                ? this.state.library?.find(
+                    (c) =>
+                      c.revision.revision === request.revision && c.presetId === request.presetId,
+                  )
+                : undefined;
           const revision = request.action === 'load' ? request.revision : choice?.revision.revision;
           const presetId = request.action === 'load' ? request.presetId : choice?.presetId;
           if (!revision || !presetId) throw new Error('No previous working action is available.');
@@ -104,7 +121,14 @@ export class ActionManager {
           const approved = result.revision;
           await this.commit((next) => {
             if (next.selected) next.previous = next.selected;
-            next.selected = { revision: approved, presetId };
+            const selected = { revision: approved, presetId };
+            const library = next.library || [];
+            if (!library.some((c) => c.revision.revision === revision && c.presetId === presetId)) {
+              if (library.length >= 128) throw new Error('Keep at most 128 call presets.');
+              library.push(selected);
+            }
+            next.library = library;
+            next.selected = selected;
             delete next.error;
           });
           await this.prune();
@@ -143,6 +167,7 @@ export class ActionManager {
     const saved = await this.db({ type: 'DB_DIGEST_ACTION_REVISIONS', payload: undefined });
     const protect = [
       ...saved,
+      ...(this.state.library || []).map((c) => c.revision.revision),
       ...[
         this.state.selected?.revision.revision,
         this.state.previous?.revision.revision,

@@ -213,7 +213,7 @@ choice and sends the exact selected tab IDs. Snapshot metadata records source-wi
 older saved summaries remain readable. Polling reads active progress or the
 open reader, never the entire summary history on a recurring timer.
 
-`src/digest/actions.ts` registers **Saul Summarize** on installation/update.
+`src/digest/actions.ts` registers **Call Saul** on installation/update.
 The context menu and Chrome command share one handler. Chrome UI actions use
 `src/digest/panel.ts` to open `summary-panel.html` synchronously in the browser
 gesture, with the selected route in trusted session storage per window. The panel

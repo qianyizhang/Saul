@@ -1,0 +1,82 @@
+{
+  "modelPresets": {
+    "revision": 1,
+    "presets": [
+      {
+        "id": "11111111-1111-4111-8111-111111111111",
+        "name": "Standard",
+        "model": "gpt-6-luna",
+        "effort": "medium",
+        "fast": false
+      },
+      {
+        "id": "22222222-2222-4222-8222-222222222222",
+        "name": "Deep",
+        "model": "gpt-6-luna",
+        "effort": "high",
+        "fast": false
+      }
+    ]
+  },
+  "apps": {
+    "saul": {
+      "settings": {
+        "revision": 1,
+        "value": {
+          "activeProvider": "chatgpt-plan",
+          "summaryPdfProcessing": "attachment",
+          "responseLanguage": "English",
+          "configuration": {
+            "schemaVersion": 1,
+            "selectedRecipeId": "explain",
+            "presets": [],
+            "recipes": [
+              {
+                "id": "explain",
+                "name": "Explain",
+                "presetId": "11111111-1111-4111-8111-111111111111",
+                "template": "Explain this passage concisely:\n\n{{text}}",
+                "systemPrompt": "Answer directly and preserve uncertainty."
+              }
+            ]
+          }
+        }
+      },
+      "calls": {
+        "revision": 1,
+        "value": {
+          "library": [
+            {
+              "presetId": "11111111-1111-4111-8111-111111111111",
+              "revision": {
+                "contractVersion": 1,
+                "name": "Source title",
+                "description": "Return the frozen source title without a model request.",
+                "language": "typescript",
+                "source": "export default async function run(ctx) { return \"Source title: \" + ctx.source.title; }",
+                "revision": "40df7ccb4da1fa5fe3b224c45de92cc2e729803c9f99e60a94d612f322707f88",
+                "createdAt": 0
+              }
+            }
+          ]
+        }
+      }
+    },
+    "ez": {
+      "configuration": {
+        "revision": 1,
+        "value": {
+          "schemaVersion": 1,
+          "recipes": [
+            {
+              "id": "33333333-3333-4333-8333-333333333333",
+              "name": "Explain",
+              "presetID": "11111111-1111-4111-8111-111111111111",
+              "template": "Explain this passage concisely:\n\n{{text}}"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

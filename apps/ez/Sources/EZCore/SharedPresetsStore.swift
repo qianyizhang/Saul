@@ -24,6 +24,42 @@ public final class SharedPresetsStore {
         }
         return value
     }
+    public func readAppSection(_ section: String) throws -> (revision: Int, value: [String: Any]?) {
+        let document = try document()
+        guard let rawApps = document["apps"] else { return (0, nil) }
+        guard let apps = rawApps as? [String: Any] else { throw EZError("Invalid app settings.") }
+        guard let rawEZ = apps["ez"] else { return (0, nil) }
+        guard let ez = rawEZ as? [String: Any] else { throw EZError("Invalid EZ settings.") }
+        guard let raw = ez[section] else { return (0, nil) }
+        guard let saved = raw as? [String: Any], let revision = saved["revision"] as? Int,
+            revision >= 0, let value = saved["value"] as? [String: Any]
+        else { throw EZError("Invalid scoped settings. Original file preserved.") }
+        return (revision, value)
+    }
+    @discardableResult public func saveAppSection(_ section: String, value: [String: Any], revision: Int)
+        throws -> Int
+    {
+        guard try readAppSection(section).revision == revision else {
+            throw EZError("EZ settings changed. Reload before saving again.")
+        }
+        var document = try document()
+        var apps = document["apps"] as? [String: Any] ?? [:]
+        var ez = apps["ez"] as? [String: Any] ?? [:]
+        ez[section] = ["revision": revision + 1, "value": value]
+        apps["ez"] = ez
+        document["apps"] = apps
+        try writeDocument(document)
+        return revision + 1
+    }
+    private func writeDocument(_ document: [String: Any]) throws {
+        let data = try JSONSerialization.data(
+            withJSONObject: document, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700])
+        try data.write(to: url, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+    }
     public func read() throws -> SharedPresets {
         guard let raw = try document()["modelPresets"] else {
             return SharedPresets(revision: 0, presets: [])
@@ -56,13 +92,7 @@ public final class SharedPresetsStore {
         let saved = SharedPresets(revision: revision + 1, presets: presets)
         var document = try document()
         document["modelPresets"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(saved))
-        let data = try JSONSerialization.data(
-            withJSONObject: document, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
-        try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
-            attributes: [.posixPermissions: 0o700])
-        try data.write(to: url, options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        try writeDocument(document)
         return saved
     }
     public func migrate(_ presets: [ModelPreset]) throws -> SharedPresets {

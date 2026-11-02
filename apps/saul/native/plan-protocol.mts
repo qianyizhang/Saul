@@ -1,5 +1,8 @@
 import { isRecord } from './value.mts';
 import {
+  validScopedConfig,
+  validateScopedConfigValue,
+  type ScopedConfig,
   validateSharedPresets,
   type SharedPreset,
   type SharedPresets,
@@ -39,6 +42,13 @@ export function validPdfUrlAttachment(value: unknown): value is PdfUrlAttachment
   }
 }
 export type PlanRequest =
+  | { action: 'config-read'; section: 'settings' | 'calls' }
+  | {
+      action: 'config-save';
+      section: 'settings' | 'calls';
+      revision: number;
+      value: Record<string, unknown>;
+    }
   | { action: 'presets-read' }
   | { action: 'presets-import'; presets: SharedPreset[] }
   | { action: 'presets-save'; revision: number; presets: SharedPreset[] }
@@ -59,6 +69,8 @@ export type PlanRequest =
     };
 export type PlanControlRequest = Exclude<PlanRequest, { action: 'generate' }>;
 export interface PlanResults {
+  'config-read': { config: ScopedConfig };
+  'config-save': { config: ScopedConfig };
   'presets-read': { library: SharedPresets };
   'presets-import': { library: SharedPresets };
   'presets-save': { library: SharedPresets };
@@ -87,6 +99,8 @@ const text = (v: unknown, max: number): v is string =>
 export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
   if (!isRecord(v)) throw new Error('Invalid plan request');
   const operations: Record<string, string[]> = {
+    'config-read': ['section'],
+    'config-save': ['section', 'revision', 'value'],
     'presets-read': [],
     'presets-import': ['presets'],
     'presets-save': ['revision', 'presets'],
@@ -100,6 +114,15 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
   const keys = typeof v.action === 'string' ? operations[v.action] : undefined;
   if (!Array.isArray(keys) || Object.keys(v).some((k) => k !== 'action' && !keys.includes(k)))
     throw new Error('Unsupported plan operation');
+  if (v.action === 'config-read' || v.action === 'config-save') {
+    if (!['settings', 'calls'].includes(String(v.section)))
+      throw new Error('Invalid config section.');
+    if (v.action === 'config-save') {
+      if (!validScopedConfig(v)) throw new Error('Invalid config revision.');
+      validateScopedConfigValue(v.value);
+    }
+    return;
+  }
   if (v.action === 'presets-read') return;
   if (v.action === 'presets-import' || v.action === 'presets-save') {
     validateSharedPresets(v.presets);
@@ -167,6 +190,8 @@ export function validatePlanResult<T extends PlanControlRequest>(
 ): asserts value is PlanResult<T> {
   const validators: Record<PlanControlRequest['action'], (v: Record<string, unknown>) => boolean> =
     {
+      'config-read': (v) => validScopedConfig(v.config),
+      'config-save': (v) => validScopedConfig(v.config),
       'presets-read': sharedLibrary,
       'presets-import': sharedLibrary,
       'presets-save': sharedLibrary,

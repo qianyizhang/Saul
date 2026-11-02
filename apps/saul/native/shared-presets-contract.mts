@@ -34,3 +34,28 @@ export function validateSharedPresets(value: unknown): asserts value is SharedPr
   )
     throw new Error('Shared presets need unique IDs and names, a model, effort, and speed.');
 }
+
+export interface ScopedConfig {
+  revision: number;
+  value?: Record<string, unknown>;
+}
+export function validScopedConfig(v: unknown): v is ScopedConfig {
+  return (
+    isRecord(v) &&
+    Number.isSafeInteger(v.revision) &&
+    Number(v.revision) >= 0 &&
+    (v.value === undefined || isRecord(v.value))
+  );
+}
+
+// Leave room for native framing and the result envelope within the 1 MiB transport.
+export const MAX_SCOPED_CONFIG_BYTES = 750_000;
+export function validateScopedConfigValue(
+  value: unknown,
+): asserts value is Record<string, unknown> {
+  if (!isRecord(value)) throw new Error('Scoped configuration must be an object.');
+  if (new TextEncoder().encode(JSON.stringify(value)).length > MAX_SCOPED_CONFIG_BYTES)
+    throw new Error(
+      'Scoped configuration exceeds 750 KB. Keep fewer or smaller call presets and recipes.',
+    );
+}

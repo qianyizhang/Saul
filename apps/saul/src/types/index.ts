@@ -74,6 +74,7 @@ export interface ModelPreset {
   provider: ProviderType;
   model: string;
   profileId?: string;
+  /** Legacy historical snapshots only; new model presets never select an account. */
   accountId?: string;
   temperature?: number;
   topK?: number;
@@ -99,6 +100,7 @@ export interface ReadingConfiguration {
 export interface UserSettings {
   summaryPdfProcessing?: 'attachment' | 'local';
   sharedPresetRevision?: number;
+  scopedConfigRevision?: number;
   profiles?: ProviderProfile[];
   activeProfileId?: string;
   responseLanguage?: string;

@@ -91,7 +91,7 @@ function recoveredProfileId(profiles: UserSettings['profiles']): string {
   return id;
 }
 
-function normalizeSettings(value: unknown): UserSettings {
+export function normalizeSettings(value: unknown): UserSettings {
   const stored = record(value, 'settings');
   const activeProvider = stored.activeProvider ?? DEFAULT_SETTINGS.activeProvider;
   if (
@@ -166,6 +166,7 @@ function normalizeSettings(value: unknown): UserSettings {
   const settings: UserSettings = {
     ...DEFAULT_SETTINGS,
     summaryPdfProcessing,
+    scopedConfigRevision: optionalNumber(stored.scopedConfigRevision, 'scoped config revision'),
     ...(stored.sharedPresetRevision === undefined
       ? {}
       : {
@@ -348,12 +349,15 @@ export function createSettingsOwner(
       } catch (error) {
         if (!(error instanceof InvalidStoredSettingsError)) throw error;
       }
-      // The only migration write: retain remapped recipe IDs and local account bindings.
+      // The only migration write: retain remapped recipe IDs and migration revisions.
       if (
         request.action === 'read' &&
         shared &&
-        loaded?.sharedPresetRevision !== undefined &&
-        settingsFromStored(stored).sharedPresetRevision === undefined
+        loaded &&
+        ((loaded.sharedPresetRevision !== undefined &&
+          settingsFromStored(stored).sharedPresetRevision === undefined) ||
+          (loaded.scopedConfigRevision !== undefined &&
+            settingsFromStored(stored).scopedConfigRevision === undefined))
       ) {
         await storage.write({ [SETTINGS_STORAGE_KEY]: loaded });
         return {
@@ -362,11 +366,18 @@ export function createSettingsOwner(
           revision: await revisionOf({
             stored: loaded,
             sharedRevision: loaded.sharedPresetRevision,
+            scopedRevision: loaded.scopedConfigRevision,
           }),
         };
       }
       const revision = await revisionOf(
-        shared ? { stored, sharedRevision: loaded?.sharedPresetRevision } : stored,
+        shared
+          ? {
+              stored,
+              sharedRevision: loaded?.sharedPresetRevision,
+              scopedRevision: loaded?.scopedConfigRevision,
+            }
+          : stored,
       );
       if (request.action !== 'read' && request.baseline !== revision)
         return {
@@ -394,7 +405,13 @@ export function createSettingsOwner(
           state: 'ready',
           settings,
           revision: await revisionOf(
-            shared ? { stored: settings, sharedRevision: settings.sharedPresetRevision } : settings,
+            shared
+              ? {
+                  stored: settings,
+                  sharedRevision: settings.sharedPresetRevision,
+                  scopedRevision: settings.scopedConfigRevision,
+                }
+              : settings,
           ),
         };
       }
@@ -423,7 +440,13 @@ export function createSettingsOwner(
       return {
         state: 'ready',
         revision: await revisionOf(
-          shared ? { stored: settings, sharedRevision: settings.sharedPresetRevision } : settings,
+          shared
+            ? {
+                stored: settings,
+                sharedRevision: settings.sharedPresetRevision,
+                scopedRevision: settings.scopedConfigRevision,
+              }
+            : settings,
         ),
         settings,
         reset: true,

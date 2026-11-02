@@ -87,6 +87,7 @@ export function ActionSettings({
     setForm((current) => ({ ...current, ...patch }));
   }
   useEffect(() => {
+    void request({ action: 'status' });
     live.current = true;
     return () => {
       live.current = false;
@@ -142,173 +143,214 @@ export function ActionSettings({
     candidate?.revision === state?.selected?.revision.revision &&
     actionPreset === state?.selected?.presetId;
   return (
-    <details
-      onToggle={(event) => {
-        if (event.currentTarget.open && !state && !busy) void request({ action: 'status' });
-      }}
-    >
-      <summary>Customize Summarize</summary>
-      <div className="stack settings-disclosure" aria-label="Summary action">
-        <p role="status" className="small">
-          {state?.blocked
-            ? 'Action settings unavailable'
-            : state
-              ? `Current action: ${state.selected?.revision.name || 'Built-in bilingual summary'}`
-              : 'Loading action…'}
-        </p>
-        {state?.selected && (
-          <p className="small muted">
-            Preset:{' '}
-            {presets.find((p) => p.id === state.selected?.presetId)?.name || 'Unavailable preset'} ·
-            revision {state.selected.revision.revision.slice(0, 10)}
-          </p>
-        )}
-        {settingsDirty && (
-          <p className="notice">
-            Save or reload model settings before creating or loading an action.
-          </p>
-        )}
+    <div className="stack">
+      {state && (
         <label className="field">
-          Action request
-          <textarea
-            aria-label="Action request"
-            disabled={!state}
-            rows={3}
-            maxLength={ACTION_FORM_LIMITS.prompt}
-            value={prompt}
-            onChange={(e) => edit({ prompt: e.target.value })}
-            placeholder="Explain the main claim and its weakest evidence."
-          />
-        </label>
-        <PresetField
-          label="Builder preset"
-          value={builderPreset}
-          presets={presets}
-          onChange={(value) => edit({ builderPreset: value })}
-        />
-        <div className="row">
-          <button
-            type="button"
-            className="btn"
-            disabled={disabled || !prompt.trim() || !presets.some((p) => p.id === builderPreset)}
-            onClick={() => void request({ action: 'build', prompt, presetId: builderPreset })}
+          Call preset
+          <select
+            aria-label="Call preset"
+            disabled={disabled || !state || state.blocked}
+            value={
+              state.selected ? `${state.selected.revision.revision}:${state.selected.presetId}` : ''
+            }
+            onChange={(event) => {
+              const choice = state.library?.find(
+                (c) => `${c.revision.revision}:${c.presetId}` === event.target.value,
+              );
+              void request(
+                choice
+                  ? {
+                      action: 'select',
+                      revision: choice.revision.revision,
+                      presetId: choice.presetId,
+                    }
+                  : { action: 'builtin' },
+              );
+            }}
           >
-            {candidate || state?.selected ? 'Revise action' : 'Create action'}
-          </button>
-          {building && (
-            <button
-              type="button"
-              className="btn"
-              disabled={busy}
-              onClick={() => void request({ action: 'stop' })}
-            >
-              Stop creation
-            </button>
-          )}
-        </div>
-        <p className="small muted">
-          Create/revise uses one model request. Review the checked code, then Load/Replace. The next
-          Summarize runs it.
-        </p>
-        {building && <p role="status">Creating and checking action…</p>}
-        {(error || state?.error) && (
-          <p role="alert" className="notice error">
-            {error || state?.error}
+            <option value="">Summarize (default)</option>
+            {(state.library || []).map((choice) => (
+              <option
+                key={`${choice.revision.revision}:${choice.presetId}`}
+                value={`${choice.revision.revision}:${choice.presetId}`}
+              >
+                {choice.revision.name} ·{' '}
+                {presets.find((p) => p.id === choice.presetId)?.name || 'Unavailable model preset'}{' '}
+                · {choice.revision.revision.slice(0, 8)}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <details
+        onToggle={(event) => {
+          if (event.currentTarget.open && !state && !busy) void request({ action: 'status' });
+        }}
+      >
+        <summary>Customize Call Saul</summary>
+        <div className="stack settings-disclosure" aria-label="Summary action">
+          <p role="status" className="small">
+            {state?.blocked
+              ? 'Action settings unavailable'
+              : state
+                ? `Current action: ${state.selected?.revision.name || 'Built-in bilingual summary'}`
+                : 'Loading action…'}
           </p>
-        )}
-        {candidate && (
-          <div className="stack" aria-label="Checked candidate">
-            <strong>{candidate.name}</strong>
-            <p>{candidate.description}</p>
-            <InspectionText label="Candidate source" text={candidate.source} />
-            {state?.selected && candidate.revision !== state.selected.revision.revision && (
-              <details>
-                <summary>Current selected source</summary>
-                <InspectionText label="Selected source" text={state.selected.revision.source} />
-              </details>
-            )}
-            <PresetField
-              label="Action preset"
-              value={actionPreset}
-              presets={presets}
-              onChange={(value) => edit({ actionPreset: value })}
-            />
+          {state?.selected && (
             <p className="small muted">
-              One run per page · Up to three model calls · Five minutes. Load runs trusted local
-              code with your OS permissions. Initialization effects cannot be undone.
+              Preset:{' '}
+              {presets.find((p) => p.id === state.selected?.presetId)?.name || 'Unavailable preset'}{' '}
+              · revision {state.selected.revision.revision.slice(0, 10)}
             </p>
-            <button
-              type="button"
-              className="btn primary"
-              disabled={disabled || !presets.some((p) => p.id === actionPreset) || alreadyLoaded}
-              onClick={() =>
-                void request({
-                  action: 'load',
-                  revision: candidate.revision,
-                  presetId: actionPreset,
-                })
-              }
-            >
-              {alreadyLoaded ? 'Loaded' : state?.selected ? 'Replace action' : 'Load action'}
-            </button>
-          </div>
-        )}
-        <details>
-          <summary>Local module and recovery</summary>
-          <div className="stack settings-disclosure">
-            <label className="field">
-              Module file path
-              <input
-                aria-label="Module file path"
-                value={path}
-                maxLength={ACTION_FORM_LIMITS.path}
-                onChange={(e) => edit({ path: e.target.value })}
-                placeholder="/absolute/path/summarize.ts"
-              />
-            </label>
+          )}
+          {settingsDirty && (
+            <p className="notice">
+              Save or reload model settings before creating or loading an action.
+            </p>
+          )}
+          <label className="field">
+            Action request
+            <textarea
+              aria-label="Action request"
+              disabled={!state}
+              rows={3}
+              maxLength={ACTION_FORM_LIMITS.prompt}
+              value={prompt}
+              onChange={(e) => edit({ prompt: e.target.value })}
+              placeholder="Explain the main claim and its weakest evidence."
+            />
+          </label>
+          <PresetField
+            label="Builder preset"
+            value={builderPreset}
+            presets={presets}
+            onChange={(value) => edit({ builderPreset: value })}
+          />
+          <div className="row">
             <button
               type="button"
               className="btn"
-              disabled={disabled || !path.trim()}
-              onClick={() => void request({ action: 'file', path })}
+              disabled={disabled || !prompt.trim() || !presets.some((p) => p.id === builderPreset)}
+              onClick={() => void request({ action: 'build', prompt, presetId: builderPreset })}
             >
-              Check file
+              {candidate || state?.selected ? 'Revise action' : 'Create action'}
             </button>
-            <p className="small muted">
-              Check file only reads and checks code. Review its candidate, then Load/Replace to
-              reload an edit. No file watching.
-            </p>
-            {state?.previous && (
+            {building && (
               <button
                 type="button"
                 className="btn"
-                disabled={disabled}
-                onClick={() => void request({ action: 'restore' })}
+                disabled={busy}
+                onClick={() => void request({ action: 'stop' })}
               >
-                Restore previous action
+                Stop creation
               </button>
             )}
-            {(state?.selected || state?.blocked) && (
-              <button
-                type="button"
-                className="btn"
-                disabled={disabled}
-                onClick={() => void request({ action: 'builtin' })}
-              >
-                Use built-in summary
-              </button>
-            )}
-            {state?.raw && (
-              <InspectionText label="Builder response · may be incomplete" text={state.raw} />
-            )}
-            <p className="small muted">Optional helper setup:</p>
-            <InspectionText
-              label="Setup command"
-              text={`node scripts/setup.mts --components actions --extension-id ${chrome.runtime.id}`}
-            />
           </div>
-        </details>
-      </div>
-    </details>
+          <p className="small muted">
+            Create/revise uses one model request. Review the checked code, then Save and select.
+            Saving keeps a Call preset you can select again. The next Call Saul runs the selected
+            preset.
+          </p>
+          {building && <p role="status">Creating and checking action…</p>}
+          {(error || state?.error) && (
+            <p role="alert" className="notice error">
+              {error || state?.error}
+            </p>
+          )}
+          {candidate && (
+            <div className="stack" aria-label="Checked candidate">
+              <strong>{candidate.name}</strong>
+              <p>{candidate.description}</p>
+              <InspectionText label="Candidate source" text={candidate.source} />
+              {state?.selected && candidate.revision !== state.selected.revision.revision && (
+                <details>
+                  <summary>Current selected source</summary>
+                  <InspectionText label="Selected source" text={state.selected.revision.source} />
+                </details>
+              )}
+              <PresetField
+                label="Model preset"
+                value={actionPreset}
+                presets={presets}
+                onChange={(value) => edit({ actionPreset: value })}
+              />
+              <p className="small muted">
+                One run per page · Up to three model calls · Five minutes. Load runs trusted local
+                code with your OS permissions. Initialization effects cannot be undone.
+              </p>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={disabled || !presets.some((p) => p.id === actionPreset) || alreadyLoaded}
+                onClick={() =>
+                  void request({
+                    action: 'load',
+                    revision: candidate.revision,
+                    presetId: actionPreset,
+                  })
+                }
+              >
+                {alreadyLoaded ? 'Selected' : 'Save and select call preset'}
+              </button>
+            </div>
+          )}
+          <details>
+            <summary>Local module and recovery</summary>
+            <div className="stack settings-disclosure">
+              <label className="field">
+                Module file path
+                <input
+                  aria-label="Module file path"
+                  value={path}
+                  maxLength={ACTION_FORM_LIMITS.path}
+                  onChange={(e) => edit({ path: e.target.value })}
+                  placeholder="/absolute/path/summarize.ts"
+                />
+              </label>
+              <button
+                type="button"
+                className="btn"
+                disabled={disabled || !path.trim()}
+                onClick={() => void request({ action: 'file', path })}
+              >
+                Check file
+              </button>
+              <p className="small muted">
+                Check file only reads and checks code. Review its candidate, then Save and select to
+                reload an edit. No file watching.
+              </p>
+              {state?.previous && (
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={disabled}
+                  onClick={() => void request({ action: 'restore' })}
+                >
+                  Restore previous action
+                </button>
+              )}
+              {(state?.selected || state?.blocked) && (
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={disabled}
+                  onClick={() => void request({ action: 'builtin' })}
+                >
+                  Use built-in summary
+                </button>
+              )}
+              {state?.raw && (
+                <InspectionText label="Builder response · may be incomplete" text={state.raw} />
+              )}
+              <p className="small muted">Optional helper setup:</p>
+              <InspectionText
+                label="Setup command"
+                text={`node scripts/setup.mts --components actions --extension-id ${chrome.runtime.id}`}
+              />
+            </div>
+          </details>
+        </div>
+      </details>
+    </div>
   );
 }

@@ -122,14 +122,14 @@ See [native messaging](native-messaging.md).
 ### Summaries
 
 The built-in behavior below remains the default. **Settings → Summaries →
-Customize Summarize** can replace it with one explicitly loaded local action.
+Customize Call Saul** can save and select a custom Call preset while retaining earlier choices.
 Create/revise uses a chosen saved preset, then checks and previews a candidate
-without running it. Load/Replace initializes trusted code; the next Summarize
+without running it. Save and select call preset initializes trusted code; the next Summarize
 invokes it once per page. Custom results use safe text/Markdown, their own frozen
 preset, and the existing reader/Stop/history controls. See
 [custom actions](custom-actions.md) for the versioned interface and recovery.
 
-Right-click a web page and choose **Saul Summarize** to summarize that tab's
+Right-click a web page and choose **Call Saul** to summarize that tab's
 loaded page text, even when the click is on a link or selected text. It does
 not summarize the link destination or only the selection. The reader opens
 in Chrome's side panel, keeping the source tab active, and shows its page title,
@@ -215,7 +215,7 @@ from passage History's Clear all action.
 
 ### Saved input and reuse
 
-Repeated **Saul Summarize** reopens the latest saved summary for the exact ordered
+Repeated **Call Saul** reopens the latest saved summary for the exact ordered
 URL selection, or its active run. Before any new account/model call, Saul compares
 current source text with the saved capture. An upfront notice shows the original date,
 text change estimate, changed instructions/title/coverage, or a capture error.

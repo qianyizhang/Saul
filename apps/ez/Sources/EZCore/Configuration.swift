@@ -198,12 +198,27 @@ public struct Configuration: Codable, Equatable {
 public final class ConfigurationStore {
     public let url: URL
     private let shared: SharedPresetsStore?
+    private var scopedRevision = 0
     public init(directory: URL, shared: SharedPresetsStore? = nil) {
         url = directory.appendingPathComponent("configuration.json")
         self.shared = shared
     }
 
     public func load() throws -> Configuration? {
+        if let shared {
+            let section = try shared.readAppSection("configuration")
+            scopedRevision = section.revision
+            if var value = section.value {
+                let library = try shared.read()
+                value["presets"] = try JSONSerialization.jsonObject(
+                    with: JSONEncoder().encode(library.presets))
+                value["sharedPresetRevision"] = library.revision
+                let result = try JSONDecoder().decode(
+                    Configuration.self, from: JSONSerialization.data(withJSONObject: value))
+                try result.validate()
+                return result
+            }
+        }
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
         let data = try Data(contentsOf: url)
         guard data.count <= 1_048_576 else {
@@ -217,6 +232,7 @@ public final class ConfigurationStore {
             result.presets = library.presets
             result.sharedPresetRevision = library.revision
             if migrating { try writeLocal(result) }
+            try writeScope(result, shared: shared)
         }
         return result
     }
@@ -225,6 +241,9 @@ public final class ConfigurationStore {
         try configuration.validate()
         var saved = configuration
         if let shared {
+            guard try shared.readAppSection("configuration").revision == scopedRevision else {
+                throw EZError("EZ settings changed. Reload before saving again.")
+            }
             let library =
                 try configuration.sharedPresetRevision.map {
                     try shared.save(configuration.presets, revision: $0)
@@ -232,12 +251,23 @@ public final class ConfigurationStore {
             saved.presets = library.presets
             saved.sharedPresetRevision = library.revision
         }
-        do { try writeLocal(saved) } catch {
+        do {
+            if let shared { try writeScope(saved, shared: shared) } else { try writeLocal(saved) }
+        } catch {
             if shared == nil { throw error }
             throw EZError(
                 "Configuration could not be saved. Shared presets may already be saved; reload before editing again. \(error.localizedDescription)"
             )
         }
+    }
+    private func writeScope(_ configuration: Configuration, shared: SharedPresetsStore) throws {
+        guard
+            var value = try JSONSerialization.jsonObject(with: JSONEncoder().encode(configuration))
+                as? [String: Any]
+        else { throw EZError("Configuration must be an object.") }
+        value.removeValue(forKey: "presets")
+        value.removeValue(forKey: "sharedPresetRevision")
+        scopedRevision = try shared.saveAppSection("configuration", value: value, revision: scopedRevision)
     }
     private func writeLocal(_ configuration: Configuration) throws {
         let encoder = JSONEncoder()

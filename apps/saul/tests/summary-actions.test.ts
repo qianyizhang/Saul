@@ -44,7 +44,7 @@ it('registers one HTTP(S) page action on installation or update, not on worker w
   expect(f.removeAll).toHaveBeenCalledOnce();
   expect(f.create.mock.calls[0]![0]).toMatchObject({
     id: SUMMARY_ACTION_ID,
-    title: 'Saul Summarize',
+    title: 'Call Saul',
     documentUrlPatterns: ['http://*/*', 'https://*/*'],
   });
 });

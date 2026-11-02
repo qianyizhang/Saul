@@ -17,18 +17,18 @@ test('unsubmitted action fields survive navigation and reload without a model ca
   const { popup } = await sandbox.launch();
   await configureFixtureProvider(popup, fixtureServer.origin);
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await popup.getByText('Customize Summarize', { exact: true }).click();
+  await popup.getByText('Customize Call Saul', { exact: true }).click();
   await popup.getByLabel('Action request', { exact: true }).fill('Keep this unsent request 中文.');
   await popup.getByText('Local module and recovery', { exact: true }).click();
   await popup.getByLabel('Module file path', { exact: true }).fill('/tmp/my-summary.ts');
   await popup.getByRole('button', { name: 'History', exact: true }).click();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await popup.getByText('Customize Summarize', { exact: true }).click();
+  await popup.getByText('Customize Call Saul', { exact: true }).click();
   await expect(popup.getByLabel('Action request', { exact: true })).toHaveValue(
     'Keep this unsent request 中文.',
   );
   await popup.reload();
-  await popup.getByText('Customize Summarize', { exact: true }).click();
+  await popup.getByText('Customize Call Saul', { exact: true }).click();
   await expect(popup.getByLabel('Action request', { exact: true })).toHaveValue(
     'Keep this unsent request 中文.',
   );
@@ -86,7 +86,7 @@ test('creates and explicitly loads a real local action, renders safely, isolates
     await helper.install(worker);
     await configureFixtureProvider(popup, fixtureServer.origin);
     await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-    await popup.getByText('Customize Summarize', { exact: true }).click();
+    await popup.getByText('Customize Call Saul', { exact: true }).click();
     await popup
       .getByLabel('Action request', { exact: true })
       .fill('Explain the main claim and its weakest evidence.');
@@ -98,7 +98,7 @@ test('creates and explicitly loads a real local action, renders safely, isolates
         (m) => (m as { request?: { action: string } }).request?.action === 'run',
       ),
     ).toBe(false);
-    await popup.getByRole('button', { name: 'Load action', exact: true }).click();
+    await popup.getByRole('button', { name: 'Save and select call preset', exact: true }).click();
     await expect(
       popup.getByText('Current action: Evidence summary', { exact: true }),
     ).toBeVisible();
@@ -113,6 +113,16 @@ test('creates and explicitly loads a real local action, renders safely, isolates
     ).toHaveCount(0);
     expect(calls).toHaveLength(2);
     const firstUrl = reader.url();
+    const savedChoice = await popup.getByLabel('Call preset', { exact: true }).inputValue();
+    await popup.getByLabel('Call preset', { exact: true }).selectOption('');
+    await expect
+      .poll(async () => (await request(popup, { action: 'status' })).selected)
+      .toBeUndefined();
+    await popup.getByLabel('Call preset', { exact: true }).selectOption(savedChoice);
+    await expect
+      .poll(async () => (await request(popup, { action: 'status' })).selected?.revision.name)
+      .toBe(candidate.name);
+    expect(calls).toHaveLength(2);
     await reader.getByText('Inspect input/output', { exact: true }).click();
     await reader.getByText('Saved request and response', { exact: true }).click();
     await expect(
@@ -134,7 +144,7 @@ test('creates and explicitly loads a real local action, renders safely, isolates
       .poll(async () => (await request(popup, { action: 'status' })).candidate?.source)
       .toBe(module.source);
     expect(calls).toHaveLength(3);
-    await popup.getByRole('button', { name: 'Replace action', exact: true }).click();
+    await popup.getByRole('button', { name: 'Save and select call preset', exact: true }).click();
     await expect
       .poll(async () => (await request(popup, { action: 'status' })).selected?.revision.source)
       .toBe(module.source);
@@ -148,7 +158,7 @@ test('creates and explicitly loads a real local action, renders safely, isolates
       for (const colorScheme of ['light', 'dark'] as const) {
         await popup.setViewportSize({ width, height: 800 });
         await popup.emulateMedia({ colorScheme });
-        await popup.getByText('Customize Summarize', { exact: true }).scrollIntoViewIfNeeded();
+        await popup.getByText('Customize Call Saul', { exact: true }).scrollIntoViewIfNeeded();
         expect(await popup.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
           true,
         );
@@ -173,6 +183,7 @@ test('creates and explicitly loads a real local action, renders safely, isolates
       restored.getByRole('heading', { name: 'Revised answer', exact: true }),
     ).toBeVisible();
     expect(calls).toHaveLength(4);
+    expect((await request(popup, { action: 'status' })).library).toHaveLength(2);
     expect((await request(popup, { action: 'status' })).selected?.revision.source).toBe(
       module.source,
     );

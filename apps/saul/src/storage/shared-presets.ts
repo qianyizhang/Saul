@@ -1,3 +1,5 @@
+import { validateScopedConfigValue } from '../../native/shared-presets-contract.mts';
+import { scopedCall, portableSettings, restoreSettings } from './scoped-config';
 import type { UserSettings, ModelPreset } from '../types';
 import type { SharedPreset, SharedPresets } from '../../native/shared-presets-contract.mts';
 import {
@@ -70,9 +72,6 @@ function project(settings: UserSettings, library: SharedPresets): UserSettings {
           ...p,
           id: p.id.toLowerCase(),
           provider: 'chatgpt-plan',
-          accountId:
-            configuration.presets.find((local) => local.id.toLowerCase() === p.id.toLowerCase())
-              ?.accountId ?? '',
         })),
       ],
     },
@@ -87,7 +86,7 @@ export const sharedPresets = {
       library = await sharedCall({ action: 'presets-read' });
     } catch (error) {
       // An API-only installation with no shared presets needs no native helper.
-      if (old.length) throw error;
+      if (old.length || source.scopedConfigRevision !== undefined) throw error;
       const local = { ...source };
       delete local.sharedPresetRevision;
       return local;
@@ -96,7 +95,18 @@ export const sharedPresets = {
       settings = await withSharedIDs(source);
       library = await sharedCall({ action: 'presets-import', presets: definitions(settings) });
     }
-    return project(settings, library);
+    const projected = project(settings, library);
+    const config = await scopedCall({ action: 'config-read', section: 'settings' });
+    if (!config.value) {
+      const saved = await scopedCall({
+        action: 'config-save',
+        section: 'settings',
+        revision: config.revision,
+        value: portableSettings(projected),
+      });
+      return { ...projected, scopedConfigRevision: saved.revision };
+    }
+    return restoreSettings(projected, config);
   },
   async save(source: UserSettings): Promise<UserSettings> {
     const settings = await withSharedIDs(source);
@@ -107,7 +117,13 @@ export const sharedPresets = {
         'Reload saved settings to load shared presets before saving ChatGPT choices.',
       );
     }
-    return project(
+    if (settings.scopedConfigRevision === undefined)
+      throw new Error('Reload settings before saving unified config.');
+    const current = await scopedCall({ action: 'config-read', section: 'settings' });
+    if (current.revision !== settings.scopedConfigRevision)
+      throw new Error('Scoped settings changed. Reload before saving again.');
+    validateScopedConfigValue(portableSettings(settings));
+    const projected = project(
       settings,
       await sharedCall({
         action: 'presets-save',
@@ -115,5 +131,12 @@ export const sharedPresets = {
         presets,
       }),
     );
+    const config = await scopedCall({
+      action: 'config-save',
+      section: 'settings',
+      revision: settings.scopedConfigRevision,
+      value: portableSettings(projected),
+    });
+    return { ...projected, scopedConfigRevision: config.revision };
   },
 };

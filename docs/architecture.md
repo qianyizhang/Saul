@@ -128,8 +128,10 @@ migration are future decisions, informed by the provider's supported authorizati
 
 ChatGPT model presets share one local JSON document through native Swift and
 Node adapters; [the shared contract](../contracts/README.md#accounts-and-models)
-defines migration, revisions and account binding. Each app retains its recipes,
-credentials and history. There is no recipe import, sync queue, remote library or
+defines migration, revisions and account-independent presets. App-specific
+preferences and recipes use `apps.saul` and `apps.ez` scopes in that document.
+Credentials, history and runtime state retain their existing owners. There is no
+cross-app recipe import, sync queue, remote library or
 Git sync. Multi-device sync remains separate work.
 
 ## Naming reminder
