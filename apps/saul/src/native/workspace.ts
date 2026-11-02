@@ -7,10 +7,7 @@ import {
 } from '../../native/protocol.mts';
 import { record } from '../contracts/reading';
 type WorkspaceCommandTool =
-  | 'saul_tabs_edit'
-  | 'saul_tabs_undo'
-  | 'saul_summary_open'
-  | 'saul_summary_status';
+  'saul_tabs_edit' | 'saul_tabs_undo' | 'saul_summary_open' | 'saul_summary_status';
 type WorkspaceCommandRequest = {
   [K in WorkspaceCommandTool]: {
     action: 'command';

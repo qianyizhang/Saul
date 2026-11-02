@@ -92,8 +92,7 @@ export function captureAnchor(range: Range, map = buildTextMap()): SelectionSnap
   };
 }
 export type Attachment =
-  | { state: 'attached'; range: Range }
-  | { state: 'not-yet-present' | 'unresolved' };
+  { state: 'attached'; range: Range } | { state: 'not-yet-present' | 'unresolved' };
 export function resolveAnchor(anchor: SelectionSnapshot['anchor'], map: TextMap): Attachment {
   if (map.truncated) return { state: 'unresolved' };
   const quote = anchor.exact.replace(/\s+/g, ' ').trim();

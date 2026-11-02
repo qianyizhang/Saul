@@ -211,10 +211,10 @@ function layout(current = false) {
 function canEdit() {
   return Boolean(
     ready &&
-      !busy &&
-      data?.snapshot &&
-      !['pending', 'expired'].includes(data?.proposal?.status ?? '') &&
-      !draftLayout,
+    !busy &&
+    data?.snapshot &&
+    !['pending', 'expired'].includes(data?.proposal?.status ?? '') &&
+    !draftLayout,
   );
 }
 function endDrag() {

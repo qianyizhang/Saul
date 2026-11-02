@@ -9,13 +9,7 @@ import type {
 } from './index';
 
 export type RunStatus =
-  | 'queued'
-  | 'running'
-  | 'saving'
-  | 'completed'
-  | 'failed'
-  | 'interrupted'
-  | 'cancelled';
+  'queued' | 'running' | 'saving' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
 export interface RunResult {
   id: string;
   status: RunStatus;

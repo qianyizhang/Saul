@@ -37,8 +37,7 @@ export interface DigestPdfSource extends SourceMeta {
 export type DigestSource = DigestTextSource | DigestPdfSource;
 // Local PDF bytes stay in the offscreen document; messages carry only this target.
 export type DigestCapture =
-  | DigestTextSource
-  | { pdf: { url: string; title?: string; unverified?: boolean } };
+  DigestTextSource | { pdf: { url: string; title?: string; unverified?: boolean } };
 export interface DigestItem {
   finalText?: string;
   progress?: string;

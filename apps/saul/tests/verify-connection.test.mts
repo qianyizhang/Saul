@@ -15,9 +15,10 @@ it('checks the registered transport with its environment/cwd and returns honest 
     cwd: '/fixture',
   };
   const list = vi.fn(async () => [{ name: 'saul-tabs', enabled: true, transport }]);
-  const verify = vi.fn(
-    async (): Promise<Verification> => ({ status: 'waiting-for-browser', inventories: [] }),
-  );
+  const verify = vi.fn(async (): Promise<Verification> => ({
+    status: 'waiting-for-browser',
+    inventories: [],
+  }));
   const id = 'a'.repeat(32);
   expect(await verifyConnection(id, { list, verify })).toEqual({
     status: 'waiting-for-browser',

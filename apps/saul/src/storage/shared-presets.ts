@@ -66,16 +66,14 @@ function project(settings: UserSettings, library: SharedPresets): UserSettings {
       ...configuration,
       presets: [
         ...configuration.presets.filter((p) => p.provider !== 'chatgpt-plan'),
-        ...library.presets.map(
-          (p): ModelPreset => ({
-            ...p,
-            id: p.id.toLowerCase(),
-            provider: 'chatgpt-plan',
-            accountId:
-              configuration.presets.find((local) => local.id.toLowerCase() === p.id.toLowerCase())
-                ?.accountId ?? '',
-          }),
-        ),
+        ...library.presets.map((p): ModelPreset => ({
+          ...p,
+          id: p.id.toLowerCase(),
+          provider: 'chatgpt-plan',
+          accountId:
+            configuration.presets.find((local) => local.id.toLowerCase() === p.id.toLowerCase())
+              ?.accountId ?? '',
+        })),
       ],
     },
   };

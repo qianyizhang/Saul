@@ -4,15 +4,7 @@ export type ToolCaller = <K extends ToolName>(
 ) => Promise<ToolResults[K]>;
 import { isRecord } from './value.mts';
 export type GroupColor =
-  | 'grey'
-  | 'blue'
-  | 'red'
-  | 'yellow'
-  | 'green'
-  | 'pink'
-  | 'purple'
-  | 'cyan'
-  | 'orange';
+  'grey' | 'blue' | 'red' | 'yellow' | 'green' | 'pink' | 'purple' | 'cyan' | 'orange';
 export interface GroupMetadata {
   title?: string;
   color?: GroupColor;
