@@ -11,6 +11,18 @@ enum AppStyle {
     static let controlRadius = DesignTokens.radiusControl
 }
 
+/// Plain row buttons must include transparent label padding in their click target.
+struct FullRowButton<Label: View>: View {
+    let action: () -> Void
+    @ViewBuilder var label: () -> Label
+
+    var body: some View {
+        Button(action: action) {
+            label().contentShape(Rectangle())
+        }.buttonStyle(.plain)
+    }
+}
+
 /// Keep disclosure activation on the header, with a full-row mouse and keyboard target.
 struct FullRowDisclosureStyle: DisclosureGroupStyle {
     func makeBody(configuration: Configuration) -> some View {

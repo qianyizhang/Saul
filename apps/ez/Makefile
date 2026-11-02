@@ -1,4 +1,4 @@
-.PHONY: build check check-scripts test test-core test-state test-services test-install lint lint-swift lint-shell lint-workflows format tools app run install signing-setup clean design-preview configuration-preview surface-preview
+.PHONY: build check check-scripts test test-core test-state test-services test-ui test-install lint lint-swift lint-shell lint-workflows format tools app run install signing-setup clean design-preview configuration-preview surface-preview
 build:
 	./scripts/swift.sh build --product EZ
 test:
@@ -9,6 +9,8 @@ test-state:
 	bash scripts/state-checks.sh $(CHECK_ARGS)
 test-services:
 	bash scripts/check-services.sh $(CHECK_ARGS)
+test-ui:
+	bash scripts/check-ui.sh $(CHECK_ARGS)
 test-install:
 	bash scripts/check-install.sh
 lint: lint-swift lint-shell lint-workflows

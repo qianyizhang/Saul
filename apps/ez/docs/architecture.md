@@ -309,9 +309,11 @@ The app remains a native Swift executable, with no launcher runtime dependency.
 All production dropdowns use a width-filling native `NSPopUpButton` through
 `SelectorPicker`. The label is separate from the control’s stable full-width hitbox;
 changing from a long title to a short one never shrinks the click/scroll area.
-Settings sections use a fixed-width native segmented control. Both receive wheel
-events through AppKit’s normal hit-testing, so only the hovered control changes;
-there are no app-wide scroll monitors. Discrete wheel steps and accumulated
+Settings sections, model/recipe editor rows, and the main Settings entry use
+`FullRowButton`, a plain native button with an explicit rectangular content shape
+around the complete padded label. Selection changes its background, not its hit area.
+Dropdowns receive wheel events through AppKit’s normal hit-testing, so only the
+hovered control changes; there are no app-wide scroll monitors. Discrete wheel steps and accumulated
 precise deltas use the existing selection bindings. Choices clamp at the ends;
 momentum is ignored and steps are throttled. Quick Lookup’s fixed-width preset
 selector changes overrides; its adjacent information button opens request details.

@@ -86,14 +86,14 @@ struct ConfigurationView: View {
                 HStack(alignment: .top, spacing: 18) {
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(model.configuration.presets) { item in
-                            Button {
+                            FullRowButton {
                                 selectPreset(item)
                             } label: {
                                 Text(item.name).frame(maxWidth: .infinity, alignment: .leading).padding(6)
                                     .background(
                                         preset?.id == item.id ? AppStyle.accent.opacity(0.12) : .clear,
                                         in: RoundedRectangle(cornerRadius: 6))
-                            }.buttonStyle(.plain)
+                            }
                         }
                         if model.configuration.presets.isEmpty {
                             Text("No presets yet").foregroundStyle(.secondary)
@@ -203,7 +203,7 @@ struct ConfigurationView: View {
                 HStack(alignment: .top, spacing: 18) {
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(model.configuration.recipes) { item in
-                            Button {
+                            FullRowButton {
                                 selectRecipe(item)
                             } label: {
                                 Label(item.name, systemImage: item.symbol)

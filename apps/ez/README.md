@@ -147,8 +147,9 @@ A cold start may also show EZ's main window.
 
 ## Configure presets and recipes
 
-Open **Settings → Configuration**. A **model preset** names a model, effort, and
-Fast/Standard choice. ChatGPT presets are shared with Saul through one local store;
+Open **Settings → Models** for presets or **Settings → Recipes** for recipes.
+A **model preset** names a model, effort, and Fast/Standard choice.
+ChatGPT presets are shared with Saul through one local store;
 existing presets import once. Save in either app, then reopen or reload the other
 app's Settings. Accounts, recipes and history stay in each app. Model presets never bind an account; each app uses its selected local account for
 a new run. A **recipe** selects a default
@@ -168,13 +169,14 @@ History and Use again preserve the original recipe, inputs, and preset. See
 
 ## Selectors and keyboard shortcuts
 
-Scroll over a recipe, preset, model, effort, account, or Settings section selector
+Scroll over a recipe, preset, model, effort, or account dropdown
 to move through its choices without opening the menu. Wheel selection stops at the
 ends; trackpad momentum is ignored. Disabled selectors stay locked. Scrolling the
 compact panel’s preset selector changes the override directly; the adjacent
 information button opens details. Each native selector keeps its allocated width
 and full click/scroll target when labels change.
-Configuration edits still require Save.
+Settings sidebar sections and editor rows use full-row click targets, independent
+of selection or title length. Configuration edits still require Save.
 
 A **lookup** is an independent request and answer; a **recipe** is a reusable prompt.
 Lookups do not yet have conversation follow-ups.

@@ -144,7 +144,7 @@ struct ContentView: View {
                 }
             Spacer(minLength: 0)
             Divider()
-            Button {
+            FullRowButton {
                 model.openSettings(model.signedIn ? .overview : .account)
             } label: {
                 HStack {
@@ -162,7 +162,7 @@ struct ContentView: View {
                     Spacer()
                     if !model.minimumMode { Image(systemName: "gearshape").foregroundStyle(.secondary) }
                 }.padding(6)
-            }.buttonStyle(.plain).padding([.horizontal, .bottom], 12)
+            }.padding([.horizontal, .bottom], 12)
         }
     }
     private var welcome: some View {

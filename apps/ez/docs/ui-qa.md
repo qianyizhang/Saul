@@ -53,6 +53,23 @@ capture error after a window closes/hides, rebind the visible main window; do no
 assume the action failed or repeatedly capture a stale window. Use current element
 indices from each fresh accessibility tree, never a checked-in list of AX indices.
 
+## Row click targets
+
+Run `make test-ui` for the automated production row-button regression. Then use
+the surface preview in Min Mode and Standard view, light and dark:
+
+- Settings → Recipes: select Lookup, then click the blank trailing area of Ask.
+  Ask must become the edited recipe. Repeat at the top/bottom padding and corners;
+  selected and unselected rows must have the same target size.
+- Repeat with model preset rows and every Settings sidebar section. Click outside
+  the row and in the gap between rows; selection must not change.
+- In the main window, click the blank middle/right portion of Settings/Connect.
+  It must open Settings. Also check History row whitespace and New.
+- Click the far-right area of Overview routes and disclosure headers. Disclosures
+  must toggle once; clicking expanded content must not collapse the header.
+- Check dropdowns at their far edge and verify disabled actions stay disabled.
+  Follow keyboard focus through the changed controls and activate with the keyboard.
+
 ## Unsaved answer recovery
 
 Quit any existing surface preview, then launch its built bundle with

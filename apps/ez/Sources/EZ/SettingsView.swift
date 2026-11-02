@@ -21,7 +21,7 @@ struct SettingsView: View {
             HStack(alignment: .top, spacing: 0) {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(AppModel.SettingsSection.allCases, id: \.self) { section in
-                        Button {
+                        FullRowButton {
                             model.settingsSection = section
                         } label: {
                             Text(section.title).frame(maxWidth: .infinity, alignment: .leading)
@@ -29,8 +29,8 @@ struct SettingsView: View {
                                 .background(
                                     model.settingsSection == section ? AppStyle.accent.opacity(0.12) : .clear,
                                     in: RoundedRectangle(cornerRadius: 6))
-                        }.buttonStyle(.plain)
-                            .accessibilityAddTraits(model.settingsSection == section ? .isSelected : [])
+                        }
+                        .accessibilityAddTraits(model.settingsSection == section ? .isSelected : [])
                     }
                     Spacer()
                     if hasUnsavedChanges {
