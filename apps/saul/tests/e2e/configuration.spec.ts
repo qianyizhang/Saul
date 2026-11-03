@@ -174,7 +174,7 @@ test('failed different-recipe attempts keep shown-answer metadata; Retry and fol
       sentRequest(server, 0).messages.find((message) => message.role === 'system'),
     );
     expect(followup.messages.find((message) => message.role === 'user')!.content).toContain(
-      'Follow-up request: Simpler',
+      '--- Follow-up question ---\nSimpler',
     );
     expect((await getFirstHistory(popup)).latest.recipe?.id).toBe('recipe-explain');
   } finally {

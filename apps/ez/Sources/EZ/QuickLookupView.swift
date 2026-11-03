@@ -54,6 +54,9 @@ struct QuickLookupView: View {
             } else {
                 Spacer(minLength: 0)
             }
+            if let entry = model.selectedEntry {
+                FollowUpComposer(model: model, entry: entry).id(entry.id)
+            }
             footer
             if !model.minimumMode, let entry = model.selectedEntry {
                 Divider()
@@ -181,6 +184,9 @@ struct QuickLookupView: View {
         VStack(alignment: .leading, spacing: 10) {
             UnsavedAttemptNotice(model: model, entry: entry)
             LookupAnswerText(entry: entry, activity: model.selectedResponseActivity, compact: true)
+            if let parentID = entry.parentID, model.entries.contains(where: { $0.id == parentID }) {
+                Button("Previous answer") { model.selection = parentID }.buttonStyle(.borderless)
+            }
             if !["pending", "completed", "unsaved"].contains(entry.status) {
                 Text(entry.status.capitalized).font(AppStyle.caption).foregroundStyle(.orange)
             }
@@ -214,6 +220,7 @@ struct QuickLookupView: View {
         QuickLookupLayout(
             fieldCount: showsInputs ? model.inputFields.count : 0,
             showsNotice: !notices.isEmpty || needsSetup || model.connecting,
-            showsAnswer: model.selectedEntry != nil)
+            showsAnswer: model.selectedEntry != nil,
+            showsFollowUp: model.selectedEntry?.status == "completed")
     }
 }

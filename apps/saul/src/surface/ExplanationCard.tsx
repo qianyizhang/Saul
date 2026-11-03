@@ -25,7 +25,9 @@ interface Props {
   pinned: boolean;
   busy: boolean;
   minimum: boolean;
-  onRetry: (instruction?: string) => void;
+  onRetry: (instruction?: string) => Promise<boolean>;
+  followUpDraft: string;
+  onFollowUpDraft: (value: string) => void;
   onClose: () => void;
   onStop: () => void;
   onPin: () => void;
@@ -39,6 +41,8 @@ export function ExplanationCard({
   busy,
   minimum,
   onRetry,
+  followUpDraft,
+  onFollowUpDraft,
   onClose,
   onStop,
   onPin,
@@ -181,6 +185,11 @@ export function ExplanationCard({
           </p>
         )}
         {answer.id !== latest.id && <p className="text-xs text-muted mb-2">Previous answer</p>}
+        {answer.inspection?.followUpQuestion && (
+          <p className="text-sm font-medium mb-3 whitespace-pre-wrap">
+            {answer.inspection.followUpQuestion}
+          </p>
+        )}
         {segments.length ? (
           <AnnotatedTextView segments={segments} isStreaming={answer.status === 'running'} />
         ) : (
@@ -191,6 +200,9 @@ export function ExplanationCard({
         {answer.id !== latest.id && (
           <details className="text-sm mt-3">
             <summary>Latest attempt · {runLabel(latest.status)}</summary>
+            {latest.inspection?.followUpQuestion && (
+              <p className="whitespace-pre-wrap">{latest.inspection.followUpQuestion}</p>
+            )}
             <AnnotatedTextView segments={new TagStreamParser().feed(latest.responseRaw)} />
             <RunDetails run={latest} />
             <InputOutputInspector key={latest.id} run={latest} />
@@ -219,7 +231,7 @@ export function ExplanationCard({
                     onClick={() => {
                       setRuns(null);
                       setMore(false);
-                      onRetry(label);
+                      void onRetry(label);
                     }}
                   >
                     {minimum
@@ -255,6 +267,9 @@ export function ExplanationCard({
                   {runLabel(run.status)} · {new Date(run.createdAt).toLocaleString()}
                 </summary>
                 {run.error && <p>{run.error}</p>}
+                {run.inspection?.followUpQuestion && (
+                  <p className="whitespace-pre-wrap">{run.inspection.followUpQuestion}</p>
+                )}
                 <AnnotatedTextView segments={new TagStreamParser().feed(run.responseRaw)} />
                 <RunDetails run={run} />
                 <InputOutputInspector run={run} />
@@ -263,6 +278,52 @@ export function ExplanationCard({
           </div>
         )}
       </div>
+      {passage.completed && (
+        <form
+          className="px-4 pb-2 flex items-end gap-2"
+          aria-label="Ask a follow-up"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (active || busy || !followUpDraft.trim()) return;
+            void onRetry(followUpDraft).then((sent) => {
+              if (sent) {
+                onFollowUpDraft('');
+                setRuns(null);
+              }
+            });
+          }}
+        >
+          <label className="flex-1 min-w-0 text-xs text-muted">
+            Ask a follow-up
+            <textarea
+              className="mt-1 block w-full resize-none rounded-control border border-line bg-surface p-2 text-sm text-ink focus-visible:outline-2 focus-visible:outline-accent"
+              rows={2}
+              maxLength={2000}
+              value={followUpDraft}
+              onChange={(event) => onFollowUpDraft(event.target.value)}
+              disabled={active || busy}
+              onKeyDown={(event) => {
+                if (
+                  event.key === 'Enter' &&
+                  (event.metaKey || event.ctrlKey) &&
+                  !event.nativeEvent.isComposing
+                ) {
+                  event.preventDefault();
+                  event.currentTarget.form?.requestSubmit();
+                }
+              }}
+            />
+          </label>
+          <button
+            className={iconClass}
+            type="submit"
+            aria-label="Send follow-up"
+            disabled={active || busy || !followUpDraft.trim()}
+          >
+            Send
+          </button>
+        </form>
+      )}
       <div className="px-3 pb-1 flex flex-wrap items-center gap-1">
         {!active && copyButton}
         {active ? (
@@ -282,7 +343,7 @@ export function ExplanationCard({
               disabled={busy}
               onClick={() => {
                 setRuns(null);
-                onRetry();
+                void onRetry();
               }}
             >
               {!minimum && <RefreshCw size={16} />}

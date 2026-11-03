@@ -6,6 +6,7 @@ export function inspectionInput(input: RunInput): NonNullable<RunResult['inspect
   return {
     systemPrompt: input.systemPrompt,
     userPrompt: input.userPrompt,
+    ...(input.followUpQuestion ? { followUpQuestion: input.followUpQuestion } : {}),
     context: { selection, pageTitle, pageUrl, heading, paragraph, surroundingText },
   };
 }

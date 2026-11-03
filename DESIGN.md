@@ -369,6 +369,18 @@ actual runner/provider signals, never a timer. Keep queued work labelled
 **Waiting…**. Reduced motion uses a static centered light. Keep the textual
 status visible in Min Mode and reserve the divider height to avoid jumps.
 
+### Follow-up questions
+
+Keep **Ask a follow-up** below a completed answer in both widget presentations.
+Use a labelled multiline field and **Send**; Command/Ctrl+Enter sends from that field.
+Each explicit Send includes the saved source/request and earlier exchanges, retains
+the answer's model choices, and creates a saved attempt. Show the submitted question
+with its answer. Keep prior answers available through attempts/history. Preserve
+unsubmitted drafts on dismissal and surface switches; clear only after submission
+is accepted. Block empty questions, more than 2,000 characters and conversations
+over 120,000 characters without silently dropping context. Stop, partial output,
+errors and save-only recovery use the existing attempt lifecycle.
+
 ### Answer details
 
 Give each fact one labelled place. Metadata uses aligned label/value columns,

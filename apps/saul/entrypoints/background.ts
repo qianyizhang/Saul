@@ -25,7 +25,11 @@ import {
 } from '../src/storage/presentation';
 import { runnerRequest } from '../src/storage/client';
 import { configurationFor } from '../src/models/configuration';
-import { prepareFrozenRun, prepareRecipeRun } from '../src/reading/configuration';
+import {
+  prepareFollowUpRun,
+  prepareFrozenRun,
+  prepareRecipeRun,
+} from '../src/reading/configuration';
 import { initNativeBridge } from '../src/native/bridge';
 import { workspaceCall } from '../src/native/workspace';
 import {
@@ -59,7 +63,6 @@ async function submit(
   context: ResolvedContext,
   submissionId: string,
   regenerate: boolean,
-  instruction?: string,
   recipeId?: string,
   runId?: string,
 ) {
@@ -71,13 +74,12 @@ async function submit(
       throw new Error(
         'This older explanation has no saved request. Select its text and choose a recipe to run again.',
       );
-    prepared = prepareFrozenRun(settings, original, instruction);
+    prepared = prepareFrozenRun(settings, original);
   } else
     prepared = prepareRecipeRun(
       settings,
       context,
       recipeId || configurationFor(settings).selectedRecipeId,
-      instruction,
     );
   return runnerRequest<{ passageId: string; reused: boolean }>({
     operation: 'submit',
@@ -136,7 +138,6 @@ async function reading(
         context,
         request.submissionId,
         request.regenerate === true,
-        undefined,
         request.recipeId,
       );
     }
@@ -158,7 +159,6 @@ async function reading(
               settings,
               request.context,
               request.recipeId || configurationFor(settings).selectedRecipeId,
-              undefined,
               true,
             ).input;
             return compareRunInput(before, after);
@@ -167,21 +167,46 @@ async function reading(
           }
         }
         case 'regenerate': {
+          if (request.instruction !== undefined) {
+            if (['queued', 'running', 'saving'].includes(passage.latest.status))
+              throw new Error('Wait for this explanation to finish before asking a follow-up.');
+            const answer = passage.completed;
+            if (!answer || (request.runId && request.runId !== answer.id))
+              throw new Error('The answer changed. Review it before asking a follow-up.');
+            const original = await db({
+              type: 'DB_INPUT',
+              payload: { selectionId: request.selectionId, runId: answer.id },
+            });
+            if (!original)
+              throw new Error('This older answer has no saved context. Start a new explanation.');
+            const prepared = prepareFollowUpRun(
+              await currentSettings(),
+              original,
+              answer.responseRaw,
+              request.instruction,
+            );
+            return runnerRequest<{ passageId: string; reused: boolean }>({
+              operation: 'submit',
+              submission: {
+                snapshot: passage.snapshot,
+                input: prepared.input,
+                submissionId: request.submissionId,
+                regenerate: true,
+              },
+              credential: prepared.credential,
+            });
+          }
           const context = await db({
             type: 'DB_CONTEXT',
             payload: { selectionId: request.selectionId },
           });
-          const instruction = request.instruction
-            ? `Previous explanation:\n${passage.completed?.responseRaw || passage.latest.responseRaw}\n\nFollow-up request: ${request.instruction}`
-            : undefined;
           return submit(
             passage.snapshot,
             context,
             request.submissionId,
             true,
-            instruction,
             request.recipeId,
-            request.instruction ? (passage.completed || passage.latest).id : passage.latest.id,
+            passage.latest.id,
           );
         }
         case 'stop':

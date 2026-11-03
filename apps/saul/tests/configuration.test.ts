@@ -10,7 +10,11 @@ import {
   starterConfiguration,
   validateConfiguration,
 } from '../src/models/configuration';
-import { prepareFrozenRun, prepareRecipeRun } from '../src/reading/configuration';
+import {
+  prepareFollowUpRun,
+  prepareFrozenRun,
+  prepareRecipeRun,
+} from '../src/reading/configuration';
 
 const context: ResolvedContext = {
   selection: 'Gradient descent',
@@ -36,6 +40,47 @@ function configured(): UserSettings {
   return settings;
 }
 afterEach(() => vi.unstubAllGlobals());
+
+it('follow-ups retain source, model and earlier exchanges without changing the saved request', () => {
+  const settings = configured();
+  const original = prepareRecipeRun(
+    settings,
+    context,
+    settings.configuration!.selectedRecipeId,
+  ).input;
+  const before = structuredClone(original);
+  const first = prepareFollowUpRun(
+    settings,
+    original,
+    'First answer',
+    'Why does that happen?',
+  ).input;
+  const second = prepareFollowUpRun(
+    settings,
+    first,
+    'Second answer',
+    'Give a concrete example.',
+  ).input;
+  expect(second.context).toEqual(original.context);
+  expect(second.remote).toEqual(original.remote);
+  expect(second.preset).toEqual(original.preset);
+  expect(second.userPrompt).toContain(original.userPrompt);
+  for (const text of [
+    'First answer',
+    'Why does that happen?',
+    'Second answer',
+    'Give a concrete example.',
+  ])
+    expect(second.userPrompt).toContain(text);
+  expect(second.followUpQuestion).toBe('Give a concrete example.');
+  expect(original).toEqual(before);
+  for (const question of ['  ', 'x'.repeat(2001)])
+    expect(() => prepareFollowUpRun(settings, original, 'Answer', question)).toThrow('2,000');
+  expect(() => prepareFollowUpRun(settings, original, '', 'Why?')).toThrow('completed answer');
+  expect(() =>
+    prepareFollowUpRun(settings, { ...original, userPrompt: 'x'.repeat(120000) }, 'Answer', 'Why?'),
+  ).toThrow('too long');
+});
 
 it('migrates the legacy system prompt, model and context assembly without writing over saved data', async () => {
   const legacy = configured();
@@ -195,10 +240,8 @@ it('freezes request inputs and retries them exactly after recipe, preset, langua
   expect(retry.credential).toBe('rotated-key');
   expect(original).toEqual(expected);
   expect(retry.input).not.toBe(original);
-  const followup = prepareFrozenRun(settings, original, 'Give an example');
-  expect(followup.input.userPrompt).toBe(
-    original.userPrompt + '\n\nAdditional Instruction: Give an example',
-  );
+  const followup = prepareFollowUpRun(settings, original, 'Saved answer', 'Give an example');
+  expect(followup.input.userPrompt).toContain(original.userPrompt);
   expect(followup.input.recipe).toEqual(expected.recipe);
 });
 
@@ -246,7 +289,7 @@ it('reviews current input without requiring a credential, while generation still
   settings.profiles![0]!.config.apiKey = '';
   const recipeId = configurationFor(settings).selectedRecipeId;
   expect(() => prepareRecipeRun(settings, context, recipeId)).toThrow();
-  const before = prepareRecipeRun(settings, context, recipeId, undefined, true).input;
+  const before = prepareRecipeRun(settings, context, recipeId, true).input;
   const after = structuredClone(before);
   after.systemPrompt += '\nChanged instructions';
   after.userPrompt += '\nA new finding';

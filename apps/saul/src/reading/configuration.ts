@@ -39,7 +39,6 @@ export function prepareRecipeRun(
   settings: UserSettings,
   context: ResolvedContext,
   recipeId: string,
-  instruction?: string,
   inspectOnly = false,
 ): { input: RunInput; credential: string } {
   const configuration = configurationFor(settings);
@@ -67,11 +66,7 @@ export function prepareRecipeRun(
       : {}),
     context: structuredClone(context),
     systemPrompt: recipe.systemPrompt,
-    userPrompt: renderRecipePrompt(
-      recipe,
-      context,
-      [instruction, language].filter(Boolean).join('\n'),
-    ),
+    userPrompt: renderRecipePrompt(recipe, context, language),
     recipe: structuredClone(recipe),
     preset: structuredClone(preset),
   };
@@ -81,9 +76,24 @@ export function prepareRecipeRun(
 export function prepareFrozenRun(
   settings: UserSettings,
   original: RunInput,
-  instruction?: string,
 ): { input: RunInput; credential: string } {
   const input = structuredClone(original);
-  if (instruction) input.userPrompt += `\n\nAdditional Instruction: ${instruction}`;
   return { input, credential: credentialForFrozenInput(settings, input) };
+}
+
+export function prepareFollowUpRun(
+  settings: UserSettings,
+  original: RunInput,
+  answer: string,
+  question: string,
+): { input: RunInput; credential: string } {
+  if (!question.trim() || question.length > 2000)
+    throw new Error('Enter a follow-up question of up to 2,000 characters.');
+  if (!answer.trim()) throw new Error('Wait for a completed answer before asking a follow-up.');
+  const prepared = prepareFrozenRun(settings, original);
+  prepared.input.userPrompt += `\n\n--- Previous answer ---\n${answer}\n\n--- Follow-up question ---\n${question}\n\nAnswer the follow-up question directly using the saved context above.`;
+  if (prepared.input.userPrompt.length > 120000)
+    throw new Error('This conversation is too long. Start a new explanation.');
+  prepared.input.followUpQuestion = question;
+  return prepared;
 }

@@ -117,6 +117,8 @@ public struct HistoryEntry: Codable, Identifiable, Equatable {
     public var inputValues: [String: String]?
     /// nil preserves the legacy mode instruction; empty means the recipe prompt is complete.
     public var instructions: String?
+    public var followUpQuestion: String?
+    public var parentID: UUID?
     public init(mode: QueryMode, query: String, model: String, effort: String, requestedServiceTier: String?)
     {
         self.mode = mode
@@ -132,10 +134,49 @@ public struct HistoryEntry: Codable, Identifiable, Equatable {
     public var recipeName: String { recipeSnapshot?.name ?? mode.rawValue }
     public var recipeSymbol: String { recipeSnapshot?.symbol ?? mode.symbol }
     public var displayQuery: String {
+        if let followUpQuestion { return followUpQuestion }
         guard let recipe = recipeSnapshot, let values = inputValues,
             let template = try? PromptTemplate(recipe.template)
         else { return query }
         return template.fields.compactMap { values[$0] }.joined(separator: " · ")
+    }
+    public func prepareFollowUp(_ question: String, models: [ModelOption]) throws -> HistoryEntry {
+        guard status == "completed", !response.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw EZError("Wait for a saved, completed answer before asking a follow-up.")
+        }
+        guard !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            question.utf16.count <= 2_000
+        else {
+            throw EZError("Enter a follow-up question of up to 2,000 characters.")
+        }
+        let preset =
+            presetSnapshot
+            ?? ModelPreset(name: "Saved", model: model, effort: effort, fast: requestedServiceTier != nil)
+        if let issue = preset.availabilityError(in: models) { throw EZError(issue) }
+        let originalInstructions = instructions ?? mode.instruction
+        let context =
+            parentID == nil && !originalInstructions.isEmpty
+            ? "--- Original instructions ---\n" + originalInstructions + "\n\n--- Original request ---\n"
+                + query
+            : query
+        let prompt =
+            context + "\n\n--- Previous answer ---\n" + response
+            + "\n\n--- Follow-up question ---\n" + question
+            + "\n\nAnswer the follow-up question directly using the saved context above."
+        guard prompt.utf16.count <= 120_000 else {
+            throw EZError("This conversation is too long. Start a new lookup.")
+        }
+        var entry = HistoryEntry(
+            mode: .ask, query: prompt, model: model, effort: effort,
+            requestedServiceTier: requestedServiceTier)
+        entry.instructions = QueryMode.ask.instruction
+        entry.followUpQuestion = question
+        entry.parentID = id
+        entry.presetSnapshot = preset
+        entry.recipeSnapshot = Recipe(
+            name: "Follow-up", presetID: preset.id, template: "{{text}}", legacyMode: .ask)
+        entry.inputValues = ["text": prompt]
+        return entry
     }
     public var markdown: String {
         "# \(recipeName)\n\n\(createdAt.formatted()) · \(model) · \(effort) · \(serviceDescription) · \(status)\n\n## Query\n\n\(displayQuery)\n\n## Compiled prompt\n\n\(query)\n\n## Response\n\n\(response)\n"

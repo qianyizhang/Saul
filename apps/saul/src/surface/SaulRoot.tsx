@@ -21,6 +21,7 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
   const [, redraw] = useState(0);
   const [errorsMuted, setErrorsMuted] = useState<boolean | null>(null);
   const [minimum, setMinimum] = useState(true);
+  const [followUpDrafts, setFollowUpDrafts] = useState<Record<string, string>>({});
   const [reuse, setReuse] = useState<{
     id: string;
     selection: Captured;
@@ -451,14 +452,20 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
               bookmarked: !active.bookmarked,
             })
           }
-          onRetry={(instruction) =>
-            void action({
+          followUpDraft={followUpDrafts[active.snapshot.id] || ''}
+          onFollowUpDraft={(value) =>
+            setFollowUpDrafts((drafts) => ({ ...drafts, [active.snapshot.id]: value }))
+          }
+          onRetry={async (instruction) => {
+            const result = await action({
               action: 'regenerate',
               submissionId: crypto.randomUUID(),
               selectionId: active.snapshot.id,
               instruction,
-            })
-          }
+              runId: (active.completed || active.latest).id,
+            });
+            return !!result && 'reused' in result && !result.reused;
+          }}
           loadRuns={async () =>
             (await sendReadingMessage({ action: 'runs', selectionId: active.snapshot.id })).runs
           }

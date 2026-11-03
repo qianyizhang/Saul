@@ -32,6 +32,7 @@ Opening a completed answer marks it read. Dismissing a notification does not. Er
 - Pin keeps the card open while interacting with the page.
 - Concept terms expose notes on hover, focus, or click.
 - **Simpler**, **Give an example**, and **Go deeper** retain the captured source context and include the previous explanation.
+- **Ask a follow-up** accepts a custom question below a saved answer. Send or Command/Ctrl+Enter includes the saved source and earlier exchanges with the same model choices. The question appears with its answer; earlier answers remain in Past attempts. Drafts survive closing/reopening the card within the page. Stop and incomplete answers retain the last successful answer.
 - Copy reports clipboard failures rather than claiming success.
 
 ## History

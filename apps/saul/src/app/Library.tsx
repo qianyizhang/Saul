@@ -243,6 +243,11 @@ export function Library({
                         {item.latest.error}
                       </p>
                     )}
+                    {(item.completed || item.latest).inspection?.followUpQuestion && (
+                      <p style={{ whiteSpace: 'pre-wrap', fontWeight: 600 }}>
+                        {(item.completed || item.latest).inspection?.followUpQuestion}
+                      </p>
+                    )}
                     <AnnotatedTextView segments={new TagStreamParser().feed(item.responseRaw)} />
                     <RunDetails
                       key={`details-${(item.completed || item.latest).id}`}
@@ -271,6 +276,11 @@ export function Library({
                               {runLabel(run.status)} · {new Date(run.createdAt).toLocaleString()}
                             </summary>
                             {run.error && <p>{run.error}</p>}
+                            {run.inspection?.followUpQuestion && (
+                              <p style={{ whiteSpace: 'pre-wrap', fontWeight: 600 }}>
+                                {run.inspection.followUpQuestion}
+                              </p>
+                            )}
                             <AnnotatedTextView
                               segments={new TagStreamParser().feed(run.responseRaw)}
                             />

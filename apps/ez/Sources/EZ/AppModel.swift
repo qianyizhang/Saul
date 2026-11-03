@@ -27,6 +27,8 @@ import EZCore
     @Published var models: [ModelOption] = []
     @Published var entries: [HistoryEntry] = []
     @Published var selection: UUID?
+    @Published var followUpDrafts: [UUID: String] = [:]
+    @Published var followUpTargetID: UUID?
     @Published var search = ""
     @Published var connecting = false
     @Published var signedIn = false
@@ -155,7 +157,13 @@ import EZCore
 
     func commandEnabled(_ command: LookupCommand) -> Bool {
         switch command {
-        case .send: return canSend
+        case .send:
+            if let id = followUpTargetID {
+                let draft = followUpDrafts[id] ?? ""
+                return canFollowUp && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    && draft.utf16.count <= 2_000
+            }
+            return canSend
         case .stop: return busy
         case .newLookup: return !busy && !launcherPending
         case .nextRecipe, .previousRecipe, .lastRecipe:
@@ -169,7 +177,8 @@ import EZCore
         guard commandEnabled(command) else { return }
         switch command {
         case .newLookup: newQuery()
-        case .send: send()
+        case .send:
+            if let id = followUpTargetID { followUp(id) } else { send() }
         case .stop: stop()
         case .nextRecipe: cycleRecipe(by: 1)
         case .previousRecipe: cycleRecipe(by: -1)
@@ -470,6 +479,23 @@ import EZCore
     func stop() {
         attemptExecution?.stop()
     }
+    var canFollowUp: Bool {
+        attemptExecution != nil && signedIn && planEnabled && !busy && !launcherPending && !connecting
+            && !signingIn && history != nil && lock != nil
+    }
+    func followUp(_ id: UUID) {
+        guard canFollowUp, let parent = entries.first(where: { $0.id == id }), let attemptExecution else {
+            return
+        }
+        do {
+            let entry = try parent.prepareFollowUp(followUpDrafts[id] ?? "", models: models)
+            try attemptExecution.start(entry)
+            followUpDrafts[id] = nil
+            if followUpTargetID == id { followUpTargetID = nil }
+            selection = entry.id
+            error = nil
+        } catch { self.error = error.localizedDescription }
+    }
     func saveError(for id: UUID) -> String? { attemptExecution?.saveError(for: id) }
     var canSaveAgain: Bool { canDeleteLookup }
     func saveAgain(_ id: UUID) {
@@ -518,6 +544,7 @@ import EZCore
             try history.delete(id: id)
             attemptExecution?.forget(id)
             entries.removeAll { $0.id == id }
+            followUpDrafts[id] = nil
             if selection == id { selection = nil }
         } catch {
             self.error = "Lookup could not be deleted. \(error.localizedDescription)"

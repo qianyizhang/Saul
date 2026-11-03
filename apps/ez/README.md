@@ -179,7 +179,15 @@ Settings sidebar sections and editor rows use full-row click targets, independen
 of selection or title length. Configuration edits still require Save.
 
 A **lookup** is an independent request and answer; a **recipe** is a reusable prompt.
-Lookups do not yet have conversation follow-ups.
+Both lookup surfaces offer **Ask a follow-up** below a completed answer. Send or
+⌘Return from the field includes the saved request and earlier exchanges with the
+same model/effort/speed, using the currently selected local account. Each follow-up
+is a linked history entry; **Previous answer** returns to its parent. Draft questions
+are shared across the panel and main window and survive dismissal during the app
+session. They clear when sent or the parent is deleted. Questions allow 2,000
+characters; conversations stop at 120,000 characters without dropping context.
+Stop and save recovery use the same
+lookup lifecycle. No question is sent on opening or switching surfaces.
 
 | Action | Default shortcut |
 | --- | --- |

@@ -25,7 +25,7 @@ export interface RunResult {
   viewedAt?: number;
   recipe?: Pick<Recipe, 'id' | 'name'>;
   preset?: Pick<ModelPreset, 'id' | 'name'>;
-  inspection?: Pick<RunInput, 'systemPrompt' | 'userPrompt' | 'context'>;
+  inspection?: Pick<RunInput, 'systemPrompt' | 'userPrompt' | 'context' | 'followUpQuestion'>;
 }
 export interface Passage {
   snapshot: SelectionSnapshot;
@@ -41,6 +41,7 @@ export interface RunInput {
   plan?: UserSettings['chatgptPlan'];
   systemPrompt: string;
   userPrompt: string;
+  followUpQuestion?: string;
   context: ResolvedContext;
   recipe?: Recipe;
   preset?: ModelPreset;

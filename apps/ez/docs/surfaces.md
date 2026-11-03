@@ -18,7 +18,14 @@ Canonical responsibilities for the two lookup surfaces. Names are defined in
 - **Keyboard and wheel:** Both lookup surfaces share configurable New/Send/Stop and recipe navigation in Settings → Shortcuts. Wheel changes native selectors without opening them; compact preset selectors also scroll. Defaults above remain the initial bindings.
 - **Entry points:** Shortcut/menu invocation optionally fills the fresh lookup's first input from the active app's selected text, with Accessibility access and source-app support; absent or unavailable selection leaves it empty. It never submits. Raycast fills the first input: one-field recipes submit; multi-field recipes wait for completion and explicit Send. **Look Up in EZ** fills the first input from the Services pasteboard and always waits for Send; existing drafts, active work, and open Settings reject the incoming selection without mutation.
 
-Future features must declare which surface owns them and preserve these shared-state and request boundaries. Conversation follow-ups remain a separate planned feature.
+Both surfaces own **Ask a follow-up** below completed answers, sharing one per-answer
+draft and the active request. Each Send keeps the saved request and earlier exchanges,
+uses its model choices and the selected local account, and saves a linked history
+entry. Previous answer navigates to the retained parent. Opening, hiding and switching
+surfaces never submits. Unsaved/partial answers must recover or finish before they
+can supply follow-up context.
+
+Future features must declare which surface owns them and preserve these shared-state and request boundaries.
 
 Future mobile surfaces should reuse the action vocabulary, reading/editing
 separation, and progressive disclosure in the shared design contract. Mobile is

@@ -509,6 +509,9 @@ export class SaulDatabase {
                   `Recipe: ${metadata.recipe.name}${metadata.preset ? ` · Preset: ${metadata.preset.name}` : ''}`,
                 ]
               : []),
+            ...(metadata.inspection?.followUpQuestion
+              ? [`Follow-up: ${metadata.inspection.followUpQuestion}`]
+              : []),
             segments.map((s) => (s.type === 'text' ? s.text : s.term)).join(''),
           );
           for (const s of segments)

@@ -123,6 +123,84 @@ import Foundation
 
 @MainActor func attemptStateChecks() -> [CheckCase] {
     [
+        attemptCase("follow-ups retain earlier context, saved model and the original draft") { f in
+            f.model.send()
+            try await f.terminal.wait()
+            let first = f.model.selectedEntry!
+            f.model.followUpDrafts[first.id] = "Why does that happen?"
+            f.model.followUpTargetID = first.id
+            f.terminal = CheckSignal()
+            f.model.performLookupCommand(.send)
+            try await f.terminal.wait()
+            let second = f.model.selectedEntry!
+            try expectEqual(second.parentID, first.id, "Parent link lost")
+            try expectEqual(second.displayQuery, "Why does that happen?", "Question not displayed")
+            try expect(
+                second.query.contains(first.query) && second.query.contains(first.response),
+                "Saved context lost")
+            try expectEqual(second.model, first.model, "Model changed")
+            try expectEqual(f.model.query, "Frozen question", "Original draft changed")
+            try expect(f.model.followUpDrafts[first.id] == nil, "Accepted draft not cleared")
+            f.terminal = CheckSignal()
+            f.model.followUpDrafts[second.id] = "And an example?"
+            f.model.followUp(second.id)
+            try await f.terminal.wait()
+            let third = f.model.selectedEntry!
+            try expect(third.query.contains(second.query), "Earlier exchanges lost")
+            let loaded = try f.state.history.load().entries
+            try expectEqual(
+                loaded.first(where: { $0.id == third.id })?.parentID, second.id, "Parent link did not persist"
+            )
+            try expectEqual(loaded.count, 3, "Follow-up replaced an earlier answer")
+            try expectEqual(f.control.providerCalls, 3, "Unexpected provider request")
+        },
+        attemptCase("invalid follow-ups and failed initial saves retain the question") { f in
+            f.model.send()
+            try await f.terminal.wait()
+            let first = f.model.selectedEntry!
+            for question in ["  ", String(repeating: "x", count: 2_001)] {
+                f.model.followUpDrafts[first.id] = question
+                f.model.followUp(first.id)
+                try expectEqual(f.control.providerCalls, 1, "Invalid follow-up was sent")
+            }
+            f.model.followUpDrafts[first.id] = "Keep this question"
+            f.control.failedWrites = [3]
+            f.model.followUp(first.id)
+            try expectEqual(f.model.selection, first.id, "Failed submission changed answer")
+            try expectEqual(
+                f.model.followUpDrafts[first.id], "Keep this question", "Failed submission lost draft")
+            try expectEqual(f.control.providerCalls, 1, "Initial-save failure reached provider")
+            var unsaved = first
+            unsaved.status = "unsaved"
+            try expectThrows(EZError.self) {
+                _ = try unsaved.prepareFollowUp("Why?", models: f.model.models)
+            }
+            try expectThrows(EZError.self) {
+                _ = try first.prepareFollowUp("Why?", models: [])
+            }
+            var long = first
+            long.query = String(repeating: "x", count: 120_000)
+            try expectThrows(EZError.self) {
+                _ = try long.prepareFollowUp("Why?", models: f.model.models)
+            }
+            try expectEqual(f.model.selectedEntry?.response, first.response, "Failure lost original answer")
+        },
+        attemptCase("failed follow-up keeps its context and save recovery never resends") { f in
+            f.model.send()
+            try await f.terminal.wait()
+            let first = f.model.selectedEntry!
+            f.model.followUpDrafts[first.id] = "Why?"
+            f.control.failedWrites = [4]
+            f.terminal = CheckSignal()
+            f.model.followUp(first.id)
+            try await f.terminal.wait()
+            let followUp = f.model.selectedEntry!
+            try expectEqual(followUp.status, "unsaved", "Follow-up claimed a saved result")
+            try expectEqual(followUp.parentID, first.id, "Failed save lost context link")
+            f.model.saveAgain(followUp.id)
+            try expectEqual(f.model.selectedEntry?.status, "completed", "Follow-up recovery failed")
+            try expectEqual(f.control.providerCalls, 2, "Save recovery resent follow-up")
+        },
         attemptCase("initial save failure prevents credential and provider work") { f in
             f.control.failedWrites = [1]
             try expect(f.model.canSend, "Controlled execution should be available")

@@ -10,7 +10,7 @@ in [verification](verification.md).
 - Language preferences and optional richer recipe field rules.
 - Bulk history deletion, retention controls, and larger-history indexing.
 - Optional explicitly billed API-key provider.
-- Conversation follow-ups with deliberate context selection.
+- Optional selection of follow-up context beyond the saved conversation.
 - Signed/notarized distribution and an update channel.
 - Deferred: keep self-signing; revisit only when installation prompts bother us again.
   Candidate: full Xcode + free Personal Team → Apple Development signing; verify

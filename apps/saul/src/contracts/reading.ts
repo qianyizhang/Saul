@@ -37,6 +37,7 @@ export interface ReadingOperations {
       submissionId: string;
       selectionId: string;
       instruction?: string;
+      runId?: string;
       recipeId?: string;
     };
     result: { passageId: string; reused: boolean };
@@ -141,6 +142,7 @@ export function validateReading(v: unknown): asserts v is ReadingRequest {
         id(v.submissionId) &&
         id(v.selectionId) &&
         (v.recipeId === undefined || id(v.recipeId)) &&
+        (v.runId === undefined || id(v.runId)) &&
         (v.instruction === undefined || text(v.instruction, 2000));
       break;
     case 'stop':

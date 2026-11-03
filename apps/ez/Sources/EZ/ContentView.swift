@@ -38,7 +38,7 @@ struct ContentView: View {
                 } else if model.selectedEntry != nil {
                     HStack {
                         if !model.minimumMode {
-                            Text("Each lookup starts fresh.").foregroundStyle(.secondary)
+                            Text("New lookup starts fresh.").foregroundStyle(.secondary)
                         }
                         Spacer()
                         if model.busy {
@@ -204,6 +204,10 @@ struct ContentView: View {
             }
             UnsavedAttemptNotice(model: model, entry: entry)
             LookupAnswerText(entry: entry, activity: model.selectedResponseActivity)
+            if let parentID = entry.parentID, model.entries.contains(where: { $0.id == parentID }) {
+                Button("Previous answer") { model.selection = parentID }.buttonStyle(.borderless)
+            }
+            FollowUpComposer(model: model, entry: entry).id(entry.id)
             if entry.status != "pending" {
                 HStack {
                     Button {
