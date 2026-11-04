@@ -53,13 +53,24 @@ capture error after a window closes/hides, rebind the visible main window; do no
 assume the action failed or repeatedly capture a stale window. Use current element
 indices from each fresh accessibility tree, never a checked-in list of AX indices.
 
+## Illustration action
+
+Use `make surface-preview`, then open **EZ Surface Preview.app**. Choose Draw,
+fill Context and Run. Verify the PNG in History and Quick Lookup. Download must
+open a PNG save dialog; Cancel preserves the result. Draw error reports the error
+on that run; previous History entries remain available. Draw waiting supports Stop,
+without promising server cancellation. Verify Presets → Image settings and
+Providers → API key; no duplicate settings belong in the run composer. Repeat at
+minimum panel size, light/dark and Min/Standard. All requests are synthetic.
+Installed Keychain, live generation and actual launcher delivery require separate checks.
+
 ## Row click targets
 
 Run `make test-ui` for the automated production row-button regression. Then use
 the surface preview in Min Mode and Standard view, light and dark:
 
-- Settings → Recipes: select Lookup, then click the blank trailing area of Ask.
-  Ask must become the edited recipe. Repeat at the top/bottom padding and corners;
+- Settings → Actions: select Lookup, then click the blank trailing area of Ask.
+  Ask must become the edited action. Repeat at the top/bottom padding and corners;
   selected and unselected rows must have the same target size.
 - Repeat with model preset rows and every Settings sidebar section. Click outside
   the row and in the gap between rows; selection must not change.
@@ -74,8 +85,7 @@ the surface preview in Min Mode and Standard view, light and dark:
 
 Quit any existing surface preview, then launch its built bundle with
 `open 'dist/EZ Surface Preview.app' --args --unsaved-attempt`. This explicit mode
-uses a synthetic request and disposable history; ordinary preview mode continues
-to block Send. Its first terminal save fails and Save again succeeds.
+uses a synthetic request and disposable history; ordinary preview mode also uses synthetic Write/Draw providers. Its first terminal save fails and Save again succeeds.
 
 1. Confirm the main answer and History row say Unsaved. Expand Save error and
    Inspect input/output; neither should claim the answer was saved.
@@ -116,3 +126,13 @@ screenshots local and outside Git; identify each capture's fixture and appearanc
 These are repeatable acceptance journeys, not an unattended GUI test suite. Run
 `make check` for deterministic offline regression checks, then replay the affected
 native journeys for layout, focus, and interaction changes.
+
+## Typed action integration
+
+Use Draw, Draw result, Draw waiting and Draw error in the disposable surface preview.
+Run Illustration, verify History and Quick Lookup show its PNG, open/cancel Download,
+and inspect Details. Verify Stop leaves a stopped run and a late response cannot
+replace another run. Providers holds the API key and stable key; Presets holds
+provider/capability/model and Image settings; Actions holds template/type/default preset.
+Rename drafts must survive section changes and Keep on the close guard. Check both
+Min Mode settings, light/dark and Minimum panel. Draw launcher input must wait for Run.

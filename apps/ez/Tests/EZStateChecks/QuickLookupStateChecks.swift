@@ -4,19 +4,19 @@ import Foundation
 
 @MainActor func quickLookupStateChecks() -> [CheckCase] {
     [
-        stateCase("fresh invocation clears previous context and keeps history and recipe") { f in
+        stateCase("fresh invocation clears previous context and keeps history and action") { f in
             let entry = try f.selectLookup()
             f.model.choosePreset(f.alternate.id)
-            let recipe = f.model.selectedRecipeID
+            let action = f.model.selectedActionID
             f.model.newQuery()
             f.model.fillQuickLookupSelection(nil)
             try expect(f.model.inputValues.isEmpty && f.model.selection == nil, "Old context survived")
             try expect(
-                f.model.selectedRecipeID == recipe && f.model.overridePresetID == nil, "Recipe reset failed")
+                f.model.selectedActionID == action && f.model.overridePresetID == nil, "Action reset failed")
             try expect(f.model.entries.map(\.id) == [entry.id], "History was lost")
         },
         stateCase("selection autofill preserves Unicode fills one field and never sends") { f in
-            f.model.chooseRecipe(f.multi.id)
+            f.model.chooseAction(f.multi.id)
             let text = "  café 中文 🧪\nsecond line  "
             f.model.fillQuickLookupSelection(text)
             try expect(f.model.inputValues == ["fuzzy term": text], "Selection or remaining fields changed")

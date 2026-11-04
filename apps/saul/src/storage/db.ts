@@ -219,7 +219,7 @@ export class SaulDatabase {
         ['queued', 'running', 'saving'].includes(String(prior.status))
       )
         throw new Error(
-          'This passage already has an active request. Stop it before choosing another recipe.',
+          'This passage already has an active request. Stop it before choosing another action.',
         );
       if (
         known &&
@@ -506,7 +506,7 @@ export class SaulDatabase {
             `\n${run.status === 'completed' ? 'Completed' : 'Incomplete (' + run.status + ')'} · Model: ${run.model}`,
             ...(metadata.recipe
               ? [
-                  `Recipe: ${metadata.recipe.name}${metadata.preset ? ` · Preset: ${metadata.preset.name}` : ''}`,
+                  `Action: ${metadata.recipe.name}${metadata.preset ? ` · Preset: ${metadata.preset.name}` : ''}`,
                 ]
               : []),
             ...(metadata.inspection?.followUpQuestion

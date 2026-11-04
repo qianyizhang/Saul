@@ -59,7 +59,7 @@ struct ShortcutSettingsView: View {
                     HStack {
                         VStack(alignment: .leading) {
                             Text(command.title)
-                            if !model.minimumMode, let name = recipeName(command) {
+                            if !model.minimumMode, let name = actionName(command) {
                                 Text(name).font(AppStyle.caption).foregroundStyle(.secondary)
                             }
                         }
@@ -75,7 +75,7 @@ struct ShortcutSettingsView: View {
                 }
                 if !model.minimumMode {
                     Text(
-                        "Recipe numbers follow Configuration order; Last recipe selects the final item. Next/Previous wraps. Switching recipes clears the draft and restores its default preset. Recipe changes and New are unavailable during generation."
+                        "Action numbers follow Configuration order; Last action selects the final item. Next/Previous wraps. Switching actions clears the draft and restores its default preset. Action changes and New are unavailable during generation."
                     )
                     .font(AppStyle.caption).foregroundStyle(.secondary)
                 }
@@ -159,11 +159,11 @@ struct ShortcutSettingsView: View {
         }
     }
 
-    private func recipeName(_ command: LookupCommand) -> String? {
-        if command == .lastRecipe { return model.configuration.recipes.last?.name ?? "No recipes" }
+    private func actionName(_ command: LookupCommand) -> String? {
+        if command == .lastRecipe { return model.configuration.actions.last?.name ?? "No actions" }
         guard let index = command.recipeIndex else { return nil }
-        return model.configuration.recipes.indices.contains(index)
-            ? model.configuration.recipes[index].name : "No recipe at this position"
+        return model.configuration.actions.indices.contains(index)
+            ? model.configuration.actions[index].name : "No action at this position"
     }
 
     private func chromeNavigation() {

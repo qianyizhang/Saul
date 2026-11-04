@@ -13,43 +13,43 @@ test('focused settings preserves drafts across sections and keeps Min Mode conci
   await configureFixtureProvider(popup, fixtureServer.origin);
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(popup.getByRole('main')).toHaveCount(1);
-  await expect(popup.getByLabel('Default recipe', { exact: true })).toBeVisible();
+  await expect(popup.getByLabel('Default action', { exact: true })).toBeVisible();
   await expect(popup.getByLabel('Response language', { exact: true })).toBeVisible();
   await expect(popup.getByLabel('Model name', { exact: true })).toBeHidden();
-  await settingsSection(popup, 'Models');
+  await settingsSection(popup, 'Presets');
   await popup.getByLabel('Model name', { exact: true }).fill('draft-model');
   await expect(popup.getByRole('button', { name: 'Add preset', exact: true })).toHaveText('+');
-  await settingsSection(popup, 'Reading');
-  const edit = popup.getByLabel('Edit recipes', { exact: true });
-  expect(await edit.innerText()).toBe('Recipes');
+  await settingsSection(popup, 'Actions');
+  const edit = popup.getByLabel('Edit actions', { exact: true });
+  expect(await edit.innerText()).toBe('Actions');
   await edit.focus();
   await popup.keyboard.press('Enter');
   await expect(popup.getByLabel('Template syntax', { exact: true })).toBeHidden();
-  await popup.getByLabel('Recipe name', { exact: true }).fill('Careful reading');
-  await settingsSection(popup, 'Models');
+  await popup.getByLabel('Action name', { exact: true }).fill('Careful reading');
+  await settingsSection(popup, 'Presets');
   await expect(popup.getByLabel('Model name', { exact: true })).toHaveValue('draft-model');
-  await expect(popup.getByLabel('Recipe name', { exact: true })).toBeHidden();
-  await settingsSection(popup, 'Reading');
-  await expect(popup.getByLabel('Recipe name', { exact: true })).toHaveValue('Careful reading');
+  await expect(popup.getByLabel('Action name', { exact: true })).toBeHidden();
+  await settingsSection(popup, 'Actions');
+  await expect(popup.getByLabel('Action name', { exact: true })).toHaveValue('Careful reading');
   await popup.getByLabel('Include with selected text', { exact: true }).click();
   await popup.getByLabel('Section heading', { exact: true }).uncheck();
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
   await popup.reload();
-  await settingsSection(popup, 'Models');
+  await settingsSection(popup, 'Presets');
   await expect(popup.getByLabel('Model name', { exact: true })).toHaveValue('draft-model');
-  await settingsSection(popup, 'Reading');
+  await settingsSection(popup, 'Actions');
   await edit.click();
-  await expect(popup.getByLabel('Recipe name', { exact: true })).toHaveValue('Careful reading');
+  await expect(popup.getByLabel('Action name', { exact: true })).toHaveValue('Careful reading');
   await popup.getByLabel('Include with selected text', { exact: true }).click();
   await expect(popup.getByLabel('Section heading', { exact: true })).not.toBeChecked();
   for (const section of [
     'Overview',
-    'Models',
-    'Reading',
+    'Presets',
+    'Actions',
     'Summaries',
     'Preferences',
-    'Connections',
+    'Providers',
   ] as const) {
     await settingsSection(popup, section);
     for (const width of [390, 640, 1100]) {
@@ -85,7 +85,7 @@ test('a provider test stays stoppable after visiting another settings section', 
     const { popup } = await sandbox.launch();
     await configureFixtureProvider(popup, server.origin);
     await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-    await settingsSection(popup, 'Models');
+    await settingsSection(popup, 'Presets');
     await popup.getByLabel('Model options and tests', { exact: true }).click();
     await popup.getByRole('button', { name: 'Test generation', exact: true }).click();
     await expect.poll(() => server.requests.length).toBe(1);

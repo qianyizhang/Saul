@@ -134,7 +134,7 @@ private struct LookupCommands: Commands {
             commandButton(.newLookup)
             Button("Quick Lookup") { quickLookup.showFreshLookup() }
         }
-        CommandMenu("Lookup") {
+        CommandMenu("Actions") {
             commandButton(.send)
             commandButton(.stop)
             Divider()
@@ -167,7 +167,7 @@ private struct LookupMenu: View {
     var body: some View {
         Button("Quick Lookup · ⌃⌥ Space") { quickLookup.showFreshLookup() }
         Button("Open EZ & history") { quickLookup.showMain() }
-        Button("Account & settings…") { quickLookup.showMain(settings: true, section: .account) }
+        Button("Providers & settings…") { quickLookup.showMain(settings: true, section: .account) }
         if let error = quickLookup.shortcutError { Text(error) }
         Divider()
         Button("Quit EZ") { NSApp.terminate(nil) }.keyboardShortcut("q")

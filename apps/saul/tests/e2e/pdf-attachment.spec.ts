@@ -127,7 +127,7 @@ test('PDF processing saves through Settings; changing it preserves old results a
   }
   await popup.reload();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Models');
+  await settingsSection(popup, 'Presets');
   await expect(popup.getByLabel('PDF processing', { exact: true })).toHaveValue('local');
   const reused = await openDigestReader(context, popup, worker, source.url());
   await expect(reused.getByRole('complementary', { name: 'Saved summary reused' })).toContainText(

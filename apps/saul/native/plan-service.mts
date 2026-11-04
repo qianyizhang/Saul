@@ -88,7 +88,10 @@ export class PlanService {
         emit({ type: 'result', library: this.presets.import(request.presets) });
         return;
       case 'presets-save':
-        emit({ type: 'result', library: this.presets.save(request.revision, request.presets) });
+        emit({
+          type: 'result',
+          library: this.presets.save(request.revision, request.presets, request.providers),
+        });
         return;
       case 'accounts':
         emit({ type: 'result', accounts: await this.auth.accounts() });

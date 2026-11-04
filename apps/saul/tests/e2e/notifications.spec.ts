@@ -45,7 +45,7 @@ test('mute from a toast applies across tabs and restart; Settings can unmute wit
   await settingsSection(popup, 'Preferences');
   const toggle = popup.getByRole('checkbox', { name: 'Mute error notifications' });
   await expect(toggle).toBeChecked();
-  await settingsSection(popup, 'Models');
+  await settingsSection(popup, 'Presets');
   await popup.getByLabel('API connection', { exact: true }).click();
   await popup.getByLabel('Base URL', { exact: true }).fill('invalid endpoint');
   await settingsSection(popup, 'Preferences');

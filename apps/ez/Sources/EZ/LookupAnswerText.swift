@@ -6,9 +6,30 @@ struct LookupAnswerText: View {
     let entry: HistoryEntry
     let activity: ResponseActivity?
     var compact = false
+    var imageData: Data?
+    var imageLoading = false
 
     var body: some View {
-        if let comparison = SpellingComparison(entry: entry) {
+        if entry.capability == .draw {
+            VStack(alignment: .leading, spacing: 16) {
+                DisclosureGroup("Context") {
+                    Text(entry.displayQuery).font(AppStyle.body).textSelection(.enabled)
+                }
+                if let data = imageData, let image = NSImage(data: data) {
+                    Image(nsImage: image).resizable().scaledToFit().frame(
+                        maxWidth: .infinity, maxHeight: compact ? 360 : 640
+                    )
+                    .accessibilityLabel("Generated image")
+                } else if entry.status == "pending" {
+                    Text("Drawing…").foregroundStyle(.secondary)
+                } else if imageLoading {
+                    Text("Loading image…").foregroundStyle(.secondary)
+                } else if entry.hasImage {
+                    Label("The saved image is unavailable.", systemImage: "exclamationmark.circle")
+                        .foregroundStyle(.orange)
+                }
+            }
+        } else if let comparison = SpellingComparison(entry: entry) {
             SpellingComparisonView(comparison: comparison, compact: compact)
         } else {
             VStack(alignment: .leading, spacing: 16) {

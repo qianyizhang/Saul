@@ -1,14 +1,66 @@
 import { isRecord } from './value.mts';
+export type ActionCapability = 'write' | 'draw';
+export interface SharedImageOptions {
+  size: string;
+  quality: string;
+}
+export function validImageOptions(value: unknown): value is SharedImageOptions {
+  return (
+    isRecord(value) &&
+    Object.keys(value).every((key) => ['size', 'quality'].includes(key)) &&
+    typeof value.size === 'string' &&
+    ['1024x1024', '1536x1024', '1024x1536'].includes(value.size) &&
+    typeof value.quality === 'string' &&
+    ['low', 'medium', 'high'].includes(value.quality)
+  );
+}
 export interface SharedPreset {
   id: string;
   name: string;
   model: string;
   effort: string;
   fast: boolean;
+  providerKey?: string;
+  capability?: ActionCapability;
+  imageOptions?: SharedImageOptions;
+}
+export interface SharedProvider {
+  key: string;
+  name: string;
+  kind: 'chatgpt-plan' | 'openai-api';
+}
+export const DEFAULT_PROVIDERS: readonly SharedProvider[] = [
+  { key: 'gpt-plan', name: 'ChatGPT plan', kind: 'chatgpt-plan' },
+  { key: 'openai-api', name: 'OpenAI API', kind: 'openai-api' },
+];
+export function providerCapabilities(provider: SharedProvider): ActionCapability[] {
+  return provider.kind === 'chatgpt-plan' ? ['write'] : ['write', 'draw'];
+}
+export function validateSharedProviders(value: unknown): asserts value is SharedProvider[] {
+  if (
+    !Array.isArray(value) ||
+    value.length > 32 ||
+    !value.every(
+      (p) =>
+        isRecord(p) &&
+        Object.keys(p).every((key) => ['key', 'name', 'kind'].includes(key)) &&
+        typeof p.key === 'string' &&
+        /^[a-z][a-z0-9-]{0,63}$/.test(p.key) &&
+        typeof p.name === 'string' &&
+        !!p.name.trim() &&
+        p.name.length <= 80 &&
+        (p.kind === 'chatgpt-plan' || p.kind === 'openai-api'),
+    ) ||
+    new Set(value.map((p) => p.key)).size !== value.length ||
+    new Set(value.map((p) => p.name.trim().toLowerCase())).size !== value.length
+  )
+    throw new Error('Providers need unique keys and names and a supported kind.');
 }
 export interface SharedPresets {
   revision: number;
   presets: SharedPreset[];
+  /** Absent only in legacy replies; both current stores return shared definitions. */
+  providers?: SharedProvider[];
 }
 export function validateSharedPresets(value: unknown): asserts value is SharedPreset[] {
   if (
@@ -17,7 +69,18 @@ export function validateSharedPresets(value: unknown): asserts value is SharedPr
     !value.every(
       (p) =>
         isRecord(p) &&
-        Object.keys(p).length === 5 &&
+        Object.keys(p).every((key) =>
+          [
+            'id',
+            'name',
+            'model',
+            'effort',
+            'fast',
+            'providerKey',
+            'capability',
+            'imageOptions',
+          ].includes(key),
+        ) &&
         typeof p.id === 'string' &&
         /^[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/i.test(p.id) &&
         typeof p.name === 'string' &&
@@ -27,7 +90,11 @@ export function validateSharedPresets(value: unknown): asserts value is SharedPr
         p.model.length <= 256 &&
         typeof p.effort === 'string' &&
         p.effort.length <= 64 &&
-        typeof p.fast === 'boolean',
+        typeof p.fast === 'boolean' &&
+        (p.providerKey === undefined ||
+          (typeof p.providerKey === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(p.providerKey))) &&
+        (p.capability === undefined || p.capability === 'write' || p.capability === 'draw') &&
+        (p.imageOptions === undefined || validImageOptions(p.imageOptions)),
     ) ||
     new Set(value.map((p: SharedPreset) => p.id.toLowerCase())).size !== value.length ||
     new Set(value.map((p: SharedPreset) => p.name.trim().toLowerCase())).size !== value.length
@@ -56,6 +123,6 @@ export function validateScopedConfigValue(
   if (!isRecord(value)) throw new Error('Scoped configuration must be an object.');
   if (new TextEncoder().encode(JSON.stringify(value)).length > MAX_SCOPED_CONFIG_BYTES)
     throw new Error(
-      'Scoped configuration exceeds 750 KB. Keep fewer or smaller call presets and recipes.',
+      'Scoped configuration exceeds 750 KB. Keep fewer or smaller call presets and actions.',
     );
 }

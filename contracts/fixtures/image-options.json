@@ -1,0 +1,43 @@
+{
+  "valid": [
+    {
+      "size": "1024x1024",
+      "quality": "low"
+    },
+    {
+      "size": "1536x1024",
+      "quality": "medium"
+    },
+    {
+      "size": "1024x1536",
+      "quality": "high"
+    }
+  ],
+  "invalid": [
+    {
+      "size": ["1024x1024"],
+      "quality": "low"
+    },
+    {
+      "size": "1024x1024",
+      "quality": ["low"]
+    },
+    {
+      "size": "1024x1024",
+      "quality": "low",
+      "extra": true
+    },
+    {
+      "size": "1024x1024"
+    },
+    {
+      "size": "4096x4096",
+      "quality": "low"
+    },
+    {
+      "size": "1024x1024",
+      "quality": "unknown"
+    },
+    null
+  ]
+}

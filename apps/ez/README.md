@@ -12,7 +12,8 @@ See the [monorepo setup guide](../../docs/setup.md) for component selection.
 ## Run
 
 Requires macOS 14+ and Apple Command Line Tools with Swift 6.3+ (`xcode-select --install`).
-The app has no third-party runtime packages and needs no API key or Codex installation.
+The app has no third-party runtime packages. Text lookups use ChatGPT sign-in;
+the optional Illustration action uses an OpenAI API key. No Codex installation is needed.
 
 ```sh
 make tools
@@ -29,8 +30,8 @@ self-signing alone does not prevent Keychain prompts after upgrades. See
 [the Keychain limitation](docs/keychain.md#why-a-rebuild-can-ask-again).
 The previous installed bundle is retained for rollback.
 
-In EZ, open **Settings → Accounts → Connect**, finish sign-in
-in your browser, and allow ChatGPT plan usage. Choose a recipe, fill its inputs,
+In EZ, open **Settings → Providers → ChatGPT plan → Connect**, finish sign-in
+in your browser, and allow ChatGPT plan usage. Choose an action, fill its inputs,
 then press **⌘ Return**. **Min Mode** is on by default: the draft sits below
 the new-lookup heading, answers get a quiet reading view, and **Details** holds
 request settings, token counts, and timing. Turn it off in Settings → Preferences or Quick
@@ -38,8 +39,8 @@ Lookup's actions menu to restore extra guidance and the persistent metrics foote
 The choice is saved on this Mac. Check Settings → Manage usage for ChatGPT plan
 allowance. Metrics are saved with new lookups; older history has no metrics.
 **⌘ N** starts a new lookup and **⌘ .** stops generation.
-Settings uses the same focused design as Saul: Overview, Models, Recipes,
-Preferences, Accounts and Shortcuts. One editor is shown at a time and section
+Settings uses the same focused design as Saul: Overview, Presets, Actions,
+Preferences, Providers and Shortcuts. One editor is shown at a time and section
 changes preserve drafts. Min Mode assumes a familiar user: everyday controls
 stay visible, with one-word or symbol-only actions. Turn Min Mode off for explanatory help.
 
@@ -67,7 +68,7 @@ full response. Long original passages sit behind **Original text**.
 
 For quick access while EZ is running, press **⌃⌥ Space** (Control–Option–Space)
 or choose **Quick Lookup** from EZ’s menu-bar icon. Type or paste text and press
-**⌘ Return** after filling the recipe's inputs. The panel starts small and grows
+**⌘ Return** after filling the action's inputs. The panel starts small and grows
 for results; long forms and answers scroll. Choose a preset override in the panel’s
 preset selector. Click its information button for exact request choices and the
 displayed answer's actual service tier. In Min Mode, an answer hides the input
@@ -77,7 +78,7 @@ actions menu for Settings. **Esc** hides the panel and returns keyboard focus to
 your work. A running answer continues while hidden; **⌘ .** stops it. **⌘ N** starts
 a new lookup. Invoking Quick Lookup through the shortcut or menu starts an empty
 lookup when idle: it clears previous inputs and the displayed answer, keeps the
-selected recipe, restores its default preset, and focuses the first input. With
+selected action, restores its default preset, and focuses the first input. With
 Accessibility access, selected text from the active app fills the first input when
 that app supports it; otherwise the input stays empty. Enable access through
 **Settings → Shortcuts → Accessibility settings**. This reads only on invocation,
@@ -97,11 +98,11 @@ type **ez**, press **Space**, type your query, and press **Return**. EZ launches
 needed and streams the answer in its compact panel. On macOS 15+, a cold launcher
 start suppresses the full window; macOS 14 may also display the full window.
 
-The command fills the selected recipe’s first input and uses its preset and the
-current account. A single-field recipe submits immediately; a multi-field recipe
-opens the panel for you to complete the remaining inputs and explicitly Send.
-After restart, EZ selects the first remaining recipe. Raycast does not generate or bill for the
-answer. Return explicitly submits single-field recipes through EZ’s existing ChatGPT plan
+The command fills the selected action’s first input and uses its preset and the
+selected provider. A single-field Write action submits immediately; a Draw or multi-field action
+opens the panel for you to complete the remaining inputs and explicitly Run.
+After restart, EZ selects the first remaining action. Raycast does not generate or bill for the
+answer. Return explicitly submits single-field Write actions through the selected provider
 flow. An in-progress lookup is preserved and a second submission is refused.
 If sign-in, model loading, or history storage blocks sending, the panel shows the
 error and retains your query for manual retry. It does not send later on sign-in.
@@ -109,7 +110,7 @@ Escape hides the panel. The command pins the installed app, so an indexed build
 in `dist` cannot steal the submission. See [Raycast integration](docs/raycast.md).
 
 macOS may ask whether **EZ** can access its Keychain item to save or restore your
-sign-in. EZ queries only its own credential record. Locally signed development
+sign-in. EZ queries only its own credential records. Locally signed development
 rebuilds can trigger another prompt; refusing access keeps history available but
 prevents the saved sign-in from loading.
 See [Keychain access](docs/keychain.md) for the stored data, permission choices,
@@ -126,10 +127,10 @@ settings to inspect your app allowance. No fallback API billing is configured.
 
 Select text in another Mac app, then choose **Services → Look Up in EZ** from
 that app's menu (or its selection's contextual menu, when offered). EZ opens
-Quick Lookup and fills the selected recipe's first input. Complete any remaining
-fields and press **⌘ Return** to Send. Invoking the service never submits a request,
-including after sign-in. It uses the recipe's default preset; normal unavailable
-model/account/storage checks still apply when you Send.
+Quick Lookup and fills the selected action's first input. Complete any remaining
+fields and press **⌘ Return** to Run. Invoking the service never submits a request,
+including after sign-in. It uses the action's default preset; normal unavailable
+model/account/storage checks still apply when you Run.
 
 The service reads the selection's dedicated Services pasteboard. It does not read
 or change your clipboard, replace the source selection, or require Accessibility
@@ -145,31 +146,49 @@ Keyboard Shortcuts → Services → Text**; a custom Services shortcut can be as
 there. Availability depends on the source app exposing selected text to Services.
 A cold start may also show EZ's main window.
 
-## Configure presets and recipes
+## Illustration
 
-Open **Settings → Models** for presets or **Settings → Recipes** for recipes.
-A **model preset** names a model, effort, and Fast/Standard choice.
-ChatGPT presets are shared with Saul through one local store;
-existing presets import once. Save in either app, then reopen or reload the other
-app's Settings. Accounts, recipes and history stay in each app. Model presets never bind an account; each app uses its selected local account for
-a new run. A **recipe** selects a default
-preset and contains the entire prompt. Add `{{fuzzy term}}` and `{{fuzzy context}}` to create
-two inputs with those placeholders. Repeated names share one field; all fields
-are required. Templates support substitution only, without Jinja expressions.
-Save each edited preset/recipe explicitly. Unsaved edits survive Settings section
-changes; switching items or closing Settings asks before discarding them.
-The input preview shows the generated form.
+Choose **Illustration** in the Action picker. Save your OpenAI API key in
+**Settings → Providers → OpenAI API**, fill Context and click **Run** (⌘Return).
+Key Save/Reload do not test the key or send a request. API usage is billed
+separately from ChatGPT plan usage. Each Run requests one PNG.
 
-Dictionary, Spell Check, Ask, and Lookup are editable/removable starters. They are
-not restored after removal. Select a recipe during use; the preset picker can
-override its default until New lookup or another recipe is selected. Unavailable
-saved model/effort/Fast choices block sending rather than silently changing them.
-History and Use again preserve the original recipe, inputs, and preset. See
-[configuration decisions](docs/adr/0002-model-presets-and-recipes.md).
+**Settings → Presets → Illustration** owns the image model and optional size/quality.
+The default is GPT Image 2.5 Flare, low, 1024×1024. Access depends on your API project
+and organization. **Stop** (⌘.) cancels locally; OpenAI may still finish and bill an
+accepted request. There are no automatic retries.
+
+The result appears in the same History and Quick Lookup as text. **Download**
+exports its original PNG; **Details** shows frozen inputs and settings. **Reuse**
+restores a draft without sending. Draw actions always wait for Run after launcher
+input. Images are saved in `EZ/images/<run-id>.png`; deleting a run removes its PNG.
+If saving fails, **Unsaved → Save again** retries the exact result without generation.
+Save or download unsaved results before quitting.
+
+## Configure providers, presets and actions
+
+**Providers** names the connection and displays its stable key and capabilities.
+`gpt-plan` supports Write; `openai-api` supports Write and Draw. Renaming a provider
+preserves preset bindings. Plan sign-ins and the API key remain separate, app-local
+Keychain records. Presets never select a different plan account implicitly.
+
+**Presets** binds provider key, Write/Draw, model and supported options. Existing
+presets default to `gpt-plan` / Write, retaining their IDs and behavior. Provider definitions and Presets
+share the local store and stale-save revision with Saul; both apps must use a compatible build to preserve
+the typed fields. Saul retains Draw presets but currently executes Write only.
+API Write uses an explicit model ID. Unavailable choices block rather than falling back.
+
+**Actions** owns instructions, type and a compatible default preset. Use
+`{{fuzzy term}}` and `{{fuzzy context}}` to generate two required inputs. Repeated
+names share one field; substitution is literal, without expressions. Save edited
+items explicitly. Section changes preserve drafts; changing items or closing asks
+before discard. History and Reuse retain original action, inputs and preset.
+Starters are editable/removable. Illustration is added once during migration and
+is not restored after deletion. Action chaining is out of scope.
 
 ## Selectors and keyboard shortcuts
 
-Scroll over a recipe, preset, model, effort, or account dropdown
+Scroll over an action, preset, model, effort, or account dropdown
 to move through its choices without opening the menu. Wheel selection stops at the
 ends; trackpad momentum is ignored. Disabled selectors stay locked. Scrolling the
 compact panel’s preset selector changes the override directly; the adjacent
@@ -178,7 +197,7 @@ and full click/scroll target when labels change.
 Settings sidebar sections and editor rows use full-row click targets, independent
 of selection or title length. Configuration edits still require Save.
 
-A **lookup** is an independent request and answer; a **recipe** is a reusable prompt.
+A **lookup** is an independent request and answer; a **action** is a reusable prompt.
 Both lookup surfaces offer **Ask a follow-up** below a completed answer. Send or
 ⌘Return from the field includes the saved request and earlier exchanges with the
 same model/effort/speed, using the currently selected local account. Each follow-up
@@ -191,15 +210,15 @@ lookup lifecycle. No question is sent on opening or switching surfaces.
 
 | Action | Default shortcut |
 | --- | --- |
-| New lookup | ⌘N |
-| Send | ⌘Return |
+| New run | ⌘N |
+| Run / send follow-up | ⌘Return |
 | Stop generation | ⌘. |
-| Previous / next recipe | ⌘⇧[ / ⌘⇧] |
-| Recipe at position 1–8 | ⌘1–8 |
-| Last recipe | ⌘9 |
+| Previous / next action | ⌘⇧[ / ⌘⇧] |
+| Action at position 1–8 | ⌘1–8 |
+| Last action | ⌘9 |
 
 Open **Settings → Shortcuts** to record replacements, clear bindings, or restore
-defaults. **Use Chrome navigation** assigns ⌘⌥← / ⌘⌥→ to previous/next recipe.
+defaults. **Use Chrome navigation** assigns ⌘⌥← / ⌘⌥→ to previous/next action.
 You can assign ⌘T to New lookup if you prefer Chrome’s new-tab key. Shortcuts work
 while typing in either lookup surface. The Lookup menu and action hints reflect
 custom bindings. Settings and modal sheets suspend lookup shortcuts so recording,
@@ -207,9 +226,9 @@ editing, and confirmations take priority. Text-editing and reserved app keys can
 be reassigned; conflicts are reported without saving. Shortcut changes save immediately.
 
 Previous/next wraps in Configuration order; numbered bindings follow that order,
-and missing positions do nothing. Selecting the current recipe leaves the draft
-intact. Selecting another recipe clears inputs and restores its default preset;
-recipe navigation and New are blocked while a request or launcher submission is active.
+and missing positions do nothing. Selecting the current action leaves the draft
+intact. Selecting another action clears inputs and restores its default preset;
+action navigation and New are blocked while a request or launcher submission is active.
 Global Quick Lookup (⌃⌥Space), Settings (⌘,), and panel hiding (Esc / ⌘W) remain fixed.
 New lookup follows [VS Code’s new-item shortcut](https://code.visualstudio.com/shortcuts/keyboard-shortcuts-macos.pdf).
 Numbered and last-item navigation follow [Chrome’s shortcuts](https://support.google.com/chrome/answer/157179).
@@ -217,9 +236,11 @@ Numbered and last-item navigation follow [Chrome’s shortcuts](https://support.
 ## Local data
 
 - Queries/answers: `~/Library/Application Support/EZ/history.jsonl`, owner-only.
+- Generated PNGs: `~/Library/Application Support/EZ/images/`, owner-only.
+- OpenAI API key: macOS Keychain (`local.ez.app.openai`), separate from plan sign-ins.
 - Credentials, issued client IDs, and host ID: macOS Keychain (`local.ez.app.chatgpt`).
 - Shared model presets: owner-only `~/Library/Application Support/Little Clarity/settings.json` → `modelPresets`.
-- EZ recipes/configuration: the same file → `apps.ez.configuration`; the old `EZ/configuration.json` remains a migration recovery copy.
+- EZ actions/configuration: the same file → `apps.ez.configuration`; the old `EZ/configuration.json` remains a migration recovery copy.
 - Keyboard bindings: owner-only `~/Library/Application Support/EZ/shortcuts.json`.
 - Previous model/effort/Fast preferences seed the initial Current preset.
 - Build products: ignored `.build/` and `dist/`; regenerate them with `make app`.

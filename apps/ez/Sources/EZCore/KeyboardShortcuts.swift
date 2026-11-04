@@ -7,13 +7,13 @@ public enum LookupCommand: String, Codable, CaseIterable {
 
     public var title: String {
         switch self {
-        case .newLookup: return "New lookup"
-        case .send: return "Send lookup"
+        case .newLookup: return "New run"
+        case .send: return "Run action"
         case .stop: return "Stop generating"
-        case .nextRecipe: return "Next recipe"
-        case .previousRecipe: return "Previous recipe"
-        case .lastRecipe: return "Last recipe"
-        default: return "Recipe \(recipeIndex! + 1)"
+        case .nextRecipe: return "Next action"
+        case .previousRecipe: return "Previous action"
+        case .lastRecipe: return "Last action"
+        default: return "Action \(recipeIndex! + 1)"
         }
     }
 

@@ -39,7 +39,7 @@ func spellingComparisonChecks() -> [CheckCase] {
             ] {
                 var value = entry(source, corrected + "\n\n" + label + " " + explanation)
                 let preset = ModelPreset(name: "Fixture", model: "fixture", effort: "", fast: false)
-                value.recipeSnapshot = Recipe(
+                value.actionSnapshot = Action(
                     name: "Spell Check", presetID: preset.id, template: "Correct {{text}}",
                     legacyMode: .spelling)
                 value.inputValues = ["text": source]
@@ -77,7 +77,7 @@ func spellingComparisonChecks() -> [CheckCase] {
             }
             value.status = "completed"
             value.mode = .ask
-            try expect(SpellingComparison(entry: value) == nil, "Compared non-spelling recipe")
+            try expect(SpellingComparison(entry: value) == nil, "Compared non-spelling action")
         },
         CheckCase("spelling: paragraph splits and merges keep later paragraphs aligned") { _ in
             let original = "Alpha starts. Beta follows.\n\nGamma ends."

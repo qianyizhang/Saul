@@ -10,7 +10,7 @@ while IFS= read -r file; do
 done < "$bin_dir/EZChecks.product/Objects.LinkFileList"
 xcrun swiftc -swift-version 5 -warnings-as-errors -strict-concurrency=complete \
     -parse-as-library -target "$(uname -m)-apple-macos14.0" -module-cache-path "$CLANG_MODULE_CACHE_PATH" \
-    -I "$bin_dir/Modules" Sources/EZ/AppModel.swift Sources/EZ/SelectedTextService.swift \
+    -I "$bin_dir/Modules" Sources/EZ/AppModel.swift Sources/EZ/ProviderState.swift Sources/EZ/SelectedTextService.swift \
     Tests/EZStateChecks/StateFixture.swift scripts/services-check.swift \
     "${objects[@]}" -o "$bin_dir/EZServicesChecks"
 "$bin_dir/EZServicesChecks" "$@"

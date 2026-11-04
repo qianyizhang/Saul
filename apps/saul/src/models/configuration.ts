@@ -1,3 +1,4 @@
+import { validImageOptions } from '../../native/shared-presets-contract.mts';
 import type {
   ModelPreset,
   ReadingConfiguration,
@@ -189,16 +190,26 @@ export function normalizeConfiguration(
   if (stored.schemaVersion !== 1)
     throw new Error('Unsupported configuration version. Original settings are preserved.');
   if (!Array.isArray(stored.presets) || !Array.isArray(stored.recipes))
-    throw new Error('Presets and recipes must be lists.');
+    throw new Error('Presets and actions must be lists.');
   const configuration: ReadingConfiguration = {
     schemaVersion: 1,
-    selectedRecipeId: string(stored.selectedRecipeId, 'Default recipe ID', 128),
+    selectedRecipeId: string(stored.selectedRecipeId, 'Default action ID', 128),
     presets: stored.presets.map((entry) => {
       const preset = record(entry, 'Preset');
       if (!['openai-compatible', 'chatgpt-plan', 'chrome-ai'].includes(String(preset.provider)))
         throw new Error('Preset provider is not supported.');
       if (preset.fast !== undefined && typeof preset.fast !== 'boolean')
         throw new Error('Preset Fast must be true or false.');
+      if (
+        preset.capability !== undefined &&
+        preset.capability !== 'write' &&
+        preset.capability !== 'draw'
+      )
+        throw new Error('Invalid preset capability.');
+      if (preset.shared !== undefined && typeof preset.shared !== 'boolean')
+        throw new Error('Invalid shared preset marker.');
+      if (preset.imageOptions !== undefined && !validImageOptions(preset.imageOptions))
+        throw new Error('Invalid image preset options.');
       return {
         id: string(preset.id, 'Preset ID', 128),
         name: string(preset.name, 'Preset name', 80),
@@ -209,13 +220,21 @@ export function normalizeConfiguration(
         topK: optionalNumber(preset.topK, 'Preset top K'),
         effort: optionalText(preset.effort, 'Preset effort'),
         fast: preset.fast as boolean | undefined,
+        ...(preset.providerKey === undefined
+          ? {}
+          : { providerKey: string(preset.providerKey, 'Provider key', 64) }),
+        ...(preset.capability === undefined
+          ? {}
+          : { capability: preset.capability as 'write' | 'draw' }),
+        ...(preset.shared === undefined ? {} : { shared: preset.shared as boolean }),
+        ...(preset.imageOptions === undefined ? {} : { imageOptions: preset.imageOptions }),
       };
     }),
     recipes: stored.recipes.map((entry) => {
-      const recipe = record(entry, 'Recipe');
+      const recipe = record(entry, 'Action');
       return {
-        id: string(recipe.id, 'Recipe ID', 128),
-        name: string(recipe.name, 'Recipe name', 80),
+        id: string(recipe.id, 'Action ID', 128),
+        name: string(recipe.name, 'Action name', 80),
         presetId: string(recipe.presetId, 'Default preset ID', 128),
         template: string(recipe.template, 'Prompt template'),
         systemPrompt: string(recipe.systemPrompt, 'System prompt'),
@@ -248,10 +267,10 @@ export function validateConfiguration(configuration: ReadingConfiguration, share
       throw new Error(`Duplicate or missing ${label} IDs.`);
   }
   if (!configuration.recipes.some((recipe) => recipe.id === configuration.selectedRecipeId))
-    throw new Error('Choose an existing default recipe.');
+    throw new Error('Choose an existing default action.');
   for (const recipe of configuration.recipes) {
     if (!shared && !configuration.presets.some((preset) => preset.id === recipe.presetId))
-      throw new Error(`Recipe “${recipe.name}” needs an existing default preset.`);
+      throw new Error(`Action “${recipe.name}” needs an existing default preset.`);
     parseTemplate(recipe.template);
     if (new TextEncoder().encode(recipe.systemPrompt).length > 32768)
       throw new Error(`“${recipe.name}” system prompt exceeds 32 KB.`);
@@ -263,10 +282,33 @@ export function settingsForPreset(
   preset: ModelPreset,
   editing = false,
 ): UserSettings {
+  if (preset.capability === 'draw' && editing) return settings;
+  if (preset.capability === 'draw' && !editing)
+    throw new Error(
+      `Preset “${preset.name}” uses Draw. Image actions are available in EZ; choose a Write preset in Saul.`,
+    );
+  if (preset.providerKey && settings.providers) {
+    const provider = settings.providers.find((item) => item.key === preset.providerKey);
+    if (!provider && !editing)
+      throw new Error(`Provider “${preset.providerKey}” is unavailable. Open Providers.`);
+    if (
+      provider &&
+      (provider.kind === 'chatgpt-plan' ? 'chatgpt-plan' : 'openai-compatible') !==
+        preset.provider &&
+      !editing
+    )
+      throw new Error('The preset provider changed. Reload settings before running.');
+  }
   if (preset.provider === 'openai-compatible') {
-    const profile = settings.profiles?.find((profile) => profile.id === preset.profileId);
-    const implicit =
-      !settings.profiles && preset.profileId === (settings.activeProfileId || 'default');
+    if (!editing && (preset.effort || preset.fast))
+      throw new Error(
+        `Preset “${preset.name}” requests reasoning or Fast options that Saul's API connection does not support. Run it in EZ or choose a supported preset.`,
+      );
+    const connectionId = preset.providerKey
+      ? settings.providerConnections?.[preset.providerKey] || preset.profileId
+      : preset.profileId;
+    const profile = settings.profiles?.find((profile) => profile.id === connectionId);
+    const implicit = !settings.profiles && connectionId === (settings.activeProfileId || 'default');
     const source =
       profile?.config ||
       (implicit
@@ -286,7 +328,7 @@ export function settingsForPreset(
     return {
       ...settings,
       activeProvider: preset.provider,
-      activeProfileId: preset.profileId,
+      activeProfileId: connectionId,
       openaiCompatible: {
         ...source,
         model: preset.model,

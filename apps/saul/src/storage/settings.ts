@@ -1,3 +1,4 @@
+import { validateSharedProviders } from '../../native/shared-presets-contract.mts';
 import type { UserSettings } from '../types';
 import { DEFAULT_SYSTEM_PROMPT } from '../models/prompts';
 import { CHROME_AI_ENABLED, CHROME_AI_DISABLED_MESSAGE } from '../models/chrome-ai';
@@ -163,8 +164,23 @@ export function normalizeSettings(value: unknown): UserSettings {
   if (summaryPdfProcessing !== 'attachment' && summaryPdfProcessing !== 'local')
     throw new Error('Saved PDF processing must be attachment or local.');
 
+  if (stored.providers !== undefined) validateSharedProviders(stored.providers);
+  let providerConnections: Record<string, string> | undefined;
+  if (stored.providerConnections !== undefined) {
+    const bindings = record(stored.providerConnections, 'Provider connections');
+    if (
+      Object.entries(bindings).some(
+        ([key, id]) =>
+          !/^[a-z][a-z0-9-]{0,63}$/.test(key) || typeof id !== 'string' || !id || id.length > 128,
+      )
+    )
+      throw new Error('Invalid local provider connection.');
+    providerConnections = bindings as Record<string, string>;
+  }
   const settings: UserSettings = {
     ...DEFAULT_SETTINGS,
+    ...(stored.providers === undefined ? {} : { providers: stored.providers }),
+    ...(providerConnections === undefined ? {} : { providerConnections }),
     summaryPdfProcessing,
     scopedConfigRevision: optionalNumber(stored.scopedConfigRevision, 'scoped config revision'),
     ...(stored.sharedPresetRevision === undefined

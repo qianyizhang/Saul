@@ -10,14 +10,21 @@ import SwiftUI
     init() {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ez-surface-preview-\(UUID())", isDirectory: true)
-        syntheticAttempt = CommandLine.arguments.contains("--unsaved-attempt")
+        let failFirstSave = CommandLine.arguments.contains("--unsaved-attempt")
+        syntheticAttempt = failFirstSave || CommandLine.arguments.contains("--actions")
         let execution: AttemptExecution?
-        if syntheticAttempt {
+        do {
             let history = try? HistoryStore(directory: directory)
             var failedTerminal = false
             execution = AttemptExecution(
-                accessToken: { "offline-preview-token" },
-                stream: { _, _, update in
+                generate: { entry, update in
+                    if entry.capability == .draw {
+                        if entry.query.contains("[slow]") { try await Task.sleep(for: .seconds(120)) }
+                        if entry.query.contains("[fail]") {
+                            throw EZError("Synthetic image request failure. Your draft is retained.")
+                        }
+                        return .image(try previewPNG())
+                    }
                     var result = ResponseAccumulator()
                     try result.consume(
                         JSONSerialization.data(withJSONObject: [
@@ -30,19 +37,17 @@ import SwiftUI
                             "type": "response.completed", "response": ["status": "completed"],
                         ]))
                     update(result)
-                    return result
+                    return .text(result)
                 },
                 append: { entry in
                     guard let history else { throw EZError("Preview history is unavailable.") }
-                    if entry.status != "pending", !failedTerminal {
+                    if entry.status != "pending", !failedTerminal, failFirstSave {
                         failedTerminal = true
                         throw EZError(
                             "Synthetic final-save failure. Save again will use disposable local history.")
                     }
                     try history.append(entry)
                 })
-        } else {
-            execution = nil
         }
         let model = AppModel(historyDirectory: directory, offline: true, attemptExecution: execution)
         _model = StateObject(wrappedValue: model)
@@ -73,7 +78,9 @@ private struct SurfacePreviewControls: View {
         self.model = model
         self.controller = controller
         self.syntheticAttempt = syntheticAttempt
-        _scenario = State(initialValue: syntheticAttempt ? "Unsaved" : "Empty")
+        _scenario = State(
+            initialValue: CommandLine.arguments.contains("--actions")
+                ? "Draw" : syntheticAttempt ? "Unsaved" : "Empty")
     }
     var body: some View {
         VStack(spacing: 0) {
@@ -84,7 +91,8 @@ private struct SurfacePreviewControls: View {
                             "Empty", "Signed out", "Two inputs", "Many inputs", "Answer", "Waiting",
                             "Thinking",
                             "Streaming", "Blocked", "Prose corrections",
-                            "No recipes", "Selector hitboxes", "Long metadata", "Legacy answer",
+                            "No actions", "Selector hitboxes", "Long metadata", "Legacy answer",
+                            "Draw", "Draw result", "Draw waiting", "Draw error",
                         ] + (syntheticAttempt ? ["Unsaved"] : []), id: \.self
                     ) {
                         Text($0)
@@ -107,7 +115,7 @@ private struct SurfacePreviewControls: View {
             Text(
                 syntheticAttempt
                     ? "Disposable synthetic requests · No account or network access"
-                    : "Disposable offline data · Send and account actions are blocked"
+                    : "Offline fixture · synthetic Write/Draw · no API requests"
             )
             .font(.caption).foregroundStyle(.secondary).padding(.bottom, 8)
             Divider()
@@ -126,6 +134,7 @@ private struct SurfacePreviewControls: View {
     }
 
     private func loadFixture() {
+        model.stop()
         model.busy = false
         model.responseActivity = .waiting
         model.launcherPending = false
@@ -144,41 +153,51 @@ private struct SurfacePreviewControls: View {
         config.presets[0].name = "lit"
         config.presets.append(ModelPreset(name: "steady", model: "fixture-luna", effort: "high", fast: false))
         if scenario == "Selector hitboxes" {
-            config.recipes[0].name = "A deliberately long recipe title for checking the full selector hitbox"
-            config.recipes[1].name = "S"
+            config.actions[0].name = "A deliberately long action title for checking the full selector hitbox"
+            config.actions[1].name = "S"
             config.presets[0].name = "A deliberately long preset title"
             config.presets[1].name = "S"
         }
         if scenario == "Many inputs" {
-            config.recipes.append(
-                Recipe(
+            config.actions.append(
+                Action(
                     name: "Long form", presetID: config.presets[0].id,
                     template: (1...8).map { "{{Input \($0)}}" }.joined(separator: "\n")))
         }
-        if scenario == "No recipes" { config.recipes = [] }
+        if scenario.hasPrefix("Draw") { config.addIllustration() }
+        if scenario == "No actions" { config.actions = [] }
         do { try model.saveConfiguration(config) } catch { model.error = error.localizedDescription }
-        let recipe: Recipe?
-        if scenario == "Two inputs" {
-            recipe = config.recipes[3]
+        let action: Action?
+        if scenario.hasPrefix("Draw") {
+            action = config.actions.first { $0.capability == .draw }
+        } else if scenario == "Two inputs" {
+            action = config.actions[3]
         } else if scenario == "Many inputs" {
-            recipe = config.recipes.last
+            action = config.actions.last
         } else {
-            recipe = config.recipes.first
+            action = config.actions.first
         }
-        model.chooseRecipe(recipe?.id)
+        model.chooseAction(action?.id)
         model.signedIn = scenario != "Signed out"
         model.planEnabled = scenario != "Signed out"
         model.entries = []
+        model.apiConnected = true
+        if scenario.hasPrefix("Draw") {
+            model.query = "A tree shares nutrients through its roots and fungi."
+            if scenario == "Draw waiting" { model.query += " [slow]" }
+            if scenario == "Draw error" { model.query += " [fail]" }
+            if scenario != "Draw" { model.send() }
+        }
         if ["Answer", "Waiting", "Thinking", "Streaming", "Blocked", "Long metadata", "Legacy answer"]
             .contains(scenario)
         {
             model.query = "Serendipity"
         }
         if ["Answer", "Waiting", "Thinking", "Streaming", "Blocked", "Long metadata", "Legacy answer"]
-            .contains(scenario), let recipe,
+            .contains(scenario), let action,
             let preset = model.currentPreset
         {
-            if var entry = try? recipe.prepare(
+            if var entry = try? action.prepare(
                 values: model.inputValues, preset: preset, models: model.models)
             {
                 entry.response =
@@ -249,4 +268,20 @@ private struct SurfacePreviewControls: View {
             model.send()
         }
     }
+}
+
+@MainActor private func previewPNG() throws -> Data {
+    let image = NSImage(size: NSSize(width: 720, height: 460), flipped: false) { bounds in
+        NSColor(calibratedRed: 0.95, green: 0.96, blue: 0.92, alpha: 1).setFill()
+        bounds.fill()
+        NSColor(calibratedRed: 0.16, green: 0.43, blue: 0.35, alpha: 1).setFill()
+        NSBezierPath(ovalIn: NSRect(x: 210, y: 135, width: 300, height: 240)).fill()
+        NSColor(calibratedRed: 0.55, green: 0.37, blue: 0.22, alpha: 1).setFill()
+        NSRect(x: 345, y: 50, width: 30, height: 180).fill()
+        return true
+    }
+    guard let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff),
+        let png = bitmap.representation(using: .png, properties: [:])
+    else { throw EZError("Cannot create fixture PNG.") }
+    return png
 }

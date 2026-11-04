@@ -201,7 +201,7 @@ completion; a build or token check alone does not establish readability.
 
 Min Mode is the default **expert everyday view**: assume the user already
 knows the app and normally needs only its common tasks. Show current inputs and
-answers, recipe/preset choices, essential state and the next useful action.
+answers, action/preset choices, essential state and the next useful action.
 Omit routine explanatory subtext, repeated facts, coaching and decorative labels.
 Remove help-only disclosures and documentation links entirely in Min Mode; do not
 move explanatory paragraphs behind Details. Disclosures remain for controls,
@@ -235,7 +235,7 @@ omit the default Standard speed suffix; keep Fast visible. Exact speed remains i
 | Repeated instructions, keyboard coaching, local-storage slogans | Omitted                                                          | Brief guidance may appear         |
 
 Min Mode changes presentation, never execution or retention. It does not clear a
-draft, alter a recipe, mute errors, change providers, send a request, or skip a
+draft, alter an action, mute errors, change providers, send a request, or skip a
 confirmation. Empty space is preferable to a new tip. Keep accessibility labels,
 tooltips and focus indicators even when visible labels are shortened.
 
@@ -249,60 +249,72 @@ device” on every answer. Place storage explanations in Settings.
 
 Keep meaningful differences explicit. **Explain** starts a reading request from
 selected text; **Send** submits a draft. **Use again** restores an editable draft;
-**Regenerate** starts another attempt. A **recipe** is a prompt template; a
-**preset** saves model choices; a **provider** identifies the service. Do not call
+**Regenerate** starts another attempt. An **action** declares inputs, capability,
+instructions and a result; a **preset** binds provider key, capability, model and
+options; a **provider** is a named connection with a stable key. Do not call
 all three “model.” Hide technical identifiers from routine reading, not from the
 settings or details needed to inspect them.
 
-Keep one primary action per state. Compose: Send or Explain. Running: Stop.
-Reading: Copy, with secondary actions grouped. Manual organization: act directly.
+Keep one primary action per state. Compose: Run (EZ), Send or Explain (Saul). Running: Stop.
+Reading: Copy for text or Download for an image, with secondary actions grouped. Manual organization: act directly.
 Codex proposals: review, then Apply.
 An unavailable action keeps its reason nearby; it does not silently select an
 alternative account, model, service tier, or billing path. Fast is a request,
 not a promise of latency. Details identifies the requested speed; show the actual
 service tier only when it was returned and recorded, never inferred from Fast.
 
-## Accounts, presets, and recipes
+## Providers, presets, and actions
 
-Settings uses focused sections in both apps. Overview leads with everyday choices;
-Models places the selected preset beside its editor; Reading/Recipes, Summaries
-(Saul), Preferences, and Connections/Accounts have separate destinations. Keep one
-editing task visible and preserve drafts when navigating between sections. Use a
-sidebar at desktop widths and a compact section control at narrow widths; a narrow
-preset selector replaces the list. EZ uses native controls and keeps its existing
-per-item save semantics. Saul retains one configuration draft and explicit Save.
-Keep model tuning and diagnostics in named disclosures. Essential meaning and billing distinctions remain visible in Minimum
-Mode. Give independent preferences their own section and label their immediate-save
-behavior. The toolbar popup should support ordinary reading
-and setup without requiring a full tab; use a wider desktop layout and verify
-its actual browser bounds. Collapsed History entries show a short passage preview;
-opening the entry reveals the full selection and answer.
+Settings uses focused sections: Overview, Presets, Actions, Preferences, Providers
+and Shortcuts (EZ), with Saul's Summaries and other app-specific destinations.
+Keep the selected item beside its editor, one task visible at a time. Preserve
+editor drafts across section changes; switching items or closing asks before
+unsaved work is discarded. Keep native controls, existing density and Min Mode.
+Advanced options belong in named disclosures; errors and billing routes stay visible.
 
-In Standard view use **Continue with ChatGPT**, **Cancel**, **Add account**, **Enable plan usage**,
-**Refresh models**, **Manage usage**, and **Sign out** for the same account actions.
-Min Mode shows Connect, Cancel, Add, Enable, Refresh, Usage and Disconnect,
-with the full action retained in its accessible name and tooltip.
-Both surfaces use ChatGPT's direct sign-in flow and account model catalog. Each
-app keeps its own sign-ins; signing in or out of one does not change the other.
-Account identity and permission to use the plan are separate states. Show recovery
-actions when needed; keep routine connection details behind a disclosure.
+Providers have stable unique keys and editable display names. Renaming a provider
+does not change a preset's binding. Existing plan presets default to `gpt-plan` /
+Write. OpenAI API uses `openai-api`, supports Write and Draw, and has separate API
+billing. Credentials and plan account selection remain app-owned. Keep the existing
+Connect/Add/Enable/Refresh/Usage/Disconnect account actions within its provider.
+Saving or reloading an API key does not generate or test a request.
 
-A named **preset** records a model and its supported options, including reasoning
-effort and requested Fast or Standard service. A named **recipe** contains editable
-prompt text and a default preset. Choose the recipe at the point of use; edit
-recipes and presets in Settings. Keep one editor for each choice. An unavailable
-saved choice blocks the request with a useful explanation instead of falling back.
+Presets bind provider, capability, model and options. Write exposes reasoning and
+requested speed where supported; Draw exposes its model and an Image settings
+disclosure for size/quality. Keep unsupported saved choices visible and block Run
+with a useful reason. Never change the provider, model or billing route implicitly.
+Plan models still come from the selected local account's catalog. API Write uses
+an explicit model ID. Exact recorded choices belong in run Details.
 
-Use the same concepts with surface-specific inputs: EZ collects recipe fields in
-a draft; Saul supplies the selected passage and enabled page context. Saved
-attempts retain their original prompts and model choices when configuration is
-edited. Recipe and preset names are personal data, not fixed navigation labels.
-ChatGPT model presets share one local store: editing a name, model, effort or speed
-in either app updates new requests in both. Model choices come from each app's
-signed-in account catalog. Use Model, Effort (including Default), and Speed with
-Standard/Fast choices in both editors. Keep unsupported saved choices visible;
-disable unsupported Fast selection. Open editors preserve drafts and require Reload
-after a conflicting save. Recipes, accounts, API connections and history stay app-owned.
+Actions declare Write or Draw, literal prompt templates and a compatible default
+preset. Choose an action at the point of use; show only compatible preset overrides.
+EZ collects generated input fields; Saul supplies selected text and enabled page
+context. Action names are personal data. The legacy word Recipe and JSON keys are
+storage contracts, not another visible settings concept. Chaining is out of scope.
+
+The shared settings store owns Provider definitions and Presets, including stable
+keys, display names, kinds, capabilities and model options. Both apps use that same
+configuration and revision; a provider rename preserves preset bindings. Credentials,
+local connection bindings, Action inputs and history stay app-owned. Saul preserves
+Draw presets but does not execute or edit their image settings yet; make that limit
+visible rather than routing them to a text endpoint.
+
+## Illustration
+
+Illustration is a Draw action in the existing action picker. It uses the same
+composer, Run/Stop, Quick Lookup, History, reuse and inspection flow as Write.
+There is no separate image window or duplicate connection editor. Keep the API
+billing route visible at Run in both display modes. Draw launcher input prepares
+a draft and waits for explicit Run, including single-field actions.
+
+Run freezes inputs, preset and provider and requests one PNG. Stop cancels locally;
+it cannot promise server cancellation or prevent billing. There are no automatic
+retries. A completed PNG is saved under History's images directory before its
+terminal record. Download exports the original bytes; Details shows frozen choices.
+Storage failures retain the exact PNG with Unsaved and Save again, without another
+request. Historical results remain separate runs and are not replaced by a new run.
+Images do not offer text follow-ups; Reuse restores a draft for an explicit new Run.
+Deleting a run removes its PNG; external downloads remain outside EZ's ownership.
 
 ## Keyboard and focus
 

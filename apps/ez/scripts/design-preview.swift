@@ -8,7 +8,7 @@ import SwiftUI
     init() {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ez-design-preview-\(UUID().uuidString)", isDirectory: true)
-        let model = AppModel(historyDirectory: directory)
+        let model = AppModel(historyDirectory: directory, offline: true)
         var entry = HistoryEntry(
             mode: .dictionary, query: "Equanimity", model: "Preview model", effort: "low",
             requestedServiceTier: nil)

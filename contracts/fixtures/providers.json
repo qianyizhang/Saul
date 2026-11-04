@@ -1,0 +1,69 @@
+{
+  "providers": [
+    {
+      "key": "gpt-plan",
+      "name": "My plan",
+      "kind": "chatgpt-plan"
+    },
+    {
+      "key": "openai-api",
+      "name": "My API",
+      "kind": "openai-api"
+    }
+  ],
+  "invalid": [
+    [
+      {
+        "key": "bad key",
+        "name": "API",
+        "kind": "openai-api"
+      }
+    ],
+    [
+      {
+        "key": "same",
+        "name": "One",
+        "kind": "openai-api"
+      },
+      {
+        "key": "same",
+        "name": "Two",
+        "kind": "chatgpt-plan"
+      }
+    ],
+    [
+      {
+        "key": "one",
+        "name": "Same",
+        "kind": "openai-api"
+      },
+      {
+        "key": "two",
+        "name": " same ",
+        "kind": "chatgpt-plan"
+      }
+    ],
+    [
+      {
+        "key": "api",
+        "name": "API",
+        "kind": "unknown"
+      }
+    ],
+    [
+      {
+        "key": "api",
+        "name": "API",
+        "kind": "openai-api",
+        "apiKey": "fixture-only"
+      }
+    ],
+    [
+      {
+        "key": "api",
+        "name": "🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳",
+        "kind": "openai-api"
+      }
+    ]
+  ]
+}

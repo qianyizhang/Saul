@@ -3,7 +3,7 @@
 EZ has two lookup surfaces in one app. Their responsibilities are defined in
 [the surface contract](docs/surfaces.md).
 
-See the [shared vocabulary](../../GLOSSARY.md) for recipes, presets and inspection.
+See the [shared vocabulary](../../GLOSSARY.md) for actions, presets and inspection.
 
 ## Language
 
@@ -18,8 +18,8 @@ _Avoid_: Lite app, quick app, Quick Look
 
 
 **Lookup**:
-One independent request and its answer, using a recipe, input values, and a preset.
+One independent request and its answer, using a action, input values, and a preset.
 
 
 **Preset override**:
-A temporary preset choice for the current lookup, replacing the recipe's default.
+A temporary preset choice for the current lookup, replacing the action's default.

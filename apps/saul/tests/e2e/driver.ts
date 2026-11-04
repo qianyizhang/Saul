@@ -71,7 +71,7 @@ export async function openFirstPageExplanation(page: Page): Promise<void> {
 /** Navigate through the same settings sections as a user, preserving the mounted draft. */
 export async function settingsSection(
   page: Page,
-  section: 'Overview' | 'Models' | 'Reading' | 'Summaries' | 'Preferences' | 'Connections',
+  section: 'Overview' | 'Presets' | 'Actions' | 'Summaries' | 'Preferences' | 'Providers',
 ): Promise<void> {
   await page
     .getByRole('navigation', { name: 'Settings sections' })

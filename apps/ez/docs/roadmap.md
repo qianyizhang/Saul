@@ -7,9 +7,10 @@ in [verification](verification.md).
 ## Candidates, not commitments
 
 - Spotlight query entry alongside the existing Raycast integration.
-- Language preferences and optional richer recipe field rules.
+- Language preferences and optional richer action field rules.
 - Bulk history deletion, retention controls, and larger-history indexing.
-- Optional explicitly billed API-key provider.
+- Action chaining (out of scope for the current typed-action integration).
+- Additional provider instances/accounts and provider model discovery.
 - Optional selection of follow-up context beyond the saved conversation.
 - Signed/notarized distribution and an update channel.
 - Deferred: keep self-signing; revisit only when installation prompts bother us again.

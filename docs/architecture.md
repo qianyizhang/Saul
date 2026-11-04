@@ -127,7 +127,7 @@ migration are future decisions, informed by the provider's supported authorizati
 ## Data ownership
 
 ChatGPT model presets share one local JSON document through native Swift and
-Node adapters; [the shared contract](../contracts/README.md#accounts-and-models)
+Node adapters; [the shared contract](../contracts/README.md#providers-and-presets)
 defines migration, revisions and account-independent presets. App-specific
 preferences and recipes use `apps.saul` and `apps.ez` scopes in that document.
 Credentials, history and runtime state retain their existing owners. There is no

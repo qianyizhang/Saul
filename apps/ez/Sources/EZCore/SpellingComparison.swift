@@ -19,8 +19,8 @@ public struct SpellingComparison {
 
     public init?(entry: HistoryEntry) {
         guard entry.mode == .spelling, entry.status == "completed" else { return nil }
-        if let recipe = entry.recipeSnapshot {
-            guard let template = try? PromptTemplate(recipe.template), template.fields.count == 1 else {
+        if let action = entry.actionSnapshot {
+            guard let template = try? PromptTemplate(action.template), template.fields.count == 1 else {
                 return nil
             }
         }

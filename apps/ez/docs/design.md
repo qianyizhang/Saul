@@ -44,14 +44,14 @@ Settings → Preferences and Quick Lookup’s menu expose the same preference.
 Routine subtext and redundant icon/text pairs disappear. Short action words retain
 complete accessible names and help. Errors, blocked choices, unsaved answers and
 recovery actions remain visible. Help-only disclosures, documentation links and gray
-explanatory paragraphs are absent in Min Mode. Accounts uses one aligned action row;
+explanatory paragraphs are absent in Min Mode. The plan provider uses one aligned account action row;
 History places its title and Reveal action on the same row.
 
-Settings uses native sidebar sections: Overview, Models, Recipes, Preferences,
-Accounts and Shortcuts. Models and Recipes share one mounted draft owner but show
+Settings uses native sidebar sections: Overview, Presets, Actions, Preferences,
+Providers and Shortcuts. Presets and Actions share one mounted draft owner but show
 one editor at a time; navigating sections preserves both drafts. Switching the
 selected item still requires saving or explicitly discarding its edits. Overview
-shows current recipe/preset/account state and routes to the relevant editor.
+shows current action/preset/account state and routes to the relevant editor.
 
 A saved answer prioritizes Copy. Min Mode puts Reuse, Export and Delete in More,
 and input/output inspection inside Details. Edit reveals the retained draft; Hide
@@ -62,24 +62,21 @@ remains explicit, and complete recorded choices remain in Details.
 ## Offline previews
 
 `make surface-preview` builds `dist/EZ Surface Preview.app` from production views.
-It uses disposable offline storage, blocks account/inference actions, and does not
-register the global shortcut. Choose empty, multi-input, answer, streaming, blocked,
-or no-recipes fixtures; toggle Min Mode, open its actual Quick Lookup panel,
-and inspect light/dark, resizing, preset overrides, and main-window handoff.
-**Minimum panel** applies the
-current state's minimum size. Fixture streaming is simulated. All three preview
-targets use `scripts/preview.sh`, which stages and verifies each bundle before replacement.
-The [surface contract](surfaces.md) governs which controls belong in each surface.
+It uses disposable storage, an in-memory API key store and synthetic Write/Draw
+providers. It cannot access Keychain, accounts or the network and does not register
+the global shortcut. Fixtures cover empty/multi-input, saved text, Draw draft/result,
+Draw waiting/error, unavailable choices and no actions. Draw waiting allows Stop;
+Run produces a synthetic tree PNG. Verify the shared main/Quick Lookup flow,
+Providers/Presets/Actions, Min Mode, light/dark and minimum panel size.
 
-For failure recovery, launch the same surface preview with `--unsaved-attempt`.
-This explicit mode uses a synthetic provider, fails its first terminal save and
-allows Save again against disposable history. It does not connect to an account
-or the network. Ordinary preview mode still blocks Send. Inspect the Unsaved
-notice in the main window and Quick Lookup, including its Save error disclosure,
-Copy/Export access, successful Save again and retained draft after navigation.
+`--unsaved-attempt` rejects the first terminal save. Save again writes the frozen
+result without generation. Inspect Unsaved, recovery, navigation and export with
+both capabilities. Preview targets stage and verify bundles before replacement.
+The [surface contract](surfaces.md) owns feature placement. Synthetic providers do
+not prove API model access, real latency, billed requests or installed shortcuts.
 
 The initial adoption also makes answer metadata and composer hints readable at the
-shared caption size. Quick Lookup uses the shared accent and a compact recipe-first
+shared caption size. Quick Lookup uses the shared accent and a compact action-first
 layout. The answer boundary shows a yellow light while waiting and transitions to
 green on a reasoning-item event: a smooth 3.2-second round trip, at most 84 points wide, with a 2-point core and 3-point glow.
 Reduce Motion replaces travel with a stationary light. The effect occupies the
@@ -89,7 +86,7 @@ implemented in `ThinkingDivider`, using the shared accent role.
 
 Lookup dropdowns use stable-width native popup buttons with the entire control
 available for click and hover scrolling, independent of title length. The compact
-header recipe control fills its available space; the footer preset control stays
+header action control fills its available space; the footer preset control stays
 250 points wide and has an adjacent information button for request details.
 Settings sections use a native sidebar. The offline surface preview
 includes **Selector hitboxes** with long names and one-character alternatives.
@@ -132,7 +129,7 @@ answer is selected, with Next lookup collapsed in both presentation modes. Stand
 plain language; full token counts and throughput remain in Details. Both native
 surfaces share the same layout and full-row disclosures.
 
-Multi-input recipes retain a label above each field after typing; single-input
-recipes keep the compact placeholder. Fixed shortcut references use aligned
+Multi-input actions retain a label above each field after typing; single-input
+actions keep the compact placeholder. Fixed shortcut references use aligned
 label/value rows too. The offline preview includes Long metadata and Legacy
 answer fixtures for wrapping and unavailable-data review.

@@ -10,14 +10,21 @@ struct PresetPicker: View {
         if let saved = model.replayEntry?.presetSnapshot {
             items.append(.init(value: "saved", title: presetTitle(saved, saved: true)))
         }
-        items += model.configuration.presets.map {
+        items += model.compatiblePresets.map {
             .init(value: $0.id.uuidString, title: presetTitle($0))
+        }
+        if let selected = model.currentPreset, !items.contains(where: { $0.value == selected.id.uuidString }),
+            model.replayEntry == nil
+        {
+            items.append(
+                .init(value: selected.id.uuidString, title: "\(selected.name) (unavailable)", enabled: false))
         }
         if model.currentPreset == nil { items.append(.init(value: "", title: "No preset")) }
         return items
     }
     private func presetTitle(_ preset: ModelPreset, saved: Bool = false) -> String {
         let name = saved ? "Saved: \(preset.name)" : preset.name
+        if preset.capability == .draw { return name }
         guard showsSpeed else { return name }
         if model.minimumMode {
             return preset.fast ? "\(name) · Fast" : name
@@ -80,9 +87,9 @@ struct RequestDetails: View {
                     Text("Next lookup").font(.headline)
                     draftDetails
                 }
-                Button(model.minimumMode ? "Settings" : "Presets & recipes…", action: onConfigure).help(
-                    "Presets & recipes…"
-                ).accessibilityLabel("Presets & recipes…")
+                Button(model.minimumMode ? "Settings" : "Presets & actions…", action: onConfigure).help(
+                    "Presets & actions…"
+                ).accessibilityLabel("Presets & actions…")
             }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
         }.frame(width: 380).frame(maxHeight: 520)
     }
@@ -92,13 +99,21 @@ struct RequestDetails: View {
             if let preset = model.currentPreset {
                 MetadataRow("Preset", value: preset.name)
                 MetadataRow("Model", value: preset.model)
-                MetadataRow("Effort", value: preset.effort.isEmpty ? "Default" : preset.effort.capitalized)
-                MetadataRow("Requested speed", value: preset.fast ? "Fast" : "Standard")
+                MetadataRow("Provider", value: preset.providerKey)
+                MetadataRow("Capability", value: preset.capability.name)
+                if preset.capability == .draw {
+                    MetadataRow("Size", value: (preset.imageOptions ?? ImageOptions()).size)
+                    MetadataRow("Quality", value: (preset.imageOptions ?? ImageOptions()).quality.capitalized)
+                } else {
+                    MetadataRow(
+                        "Effort", value: preset.effort.isEmpty ? "Default" : preset.effort.capitalized)
+                    MetadataRow("Requested speed", value: preset.fast ? "Fast" : "Standard")
+                }
             } else {
                 Text("No preset selected").font(AppStyle.caption).foregroundStyle(.secondary)
             }
             if !model.minimumMode {
-                Text("A preset override lasts until New lookup or a recipe change.")
+                Text("A preset override lasts until New run or an action change.")
                     .font(AppStyle.caption).foregroundStyle(.secondary)
             }
             if model.fast && !model.minimumMode {
@@ -109,37 +124,37 @@ struct RequestDetails: View {
     }
 }
 
-struct RecipePicker: View {
+struct ActionPicker: View {
     @ObservedObject var model: AppModel
     var showsLabel = true
     private var options: [SelectorOption<String>] {
         var items: [SelectorOption<String>] = []
-        if let saved = model.replayEntry?.recipeSnapshot {
+        if let saved = model.replayEntry?.actionSnapshot {
             items.append(.init(value: "saved", title: "Saved: \(saved.name)", symbol: saved.symbol))
         }
-        items += model.configuration.recipes.map {
+        items += model.configuration.actions.map {
             .init(value: $0.id.uuidString, title: $0.name, symbol: $0.symbol)
         }
-        if model.currentRecipe == nil {
-            items.append(.init(value: "", title: "No recipes — open Configuration"))
+        if model.currentAction == nil {
+            items.append(.init(value: "", title: "No actions — open Configuration"))
         }
         return items
     }
     var body: some View {
         SelectorPicker(
-            "Recipe", options: options,
+            "Action", options: options,
             selection: Binding(
-                get: { model.replayEntry != nil ? "saved" : model.selectedRecipeID?.uuidString ?? "" },
+                get: { model.replayEntry != nil ? "saved" : model.selectedActionID?.uuidString ?? "" },
                 set: { value in
                     guard value != "saved" else { return }
-                    model.chooseRecipe(UUID(uuidString: value))
+                    model.chooseAction(UUID(uuidString: value))
                 }), showsLabel: showsLabel
         )
         .disabled(model.busy || model.launcherPending)
     }
 }
 
-struct RecipeInputs: View {
+struct ActionInputs: View {
     @ObservedObject var model: AppModel
     var compact = false
     var presentation = 0
@@ -148,9 +163,9 @@ struct RecipeInputs: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if model.inputFields.isEmpty {
-                Button(model.minimumMode ? "Recipes" : "Configure recipes") {
-                    if let onConfigure { onConfigure() } else { model.openSettings(.recipes) }
-                }.help("Configure recipes").accessibilityLabel("Configure recipes")
+                Button(model.minimumMode ? "Actions" : "Configure actions") {
+                    if let onConfigure { onConfigure() } else { model.openSettings(.actions) }
+                }.help("Configure actions").accessibilityLabel("Configure actions")
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -195,7 +210,7 @@ struct RecipeInputs: View {
     private func focusInput() {
         Task { @MainActor in
             focusedField = nil
-            // Recipe changes replace the fields; focus after the new controls exist.
+            // Action changes replace the fields; focus after the new controls exist.
             await Task.yield()
             guard !model.busy, !model.launcherPending,
                 compact == (NSApp.keyWindow is NSPanel)

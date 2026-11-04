@@ -1,4 +1,7 @@
-import { validateScopedConfigValue } from '../../native/shared-presets-contract.mts';
+import {
+  DEFAULT_PROVIDERS,
+  validateScopedConfigValue,
+} from '../../native/shared-presets-contract.mts';
 import { scopedCall, portableSettings, restoreSettings } from './scoped-config';
 import type { UserSettings, ModelPreset } from '../types';
 import type { SharedPreset, SharedPresets } from '../../native/shared-presets-contract.mts';
@@ -33,7 +36,7 @@ async function sharedID(id: string): Promise<string> {
 async function withSharedIDs(settings: UserSettings): Promise<UserSettings> {
   const configuration = configurationFor(settings);
   const mapping = new Map<string, string>();
-  for (const p of configuration.presets.filter((p) => p.provider === 'chatgpt-plan'))
+  for (const p of configuration.presets.filter((p) => p.provider === 'chatgpt-plan' || p.shared))
     mapping.set(p.id, await sharedID(p.id));
   return {
     ...settings,
@@ -53,25 +56,52 @@ const portable = (p: ModelPreset): SharedPreset => ({
   model: p.model,
   effort: p.effort ?? '',
   fast: p.fast ?? false,
+  ...(p.providerKey ? { providerKey: p.providerKey } : {}),
+  ...(p.capability ? { capability: p.capability } : {}),
+  ...(p.imageOptions ? { imageOptions: p.imageOptions } : {}),
 });
 const definitions = (settings: UserSettings) =>
   configurationFor(settings)
-    .presets.filter((p) => p.provider === 'chatgpt-plan')
+    .presets.filter((p) => p.provider === 'chatgpt-plan' || p.shared)
     .map(portable);
 
 function project(settings: UserSettings, library: SharedPresets): UserSettings {
   const configuration = configurationFor(settings);
+  const providers = structuredClone([...(library.providers ?? DEFAULT_PROVIDERS)]);
+  const providerConnections = { ...settings.providerConnections };
+  // Adopt only the already-selected official OpenAI connection. Never borrow a key from another endpoint.
+  if (
+    !providerConnections['openai-api'] &&
+    settings.openaiCompatible.baseUrl.replace(/\/+$/, '') === 'https://api.openai.com/v1'
+  )
+    providerConnections['openai-api'] = settings.activeProfileId || 'default';
   return {
     ...settings,
+    providerConnections,
     sharedPresetRevision: library.revision,
+    providers,
     configuration: {
       ...configuration,
       presets: [
-        ...configuration.presets.filter((p) => p.provider !== 'chatgpt-plan'),
+        ...configuration.presets.filter((p) => p.provider !== 'chatgpt-plan' && !p.shared),
         ...library.presets.map((p): ModelPreset => ({
           ...p,
           id: p.id.toLowerCase(),
-          provider: 'chatgpt-plan',
+          provider:
+            !p.providerKey ||
+            providers.find((provider) => provider.key === p.providerKey)?.kind === 'chatgpt-plan'
+              ? 'chatgpt-plan'
+              : 'openai-compatible',
+          ...(p.providerKey
+            ? {
+                shared: true,
+                profileId:
+                  providers.find((provider) => provider.key === p.providerKey)?.kind ===
+                  'chatgpt-plan'
+                    ? undefined
+                    : providerConnections[p.providerKey] || p.providerKey,
+              }
+            : {}),
         })),
       ],
     },
@@ -129,6 +159,7 @@ export const sharedPresets = {
         action: 'presets-save',
         revision: settings.sharedPresetRevision,
         presets,
+        providers: settings.providers,
       }),
     );
     const config = await scopedCall({

@@ -25,28 +25,28 @@ export function RecipeSettings({
   }
   return (
     <details>
-      <summary aria-label="Edit recipes" title="Edit recipes">
-        <ActionLabel short="Recipes" full="Edit recipes" />
+      <summary aria-label="Edit actions" title="Edit actions">
+        <ActionLabel short="Actions" full="Edit actions" />
       </summary>
       <div className="stack settings-disclosure">
         <p className="small muted standard-only">
-          Recipes tell Saul what to do with your selection.
+          Actions tell Saul what to do with your selection.
         </p>
         <div className="row between">
           <button
             className="btn"
             disabled={configuration.recipes.length >= 32}
             onClick={() => onEdit({ type: 'add-recipe', id: crypto.randomUUID() })}
-            aria-label="Add recipe"
-            title="Add recipe"
+            aria-label="Add action"
+            title="Add action"
           >
-            <ActionLabel short="Add" full="Add recipe" />
+            <ActionLabel short="Add" full="Add action" />
           </button>
         </div>
         <label className="field">
-          Edit recipe
+          Edit action
           <select
-            aria-label="Edit recipe"
+            aria-label="Edit action"
             value={recipe.id}
             onChange={(event) => {
               onEdit({ type: 'select-recipe', id: event.target.value });
@@ -60,7 +60,7 @@ export function RecipeSettings({
           </select>
         </label>
         <label className="field">
-          Recipe name
+          Action name
           <input
             maxLength={80}
             value={recipe.name}
@@ -78,8 +78,9 @@ export function RecipeSettings({
               <option value={recipe.presetId}>Unavailable preset</option>
             )}
             {configuration.presets.map((preset) => (
-              <option key={preset.id} value={preset.id}>
+              <option key={preset.id} value={preset.id} disabled={preset.capability === 'draw'}>
                 {preset.name}
+                {preset.capability === 'draw' ? ' · Draw unavailable in Saul' : ''}
               </option>
             ))}
           </select>
@@ -116,9 +117,9 @@ export function RecipeSettings({
             <ActionLabel short="Instructions" full="System instructions" />
           </summary>
           <label className="field">
-            <span className="sr-only">Recipe system instructions</span>
+            <span className="sr-only">Action system instructions</span>
             <textarea
-              aria-label="Recipe system instructions"
+              aria-label="Action system instructions"
               rows={8}
               value={recipe.systemPrompt}
               onChange={(event) => update({ systemPrompt: event.target.value })}
@@ -130,10 +131,10 @@ export function RecipeSettings({
             className="btn danger"
             disabled={configuration.recipes.length <= 1}
             onClick={() => onEdit({ type: 'remove-recipe' })}
-            aria-label="Remove recipe"
-            title="Remove recipe"
+            aria-label="Remove action"
+            title="Remove action"
           >
-            <ActionLabel short="Remove" full="Remove recipe" />
+            <ActionLabel short="Remove" full="Remove action" />
           </button>
         </div>
       </div>

@@ -9,8 +9,8 @@ struct RecipeFixture {
         "service_tiers": [["id": "priority", "name": "Fast"]],
     ])!
     let preset = ModelPreset(name: "lit", model: "fixture", effort: "medium", fast: true)
-    var recipe: Recipe {
-        Recipe(
+    var action: Action {
+        Action(
             name: "Lookup", presetID: preset.id,
             template: "Find {{fuzzy term}} for {{fuzzy context}}; correct {{ fuzzy term }}.")
     }

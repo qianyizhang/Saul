@@ -2,6 +2,11 @@
 
 ## 0.1.0 — Unreleased
 
+- Typed Write/Draw actions in the shared composer, Quick Lookup and History.
+  Providers have stable keys; presets bind provider/capability/model/options.
+  Illustration saves PNGs with save-only recovery, Download and frozen inspection.
+  Separate API Keychain credentials and billing; no automatic provider fallback.
+
 - Full-row disclosure hit targets across reading views and Settings, with keyboard
   activation and accessible expansion state.
 

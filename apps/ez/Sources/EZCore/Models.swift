@@ -1,6 +1,6 @@
 import Foundation
 
-public enum QueryMode: String, Codable, CaseIterable, Identifiable {
+public enum QueryMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case dictionary = "Dictionary"
     case spelling = "Spell Check"
     case ask = "Ask"
@@ -97,7 +97,7 @@ public struct ModelOption: Identifiable {
     }
 }
 
-public struct HistoryEntry: Codable, Identifiable, Equatable {
+public struct HistoryEntry: Codable, Identifiable, Equatable, Sendable {
     public var schemaVersion = 1
     public var id = UUID()
     public var createdAt = Date()
@@ -112,13 +112,28 @@ public struct HistoryEntry: Codable, Identifiable, Equatable {
     public var error: String?
     public var durationSeconds: Double?
     public var metrics: ResponseMetrics?
-    public var recipeSnapshot: Recipe?
+    public var actionSnapshot: Action?
     public var presetSnapshot: ModelPreset?
     public var inputValues: [String: String]?
-    /// nil preserves the legacy mode instruction; empty means the recipe prompt is complete.
+    /// nil preserves the legacy mode instruction; empty means the action prompt is complete.
     public var instructions: String?
     public var followUpQuestion: String?
     public var parentID: UUID?
+    public var imageFile: String?
+    /// Retained only for an unsaved image; PNG bytes never enter JSONL.
+    public var imageData: Data?
+    public var providerSnapshot: ProviderDefinition?
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion, id, createdAt, mode, query, response, model, effort
+        case requestedServiceTier, actualServiceTier, status, error, durationSeconds, metrics
+        case actionSnapshot = "recipeSnapshot"
+        case presetSnapshot, inputValues, instructions, followUpQuestion, parentID, imageFile,
+            providerSnapshot
+    }
+    public var capability: ActionCapability {
+        actionSnapshot?.capability ?? presetSnapshot?.capability ?? .write
+    }
+    public var hasImage: Bool { capability == .draw && (imageFile != nil || imageData != nil) }
     public init(mode: QueryMode, query: String, model: String, effort: String, requestedServiceTier: String?)
     {
         self.mode = mode
@@ -131,16 +146,17 @@ public struct HistoryEntry: Codable, Identifiable, Equatable {
         let requested = requestedServiceTier == nil ? "Standard requested" : "Fast requested"
         return actualServiceTier.map { "\(requested) · Served: \($0)" } ?? requested
     }
-    public var recipeName: String { recipeSnapshot?.name ?? mode.rawValue }
-    public var recipeSymbol: String { recipeSnapshot?.symbol ?? mode.symbol }
+    public var actionName: String { actionSnapshot?.name ?? mode.rawValue }
+    public var actionSymbol: String { actionSnapshot?.symbol ?? mode.symbol }
     public var displayQuery: String {
         if let followUpQuestion { return followUpQuestion }
-        guard let recipe = recipeSnapshot, let values = inputValues,
-            let template = try? PromptTemplate(recipe.template)
+        guard let action = actionSnapshot, let values = inputValues,
+            let template = try? PromptTemplate(action.template)
         else { return query }
         return template.fields.compactMap { values[$0] }.joined(separator: " · ")
     }
     public func prepareFollowUp(_ question: String, models: [ModelOption]) throws -> HistoryEntry {
+        guard capability == .write else { throw EZError("Use again to prepare another image action.") }
         guard status == "completed", !response.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw EZError("Wait for a saved, completed answer before asking a follow-up.")
         }
@@ -173,13 +189,13 @@ public struct HistoryEntry: Codable, Identifiable, Equatable {
         entry.followUpQuestion = question
         entry.parentID = id
         entry.presetSnapshot = preset
-        entry.recipeSnapshot = Recipe(
+        entry.actionSnapshot = Action(
             name: "Follow-up", presetID: preset.id, template: "{{text}}", legacyMode: .ask)
         entry.inputValues = ["text": prompt]
         return entry
     }
     public var markdown: String {
-        "# \(recipeName)\n\n\(createdAt.formatted()) · \(model) · \(effort) · \(serviceDescription) · \(status)\n\n## Query\n\n\(displayQuery)\n\n## Compiled prompt\n\n\(query)\n\n## Response\n\n\(response)\n"
+        "# \(actionName)\n\n\(createdAt.formatted()) · \(model) · \(effort) · \(serviceDescription) · \(status)\n\n## Query\n\n\(displayQuery)\n\n## Compiled prompt\n\n\(query)\n\n## Response\n\n\(response)\n"
             + (error.map { "\nError: \($0)\n" } ?? "")
     }
 }

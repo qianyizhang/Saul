@@ -96,7 +96,7 @@ import Foundation
         state = try StateFixture(directory: directory, attemptExecution: execution)
         model.signedIn = true
         model.planEnabled = true
-        model.chooseRecipe(state.single.id)
+        model.chooseAction(state.single.id)
         model.query = "Frozen question"
         let receive = execution.onChange
         execution.onChange = { [weak self] update in

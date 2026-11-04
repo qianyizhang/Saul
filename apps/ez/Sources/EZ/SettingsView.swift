@@ -2,7 +2,16 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var model: AppModel
-    @State private var hasUnsavedChanges = false
+    @State private var configurationDirty = false
+    @State private var providerKey = "gpt-plan"
+    @State private var providerName = ""
+    @State private var providerMessage: String?
+    @State private var pendingProvider: String?
+    private var providerDirty: Bool {
+        !providerName.isEmpty
+            && providerName != model.configuration.providers.first(where: { $0.key == providerKey })?.name
+    }
+    private var hasUnsavedChanges: Bool { configurationDirty || providerDirty }
     @State private var confirmDiscard = false
     @Environment(\.dismiss) private var dismiss
     private var version: String {
@@ -40,7 +49,7 @@ struct SettingsView: View {
                 Divider()
                 ZStack {
                     // One mounted owner keeps both drafts when navigating between tasks.
-                    ConfigurationView(model: model, hasUnsavedChanges: $hasUnsavedChanges)
+                    ConfigurationView(model: model, hasUnsavedChanges: $configurationDirty)
                         .opacity(isConfiguration ? 1 : 0)
                         .allowsHitTesting(isConfiguration)
                         .disabled(!isConfiguration)
@@ -48,7 +57,7 @@ struct SettingsView: View {
                     if model.settingsSection == .shortcuts {
                         ShortcutSettingsView(model: model)
                     } else if model.settingsSection == .account {
-                        accountBody
+                        providersBody
                     } else if model.settingsSection == .overview {
                         overviewBody
                     } else if model.settingsSection == .preferences {
@@ -65,23 +74,20 @@ struct SettingsView: View {
                 Button("Discard", role: .destructive) { dismiss() }
             } message: {
                 Text(
-                    "Your preset or recipe has unsaved edits. Return to Models or Recipes to save them before closing."
+                    "Your provider, preset or action has unsaved edits. Return to its editor to save them before closing."
                 )
             }
     }
-    private var isConfiguration: Bool { [.configuration, .recipes].contains(model.settingsSection) }
+    private var isConfiguration: Bool { [.configuration, .actions].contains(model.settingsSection) }
 
     private var overviewBody: some View {
         VStack(alignment: .leading, spacing: 22) {
             if !model.minimumMode { Text("Your current reading choices.").foregroundStyle(.secondary) }
-            overviewRow("Recipe", value: model.currentRecipe?.name ?? "Unavailable", destination: .recipes)
+            overviewRow("Action", value: model.currentAction?.name ?? "Unavailable", destination: .actions)
             overviewRow(
                 "Preset", value: model.currentPreset?.name ?? "Unavailable", destination: .configuration)
             overviewRow(
-                "Account",
-                value: model.signedIn
-                    ? (model.planEnabled ? "Connected" : "Plan access needed") : "Not connected",
-                destination: .account)
+                "Provider", value: model.currentProvider?.name ?? "Unavailable", destination: .account)
             Spacer()
         }.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -105,6 +111,7 @@ struct SettingsView: View {
     private var preferencesBody: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Preferences").font(AppStyle.subject)
+            Button("Reveal history") { model.revealHistory() }
             Toggle("Min Mode", isOn: $model.minimumMode).toggleStyle(.switch)
             if !model.minimumMode {
                 Text(
@@ -119,142 +126,201 @@ struct SettingsView: View {
         }.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private var accountBody: some View {
+    private var providersBody: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Label("ChatGPT account", systemImage: "person.crop.circle").font(.headline)
-                        if !model.profiles.isEmpty {
-                            SelectorPicker(
-                                "Account",
-                                options: model.profiles.map { .init(value: $0.id, title: $0.label) },
-                                selection: Binding(
-                                    get: { model.accountID },
-                                    set: { value in Task { await model.selectAccount(value) } })
-                            )
-                            .disabled(
-                                model.offline || model.busy || model.connecting || model.signingIn
-                                    || model.launcherPending)
-                        }
-                        Text(
-                            model.signedIn
-                                ? (model.planEnabled
-                                    ? "Using ChatGPT plan" : "Signed in · Plan usage not enabled")
-                                : "Not signed in"
-                        ).font(.callout)
-                        if !model.minimumMode {
-                            Text(
-                                "Connect your eligible ChatGPT account and allow EZ to use your plan. Credentials stay in macOS Keychain. Model availability and limits depend on your account."
-                            ).font(.caption).foregroundStyle(.secondary)
-                        }
-                        if !model.minimumMode {
-                            DisclosureGroup("Keychain") {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text(
-                                        "EZ saves sign-in tokens in its own Keychain record so you can stay signed in. It does not store your ChatGPT password or read other apps’ passwords."
-                                    )
-                                    Text(
-                                        "Allow Once approves this access; Always Allow remembers permission for this app and item. Deny prevents access to the saved sign-in. A local development rebuild may prompt again."
-                                    )
-                                    Link(
-                                        "Permissions",
-                                        destination: URL(
-                                            string:
-                                                "https://support.apple.com/guide/keychain-access/kyca1243/mac"
-                                        )!)
-                                }.font(.caption).foregroundStyle(.secondary).padding(.top, 6)
-                            }.font(.caption)
-                        }
-                        HStack(spacing: 8) {
-                            Group {
-                                if model.signingIn {
-                                    ProgressView().controlSize(.small)
-                                    Text("Finish signing in in your browser.").font(.caption)
-                                    Button("Cancel") { model.cancelLogin() }
-                                } else if model.signedIn {
-                                    Button(model.minimumMode ? "Disconnect" : "Sign out") {
-                                        Task { await model.signOut() }
-                                    }.help("Sign out").accessibilityLabel("Sign out")
-                                    if !model.planEnabled {
-                                        Button(model.minimumMode ? "Enable" : "Enable plan usage") {
-                                            model.signIn(enablePlan: true)
-                                        }.help("Enable plan usage").accessibilityLabel("Enable plan usage")
-                                    }
-                                    Button(model.minimumMode ? "Add" : "Add account") {
-                                        model.signIn(newAccount: true)
-                                    }.help("Add account").accessibilityLabel("Add account")
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Providers").font(AppStyle.subject)
+                HStack(alignment: .top, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(model.configuration.providers) { provider in
+                            FullRowButton {
+                                if providerDirty {
+                                    pendingProvider = provider.key
                                 } else {
-                                    Button(model.minimumMode ? "Connect" : "Continue with ChatGPT") {
-                                        model.signIn()
-                                    }.help("Continue with ChatGPT").accessibilityLabel(
-                                        "Continue with ChatGPT"
-                                    )
-                                    .buttonStyle(
-                                        .borderedProminent)
-                                    if !model.profiles.isEmpty {
-                                        Button(model.minimumMode ? "Add" : "Add account") {
-                                            model.signIn(newAccount: true)
-                                        }.help("Add account").accessibilityLabel("Add account")
-                                    }
+                                    selectProvider(provider.key)
                                 }
-                            }.disabled(model.offline || model.busy || model.connecting)
-                            Spacer()
-                            Link(
-                                model.minimumMode ? "Usage" : "Manage usage",
-                                destination: URL(string: "https://chatgpt.com/settings/usage")!
-                            )
-                            .help("Manage usage").accessibilityLabel("Manage usage")
-                            .buttonStyle(.bordered)
-                            Button(
-                                model.connecting
-                                    ? "Loading…" : (model.minimumMode ? "Refresh" : "Refresh models")
-                            ) {
-                                Task { await model.connect() }
-                            }.help("Refresh models").accessibilityLabel("Refresh models").disabled(
-                                model.offline || model.busy || model.connecting || model.signingIn
-                                    || !model.planEnabled)
-                        }.controlSize(.regular)
-                    }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
-                }
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 10) {
+                            } label: {
+                                Text(provider.name).frame(maxWidth: .infinity, alignment: .leading).padding(8)
+                                    .background(
+                                        providerKey == provider.key ? AppStyle.accent.opacity(0.12) : .clear,
+                                        in: RoundedRectangle(cornerRadius: 6))
+                            }
+                        }
+                    }.frame(width: 140)
+                    Divider()
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Name").font(AppStyle.caption)
+                        TextField("Provider name", text: $providerName).textFieldStyle(.roundedBorder)
+                        MetadataRow("Key", value: providerKey)
+                        MetadataRow(
+                            "Capabilities",
+                            value: model.configuration.providers.first(where: { $0.key == providerKey })?
+                                .capabilities.map(\.name).joined(separator: " · ") ?? "Unavailable")
                         HStack {
-                            Label(
-                                model.minimumMode ? "History" : "Local history", systemImage: "externaldrive"
-                            ).font(.headline)
-                            Spacer()
-                            Button(model.minimumMode ? "Reveal" : "Show in Finder") { model.revealHistory() }
-                                .help("Show in Finder").accessibilityLabel("Show in Finder").disabled(
-                                    model.offline)
+                            Button("Save") { saveProvider() }.disabled(
+                                !providerDirty || model.configurationLocked)
+                            if let providerMessage {
+                                Text(providerMessage).font(AppStyle.caption).foregroundStyle(.secondary)
+                            }
                         }
-                        if !model.minimumMode {
-                            DisclosureGroup("Details") {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text(
-                                        "Queries and answers are saved as plain text on this Mac. Each new query is sent to OpenAI; previous lookups are not included."
-                                    )
-                                    Text(model.directory.appendingPathComponent("history.jsonl").path)
-                                        .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
-                                }.font(.caption).foregroundStyle(.secondary).padding(.top, 6)
-                            }.font(.caption)
-                        }
-                    }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
+                        Divider()
+                        if providerKey == "gpt-plan" { planConnection } else { apiConnection }
+                    }.frame(maxWidth: .infinity, alignment: .leading)
                 }
-                if let error = model.error {
-                    Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
-                }
-                if !model.minimumMode {
-                    HStack {
-                        Text("EZ \(version)")
-                        Spacer()
-                        Link(
-                            "Sign-in documentation",
-                            destination: URL(
-                                string: "https://developers.openai.com/siwc/token-sharing-open-source")!)
-                    }.font(.caption).foregroundStyle(.secondary)
-                }
-            }.padding(26)
+            }.padding(24)
         }
+        .onAppear { if providerName.isEmpty { selectProvider(providerKey) } }
+        .alert(
+            "Discard provider edits?",
+            isPresented: Binding(get: { pendingProvider != nil }, set: { if !$0 { pendingProvider = nil } })
+        ) {
+            Button("Keep", role: .cancel) { pendingProvider = nil }
+            Button("Discard", role: .destructive) {
+                if let key = pendingProvider { selectProvider(key) }
+                pendingProvider = nil
+            }
+        } message: {
+            Text("Save the provider name before switching, or discard its edits.")
+        }
+    }
+    private func selectProvider(_ key: String) {
+        providerKey = key
+        providerName = model.configuration.providers.first { $0.key == key }?.name ?? ""
+        providerMessage = nil
+    }
+    private func saveProvider() {
+        var updated = model.configuration
+        guard let index = updated.providers.firstIndex(where: { $0.key == providerKey }) else { return }
+        updated.providers[index].name = providerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            try model.saveConfiguration(updated)
+            selectProvider(providerKey)
+            providerMessage = "Saved"
+        } catch { providerMessage = error.localizedDescription }
+    }
+    private var apiConnection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(model.apiConnected ? "API key saved" : "API key required").font(.callout)
+            SecureField(
+                model.apiConnected ? "Replacement API key" : "OpenAI API key", text: $model.apiKeyDraft
+            )
+            .textFieldStyle(.roundedBorder).accessibilityLabel("OpenAI API key")
+            .disabled(model.busy || model.apiKeyBusy)
+            HStack {
+                Button("Save") { Task { await model.saveAPIKey() } }.disabled(model.apiKeyDraft.isEmpty)
+                    .accessibilityLabel("Save API key")
+                Button("Reload") { Task { await model.restoreAPIKey() } }
+                if model.apiConnected {
+                    Button("Remove", role: .destructive) { Task { await model.removeAPIKey() } }
+                }
+            }
+            .disabled(model.busy || model.apiKeyBusy)
+            if let error = model.apiKeyError {
+                Text(error).font(AppStyle.caption).foregroundStyle(.red).textSelection(.enabled)
+            }
+            if !model.minimumMode {
+                Text("Stored in this Mac's Keychain. Saving does not send a model request.").font(
+                    AppStyle.caption
+                ).foregroundStyle(.secondary)
+            }
+            Text("OpenAI API · billed separately from ChatGPT").font(AppStyle.caption).foregroundStyle(
+                .secondary)
+        }
+    }
+
+    private var planConnection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("ChatGPT account", systemImage: "person.crop.circle").font(.headline)
+            if !model.profiles.isEmpty {
+                SelectorPicker(
+                    "Provider",
+                    options: model.profiles.map { .init(value: $0.id, title: $0.label) },
+                    selection: Binding(
+                        get: { model.accountID },
+                        set: { value in Task { await model.selectAccount(value) } })
+                )
+                .disabled(
+                    model.offline || model.busy || model.connecting || model.signingIn
+                        || model.launcherPending)
+            }
+            Text(
+                model.signedIn
+                    ? (model.planEnabled
+                        ? "Using ChatGPT plan" : "Signed in · Plan usage not enabled")
+                    : "Not signed in"
+            ).font(.callout)
+            if !model.minimumMode {
+                Text(
+                    "Connect your eligible ChatGPT account and allow EZ to use your plan. Credentials stay in macOS Keychain. Model availability and limits depend on your account."
+                ).font(.caption).foregroundStyle(.secondary)
+            }
+            if !model.minimumMode {
+                DisclosureGroup("Keychain") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(
+                            "EZ saves sign-in tokens in its own Keychain record so you can stay signed in. It does not store your ChatGPT password or read other apps’ passwords."
+                        )
+                        Text(
+                            "Allow Once approves this access; Always Allow remembers permission for this app and item. Deny prevents access to the saved sign-in. A local development rebuild may prompt again."
+                        )
+                        Link(
+                            "Permissions",
+                            destination: URL(
+                                string:
+                                    "https://support.apple.com/guide/keychain-access/kyca1243/mac"
+                            )!)
+                    }.font(.caption).foregroundStyle(.secondary).padding(.top, 6)
+                }.font(.caption)
+            }
+            HStack(spacing: 8) {
+                Group {
+                    if model.signingIn {
+                        ProgressView().controlSize(.small)
+                        Text("Finish signing in in your browser.").font(.caption)
+                        Button("Cancel") { model.cancelLogin() }
+                    } else if model.signedIn {
+                        Button(model.minimumMode ? "Disconnect" : "Sign out") {
+                            Task { await model.signOut() }
+                        }.help("Sign out").accessibilityLabel("Sign out")
+                        if !model.planEnabled {
+                            Button(model.minimumMode ? "Enable" : "Enable plan usage") {
+                                model.signIn(enablePlan: true)
+                            }.help("Enable plan usage").accessibilityLabel("Enable plan usage")
+                        }
+                        Button(model.minimumMode ? "Add" : "Add account") {
+                            model.signIn(newAccount: true)
+                        }.help("Add account").accessibilityLabel("Add account")
+                    } else {
+                        Button(model.minimumMode ? "Connect" : "Continue with ChatGPT") {
+                            model.signIn()
+                        }.help("Continue with ChatGPT").accessibilityLabel(
+                            "Continue with ChatGPT"
+                        )
+                        .buttonStyle(
+                            .borderedProminent)
+                        if !model.profiles.isEmpty {
+                            Button(model.minimumMode ? "Add" : "Add account") {
+                                model.signIn(newAccount: true)
+                            }.help("Add account").accessibilityLabel("Add account")
+                        }
+                    }
+                }.disabled(model.offline || model.busy || model.connecting)
+                Spacer()
+                Link(
+                    model.minimumMode ? "Usage" : "Manage usage",
+                    destination: URL(string: "https://chatgpt.com/settings/usage")!
+                )
+                .help("Manage usage").accessibilityLabel("Manage usage")
+                .buttonStyle(.bordered)
+                Button(
+                    model.connecting
+                        ? "Loading…" : (model.minimumMode ? "Refresh" : "Refresh models")
+                ) {
+                    Task { await model.connect() }
+                }.help("Refresh models").accessibilityLabel("Refresh models").disabled(
+                    model.offline || model.busy || model.connecting || model.signingIn
+                        || !model.planEnabled)
+            }.controlSize(.regular)
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
     }
 }

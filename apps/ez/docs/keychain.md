@@ -16,6 +16,13 @@ profiles, OAuth access/refresh/identity tokens, granted scopes, expiration times
 issued client IDs, and installation host ID. Refresh tokens let EZ renew an
 expired session without another browser login.
 
+The OpenAI API provider uses a separate generic-password item:
+service `local.ez.app.openai`, account `api-key`, containing only the OpenAI API key.
+`OpenAIKeyStore` restores availability during app connection and reads the key
+when an API run needs it. It writes or removes it only through explicit Providers actions. These operations run
+off the UI actor. It is not copied into ChatGPT credentials, shared configuration,
+prompts, history, image metadata or exports. Removing it does not sign out ChatGPT.
+
 EZ does not receive or store your ChatGPT password. Its code does not enumerate
 your Keychain or query other apps' passwords. This describes the implementation,
 not an operating-system sandbox guarantee: the current development app is not

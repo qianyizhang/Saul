@@ -30,6 +30,7 @@ it('shares edits, migrates once, keeps accounts outside presets, and refuses a s
               value: Record<string, unknown>;
               revision: number;
               presets: Parameters<typeof store.import>[0];
+              providers?: Parameters<typeof store.save>[2];
             };
           },
         ) => ({
@@ -49,7 +50,7 @@ it('shares edits, migrates once, keeps accounts outside presets, and refuses a s
                       ? store.read()
                       : request.action === 'presets-import'
                         ? store.import(request.presets)
-                        : store.save(request.revision, request.presets),
+                        : store.save(request.revision, request.presets, request.providers),
                 }),
           },
         }),
@@ -101,6 +102,17 @@ it('shares edits, migrates once, keeps accounts outside presets, and refuses a s
     const otherApp = store.read();
     otherApp.presets[0]!.name = 'Changed in EZ';
     otherApp.presets[0]!.fast = false;
+    const draw = {
+      id: 'c14b29f3-3ec2-4efc-8bed-e05531aef2cb',
+      name: 'Illustration',
+      model: 'gpt-image-2.5-flare',
+      effort: '',
+      fast: false,
+      providerKey: 'openai-api',
+      capability: 'draw' as const,
+      imageOptions: { size: '1536x1024', quality: 'medium' },
+    };
+    otherApp.presets.push(draw);
     store.save(otherApp.revision, otherApp.presets);
     expect(
       (await owner({ action: 'commit', baseline: first.revision, settings: first.settings })).state,
@@ -117,6 +129,7 @@ it('shares edits, migrates once, keeps accounts outside presets, and refuses a s
         .state,
     ).toBe('ready');
     expect(store.read().presets[0]!.effort).toBe('high');
+    expect(store.read().presets.find((p) => p.id === draw.id)).toEqual(draw);
     expect(JSON.parse(readFileSync(store.path, 'utf8')).appearance).toEqual({ theme: 'dark' });
     const current = store.read();
     store.save(current.revision, []);
@@ -144,5 +157,121 @@ it('shares edits, migrates once, keeps accounts outside presets, and refuses a s
   } finally {
     vi.unstubAllGlobals();
     rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+it('preserves typed image definitions and rejects malformed image options', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'saul-typed-presets-'));
+  try {
+    const store = new SharedPresetsStore(join(directory, 'settings.json'));
+    const image = {
+      id: 'c14b29f3-3ec2-4efc-8bed-e05531aef2cb',
+      name: 'Illustration',
+      model: 'gpt-image-2.5-flare',
+      effort: '',
+      fast: false,
+      providerKey: 'openai-api',
+      capability: 'draw' as const,
+      imageOptions: { size: '1536x1024', quality: 'medium' },
+    };
+    store.save(0, [image]);
+    const library = store.read();
+    library.presets.push({
+      id: '11111111-1111-4111-8111-111111111111',
+      name: 'Writing',
+      model: 'fixture',
+      effort: 'low',
+      fast: false,
+      providerKey: 'gpt-plan',
+      capability: 'write',
+    });
+    store.save(library.revision, library.presets);
+    expect(store.read().presets[0]).toEqual(image);
+    const bad = { ...image, imageOptions: { size: '../../escape', quality: 'low' } };
+    expect(() => store.save(store.read().revision, [bad])).toThrow();
+    expect(store.read().presets[0]).toEqual(image);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+it('uses the shared provider fixture, preserves definitions on preset-only saves, and rejects invalid changes', async () => {
+  const { validateSharedProviders } = await import('../native/shared-presets-contract.mts');
+  const { validatePlanRequest } = await import('../native/plan-protocol.mts');
+  const fixture = JSON.parse(
+    readFileSync(new URL('../../../contracts/fixtures/providers.json', import.meta.url), 'utf8'),
+  );
+  const directory = mkdtempSync(join(tmpdir(), 'saul-shared-providers-'));
+  try {
+    const store = new SharedPresetsStore(join(directory, 'settings.json'));
+    writeFileSync(
+      store.path,
+      JSON.stringify({
+        modelPresets: { revision: 0, presets: [], future: 'retained' },
+        apps: {
+          ez: { configuration: { revision: 1, value: { providers: fixture.providers } } },
+        },
+      }),
+    );
+    // Native-scoped names migrate into the common owner rather than being replaced with defaults.
+    expect(store.read().providers).toEqual(fixture.providers);
+    const first = store.save(0, []);
+    expect(first.providers).toEqual(fixture.providers);
+    const renamed = structuredClone(first.providers!);
+    renamed[1]!.name = 'Renamed in Saul';
+    const saved = store.save(first.revision, [], renamed);
+    expect(store.read().providers?.[1]).toEqual({
+      ...fixture.providers[1],
+      name: 'Renamed in Saul',
+    });
+    expect(JSON.parse(readFileSync(store.path, 'utf8')).modelPresets.future).toBe('retained');
+    const bytes = readFileSync(store.path, 'utf8');
+    expect(() => store.save(first.revision, [], fixture.providers)).toThrow('changed');
+    for (const providers of fixture.invalid) {
+      expect(() => validateSharedProviders(providers)).toThrow();
+      expect(() =>
+        validatePlanRequest({
+          action: 'presets-save',
+          revision: saved.revision,
+          presets: [],
+          providers,
+        }),
+      ).toThrow();
+      expect(() => store.save(saved.revision, [], providers)).toThrow();
+      expect(readFileSync(store.path, 'utf8')).toBe(bytes);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+it('rejects malformed image options without coercion in shared and app-scoped presets', async () => {
+  const { validateSharedPresets } = await import('../native/shared-presets-contract.mts');
+  const { normalizeConfiguration } = await import('../src/models/configuration');
+  const fixture = JSON.parse(
+    readFileSync(
+      new URL('../../../contracts/fixtures/image-options.json', import.meta.url),
+      'utf8',
+    ),
+  );
+  const preset = {
+    id: 'c14b29f3-3ec2-4efc-8bed-e05531aef2cb',
+    name: 'Illustration',
+    model: 'gpt-image-2.5-flare',
+    effort: '',
+    fast: false,
+    providerKey: 'openai-api',
+    capability: 'draw',
+  };
+  for (const imageOptions of fixture.valid) {
+    expect(() => validateSharedPresets([{ ...preset, imageOptions }])).not.toThrow();
+  }
+  for (const imageOptions of fixture.invalid) {
+    expect(() => validateSharedPresets([{ ...preset, imageOptions }])).toThrow();
+    const source = structuredClone(DEFAULT_SETTINGS);
+    source.configuration!.presets[0] = { ...source.configuration!.presets[0]!, imageOptions };
+    expect(() => normalizeConfiguration(source.configuration, source)).toThrow(
+      'image preset options',
+    );
   }
 });

@@ -4,8 +4,8 @@ import Foundation
 
 @MainActor func selectedTextChecks() -> [CheckCase] {
     [
-        stateCase("selected text preserves Unicode and waits for Send in a single-field recipe") { f in
-            f.model.chooseRecipe(f.single.id)
+        stateCase("selected text preserves Unicode and waits for Send in a single-field action") { f in
+            f.model.chooseAction(f.single.id)
             f.model.signedIn = true
             f.model.planEnabled = true
             let text = "  café 中文 🧪\nsecond line + % &  "
@@ -16,16 +16,16 @@ import Foundation
                 "Selected text started or queued a request")
             try expect(try f.history.load().entries.isEmpty, "Draft was saved as a request")
         },
-        stateCase("selected text fills only the first field of a multi-input recipe") { f in
-            f.model.chooseRecipe(f.multi.id)
+        stateCase("selected text fills only the first field of a multi-input action") { f in
+            f.model.chooseAction(f.multi.id)
             try f.model.prepareSelectedText("elicit")
-            try expect(f.model.inputValues == ["fuzzy term": "elicit"], "Other recipe inputs were filled")
+            try expect(f.model.inputValues == ["fuzzy term": "elicit"], "Other action inputs were filled")
             try expect(
                 f.model.currentPreset == f.alternate && !f.model.busy,
-                "Recipe default changed or request sent")
+                "Action default changed or request sent")
         },
         stateCase("selected text refuses active work and preserves the entire draft") { f in
-            f.model.chooseRecipe(f.multi.id)
+            f.model.chooseAction(f.multi.id)
             f.model.inputValues = ["fuzzy term": "existing", "fuzzy context": "context"]
             f.model.choosePreset(f.alternate.id)
             let revision = f.model.draftRevision
@@ -59,7 +59,7 @@ import Foundation
                 f.model.query.utf8.count == 16_384 && f.model.selection == nil,
                 "Boundary selection rejected or old answer stayed selected")
         },
-        stateCase("selected text without recipes preserves the workspace and reports configuration") { f in
+        stateCase("selected text without actions preserves the workspace and reports configuration") { f in
             try f.model.saveConfiguration(Configuration())
             let revision = f.model.draftRevision
             try expectThrows(EZError.self, matching: { $0.message.contains("Configuration") }) {
@@ -67,7 +67,7 @@ import Foundation
             }
             try expect(
                 f.model.inputValues.isEmpty && f.model.draftRevision == revision,
-                "Missing recipe changed the workspace")
+                "Missing action changed the workspace")
         },
     ]
 }

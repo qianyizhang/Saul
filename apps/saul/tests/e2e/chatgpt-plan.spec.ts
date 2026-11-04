@@ -45,7 +45,11 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
             id: message.id,
             event: { type: 'error', message: 'Shared presets changed. Reload saved settings.' },
           };
-        library = { revision: library.revision + 1, presets: request.presets };
+        library = {
+          revision: library.revision + 1,
+          presets: request.presets,
+          providers: request.providers || library.providers,
+        };
       } else if (request.action === 'presets-import') {
         library = {
           revision: library.revision + 1,
@@ -172,8 +176,8 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
     ),
   ).toEqual({ library: [] });
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Models');
-  await popup.getByLabel('AI service', { exact: true }).selectOption('chatgpt-plan');
+  await settingsSection(popup, 'Presets');
+  await popup.getByLabel('Provider', { exact: true }).selectOption('gpt-plan');
   await expect(popup.getByPlaceholder('Optional for local models')).toHaveCount(0);
   await expect(popup.getByLabel(/Temperature/)).toHaveCount(0);
   await popup.getByRole('button', { name: 'Continue with ChatGPT', exact: true }).click();
@@ -181,15 +185,15 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
     popup.getByText('Complete sign-in in the opened tab.', { exact: true }),
   ).toBeVisible();
   await expect(popup.getByLabel('Preset', { exact: true })).toBeDisabled();
-  await expect(popup.getByLabel('AI service', { exact: true })).toBeDisabled();
+  await expect(popup.getByLabel('Provider', { exact: true })).toBeDisabled();
   await expect(popup.getByRole('button', { name: 'Cancel', exact: true })).toBeEnabled();
   const popupUrl = popup.url();
   await popup.close();
   popup = await context.newPage();
   await popup.goto(popupUrl);
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Models');
-  await popup.getByLabel('AI service', { exact: true }).selectOption('chatgpt-plan');
+  await settingsSection(popup, 'Presets');
+  await popup.getByLabel('Provider', { exact: true }).selectOption('gpt-plan');
   await expect(popup.getByText('ChatGPT helper connected.', { exact: true })).not.toBeVisible();
   await worker.evaluate(() => {
     (
@@ -203,7 +207,7 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   await expect(popup.getByText('Loading available models…', { exact: true })).toBeVisible();
   await expect(popup.getByLabel('ChatGPT model', { exact: true })).toBeDisabled();
   await expect(popup.getByLabel('Preset', { exact: true })).toBeDisabled();
-  await expect(popup.getByLabel('AI service', { exact: true })).toBeDisabled();
+  await expect(popup.getByLabel('Provider', { exact: true })).toBeDisabled();
   await worker.evaluate(() => {
     const fixture = (
       globalThis as unknown as {
@@ -249,8 +253,8 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
     await popup.screenshot({ path: testInfo.outputPath('chatgpt-settings.png'), fullPage: true });
   await popup.reload();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Models');
-  await expect(popup.getByLabel('AI service', { exact: true })).toHaveValue('chatgpt-plan');
+  await settingsSection(popup, 'Presets');
+  await expect(popup.getByLabel('Provider', { exact: true })).toHaveValue('gpt-plan');
   await expect(popup.getByLabel('ChatGPT model', { exact: true })).toHaveValue(
     'plan-fixture-model',
   );
@@ -381,8 +385,8 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
     popup.getByRole('button', { name: 'Continue with ChatGPT', exact: true }),
   ).toBeVisible();
   await expect(popup.getByRole('button', { name: 'Test generation', exact: true })).toBeDisabled();
-  await settingsSection(popup, 'Models');
-  await popup.getByLabel('AI service', { exact: true }).selectOption('openai-compatible');
+  await settingsSection(popup, 'Presets');
+  await popup.getByLabel('Provider', { exact: true }).selectOption('openai-compatible');
   await popup.getByLabel('API connection', { exact: true }).click();
   await expect(popup.getByPlaceholder('Optional for local models')).toBeVisible();
   expect(fixtureServer.requests).toHaveLength(initialApiRequests); // No fallback to the API-key provider.
@@ -393,16 +397,16 @@ test('missing ChatGPT helper shows setup recovery without altering the existing 
 }) => {
   const { popup } = await sandbox.launch();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Models');
-  await popup.getByLabel('AI service', { exact: true }).selectOption('chatgpt-plan');
+  await settingsSection(popup, 'Presets');
+  await popup.getByLabel('Provider', { exact: true }).selectOption('gpt-plan');
   await expect(popup.getByRole('alert')).toContainText('helper');
   await expect(popup.getByText('pnpm native:install', { exact: false })).toBeVisible();
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(
     popup.getByText('Choose a ChatGPT account and model.', { exact: true }),
   ).toBeVisible();
-  await settingsSection(popup, 'Models');
-  await popup.getByLabel('AI service', { exact: true }).selectOption('openai-compatible');
+  await settingsSection(popup, 'Presets');
+  await popup.getByLabel('Provider', { exact: true }).selectOption('openai-compatible');
   await popup.getByLabel('API connection', { exact: true }).click();
   await expect(popup.getByPlaceholder('Optional for local models')).toBeVisible();
 });

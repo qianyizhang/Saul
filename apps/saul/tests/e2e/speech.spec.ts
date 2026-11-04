@@ -52,8 +52,8 @@ test('speech widget keeps OAuth scope, supports cancellation and shows audio or 
     }) as typeof chrome.runtime.connectNative;
   });
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Models');
-  await popup.getByLabel('AI service', { exact: true }).selectOption('chatgpt-plan');
+  await settingsSection(popup, 'Presets');
+  await popup.getByLabel('Provider', { exact: true }).selectOption('gpt-plan');
   await popup.getByLabel('Connection and tests', { exact: true }).click();
   await popup.getByLabel('Experimental tools', { exact: true }).click();
   const widget = popup
@@ -67,7 +67,7 @@ test('speech widget keeps OAuth scope, supports cancellation and shows audio or 
   await widget.getByRole('button', { name: 'Test speech', exact: true }).click();
   await expect(widget.getByRole('status')).toHaveText('Requesting speech…');
   await expect(popup.getByLabel('ChatGPT account', { exact: true })).toBeDisabled();
-  await expect(popup.getByLabel('AI service', { exact: true })).toBeDisabled();
+  await expect(popup.getByLabel('Provider', { exact: true })).toBeDisabled();
   await widget.getByRole('button', { name: 'Stop speech request' }).click();
   await expect(widget.getByRole('status')).toHaveText('Stopped.');
   expect(
@@ -97,7 +97,7 @@ test('speech widget keeps OAuth scope, supports cancellation and shows audio or 
     await expect(popup.getByRole('dialog', { name: "You're using your ChatGPT plan" })).toHaveCount(
       0,
     );
-    await settingsSection(popup, 'Models');
+    await settingsSection(popup, 'Presets');
     if (!minimum) await popup.getByRole('button', { name: 'Got it', exact: true }).click();
     for (const width of [360, 1000])
       for (const colorScheme of ['light', 'dark'] as const) {

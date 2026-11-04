@@ -7,17 +7,17 @@ test('two Settings surfaces retain a stale draft until deliberate reload', async
 }, info) => {
   const { popup, context } = await sandbox.launch();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Models');
+  await settingsSection(popup, 'Presets');
   const other = await context.newPage();
   await other.goto(popup.url().replace('popup.html', 'library.html'));
-  await settingsSection(other, 'Models');
+  await settingsSection(other, 'Presets');
   await expect(other.getByLabel('Model name', { exact: true })).toBeVisible();
-  await settingsSection(popup, 'Reading');
-  await popup.getByLabel('Edit recipes', { exact: true }).click();
-  await popup.getByLabel('Recipe name', { exact: true }).fill('Saved in first surface');
-  await settingsSection(other, 'Reading');
-  await other.getByLabel('Edit recipes', { exact: true }).click();
-  await other.getByLabel('Edit recipe', { exact: true }).selectOption('recipe-lookup');
+  await settingsSection(popup, 'Actions');
+  await popup.getByLabel('Edit actions', { exact: true }).click();
+  await popup.getByLabel('Action name', { exact: true }).fill('Saved in first surface');
+  await settingsSection(other, 'Actions');
+  await other.getByLabel('Edit actions', { exact: true }).click();
+  await other.getByLabel('Edit action', { exact: true }).selectOption('recipe-lookup');
   await other.getByLabel('Prompt template', { exact: true }).fill('Keep this draft: {{text}}');
   await other.getByLabel('Response language', { exact: true }).selectOption('Chinese');
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
@@ -25,7 +25,7 @@ test('two Settings surfaces retain a stale draft until deliberate reload', async
   await other.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(other.getByRole('alert')).toContainText('Settings changed in another surface');
   await expect(other.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
-  await expect(other.getByLabel('Edit recipe', { exact: true })).toHaveValue('recipe-lookup');
+  await expect(other.getByLabel('Edit action', { exact: true })).toHaveValue('recipe-lookup');
   await expect(other.getByLabel('Prompt template', { exact: true })).toHaveValue(
     'Keep this draft: {{text}}',
   );
@@ -59,7 +59,7 @@ test('two Settings surfaces retain a stale draft until deliberate reload', async
       }
     }
   }
-  await settingsSection(other, 'Reading');
+  await settingsSection(other, 'Actions');
   other.once('dialog', (dialog) => dialog.dismiss());
   const reload = other.getByRole('button', { name: 'Reload saved settings', exact: true });
   await reload.focus();
@@ -69,7 +69,7 @@ test('two Settings surfaces retain a stale draft until deliberate reload', async
   );
   other.once('dialog', (dialog) => dialog.accept());
   await other.getByRole('button', { name: 'Reload saved settings', exact: true }).click();
-  await expect(other.getByLabel('Recipe name', { exact: true })).toHaveValue(
+  await expect(other.getByLabel('Action name', { exact: true })).toHaveValue(
     'Saved in first surface',
   );
   await expect(other.getByRole('alert')).toHaveCount(0);
@@ -82,9 +82,9 @@ test('an uncertain commit reply keeps the draft and never sends the commit again
 }) => {
   const { popup } = await sandbox.launch();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Reading');
-  await popup.getByLabel('Edit recipes', { exact: true }).click();
-  await popup.getByLabel('Recipe name', { exact: true }).fill('Saved but acknowledgement lost');
+  await settingsSection(popup, 'Actions');
+  await popup.getByLabel('Edit actions', { exact: true }).click();
+  await popup.getByLabel('Action name', { exact: true }).fill('Saved but acknowledgement lost');
   await popup.evaluate(() => {
     const original = chrome.runtime.sendMessage.bind(chrome.runtime) as (
       message: unknown,
@@ -105,7 +105,7 @@ test('an uncertain commit reply keeps the draft and never sends the commit again
   });
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(popup.getByRole('alert')).toContainText('save outcome is unknown');
-  await expect(popup.getByLabel('Recipe name', { exact: true })).toHaveValue(
+  await expect(popup.getByLabel('Action name', { exact: true })).toHaveValue(
     'Saved but acknowledgement lost',
   );
   await expect(popup.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
@@ -118,7 +118,7 @@ test('an uncertain commit reply keeps the draft and never sends the commit again
   popup.once('dialog', (dialog) => dialog.accept());
   await popup.getByRole('button', { name: 'Reload saved settings', exact: true }).click();
   await expect(popup.getByRole('alert')).toHaveCount(0);
-  await expect(popup.getByLabel('Recipe name', { exact: true })).toHaveValue(
+  await expect(popup.getByLabel('Action name', { exact: true })).toHaveValue(
     'Saved but acknowledgement lost',
   );
   await expect(popup.getByText('Unsaved changes', { exact: true })).toHaveCount(0);
@@ -134,9 +134,9 @@ test('an appearance change in another surface does not conflict with a settings 
 }) => {
   const { popup, context } = await sandbox.launch();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Reading');
-  await popup.getByLabel('Edit recipes', { exact: true }).click();
-  await popup.getByLabel('Recipe name', { exact: true }).fill('Personal recipe');
+  await settingsSection(popup, 'Actions');
+  await popup.getByLabel('Edit actions', { exact: true }).click();
+  await popup.getByLabel('Action name', { exact: true }).fill('Personal recipe');
   const other = await context.newPage();
   await other.goto(popup.url().replace('popup.html', 'library.html'));
   await settingsSection(other, 'Preferences');

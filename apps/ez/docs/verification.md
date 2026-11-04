@@ -4,6 +4,34 @@ Current repository migration/packaging checks are recorded in the
 [monorepo verification](../../../docs/migration.md#verification--2026-10-20).
 The dated native and live-provider evidence below remains scoped to its original build.
 
+## Actions and shared configuration — 2026-11-04
+
+Illustration is a Draw action in the shared main/Quick Lookup workspace. History
+saves PNGs with exact save-only recovery. Providers and Presets use one shared
+configuration and revision; Action inputs, credentials and runtime bindings remain
+app-owned. Both implementations consume shared provider and image-option fixtures.
+Malformed settings, stale saves, missing providers/keys, Stop/late output and storage
+failures preserve existing data and never trigger fallback or another billed request.
+
+Final source checks passed **79 core + 53 state**, **324 Saul unit**, and **27 shared**
+cases. The browser gate passed **109 cases**, with **6 optional skips**. Native and
+shared checks cover strict JSON schemas, literal prompts, PNG retention/deletion,
+credential ownership and provider-option handling. User-reported live image success
+belongs to the initial build; review checks used synthetic providers and no paid request.
+
+Native review exercised Run → History, Download/Cancel, Quick Lookup, the three
+settings editors, image options and the unsaved-edit guard. Browser provider views
+were inspected at narrow/wide widths in light/dark appearances. Full VoiceOver,
+keyboard/menu targeting and the complete native display matrix remain unverified;
+ScreenCaptureKit intermittently failed during capture.
+
+The compatible builds were installed with signing and extension identity preserved.
+Saul remains at its existing `.output/chrome-mv3` path. The user confirmed Reload;
+the expected native bridge reconnected. EZ opened from `~/Applications/EZ.app` with
+existing History and the new action controls. Rollback bundles and exact installation
+inventories remain in the scoped temporary recovery bundle through its Nov 11 review.
+These installed builds precede the final source cleanup; installation was not repeated.
+
 ## Repeatable offline gate
 
 From `apps/ez`, run `make tools` once, then `make check`. This checks Swift formatting and correctness,

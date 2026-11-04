@@ -71,14 +71,14 @@ SQLite-WASM stores the library in OPFS for the current browser profile. Data is 
 
 ## Settings and models
 
-Settings has focused sections: Overview, Models, Reading, Summaries, Preferences
-and Connections. Overview leads with reading defaults; Models keeps the selected
+Settings has focused sections: Overview, Presets, Actions, Summaries, Preferences
+and Providers. Overview leads with reading defaults; Presets keeps the selected
 preset beside its fields, with a compact selector at narrow widths. Section changes
 preserve the mounted configuration draft. Save and conflict recovery remain reachable
 across sections; preferences and access retain their independent immediate-save behavior.
 
-- Named recipes pair editable prompts with a default model preset. Explain, Lookup, and Nudge are editable starters. A preset names the provider, connection/account, model, and supported options.
-- The existing prompt and model migrate into Explain and Current. Choosing another recipe for the same passage creates a new attempt; retry keeps the original request choices even after Settings changes.
+- Named actions pair editable prompts with a default model preset. Explain, Lookup, and Nudge are editable starters. A preset names the provider, API connection where applicable, model, and supported options. ChatGPT plan presets use the app-selected account; they do not bind one.
+- The existing prompt and model migrate into Explain and Current. Choosing another action for the same passage creates a new attempt; retry keeps the original request choices even after Settings changes.
 - Templates substitute `{{text}}`, `{{context}}`, `{{page title}}`, `{{page url}}`, `{{heading}}`, and `{{paragraph}}` once. `{{text}}` is required; unavailable referenced context blocks submission. Enabled context is included once, and template expressions are unsupported.
 - OpenAI-compatible profiles keep separate endpoint, model, temperature, and key values.
 - Changing endpoint origin clears the current key.
@@ -249,3 +249,11 @@ the saved request. Reading and summary inspectors share the large-text viewer.
 - Saul targets Google Chrome MV3 only.
 - The native bridge supports macOS and Linux Chromium-family browsers; Google Chrome is the verified target.
 - See [testing](testing.md) for covered behavior and evidence limits.
+
+Shared presets also preserve stable `providerKey`, Write/Draw capability and image
+options from EZ. Missing typed fields default to `gpt-plan` / Write. Saul retains
+Draw presets but blocks text execution; image settings and execution currently
+belong in EZ. Provider definitions and Presets use the same shared configuration and revision
+as EZ. Credentials, local connection bindings and Action inputs remain app-owned.
+Providers edits the shared display name without changing the key; preset selection
+binds that key. Legacy API profiles remain available for Saul-specific connections.

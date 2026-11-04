@@ -17,7 +17,7 @@ import Foundation
                     directory: directory.appendingPathComponent("ez"), shared: shared)
                 let loaded = try store.load()!
                 try expectEqual(loaded.presets.count, 2, "Example model presets were not loaded")
-                try expectEqual(loaded.recipes.first?.name, "Explain", "Example recipe was not loaded")
+                try expectEqual(loaded.actions.first?.name, "Explain", "Example action was not loaded")
                 let original = try Data(contentsOf: sharedURL)
                 let before = try JSONSerialization.jsonObject(with: original) as? [String: Any]
                 try store.save(loaded)
@@ -45,7 +45,7 @@ import Foundation
             try expectEqual(loaded.presets, config.presets, "Migration changed preset identity")
             try FileManager.default.removeItem(at: local.url)
             try expectEqual(
-                try ez.load()!.recipes, config.recipes, "Scoped recipes depended on the legacy file")
+                try ez.load()!.actions, config.actions, "Scoped actions depended on the legacy file")
             let competing = ConfigurationStore(
                 directory: directory.appendingPathComponent("ez"), shared: shared)
             let stale = try competing.load()!
@@ -69,7 +69,7 @@ import Foundation
             repaired.presets = [ModelPreset(name: "Replacement", model: "fixture", effort: "", fast: false)]
             try ez.save(repaired)
             try expectEqual(
-                try ez.load()!.presets[0].name, "Replacement", "Missing recipe references blocked recovery")
+                try ez.load()!.presets[0].name, "Replacement", "Missing action references blocked recovery")
             let document =
                 try JSONSerialization.jsonObject(with: Data(contentsOf: shared.url)) as? [String: Any]
             try expectEqual(
@@ -80,11 +80,11 @@ import Foundation
             directory in
             let f = RecipeFixture()
             let preset = f.preset
-            let recipe = f.recipe
+            let action = f.action
 
             let store = ConfigurationStore(directory: directory.appendingPathComponent("config"))
             try expect(try store.load() == nil, "Missing config should be distinct from empty")
-            var config = Configuration(presets: [preset], recipes: [recipe])
+            var config = Configuration(presets: [preset], actions: [action])
             try store.save(config)
             try expect(try store.load() == config, "Configuration did not round trip")
             let attributes = try FileManager.default.attributesOfItem(atPath: store.url.path)
@@ -104,14 +104,14 @@ import Foundation
             directory in
             let f = RecipeFixture()
             let preset = f.preset
-            let recipe = f.recipe
+            let action = f.action
 
             let store = ConfigurationStore(directory: directory.appendingPathComponent("config-failure"))
-            let config = Configuration(presets: [preset], recipes: [recipe])
+            let config = Configuration(presets: [preset], actions: [action])
             try store.save(config)
             let original = try Data(contentsOf: store.url)
             var invalid = config
-            invalid.recipes[0].template = "{{unfinished"
+            invalid.actions[0].template = "{{unfinished"
             try expectThrows(EZError.self) { try store.save(invalid) }
             try expect(try Data(contentsOf: store.url) == original, "Rejected save overwrote configuration")
             let broken = Data("{broken".utf8)

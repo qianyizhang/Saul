@@ -30,12 +30,13 @@ export function portableSettings(settings: UserSettings): Record<string, unknown
   const value = structuredClone(settings);
   delete value.chatgptPlan;
   delete value.sharedPresetRevision;
+  delete value.providers;
   delete value.scopedConfigRevision;
   value.openaiCompatible.apiKey = '';
   for (const profile of value.profiles || []) profile.config.apiKey = '';
   if (value.configuration)
     value.configuration.presets = value.configuration.presets.filter(
-      (p) => p.provider !== 'chatgpt-plan',
+      (p) => p.provider !== 'chatgpt-plan' && !p.shared,
     );
   return value as unknown as Record<string, unknown>;
 }
@@ -44,6 +45,8 @@ export function restoreSettings(local: UserSettings, config: ScopedConfig): User
   const value = normalizeSettings({
     ...config.value,
     sharedPresetRevision: local.sharedPresetRevision,
+    providers: local.providers,
+    providerConnections: config.value.providerConnections ?? local.providerConnections,
   });
   const keyFor = (id: string | undefined, baseUrl: string) => {
     const connection = id
@@ -57,7 +60,9 @@ export function restoreSettings(local: UserSettings, config: ScopedConfig): User
     profile.config.apiKey = keyFor(profile.id, profile.config.baseUrl);
   value.chatgptPlan = local.chatgptPlan;
   value.configuration!.presets.push(
-    ...(local.configuration?.presets || []).filter((p) => p.provider === 'chatgpt-plan'),
+    ...(local.configuration?.presets || []).filter(
+      (p) => p.provider === 'chatgpt-plan' || p.shared,
+    ),
   );
   return { ...value, scopedConfigRevision: config.revision };
 }

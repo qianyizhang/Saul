@@ -13,12 +13,12 @@ struct QuickLookupView: View {
         VStack(alignment: .leading, spacing: 10) {
             header
             if showsInputs {
-                RecipeInputs(
+                ActionInputs(
                     model: model, compact: true, presentation: controller.presentation,
                     onConfigure: { controller.showMain(settings: true) })
             }
             actions
-            if !notices.isEmpty || needsSetup || model.connecting {
+            if !notices.isEmpty || needsSetup || (model.needsPlan && model.connecting) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(notices, id: \.self) { message in
@@ -29,7 +29,7 @@ struct QuickLookupView: View {
                                 )
                                 .textSelection(.enabled)
                         }
-                        if model.connecting {
+                        if model.needsPlan && model.connecting {
                             Text("Connecting to ChatGPT…").font(AppStyle.caption).foregroundStyle(.secondary)
                         } else if needsSetup {
                             Button(
@@ -83,10 +83,10 @@ struct QuickLookupView: View {
     private var header: some View {
         HStack(spacing: 8) {
             if showsInputs {
-                RecipePicker(model: model, showsLabel: false)
+                ActionPicker(model: model, showsLabel: false)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else if let entry = model.selectedEntry {
-                Label(entry.recipeName, systemImage: entry.recipeSymbol)
+                Label(entry.actionName, systemImage: entry.actionSymbol)
                     .font(AppStyle.caption).foregroundStyle(AppStyle.accent).lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading).frame(height: 24)
             }
@@ -99,7 +99,7 @@ struct QuickLookupView: View {
                 Toggle("Min Mode", isOn: $model.minimumMode)
                 Divider()
                 Button("Settings…") { controller.showMain(settings: true) }
-                Button("Account…") { controller.showMain(settings: true, section: .account) }
+                Button("Providers…") { controller.showMain(settings: true, section: .account) }
             } label: {
                 Image(systemName: "ellipsis")
             }.menuStyle(.borderlessButton).fixedSize()
@@ -135,9 +135,9 @@ struct QuickLookupView: View {
                 Button("Stop") { model.stop() }.help(
                     "Stop generating · \(model.shortcuts.binding(for: .stop).display)")
             } else if showsInputs {
-                Button("Send") { model.send() }.buttonStyle(.borderedProminent)
+                Button("Run") { model.send() }.buttonStyle(.borderedProminent)
                     .disabled(!model.canSend).help(
-                        "Send lookup · \(model.shortcuts.binding(for: .send).display)")
+                        "Run action · \(model.shortcuts.binding(for: .send).display)")
             }
         }.controlSize(.small)
     }
@@ -150,12 +150,12 @@ struct QuickLookupView: View {
             } else if let entry = model.selectedEntry {
                 Text(
                     entry.presetSnapshot.map {
-                        model.minimumMode && entry.requestedServiceTier == nil
+                        entry.capability == .draw || (model.minimumMode && entry.requestedServiceTier == nil)
                             ? $0.name
                             : "\($0.name) · \(entry.requestedServiceTier == nil ? "Standard" : "Fast")"
                     } ?? "Details"
                 )
-                .lineLimit(1).help(entry.serviceDescription)
+                .lineLimit(1).help(entry.capability == .draw ? "Draw · PNG" : entry.serviceDescription)
             }
             Button {
                 showDetails.toggle()
@@ -166,7 +166,10 @@ struct QuickLookupView: View {
                 .accessibilityLabel("Details")
                 .popover(isPresented: $showDetails) { details }
             Spacer(minLength: 0)
-            if let entry = model.selectedEntry, !entry.response.isEmpty {
+            if let entry = model.selectedEntry, entry.capability == .draw, entry.hasImage {
+                Button("Download") { model.downloadImage(entry) }.buttonStyle(.borderless)
+                    .disabled(model.imageLoading)
+            } else if let entry = model.selectedEntry, !entry.response.isEmpty {
                 Button("Copy") { model.copy(entry.response) }.buttonStyle(.borderless)
                     .help("Copy answer")
             }
@@ -183,7 +186,9 @@ struct QuickLookupView: View {
     private func result(_ entry: HistoryEntry) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             UnsavedAttemptNotice(model: model, entry: entry)
-            LookupAnswerText(entry: entry, activity: model.selectedResponseActivity, compact: true)
+            LookupAnswerText(
+                entry: entry, activity: model.selectedResponseActivity, compact: true,
+                imageData: model.imageData(for: entry), imageLoading: model.imageLoading)
             if let parentID = entry.parentID, model.entries.contains(where: { $0.id == parentID }) {
                 Button("Previous answer") { model.selection = parentID }.buttonStyle(.borderless)
             }
@@ -202,25 +207,26 @@ struct QuickLookupView: View {
             model.planEnabled && !model.models.isEmpty
             ? model.currentPreset?.availabilityError(in: model.models) : nil
         for message in [
-            controller.shortcutError, controller.launcherError, model.storageWarning,
+            controller.shortcutError, controller.launcherError, model.storageWarning, model.providerIssue,
             model.configurationError, model.error, presetIssue,
         ].compactMap({ $0 }) {
             if !messages.contains(message) { messages.append(message) }
         }
         return messages
     }
-    private var needsAccount: Bool { !model.signedIn || !model.planEnabled }
+    private var needsAccount: Bool { model.providerIssue != nil }
     private var needsSetup: Bool {
         needsAccount
-            || (model.currentRecipe != nil
-                && (model.currentPreset == nil || model.currentModel == nil
+            || (model.currentAction != nil
+                && (model.currentPreset == nil || (model.needsPlan && model.currentModel == nil)
                     || model.configurationError != nil))
     }
     private var layout: QuickLookupLayout {
         QuickLookupLayout(
             fieldCount: showsInputs ? model.inputFields.count : 0,
-            showsNotice: !notices.isEmpty || needsSetup || model.connecting,
+            showsNotice: !notices.isEmpty || needsSetup || (model.needsPlan && model.connecting),
             showsAnswer: model.selectedEntry != nil,
-            showsFollowUp: model.selectedEntry?.status == "completed")
+            showsFollowUp: model.selectedEntry?.status == "completed"
+                && model.selectedEntry?.capability == .write)
     }
 }

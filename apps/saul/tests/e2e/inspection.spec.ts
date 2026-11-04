@@ -50,11 +50,11 @@ test('inspection matches the submitted request, retains literal output, and surv
   ).toHaveText('Gradient descent');
 
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Reading');
-  await popup.getByLabel('Edit recipes', { exact: true }).click();
+  await settingsSection(popup, 'Actions');
+  await popup.getByLabel('Edit actions', { exact: true }).click();
   await popup.getByLabel('System instructions', { exact: true }).click();
   await popup
-    .getByLabel('Recipe system instructions', { exact: true })
+    .getByLabel('Action system instructions', { exact: true })
     .fill('Changed after generation');
   await popup.getByLabel('Prompt template', { exact: true }).fill('Changed {{text}}');
   await popup.getByRole('button', { name: 'Save', exact: true }).click();

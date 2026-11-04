@@ -1,68 +1,125 @@
 import Darwin
 import Foundation
 
-public struct ModelPreset: Codable, Equatable, Identifiable {
+public struct ModelPreset: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var name: String
     public var model: String
     public var effort: String
     public var fast: Bool
+    public var providerKey: String
+    public var capability: ActionCapability
+    public var imageOptions: ImageOptions?
 
-    public init(id: UUID = UUID(), name: String, model: String, effort: String, fast: Bool) {
+    public init(
+        id: UUID = UUID(), name: String, model: String, effort: String, fast: Bool,
+        providerKey: String = "gpt-plan", capability: ActionCapability = .write,
+        imageOptions: ImageOptions? = nil
+    ) {
         self.id = id
         self.name = name
         self.model = model
         self.effort = effort
         self.fast = fast
+        self.providerKey = providerKey
+        self.capability = capability
+        self.imageOptions = imageOptions
+    }
+
+    private enum CodingKeys: String, CodingKey, CaseIterable {
+        case id, name, model, effort, fast, providerKey, capability, imageOptions
+    }
+    public init(from decoder: Decoder) throws {
+        let c = try contractFields(decoder, keys: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        model = try c.decode(String.self, forKey: .model)
+        effort = try c.decode(String.self, forKey: .effort)
+        fast = try c.decode(Bool.self, forKey: .fast)
+        providerKey = c.contains(.providerKey) ? try c.decode(String.self, forKey: .providerKey) : "gpt-plan"
+        capability =
+            c.contains(.capability) ? try c.decode(ActionCapability.self, forKey: .capability) : .write
+        imageOptions =
+            c.contains(.imageOptions) ? try c.decode(ImageOptions.self, forKey: .imageOptions) : nil
     }
 
     public func availabilityError(in models: [ModelOption]) -> String? {
+        if capability == .draw {
+            guard ImageModelOption.openAIModels.contains(where: { $0.id == model }) else {
+                return "Preset ‘\(name)’ needs an available Draw model. Edit it in Presets."
+            }
+            do { try (imageOptions ?? ImageOptions()).validate() } catch { return error.localizedDescription }
+            return nil
+        }
+        if providerKey != "gpt-plan" {
+            return model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "Choose a model in Presets." : nil
+        }
         guard let option = models.first(where: { $0.model == model }) else {
             return
-                "Preset ‘\(name)’ needs \(model.isEmpty ? "a model" : model). Choose an available model in Configuration."
+                "Preset ‘\(name)’ needs \(model.isEmpty ? "a model" : model). Choose an available model in Presets."
         }
         if !effort.isEmpty
             && !option.supportedReasoningEfforts.contains(where: { $0.reasoningEffort == effort })
         {
-            return "Preset ‘\(name)’ requests unsupported effort ‘\(effort)’. Edit it in Configuration."
+            return "Preset ‘\(name)’ requests unsupported effort ‘\(effort)’. Edit it in Presets."
         }
         if fast && option.fastTier == nil {
             return
-                "Preset ‘\(name)’ requests Fast, but this model does not advertise Fast. Edit it in Configuration."
+                "Preset ‘\(name)’ requests Fast, but this model does not advertise Fast. Edit it in Presets."
         }
         return nil
     }
 }
 
-public struct Recipe: Codable, Equatable, Identifiable {
+public struct Action: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var name: String
     public var presetID: UUID
     public var template: String
     public var legacyMode: QueryMode?
+    public var capability: ActionCapability
 
     public init(
-        id: UUID = UUID(), name: String, presetID: UUID, template: String, legacyMode: QueryMode? = nil
+        id: UUID = UUID(), name: String, presetID: UUID, template: String, legacyMode: QueryMode? = nil,
+        capability: ActionCapability = .write
     ) {
         self.id = id
         self.name = name
         self.presetID = presetID
         self.template = template
         self.legacyMode = legacyMode
+        self.capability = capability
     }
 
-    public var symbol: String { legacyMode?.symbol ?? "text.badge.plus" }
+    private enum CodingKeys: String, CodingKey { case id, name, presetID, template, legacyMode, capability }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        presetID = try c.decode(UUID.self, forKey: .presetID)
+        template = try c.decode(String.self, forKey: .template)
+        legacyMode = try c.decodeIfPresent(QueryMode.self, forKey: .legacyMode)
+        capability = try c.decodeIfPresent(ActionCapability.self, forKey: .capability) ?? .write
+    }
+
+    public var symbol: String { capability == .draw ? "photo" : legacyMode?.symbol ?? "text.badge.plus" }
 
     public func prepare(values: [String: String], preset: ModelPreset, models: [ModelOption]) throws
         -> HistoryEntry
     {
+        guard capability == preset.capability else {
+            throw EZError("Choose a \(capability.name) preset for this action.")
+        }
         if let message = preset.availabilityError(in: models) { throw EZError(message) }
         let prompt = try PromptTemplate(template).render(values)
         var entry = HistoryEntry(
             mode: legacyMode ?? .ask, query: prompt, model: preset.model,
             effort: preset.effort,
-            requestedServiceTier: preset.fast ? models.first { $0.model == preset.model }?.fastTier : nil)
-        entry.recipeSnapshot = self
+            requestedServiceTier: preset.capability == .write && preset.fast
+                ? (preset.providerKey == "gpt-plan"
+                    ? models.first { $0.model == preset.model }?.fastTier : "priority") : nil)
+        entry.actionSnapshot = self
         entry.presetSnapshot = preset
         entry.inputValues = values
         entry.instructions = ""
@@ -111,7 +168,7 @@ public struct PromptTemplate {
         guard !rest.contains("}}") else { throw EZError("Unmatched }} in prompt template.") }
         parts.append(.text(String(rest)))
         guard !fields.isEmpty else { throw EZError("Include at least one input, such as {{text}}.") }
-        guard fields.count <= 16 else { throw EZError("Use at most 16 input fields in a recipe.") }
+        guard fields.count <= 16 else { throw EZError("Use at most 16 input fields in an action.") }
     }
 
     public func render(_ values: [String: String]) throws -> String {
@@ -134,33 +191,54 @@ public struct Configuration: Codable, Equatable {
     public var schemaVersion = 1
     public var sharedPresetRevision: Int?
     public var presets: [ModelPreset]
-    public var recipes: [Recipe]
+    public var actions: [Action]
     public var unassignedStarterID: UUID?
+    public var providers: [ProviderDefinition] = ProviderDefinition.defaults
+    public var actionTypesVersion: Int?
 
-    public init(presets: [ModelPreset] = [], recipes: [Recipe] = []) {
+    // Existing persisted keys are migration contracts, not UI vocabulary.
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion, sharedPresetRevision, presets, unassignedStarterID, providers, actionTypesVersion
+        case actions = "recipes"
+    }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try c.decode(Int.self, forKey: .schemaVersion)
+        sharedPresetRevision = try c.decodeIfPresent(Int.self, forKey: .sharedPresetRevision)
+        presets = try c.decodeIfPresent([ModelPreset].self, forKey: .presets) ?? []
+        actions = try c.decode([Action].self, forKey: .actions)
+        unassignedStarterID = try c.decodeIfPresent(UUID.self, forKey: .unassignedStarterID)
+        providers =
+            try c.decodeIfPresent([ProviderDefinition].self, forKey: .providers)
+            ?? ProviderDefinition.defaults
+        actionTypesVersion = try c.decodeIfPresent(Int.self, forKey: .actionTypesVersion)
+    }
+
+    public init(presets: [ModelPreset] = [], actions: [Action] = []) {
         self.presets = presets
-        self.recipes = recipes
+        self.actions = actions
     }
 
     public static func starters(model: String, effort: String, fast: Bool) -> Configuration {
         let preset = ModelPreset(name: "Current", model: model, effort: effort, fast: fast)
-        var recipes = QueryMode.allCases.map { mode in
-            Recipe(
+        var actions = QueryMode.allCases.map { mode in
+            Action(
                 name: mode.rawValue, presetID: preset.id,
                 template: mode.instruction + "\n\n{{text}}", legacyMode: mode)
         }
-        recipes.append(
-            Recipe(
+        actions.append(
+            Action(
                 name: "Lookup", presetID: preset.id,
                 template:
                     "I am looking for {{fuzzy term}} for describing {{fuzzy context}}. Please help me find the term, or I might be mistaking it for another adjacent term; then correct me."
             ))
-        var result = Configuration(presets: [preset], recipes: recipes)
+        var result = Configuration(presets: [preset], actions: actions)
         if model.isEmpty { result.unassignedStarterID = preset.id }
         return result
     }
 
     public func validate() throws {
+        try ProviderDefinition.validate(providers)
         guard schemaVersion == 1 else {
             throw EZError("Unsupported configuration version. Original file is preserved.")
         }
@@ -171,27 +249,59 @@ public struct Configuration: Codable, Equatable {
             }
         }
         try checkNames(presets.map(\.name))
-        try checkNames(recipes.map(\.name))
-        guard Set(presets.map(\.id)).count == presets.count, Set(recipes.map(\.id)).count == recipes.count
+        try checkNames(actions.map(\.name))
+        guard Set(presets.map(\.id)).count == presets.count, Set(actions.map(\.id)).count == actions.count
         else {
             throw EZError("Duplicate configuration IDs. Original file is preserved.")
         }
-        for recipe in recipes {
-            guard sharedPresetRevision != nil || presets.contains(where: { $0.id == recipe.presetID }) else {
-                throw EZError("Recipe ‘\(recipe.name)’ needs an existing default preset.")
+        for action in actions {
+            guard sharedPresetRevision != nil || presets.contains(where: { $0.id == action.presetID }) else {
+                throw EZError("Action ‘\(action.name)’ needs an existing default preset.")
             }
-            _ = try PromptTemplate(recipe.template)
+            _ = try PromptTemplate(action.template)
         }
+        for preset in presets {
+            guard preset.providerKey.range(of: "^[a-z][a-z0-9-]{0,63}$", options: .regularExpression) != nil
+            else { throw EZError("Invalid preset provider key.") }
+            if let image = preset.imageOptions { try image.validate() }
+        }
+    }
+
+    @discardableResult public mutating func addIllustration() -> Bool {
+        let actionID = UUID(uuidString: "8BE72259-67B7-4DCF-8F8D-88E5B68F23CB")!
+        guard !actions.contains(where: { $0.id == actionID }) else { return false }
+        let preset = ModelPreset(
+            id: UUID(uuidString: "C14B29F3-3EC2-4EFC-8BED-E05531AEF2CB")!,
+            name: uniqueName("Illustration", in: presets.map(\.name)), model: "gpt-image-2.5-flare",
+            effort: "", fast: false,
+            providerKey: "openai-api", capability: .draw, imageOptions: ImageOptions())
+        if !presets.contains(where: { $0.id == preset.id }) { presets.append(preset) }
+        actions.append(
+            Action(
+                id: actionID, name: uniqueName("Illustration", in: actions.map(\.name)),
+                presetID: preset.id,
+                template: "Create a clear illustration of the following context:\n\n{{context}}",
+                capability: .draw))
+        return true
+    }
+    private func uniqueName(_ proposed: String, in names: [String]) -> String {
+        var name = proposed
+        var suffix = 2
+        while names.contains(where: { $0.lowercased() == name.lowercased() }) {
+            name = "\(proposed) (\(suffix))"
+            suffix += 1
+        }
+        return name
     }
 
     public func preparingLauncherInput(_ text: String, recipeID: UUID) throws -> (
         values: [String: String], submit: Bool
     ) {
-        guard let recipe = recipes.first(where: { $0.id == recipeID }) else {
-            throw EZError("Choose a recipe in EZ first.")
+        guard let action = actions.first(where: { $0.id == recipeID }) else {
+            throw EZError("Choose an action in EZ first.")
         }
-        let fields = try PromptTemplate(recipe.template).fields
-        return ([fields[0]: text], fields.count == 1)
+        let fields = try PromptTemplate(action.template).fields
+        return ([fields[0]: text], fields.count == 1 && action.capability == .write)
     }
 }
 
@@ -212,6 +322,8 @@ public final class ConfigurationStore {
                 let library = try shared.read()
                 value["presets"] = try JSONSerialization.jsonObject(
                     with: JSONEncoder().encode(library.presets))
+                value["providers"] = try JSONSerialization.jsonObject(
+                    with: JSONEncoder().encode(library.providers))
                 value["sharedPresetRevision"] = library.revision
                 let result = try JSONDecoder().decode(
                     Configuration.self, from: JSONSerialization.data(withJSONObject: value))
@@ -228,8 +340,10 @@ public final class ConfigurationStore {
         try result.validate()
         if let shared {
             let migrating = result.sharedPresetRevision == nil
-            let library = try migrating ? shared.migrate(result.presets) : shared.read()
+            let library =
+                try migrating ? shared.migrate(result.presets, providers: result.providers) : shared.read()
             result.presets = library.presets
+            result.providers = library.providers
             result.sharedPresetRevision = library.revision
             if migrating { try writeLocal(result) }
             try writeScope(result, shared: shared)
@@ -246,9 +360,10 @@ public final class ConfigurationStore {
             }
             let library =
                 try configuration.sharedPresetRevision.map {
-                    try shared.save(configuration.presets, revision: $0)
-                } ?? shared.migrate(configuration.presets)
+                    try shared.save(configuration.presets, revision: $0, providers: configuration.providers)
+                } ?? shared.migrate(configuration.presets, providers: configuration.providers)
             saved.presets = library.presets
+            saved.providers = library.providers
             saved.sharedPresetRevision = library.revision
         }
         do {
@@ -266,6 +381,7 @@ public final class ConfigurationStore {
                 as? [String: Any]
         else { throw EZError("Configuration must be an object.") }
         value.removeValue(forKey: "presets")
+        value.removeValue(forKey: "providers")
         value.removeValue(forKey: "sharedPresetRevision")
         scopedRevision = try shared.saveAppSection("configuration", value: value, revision: scopedRevision)
     }

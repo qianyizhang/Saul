@@ -43,7 +43,12 @@ struct InputOutputInspector: View {
                     }
                 }
                 InspectionTextBlock(label: "Prompt · user", text: entry.query)
-                InspectionTextBlock(label: "Response · raw text", text: entry.response, response: true)
+                if entry.capability == .draw {
+                    Text(entry.hasImage ? "Response · PNG image" : "No image returned.").font(
+                        AppStyle.caption)
+                } else {
+                    InspectionTextBlock(label: "Response · raw text", text: entry.response, response: true)
+                }
             }.padding(.top, 8)
         }
         .font(AppStyle.caption)

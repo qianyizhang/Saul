@@ -1,3 +1,4 @@
+import { providerCapabilities } from '../../native/shared-presets-contract.mts';
 import { ActionLabel } from '../surface/ActionLabel';
 import { ChatGPTPlanSettings } from './ChatGPTPlanSettings';
 import { useEffect, useState } from 'react';
@@ -32,6 +33,9 @@ export function Settings({
   const { testing, notice, availability } = providerTest;
   const error = draft.error || providerTest.error;
   const [presetSearch, setPresetSearch] = useState('');
+  const [providerKey, setProviderKey] = useState('gpt-plan');
+  const selectedProvider =
+    settings.providers?.find((provider) => provider.key === providerKey) || settings.providers?.[0];
   const [visibleKey, setVisibleKey] = useState(false);
   const [planBusy, setPlanBusy] = useState(false);
   const [actionBuilding, setActionBuilding] = useState(false);
@@ -120,10 +124,60 @@ export function Settings({
     );
   return (
     <fieldset className="stack settings-layout settings-fields" disabled={saving}>
-      <section hidden={section !== 'models'} className="settings-section" aria-label="Models">
-        <h2 className="view-title">Models</h2>
+      <section
+        hidden={section !== 'connections'}
+        className="settings-section"
+        aria-label="Provider definitions"
+      >
+        <h2 className="view-title">Providers</h2>
+        {selectedProvider && (
+          <div className="stack">
+            <label className="field">
+              Provider
+              <select
+                aria-label="Edit provider"
+                value={selectedProvider.key}
+                onChange={(event) => setProviderKey(event.target.value)}
+              >
+                {settings.providers?.map((provider) => (
+                  <option key={provider.key} value={provider.key}>
+                    {provider.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              Name
+              <input
+                aria-label="Provider name"
+                maxLength={80}
+                value={selectedProvider.name}
+                onChange={(event) =>
+                  draft.edit({
+                    type: 'provider-name',
+                    key: selectedProvider.key,
+                    name: event.target.value,
+                  })
+                }
+              />
+            </label>
+            <dl className="saul-metadata">
+              <dt>Key</dt>
+              <dd>{selectedProvider.key}</dd>
+              <dt>Capabilities</dt>
+              <dd>
+                {providerCapabilities(selectedProvider)
+                  .map((capability) => (capability === 'write' ? 'Write' : 'Draw'))
+                  .join(' · ')}
+              </dd>
+            </dl>
+          </div>
+        )}
+      </section>
+      <section hidden={section !== 'models'} className="settings-section" aria-label="Presets">
+        <h2 className="view-title">Presets</h2>
         <p className="small muted standard-only">
-          ChatGPT presets are shared with EZ. Accounts and recipes stay in each app.
+          Providers and presets are shared with EZ. Action inputs and credentials stay in each app.
         </p>
         <div className="settings-models">
           <div className="preset-browser">
@@ -224,22 +278,69 @@ export function Settings({
                 Remove
               </button>
             </div>
+            {selectedPreset?.capability === 'draw' && (
+              <div>
+                <p role="status">
+                  Draw preset · edit image settings in EZ. Saul currently runs Write actions.
+                </p>
+                <dl className="saul-metadata">
+                  <dt>Provider</dt>
+                  <dd>
+                    {settings.providers?.find(
+                      (provider) => provider.key === selectedPreset.providerKey,
+                    )?.name || selectedPreset.providerKey}
+                  </dd>
+                  <dt>Model</dt>
+                  <dd>{selectedPreset.model}</dd>
+                  <dt>Size</dt>
+                  <dd>{selectedPreset.imageOptions?.size || '1024x1024'}</dd>
+                  <dt>Quality</dt>
+                  <dd>{selectedPreset.imageOptions?.quality || 'low'}</dd>
+                </dl>
+              </div>
+            )}
             <fieldset
+              hidden={selectedPreset?.capability === 'draw'}
               className={`settings-fields ${settings.activeProvider === 'openai-compatible' ? 'api-fields' : ''}`}
-              disabled={testing}
+              disabled={testing || selectedPreset?.capability === 'draw'}
             >
               <label className="field">
-                AI service
+                Provider
                 <select
-                  aria-label="AI service"
+                  aria-label="Provider"
                   disabled={planBusy}
-                  value={settings.activeProvider}
-                  onChange={(e) =>
-                    update({ activeProvider: e.target.value as UserSettings['activeProvider'] })
+                  value={
+                    selectedPreset?.providerKey ||
+                    (settings.activeProvider === 'chatgpt-plan'
+                      ? 'gpt-plan'
+                      : settings.activeProvider)
                   }
+                  onChange={(e) => {
+                    if (settings.providers?.some((provider) => provider.key === e.target.value))
+                      draft.edit({ type: 'preset-provider', key: e.target.value });
+                    else
+                      update({
+                        activeProvider: (e.target.value === 'gpt-plan'
+                          ? 'chatgpt-plan'
+                          : e.target.value) as UserSettings['activeProvider'],
+                      });
+                  }}
                 >
                   <option value="openai-compatible">API connection</option>
-                  <option value="chatgpt-plan">ChatGPT plan</option>
+                  {!settings.providers?.length && <option value="gpt-plan">ChatGPT plan</option>}
+                  {settings.providers?.map((provider) => (
+                    <option key={provider.key} value={provider.key}>
+                      {provider.name}
+                    </option>
+                  ))}
+                  {selectedPreset?.providerKey &&
+                    !settings.providers?.some(
+                      (provider) => provider.key === selectedPreset.providerKey,
+                    ) && (
+                      <option value={selectedPreset.providerKey} disabled>
+                        {selectedPreset.providerKey} · unavailable
+                      </option>
+                    )}
                   <option value="chrome-ai" disabled={!CHROME_AI_ENABLED}>
                     Chrome on-device AI{CHROME_AI_ENABLED ? '' : ' (temporarily disabled)'}
                   </option>
@@ -522,14 +623,14 @@ export function Settings({
       <section
         hidden={section !== 'overview' && section !== 'reading'}
         className="settings-section"
-        aria-label={section === 'overview' ? 'Overview' : 'Reading'}
+        aria-label={section === 'overview' ? 'Overview' : 'Actions'}
       >
-        <h2 className="view-title">{section === 'overview' ? 'Settings' : 'Reading'}</h2>
+        <h2 className="view-title">{section === 'overview' ? 'Settings' : 'Actions'}</h2>
         <div className="settings-pair">
           <label className="field">
-            Default recipe
+            Default action
             <select
-              aria-label="Default recipe"
+              aria-label="Default action"
               value={configuration.selectedRecipeId}
               onChange={(event) => draft.edit({ type: 'default-recipe', id: event.target.value })}
             >
@@ -561,14 +662,14 @@ export function Settings({
         </div>
         <div hidden={section !== 'overview'} className="settings-overview">
           <button className="settings-link" onClick={() => onSectionChange('models')}>
-            <span>Models</span>
+            <span>Presets</span>
             <span>
               {configuration.presets.length}
               <span aria-hidden="true"> ›</span>
             </span>
           </button>
           <button className="settings-link" onClick={() => onSectionChange('reading')}>
-            <span>Recipes</span>
+            <span>Actions</span>
             <span>
               {configuration.recipes.length}
               <span aria-hidden="true"> ›</span>
@@ -672,7 +773,7 @@ export function Settings({
           !testing &&
           !planBusy &&
           !actionBuilding &&
-          (section === 'preferences' || section === 'connections')
+          section === 'preferences'
         }
       >
         {testing && (
@@ -702,7 +803,7 @@ export function Settings({
           <div className="row">
             <span role="status">Account operation in progress.</span>
             <button className="btn" onClick={() => onSectionChange('models')}>
-              Models
+              Presets
             </button>
           </div>
         )}

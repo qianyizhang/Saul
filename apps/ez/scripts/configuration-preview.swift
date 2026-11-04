@@ -21,7 +21,7 @@ import SwiftUI
         config.presets[0].name = "lit"
         config.presets.append(ModelPreset(name: "steady", model: "fixture-luna", effort: "high", fast: false))
         do { try model.saveConfiguration(config) } catch { model.error = error.localizedDescription }
-        model.chooseRecipe(config.recipes[3].id)
+        model.chooseAction(config.actions[3].id)
         _model = StateObject(wrappedValue: model)
         controller = QuickLookupController(model: model)
     }

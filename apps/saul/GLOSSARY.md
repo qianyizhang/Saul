@@ -2,7 +2,7 @@
 
 Shared language for reading and organizing open browser tabs across Saul's surfaces.
 
-See the [shared vocabulary](../../GLOSSARY.md) for recipes, presets and inspection.
+See the [shared vocabulary](../../GLOSSARY.md) for actions, presets and inspection.
 
 ## Language
 

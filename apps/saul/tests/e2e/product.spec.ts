@@ -68,7 +68,7 @@ test('provider profiles preserve their own credentials and clear keys across ori
 }) => {
   const { popup } = await sandbox.launch();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Models');
+  await settingsSection(popup, 'Presets');
   await popup.getByLabel('API connection', { exact: true }).click();
   await popup.getByLabel('Profile name', { exact: true }).fill('Local test');
   await popup.getByPlaceholder('https://api.openai.com/v1').fill(fixtureServer.origin + '/v1');
@@ -89,7 +89,7 @@ test('provider profiles preserve their own credentials and clear keys across ori
   await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
   await popup.reload();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Models');
+  await settingsSection(popup, 'Presets');
   await popup.getByLabel('API connection', { exact: true }).click();
   await popup.getByLabel('Saved profile', { exact: true }).selectOption({ label: 'Local test' });
   await expect(popup.getByPlaceholder('Optional for local models')).toHaveValue('fixture-key-one');
@@ -140,11 +140,11 @@ test('missing and stale profile selections recover the current config and remain
     );
     if (popup.url().includes('#settings')) await popup.reload();
     else await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-    await settingsSection(popup, 'Models');
+    await settingsSection(popup, 'Presets');
 
     await expect(popup.getByLabel('Saved profile', { exact: true })).toHaveValue(recoveredId);
     await expect(popup.getByLabel('Model name', { exact: true })).toHaveValue('current-model');
-    await settingsSection(popup, 'Models');
+    await settingsSection(popup, 'Presets');
     await popup.getByLabel('Model name', { exact: true }).fill(model);
     await popup.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
@@ -223,7 +223,7 @@ test('unreadable settings show an error instead of an editable default profile',
     };
   });
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Models');
+  await settingsSection(popup, 'Presets');
   await expect(popup.getByRole('alert')).toContainText('Could not read saved settings');
   await expect(popup.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
   await expect(popup.getByRole('button', { name: 'Back up and reset settings' })).toHaveCount(0);
@@ -239,12 +239,12 @@ test('malformed settings expose their field error and require explicit backup be
     invalid,
   );
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Models');
+  await settingsSection(popup, 'Presets');
   await expect(popup.getByRole('alert')).toContainText(
     'Saved provider temperature must be a finite number',
   );
   await popup.getByRole('button', { name: 'Back up and reset settings', exact: true }).click();
-  await expect(popup.getByLabel('AI service', { exact: true })).toBeVisible();
+  await expect(popup.getByLabel('Provider', { exact: true })).toBeVisible();
   await expect(
     popup.getByText(
       'Defaults restored. The previous saved settings remain in a local recovery backup.',
@@ -331,12 +331,12 @@ test('workspace navigation protects drafts and respects on-device availability',
 }) => {
   const { popup } = await sandbox.launch();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Models');
+  await settingsSection(popup, 'Presets');
   await expect(popup.getByRole('link', { name: 'Open full workspace' })).toHaveAttribute(
     'href',
     /library\.html#settings$/,
   );
-  await settingsSection(popup, 'Models');
+  await settingsSection(popup, 'Presets');
   await popup.getByLabel('Model name', { exact: true }).fill('unsaved-model');
   popup.once('dialog', (dialog) => dialog.dismiss());
   await popup.evaluate(() => {
@@ -374,13 +374,13 @@ test('workspace navigation protects drafts and respects on-device availability',
       },
     });
   });
-  await settingsSection(popup, 'Models');
-  await popup.getByLabel('AI service', { exact: true }).selectOption('chrome-ai');
+  await settingsSection(popup, 'Presets');
+  await popup.getByLabel('Provider', { exact: true }).selectOption('chrome-ai');
   await popup.getByRole('button', { name: 'Prepare on-device model' }).click();
-  await expect(popup.getByLabel('AI service', { exact: true })).toBeDisabled();
+  await expect(popup.getByLabel('Provider', { exact: true })).toBeDisabled();
   await popup.getByRole('button', { name: 'Stop test' }).click();
   await expect(popup.getByRole('alert')).toContainText('Test stopped');
-  await expect(popup.getByLabel('AI service', { exact: true })).toBeEnabled();
+  await expect(popup.getByLabel('Provider', { exact: true })).toBeEnabled();
 });
 
 test('save locks the draft; provider tests lock only provider settings and remain cancellable', async ({
@@ -391,12 +391,12 @@ test('save locks the draft; provider tests lock only provider settings and remai
     const { popup, worker } = await sandbox.launch();
     await configureFixtureProvider(popup, server.origin);
     await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-    await settingsSection(popup, 'Models');
+    await settingsSection(popup, 'Presets');
     await popup.getByLabel('Model options and tests', { exact: true }).click();
     await popup.getByRole('button', { name: 'Test generation', exact: true }).click();
     await expect(popup.getByLabel('Profile name', { exact: true })).toBeDisabled();
     await expect(popup.getByLabel('Response language', { exact: true })).toBeEnabled();
-    await settingsSection(popup, 'Reading');
+    await settingsSection(popup, 'Actions');
     await popup.getByLabel('Response language', { exact: true }).selectOption('English');
     await popup.getByRole('button', { name: 'Stop test', exact: true }).click();
     await expect(popup.getByLabel('Profile name', { exact: true })).toBeEnabled();

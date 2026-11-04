@@ -20,7 +20,7 @@ function credentialForFrozenInput(settings: UserSettings, input: RunInput): stri
   if (!input.preset) {
     if (isLoopbackEndpoint(endpoint)) return '';
     throw new Error(
-      'This older request has no saved connection reference. Select the text and choose a recipe to run again.',
+      'This older request has no saved connection reference. Select the text and choose an action to run again.',
     );
   }
   const connection = settingsForPreset(settings, input.preset);
@@ -43,10 +43,10 @@ export function prepareRecipeRun(
 ): { input: RunInput; credential: string } {
   const configuration = configurationFor(settings);
   const recipe = configuration.recipes.find((item) => item.id === recipeId);
-  if (!recipe) throw new Error('This recipe no longer exists. Choose a recipe in Settings.');
+  if (!recipe) throw new Error('This action no longer exists. Choose an action in Settings.');
   const preset = configuration.presets.find((item) => item.id === recipe.presetId);
   if (!preset)
-    throw new Error(`Recipe “${recipe.name}” needs its default preset. Choose one in Settings.`);
+    throw new Error(`Action “${recipe.name}” needs its default preset. Choose one in Settings.`);
   const selected = settingsForPreset(settings, preset);
   if (!inspectOnly) validateProviderSettings(selected);
   const remote = {

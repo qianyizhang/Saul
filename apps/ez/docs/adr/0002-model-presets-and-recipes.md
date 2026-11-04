@@ -29,7 +29,7 @@ remaining fields and explicit Send. Restart selects the first remaining recipe.
 
 Recipes and preset snapshots are stored in owner-only `configuration.json`, separate
 from credentials and history. Since 2026-10-27, live model presets use the
-[shared local store](../../../../contracts/README.md#accounts-and-models); configuration
+[shared local store](../../../../contracts/README.md#providers-and-presets); configuration
 records its revision and imports old presets once. Writes validate names, template syntax, and references
 before atomic replacement. Referenced presets must be reassigned before removal.
 Corrupt files are preserved and sending/editing is blocked rather than resetting.

@@ -1,3 +1,8 @@
+import type {
+  ActionCapability,
+  SharedImageOptions,
+  SharedProvider,
+} from '../../native/shared-presets-contract.mts';
 export interface SelectionSnapshot {
   id: string;
   text: string;
@@ -80,6 +85,10 @@ export interface ModelPreset {
   topK?: number;
   effort?: string;
   fast?: boolean;
+  providerKey?: string;
+  capability?: ActionCapability;
+  imageOptions?: SharedImageOptions;
+  shared?: boolean;
 }
 
 export interface Recipe {
@@ -100,6 +109,9 @@ export interface ReadingConfiguration {
 export interface UserSettings {
   summaryPdfProcessing?: 'attachment' | 'local';
   sharedPresetRevision?: number;
+  providers?: SharedProvider[];
+  /** App-local provider key → API profile ID; contains no credential. */
+  providerConnections?: Record<string, string>;
   scopedConfigRevision?: number;
   profiles?: ProviderProfile[];
   activeProfileId?: string;

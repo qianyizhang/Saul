@@ -42,10 +42,10 @@ test('compact workspace supports reading, tab controls and reachable settings', 
     .check();
   await expect(popup.getByRole('button', { name: 'Group', exact: true })).toBeEnabled();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Models');
+  await settingsSection(popup, 'Presets');
   const connection = popup
     .getByRole('navigation', { name: 'Settings sections' })
-    .getByRole('button', { name: 'Connections', exact: true });
+    .getByRole('button', { name: 'Providers', exact: true });
   await connection.focus();
   await popup.keyboard.press('Enter');
   await expect(popup.getByLabel('Codex tab access')).toBeVisible();
@@ -57,16 +57,16 @@ test('compact workspace supports reading, tab controls and reachable settings', 
   ).toBeVisible();
   await popup.getByLabel('Connect Codex · setup and troubleshooting', { exact: true }).click();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Models');
-  await expect(popup.getByLabel('AI service', { exact: true })).toBeVisible();
+  await settingsSection(popup, 'Presets');
+  await expect(popup.getByLabel('Provider', { exact: true })).toBeVisible();
   const save = popup.getByRole('button', { name: 'Save', exact: true });
   await expect(save).toBeInViewport();
   if (reviewScreenshots) await popup.screenshot({ path: info.outputPath('05-settings.png') });
-  await settingsSection(popup, 'Models');
+  await settingsSection(popup, 'Presets');
   await popup.getByLabel('Model name', { exact: true }).fill('');
   await save.click();
   await expect(popup.getByRole('alert')).toBeInViewport();
-  await settingsSection(popup, 'Models');
+  await settingsSection(popup, 'Presets');
   await popup.getByLabel('Model name', { exact: true }).fill('changed-model');
   popup.once('dialog', (dialog) => dialog.dismiss());
   await popup.getByRole('button', { name: 'Window', exact: true }).click();
@@ -221,11 +221,11 @@ test('answer metadata stays aligned and readable in cards and history at compact
   const { popup, context } = await sandbox.launch();
   await configureFixtureProvider(popup, fixtureServer.origin);
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Models');
+  await settingsSection(popup, 'Presets');
   const longModel = 'test-model-with-a-deliberately-long-identifier-for-wrapping';
-  await settingsSection(popup, 'Models');
+  await settingsSection(popup, 'Presets');
   await popup.getByLabel('Model name', { exact: true }).fill(longModel);
-  await settingsSection(popup, 'Models');
+  await settingsSection(popup, 'Presets');
   await popup
     .getByLabel('Preset name', { exact: true })
     .fill('Careful reading with a deliberately long preset name');
@@ -252,7 +252,7 @@ test('answer metadata stays aligned and readable in cards and history at compact
     await expect(details).toHaveAttribute('open');
     await expect(details.locator('dt')).toHaveText([
       'Created',
-      'Recipe',
+      'Action',
       'Preset',
       'Provider',
       'Model',

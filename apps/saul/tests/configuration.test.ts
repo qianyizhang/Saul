@@ -4,6 +4,7 @@ import { DEFAULT_SETTINGS, getSettings } from '../src/storage/settings';
 import { DEFAULT_SYSTEM_PROMPT, renderExplainPrompt } from '../src/models/prompts';
 import {
   configurationFor,
+  settingsForPreset,
   normalizeConfiguration,
   parseTemplate,
   renderRecipePrompt,
@@ -192,7 +193,7 @@ it('rejects missing and duplicate configuration references without silently chan
     'Unsupported configuration',
   );
   expect(() => validateConfiguration({ ...configuration, selectedRecipeId: 'missing' })).toThrow(
-    'default recipe',
+    'default action',
   );
   expect(() =>
     validateConfiguration({
@@ -209,7 +210,7 @@ it('rejects missing and duplicate configuration references without silently chan
       ],
     }),
   ).toThrow('unique');
-  expect(() => prepareRecipeRun(settings, context, 'deleted')).toThrow('recipe no longer exists');
+  expect(() => prepareRecipeRun(settings, context, 'deleted')).toThrow('action no longer exists');
   expect(() =>
     prepareRecipeRun({ ...settings, profiles: [] }, context, configuration.selectedRecipeId),
   ).toThrow('saved connection');
@@ -299,4 +300,14 @@ it('reviews current input without requiring a credential, while generation still
     text: { kind: 'changed', added: 3 },
     fields: ['Instructions', 'Model settings'],
   });
+});
+
+it('blocks shared API options before transport rather than silently discarding them', () => {
+  const settings = configured();
+  const preset = configurationFor(settings).presets[0]!;
+  for (const options of [{ effort: 'low' }, { fast: true }]) {
+    const request = { ...preset, ...options, providerKey: 'openai-api', shared: true };
+    expect(() => settingsForPreset(settings, request)).toThrow('Run it in EZ');
+    expect(settingsForPreset(settings, request, true).activeProvider).toBe('openai-compatible');
+  }
 });

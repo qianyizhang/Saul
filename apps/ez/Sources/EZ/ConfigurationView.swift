@@ -7,15 +7,15 @@ struct ConfigurationView: View {
     @State private var confirmSelection = false
     @State private var pendingSelection: (() -> Void)?
     @State private var preset: ModelPreset?
-    @State private var recipe: Recipe?
+    @State private var action: Action?
     @State private var presetMessage: String?
-    @State private var recipeMessage: String?
+    @State private var actionMessage: String?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 if !model.minimumMode {
-                    Text("Name your model choices, then build the recipes you use.")
+                    Text("Name your model choices, then build the actions you use.")
                         .font(AppStyle.body).foregroundStyle(.secondary)
                 }
                 if let error = model.configurationError {
@@ -23,7 +23,7 @@ struct ConfigurationView: View {
                 }
                 HStack {
                     if !model.minimumMode {
-                        Text("Model presets are shared with Saul. Accounts and recipes stay in each app.")
+                        Text("Model presets are shared with Saul. Accounts and actions stay in each app.")
                             .font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
                     }
                     Spacer()
@@ -31,9 +31,9 @@ struct ConfigurationView: View {
                         let reload = {
                             model.refreshConfiguration()
                             preset = model.configuration.presets.first
-                            recipe = model.configuration.recipes.first
+                            action = model.configuration.actions.first
                         }
-                        if presetIsDirty || recipeIsDirty {
+                        if presetIsDirty || actionIsDirty {
                             pendingSelection = reload
                             confirmSelection = true
                         } else {
@@ -41,7 +41,7 @@ struct ConfigurationView: View {
                         }
                     }.help("Reload saved settings").accessibilityLabel("Reload saved settings")
                 }
-                if model.settingsSection == .recipes { recipeSection } else { presetSection }
+                if model.settingsSection == .actions { actionSection } else { presetSection }
                 if !model.minimumMode {
                     Text(
                         "Saved on this Mac. Changes apply to new lookups; history keeps its original prompt and choices."
@@ -51,9 +51,9 @@ struct ConfigurationView: View {
             }.padding(24)
         }.onAppear {
             if preset == nil { preset = model.configuration.presets.first }
-            if recipe == nil { recipe = model.configuration.recipes.first }
+            if action == nil { action = model.configuration.actions.first }
         }
-        .onChange(of: presetIsDirty || recipeIsDirty, initial: true) { _, dirty in
+        .onChange(of: presetIsDirty || actionIsDirty, initial: true) { _, dirty in
             hasUnsavedChanges = dirty
         }
         .alert("Discard unsaved edits?", isPresented: $confirmSelection) {
@@ -72,7 +72,7 @@ struct ConfigurationView: View {
         GroupBox {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
-                    Label("Model presets", systemImage: "slider.horizontal.3").font(.headline)
+                    Text("Presets").font(.headline)
                     Spacer()
                     Button(model.minimumMode ? "Add" : "Add preset", systemImage: "plus") {
                         let option = model.currentModel ?? model.models.first
@@ -130,44 +130,99 @@ struct ConfigurationView: View {
                         preset?.fast = false
                     }
                 })
-            let modelOptions: [SelectorOption<String>] =
-                (model.models.contains(where: { $0.model == preset?.model })
-                    ? []
-                    : [
-                        .init(
-                            value: preset?.model ?? "",
-                            title: preset?.model.isEmpty == false
-                                ? "\(preset!.model) (unavailable)" : "Connect to choose a model")
-                    ]) + model.models.map { .init(value: $0.model, title: $0.displayName) }
-            SelectorPicker("Model", options: modelOptions, selection: modelSelection)
-            let efforts =
-                model.models.first { $0.model == preset?.model }?.supportedReasoningEfforts.map(
-                    \.reasoningEffort) ?? []
-            let effortOptions: [SelectorOption<String>] =
-                [.init(value: "", title: "Default")]
-                + (efforts.contains(preset?.effort ?? "") || preset?.effort.isEmpty != false
-                    ? []
-                    : [
-                        .init(
-                            value: preset?.effort ?? "",
-                            title: preset?.effort.isEmpty == false
-                                ? "\(preset!.effort.capitalized) (unavailable)" : "Default")
-                    ]) + efforts.map { .init(value: $0, title: $0.capitalized) }
-            SelectorPicker("Effort", options: effortOptions, selection: presetBinding(\.effort))
-            let supportsFast = model.models.first { $0.model == preset?.model }?.fastTier != nil
             SelectorPicker(
-                "Speed",
-                options: [
-                    .init(value: false, title: "Standard"),
+                "Provider",
+                options: (model.configuration.providers.contains { $0.key == preset?.providerKey }
+                    ? []
+                    : [
+                        .init(
+                            value: preset?.providerKey ?? "",
+                            title: "\(preset?.providerKey ?? "Unknown") (unavailable)", enabled: false)
+                    ])
+                    + model.configuration.providers.map { .init(value: $0.key, title: $0.name) },
+                selection: presetBinding(\.providerKey))
+            let supported =
+                model.configuration.providers.first { $0.key == preset?.providerKey }?.capabilities ?? []
+            SelectorPicker(
+                "Capability",
+                options: ActionCapability.allCases.map {
                     .init(
-                        value: true, title: supportsFast ? "Fast" : "Fast (unavailable)",
-                        enabled: supportsFast),
-                ], selection: presetBinding(\.fast)
-            )
-            .help("Fast requests priority service and may use more plan allowance.")
-            if !model.minimumMode {
-                Text("Fast may use more plan allowance.").font(AppStyle.caption).foregroundStyle(
-                    AppStyle.secondaryText)
+                        value: $0, title: supported.contains($0) ? $0.name : "\($0.name) (unavailable)",
+                        enabled: supported.contains($0))
+                }, selection: presetBinding(\.capability))
+            if preset?.capability == .draw {
+                let images: [SelectorOption<String>] = ImageModelOption.openAIModels.map {
+                    .init(value: $0.id, title: $0.name)
+                }
+                SelectorPicker(
+                    "Model",
+                    options: (images.contains(where: { $0.value == preset?.model })
+                        ? [] : [.init(value: preset?.model ?? "", title: "Choose an image model")]) + images,
+                    selection: presetBinding(\.model))
+                DisclosureGroup("Image settings") {
+                    VStack(spacing: 12) {
+                        SelectorPicker(
+                            "Size",
+                            options: ImageModelOption.sizes.map {
+                                .init(value: $0, title: $0.replacingOccurrences(of: "x", with: " × "))
+                            }, selection: imageOptionBinding(\.size))
+                        SelectorPicker(
+                            "Quality",
+                            options: ImageModelOption.qualities.map {
+                                .init(value: $0, title: $0.capitalized)
+                            }, selection: imageOptionBinding(\.quality))
+                    }.padding(.top, 8)
+                }
+            } else if preset?.providerKey != "gpt-plan" {
+                Text("Model").font(AppStyle.caption)
+                TextField("Model ID", text: presetBinding(\.model)).textFieldStyle(.roundedBorder)
+                DisclosureGroup("Options") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        TextField("Reasoning effort · optional", text: presetBinding(\.effort))
+                            .textFieldStyle(.roundedBorder)
+                        Toggle("Fast", isOn: presetBinding(\.fast))
+                    }.padding(.top, 8)
+                }
+            } else {
+                let modelOptions: [SelectorOption<String>] =
+                    (model.models.contains(where: { $0.model == preset?.model })
+                        ? []
+                        : [
+                            .init(
+                                value: preset?.model ?? "",
+                                title: preset?.model.isEmpty == false
+                                    ? "\(preset!.model) (unavailable)" : "Connect to choose a model")
+                        ]) + model.models.map { .init(value: $0.model, title: $0.displayName) }
+                SelectorPicker("Model", options: modelOptions, selection: modelSelection)
+                let efforts =
+                    model.models.first { $0.model == preset?.model }?.supportedReasoningEfforts.map(
+                        \.reasoningEffort) ?? []
+                let effortOptions: [SelectorOption<String>] =
+                    [.init(value: "", title: "Default")]
+                    + (efforts.contains(preset?.effort ?? "") || preset?.effort.isEmpty != false
+                        ? []
+                        : [
+                            .init(
+                                value: preset?.effort ?? "",
+                                title: preset?.effort.isEmpty == false
+                                    ? "\(preset!.effort.capitalized) (unavailable)" : "Default")
+                        ]) + efforts.map { .init(value: $0, title: $0.capitalized) }
+                SelectorPicker("Effort", options: effortOptions, selection: presetBinding(\.effort))
+                let supportsFast = model.models.first { $0.model == preset?.model }?.fastTier != nil
+                SelectorPicker(
+                    "Speed",
+                    options: [
+                        .init(value: false, title: "Standard"),
+                        .init(
+                            value: true, title: supportsFast ? "Fast" : "Fast (unavailable)",
+                            enabled: supportsFast),
+                    ], selection: presetBinding(\.fast)
+                )
+                .help("Fast requests priority service and may use more plan allowance.")
+                if !model.minimumMode {
+                    Text("Fast may use more plan allowance.").font(AppStyle.caption).foregroundStyle(
+                        AppStyle.secondaryText)
+                }
             }
             if let preset, let issue = preset.availabilityError(in: model.models) {
                 Text(issue).font(AppStyle.caption).foregroundStyle(.orange)
@@ -187,73 +242,77 @@ struct ConfigurationView: View {
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var recipeSection: some View {
+    private var actionSection: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
-                    Label("Recipes", systemImage: "text.badge.plus").font(.headline)
+                    Label("Actions", systemImage: "text.badge.plus").font(.headline)
                     Spacer()
-                    Button(model.minimumMode ? "Add" : "Add recipe", systemImage: "plus") {
+                    Button(model.minimumMode ? "Add" : "Add action", systemImage: "plus") {
                         guard let defaultPreset = model.configuration.presets.first else { return }
-                        selectRecipe(
-                            Recipe(name: "New recipe", presetID: defaultPreset.id, template: "{{text}}"))
-                    }.help("Add recipe").accessibilityLabel("Add recipe").disabled(
+                        selectAction(
+                            Action(name: "New action", presetID: defaultPreset.id, template: "{{text}}"))
+                    }.help("Add action").accessibilityLabel("Add action").disabled(
                         model.configuration.presets.isEmpty)
                 }
                 HStack(alignment: .top, spacing: 18) {
                     VStack(alignment: .leading, spacing: 6) {
-                        ForEach(model.configuration.recipes) { item in
+                        ForEach(model.configuration.actions) { item in
                             FullRowButton {
-                                selectRecipe(item)
+                                selectAction(item)
                             } label: {
                                 Label(item.name, systemImage: item.symbol)
                                     .frame(maxWidth: .infinity, alignment: .leading).padding(6)
                                     .background(
-                                        recipe?.id == item.id ? AppStyle.accent.opacity(0.12) : .clear,
+                                        action?.id == item.id ? AppStyle.accent.opacity(0.12) : .clear,
                                         in: RoundedRectangle(cornerRadius: 6))
                             }
                         }
-                        if model.configuration.recipes.isEmpty {
-                            Text("No recipes yet").foregroundStyle(.secondary)
+                        if model.configuration.actions.isEmpty {
+                            Text("No actions yet").foregroundStyle(.secondary)
                         }
                     }.frame(width: 145)
                     Divider()
-                    if recipe != nil {
-                        recipeEditor
+                    if action != nil {
+                        actionEditor
                     } else if !model.minimumMode {
-                        Text("Add a recipe with a prompt and a default preset.").foregroundStyle(.secondary)
+                        Text("Add an action with a prompt and a default preset.").foregroundStyle(.secondary)
                     }
                 }
-                if let message = recipeMessage {
+                if let message = actionMessage {
                     Text(message).font(AppStyle.caption).textSelection(.enabled)
                 }
             }.padding(10)
         }.disabled(model.configurationLocked)
     }
 
-    private var recipeEditor: some View {
+    private var actionEditor: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Recipe name").font(AppStyle.caption)
-            TextField("Recipe name", text: recipeBinding(\.name)).textFieldStyle(.roundedBorder)
-                .accessibilityLabel("Recipe name")
+            Text("Action name").font(AppStyle.caption)
+            TextField("Action name", text: actionBinding(\.name)).textFieldStyle(.roundedBorder)
+                .accessibilityLabel("Action name")
+            SelectorPicker(
+                "Capability", options: ActionCapability.allCases.map { .init(value: $0, title: $0.name) },
+                selection: actionBinding(\.capability))
+            let compatible = model.configuration.presets.filter { $0.capability == action?.capability }
             let presetOptions: [SelectorOption<UUID>] =
-                (model.configuration.presets.contains { $0.id == recipe?.presetID }
+                (compatible.contains { $0.id == action?.presetID }
                     ? []
                     : [
-                        .init(value: recipe!.presetID, title: "Unavailable preset")
-                    ]) + model.configuration.presets.map { .init(value: $0.id, title: $0.name) }
+                        .init(value: action!.presetID, title: "Unavailable preset")
+                    ]) + compatible.map { .init(value: $0.id, title: $0.name) }
             SelectorPicker(
                 "Default preset",
                 options: presetOptions,
-                selection: recipeBinding(\.presetID))
+                selection: actionBinding(\.presetID))
             Text("Prompt").font(.subheadline.weight(.medium))
-            TextEditor(text: recipeBinding(\.template)).font(.system(size: 12, design: .monospaced))
+            TextEditor(text: actionBinding(\.template)).font(.system(size: 12, design: .monospaced))
                 .frame(height: 125).padding(6)
                 .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
                 .accessibilityLabel("Prompt template")
             if !model.minimumMode { templateHint }
-            if let template = try? PromptTemplate(recipe?.template ?? "") {
+            if let template = try? PromptTemplate(action?.template ?? "") {
                 DisclosureGroup(
                     model.minimumMode
                         ? "Preview"
@@ -270,15 +329,15 @@ struct ConfigurationView: View {
                 Text(templateError).font(AppStyle.caption).foregroundStyle(.orange)
             }
             HStack {
-                Button(model.minimumMode ? "Save" : "Save recipe") { saveRecipe() }.help("Save recipe")
-                    .accessibilityLabel("Save recipe").buttonStyle(.borderedProminent).disabled(
-                        !recipeIsDirty)
-                if recipeIsDirty { Text("Unsaved edits").font(AppStyle.caption).foregroundStyle(.secondary) }
+                Button(model.minimumMode ? "Save" : "Save action") { saveAction() }.help("Save action")
+                    .accessibilityLabel("Save action").buttonStyle(.borderedProminent).disabled(
+                        !actionIsDirty)
+                if actionIsDirty { Text("Unsaved edits").font(AppStyle.caption).foregroundStyle(.secondary) }
                 Spacer()
-                if model.configuration.recipes.contains(where: { $0.id == recipe?.id }) {
-                    Button(model.minimumMode ? "Remove" : "Remove recipe", role: .destructive) {
-                        removeRecipe()
-                    }.help("Remove recipe").accessibilityLabel("Remove recipe")
+                if model.configuration.actions.contains(where: { $0.id == action?.id }) {
+                    Button(model.minimumMode ? "Remove" : "Remove action", role: .destructive) {
+                        removeAction()
+                    }.help("Remove action").accessibilityLabel("Remove action")
                 }
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
@@ -293,9 +352,9 @@ struct ConfigurationView: View {
         guard let preset else { return false }
         return preset != model.configuration.presets.first { $0.id == preset.id }
     }
-    private var recipeIsDirty: Bool {
-        guard let recipe else { return false }
-        return recipe != model.configuration.recipes.first { $0.id == recipe.id }
+    private var actionIsDirty: Bool {
+        guard let action else { return false }
+        return action != model.configuration.actions.first { $0.id == action.id }
     }
     private func selectPreset(_ item: ModelPreset) {
         guard item.id != preset?.id else { return }
@@ -310,13 +369,13 @@ struct ConfigurationView: View {
             change()
         }
     }
-    private func selectRecipe(_ item: Recipe) {
-        guard item.id != recipe?.id else { return }
+    private func selectAction(_ item: Action) {
+        guard item.id != action?.id else { return }
         let change = {
-            recipe = item
-            recipeMessage = nil
+            action = item
+            actionMessage = nil
         }
-        if recipeIsDirty {
+        if actionIsDirty {
             pendingSelection = change
             confirmSelection = true
         } else {
@@ -326,7 +385,7 @@ struct ConfigurationView: View {
 
     private var templateError: String {
         do {
-            _ = try PromptTemplate(recipe?.template ?? "")
+            _ = try PromptTemplate(action?.template ?? "")
             return ""
         } catch { return error.localizedDescription }
     }
@@ -334,9 +393,18 @@ struct ConfigurationView: View {
         let original = preset![keyPath: path]
         return Binding(get: { preset?[keyPath: path] ?? original }, set: { preset?[keyPath: path] = $0 })
     }
-    private func recipeBinding<Value>(_ path: WritableKeyPath<Recipe, Value>) -> Binding<Value> {
-        let original = recipe![keyPath: path]
-        return Binding(get: { recipe?[keyPath: path] ?? original }, set: { recipe?[keyPath: path] = $0 })
+    private func actionBinding<Value>(_ path: WritableKeyPath<Action, Value>) -> Binding<Value> {
+        let original = action![keyPath: path]
+        return Binding(get: { action?[keyPath: path] ?? original }, set: { action?[keyPath: path] = $0 })
+    }
+    private func imageOptionBinding(_ path: WritableKeyPath<ImageOptions, String>) -> Binding<String> {
+        Binding(
+            get: { (preset?.imageOptions ?? ImageOptions())[keyPath: path] },
+            set: { value in
+                var options = preset?.imageOptions ?? ImageOptions()
+                options[keyPath: path] = value
+                preset?.imageOptions = options
+            })
     }
     private func savePreset() {
         guard var item = preset else { return }
@@ -357,28 +425,32 @@ struct ConfigurationView: View {
             presetMessage = "Preset saved."
         } catch { presetMessage = error.localizedDescription }
     }
-    private func saveRecipe() {
-        guard var item = recipe else { return }
-        guard model.configuration.presets.contains(where: { $0.id == item.presetID }) else {
-            recipeMessage = "Choose an available default preset before saving this recipe."
+    private func saveAction() {
+        guard var item = action else { return }
+        guard
+            model.configuration.presets.contains(where: {
+                $0.id == item.presetID && $0.capability == item.capability
+            })
+        else {
+            actionMessage = "Choose an available default preset before saving this action."
             return
         }
         item.name = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
         var updated = model.configuration
-        if let index = updated.recipes.firstIndex(where: { $0.id == item.id }) {
-            updated.recipes[index] = item
+        if let index = updated.actions.firstIndex(where: { $0.id == item.id }) {
+            updated.actions[index] = item
         } else {
-            updated.recipes.append(item)
+            updated.actions.append(item)
         }
         do {
             try model.saveConfiguration(updated)
-            recipe = item
-            recipeMessage = "Recipe saved."
-        } catch { recipeMessage = error.localizedDescription }
+            action = item
+            actionMessage = "Action saved."
+        } catch { actionMessage = error.localizedDescription }
     }
     private func removePreset() {
         guard let item = preset else { return }
-        let references = model.configuration.recipes.filter { $0.presetID == item.id }.map(\.name)
+        let references = model.configuration.actions.filter { $0.presetID == item.id }.map(\.name)
         guard references.isEmpty else {
             presetMessage =
                 "Change the default preset of \(references.joined(separator: ", ")) before removing this preset."
@@ -392,14 +464,14 @@ struct ConfigurationView: View {
             presetMessage = "Preset removed."
         } catch { presetMessage = error.localizedDescription }
     }
-    private func removeRecipe() {
-        guard let item = recipe else { return }
+    private func removeAction() {
+        guard let item = action else { return }
         var updated = model.configuration
-        updated.recipes.removeAll { $0.id == item.id }
+        updated.actions.removeAll { $0.id == item.id }
         do {
             try model.saveConfiguration(updated)
-            recipe = updated.recipes.first
-            recipeMessage = "Recipe removed."
-        } catch { recipeMessage = error.localizedDescription }
+            action = updated.actions.first
+            actionMessage = "Action removed."
+        } catch { actionMessage = error.localizedDescription }
     }
 }

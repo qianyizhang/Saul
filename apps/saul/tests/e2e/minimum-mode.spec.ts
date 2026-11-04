@@ -60,7 +60,7 @@ test('Min Mode defaults on, updates open surfaces, and persists independently of
   await settingsSection(popup, 'Preferences');
   const toggle = popup.getByRole('checkbox', { name: 'Min Mode', exact: false });
   await expect(toggle).toBeChecked();
-  await settingsSection(popup, 'Models');
+  await settingsSection(popup, 'Presets');
   await popup.getByLabel('API connection', { exact: true }).click();
   await popup.getByLabel('Base URL', { exact: true }).fill('invalid endpoint');
   await settingsSection(popup, 'Preferences');
@@ -102,7 +102,7 @@ test('appearance failure is visible and an unreadable provider record does not b
     chrome.storage.local.set({ saul_user_settings: { activeProvider: 'unknown' } }),
   );
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Models');
+  await settingsSection(popup, 'Presets');
   await expect(popup.getByRole('alert')).toContainText('Saved provider is not supported');
   await settingsSection(popup, 'Preferences');
   const toggle = popup.getByRole('checkbox', { name: 'Min Mode', exact: false });
@@ -155,7 +155,7 @@ test('a failed appearance save preserves a newer preference from another surface
 }) => {
   const { popup, context } = await sandbox.launch();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Models');
+  await settingsSection(popup, 'Presets');
   const other = await context.newPage();
   await other.goto(popup.url().replace('popup.html', 'library.html'));
   await popup.evaluate(() => {

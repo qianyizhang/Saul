@@ -6,7 +6,7 @@ The user-scope `gui-review` skill
 owns the annotation workflow for GUI refinement.
 [ADR 0001](adr/0001-screenshot-first-design-review.md) retains the historical rationale.
 
-[ADR 0002: Model presets and editable recipes](adr/0002-model-presets-and-recipes.md)
+[ADR 0002: Model presets and editable actions](adr/0002-model-presets-and-recipes.md)
 defines configuration, template inputs, preset overrides, and historical snapshots.
 
 ## Components
@@ -22,6 +22,8 @@ defines configuration, template inputs, preset overrides, and historical snapsho
 | `OIDC` | PKCE and RS256 identity verification using CryptoKit/Security |
 | `AuthStorage` | Keychain records and exclusive runtime lock |
 | `ResponsesClient` | Account model discovery and stateless streamed Responses requests |
+| `GenerationProvider` | Provider identity, credential resolution and supported generation operations; ChatGPT plan and OpenAI API adapters |
+| `ImagesClient` / `ProviderState` | Bounded PNG requests, local API connection, selected image loading and download |
 | `ResponseAccumulator` / `SSEParser` | Wire-event parsing and terminal completion checks |
 | `HistoryStore` | Owner-only, locked JSONL snapshots, deletion, and recovery |
 | `SharedPresetsStore` | Unified JSON model presets and EZ configuration scope; one-time import and stale-save detection |
@@ -34,13 +36,61 @@ a second runtime; it sends the same public HTTP requests an OpenAI SDK sends.
 There are no model tools in the request. Account/model choices come from the live
 `/v1/models` catalog. Unavailable preset choices block sending rather than silently changing them.
 
-Inference sends one user message containing the compiled recipe template. Starter
-mode instructions are editable template text; new recipes have no hidden mode
+Inference sends one user message containing the compiled action template. Starter
+mode instructions are editable template text; new actions have no hidden mode
 instructions. Legacy history retains its earlier instruction semantics. Every request explicitly
 sets `store: false`, `stream: true`, and the chosen/default service tier. Effort
 is sent only when available. No temperature, max-output-tokens, saved response ID,
 or unsupported preview fields are added. Completion requires a terminal
 `response.completed`; a partial stream is not a successful answer.
+
+## Providers and Illustration
+
+`ProviderDefinition` owns stable unique keys, display names and transport kind.
+Defaults are `gpt-plan` (Write) and `openai-api` (Write/Draw). Presets bind the key,
+capability, model and options, not a particular plan account. `GenerationProvider`
+resolves app-local credentials and derives supported operations from its handlers.
+No credential reaches an action or shared preset. Unknown/incompatible providers
+block before generation; no automatic model, account or billing fallback exists.
+
+Legacy presets decode as `gpt-plan` / Write. Legacy action/history JSON keys
+`recipes` and `recipeSnapshot` remain stable. Provider definitions and presets share the `modelPresets` section and its revision
+with Saul. Reads adopt legacy EZ-scoped definitions only when the shared list is
+absent. Subsequent native scope writes omit providers; shared definitions win on
+reload. Credentials, Action inputs and runtime bindings remain local. `actionTypesVersion` seeds Illustration once;
+IDs and existing behavior survive, and deletion is respected after migration.
+
+Illustration is a Draw action using `AppModel` and `AttemptExecution`, the same
+workspace, composer and single active request as Write. API Write presets use
+an explicit model ID. Its explicit Fast choice sends `service_tier: priority`;
+plan Fast remains catalog-controlled. The [official Fast mode guide](https://developers.openai.com/api/docs/guides/fast-mode)
+owns API tier semantics. Draw sends one `POST /v1/images/generations`, defaulting to
+GPT Image 2.5 Flare, low quality, 1024×1024 PNG. Its action template is the exact
+compiled prompt. Image options belong to its preset. Key Save/Reload and inspection
+never generate. The Keychain service `local.ez.app.openai` remains unchanged.
+
+Run freezes action, input values, preset and provider snapshots. Stop invalidates
+late output and cancels the local task without claiming the server stopped or
+billing was prevented. No automatic retries. Image requests time out after 180s,
+reject redirects, bound response bytes/dimensions and use safe status-specific errors.
+
+History writes PNG bytes atomically under `EZ/images/<lowercase-run-UUID>.png`
+(owner-only directory/file), before the terminal JSONL snapshot. JSON stores only
+the filename and frozen choices; it never contains base64 image bytes. The file
+name must match the entry ID; reads reject symlinks and arbitrary paths. The initial
+pending snapshot precedes generation. If PNG or terminal save fails, the in-memory
+terminal entry retains exact bytes as Unsaved; Save again retries storage only.
+Saved media loads asynchronously on selection; missing files are reported honestly.
+Download atomically exports original bytes through NSSavePanel. Deletion rewrites
+history then removes its PNG; removal errors remain visible and can be retried.
+An orphan PNG after a terminal-write failure is possible; no background cleanup ships.
+
+Both main and Quick Lookup render the saved image. Reuse restores a draft; image
+results do not accept text follow-ups. Draw launcher input always waits for explicit
+Run. Closing/hiding a surface preserves work; quitting cancels active execution.
+
+Schema follows the [official image API](https://developers.openai.com/api/reference/resources/images/methods/generate).
+Offline fixtures cannot establish account access or billed generation.
 
 ## Authentication invariants
 
@@ -67,9 +117,9 @@ or unsupported preview fields are added. Completion requires a terminal
 - OAuth URLs, codes, tokens, and raw auth diagnostics never enter chat history.
 
 See [Keychain access](keychain.md) for the exact stored item and development
-signing limitations. Presets and recipes persist on explicit Save in Configuration;
+signing limitations. Presets and actions persist on explicit Save in Configuration;
 they contain no credentials and remain separate from lookup history. Configuration
-editing preserves a draft's preset override and any recipe restored from history.
+editing preserves a draft's preset override and any action restored from history.
 
 ## Lookup workspace
 
@@ -118,10 +168,10 @@ pointer so the source app can report rejection.
 limit before mutating the workspace. A running request, pending launcher, sign-in,
 open Settings, or any nonempty draft input rejects the selection without mutation.
 Unavailable configuration reports its load/storage error; an empty configuration
-asks the user to add a recipe.
-Otherwise it starts a new lookup using the selected configured recipe (or the first
-remaining recipe after a historical recipe was removed), resets preset overrides,
-and fills only the first field. Sending remains explicit for every recipe. No
+asks the user to add an action.
+Otherwise it starts a new lookup using the selected configured action (or the first
+remaining action after a historical action was removed), resets preset overrides,
+and fills only the first field. Sending remains explicit for every action. No
 history is written until Send. Signed-out and catalog-loading states can hold the
 draft; ordinary send checks still apply. Cold Services launch may show the main
 window as well as Quick Lookup; the Raycast-only presentation flag is unchanged.
@@ -212,7 +262,7 @@ Write and flush an owner-only sibling, then atomically rename it over the histor
 file while holding the sidecar lock. No backup copy is retained. Only successful
 persistence removes the visible entry and clears its selection in both surfaces;
 failures keep the lookup visible and show an error. Deleting preserves composer
-drafts, including a recipe/inputs already restored with Use again. Unidentifiable
+drafts, including an action/inputs already restored with Use again. Unidentifiable
 damaged lines are preserved and may still contain text from a deleted lookup;
 deletion does not remove exports, clipboard contents, or filesystem backups.
 
@@ -221,10 +271,10 @@ when real history size warrants it, with a tested import and export path.
 
 ## Extension points
 
-Add a new text workflow as a recipe in Configuration. `QueryMode` remains the
+Add a new text workflow as an action in Configuration. `QueryMode` remains the
 legacy history discriminator and starter icon mapping. Features requiring
 conversation context need an explicit conversation model and retention decisions.
-Add API-key billing only as an explicit user choice, with separate credentials;
+API-key billing is explicit in API presets, with separate credentials;
 never silently use it after a plan-usage failure. Global shortcuts and menu-bar
 access should call the same app actions. See the roadmap for deferred work.
 
@@ -241,7 +291,7 @@ both the panel and menu-bar menu, which remains an alternate entry point. The pa
 appears on the pointer's display and can accompany other apps and full-screen Spaces.
 It takes keyboard focus without activating EZ; hiding it releases that focus.
 
-The panel and main window share one `AppModel`: recipe, draft inputs, preset override,
+The panel and main window share one `AppModel`: action, draft inputs, preset override,
 selection, account, request lifecycle, and history. Shortcut/menu invocation uses
 `showFreshLookup`, which starts a new lookup when idle. Plain `show` preserves
 prepared Services/Raycast inputs. The surface contract owns the invocation behavior.
@@ -267,7 +317,7 @@ directly; the adjacent information button opens the shared `RequestDetails` popo
 The main-window `RequestControls` uses that same details view without duplicating
 selectors. The popover separates next-request choices from the displayed answer's recorded choices and actual service tier.
 In Min Mode, selecting an answer hides the panel's input fields and replaces
-the recipe picker with the answer's saved recipe name, and the preset selector
+the action picker with the answer's saved action name, and the preset selector
 with its saved preset name and requested speed. Exact
 model and service tier information remains in Details. Edit
 draft restores the current inputs and preset selector without changing them;
@@ -309,7 +359,7 @@ The app remains a native Swift executable, with no launcher runtime dependency.
 All production dropdowns use a width-filling native `NSPopUpButton` through
 `SelectorPicker`. The label is separate from the control’s stable full-width hitbox;
 changing from a long title to a short one never shrinks the click/scroll area.
-Settings sections, model/recipe editor rows, and the main Settings entry use
+Settings sections, model/action editor rows, and the main Settings entry use
 `FullRowButton`, a plain native button with an explicit rectangular content shape
 around the complete padded label. Selection changes its background, not its hit area.
 Dropdowns receive wheel events through AppKit’s normal hit-testing, so only the
@@ -318,10 +368,10 @@ precise deltas use the existing selection bindings. Choices clamp at the ends;
 momentum is ignored and steps are throttled. Quick Lookup’s fixed-width preset
 selector changes overrides; its adjacent information button opens request details.
 
-`LookupCommand` names lookup actions and ordered recipe positions. `AppModel`
+`LookupCommand` names lookup actions and ordered action positions. `AppModel`
 executes them through existing New/Send/Stop/chooseRecipe actions and request guards.
 Next/Previous wraps; positions 1–8 and Last follow Configuration order. A repeated
-selection is a no-op; leaving historical replay selects a live recipe. Recipe
+selection is a no-op; leaving historical replay selects a live action. Action
 selection retains its existing draft-reset/default-preset contract.
 
 `QuickLookupController` installs one app-local key monitor independently of global

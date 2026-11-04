@@ -36,7 +36,7 @@ import Foundation
             let f = RecipeFixture()
             let option = f.option
             let preset = f.preset
-            let recipe = f.recipe
+            let action = f.action
 
             try expect(preset.availabilityError(in: [option]) == nil, "Valid preset rejected")
             var changed = preset
@@ -51,7 +51,7 @@ import Foundation
             ])!
             try expect(preset.availabilityError(in: [noFast]) != nil, "Fast silently downgraded")
             try expectThrows(EZError.self) {
-                _ = try recipe.prepare(
+                _ = try action.prepare(
                     values: ["fuzzy term": "word", "fuzzy context": "context"], preset: changed,
                     models: [option])
             }

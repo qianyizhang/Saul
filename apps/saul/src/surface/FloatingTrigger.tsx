@@ -27,13 +27,13 @@ export const FloatingTrigger: React.FC<FloatingTriggerProps> = ({
       className="flex items-center bg-accent text-on-accent text-xs font-sans font-medium rounded-control saul-elevated border border-accent select-none max-w-[calc(100vw-24px)]"
     >
       <select
-        aria-label="Recipe"
+        aria-label="Action"
         value={recipeId}
         onChange={(event) => onRecipe(event.target.value)}
         className="max-w-52 min-w-0 bg-transparent text-inherit rounded-l-control px-2 py-1.5"
       >
         {!recipes.some((recipe) => recipe.id === recipeId) && (
-          <option value={recipeId}>Recipe unavailable</option>
+          <option value={recipeId}>Action unavailable</option>
         )}
         {recipes.map((recipe) => (
           <option key={recipe.id} value={recipe.id}>

@@ -1,3 +1,4 @@
+import { validateSharedProviders } from '../../native/shared-presets-contract.mts';
 import type { Recipe, UserSettings } from '../types';
 import { DEFAULT_SETTINGS, validateProviderSettings } from '../storage/settings';
 import {
@@ -23,6 +24,8 @@ export type SettingsEdit =
   | { type: 'select-preset'; id: string }
   | { type: 'add-preset'; id: string }
   | { type: 'preset-name'; name: string }
+  | { type: 'provider-name'; key: string; name: string }
+  | { type: 'preset-provider'; key: string }
   | { type: 'remove-preset' }
   | { type: 'select-recipe'; id: string }
   | { type: 'add-recipe'; id: string }
@@ -50,11 +53,24 @@ function updateChoices(draft: SettingsDraft, patch: Partial<UserSettings>): Sett
       ...settings,
       configuration: {
         ...configuration,
-        presets: configuration.presets.map((preset) =>
-          preset.id === draft.presetId
-            ? presetFromSettings(settings, preset.id, preset.name)
-            : preset,
-        ),
+        presets: configuration.presets.map((preset) => {
+          if (preset.id !== draft.presetId || preset.capability === 'draw') return preset;
+          const choices = presetFromSettings(settings, preset.id, preset.name);
+          return {
+            ...preset,
+            ...choices,
+            ...(Object.hasOwn(patch, 'activeProvider')
+              ? {
+                  providerKey: undefined,
+                  shared: undefined,
+                  effort: choices.effort,
+                  fast: choices.fast,
+                  temperature: choices.temperature,
+                  topK: choices.topK,
+                }
+              : {}),
+          };
+        }),
       },
     }),
   };
@@ -107,6 +123,52 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
   const settings = draft.settings;
   const configuration = configurationFor(settings);
   switch (edit.type) {
+    case 'provider-name':
+      return {
+        ...draft,
+        settings: {
+          ...settings,
+          providers: settings.providers?.map((provider) =>
+            provider.key === edit.key ? { ...provider, name: edit.name } : provider,
+          ),
+        },
+      };
+    case 'preset-provider': {
+      const provider = settings.providers?.find((item) => item.key === edit.key);
+      const preset = configuration.presets.find((item) => item.id === draft.presetId);
+      if (!provider || !preset) throw new Error('Choose an available provider.');
+      const kind = provider.kind === 'chatgpt-plan' ? 'chatgpt-plan' : 'openai-compatible';
+      const choices =
+        preset.provider === kind
+          ? preset
+          : presetFromSettings({ ...settings, activeProvider: kind }, preset.id, preset.name);
+      const updated = {
+        ...preset,
+        model: choices.model,
+        effort: choices.effort,
+        fast: choices.fast,
+        temperature: choices.temperature,
+        topK: choices.topK,
+        shared: true,
+        providerKey: provider.key,
+        provider:
+          provider.kind === 'chatgpt-plan'
+            ? ('chatgpt-plan' as const)
+            : ('openai-compatible' as const),
+        profileId:
+          provider.kind === 'openai-api'
+            ? settings.providerConnections?.[provider.key] || provider.key
+            : undefined,
+      };
+      const configured = {
+        ...withCurrentProfile(settings),
+        configuration: {
+          ...configuration,
+          presets: configuration.presets.map((item) => (item.id === preset.id ? updated : item)),
+        },
+      };
+      return { ...draft, settings: settingsForPreset(configured, updated, true) };
+    }
     case 'settings':
       return updateChoices(draft, edit.patch);
     case 'remote': {
@@ -124,8 +186,19 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
       const current = withCurrentProfile(settings);
       const profile = current.profiles?.find((item) => item.id === edit.id);
       if (!profile) throw new Error('Choose an existing profile.');
+      const providerKey = configuration.presets.find(
+        (item) => item.id === draft.presetId,
+      )?.providerKey;
       return updateChoices(draft, {
         profiles: current.profiles,
+        ...(providerKey
+          ? {
+              providerConnections: {
+                ...settings.providerConnections,
+                [providerKey]: profile.id,
+              },
+            }
+          : {}),
         activeProfileId: profile.id,
         openaiCompatible: { ...profile.config },
       });
@@ -181,7 +254,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
       const used = configuration.recipes.filter((recipe) => recipe.presetId === draft.presetId);
       if (used.length)
         throw new Error(
-          `This preset is used by ${used.map((recipe) => recipe.name).join(', ')}. Choose another default preset for those recipes first.`,
+          `This preset is used by ${used.map((recipe) => recipe.name).join(', ')}. Choose another default preset for those actions first.`,
         );
       const presets = configuration.presets.filter((preset) => preset.id !== draft.presetId);
       if (!presets.length) throw new Error('Keep at least one preset.');
@@ -197,10 +270,10 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
     }
     case 'select-recipe':
       if (!configuration.recipes.some((recipe) => recipe.id === edit.id))
-        throw new Error('Choose an existing recipe.');
+        throw new Error('Choose an existing action.');
       return { ...draft, recipeId: edit.id };
     case 'add-recipe':
-      if (configuration.recipes.length >= 32) throw new Error('Keep at most 32 recipes.');
+      if (configuration.recipes.length >= 32) throw new Error('Keep at most 32 actions.');
       return {
         ...draft,
         recipeId: edit.id,
@@ -212,7 +285,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
               ...configuration.recipes,
               {
                 id: edit.id,
-                name: nextName('New recipe', configuration.recipes),
+                name: nextName('New action', configuration.recipes),
                 presetId: draft.presetId,
                 template: '{{text}}',
                 systemPrompt: DEFAULT_RECIPE_SYSTEM_PROMPT,
@@ -236,14 +309,14 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
       };
     case 'default-recipe':
       if (!configuration.recipes.some((recipe) => recipe.id === edit.id))
-        throw new Error('Choose an existing default recipe.');
+        throw new Error('Choose an existing default action.');
       return {
         ...draft,
         settings: { ...settings, configuration: { ...configuration, selectedRecipeId: edit.id } },
       };
     case 'remove-recipe':
       if (draft.recipeId === configuration.selectedRecipeId)
-        throw new Error('Choose another default recipe before removing this one.');
+        throw new Error('Choose another default action before removing this one.');
       return {
         ...draft,
         recipeId: configuration.selectedRecipeId,
@@ -262,5 +335,6 @@ export function settingsForSave(draft: SettingsDraft): UserSettings {
   const settings = withCurrentProfile(draft.settings);
   validateConfiguration(configurationFor(settings), settings.sharedPresetRevision !== undefined);
   validateProviderSettings(settings);
+  if (settings.providers) validateSharedProviders(settings.providers);
   return structuredClone(settings);
 }

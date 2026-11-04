@@ -12,7 +12,7 @@ export function RunDetails({ run, children }: { run: RunResult; children?: React
     }[run.provider] || run.provider;
   const rows = [
     ['Created', new Date(run.createdAt).toLocaleString()],
-    ...(run.recipe ? [['Recipe', run.recipe.name]] : []),
+    ...(run.recipe ? [['Action', run.recipe.name]] : []),
     ...(run.preset ? [['Preset', run.preset.name]] : []),
     ['Provider', provider],
     ['Model', run.model],

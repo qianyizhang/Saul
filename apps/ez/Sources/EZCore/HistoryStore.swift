@@ -19,6 +19,7 @@ public final class HistoryStore {
         var data = try encoder.encode(entry)
         data.append(0x0A)
         try withLock {
+            if let png = entry.imageData { try saveImage(png, id: entry.id) }
             let fd = Darwin.open(url.path, O_CREAT | O_RDWR | O_APPEND, 0o600)
             guard fd >= 0 else {
                 throw EZError("Cannot open local history: \(String(cString: strerror(errno)))")
@@ -36,7 +37,10 @@ public final class HistoryStore {
     /// Remove all snapshots with this identity, preserving unrelated bytes verbatim.
     public func delete(id: UUID) throws {
         try withLock {
-            guard FileManager.default.fileExists(atPath: url.path) else { return }
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                try removeImage(id)
+                return
+            }
             let original = try Data(contentsOf: url)
             var retained = Data()
             var start = original.startIndex
@@ -50,7 +54,10 @@ public final class HistoryStore {
                 if identity?.id != id { retained.append(contentsOf: original[start..<next]) }
                 start = next
             }
-            guard retained != original else { return }
+            guard retained != original else {
+                try removeImage(id)
+                return
+            }
             // Write and flush an owner-only sibling before replacing the original.
             // Keeping the lock on a separate inode protects writers across rename.
             var template = Array(
@@ -66,6 +73,7 @@ public final class HistoryStore {
             guard rename(temporaryPath, url.path) == 0 else {
                 throw EZError("Cannot replace local history: \(String(cString: strerror(errno)))")
             }
+            try removeImage(id)
         }
     }
     public func load() throws -> (entries: [HistoryEntry], damagedLines: Int) {
@@ -84,6 +92,48 @@ public final class HistoryStore {
                 } catch { damaged += 1 }
             }
             return (latest.values.sorted { $0.createdAt > $1.createdAt }, damaged)
+        }
+    }
+    private var imagesURL: URL {
+        url.deletingLastPathComponent().appendingPathComponent("images", isDirectory: true)
+    }
+    private func imageURL(_ id: UUID) throws -> URL {
+        if (try? imagesURL.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true {
+            throw EZError("History images directory must not be a symbolic link.")
+        }
+        let result = imagesURL.appendingPathComponent(id.uuidString.lowercased() + ".png")
+        if (try? result.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true {
+            throw EZError("History image must not be a symbolic link.")
+        }
+        return result
+    }
+    private func saveImage(_ png: Data, id: UUID) throws {
+        let target = try imageURL(id)
+        try FileManager.default.createDirectory(
+            at: imagesURL, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let temporary = imagesURL.appendingPathComponent(".\(UUID().uuidString).tmp")
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        try png.write(to: temporary, options: .withoutOverwriting)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: temporary.path)
+        let handle = try FileHandle(forWritingTo: temporary)
+        defer { try? handle.close() }
+        try handle.synchronize()
+        guard Darwin.rename(temporary.path, target.path) == 0 else {
+            throw EZError("Cannot save the returned image in History.")
+        }
+    }
+    public func image(for entry: HistoryEntry) throws -> Data? {
+        if let data = entry.imageData { return data }
+        guard let filename = entry.imageFile else { return nil }
+        guard filename == entry.id.uuidString.lowercased() + ".png" else {
+            throw EZError("Invalid saved image reference.")
+        }
+        return try Data(contentsOf: imageURL(entry.id))
+    }
+    private func removeImage(_ id: UUID) throws {
+        let image = try imageURL(id)
+        if FileManager.default.fileExists(atPath: image.path) {
+            try FileManager.default.removeItem(at: image)
         }
     }
     private func withLock<T>(_ operation: () throws -> T) throws -> T {

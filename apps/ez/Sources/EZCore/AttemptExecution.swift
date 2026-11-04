@@ -2,10 +2,18 @@ import Foundation
 
 /// One explicit attempt owns generation and the durable terminal outcome together.
 @MainActor public final class AttemptExecution {
+    public enum Output {
+        case text(ResponseAccumulator)
+        case image(Data)
+    }
     public typealias Stream =
         @MainActor (
             HistoryEntry, String, @escaping @MainActor (ResponseAccumulator) -> Void
         ) async throws -> ResponseAccumulator
+    public typealias Generation =
+        @MainActor (
+            HistoryEntry, @escaping @MainActor (ResponseAccumulator) -> Void
+        ) async throws -> Output
 
     public struct Update {
         public let entry: HistoryEntry
@@ -15,8 +23,7 @@ import Foundation
 
     public var onChange: (@MainActor (Update) -> Void)?
     public private(set) var activeID: UUID?
-    private let accessToken: @MainActor () async throws -> String
-    private let stream: Stream
+    private let generate: Generation
     private let append: @MainActor (HistoryEntry) throws -> Void
     private var active: HistoryEntry?
     private var task: Task<Void, Never>?
@@ -26,13 +33,23 @@ import Foundation
     }
     private var unsaved: [UUID: Unsaved] = [:]
 
-    public init(
+    public convenience init(
         accessToken: @escaping @MainActor () async throws -> String,
         stream: @escaping Stream,
         append: @escaping @MainActor (HistoryEntry) throws -> Void
     ) {
-        self.accessToken = accessToken
-        self.stream = stream
+        self.init(
+            generate: { entry, update in
+                let token = try await accessToken()
+                try Task.checkCancellation()
+                return .text(try await stream(entry, token, update))
+            }, append: append)
+    }
+
+    public init(
+        generate: @escaping Generation, append: @escaping @MainActor (HistoryEntry) throws -> Void
+    ) {
+        self.generate = generate
         self.append = append
     }
 
@@ -52,14 +69,20 @@ import Foundation
         task = Task {
             do {
                 try Task.checkCancellation()
-                let token = try await accessToken()
-                try Task.checkCancellation()
-                let result = try await stream(entry, token) { [weak self] progress in
+                let result = try await generate(entry) { [weak self] progress in
                     self?.progress(progress, for: entry.id)
                 }
                 try Task.checkCancellation()
-                progress(result, for: entry.id)
-                try result.requireCompleted()
+                switch result {
+                case .text(let response):
+                    progress(response, for: entry.id)
+                    try response.requireCompleted()
+                case .image(let png):
+                    guard var image = active, activeID == entry.id else { return }
+                    image.imageData = png
+                    image.imageFile = entry.id.uuidString.lowercased() + ".png"
+                    active = image
+                }
                 finish(entry.id, status: "completed")
             } catch is CancellationError {
                 finish(entry.id, status: "interrupted")
@@ -84,7 +107,9 @@ import Foundation
         do {
             try append(pending.terminal)
             unsaved.removeValue(forKey: id)
-            publish(pending.terminal, activity: .finished, isActive: false)
+            var saved = pending.terminal
+            saved.imageData = nil
+            publish(saved, activity: .finished, isActive: false)
         } catch {
             pending.error = error.localizedDescription
             unsaved[id] = pending
@@ -112,6 +137,7 @@ import Foundation
         var visible = entry
         do {
             try append(entry)
+            visible.imageData = nil
         } catch {
             unsaved[id] = Unsaved(terminal: entry, error: error.localizedDescription)
             visible = unsavedProjection(entry)

@@ -29,7 +29,7 @@ import EZCore
                 { directory in
                     let f = try StateFixture(directory: directory)
                     defer { f.model.shutdown() }
-                    f.model.chooseRecipe(f.single.id)
+                    f.model.chooseAction(f.single.id)
                     let pasteboard = NSPasteboard.withUniqueName()
                     defer { pasteboard.releaseGlobally() }
                     let text = "café 中文 🧪\n+ & %"

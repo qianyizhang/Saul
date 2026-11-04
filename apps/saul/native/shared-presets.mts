@@ -7,6 +7,9 @@ import {
   validScopedConfig,
   validateScopedConfigValue,
   validateSharedPresets,
+  validateSharedProviders,
+  DEFAULT_PROVIDERS,
+  type SharedProvider,
   type SharedPreset,
   type SharedPresets,
 } from './shared-presets-contract.mts';
@@ -67,24 +70,44 @@ export class SharedPresetsStore {
     }
   }
   read(): SharedPresets {
-    const value = this.document().modelPresets;
-    if (value === undefined) return { revision: 0, presets: [] };
+    const document = this.document();
+    const value = document.modelPresets;
+    const apps = isRecord(document.apps) ? document.apps : {};
+    const ez = isRecord(apps.ez) ? apps.ez : {};
+    const scope = isRecord(ez.configuration) ? ez.configuration : {};
+    const configuration = isRecord(scope.value) ? scope.value : {};
+    const providers =
+      isRecord(value) && value.providers !== undefined
+        ? value.providers
+        : (configuration.providers ?? structuredClone([...DEFAULT_PROVIDERS]));
+    validateSharedProviders(providers);
+    if (value === undefined) return { revision: 0, presets: [], providers };
     if (!isRecord(value) || !Number.isSafeInteger(value.revision) || Number(value.revision) < 0)
       throw new Error('Shared presets could not be read. The original file is preserved.');
     validateSharedPresets(value.presets);
     return {
       revision: Number(value.revision),
+      providers,
       presets: value.presets.map((p) => ({ ...p, id: p.id.toLowerCase() })),
     };
   }
-  save(revision: number, presets: SharedPreset[]): SharedPresets {
+  save(revision: number, presets: SharedPreset[], providers?: SharedProvider[]): SharedPresets {
     validateSharedPresets(presets);
-    if (this.read().revision !== revision)
+    const current = this.read();
+    if (current.revision !== revision)
       throw new Error(
         'Shared presets changed in the other app. Reload saved settings before saving again.',
       );
-    const saved = { revision: revision + 1, presets };
-    const document = { ...this.document(), modelPresets: saved };
+    const definitions = providers ?? current.providers ?? structuredClone([...DEFAULT_PROVIDERS]);
+    validateSharedProviders(definitions);
+    const document = this.document();
+    const saved = {
+      ...(isRecord(document.modelPresets) ? document.modelPresets : {}),
+      revision: revision + 1,
+      presets,
+      providers: definitions,
+    };
+    document.modelPresets = saved;
     this.writeDocument(document);
     return saved;
   }

@@ -82,3 +82,32 @@ it('keeps invalid edits in the draft until explicit validation succeeds', () => 
   expect(configurationFor(draft.settings).recipes[0]?.template).toBe('{{text');
   expect(configurationFor(DEFAULT_SETTINGS).recipes[0]?.template).not.toBe('{{text');
 });
+
+it('preserves a shared Draw preset through unrelated settings and provider-name edits', () => {
+  const source = structuredClone(DEFAULT_SETTINGS);
+  source.sharedPresetRevision = 2;
+  source.providers = [
+    { key: 'gpt-plan', name: 'Plan', kind: 'chatgpt-plan' },
+    { key: 'openai-api', name: 'API', kind: 'openai-api' },
+  ];
+  const image = {
+    id: 'c14b29f3-3ec2-4efc-8bed-e05531aef2cb',
+    name: 'Illustration',
+    provider: 'openai-compatible' as const,
+    providerKey: 'openai-api',
+    capability: 'draw' as const,
+    shared: true,
+    model: 'gpt-image-2.5-flare',
+    effort: '',
+    fast: false,
+    imageOptions: { size: '1536x1024', quality: 'medium' },
+  };
+  source.configuration!.presets.push(image);
+  let draft = createSettingsDraft(source);
+  draft = editSettingsDraft(draft, { type: 'select-preset', id: image.id });
+  draft = editSettingsDraft(draft, { type: 'settings', patch: { responseLanguage: 'Chinese' } });
+  draft = editSettingsDraft(draft, { type: 'provider-name', key: 'openai-api', name: 'My API' });
+  const saved = settingsForSave(draft);
+  expect(saved.configuration!.presets.find((p) => p.id === image.id)).toEqual(image);
+  expect(saved.providers?.[1]).toEqual({ key: 'openai-api', name: 'My API', kind: 'openai-api' });
+});

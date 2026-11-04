@@ -4,21 +4,21 @@ import EZCore
 
 @MainActor final class AppModel: ObservableObject {
     enum SettingsSection: String, CaseIterable {
-        case overview, configuration, recipes, preferences, account, shortcuts
+        case overview, configuration, actions, preferences, account, shortcuts
         var title: String {
             switch self {
             case .overview: "Overview"
-            case .configuration: "Models"
-            case .recipes: "Recipes"
+            case .configuration: "Presets"
+            case .actions: "Actions"
             case .preferences: "Preferences"
-            case .account: "Accounts"
+            case .account: "Providers"
             case .shortcuts: "Shortcuts"
             }
         }
     }
     @Published var settingsSection: SettingsSection = .overview
     @Published private(set) var configuration = Configuration()
-    @Published var selectedRecipeID: UUID?
+    @Published var selectedActionID: UUID?
     @Published var overridePresetID: UUID?
     @Published var inputValues: [String: String] = [:]
     @Published private(set) var draftRevision = 0
@@ -26,7 +26,10 @@ import EZCore
     @Published var configurationError: String?
     @Published var models: [ModelOption] = []
     @Published var entries: [HistoryEntry] = []
-    @Published var selection: UUID?
+    @Published var selection: UUID? { didSet { loadSelectedImage() } }
+    @Published var selectedImageData: Data?
+    @Published var imageLoading = false
+    var imageLoadTask: Task<Void, Never>?
     @Published var followUpDrafts: [UUID: String] = [:]
     @Published var followUpTargetID: UUID?
     @Published var search = ""
@@ -41,6 +44,11 @@ import EZCore
     @Published var launcherPending = false
     @Published var error: String?
     @Published var storageWarning: String?
+    @Published var apiKeyDraft = ""
+    @Published var apiConnected = false
+    @Published var apiKeyBusy = false
+    @Published var apiKeyError: String?
+    let apiKeyStore: any OpenAIKeyStorage
     @Published var showSettings = false
     @Published var minimumMode = true {
         didSet {
@@ -64,9 +72,10 @@ import EZCore
 
     init(
         historyDirectory: URL? = nil, offline: Bool = false,
-        attemptExecution: AttemptExecution? = nil
+        attemptExecution: AttemptExecution? = nil, apiKeyStore: (any OpenAIKeyStorage)? = nil
     ) {
         self.offline = offline
+        self.apiKeyStore = apiKeyStore ?? (offline ? TemporaryAPIKeyStore() : OpenAIKeyStore())
         self.attemptExecution = attemptExecution
         minimumMode = offline ? true : UserDefaults.standard.object(forKey: "minimumMode") as? Bool ?? true
         directory =
@@ -80,13 +89,26 @@ import EZCore
             if !offline, attemptExecution == nil {
                 let auth = self.auth
                 let responses = self.responses
-                self.attemptExecution = AttemptExecution(
+                let provider = GenerationProvider.chatGPTPlan(
                     accessToken: { [weak self] in
                         defer { self?.syncAccount() }
                         return try await auth.accessToken()
-                    },
-                    stream: { entry, token, update in
-                        try await responses.stream(entry: entry, token: token, onUpdate: update)
+                    }, responses: responses)
+                let api = GenerationProvider.openAIAPI(keyStore: self.apiKeyStore)
+                self.attemptExecution = AttemptExecution(
+                    generate: { entry, update in
+                        guard let preset = entry.presetSnapshot, let connection = entry.providerSnapshot
+                        else { throw EZError("The action's provider snapshot is missing.") }
+                        let selected = connection.kind == .chatGPTPlan ? provider : api
+                        if preset.capability == .draw {
+                            let options = preset.imageOptions ?? ImageOptions()
+                            let output = try await selected.generateImage(
+                                ImageGenerationRequest(
+                                    prompt: entry.query,
+                                    model: preset.model, size: options.size, quality: options.quality))
+                            return .image(output)
+                        }
+                        return .text(try await selected.streamText(entry: entry, onUpdate: update))
                     },
                     append: { try store.append($0) })
             }
@@ -112,7 +134,14 @@ import EZCore
                     configuration = try configStore.load() ?? configuration
                 }
                 configurationLoaded = true
-                selectedRecipeID = configuration.recipes.first?.id
+                if !offline, configuration.actionTypesVersion == nil {
+                    var upgraded = configuration
+                    upgraded.addIllustration()
+                    upgraded.actionTypesVersion = 1
+                    try configStore.save(upgraded)
+                    configuration = try configStore.load() ?? upgraded
+                }
+                selectedActionID = configuration.actions.first?.id
             } catch {
                 configurationError =
                     "Configuration could not be loaded. Original file is preserved. \(error.localizedDescription)"
@@ -167,9 +196,9 @@ import EZCore
         case .stop: return busy
         case .newLookup: return !busy && !launcherPending
         case .nextRecipe, .previousRecipe, .lastRecipe:
-            return !busy && !launcherPending && !configuration.recipes.isEmpty
+            return !busy && !launcherPending && !configuration.actions.isEmpty
         default:
-            return !busy && !launcherPending && command.recipeIndex! < configuration.recipes.count
+            return !busy && !launcherPending && command.recipeIndex! < configuration.actions.count
         }
     }
 
@@ -182,29 +211,29 @@ import EZCore
         case .stop: stop()
         case .nextRecipe: cycleRecipe(by: 1)
         case .previousRecipe: cycleRecipe(by: -1)
-        case .lastRecipe: selectRecipe(at: configuration.recipes.count - 1)
+        case .lastRecipe: selectRecipe(at: configuration.actions.count - 1)
         default: selectRecipe(at: command.recipeIndex!)
         }
     }
 
     func cycleRecipe(by offset: Int) {
-        let recipes = configuration.recipes
-        guard !recipes.isEmpty else { return }
-        let index = replayEntry == nil ? recipes.firstIndex { $0.id == selectedRecipeID } : nil
+        let actions = configuration.actions
+        guard !actions.isEmpty else { return }
+        let index = replayEntry == nil ? actions.firstIndex { $0.id == selectedActionID } : nil
         let next =
-            index.map { ($0 + offset + recipes.count) % recipes.count }
-            ?? (offset > 0 ? 0 : recipes.count - 1)
+            index.map { ($0 + offset + actions.count) % actions.count }
+            ?? (offset > 0 ? 0 : actions.count - 1)
         selectRecipe(at: next)
     }
 
     private func selectRecipe(at index: Int) {
-        guard configuration.recipes.indices.contains(index) else { return }
-        let id = configuration.recipes[index].id
-        guard replayEntry != nil || selectedRecipeID != id else { return }
-        chooseRecipe(id)
+        guard configuration.actions.indices.contains(index) else { return }
+        let id = configuration.actions[index].id
+        guard replayEntry != nil || selectedActionID != id else { return }
+        chooseAction(id)
     }
-    var currentRecipe: Recipe? {
-        replayEntry?.recipeSnapshot ?? configuration.recipes.first { $0.id == selectedRecipeID }
+    var currentAction: Action? {
+        replayEntry?.actionSnapshot ?? configuration.actions.first { $0.id == selectedActionID }
     }
     func openSettings(_ section: SettingsSection = .overview) {
         if !showSettings { refreshConfiguration() }
@@ -216,10 +245,10 @@ import EZCore
             return configuration.presets.first { $0.id == overridePresetID }
         }
         if let saved = replayEntry?.presetSnapshot { return saved }
-        let id = currentRecipe?.presetID
+        let id = currentAction?.presetID
         return configuration.presets.first { $0.id == id }
     }
-    var inputFields: [String] { currentRecipe.flatMap { try? PromptTemplate($0.template).fields } ?? [] }
+    var inputFields: [String] { currentAction.flatMap { try? PromptTemplate($0.template).fields } ?? [] }
     var query: String {
         get { inputFields.first.flatMap { inputValues[$0] } ?? "" }
         set { if let field = inputFields.first { inputValues[field] = newValue } }
@@ -228,14 +257,17 @@ import EZCore
     var effort: String { currentPreset?.effort ?? "" }
     var fast: Bool { currentPreset?.fast ?? false }
     var configurationLocked: Bool {
-        busy || launcherPending || connecting || signingIn || !configurationLoaded
+        busy || launcherPending || signingIn || !configurationLoaded
     }
     var requestIssue: String? {
         if !configurationLoaded { return configurationError ?? "Configuration is unavailable." }
-        guard let recipe = currentRecipe else { return "Add a recipe in Configuration to start a lookup." }
-        guard let preset = currentPreset else { return "Choose a model preset in Configuration." }
+        guard let action = currentAction else { return "Add an action in Settings → Actions to start a run." }
+        guard let preset = currentPreset else { return "Choose a preset in Settings → Presets." }
+        guard action.capability == preset.capability else {
+            return "Choose a \(action.capability.name) preset for this action."
+        }
         if let issue = preset.availabilityError(in: models) { return issue }
-        do { _ = try PromptTemplate(recipe.template).render(inputValues) } catch {
+        do { _ = try PromptTemplate(action.template).render(inputValues) } catch {
             return error.localizedDescription
         }
         return nil
@@ -256,7 +288,8 @@ import EZCore
             }
     }
     var canSend: Bool {
-        attemptExecution != nil && signedIn && planEnabled && !busy && !launcherPending && !connecting
+        attemptExecution != nil && providerIssue == nil && !apiKeyBusy && !busy && !launcherPending
+            && !(needsPlan && connecting)
             && !signingIn
             && requestIssue == nil && history != nil && lock != nil
     }
@@ -265,6 +298,7 @@ import EZCore
         connecting = true
         error = nil
         defer { connecting = false }
+        await restoreAPIKey()
         do {
             if !loaded {
                 try await auth.load()
@@ -307,10 +341,10 @@ import EZCore
             configuration = try configurationStore?.load() ?? updated
         } catch { configurationError = "Starter preset could not be saved. \(error.localizedDescription)" }
     }
-    func chooseRecipe(_ id: UUID?) {
+    func chooseAction(_ id: UUID?) {
         guard !busy, !launcherPending else { return }
         if !showSettings { refreshConfiguration() }
-        selectedRecipeID = id
+        selectedActionID = id
         replayEntry = nil
         overridePresetID = nil
         inputValues = [:]
@@ -336,8 +370,8 @@ import EZCore
         try store.save(saved)
         configuration = try store.load() ?? saved
         configurationError = nil
-        if replayEntry == nil && !saved.recipes.contains(where: { $0.id == selectedRecipeID }) {
-            chooseRecipe(saved.recipes.first?.id)
+        if replayEntry == nil && !saved.actions.contains(where: { $0.id == selectedActionID }) {
+            chooseAction(saved.actions.first?.id)
         } else {
             inputValues = inputValues.filter { inputFields.contains($0.key) }
         }
@@ -384,14 +418,14 @@ import EZCore
             throw EZError(configurationError ?? storageWarning ?? "Configuration is unavailable.")
         }
         // Validate everything before clearing a selection or changing the workspace.
-        let recipe = configuration.recipes.first { $0.id == selectedRecipeID } ?? configuration.recipes.first
-        guard let recipe else {
-            throw EZError("Add a recipe in EZ Configuration before looking up selected text.")
+        let action = configuration.actions.first { $0.id == selectedActionID } ?? configuration.actions.first
+        guard let action else {
+            throw EZError("Add an action in Settings → Actions before looking up selected text.")
         }
-        let prepared = try configuration.preparingLauncherInput(text, recipeID: recipe.id)
+        let prepared = try configuration.preparingLauncherInput(text, recipeID: action.id)
         newQuery()
         inputValues = prepared.values
-        // Services prepares only a draft, even for single-field recipes and after sign-in.
+        // Services prepares only a draft, even for single-field actions and after sign-in.
     }
 
     func prepareLauncher(_ text: String) throws -> Bool {
@@ -399,10 +433,10 @@ import EZCore
             throw EZError("EZ is already preparing or generating a lookup.")
         }
         newQuery()
-        guard let recipe = currentRecipe else {
-            throw EZError("Add a recipe in Configuration before using Raycast.")
+        guard let action = currentAction else {
+            throw EZError("Add an action in Settings → Actions before using Raycast.")
         }
-        let prepared = try configuration.preparingLauncherInput(text, recipeID: recipe.id)
+        let prepared = try configuration.preparingLauncherInput(text, recipeID: action.id)
         inputValues = prepared.values
         return prepared.submit
     }
@@ -461,15 +495,16 @@ import EZCore
     }
     func send() {
         refreshConfiguration()
-        guard canSend, let recipe = currentRecipe, let preset = currentPreset, let attemptExecution else {
+        guard canSend, let action = currentAction, let preset = currentPreset, let attemptExecution else {
             return
         }
         error = nil
-        let entry: HistoryEntry
-        do { entry = try recipe.prepare(values: inputValues, preset: preset, models: models) } catch {
+        var entry: HistoryEntry
+        do { entry = try action.prepare(values: inputValues, preset: preset, models: models) } catch {
             self.error = error.localizedDescription
             return
         }
+        entry.providerSnapshot = currentProvider
         do { try attemptExecution.start(entry) } catch {
             self.error = error.localizedDescription
             return
@@ -480,7 +515,11 @@ import EZCore
         attemptExecution?.stop()
     }
     var canFollowUp: Bool {
-        attemptExecution != nil && signedIn && planEnabled && !busy && !launcherPending && !connecting
+        let key = selectedEntry?.presetSnapshot?.providerKey ?? "gpt-plan"
+        let provider = configuration.providers.first { $0.key == key }
+        return provider != nil && selectedEntry?.capability != .draw
+            && (provider?.kind == .chatGPTPlan ? signedIn && planEnabled : apiConnected)
+            && attemptExecution != nil && !busy && !launcherPending && !connecting
             && !signingIn && history != nil && lock != nil
     }
     func followUp(_ id: UUID) {
@@ -488,7 +527,12 @@ import EZCore
             return
         }
         do {
-            let entry = try parent.prepareFollowUp(followUpDrafts[id] ?? "", models: models)
+            var entry = try parent.prepareFollowUp(followUpDrafts[id] ?? "", models: models)
+            let key = entry.presetSnapshot?.providerKey ?? "gpt-plan"
+            entry.providerSnapshot = configuration.providers.first { $0.key == key }
+            guard let provider = entry.providerSnapshot,
+                provider.kind == .chatGPTPlan ? signedIn && planEnabled : apiConnected
+            else { throw EZError("Connect the saved action's provider before sending a follow-up.") }
             try attemptExecution.start(entry)
             followUpDrafts[id] = nil
             if followUpTargetID == id { followUpTargetID = nil }
@@ -508,8 +552,8 @@ import EZCore
         inputValues = [:]
         overridePresetID = nil
         replayEntry = nil
-        if !configuration.recipes.contains(where: { $0.id == selectedRecipeID }) {
-            selectedRecipeID = configuration.recipes.first?.id
+        if !configuration.actions.contains(where: { $0.id == selectedActionID }) {
+            selectedActionID = configuration.actions.first?.id
         }
         error = nil
         draftRevision += 1
@@ -517,11 +561,11 @@ import EZCore
     func reuse(_ entry: HistoryEntry) {
         guard !busy, !launcherPending else { return }
         var saved = entry
-        if saved.recipeSnapshot == nil {
+        if saved.actionSnapshot == nil {
             let preset = ModelPreset(
                 name: "Saved", model: entry.model, effort: entry.effort,
                 fast: entry.requestedServiceTier != nil)
-            saved.recipeSnapshot = Recipe(
+            saved.actionSnapshot = Action(
                 name: entry.mode.rawValue, presetID: preset.id,
                 template: entry.mode.instruction + "\n\n{{text}}", legacyMode: entry.mode)
             saved.presetSnapshot = preset
@@ -534,6 +578,7 @@ import EZCore
         draftRevision += 1
     }
     func shutdown() {
+        imageLoadTask?.cancel()
         cancelLogin()
         stop()
     }
@@ -556,6 +601,10 @@ import EZCore
         NSPasteboard.general.setString(text, forType: .string)
     }
     func export(_ entry: HistoryEntry) {
+        if entry.capability == .draw {
+            downloadImage(entry)
+            return
+        }
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "EZ-\(entry.id.uuidString.prefix(8)).md"
         if panel.runModal() == .OK, let url = panel.url {
@@ -571,6 +620,7 @@ import EZCore
             entries.insert(update.entry, at: 0)
         }
         responseActivity = update.activity
+        if selection == update.entry.id && update.entry.hasImage { loadSelectedImage() }
         busy = attemptExecution?.activeID != nil
         if !update.isActive, !offline { syncAccount() }
     }

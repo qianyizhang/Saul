@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ContentView: View {
     @ObservedObject var model: AppModel
+    @Environment(\.openWindow) private var openWindow
     @State private var lookupToDelete: HistoryEntry?
     @State private var showsComposer = false
     var body: some View {
@@ -38,7 +39,7 @@ struct ContentView: View {
                 } else if model.selectedEntry != nil {
                     HStack {
                         if !model.minimumMode {
-                            Text("New lookup starts fresh.").foregroundStyle(.secondary)
+                            Text("New run starts fresh.").foregroundStyle(.secondary)
                         }
                         Spacer()
                         if model.busy {
@@ -91,11 +92,11 @@ struct ContentView: View {
             Button {
                 model.newQuery()
             } label: {
-                Label(model.minimumMode ? "New" : "New lookup", systemImage: "plus").frame(
+                Label(model.minimumMode ? "New" : "New run", systemImage: "plus").frame(
                     maxWidth: .infinity, alignment: .leading
                 )
                 .padding(.vertical, 6)
-            }.help("New lookup").accessibilityLabel("New lookup").buttonStyle(.bordered)
+            }.help("New run").accessibilityLabel("New run").buttonStyle(.bordered)
                 .disabled(model.busy || model.launcherPending).padding(.horizontal, 16)
             TextField("Search history", text: $model.search).textFieldStyle(.roundedBorder).padding(
                 .horizontal, 16)
@@ -112,8 +113,8 @@ struct ContentView: View {
                         Text(entry.displayQuery).font(.system(size: 13, weight: .medium)).lineLimit(2)
                         HStack(spacing: 4) {
                             if !model.minimumMode {
-                                Image(systemName: entry.recipeSymbol)
-                                Text(entry.recipeName)
+                                Image(systemName: entry.actionSymbol)
+                                Text(entry.actionName)
                             }
                             if entry.status == "pending" {
                                 Text(model.minimumMode ? "In progress" : "· In progress")
@@ -132,7 +133,7 @@ struct ContentView: View {
                 .overlay {
                     if model.filteredEntries.isEmpty {
                         VStack(spacing: 8) {
-                            Text(model.search.isEmpty ? "No lookups yet" : "No matching lookups")
+                            Text(model.search.isEmpty ? "No runs yet" : "No matching runs")
                                 .font(AppStyle.caption).foregroundStyle(.secondary)
                             if !model.search.isEmpty {
                                 Button(model.minimumMode ? "Clear" : "Clear search") { model.search = "" }
@@ -151,11 +152,11 @@ struct ContentView: View {
                     if !model.minimumMode { Image(systemName: "person.crop.circle").font(.title3) }
                     VStack(alignment: .leading, spacing: 3) {
                         Text(
-                            model.signedIn ? "Settings" : (model.minimumMode ? "Connect" : "Connect ChatGPT")
+                            "Settings"
                         ).font(
                             .system(size: 12, weight: .medium))
                         if model.connecting || !model.minimumMode {
-                            Text(model.connecting ? "Connecting…" : "Account & history")
+                            Text(model.connecting ? "Connecting…" : "Providers, presets & actions")
                                 .font(AppStyle.caption).foregroundStyle(.secondary)
                         }
                     }
@@ -167,16 +168,16 @@ struct ContentView: View {
     }
     private var welcome: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("New lookup").font(AppStyle.subject)
+            Text("New run").font(AppStyle.subject)
             if !model.minimumMode {
                 Text(
-                    model.currentRecipe == nil
-                        ? "Add a recipe to start your next lookup."
-                        : "Choose a recipe, fill in its inputs, and send."
+                    model.currentAction == nil
+                        ? "Add an action to start your next run."
+                        : "Choose an action, fill in its inputs, and run it."
                 )
                 .font(AppStyle.body).foregroundStyle(.secondary)
             }
-            if !model.signedIn {
+            if model.needsPlan && !model.signedIn {
                 Button {
                     model.openSettings(.account)
                 } label: {
@@ -195,7 +196,7 @@ struct ContentView: View {
     private func answer(_ entry: HistoryEntry) -> some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
-                Label(entry.recipeName, systemImage: entry.recipeSymbol)
+                Label(entry.actionName, systemImage: entry.actionSymbol)
                     .font(AppStyle.caption).foregroundStyle(AppStyle.accent)
                 Spacer()
                 if !model.minimumMode {
@@ -203,18 +204,25 @@ struct ContentView: View {
                 }
             }
             UnsavedAttemptNotice(model: model, entry: entry)
-            LookupAnswerText(entry: entry, activity: model.selectedResponseActivity)
+            LookupAnswerText(
+                entry: entry, activity: model.selectedResponseActivity,
+                imageData: model.imageData(for: entry), imageLoading: model.imageLoading)
             if let parentID = entry.parentID, model.entries.contains(where: { $0.id == parentID }) {
                 Button("Previous answer") { model.selection = parentID }.buttonStyle(.borderless)
             }
             FollowUpComposer(model: model, entry: entry).id(entry.id)
             if entry.status != "pending" {
                 HStack {
-                    Button {
-                        model.copy(entry.response)
-                    } label: {
-                        Label("Copy", systemImage: "doc.on.doc")
-                    }.disabled(entry.response.isEmpty)
+                    if entry.capability == .draw {
+                        Button("Download") { model.downloadImage(entry) }
+                            .disabled(!entry.hasImage || model.imageLoading)
+                    } else {
+                        Button {
+                            model.copy(entry.response)
+                        } label: {
+                            Label("Copy", systemImage: "doc.on.doc")
+                        }.disabled(entry.response.isEmpty)
+                    }
                     if !model.minimumMode {
                         Button("Use again", systemImage: "arrow.counterclockwise") { model.reuse(entry) }
                             .disabled(model.busy || model.launcherPending)
@@ -226,7 +234,9 @@ struct ContentView: View {
                             )
                             .help("Restore this saved request as a draft").accessibilityLabel("Use again")
                         }
-                        Button("Export…", systemImage: "square.and.arrow.up") { model.export(entry) }
+                        if entry.capability == .write {
+                            Button("Export…", systemImage: "square.and.arrow.up") { model.export(entry) }
+                        }
                         deleteButton(entry)
                     } label: {
                         Label("More", systemImage: "ellipsis")
@@ -261,10 +271,10 @@ struct ContentView: View {
     private var composer: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                if model.currentRecipe == nil {
-                    Text("No recipes yet").font(.headline)
+                if model.currentAction == nil {
+                    Text("No actions yet").font(.headline)
                 } else {
-                    RecipePicker(model: model)
+                    ActionPicker(model: model)
                 }
                 if model.selectedEntry != nil {
                     Button {
@@ -275,8 +285,8 @@ struct ContentView: View {
                     .buttonStyle(.borderless).help("Hide draft").accessibilityLabel("Hide draft")
                 }
             }
-            RecipeInputs(model: model)
-            if model.currentRecipe != nil {
+            ActionInputs(model: model)
+            if model.currentAction != nil {
                 Divider()
                 HStack(spacing: 8) {
                     RequestControls(model: model)
@@ -289,17 +299,16 @@ struct ContentView: View {
                         }.accessibilityLabel("Stop generating").help(
                             "Stop generating · \(model.shortcuts.binding(for: .stop).display)")
                     } else {
-                        Button {
-                            model.send()
-                        } label: {
-                            Image(systemName: "arrow.up").fontWeight(.semibold).frame(width: 22, height: 22)
-                        }
-                        .accessibilityLabel("Send query").buttonStyle(.borderedProminent).disabled(
-                            !model.canSend
-                        )
-                        .help("Send · \(model.shortcuts.binding(for: .send).display)")
+                        Button("Run") { model.send() }
+                            .accessibilityLabel("Run action").buttonStyle(.borderedProminent).disabled(
+                                !model.canSend
+                            )
+                            .help("Run · \(model.shortcuts.binding(for: .send).display)")
                     }
-                }.controlSize(.small).disabled(model.connecting)
+                }.controlSize(.small).disabled(model.needsPlan && model.connecting)
+                if model.currentProvider?.kind == .openAIAPI {
+                    Text("OpenAI API · billed separately").font(AppStyle.caption).foregroundStyle(.secondary)
+                }
                 if !composerHint.isEmpty {
                     Text(composerHint).font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -312,9 +321,8 @@ struct ContentView: View {
         .overlay(RoundedRectangle(cornerRadius: AppStyle.composerRadius).stroke(.quaternary, lineWidth: 1))
     }
     private var composerHint: String {
-        if model.connecting { return "Connecting to ChatGPT…" }
-        if !model.signedIn { return "Connect ChatGPT to send a lookup." }
-        if !model.planEnabled { return "Enable plan usage in Account & history." }
+        if model.needsPlan && model.connecting { return "Connecting to ChatGPT…" }
+        if let issue = model.providerIssue { return issue }
         return model.requestIssue
             ?? (model.minimumMode
                 ? "" : "\(model.shortcuts.binding(for: .send).display) to send · Each lookup starts fresh.")

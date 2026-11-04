@@ -6,9 +6,9 @@ import Foundation
 @MainActor func templateChecks() -> [CheckCase] {
     [
         CheckCase("template: template fields, required values, and literal insertion") { _ in
-            let recipe = RecipeFixture().recipe
+            let action = RecipeFixture().action
 
-            let template = try PromptTemplate(recipe.template)
+            let template = try PromptTemplate(action.template)
             try expect(
                 template.fields == ["fuzzy term", "fuzzy context"], "Field order/deduplication changed")
             let values = ["fuzzy term": "你好 {{fuzzy context}}", "fuzzy context": "a+b\ncontext"]

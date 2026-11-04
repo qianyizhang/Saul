@@ -6,7 +6,7 @@ native Swift executables, without XCTest, Swift Testing, or third-party packages
 
 | Directory | Owner |
 | --- | --- |
-| `EZChecks/` | Core behavior: templates, presets, configuration, history, launcher, identity, Responses, authentication |
+| `EZChecks/` | Core behavior: templates, presets, configuration, history, launcher, identity, Responses, Images, typed actions, authentication |
 | `EZChecks/Fixtures/` | Synthetic credentials, signed identities, per-session HTTP fixtures |
 | `EZStateChecks/` | AppModel actions with fresh offline storage and controlled execution adapters where needed |
 | `Support/` | Named-case runner, source-location assertions, bounded fixture signals |
@@ -63,8 +63,8 @@ unknown options fail rather than pretending to run checks. Cases run serially;
 its executable once with the case name: a non-cooperative task cannot safely be
 abandoned and allowed to leak into later cases.
 
-`state-checks.sh` builds the normal app and compiles its existing `AppModel.swift`
-alongside the state cases, linking SwiftPM's core/support objects. This keeps
+`state-checks.sh` builds the normal app and compiles its `AppModel.swift` and
+`ProviderState.swift` alongside the state cases, linking SwiftPM's core/support objects. This keeps
 app-only state out of EZCore and requires no Xcode test host. These checks do not
 launch the native interface or prove focus, layout, shortcuts, or live inference;
 those remain separate acceptance checks in `docs/verification.md`.
@@ -88,3 +88,8 @@ pasteboard and clipboard change counts, and reported errors. It needs access to
 the macOS pasteboard server; request specific approved execution if the outer
 agent sandbox blocks it. It does not launch EZ, read clipboard contents, or prove
 Services menu discovery, cold launch, focus return, or live inference.
+
+Typed-action checks cover legacy Write defaults, shared Draw preset preservation,
+exact compiled prompts, explicit API tiers, owner-only PNG persistence/deletion,
+path/symlink rejection, unavailable provider/type/key blockers, Stop/late-result
+isolation and save-only recovery with the original bytes and no second request.

@@ -4,6 +4,8 @@ import {
   validateScopedConfigValue,
   type ScopedConfig,
   validateSharedPresets,
+  validateSharedProviders,
+  type SharedProvider,
   type SharedPreset,
   type SharedPresets,
 } from './shared-presets-contract.mts';
@@ -51,7 +53,12 @@ export type PlanRequest =
     }
   | { action: 'presets-read' }
   | { action: 'presets-import'; presets: SharedPreset[] }
-  | { action: 'presets-save'; revision: number; presets: SharedPreset[] }
+  | {
+      action: 'presets-save';
+      revision: number;
+      presets: SharedPreset[];
+      providers?: SharedProvider[];
+    }
   | { action: 'accounts' }
   | { action: 'login'; accountId?: string; consent?: boolean }
   | { action: 'logout'; accountId: string }
@@ -103,7 +110,7 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
     'config-save': ['section', 'revision', 'value'],
     'presets-read': [],
     'presets-import': ['presets'],
-    'presets-save': ['revision', 'presets'],
+    'presets-save': ['revision', 'presets', 'providers'],
     accounts: [],
     login: ['accountId', 'consent'],
     logout: ['accountId'],
@@ -126,6 +133,7 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
   if (v.action === 'presets-read') return;
   if (v.action === 'presets-import' || v.action === 'presets-save') {
     validateSharedPresets(v.presets);
+    if (v.providers !== undefined) validateSharedProviders(v.providers);
     if (
       v.action === 'presets-save' &&
       (!Number.isSafeInteger(v.revision) || Number(v.revision) < 0)
@@ -224,6 +232,7 @@ function sharedLibrary(value: Record<string, unknown>): boolean {
     return false;
   try {
     validateSharedPresets(value.library.presets);
+    if (value.library.providers !== undefined) validateSharedProviders(value.library.providers);
     return true;
   } catch {
     return false;

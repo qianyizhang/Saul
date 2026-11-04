@@ -8,8 +8,8 @@ import Foundation
     let history: HistoryStore
     let configuration: Configuration
     let alternate: ModelPreset
-    let single: Recipe
-    let multi: Recipe
+    let single: Action
+    let multi: Action
 
     init(directory: URL, attemptExecution: AttemptExecution? = nil) throws {
         self.directory = directory
@@ -21,13 +21,13 @@ import Foundation
         var config = Configuration.starters(model: "fixture", effort: "low", fast: false)
         alternate = ModelPreset(name: "lit", model: "fixture", effort: "medium", fast: true)
         config.presets.append(alternate)
-        guard let multiIndex = config.recipes.firstIndex(where: { $0.legacyMode == nil }),
-            let single = config.recipes.first(where: { $0.legacyMode == .dictionary })
+        guard let multiIndex = config.actions.firstIndex(where: { $0.legacyMode == nil }),
+            let single = config.actions.first(where: { $0.legacyMode == .dictionary })
         else { throw CheckFailure("Starter configuration is missing Dictionary or Lookup") }
-        config.recipes[multiIndex].presetID = alternate.id
+        config.actions[multiIndex].presetID = alternate.id
         configuration = config
         self.single = single
-        multi = config.recipes[multiIndex]
+        multi = config.actions[multiIndex]
         // Seed before AppModel init so tests never read personal UserDefaults.
         try ConfigurationStore(directory: directory).save(config)
         history = try HistoryStore(directory: directory)

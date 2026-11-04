@@ -41,32 +41,48 @@ struct LookupDetails: View {
                     MetadataRow("Preset", value: preset.name)
                 }
                 MetadataRow("Model", value: entry.model)
-                MetadataRow("Effort", value: entry.effort.isEmpty ? "Default" : entry.effort.capitalized)
-                MetadataRow("Requested speed", value: entry.requestedServiceTier == nil ? "Standard" : "Fast")
-                MetadataRow("Served tier", value: entry.actualServiceTier ?? "Not reported")
+                MetadataRow(
+                    "Provider",
+                    value: entry.providerSnapshot?.key ?? entry.presetSnapshot?.providerKey ?? "gpt-plan")
+                MetadataRow("Capability", value: entry.capability.name)
+                if entry.capability == .draw {
+                    MetadataRow("Size", value: (entry.presetSnapshot?.imageOptions ?? ImageOptions()).size)
+                    MetadataRow(
+                        "Quality",
+                        value: (entry.presetSnapshot?.imageOptions ?? ImageOptions()).quality.capitalized)
+                } else {
+                    MetadataRow("Effort", value: entry.effort.isEmpty ? "Default" : entry.effort.capitalized)
+                    MetadataRow(
+                        "Requested speed", value: entry.requestedServiceTier == nil ? "Standard" : "Fast")
+                    MetadataRow("Served tier", value: entry.actualServiceTier ?? "Not reported")
+                }
             }
-            Divider()
-            Text("Tokens").font(AppStyle.caption.weight(.semibold)).foregroundStyle(.primary)
-            HStack(alignment: .top, spacing: 12) {
-                metric("Input", count(entry.metrics?.inputTokens))
-                metric("Thinking", count(entry.metrics?.reasoningTokens))
-                metric("Answer", count(entry.metrics?.responseTokens))
-                    .help("Output tokens minus reasoning tokens; may include formatting tokens.")
-            }
-            Divider()
-            HStack(alignment: .top, spacing: 12) {
-                metric("First text", seconds(entry.metrics?.timeToFirstTokenSeconds))
-                    .help(
-                        "From HTTP request start to first answer or refusal text, including network time and thinking."
+            if entry.capability == .write {
+                Divider()
+                Text("Tokens").font(AppStyle.caption.weight(.semibold)).foregroundStyle(.primary)
+                HStack(alignment: .top, spacing: 12) {
+                    metric("Input", count(entry.metrics?.inputTokens))
+                    metric("Thinking", count(entry.metrics?.reasoningTokens))
+                    metric("Answer", count(entry.metrics?.responseTokens))
+                        .help("Output tokens minus reasoning tokens; may include formatting tokens.")
+                }
+                Divider()
+                HStack(alignment: .top, spacing: 12) {
+                    metric("First text", seconds(entry.metrics?.timeToFirstTokenSeconds))
+                        .help(
+                            "From HTTP request start to first answer or refusal text, including network time and thinking."
+                        )
+                    metric("Total time", seconds(entry.metrics?.durationSeconds ?? entry.durationSeconds))
+                    metric(
+                        "Answer tokens/s",
+                        entry.metrics?.tokensPerSecond.map { String(format: "%.1f", $0) } ?? "—"
                     )
-                metric("Total time", seconds(entry.metrics?.durationSeconds ?? entry.durationSeconds))
-                metric(
-                    "Answer tokens/s",
-                    entry.metrics?.tokensPerSecond.map { String(format: "%.1f", $0) } ?? "—"
-                )
-                .help(
-                    "Answer tokens per second after first text; initial waiting and thinking are excluded."
-                )
+                    .help(
+                        "Answer tokens per second after first text; initial waiting and thinking are excluded."
+                    )
+                }
+            } else {
+                MetadataRow("Total time", value: seconds(entry.durationSeconds))
             }
         }
         .textSelection(.enabled)

@@ -3,9 +3,9 @@
 This is the shared semantic contract, implemented in TypeScript and Swift.
 Model presets use one local store. App-specific configuration uses scoped sections; credentials and history remain app-owned.
 
-## Recipe preparation
+## Action preparation
 
-The conceptual interface accepts a recipe, supplied inputs and an explicit preset;
+The conceptual interface accepts an action, supplied inputs and an explicit preset;
 it returns prepared instructions/prompt and frozen choices, or a useful validation
 error. Preparation does not send, change configuration, or resolve by falling back.
 
@@ -18,7 +18,7 @@ error. Preparation does not send, change configuration, or resolve by falling ba
 Current adapters deliberately differ: the browser requires `text` and accepts a
 fixed set of page-context fields; native templates accept up to 16 named fields.
 Browser prompt assembly may append enabled source context. Native inputs come
-from a form. This migration does not erase those semantics or claim recipe interchange.
+from a form. This migration does not erase those semantics or claim action interchange.
 
 [Template fixtures](fixtures/templates.json) cover the common literal-substitution
 subset and invalid syntax in both production implementations. Native tests load
@@ -51,28 +51,46 @@ terminal record. Saul retains its existing failed/save-failed projection and
 durable recovery before an explicit new attempt. Neither app reports saved success
 from a provider completion signal alone.
 
-## Accounts and models
+## Providers and presets
 
 ChatGPT model presets share `~/Library/Application Support/Little Clarity/settings.json`.
-The JSON document has a `modelPresets` section containing `revision` and `presets`.
+The JSON document has a `modelPresets` section containing one `revision`, `presets`
+and `providers`. The legacy section name is retained for migration. Each provider
+has a stable unique `key`, editable `name` and `kind` (`chatgpt-plan` / `openai-api`).
+Capabilities derive from kind: plan supports Write; API supports Write and Draw.
+Both clients read and save these same definitions; neither owns a second provider list.
+Legacy definitions in EZ’s app scope seed the shared list once; the shared list
+then wins. [Provider fixtures](fixtures/providers.json) are validated in both runtimes.
 Preset saves preserve all other sections. Each preset has a UUID `id`,
-`name`, `model`, `effort` (empty means Default), and `fast`. Only these fields cross
-apps. Saves replace the file atomically; stale editor revisions require Reload and
+`name`, `model`, `effort` (empty means Default), and `fast`, plus optional
+`providerKey`, `capability` (`write` / `draw`) and `imageOptions` (`size`, `quality`).
+Absent typed fields decode as `gpt-plan` / Write. Image settings accept square,
+landscape or portrait PNG sizes and low/medium/high quality. Both clients preserve
+these fields even when the capability is unavailable locally. No credentials cross apps. Saves replace the file atomically; stale editor revisions require Reload and
 preserve the draft. This beta uses last-save-wins if both apps save simultaneously;
 there is no sync service or cross-process transaction manager.
 
-Both editors show Model, Effort and Standard/Fast speed. Fast is selectable only
-when the account catalog advertises it. Unsupported saved choices remain visible
+Write presets show Model, Effort and Standard/Fast speed where supported.
+Draw presets hold image model and optional size/quality in the preset editor. Plan
+Fast is selectable only when the account catalog advertises it. Native API Write
+can explicitly request priority; Saul blocks API presets with reasoning/Fast options
+its transport cannot honor, while preserving those fields for EZ. Unsupported saved choices remain visible
 and block execution. New model selections prefer advertised none/minimal/low,
 then the advertised default, then the first effort, and start at Standard.
 
 Each app imports its old ChatGPT presets once. Duplicate names get numeric
-suffixes; preset IDs and recipe references are preserved or remapped locally.
+suffixes; preset IDs and action references are preserved or remapped locally.
 After migration the shared store owns these presets. Deleted presets stay deleted;
-recipes referencing them need another explicit choice. Model presets never bind an account. Saul and EZ use their explicitly selected local
-account when preparing a new run, then freeze it for execution and retry. Legacy Saul
+actions referencing them need another explicit choice. Presets bind a stable provider key and capability, not a plan account.
+`gpt-plan` uses the explicitly selected local plan account when preparing a run;
+`openai-api` resolves the local API credential. Freeze that route for execution
+and retry. Provider display-name edits do not change keys or preset bindings. Legacy Saul
 preset account fields are ignored; selecting a preset cannot switch accounts.
-API and on-device presets remain Saul-scoped.
+Existing Saul-only API/on-device presets remain Saul-scoped. Typed shared API
+presets remain in the library; an unavailable local provider blocks execution.
+Saul preserves Draw records but blocks text execution and image-settings edits.
+EZ currently owns Draw execution. Upgrade both clients/helper before saving typed
+presets; older strict readers cannot consume the additional fields.
 Swift and Node read the same JSON file; Saul accesses it through its existing ChatGPT helper.
 Neither app needs the other app running. Settings load/reload and new requests
 read the current store; EZ also reads on activation outside Settings. Open editors
@@ -103,14 +121,16 @@ The same JSON document holds `apps.saul.settings`, `apps.saul.calls`, and
 atomic replacement preserves sibling scopes and unknown root fields. Stale saves
 block before updating shared model presets. Browser scopes are limited to 750 KB
 of serialized UTF-8 JSON, leaving room under the 1 MiB native-message limit.
-As with model presets, simultaneous
+Provider names and presets share the same stale-save revision. As with model presets, simultaneous
 cross-process writes remain last-save-wins; this is not a transaction service.
 
-Saul stores preferences, connection metadata, recipes and non-plan model presets
+Saul stores preferences, connection metadata, actions and non-plan model presets
 in its settings scope. API keys and the selected local ChatGPT account remain in
 trusted Chrome storage. Connection keys are restored only for the same connection
-and endpoint. Plan definitions come only from `modelPresets`. EZ stores recipes
-and configuration choices in its scope; its old configuration file is retained for
+and endpoint. Shared Provider and Preset definitions come only from `modelPresets`.
+Saul’s `providerConnections` maps shared keys to local API profile IDs without
+copying credentials. It adopts only the already-selected official OpenAI endpoint
+or an explicit profile choice. EZ stores actions and configuration choices in its scope; its old configuration file is retained for
 recovery after migration. Neither app needs the other running.
 
 Call presets retain approved action source/revision and a model-preset reference.
@@ -120,9 +140,9 @@ helper, API-only Saul keeps its existing local settings and call library. Once
 unified settings are adopted, helper loss blocks saves rather than silently
 changing configuration owners.
 
-Further sharing candidates are literal recipe preparation and presentation
-preferences. Recipe input contracts differ between apps; custom actions currently
-have only a browser consumer. They remain app-scoped. Minimum Mode, EZ shortcuts,
+Further sharing candidates are literal action preparation and presentation
+preferences. Action input contracts differ between apps; browser Call actions
+and native template actions retain their runtime contracts. They remain app-scoped. Minimum Mode, EZ shortcuts,
 window placement and board layout still use app-local stores. Credentials,
 history and active execution are intentionally outside the unified config.
 
@@ -130,10 +150,18 @@ history and active execution are intentionally outside the unified config.
 
 [`config.example.json`](../config.example.json) is a credential-free complete shared
 configuration with two account-independent model presets and separate Saul/EZ
-recipes. [`config.calls.json`](fixtures/config.calls.json) adds a saved Call preset
+actions. [`config.calls.json`](fixtures/config.calls.json) adds a saved Call preset
 that returns a source title without inference. Summarize remains selected by default;
 the sample module is not pre-approved and is initialized only on explicit selection.
 Both examples are loaded by TypeScript and Swift production-store tests in temporary
 folders. Model names/options are illustrative; execution still checks the account's
 current catalog. They are not an account backup or an import command. Do not replace
 a personal settings file with an example; preserve existing presets, IDs and revisions.
+
+The product term is Action. Legacy serialized keys (`recipes`, `recipeSnapshot`)
+and app-specific type names remain stable for migration. Write/Draw are domain
+capabilities, separate from transport endpoints such as Responses and Images.
+
+[Image-option fixtures](fixtures/image-options.json) pin accepted string values and
+reject coercible arrays, unknown fields and null. Both stores preserve rejected
+input bytes rather than silently normalizing unsupported settings.

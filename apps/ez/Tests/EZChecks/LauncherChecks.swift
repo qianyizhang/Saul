@@ -34,9 +34,9 @@ import Foundation
         CheckCase("launcher: single-field submission versus multi-field completion") { _ in
 
             let config = Configuration.starters(model: "fixture", effort: "medium", fast: false)
-            guard let singleRecipe = config.recipes.first(where: { $0.legacyMode == .dictionary }),
-                let multiRecipe = config.recipes.first(where: { $0.legacyMode == nil })
-            else { throw CheckFailure("Starter configuration is missing launcher recipes") }
+            guard let singleRecipe = config.actions.first(where: { $0.legacyMode == .dictionary }),
+                let multiRecipe = config.actions.first(where: { $0.legacyMode == nil })
+            else { throw CheckFailure("Starter configuration is missing launcher actions") }
             let single = try config.preparingLauncherInput("query", recipeID: singleRecipe.id)
             try expect(single.submit && single.values == ["text": "query"], "Single-field launcher changed")
             let multi = try config.preparingLauncherInput("word", recipeID: multiRecipe.id)
