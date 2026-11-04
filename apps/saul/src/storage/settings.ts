@@ -260,19 +260,10 @@ export function normalizeSettings(value: unknown): UserSettings {
   return settings;
 }
 
-export function validateProviderSettings(settings: UserSettings): URL | undefined {
-  if (settings.activeProvider === 'chrome-ai') {
-    if (!CHROME_AI_ENABLED) throw new Error(CHROME_AI_DISABLED_MESSAGE);
-    return undefined;
-  }
-  if (settings.activeProvider === 'chatgpt-plan') {
-    if (!settings.chatgptPlan?.accountId || !settings.chatgptPlan.model.trim())
-      throw new Error('Choose a ChatGPT account and model.');
-    return undefined;
-  }
+function validateEndpoint(baseUrl: string): URL {
   let endpoint: URL;
   try {
-    endpoint = new URL(settings.openaiCompatible.baseUrl);
+    endpoint = new URL(baseUrl);
   } catch {
     throw new Error('Enter a valid model endpoint URL.');
   }
@@ -286,6 +277,30 @@ export function validateProviderSettings(settings: UserSettings): URL | undefine
     throw new Error(
       'Use an HTTP(S) endpoint without credentials, query parameters, or a fragment.',
     );
+  return endpoint;
+}
+
+/** Connection editing validates syntax; credentials and model availability belong to Run. */
+export function validateSettingsConnections(settings: UserSettings): void {
+  if (settings.activeProvider === 'chrome-ai' && !CHROME_AI_ENABLED)
+    throw new Error(CHROME_AI_DISABLED_MESSAGE);
+  if (settings.activeProvider === 'openai-compatible' && !settings.openaiCompatible.model.trim())
+    throw new Error('Enter a model name available from this provider.');
+  for (const profile of settings.profiles ?? [])
+    if (profile.config.baseUrl) validateEndpoint(profile.config.baseUrl);
+}
+
+export function validateProviderSettings(settings: UserSettings): URL | undefined {
+  if (settings.activeProvider === 'chrome-ai') {
+    if (!CHROME_AI_ENABLED) throw new Error(CHROME_AI_DISABLED_MESSAGE);
+    return undefined;
+  }
+  if (settings.activeProvider === 'chatgpt-plan') {
+    if (!settings.chatgptPlan?.accountId || !settings.chatgptPlan.model.trim())
+      throw new Error('Choose a ChatGPT account and model.');
+    return undefined;
+  }
+  const endpoint = validateEndpoint(settings.openaiCompatible.baseUrl);
   if (!settings.openaiCompatible.model.trim())
     throw new Error('Enter a model name available from this provider.');
   return endpoint;
@@ -406,7 +421,7 @@ export function createSettingsOwner(
         settingsFromStored(stored); // Invalid originals require explicit backed-up recovery.
         // Normalize and validate in the write owner, not only in the form.
         let settings = normalizeSettings(request.settings);
-        validateProviderSettings(settings);
+        validateSettingsConnections(settings);
         if (shared) settings = await shared.save(settings);
         try {
           await storage.write({ [SETTINGS_STORAGE_KEY]: settings });

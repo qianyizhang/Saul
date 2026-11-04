@@ -57,13 +57,14 @@ ChatGPT model presets share `~/Library/Application Support/Little Clarity/settin
 The JSON document has a `modelPresets` section containing one `revision`, `presets`
 and `providers`. The legacy section name is retained for migration. Each provider
 has a stable unique `key`, editable `name` and `kind` (`chatgpt-plan` / `openai-api`).
-Capabilities derive from kind: plan supports Write; API supports Write and Draw.
+Capabilities derive from kind: plan supports Write; API supports Write, Draw and Speak.
 Both clients read and save these same definitions; neither owns a second provider list.
 Legacy definitions in EZ’s app scope seed the shared list once; the shared list
 then wins. [Provider fixtures](fixtures/providers.json) are validated in both runtimes.
 Preset saves preserve all other sections. Each preset has a UUID `id`,
 `name`, `model`, `effort` (empty means Default), and `fast`, plus optional
-`providerKey`, `capability` (`write` / `draw`) and `imageOptions` (`size`, `quality`).
+`providerKey`, `capability` (`write` / `draw` / `speak`), `imageOptions` (`size`, `quality`) and
+`speechOptions` (`voice`).
 Absent typed fields decode as `gpt-plan` / Write. Image settings accept square,
 landscape or portrait PNG sizes and low/medium/high quality. Both clients preserve
 these fields even when the capability is unavailable locally. No credentials cross apps. Saves replace the file atomically; stale editor revisions require Reload and
@@ -89,7 +90,11 @@ preset account fields are ignored; selecting a preset cannot switch accounts.
 Existing Saul-only API/on-device presets remain Saul-scoped. Typed shared API
 presets remain in the library; an unavailable local provider blocks execution.
 Saul preserves Draw records but blocks text execution and image-settings edits.
-EZ currently owns Draw execution. Upgrade both clients/helper before saving typed
+EZ currently owns Draw execution. Both clients preserve and edit Speak model/voice
+choices; Saul alone runs its short-text preview through OpenAI Realtime. Speak
+presets cannot run as Write actions in either app. API credentials remain app-owned;
+no audio, speech text or ephemeral Realtime token enters shared settings or history.
+Upgrade both clients/helper before saving typed
 presets; older strict readers cannot consume the additional fields.
 Swift and Node read the same JSON file; Saul accesses it through its existing ChatGPT helper.
 Neither app needs the other app running. Settings load/reload and new requests
@@ -159,9 +164,13 @@ current catalog. They are not an account backup or an import command. Do not rep
 a personal settings file with an example; preserve existing presets, IDs and revisions.
 
 The product term is Action. Legacy serialized keys (`recipes`, `recipeSnapshot`)
-and app-specific type names remain stable for migration. Write/Draw are domain
+and app-specific type names remain stable for migration. Write/Draw/Speak are domain
 capabilities, separate from transport endpoints such as Responses and Images.
 
 [Image-option fixtures](fixtures/image-options.json) pin accepted string values and
 reject coercible arrays, unknown fields and null. Both stores preserve rejected
 input bytes rather than silently normalizing unsupported settings.
+
+[Speech-option fixtures](fixtures/speech-options.json) pin the Realtime voice list
+and reject null, arrays, unknown fields and unsupported values in both stores.
+Missing `speechOptions` uses Marin in the preview; the model is always explicit.

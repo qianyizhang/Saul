@@ -1,7 +1,7 @@
 import Foundation
 
 public enum ActionCapability: String, Codable, CaseIterable, Sendable {
-    case write, draw
+    case write, draw, speak
     public var name: String { rawValue.capitalized }
 }
 
@@ -10,7 +10,7 @@ public struct ProviderDefinition: Codable, Equatable, Identifiable, Sendable {
     public var name: String
     public let kind: GenerationProviderID
     public var id: String { key }
-    public var capabilities: [ActionCapability] { kind == .chatGPTPlan ? [.write] : [.write, .draw] }
+    public var capabilities: [ActionCapability] { kind == .chatGPTPlan ? [.write] : [.write, .draw, .speak] }
     public init(key: String, name: String, kind: GenerationProviderID) {
         self.key = key
         self.name = name
@@ -39,6 +39,25 @@ public struct ProviderDefinition: Codable, Equatable, Identifiable, Sendable {
         else {
             throw EZError(
                 "Providers need unique keys and names. Keys use lowercase letters, digits and hyphens.")
+        }
+    }
+}
+
+public struct SpeechOptions: Codable, Equatable, Sendable {
+    public static let defaultModel = "gpt-realtime-2.1-mini"
+    public static let voices = [
+        "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar",
+    ]
+    public var voice: String
+    public init(voice: String = "marin") { self.voice = voice }
+    private enum CodingKeys: String, CodingKey, CaseIterable { case voice }
+    public init(from decoder: Decoder) throws {
+        let fields = try contractFields(decoder, keys: CodingKeys.self)
+        voice = try fields.decode(String.self, forKey: .voice)
+    }
+    public func validate() throws {
+        guard Self.voices.contains(voice) else {
+            throw EZError("Choose a supported speech voice in Presets.")
         }
     }
 }

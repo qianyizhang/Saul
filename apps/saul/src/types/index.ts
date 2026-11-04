@@ -1,6 +1,7 @@
 import type {
   ActionCapability,
   SharedImageOptions,
+  SharedSpeechOptions,
   SharedProvider,
 } from '../../native/shared-presets-contract.mts';
 export interface SelectionSnapshot {
@@ -88,6 +89,7 @@ export interface ModelPreset {
   providerKey?: string;
   capability?: ActionCapability;
   imageOptions?: SharedImageOptions;
+  speechOptions?: SharedSpeechOptions;
   shared?: boolean;
 }
 

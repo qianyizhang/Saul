@@ -149,7 +149,7 @@ struct ConfigurationView: View {
                     .init(
                         value: $0, title: supported.contains($0) ? $0.name : "\($0.name) (unavailable)",
                         enabled: supported.contains($0))
-                }, selection: presetBinding(\.capability))
+                }, selection: presetCapabilityBinding)
             if preset?.capability == .draw {
                 let images: [SelectorOption<String>] = ImageModelOption.openAIModels.map {
                     .init(value: $0.id, title: $0.name)
@@ -173,6 +173,13 @@ struct ConfigurationView: View {
                             }, selection: imageOptionBinding(\.quality))
                     }.padding(.top, 8)
                 }
+            } else if preset?.capability == .speak {
+                Text("Model").font(AppStyle.caption)
+                TextField(SpeechOptions.defaultModel, text: presetBinding(\.model)).textFieldStyle(
+                    .roundedBorder)
+                SelectorPicker(
+                    "Voice", options: SpeechOptions.voices.map { .init(value: $0, title: $0.capitalized) },
+                    selection: speechVoiceBinding)
             } else if preset?.providerKey != "gpt-plan" {
                 Text("Model").font(AppStyle.caption)
                 TextField("Model ID", text: presetBinding(\.model)).textFieldStyle(.roundedBorder)
@@ -292,7 +299,10 @@ struct ConfigurationView: View {
             TextField("Action name", text: actionBinding(\.name)).textFieldStyle(.roundedBorder)
                 .accessibilityLabel("Action name")
             SelectorPicker(
-                "Capability", options: ActionCapability.allCases.map { .init(value: $0, title: $0.name) },
+                "Capability",
+                options: ActionCapability.allCases.filter { $0 != .speak }.map {
+                    .init(value: $0, title: $0.name)
+                },
                 selection: actionBinding(\.capability))
             let compatible = model.configuration.presets.filter { $0.capability == action?.capability }
             let presetOptions: [SelectorOption<UUID>] =
@@ -396,6 +406,24 @@ struct ConfigurationView: View {
     private func actionBinding<Value>(_ path: WritableKeyPath<Action, Value>) -> Binding<Value> {
         let original = action![keyPath: path]
         return Binding(get: { action?[keyPath: path] ?? original }, set: { action?[keyPath: path] = $0 })
+    }
+    private var speechVoiceBinding: Binding<String> {
+        Binding(
+            get: { (preset?.speechOptions ?? SpeechOptions()).voice },
+            set: { preset?.speechOptions = SpeechOptions(voice: $0) })
+    }
+    private var presetCapabilityBinding: Binding<ActionCapability> {
+        Binding(
+            get: { preset?.capability ?? .write },
+            set: { capability in
+                if capability == .speak && preset?.capability != .speak {
+                    preset?.model = SpeechOptions.defaultModel
+                    preset?.effort = ""
+                    preset?.fast = false
+                    preset?.speechOptions = preset?.speechOptions ?? SpeechOptions()
+                }
+                preset?.capability = capability
+            })
     }
     private func imageOptionBinding(_ path: WritableKeyPath<ImageOptions, String>) -> Binding<String> {
         Binding(

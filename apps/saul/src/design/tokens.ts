@@ -1,4 +1,4 @@
-// Generated from DESIGN.md · SHA-256 62ffc0dd52edc0bf261681ab743e4605c58c15921eb7f4cd15d9e03e759873e8. Do not edit.
+// Generated from DESIGN.md · SHA-256 562730c53a47158d848cb5eff66e913dd00dd7c7514786b276f67d6e88d9cae1. Do not edit.
 export const designColors = {
   primary: '#296e59',
   'primary-dark': '#6ec2a1',

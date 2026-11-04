@@ -92,6 +92,51 @@ import Foundation
                     try Data(contentsOf: store.url), original, "Rejected settings rewrote the original")
             }
         },
+        CheckCase("action contract: Speak presets preserve voices and block native execution") { directory in
+            let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+                .appendingPathComponent("../../../../contracts/fixtures/speech-options.json")
+                .standardizedFileURL
+            guard
+                let object = try JSONSerialization.jsonObject(with: Data(contentsOf: fixture))
+                    as? [String: Any],
+                let valid = object["valid"] as? [[String: Any]], let invalid = object["invalid"] as? [Any]
+            else { throw CheckFailure("Malformed speech-options fixture") }
+            let store = SharedPresetsStore(url: directory.appendingPathComponent("settings.json"))
+            let id = UUID()
+            for raw in valid {
+                let options = try JSONDecoder().decode(
+                    SpeechOptions.self, from: JSONSerialization.data(withJSONObject: raw))
+                let preset = ModelPreset(
+                    id: id, name: "Speak", model: SpeechOptions.defaultModel, effort: "", fast: false,
+                    providerKey: "openai-api", capability: .speak, speechOptions: options)
+                _ = try store.save([preset], revision: store.read().revision)
+                try expectEqual(try store.read().presets[0], preset, "Speak options disappeared")
+                try expect(
+                    preset.availabilityError(in: [])?.contains("Saul") == true,
+                    "Native execution was not blocked")
+                let action = Action(name: "Speak", presetID: id, template: "{{text}}", capability: .speak)
+                try expectThrows(EZError.self) {
+                    _ = try action.prepare(values: ["text": "Hello"], preset: preset, models: [])
+                }
+            }
+            for raw in invalid {
+                var preset: [String: Any] = [
+                    "id": id.uuidString, "name": "Speak", "model": SpeechOptions.defaultModel, "effort": "",
+                    "fast": false, "providerKey": "openai-api", "capability": "speak",
+                ]
+                preset["speechOptions"] = raw
+                let data = try JSONSerialization.data(withJSONObject: [
+                    "modelPresets": ["revision": 0, "presets": [preset]]
+                ])
+                try data.write(to: store.url)
+                do {
+                    _ = try store.read()
+                    throw CheckFailure("Malformed speech options accepted")
+                } catch is DecodingError {} catch is EZError {}
+                try expectEqual(
+                    try Data(contentsOf: store.url), data, "Rejected speech options rewrote the file")
+            }
+        },
         CheckCase("action contract: legacy presets migrate to gpt-plan Write without identity changes") {
             directory in
             let id = UUID()

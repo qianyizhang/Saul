@@ -273,14 +273,26 @@ choice takes precedence. Paired `-dark` colors provide the appearance mapping.
 The native app keeps system backgrounds and controls. The adapter maps web px
 values to native points and system font roles, without adding a runtime dependency.
 
-## Experimental speech boundary
+## Speech preview boundary
 
-The Settings-only `speech` operation uses the existing ChatGPT native bridge and
-credential owner. Its allowlist fixes the public Speech endpoint, model and MP3
-format; callers can supply only the selected account, up to 512 input characters,
-and a small supported voice list. It refuses redirects, limits audio to 600 kB
-before base64/native-message framing, and uses the existing sanitized error parser.
-Page scripts and the offscreen text runner cannot call it. Closing the view or
-pressing Stop cancels the request; blob URLs are revoked on replacement/unmount.
-No history, saved credential format, or normal Responses behavior changes. See the
-[endpoint probe results](chatgpt-plan.md#experimental-speech-and-endpoint-probes).
+The background [speech bridge](../src/speech/bridge.ts) accepts one bounded
+request per trusted Settings port. It reads saved settings, verifies the requested
+Speak preset still matches, and resolves only that provider's local API connection.
+The connection must use the official OpenAI endpoint; ChatGPT OAuth and other
+profiles are never fallbacks. The old native `speech` operation has been removed.
+
+The [Realtime owner](../src/speech/realtime.ts) creates an ephemeral client secret
+with the selected API key, then makes one text-input/audio-output WebSocket response.
+No microphone or WebRTC permission is needed. It receives PCM16 at 24 kHz and
+packages completed audio as WAV for the preview. It bounds text to 512 characters,
+audio to 6 MB and the whole operation to 90 seconds. Redirects, incomplete/failed
+responses, malformed audio and early disconnects fail without automatic retry.
+Remote error bodies are not shown; keys and ephemeral tokens stay out of replies,
+settings exports, history and diagnostics. Normal reading and Responses are unchanged.
+
+Stop or caller loss aborts token acquisition and closes the socket. Navigating away
+from a Speak preview unmounts it, aborts pending work and revokes its blob URL.
+Text and audio remain in memory only. Preset or voice changes clear old audio.
+Realtime is generative; preview text is an instruction to read verbatim, not an
+exact-synthesis guarantee. See the [current speech flow](chatgpt-plan.md#speech-preview)
+and the historical OAuth endpoint probe below it.

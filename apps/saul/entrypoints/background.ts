@@ -4,6 +4,7 @@ import { compareRunInput } from '../src/reading/input-change';
 import { validateDigest } from '../src/digest/contracts';
 import { initSummaryActions } from '../src/digest/actions';
 import { initPlanBridge } from '../src/native/plan';
+import { initSpeechBridge } from '../src/speech/bridge';
 import { initActionBridge } from '../src/native/actions';
 import { actionState, validateActionRequest, validateActionState } from '../src/actions/contract';
 import { prepareActionPreset } from '../src/actions/configuration';
@@ -268,6 +269,7 @@ export default defineBackground(() => {
   initStorageSecurity();
   initNativeBridge();
   initPlanBridge();
+  initSpeechBridge(currentSettings);
   initActionBridge();
   void db({ type: 'DB_UNREAD', payload: undefined })
     .then((count) => chrome.action.setBadgeText({ text: count ? String(count) : '' }))

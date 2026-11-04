@@ -1,6 +1,10 @@
-import { validateSharedProviders } from '../../native/shared-presets-contract.mts';
-import type { Recipe, UserSettings } from '../types';
-import { DEFAULT_SETTINGS, validateProviderSettings } from '../storage/settings';
+import {
+  DEFAULT_PROVIDERS,
+  SPEECH_MODEL,
+  validateSharedProviders,
+} from '../../native/shared-presets-contract.mts';
+import type { ModelPreset, ProviderType, Recipe, UserSettings } from '../types';
+import { DEFAULT_SETTINGS, validateSettingsConnections } from '../storage/settings';
 import {
   configurationFor,
   DEFAULT_RECIPE_SYSTEM_PROMPT,
@@ -17,64 +21,37 @@ export interface SettingsDraft {
 
 export type SettingsEdit =
   | { type: 'settings'; patch: Partial<UserSettings> }
-  | { type: 'remote'; patch: Partial<UserSettings['openaiCompatible']> }
-  | { type: 'select-profile'; id: string }
-  | { type: 'add-profile'; id: string }
-  | { type: 'profile-name'; name: string }
   | { type: 'select-preset'; id: string }
   | { type: 'add-preset'; id: string }
   | { type: 'preset-name'; name: string }
   | { type: 'provider-name'; key: string; name: string }
   | { type: 'preset-provider'; key: string }
+  | { type: 'preset-local-provider'; provider: Exclude<ProviderType, 'chatgpt-plan'> }
+  | {
+      type: 'preset';
+      patch: Partial<
+        Pick<
+          ModelPreset,
+          'model' | 'capability' | 'effort' | 'fast' | 'temperature' | 'speechOptions'
+        >
+      >;
+    }
+  | {
+      type: 'connection';
+      id: string;
+      patch: Partial<Pick<UserSettings['openaiCompatible'], 'baseUrl' | 'apiKey'>>;
+      name?: string;
+    }
+  | { type: 'provider-connection'; key: string; profileId: string }
+  | { type: 'plan-account'; accountId: string }
+  | { type: 'add-connection'; id: string }
+  | { type: 'preset-profile'; id: string }
   | { type: 'remove-preset' }
   | { type: 'select-recipe'; id: string }
   | { type: 'add-recipe'; id: string }
   | { type: 'recipe'; patch: Partial<Recipe> }
   | { type: 'default-recipe'; id: string }
   | { type: 'remove-recipe' };
-
-function withCurrentProfile(settings: UserSettings): UserSettings {
-  return {
-    ...settings,
-    profiles: settings.profiles?.map((profile) =>
-      profile.id === settings.activeProfileId
-        ? { ...profile, config: { ...settings.openaiCompatible } }
-        : profile,
-    ),
-  };
-}
-
-function updateChoices(draft: SettingsDraft, patch: Partial<UserSettings>): SettingsDraft {
-  const settings = { ...draft.settings, ...patch };
-  const configuration = configurationFor(settings);
-  return {
-    ...draft,
-    settings: withCurrentProfile({
-      ...settings,
-      configuration: {
-        ...configuration,
-        presets: configuration.presets.map((preset) => {
-          if (preset.id !== draft.presetId || preset.capability === 'draw') return preset;
-          const choices = presetFromSettings(settings, preset.id, preset.name);
-          return {
-            ...preset,
-            ...choices,
-            ...(Object.hasOwn(patch, 'activeProvider')
-              ? {
-                  providerKey: undefined,
-                  shared: undefined,
-                  effort: choices.effort,
-                  fast: choices.fast,
-                  temperature: choices.temperature,
-                  topK: choices.topK,
-                }
-              : {}),
-          };
-        }),
-      },
-    }),
-  };
-}
 
 function nextName(base: string, items: { name: string }[]): string {
   let name = base;
@@ -118,23 +95,129 @@ export function createSettingsDraft(source: UserSettings): SettingsDraft {
   };
 }
 
-/** Views supply edits; the module owns mirrored choices, references and key clearing. */
+/** Views supply edits; presets and connections retain separate owners. */
 export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): SettingsDraft {
   const settings = draft.settings;
   const configuration = configurationFor(settings);
   switch (edit.type) {
+    case 'add-connection': {
+      if ((settings.profiles?.length ?? 0) >= 32)
+        throw new Error('Keep at most 32 API connections.');
+      return {
+        ...draft,
+        settings: {
+          ...settings,
+          profiles: [
+            ...(settings.profiles ?? []),
+            {
+              id: edit.id,
+              name: nextName('New connection', settings.profiles ?? []),
+              config: { ...DEFAULT_SETTINGS.openaiCompatible },
+            },
+          ],
+        },
+      };
+    }
+    case 'preset-profile': {
+      if (!settings.profiles?.some((p) => p.id === edit.id))
+        throw new Error('Choose an existing connection.');
+      const next = {
+        ...settings,
+        configuration: {
+          ...configuration,
+          presets: configuration.presets.map((p) =>
+            p.id === draft.presetId ? { ...p, profileId: edit.id } : p,
+          ),
+        },
+      };
+      return {
+        ...draft,
+        settings: settingsForPreset(
+          next,
+          next.configuration.presets.find((p) => p.id === draft.presetId)!,
+          true,
+        ),
+      };
+    }
+    case 'plan-account':
+      return {
+        ...draft,
+        settings: {
+          ...settings,
+          chatgptPlan: { ...(settings.chatgptPlan ?? { model: '' }), accountId: edit.accountId },
+        },
+      };
+    case 'connection': {
+      const profile = settings.profiles?.find((p) => p.id === edit.id);
+      if (!profile) throw new Error('Choose an existing connection.');
+      const config = { ...profile.config, ...edit.patch };
+      if (origin(config.baseUrl) !== origin(profile.config.baseUrl)) config.apiKey = '';
+      return {
+        ...draft,
+        settings: {
+          ...settings,
+          ...(settings.activeProfileId === profile.id
+            ? {
+                openaiCompatible: {
+                  ...settings.openaiCompatible,
+                  baseUrl: config.baseUrl,
+                  apiKey: config.apiKey,
+                },
+              }
+            : {}),
+          profiles: settings.profiles?.map((p) =>
+            p.id === profile.id
+              ? { ...p, config, ...(edit.name === undefined ? {} : { name: edit.name }) }
+              : p,
+          ),
+        },
+      };
+    }
+    case 'provider-connection': {
+      if (!settings.profiles?.some((p) => p.id === edit.profileId))
+        throw new Error('Choose an existing connection.');
+      return {
+        ...draft,
+        settings: {
+          ...settings,
+          providerConnections: { ...settings.providerConnections, [edit.key]: edit.profileId },
+        },
+      };
+    }
+    case 'preset': {
+      const preset = configuration.presets.find((p) => p.id === draft.presetId);
+      if (!preset) throw new Error('Choose an existing preset.');
+      const updated = { ...preset, ...edit.patch };
+      if (edit.patch.capability === 'speak' && preset.capability !== 'speak')
+        Object.assign(updated, {
+          model: SPEECH_MODEL,
+          effort: '',
+          fast: false,
+          speechOptions: { voice: 'marin' },
+        });
+      const next = {
+        ...settings,
+        configuration: {
+          ...configuration,
+          presets: configuration.presets.map((p) => (p.id === preset.id ? updated : p)),
+        },
+      };
+      return { ...draft, settings: settingsForPreset(next, updated, true) };
+    }
     case 'provider-name':
       return {
         ...draft,
         settings: {
           ...settings,
-          providers: settings.providers?.map((provider) =>
+          providers: (settings.providers ?? DEFAULT_PROVIDERS).map((provider) =>
             provider.key === edit.key ? { ...provider, name: edit.name } : provider,
           ),
         },
       };
     case 'preset-provider': {
-      const provider = settings.providers?.find((item) => item.key === edit.key);
+      const provider = (settings.providers ?? DEFAULT_PROVIDERS).find(
+        (item) => item.key === edit.key,
+      );
       const preset = configuration.presets.find((item) => item.id === draft.presetId);
       if (!provider || !preset) throw new Error('Choose an available provider.');
       const kind = provider.kind === 'chatgpt-plan' ? 'chatgpt-plan' : 'openai-compatible';
@@ -149,7 +232,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
         fast: choices.fast,
         temperature: choices.temperature,
         topK: choices.topK,
-        shared: true,
+        shared: settings.sharedPresetRevision !== undefined,
         providerKey: provider.key,
         provider:
           provider.kind === 'chatgpt-plan'
@@ -157,11 +240,15 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
             : ('openai-compatible' as const),
         profileId:
           provider.kind === 'openai-api'
-            ? settings.providerConnections?.[provider.key] || provider.key
+            ? settings.providerConnections?.[provider.key] ||
+              (settings.openaiCompatible.baseUrl.replace(/\/+$/, '') === 'https://api.openai.com/v1'
+                ? settings.activeProfileId
+                : undefined) ||
+              provider.key
             : undefined,
       };
       const configured = {
-        ...withCurrentProfile(settings),
+        ...settings,
         configuration: {
           ...configuration,
           presets: configuration.presets.map((item) => (item.id === preset.id ? updated : item)),
@@ -170,58 +257,40 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
       return { ...draft, settings: settingsForPreset(configured, updated, true) };
     }
     case 'settings':
-      return updateChoices(draft, edit.patch);
-    case 'remote': {
-      const remote = { ...settings.openaiCompatible, ...edit.patch };
-      if (origin(remote.baseUrl) !== origin(settings.openaiCompatible.baseUrl)) remote.apiKey = '';
-      return updateChoices(draft, { openaiCompatible: remote });
-    }
-    case 'profile-name':
-      return updateChoices(draft, {
-        profiles: settings.profiles?.map((profile) =>
-          profile.id === settings.activeProfileId ? { ...profile, name: edit.name } : profile,
-        ),
-      });
-    case 'select-profile': {
-      const current = withCurrentProfile(settings);
-      const profile = current.profiles?.find((item) => item.id === edit.id);
-      if (!profile) throw new Error('Choose an existing profile.');
-      const providerKey = configuration.presets.find(
-        (item) => item.id === draft.presetId,
-      )?.providerKey;
-      return updateChoices(draft, {
-        profiles: current.profiles,
-        ...(providerKey
-          ? {
-              providerConnections: {
-                ...settings.providerConnections,
-                [providerKey]: profile.id,
-              },
-            }
-          : {}),
-        activeProfileId: profile.id,
-        openaiCompatible: { ...profile.config },
-      });
-    }
-    case 'add-profile': {
-      const current = withCurrentProfile(settings);
-      const profile = {
-        id: edit.id,
-        name: `Profile ${(current.profiles?.length || 0) + 1}`,
-        config: { ...DEFAULT_SETTINGS.openaiCompatible, apiKey: '' },
+      return { ...draft, settings: { ...settings, ...edit.patch } };
+    case 'preset-local-provider': {
+      const preset = configuration.presets.find((p) => p.id === draft.presetId);
+      if (!preset) throw new Error('Choose an existing preset.');
+      const choices = presetFromSettings(
+        { ...settings, activeProvider: edit.provider },
+        preset.id,
+        preset.name,
+      );
+      const updated = {
+        ...preset,
+        ...choices,
+        providerKey: undefined,
+        shared: undefined,
+        effort: choices.effort,
+        fast: choices.fast,
+        temperature: choices.temperature,
+        topK: choices.topK,
       };
-      return updateChoices(draft, {
-        profiles: [...(current.profiles || []), profile],
-        activeProfileId: profile.id,
-        openaiCompatible: profile.config,
-      });
+      const next = {
+        ...settings,
+        configuration: {
+          ...configuration,
+          presets: configuration.presets.map((p) => (p.id === preset.id ? updated : p)),
+        },
+      };
+      return { ...draft, settings: settingsForPreset(next, updated, true) };
     }
     case 'select-preset': {
       const preset = configuration.presets.find((item) => item.id === edit.id);
       if (!preset) throw new Error('Choose an existing preset.');
       return {
         ...draft,
-        settings: settingsForPreset(withCurrentProfile(settings), preset, true),
+        settings: settingsForPreset(settings, preset, true),
         presetId: preset.id,
       };
     }
@@ -242,14 +311,18 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
         },
       };
     case 'preset-name':
-      return updateChoices(draft, {
-        configuration: {
-          ...configuration,
-          presets: configuration.presets.map((item) =>
-            item.id === draft.presetId ? { ...item, name: edit.name } : item,
-          ),
+      return {
+        ...draft,
+        settings: {
+          ...settings,
+          configuration: {
+            ...configuration,
+            presets: configuration.presets.map((item) =>
+              item.id === draft.presetId ? { ...item, name: edit.name } : item,
+            ),
+          },
         },
-      });
+      };
     case 'remove-preset': {
       const used = configuration.recipes.filter((recipe) => recipe.presetId === draft.presetId);
       if (used.length)
@@ -262,7 +335,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
         ...draft,
         presetId: presets[0]!.id,
         settings: settingsForPreset(
-          { ...withCurrentProfile(settings), configuration: { ...configuration, presets } },
+          { ...settings, configuration: { ...configuration, presets } },
           presets[0]!,
           true,
         ),
@@ -272,7 +345,12 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
       if (!configuration.recipes.some((recipe) => recipe.id === edit.id))
         throw new Error('Choose an existing action.');
       return { ...draft, recipeId: edit.id };
-    case 'add-recipe':
+    case 'add-recipe': {
+      const writing =
+        configuration.presets.find(
+          (p) => p.id === draft.presetId && (!p.capability || p.capability === 'write'),
+        ) ?? configuration.presets.find((p) => !p.capability || p.capability === 'write');
+      if (!writing) throw new Error('Add a Write preset before adding a reading action.');
       if (configuration.recipes.length >= 32) throw new Error('Keep at most 32 actions.');
       return {
         ...draft,
@@ -286,7 +364,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
               {
                 id: edit.id,
                 name: nextName('New action', configuration.recipes),
-                presetId: draft.presetId,
+                presetId: writing.id,
                 template: '{{text}}',
                 systemPrompt: DEFAULT_RECIPE_SYSTEM_PROMPT,
               },
@@ -294,6 +372,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
           },
         },
       };
+    }
     case 'recipe':
       return {
         ...draft,
@@ -332,9 +411,12 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
 }
 
 export function settingsForSave(draft: SettingsDraft): UserSettings {
-  const settings = withCurrentProfile(draft.settings);
+  const settings = draft.settings;
+  const selected = configurationFor(settings).presets.find((p) => p.id === draft.presetId);
+  if (selected && !selected.model.trim())
+    throw new Error('Enter a model name available from this provider.');
   validateConfiguration(configurationFor(settings), settings.sharedPresetRevision !== undefined);
-  validateProviderSettings(settings);
+  validateSettingsConnections(settings);
   if (settings.providers) validateSharedProviders(settings.providers);
   return structuredClone(settings);
 }

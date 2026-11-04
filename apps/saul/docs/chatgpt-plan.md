@@ -85,22 +85,25 @@ Protocol sources (sign-in, sessions, and model guidance rechecked 2026-10-18):
 - [Preview limitations](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)
 - [Errors and recovery](https://developers.openai.com/siwc/token-sharing-open-source/errors-and-recovery)
 
-## Experimental speech and endpoint probes
+## Speech preview
 
-Settings → ChatGPT plan → **Speech test · experimental** sends up to 512 characters
-with the selected account's OAuth credential to `POST /v1/audio/speech`, using
-`gpt-4o-mini-tts` and a selectable voice. It offers Stop and, when MP3 bytes are
-returned, an audio player. Audio is AI-generated. Text/audio remain in memory and
-are discarded on leaving the view; they are not saved to reading history. There
-is no API-key, system-voice, or alternate-account fallback. An old installed helper
-must be upgraded using its existing extension ID before it recognizes `speech`.
+Settings → Presets supports Speak presets with an OpenAI Realtime model and voice.
+Settings → Providers owns the separate API connection and key. The preview generates
+up to 512 characters, offers Stop and an audio player, and discards input/audio when
+you leave. It requires saved choices, does not use ChatGPT sign-in, and never saves
+audio or text to reading history. Both apps preserve/edit Speak presets; only Saul
+executes the preview.
 
-This is an availability experiment, not a claim that ChatGPT plan TTS is supported.
-The [direct-flow documentation](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)
-documents Models and Responses. The
-[Speech API guide](https://developers.openai.com/api/docs/guides/text-to-speech)
-schedules `gpt-4o-mini-tts` shutdown for January 6, 2027; this widget is not a
-long-term speech integration.
+The [Speech API guide](https://developers.openai.com/api/docs/guides/text-to-speech)
+schedules `gpt-4o-mini-tts` shutdown for January 6, 2027 and directs integrations to
+Realtime. Saul uses `gpt-realtime-2.1-mini` by default through the documented
+[Realtime WebSocket flow](https://developers.openai.com/api/docs/guides/voice-websockets?api=realtime),
+with a short-lived secret created by the trusted extension background. The old
+experimental OAuth `speech` operation has been removed from the helper and UI.
+Realtime output is generative; exact spoken wording is not guaranteed.
+
+The probe below is historical evidence about the removed OAuth experiment, not a
+verification of current API access.
 
 ### Live result — October 21, 2026
 

@@ -1,3 +1,4 @@
+import { apiConnections } from './driver.ts';
 import { readingMore } from './driver.ts';
 import { settingsSection } from './driver.ts';
 import { CHROME_AI_ENABLED } from '../../src/models/chrome-ai';
@@ -69,7 +70,7 @@ test('provider profiles preserve their own credentials and clear keys across ori
   const { popup } = await sandbox.launch();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await settingsSection(popup, 'Presets');
-  await popup.getByLabel('API connection', { exact: true }).click();
+  await apiConnections(popup);
   await popup.getByLabel('Profile name', { exact: true }).fill('Local test');
   await popup.getByPlaceholder('https://api.openai.com/v1').fill(fixtureServer.origin + '/v1');
   await popup.getByPlaceholder('Optional for local models').fill('fixture-key-one');
@@ -83,6 +84,7 @@ test('provider profiles preserve their own credentials and clear keys across ori
     .getByLabel('Saved profile', { exact: true })
     .selectOption({ label: 'Second profile' });
   await expect(popup.getByPlaceholder('Optional for local models')).toHaveValue('fixture-key-two');
+  await popup.getByText('Endpoint templates', { exact: true }).click();
   await popup.getByRole('button', { name: 'DeepSeek', exact: true }).click();
   await expect(popup.getByPlaceholder('Optional for local models')).toHaveValue('');
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
@@ -90,9 +92,13 @@ test('provider profiles preserve their own credentials and clear keys across ori
   await popup.reload();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await settingsSection(popup, 'Presets');
-  await popup.getByLabel('API connection', { exact: true }).click();
+  await apiConnections(popup);
   await popup.getByLabel('Saved profile', { exact: true }).selectOption({ label: 'Local test' });
   await expect(popup.getByPlaceholder('Optional for local models')).toHaveValue('fixture-key-one');
+  await settingsSection(popup, 'Presets');
+  await popup
+    .getByLabel('Preset connection', { exact: true })
+    .selectOption({ label: 'Local test' });
   await popup.getByLabel('Model options and tests', { exact: true }).click();
   await popup.getByRole('button', { name: 'Test generation', exact: true }).click();
   await expect(popup.getByText(/Generation succeeded:/)).toBeVisible();
@@ -142,7 +148,7 @@ test('missing and stale profile selections recover the current config and remain
     else await popup.getByRole('button', { name: 'Settings', exact: true }).click();
     await settingsSection(popup, 'Presets');
 
-    await expect(popup.getByLabel('Saved profile', { exact: true })).toHaveValue(recoveredId);
+    await expect(popup.getByLabel('Preset connection', { exact: true })).toHaveValue(recoveredId);
     await expect(popup.getByLabel('Model name', { exact: true })).toHaveValue('current-model');
     await settingsSection(popup, 'Presets');
     await popup.getByLabel('Model name', { exact: true }).fill(model);
@@ -153,10 +159,14 @@ test('missing and stale profile selections recover the current config and remain
       return settings as {
         activeProfileId: string;
         profiles: { id: string; config: { model: string } }[];
+        configuration: { presets: { model: string }[] };
       };
     });
     expect(saved.activeProfileId).toBe(recoveredId);
-    expect(saved.profiles.find((profile) => profile.id === recoveredId)?.config.model).toBe(model);
+    expect(saved.configuration.presets[0]?.model).toBe(model);
+    expect(saved.profiles.find((profile) => profile.id === recoveredId)?.config.model).toBe(
+      'current-model',
+    );
     expect(saved.profiles.find((profile) => profile.id === 'legacy')?.config.model).toBe(
       'legacy-model',
     );
@@ -391,9 +401,11 @@ test('save locks the draft; provider tests lock only provider settings and remai
     const { popup, worker } = await sandbox.launch();
     await configureFixtureProvider(popup, server.origin);
     await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+    await apiConnections(popup);
     await settingsSection(popup, 'Presets');
     await popup.getByLabel('Model options and tests', { exact: true }).click();
     await popup.getByRole('button', { name: 'Test generation', exact: true }).click();
+    await settingsSection(popup, 'Providers');
     await expect(popup.getByLabel('Profile name', { exact: true })).toBeDisabled();
     await expect(popup.getByLabel('Response language', { exact: true })).toBeEnabled();
     await settingsSection(popup, 'Actions');

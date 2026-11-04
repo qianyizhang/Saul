@@ -275,3 +275,46 @@ it('rejects malformed image options without coercion in shared and app-scoped pr
     );
   }
 });
+
+it('round trips Speak presets and rejects malformed speech options without changing saved bytes', async () => {
+  const { validateSharedPresets } = await import('../native/shared-presets-contract.mts');
+  const { normalizeConfiguration } = await import('../src/models/configuration');
+  const fixture = JSON.parse(
+    readFileSync(
+      new URL('../../../contracts/fixtures/speech-options.json', import.meta.url),
+      'utf8',
+    ),
+  );
+  const directory = mkdtempSync(join(tmpdir(), 'saul-shared-speech-'));
+  try {
+    const store = new SharedPresetsStore(join(directory, 'settings.json'));
+    const preset = {
+      id: 'c14b29f3-3ec2-4efc-8bed-e05531aef2cb',
+      name: 'Speak',
+      providerKey: 'openai-api',
+      capability: 'speak' as const,
+      model: 'gpt-realtime-2.1-mini',
+      effort: '',
+      fast: false,
+    };
+    for (const speechOptions of fixture.valid) {
+      const value = { ...preset, speechOptions };
+      const saved = store.save(store.read().revision, [value]);
+      expect(store.read().presets[0]).toEqual(value);
+      expect(saved.presets[0]).toEqual(value);
+    }
+    const bytes = readFileSync(store.path, 'utf8');
+    for (const speechOptions of fixture.invalid) {
+      expect(() => validateSharedPresets([{ ...preset, speechOptions }])).toThrow();
+      expect(() => store.save(store.read().revision, [{ ...preset, speechOptions }])).toThrow();
+      expect(readFileSync(store.path, 'utf8')).toBe(bytes);
+      const source = structuredClone(DEFAULT_SETTINGS);
+      source.configuration!.presets[0] = { ...source.configuration!.presets[0]!, speechOptions };
+      expect(() => normalizeConfiguration(source.configuration, source)).toThrow(
+        'speech preset options',
+      );
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

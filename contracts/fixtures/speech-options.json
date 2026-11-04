@@ -1,0 +1,24 @@
+{
+  "valid": [
+    { "voice": "alloy" },
+    { "voice": "ash" },
+    { "voice": "ballad" },
+    { "voice": "coral" },
+    { "voice": "echo" },
+    { "voice": "sage" },
+    { "voice": "shimmer" },
+    { "voice": "verse" },
+    { "voice": "marin" },
+    { "voice": "cedar" }
+  ],
+  "invalid": [
+    null,
+    [],
+    {},
+    { "voice": null },
+    { "voice": ["marin"] },
+    { "voice": "nova" },
+    { "voice": "Marin" },
+    { "voice": "marin", "speed": 1 }
+  ]
+}

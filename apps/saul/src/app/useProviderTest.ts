@@ -3,6 +3,7 @@ import type { UserSettings } from '../types';
 import { streamModel } from '../models/provider';
 import { chromeAiAvailability, prepareChromeAi, CHROME_AI_ENABLED } from '../models/chrome-ai';
 import { validateProviderSettings } from '../storage/settings';
+import { configurationFor, settingsForPreset } from '../models/configuration';
 export function useProviderTest(provider: UserSettings['activeProvider']) {
   const [testing, setTesting] = useState(false),
     [preparing, setPreparing] = useState(false),
@@ -38,10 +39,14 @@ export function useProviderTest(provider: UserSettings['activeProvider']) {
       }
     }
   }
-  async function test(mode: 'endpoint' | 'generation' | 'prepare', draft: UserSettings) {
+  async function test(
+    mode: 'endpoint' | 'generation' | 'prepare',
+    draft: UserSettings,
+    presetId?: string,
+  ) {
     if (controller.current) return;
-    const settings = structuredClone(draft),
-      ac = new AbortController();
+    let settings = structuredClone(draft);
+    const ac = new AbortController();
     controller.current = ac;
     setError('');
     setNotice('');
@@ -55,6 +60,11 @@ export function useProviderTest(provider: UserSettings['activeProvider']) {
             settings.activeProvider === 'openai-compatible' ? 20000 : 120000,
           );
     try {
+      if (presetId) {
+        const preset = configurationFor(settings).presets.find((p) => p.id === presetId);
+        if (!preset) throw new Error('Choose an existing preset.');
+        settings = settingsForPreset(settings, preset);
+      }
       validateProviderSettings(settings);
       if (settings.activeProvider === 'chrome-ai' && mode === 'prepare') {
         const availability = await prepareChromeAi(ac.signal, (progress) => {

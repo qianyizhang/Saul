@@ -1,5 +1,29 @@
 import { isRecord } from './value.mts';
-export type ActionCapability = 'write' | 'draw';
+export type ActionCapability = 'write' | 'draw' | 'speak';
+export const SPEECH_MODEL = 'gpt-realtime-2.1-mini';
+export const SPEECH_VOICES = [
+  'alloy',
+  'ash',
+  'ballad',
+  'coral',
+  'echo',
+  'sage',
+  'shimmer',
+  'verse',
+  'marin',
+  'cedar',
+] as const;
+export interface SharedSpeechOptions {
+  voice: string;
+}
+export function validSpeechOptions(value: unknown): value is SharedSpeechOptions {
+  return (
+    isRecord(value) &&
+    Object.keys(value).length === 1 &&
+    typeof value.voice === 'string' &&
+    SPEECH_VOICES.some((voice) => voice === value.voice)
+  );
+}
 export interface SharedImageOptions {
   size: string;
   quality: string;
@@ -23,6 +47,7 @@ export interface SharedPreset {
   providerKey?: string;
   capability?: ActionCapability;
   imageOptions?: SharedImageOptions;
+  speechOptions?: SharedSpeechOptions;
 }
 export interface SharedProvider {
   key: string;
@@ -34,7 +59,7 @@ export const DEFAULT_PROVIDERS: readonly SharedProvider[] = [
   { key: 'openai-api', name: 'OpenAI API', kind: 'openai-api' },
 ];
 export function providerCapabilities(provider: SharedProvider): ActionCapability[] {
-  return provider.kind === 'chatgpt-plan' ? ['write'] : ['write', 'draw'];
+  return provider.kind === 'chatgpt-plan' ? ['write'] : ['write', 'draw', 'speak'];
 }
 export function validateSharedProviders(value: unknown): asserts value is SharedProvider[] {
   if (
@@ -79,6 +104,7 @@ export function validateSharedPresets(value: unknown): asserts value is SharedPr
             'providerKey',
             'capability',
             'imageOptions',
+            'speechOptions',
           ].includes(key),
         ) &&
         typeof p.id === 'string' &&
@@ -93,8 +119,9 @@ export function validateSharedPresets(value: unknown): asserts value is SharedPr
         typeof p.fast === 'boolean' &&
         (p.providerKey === undefined ||
           (typeof p.providerKey === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(p.providerKey))) &&
-        (p.capability === undefined || p.capability === 'write' || p.capability === 'draw') &&
-        (p.imageOptions === undefined || validImageOptions(p.imageOptions)),
+        (p.capability === undefined || ['write', 'draw', 'speak'].includes(String(p.capability))) &&
+        (p.imageOptions === undefined || validImageOptions(p.imageOptions)) &&
+        (p.speechOptions === undefined || validSpeechOptions(p.speechOptions)),
     ) ||
     new Set(value.map((p: SharedPreset) => p.id.toLowerCase())).size !== value.length ||
     new Set(value.map((p: SharedPreset) => p.name.trim().toLowerCase())).size !== value.length

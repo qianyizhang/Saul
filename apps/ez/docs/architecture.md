@@ -47,7 +47,7 @@ or unsupported preview fields are added. Completion requires a terminal
 ## Providers and Illustration
 
 `ProviderDefinition` owns stable unique keys, display names and transport kind.
-Defaults are `gpt-plan` (Write) and `openai-api` (Write/Draw). Presets bind the key,
+Defaults are `gpt-plan` (Write) and `openai-api` (Write/Draw/Speak). Presets bind the key,
 capability, model and options, not a particular plan account. `GenerationProvider`
 resolves app-local credentials and derives supported operations from its handlers.
 No credential reaches an action or shared preset. Unknown/incompatible providers
@@ -419,3 +419,8 @@ file for recovery. Subsequent loads and saves use the scoped JSON section; share
 model definitions remain in `modelPresets`. Section revisions reject stale saves.
 Account selection and credentials never belong to a model preset. Native shortcuts,
 Min Mode and window placement retain their existing local stores.
+
+Speak presets preserve a Realtime model and strict `speechOptions.voice` in the
+shared store. The native preset editor can change those choices. Playback currently
+runs only in Saul. Native availability/preparation and the final execution boundary
+block Speak before credential resolution; native actions expose Write and Draw.

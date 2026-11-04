@@ -250,10 +250,17 @@ the saved request. Reading and summary inspectors share the large-text viewer.
 - The native bridge supports macOS and Linux Chromium-family browsers; Google Chrome is the verified target.
 - See [testing](testing.md) for covered behavior and evidence limits.
 
-Shared presets also preserve stable `providerKey`, Write/Draw capability and image
+Shared presets also preserve stable `providerKey`, Write/Draw/Speak capability and image/speech
 options from EZ. Missing typed fields default to `gpt-plan` / Write. Saul retains
 Draw presets but blocks text execution; image settings and execution currently
 belong in EZ. Provider definitions and Presets use the same shared configuration and revision
 as EZ. Credentials, local connection bindings and Action inputs remain app-owned.
 Providers edits the shared display name without changing the key; preset selection
 binds that key. Legacy API profiles remain available for Saul-specific connections.
+
+Speech previews live in Settings → Presets for Speak presets. Providers owns the
+OpenAI API connection and key; Presets owns the Realtime model and voice. Generate
+sends at most 512 characters using the saved configuration and separate API billing.
+Stop, navigation or closing cancels generation and clears audio. Text/audio are
+never added to reading history. Speak is a preview capability; reading actions
+continue to require Write presets.

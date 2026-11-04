@@ -10,11 +10,12 @@ public struct ModelPreset: Codable, Equatable, Identifiable, Sendable {
     public var providerKey: String
     public var capability: ActionCapability
     public var imageOptions: ImageOptions?
+    public var speechOptions: SpeechOptions?
 
     public init(
         id: UUID = UUID(), name: String, model: String, effort: String, fast: Bool,
         providerKey: String = "gpt-plan", capability: ActionCapability = .write,
-        imageOptions: ImageOptions? = nil
+        imageOptions: ImageOptions? = nil, speechOptions: SpeechOptions? = nil
     ) {
         self.id = id
         self.name = name
@@ -24,10 +25,11 @@ public struct ModelPreset: Codable, Equatable, Identifiable, Sendable {
         self.providerKey = providerKey
         self.capability = capability
         self.imageOptions = imageOptions
+        self.speechOptions = speechOptions
     }
 
     private enum CodingKeys: String, CodingKey, CaseIterable {
-        case id, name, model, effort, fast, providerKey, capability, imageOptions
+        case id, name, model, effort, fast, providerKey, capability, imageOptions, speechOptions
     }
     public init(from decoder: Decoder) throws {
         let c = try contractFields(decoder, keys: CodingKeys.self)
@@ -41,9 +43,12 @@ public struct ModelPreset: Codable, Equatable, Identifiable, Sendable {
             c.contains(.capability) ? try c.decode(ActionCapability.self, forKey: .capability) : .write
         imageOptions =
             c.contains(.imageOptions) ? try c.decode(ImageOptions.self, forKey: .imageOptions) : nil
+        speechOptions =
+            c.contains(.speechOptions) ? try c.decode(SpeechOptions.self, forKey: .speechOptions) : nil
     }
 
     public func availabilityError(in models: [ModelOption]) -> String? {
+        if capability == .speak { return "Speak preview runs in Saul." }
         if capability == .draw {
             guard ImageModelOption.openAIModels.contains(where: { $0.id == model }) else {
                 return "Preset ‘\(name)’ needs an available Draw model. Edit it in Presets."
@@ -264,6 +269,7 @@ public struct Configuration: Codable, Equatable {
             guard preset.providerKey.range(of: "^[a-z][a-z0-9-]{0,63}$", options: .regularExpression) != nil
             else { throw EZError("Invalid preset provider key.") }
             if let image = preset.imageOptions { try image.validate() }
+            if let speech = preset.speechOptions { try speech.validate() }
         }
     }
 

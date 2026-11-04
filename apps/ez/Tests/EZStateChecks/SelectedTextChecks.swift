@@ -62,7 +62,7 @@ import Foundation
         stateCase("selected text without actions preserves the workspace and reports configuration") { f in
             try f.model.saveConfiguration(Configuration())
             let revision = f.model.draftRevision
-            try expectThrows(EZError.self, matching: { $0.message.contains("Configuration") }) {
+            try expectThrows(EZError.self, matching: { $0.message.contains("Settings → Actions") }) {
                 try f.model.prepareSelectedText("word")
             }
             try expect(

@@ -1,27 +1,25 @@
-import { ActionLabel } from '../surface/ActionLabel';
 import { useEffect, useRef, useState } from 'react';
-import { planCall } from '../models/chatgpt-plan';
-import type { PlanAccount } from '../../native/plan-protocol.mts';
+import { requestSpeech } from '../speech/client';
+import type { ModelPreset } from '../types';
 
 export function SpeechTest({
-  account,
+  preset,
+  saved,
   disabled,
   onBusyChange,
 }: {
-  account?: PlanAccount;
+  preset: ModelPreset;
+  saved: boolean;
   disabled: boolean;
   onBusyChange: (busy: boolean) => void;
 }) {
-  const [input, setInput] = useState(
-    'Hello from Saul. This is a speech test using my ChatGPT sign-in.',
-  );
-  const [voice, setVoice] = useState('coral');
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
-  const [audio, setAudio] = useState('');
-  const controller = useRef<AbortController | null>(null);
-  const audioURL = useRef('');
+  const [input, setInput] = useState('Hello from Saul. This is a speech preview.');
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState(''),
+    [message, setMessage] = useState(''),
+    [audio, setAudio] = useState('');
+  const controller = useRef<AbortController | null>(null),
+    audioURL = useRef('');
   useEffect(
     () => () => {
       controller.current?.abort();
@@ -30,114 +28,104 @@ export function SpeechTest({
     },
     [onBusyChange],
   );
+  useEffect(() => {
+    URL.revokeObjectURL(audioURL.current);
+    audioURL.current = '';
+    setAudio('');
+    setMessage('');
+    setError('');
+  }, [preset.model, preset.speechOptions?.voice]);
   const run = async () => {
-    if (!account?.planEnabled || controller.current || busy || disabled || !input.trim()) return;
+    if (controller.current || !saved || disabled || !input.trim()) return;
     const operation = new AbortController();
     controller.current = operation;
     setBusy(true);
     onBusyChange(true);
     setError('');
-    setMessage('Requesting speech…');
+    setMessage('Generating speech…');
     URL.revokeObjectURL(audioURL.current);
     audioURL.current = '';
     setAudio('');
     try {
-      const result = await planCall(
-        { action: 'speech', accountId: account.id, input, voice },
+      const blob = await requestSpeech(
+        {
+          presetId: preset.id,
+          providerKey: preset.providerKey ?? '',
+          model: preset.model,
+          voice: preset.speechOptions?.voice ?? 'marin',
+          input,
+        },
         operation.signal,
       );
       operation.signal.throwIfAborted();
-      const bytes = Uint8Array.from(atob(result.audioBase64), (char) => char.charCodeAt(0));
-      audioURL.current = URL.createObjectURL(new Blob([bytes], { type: result.mimeType }));
+      audioURL.current = URL.createObjectURL(blob);
       setAudio(audioURL.current);
-      setMessage('Speech received using ChatGPT sign-in. Press Play to listen.');
+      setMessage('Speech ready. Press Play to listen.');
     } catch (cause) {
       if (!operation.signal.aborted) {
-        setError(cause instanceof Error ? cause.message : 'Speech request failed.');
+        setError(cause instanceof Error ? cause.message : 'Speech failed.');
         setMessage('');
       }
     } finally {
-      if (!operation.signal.aborted) {
+      if (controller.current === operation) {
         controller.current = null;
         setBusy(false);
         onBusyChange(false);
       }
     }
   };
-  const cancel = () => {
-    controller.current?.abort();
-    controller.current = null;
-    setBusy(false);
-    onBusyChange(false);
-    setMessage('Stopped.');
-  };
   return (
-    <details>
-      <summary aria-label="Speech test · experimental" title="Speech test · experimental">
-        <ActionLabel short="Speech" full="Speech test · experimental" />
-      </summary>
-      <div className="stack">
-        <p className="small muted standard-only">
-          Test speech with the selected ChatGPT account. Availability is unconfirmed; no API-key
-          fallback. Audio is AI-generated.
+    <div className="stack speech-preview" role="region" aria-label="Speech preview">
+      <label className="field">
+        Speech text
+        <textarea
+          rows={3}
+          maxLength={512}
+          value={input}
+          disabled={busy}
+          onChange={(e) => setInput(e.target.value)}
+        />
+      </label>
+      <p className="small muted">AI-generated audio · OpenAI API billing</p>
+      {!saved && <p role="status">Save changes before generating speech.</p>}
+      {busy ? (
+        <button
+          className="btn"
+          aria-label="Stop speech request"
+          onClick={() => {
+            controller.current?.abort();
+            controller.current = null;
+            setBusy(false);
+            onBusyChange(false);
+            setMessage('Stopped.');
+          }}
+        >
+          Stop
+        </button>
+      ) : (
+        <button
+          className="btn"
+          aria-label="Generate speech"
+          title="Generate speech using OpenAI API billing"
+          disabled={!saved || disabled || !input.trim()}
+          onClick={() => void run()}
+        >
+          Generate
+        </button>
+      )}
+      {message && <p role="status">{message}</p>}
+      {error && (
+        <p className="notice error" role="alert">
+          {error}
         </p>
-        <label className="field">
-          Speech text
-          <textarea
-            rows={3}
-            maxLength={512}
-            value={input}
-            disabled={busy}
-            onChange={(event) => setInput(event.target.value)}
-          />
-        </label>
-        <label className="field">
-          Speech voice
-          <select value={voice} disabled={busy} onChange={(event) => setVoice(event.target.value)}>
-            {['coral', 'alloy', 'marin', 'cedar'].map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </label>
-        {busy ? (
-          <button
-            className="btn"
-            onClick={cancel}
-            aria-label="Stop speech request"
-            title="Stop speech request"
-          >
-            <ActionLabel short="Stop" full="Stop speech request" />
-          </button>
-        ) : (
-          <button
-            className="btn"
-            disabled={disabled || !account?.signedIn || !account.planEnabled || !input.trim()}
-            onClick={() => void run()}
-            aria-label="Test speech"
-            title="Test speech"
-          >
-            <ActionLabel short="Test" full="Test speech" />
-          </button>
-        )}
-        {!account?.planEnabled && (
-          <p className="small">Sign in and enable plan usage above to test speech.</p>
-        )}
-        {message && <p role="status">{message}</p>}
-        {error && (
-          <p className="notice error" role="alert">
-            {error}
-          </p>
-        )}
-        {audio && (
-          <audio controls src={audio} aria-label="Generated speech" style={{ width: '100%' }} />
-        )}
-        <p className="small muted standard-only">
-          Uses gpt-4o-mini-tts at /v1/audio/speech. This Speech API model is scheduled to shut down
-          January 6, 2027. Text and audio are not saved to history.
-        </p>
-      </div>
-    </details>
+      )}
+      {audio && (
+        <audio controls src={audio} aria-label="Generated speech" style={{ width: '100%' }} />
+      )}
+      <p className="small muted standard-only">
+        Text and audio stay in memory until you leave this preview. Realtime reads the text using a
+        generative model; exact wording is not guaranteed.
+      </p>
+    </div>
   );
 }

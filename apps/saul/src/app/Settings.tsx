@@ -1,4 +1,11 @@
-import { providerCapabilities } from '../../native/shared-presets-contract.mts';
+import {
+  DEFAULT_PROVIDERS,
+  providerCapabilities,
+  SPEECH_VOICES,
+} from '../../native/shared-presets-contract.mts';
+import { ProviderSettings } from './ProviderSettings';
+import { usePlanSettings } from './usePlanSettings';
+import { SpeechTest } from './SpeechTest';
 import { ActionLabel } from '../surface/ActionLabel';
 import { ChatGPTPlanSettings } from './ChatGPTPlanSettings';
 import { useEffect, useState } from 'react';
@@ -12,12 +19,6 @@ import { SUMMARY_ACTION_ID, SUMMARY_CLOSE_ID } from '../digest/actions';
 import { ActionSettings } from './ActionSettings';
 import type { SettingsSection } from './settings-sections';
 
-const presets = [
-  { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
-  { name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
-  { name: 'Ollama', baseUrl: 'http://localhost:11434/v1', model: 'llama3.2' },
-  { name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', model: '' },
-];
 export function Settings({
   onDirty,
   section = 'overview',
@@ -30,14 +31,10 @@ export function Settings({
   const draft = useSettingsDraft(onDirty);
   const { settings, loaded, dirty, saved, saving, save } = draft;
   const providerTest = useProviderTest(settings.activeProvider);
-  const { testing, notice, availability } = providerTest;
-  const error = draft.error || providerTest.error;
+  const { testing, notice } = providerTest;
   const [presetSearch, setPresetSearch] = useState('');
-  const [providerKey, setProviderKey] = useState('gpt-plan');
-  const selectedProvider =
-    settings.providers?.find((provider) => provider.key === providerKey) || settings.providers?.[0];
-  const [visibleKey, setVisibleKey] = useState(false);
   const [planBusy, setPlanBusy] = useState(false);
+  const [speechBusy, setSpeechBusy] = useState(false);
   const [actionBuilding, setActionBuilding] = useState(false);
   const [summaryShortcut, setSummaryShortcut] = useState('Loading…');
   const [closeShortcut, setCloseShortcut] = useState('Loading…');
@@ -76,17 +73,39 @@ export function Settings({
   const selectedPreset = configuration.presets.find(
     (preset) => preset.id === draft.selectedPresetId,
   );
-  useEffect(() => setVisibleKey(false), [settings.activeProfileId, settings.activeProvider]);
+  const plan = usePlanSettings(
+    {
+      ...(settings.chatgptPlan ?? { accountId: '', model: '' }),
+      ...(selectedPreset?.provider === 'chatgpt-plan'
+        ? { model: selectedPreset.model, effort: selectedPreset.effort, fast: selectedPreset.fast }
+        : {}),
+    },
+    (value) => {
+      if (value.accountId !== settings.chatgptPlan?.accountId)
+        draft.edit({ type: 'plan-account', accountId: value.accountId });
+      if (selectedPreset?.provider === 'chatgpt-plan')
+        draft.edit({
+          type: 'preset',
+          patch: { model: value.model, effort: value.effort, fast: value.fast },
+        });
+    },
+    setPlanBusy,
+    loaded,
+  );
+  const error = draft.error || providerTest.error;
   function update(patch: Partial<UserSettings>) {
-    if (patch.activeProfileId || patch.activeProvider) setVisibleKey(false);
     draft.edit({ type: 'settings', patch });
     providerTest.clear();
   }
-  function config(patch: Partial<UserSettings['openaiCompatible']>) {
-    draft.edit({ type: 'remote', patch });
+  const editPreset = (patch: Parameters<typeof draft.edit>[0] & { type: 'preset' }) => {
+    draft.edit(patch);
     providerTest.clear();
-  }
-  const test = (mode: 'endpoint' | 'generation' | 'prepare') => providerTest.test(mode, settings);
+  };
+  const test = (mode: 'endpoint' | 'generation' | 'prepare') =>
+    providerTest.test(mode, settings, selectedPreset?.id);
+  const presetProviders = settings.providers ?? DEFAULT_PROVIDERS;
+  const currentProvider = presetProviders.find((p) => p.key === selectedPreset?.providerKey);
+  const locked = testing || planBusy || speechBusy;
   if (!loaded)
     return error ? (
       <div className="stack settings-layout">
@@ -124,61 +143,15 @@ export function Settings({
     );
   return (
     <fieldset className="stack settings-layout settings-fields" disabled={saving}>
-      <section
-        hidden={section !== 'connections'}
-        className="settings-section"
-        aria-label="Provider definitions"
-      >
-        <h2 className="view-title">Providers</h2>
-        {selectedProvider && (
-          <div className="stack">
-            <label className="field">
-              Provider
-              <select
-                aria-label="Edit provider"
-                value={selectedProvider.key}
-                onChange={(event) => setProviderKey(event.target.value)}
-              >
-                {settings.providers?.map((provider) => (
-                  <option key={provider.key} value={provider.key}>
-                    {provider.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              Name
-              <input
-                aria-label="Provider name"
-                maxLength={80}
-                value={selectedProvider.name}
-                onChange={(event) =>
-                  draft.edit({
-                    type: 'provider-name',
-                    key: selectedProvider.key,
-                    name: event.target.value,
-                  })
-                }
-              />
-            </label>
-            <dl className="saul-metadata">
-              <dt>Key</dt>
-              <dd>{selectedProvider.key}</dd>
-              <dt>Capabilities</dt>
-              <dd>
-                {providerCapabilities(selectedProvider)
-                  .map((capability) => (capability === 'write' ? 'Write' : 'Draw'))
-                  .join(' · ')}
-              </dd>
-            </dl>
-          </div>
-        )}
-      </section>
+      <ProviderSettings
+        settings={settings}
+        edit={draft.edit}
+        plan={plan}
+        disabled={locked}
+        visible={section === 'connections'}
+      />
       <section hidden={section !== 'models'} className="settings-section" aria-label="Presets">
         <h2 className="view-title">Presets</h2>
-        <p className="small muted standard-only">
-          Providers and presets are shared with EZ. Action inputs and credentials stay in each app.
-        </p>
         <div className="settings-models">
           <div className="preset-browser">
             {configuration.presets.length > 6 && (
@@ -187,37 +160,36 @@ export function Settings({
                 aria-label="Find a preset"
                 placeholder="Search"
                 value={presetSearch}
-                onChange={(event) => setPresetSearch(event.target.value)}
+                onChange={(e) => setPresetSearch(e.target.value)}
               />
             )}
             <div className="preset-list" aria-label="Model presets">
               {configuration.presets
-                .filter((preset) =>
-                  preset.name.toLocaleLowerCase().includes(presetSearch.toLocaleLowerCase()),
+                .filter((p) =>
+                  p.name.toLocaleLowerCase().includes(presetSearch.toLocaleLowerCase()),
                 )
-                .map((preset) => (
+                .map((p) => (
                   <button
                     type="button"
-                    key={preset.id}
-                    aria-pressed={preset.id === draft.selectedPresetId}
-                    disabled={testing || planBusy}
+                    key={p.id}
+                    aria-pressed={p.id === draft.selectedPresetId}
+                    disabled={locked}
                     onClick={() => {
-                      draft.edit({ type: 'select-preset', id: preset.id });
+                      draft.edit({ type: 'select-preset', id: p.id });
                       providerTest.clear();
                     }}
                   >
-                    {preset.name}
+                    {p.name}
                   </button>
                 ))}
             </div>
-            {!configuration.presets.some((preset) =>
-              preset.name.toLocaleLowerCase().includes(presetSearch.toLocaleLowerCase()),
+            {!configuration.presets.some((p) =>
+              p.name.toLocaleLowerCase().includes(presetSearch.toLocaleLowerCase()),
             ) && <p role="status">No matching presets.</p>}
             <button
               className="btn"
               aria-label="Add preset"
-              title="Add preset"
-              disabled={testing || planBusy || configuration.presets.length >= 32}
+              disabled={locked || configuration.presets.length >= 32}
               onClick={() => {
                 draft.edit({ type: 'add-preset', id: crypto.randomUUID() });
                 setPresetSearch('');
@@ -232,16 +204,16 @@ export function Settings({
                 Preset
                 <select
                   aria-label="Preset"
-                  disabled={testing || planBusy}
                   value={draft.selectedPresetId}
-                  onChange={(event) => {
-                    draft.edit({ type: 'select-preset', id: event.target.value });
+                  disabled={locked}
+                  onChange={(e) => {
+                    draft.edit({ type: 'select-preset', id: e.target.value });
                     providerTest.clear();
                   }}
                 >
-                  {configuration.presets.map((preset) => (
-                    <option key={preset.id} value={preset.id}>
-                      {preset.name}
+                  {configuration.presets.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
                     </option>
                   ))}
                 </select>
@@ -249,344 +221,248 @@ export function Settings({
               <button
                 className="btn"
                 aria-label="Add preset"
-                title="Add preset"
-                disabled={testing || planBusy || configuration.presets.length >= 32}
+                disabled={locked || configuration.presets.length >= 32}
                 onClick={() => draft.edit({ type: 'add-preset', id: crypto.randomUUID() })}
               >
                 +
               </button>
             </div>
-            <div className="row">
-              <label className="field grow">
-                Preset name
-                <input
-                  maxLength={80}
-                  value={selectedPreset?.name || ''}
-                  disabled={testing || planBusy}
-                  onChange={(event) =>
-                    draft.edit({ type: 'preset-name', name: event.target.value })
-                  }
-                />
-              </label>
-              <button
-                className="btn danger"
-                aria-label="Remove preset"
-                title="Remove preset"
-                disabled={testing || planBusy || configuration.presets.length <= 1}
-                onClick={() => draft.edit({ type: 'remove-preset' })}
-              >
-                Remove
-              </button>
-            </div>
-            {selectedPreset?.capability === 'draw' && (
-              <div>
-                <p role="status">
-                  Draw preset · edit image settings in EZ. Saul currently runs Write actions.
-                </p>
-                <dl className="saul-metadata">
-                  <dt>Provider</dt>
-                  <dd>
-                    {settings.providers?.find(
-                      (provider) => provider.key === selectedPreset.providerKey,
-                    )?.name || selectedPreset.providerKey}
-                  </dd>
-                  <dt>Model</dt>
-                  <dd>{selectedPreset.model}</dd>
-                  <dt>Size</dt>
-                  <dd>{selectedPreset.imageOptions?.size || '1024x1024'}</dd>
-                  <dt>Quality</dt>
-                  <dd>{selectedPreset.imageOptions?.quality || 'low'}</dd>
-                </dl>
-              </div>
-            )}
-            <fieldset
-              hidden={selectedPreset?.capability === 'draw'}
-              className={`settings-fields ${settings.activeProvider === 'openai-compatible' ? 'api-fields' : ''}`}
-              disabled={testing || selectedPreset?.capability === 'draw'}
-            >
-              <label className="field">
-                Provider
-                <select
-                  aria-label="Provider"
-                  disabled={planBusy}
-                  value={
-                    selectedPreset?.providerKey ||
-                    (settings.activeProvider === 'chatgpt-plan'
-                      ? 'gpt-plan'
-                      : settings.activeProvider)
-                  }
-                  onChange={(e) => {
-                    if (settings.providers?.some((provider) => provider.key === e.target.value))
-                      draft.edit({ type: 'preset-provider', key: e.target.value });
-                    else
-                      update({
-                        activeProvider: (e.target.value === 'gpt-plan'
-                          ? 'chatgpt-plan'
-                          : e.target.value) as UserSettings['activeProvider'],
-                      });
-                  }}
-                >
-                  <option value="openai-compatible">API connection</option>
-                  {!settings.providers?.length && <option value="gpt-plan">ChatGPT plan</option>}
-                  {settings.providers?.map((provider) => (
-                    <option key={provider.key} value={provider.key}>
-                      {provider.name}
-                    </option>
-                  ))}
-                  {selectedPreset?.providerKey &&
-                    !settings.providers?.some(
-                      (provider) => provider.key === selectedPreset.providerKey,
-                    ) && (
+            {selectedPreset && (
+              <fieldset className="stack settings-fields" disabled={testing}>
+                <label className="field">
+                  Preset name
+                  <input
+                    maxLength={80}
+                    value={selectedPreset.name}
+                    disabled={locked}
+                    onChange={(e) => draft.edit({ type: 'preset-name', name: e.target.value })}
+                  />
+                </label>
+                <label className="field">
+                  Provider
+                  <select
+                    aria-label="Provider"
+                    disabled={locked}
+                    value={
+                      selectedPreset.providerKey ||
+                      (selectedPreset.provider === 'chatgpt-plan'
+                        ? 'gpt-plan'
+                        : selectedPreset.provider)
+                    }
+                    onChange={(e) => {
+                      if (presetProviders.some((p) => p.key === e.target.value))
+                        draft.edit({ type: 'preset-provider', key: e.target.value });
+                      else
+                        draft.edit({
+                          type: 'preset-local-provider',
+                          provider: e.target.value as 'openai-compatible' | 'chrome-ai',
+                        });
+                    }}
+                  >
+                    {presetProviders.map((p) => (
+                      <option key={p.key} value={p.key}>
+                        {p.name}
+                      </option>
+                    ))}
+                    <option value="openai-compatible">API connection</option>
+                    {selectedPreset.providerKey && !currentProvider && (
                       <option value={selectedPreset.providerKey} disabled>
                         {selectedPreset.providerKey} · unavailable
                       </option>
                     )}
-                  <option value="chrome-ai" disabled={!CHROME_AI_ENABLED}>
-                    Chrome on-device AI{CHROME_AI_ENABLED ? '' : ' (temporarily disabled)'}
-                  </option>
-                </select>
-              </label>
-              {settings.activeProvider === 'chatgpt-plan' ? (
-                <ChatGPTPlanSettings
-                  key={draft.selectedPresetId}
-                  visible={section === 'models'}
-                  onBusyChange={setPlanBusy}
-                  saved={!dirty}
-                  value={settings.chatgptPlan || { accountId: '', model: '' }}
-                  onChange={(chatgptPlan) => update({ chatgptPlan })}
-                  test={() => test('generation')}
-                  testing={testing}
-                />
-              ) : settings.activeProvider === 'chrome-ai' ? (
-                !CHROME_AI_ENABLED ? (
+                    <option value="chrome-ai" disabled={!CHROME_AI_ENABLED}>
+                      Chrome on-device AI{CHROME_AI_ENABLED ? '' : ' (temporarily disabled)'}
+                    </option>
+                  </select>
+                </label>
+                <label className="field">
+                  Capability
+                  <select
+                    aria-label="Capability"
+                    value={selectedPreset.capability ?? 'write'}
+                    disabled={locked || selectedPreset.capability === 'draw'}
+                    onChange={(e) =>
+                      editPreset({
+                        type: 'preset',
+                        patch: { capability: e.target.value as 'write' | 'speak' },
+                      })
+                    }
+                  >
+                    <option value="write">Write</option>
+                    <option value="draw" disabled>
+                      Draw · edit in EZ
+                    </option>
+                    <option
+                      value="speak"
+                      disabled={
+                        !currentProvider || !providerCapabilities(currentProvider).includes('speak')
+                      }
+                    >
+                      Speak
+                      {!currentProvider || !providerCapabilities(currentProvider).includes('speak')
+                        ? ' · requires OpenAI API'
+                        : ''}
+                    </option>
+                  </select>
+                </label>
+                {selectedPreset.capability === 'draw' ? (
+                  <div>
+                    <p role="status">
+                      Draw preset · edit image settings in EZ. Saul currently runs Write actions.
+                    </p>
+                    <dl className="saul-metadata">
+                      <dt>Model</dt>
+                      <dd>{selectedPreset.model}</dd>
+                      <dt>Size</dt>
+                      <dd>{selectedPreset.imageOptions?.size || '1024x1024'}</dd>
+                      <dt>Quality</dt>
+                      <dd>{selectedPreset.imageOptions?.quality || 'low'}</dd>
+                    </dl>
+                  </div>
+                ) : selectedPreset.capability === 'speak' ? (
+                  <>
+                    <label className="field">
+                      Model
+                      <input
+                        aria-label="Speech model"
+                        disabled={locked}
+                        value={selectedPreset.model}
+                        onChange={(e) =>
+                          editPreset({ type: 'preset', patch: { model: e.target.value } })
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      Voice
+                      <select
+                        aria-label="Speech voice"
+                        disabled={locked}
+                        value={selectedPreset.speechOptions?.voice ?? 'marin'}
+                        onChange={(e) =>
+                          editPreset({
+                            type: 'preset',
+                            patch: { speechOptions: { voice: e.target.value } },
+                          })
+                        }
+                      >
+                        {SPEECH_VOICES.map((v) => (
+                          <option key={v} value={v}>
+                            {v}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {section === 'models' && (
+                      <SpeechTest
+                        key={selectedPreset.id}
+                        preset={selectedPreset}
+                        saved={!dirty}
+                        disabled={testing || planBusy}
+                        onBusyChange={setSpeechBusy}
+                      />
+                    )}
+                  </>
+                ) : selectedPreset.provider === 'chatgpt-plan' ? (
+                  <ChatGPTPlanSettings
+                    plan={plan}
+                    mode="preset"
+                    visible={section === 'models'}
+                    disabled={testing}
+                    test={() => test('generation')}
+                  />
+                ) : selectedPreset.provider === 'chrome-ai' ? (
                   <p className="notice">{CHROME_AI_DISABLED_MESSAGE}</p>
                 ) : (
-                  <div className="stack">
-                    <p className="muted standard-only">
-                      Chrome's built-in Gemini Nano runs locally after a separate model download.
-                    </p>
-                    <p className="small" role="status">
-                      Availability: {availability}.
-                    </p>
-                    {availability === 'unavailable' && (
-                      <p className="notice">
-                        Chrome reports that the model is unavailable. Open
-                        chrome://on-device-internals in Chrome to check model eligibility and
-                        download errors. Preparing cannot override browser or administrator
-                        restrictions.
-                      </p>
-                    )}
-                    {availability === 'unsupported' && (
-                      <p className="notice">
-                        This browser does not expose the Chrome Prompt API. Update Google Chrome and
-                        check its built-in AI support.
-                      </p>
-                    )}
-                    <div className="row">
-                      <button
-                        className="btn"
-                        disabled={testing}
-                        onClick={() => void providerTest.refreshAvailability()}
-                        aria-label="Check availability"
-                        title="Check availability"
-                      >
-                        <ActionLabel short="Check" full="Check availability" />
-                      </button>
-                      <button
-                        className="btn"
-                        disabled={
-                          testing ||
-                          availability === 'unsupported' ||
-                          availability === 'unavailable'
-                        }
-                        onClick={() => test('prepare')}
-                        aria-label="Prepare on-device model"
-                        title="Prepare on-device model"
-                      >
-                        <ActionLabel short="Prepare" full="Prepare on-device model" />
-                      </button>
-                      <button
-                        className="btn"
-                        disabled={testing || availability !== 'available'}
-                        onClick={() => test('generation')}
-                        aria-label="Test generation"
-                        title="Test generation"
-                      >
-                        <ActionLabel short="Test" full="Test generation" />
-                      </button>
-                    </div>
-                    <p className="small muted standard-only">
-                      Preparation checks readiness. Test generation verifies that the model returns
-                      text. Use the full workspace to keep setup open during a download.
-                    </p>
-                    <a
-                      href="https://developer.chrome.com/docs/ai/prompt-api#hardware-requirements"
-                      target="_blank"
-                      rel="noreferrer"
-                      aria-label="Chrome model requirements"
-                      title="Chrome model requirements"
-                    >
-                      <ActionLabel short="Requirements" full="Chrome model requirements" />
-                    </a>
-                  </div>
-                )
-              ) : (
-                <>
-                  <label className="field">
-                    Model name
-                    <input
-                      placeholder="Model name"
-                      value={settings.openaiCompatible.model}
-                      onChange={(e) => config({ model: e.target.value })}
-                    />
-                  </label>
-                  <details>
-                    <summary aria-label="API connection" title="API connection">
-                      <ActionLabel short="Connection" full="API connection" />
-                    </summary>
-                    <div className="stack settings-disclosure">
-                      <div className="row">
-                        <label className="field grow">
-                          Saved profile
-                          <select
-                            aria-label="Saved profile"
-                            value={settings.activeProfileId}
-                            onChange={(e) => {
-                              draft.edit({ type: 'select-profile', id: e.target.value });
-                              providerTest.clear();
-                            }}
-                          >
-                            {settings.profiles?.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <button
-                          className="btn"
-                          onClick={() => {
-                            draft.edit({ type: 'add-profile', id: crypto.randomUUID() });
-                            providerTest.clear();
-                          }}
-                          aria-label="New profile"
-                          title="New profile"
-                        >
-                          <ActionLabel short="New" full="New profile" />
-                        </button>
-                      </div>
+                  <>
+                    {!selectedPreset.providerKey && (
                       <label className="field">
-                        Profile name
-                        <input
-                          value={
-                            settings.profiles?.find((p) => p.id === settings.activeProfileId)
-                              ?.name || ''
-                          }
+                        Connection
+                        <select
+                          aria-label="Preset connection"
+                          value={selectedPreset.profileId ?? ''}
                           onChange={(e) =>
-                            draft.edit({ type: 'profile-name', name: e.target.value })
+                            draft.edit({ type: 'preset-profile', id: e.target.value })
                           }
-                        />
+                        >
+                          {settings.profiles?.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
                       </label>
-                      <div className="row small">
-                        <span className="muted">Fill endpoint:</span>
-                        {presets.map((p) => (
-                          <button
-                            className="btn"
-                            key={p.name}
-                            onClick={() =>
-                              config({
-                                baseUrl: p.baseUrl,
-                                model: p.model,
+                    )}
+                    <label className="field">
+                      Model
+                      <input
+                        aria-label="Model name"
+                        value={selectedPreset.model}
+                        onChange={(e) =>
+                          editPreset({ type: 'preset', patch: { model: e.target.value } })
+                        }
+                      />
+                    </label>
+                    <details>
+                      <summary aria-label="Model options and tests">
+                        <ActionLabel short="Options" full="Model options and tests" />
+                      </summary>
+                      <div className="stack settings-disclosure">
+                        <label className="field">
+                          Temperature:{' '}
+                          {selectedPreset.temperature ?? settings.openaiCompatible.temperature}
+                          <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.05"
+                            value={
+                              selectedPreset.temperature ?? settings.openaiCompatible.temperature
+                            }
+                            onChange={(e) =>
+                              editPreset({
+                                type: 'preset',
+                                patch: { temperature: Number(e.target.value) },
                               })
                             }
-                          >
-                            {p.name}
-                          </button>
-                        ))}
-                      </div>
-                      <label className="field">
-                        Base URL
-                        <input
-                          placeholder="https://api.openai.com/v1"
-                          value={settings.openaiCompatible.baseUrl}
-                          onChange={(e) =>
-                            config({
-                              baseUrl: e.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        API key
-                        <div className="row">
-                          <input
-                            className="grow"
-                            autoComplete="off"
-                            type={visibleKey ? 'text' : 'password'}
-                            placeholder="Optional for local models"
-                            value={settings.openaiCompatible.apiKey}
-                            onChange={(e) => config({ apiKey: e.target.value })}
                           />
+                        </label>
+                        <div className="row">
                           <button
-                            type="button"
                             className="btn"
-                            aria-label={visibleKey ? 'Hide API key' : 'Show API key'}
-                            onClick={() => setVisibleKey(!visibleKey)}
+                            disabled={testing}
+                            onClick={() => test('endpoint')}
+                            aria-label="Test Connection"
                           >
-                            {visibleKey ? 'Hide' : 'Show'}
+                            <ActionLabel short="Check" full="Test Connection" />
+                          </button>
+                          <button
+                            className="btn"
+                            disabled={testing}
+                            onClick={() => test('generation')}
+                            aria-label="Test generation"
+                          >
+                            <ActionLabel short="Test" full="Test generation" />
                           </button>
                         </div>
-                      </label>
-                      <p className="small muted standard-only">
-                        Each profile keeps its own key. Changing endpoint origin clears the current
-                        key.
-                      </p>
-                    </div>
-                  </details>
-                  <details>
-                    <summary aria-label="Model options and tests" title="Model options and tests">
-                      <ActionLabel short="Options" full="Model options and tests" />
-                    </summary>
-                    <div className="stack settings-disclosure">
-                      <label className="field">
-                        Temperature: {settings.openaiCompatible.temperature}
-                        <input
-                          type="range"
-                          min="0"
-                          max="1"
-                          step="0.05"
-                          value={settings.openaiCompatible.temperature}
-                          onChange={(e) => config({ temperature: Number(e.target.value) })}
-                        />
-                      </label>
-                      <div className="row">
-                        <button
-                          className="btn"
-                          disabled={testing}
-                          onClick={() => test('endpoint')}
-                          aria-label="Test Connection"
-                          title="Test Connection"
-                        >
-                          <ActionLabel short="Check" full="Test Connection" />
-                        </button>
-                        <button
-                          className="btn"
-                          disabled={testing}
-                          onClick={() => test('generation')}
-                          aria-label="Test generation"
-                          title="Test generation"
-                        >
-                          <ActionLabel short="Test" full="Test generation" />
-                        </button>
                       </div>
-                      <p className="small muted standard-only">
-                        Generation sends a short sample prompt using the current form values.
-                      </p>
-                    </div>
-                  </details>
-                </>
-              )}
-            </fieldset>
+                    </details>
+                  </>
+                )}
+                <div className="row between">
+                  <button className="btn quiet" onClick={() => onSectionChange('connections')}>
+                    Providers
+                  </button>
+                  <button
+                    className="btn danger"
+                    aria-label="Remove preset"
+                    disabled={locked || configuration.presets.length <= 1}
+                    onClick={() => draft.edit({ type: 'remove-preset' })}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </fieldset>
+            )}
           </div>
         </div>
       </section>
@@ -661,7 +537,7 @@ export function Settings({
           </label>
         </div>
         <div hidden={section !== 'overview'} className="settings-overview">
-          <button className="settings-link" onClick={() => onSectionChange('models')}>
+          <button className="settings-link" onClick={() => onSectionChange('connections')}>
             <span>Presets</span>
             <span>
               {configuration.presets.length}
@@ -772,6 +648,7 @@ export function Settings({
           !notice &&
           !testing &&
           !planBusy &&
+          !speechBusy &&
           !actionBuilding &&
           section === 'preferences'
         }
@@ -799,13 +676,32 @@ export function Settings({
             </button>
           </div>
         )}
-        {planBusy && section !== 'models' && (
+        {planBusy && (
           <div className="row">
-            <span role="status">Account operation in progress.</span>
-            <button className="btn" onClick={() => onSectionChange('models')}>
-              Presets
+            <span role="status">
+              {plan.busy
+                ? {
+                    accounts: 'Refreshing accounts…',
+                    login: 'Complete sign-in in the opened tab.',
+                    logout: 'Signing out…',
+                    models: 'Refreshing available models…',
+                  }[plan.busy]
+                : 'Account operation in progress.'}
+            </span>
+            <button className="btn" onClick={() => onSectionChange('connections')}>
+              Providers
             </button>
           </div>
+        )}
+        {plan.busy && plan.busy !== 'logout' && (
+          <button className="btn" onClick={() => plan.controller.current?.abort()}>
+            Cancel
+          </button>
+        )}
+        {plan.notice && (
+          <p className="notice" role="status">
+            {plan.notice}
+          </p>
         )}
         {error && (
           <p className="notice error" role="alert">
@@ -830,7 +726,7 @@ export function Settings({
             {draft.blocked && (
               <button
                 className="btn"
-                disabled={testing || saving || planBusy}
+                disabled={testing || saving || planBusy || speechBusy}
                 onClick={() => {
                   providerTest.clear();
                   void draft.reload();
@@ -843,7 +739,7 @@ export function Settings({
             )}
             <button
               className="btn primary"
-              disabled={testing || saving || planBusy || draft.blocked}
+              disabled={testing || saving || planBusy || speechBusy || draft.blocked}
               onClick={save}
             >
               {saving ? 'Saving…' : 'Save'}

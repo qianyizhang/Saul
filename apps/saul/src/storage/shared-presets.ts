@@ -59,6 +59,7 @@ const portable = (p: ModelPreset): SharedPreset => ({
   ...(p.providerKey ? { providerKey: p.providerKey } : {}),
   ...(p.capability ? { capability: p.capability } : {}),
   ...(p.imageOptions ? { imageOptions: p.imageOptions } : {}),
+  ...(p.speechOptions ? { speechOptions: p.speechOptions } : {}),
 });
 const definitions = (settings: UserSettings) =>
   configurationFor(settings)

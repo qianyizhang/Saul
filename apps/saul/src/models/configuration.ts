@@ -1,4 +1,4 @@
-import { validImageOptions } from '../../native/shared-presets-contract.mts';
+import { validImageOptions, validSpeechOptions } from '../../native/shared-presets-contract.mts';
 import type {
   ModelPreset,
   ReadingConfiguration,
@@ -203,13 +203,16 @@ export function normalizeConfiguration(
       if (
         preset.capability !== undefined &&
         preset.capability !== 'write' &&
-        preset.capability !== 'draw'
+        preset.capability !== 'draw' &&
+        preset.capability !== 'speak'
       )
         throw new Error('Invalid preset capability.');
       if (preset.shared !== undefined && typeof preset.shared !== 'boolean')
         throw new Error('Invalid shared preset marker.');
       if (preset.imageOptions !== undefined && !validImageOptions(preset.imageOptions))
         throw new Error('Invalid image preset options.');
+      if (preset.speechOptions !== undefined && !validSpeechOptions(preset.speechOptions))
+        throw new Error('Invalid speech preset options.');
       return {
         id: string(preset.id, 'Preset ID', 128),
         name: string(preset.name, 'Preset name', 80),
@@ -225,9 +228,10 @@ export function normalizeConfiguration(
           : { providerKey: string(preset.providerKey, 'Provider key', 64) }),
         ...(preset.capability === undefined
           ? {}
-          : { capability: preset.capability as 'write' | 'draw' }),
+          : { capability: preset.capability as ModelPreset['capability'] }),
         ...(preset.shared === undefined ? {} : { shared: preset.shared as boolean }),
         ...(preset.imageOptions === undefined ? {} : { imageOptions: preset.imageOptions }),
+        ...(preset.speechOptions === undefined ? {} : { speechOptions: preset.speechOptions }),
       };
     }),
     recipes: stored.recipes.map((entry) => {
@@ -282,7 +286,11 @@ export function settingsForPreset(
   preset: ModelPreset,
   editing = false,
 ): UserSettings {
-  if (preset.capability === 'draw' && editing) return settings;
+  if ((preset.capability === 'draw' || preset.capability === 'speak') && editing) return settings;
+  if (preset.capability === 'speak')
+    throw new Error(
+      `Preset “${preset.name}” uses Speak. Open its speech preview in Presets; choose a Write preset for reading actions.`,
+    );
   if (preset.capability === 'draw' && !editing)
     throw new Error(
       `Preset “${preset.name}” uses Draw. Image actions are available in EZ; choose a Write preset in Saul.`,

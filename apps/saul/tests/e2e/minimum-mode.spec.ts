@@ -1,3 +1,4 @@
+import { apiConnections } from './driver.ts';
 import { settingsSection } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
@@ -61,7 +62,7 @@ test('Min Mode defaults on, updates open surfaces, and persists independently of
   const toggle = popup.getByRole('checkbox', { name: 'Min Mode', exact: false });
   await expect(toggle).toBeChecked();
   await settingsSection(popup, 'Presets');
-  await popup.getByLabel('API connection', { exact: true }).click();
+  await apiConnections(popup);
   await popup.getByLabel('Base URL', { exact: true }).fill('invalid endpoint');
   await settingsSection(popup, 'Preferences');
   await toggle.uncheck();

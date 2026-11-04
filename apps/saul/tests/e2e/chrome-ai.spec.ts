@@ -167,6 +167,7 @@ test('saved on-device selection shows a recovery choice without silently switchi
   await expect(popup.getByRole('alert')).toContainText('temporarily disabled');
   await settingsSection(popup, 'Presets');
   await popup.getByLabel('Provider', { exact: true }).selectOption('gpt-plan');
+  await settingsSection(popup, 'Providers');
   await expect(
     popup.getByRole('button', { name: 'Continue with ChatGPT', exact: true }),
   ).toBeVisible();

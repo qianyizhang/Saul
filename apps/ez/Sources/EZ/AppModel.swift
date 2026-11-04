@@ -100,6 +100,9 @@ import EZCore
                         guard let preset = entry.presetSnapshot, let connection = entry.providerSnapshot
                         else { throw EZError("The action's provider snapshot is missing.") }
                         let selected = connection.kind == .chatGPTPlan ? provider : api
+                        guard preset.capability != .speak else {
+                            throw EZError("Speak previews run in Saul.")
+                        }
                         if preset.capability == .draw {
                             let options = preset.imageOptions ?? ImageOptions()
                             let output = try await selected.generateImage(

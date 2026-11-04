@@ -128,12 +128,12 @@ it('notifies reopened Settings after sign-in completes without sharing credentia
   });
 });
 
-it('restricts speech to trusted workspace callers', () => {
+it('rejects the removed OAuth speech operation for every caller', () => {
   vi.useFakeTimers();
   const h = harness();
   const request = { action: 'speech', accountId: 'fixture', input: 'Hello.', voice: 'coral' };
   h.connect('chrome-extension://extension/offscreen.html').receive(request);
   expect(h.connectNative).not.toHaveBeenCalled();
   h.connect('chrome-extension://extension/library.html').receive(request);
-  expect(h.native.postMessage).toHaveBeenCalledWith(expect.objectContaining({ request }));
+  expect(h.connectNative).not.toHaveBeenCalled();
 });

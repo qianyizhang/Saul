@@ -115,6 +115,7 @@ public final class SharedPresetsStore {
             guard preset.providerKey.range(of: "^[a-z][a-z0-9-]{0,63}$", options: .regularExpression) != nil
             else { throw EZError("Invalid provider key in shared presets.") }
             if let options = preset.imageOptions { try options.validate() }
+            if let options = preset.speechOptions { try options.validate() }
         }
     }
     public func save(_ presets: [ModelPreset], revision: Int, providers: [ProviderDefinition]? = nil) throws

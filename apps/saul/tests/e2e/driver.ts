@@ -92,3 +92,12 @@ export async function summaryMore(page: Page): Promise<void> {
   if ((await tools.isVisible()) && (await tools.getAttribute('open')) === null)
     await tools.locator('summary').click();
 }
+
+/** Open the connection editor through visible navigation at either width. */
+export async function apiConnections(page: Page): Promise<void> {
+  await settingsSection(page, 'Providers');
+  const item = page.getByRole('button', { name: 'API connections', exact: true });
+  if (await item.isVisible()) await item.click();
+  else
+    await page.getByLabel('Edit provider', { exact: true }).selectOption('local-api-connections');
+}

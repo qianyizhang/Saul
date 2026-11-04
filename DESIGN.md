@@ -274,14 +274,16 @@ Advanced options belong in named disclosures; errors and billing routes stay vis
 
 Providers have stable unique keys and editable display names. Renaming a provider
 does not change a preset's binding. Existing plan presets default to `gpt-plan` /
-Write. OpenAI API uses `openai-api`, supports Write and Draw, and has separate API
+Write. OpenAI API uses `openai-api`, supports Write, Draw and Speak, and has separate API
 billing. Credentials and plan account selection remain app-owned. Keep the existing
 Connect/Add/Enable/Refresh/Usage/Disconnect account actions within its provider.
 Saving or reloading an API key does not generate or test a request.
 
 Presets bind provider, capability, model and options. Write exposes reasoning and
 requested speed where supported; Draw exposes its model and an Image settings
-disclosure for size/quality. Keep unsupported saved choices visible and block Run
+disclosure for size/quality. Speak exposes a Realtime model and voice, with a
+short-text preview in Saul. Its Generate action shows API billing and AI-generated
+audio in both display modes. Keep unsupported saved choices visible and block Run
 with a useful reason. Never change the provider, model or billing route implicitly.
 Plan models still come from the selected local account's catalog. API Write uses
 an explicit model ID. Exact recorded choices belong in run Details.
@@ -297,7 +299,19 @@ keys, display names, kinds, capabilities and model options. Both apps use that s
 configuration and revision; a provider rename preserves preset bindings. Credentials,
 local connection bindings, Action inputs and history stay app-owned. Saul preserves
 Draw presets but does not execute or edit their image settings yet; make that limit
-visible rather than routing them to a text endpoint.
+visible rather than routing them to a text endpoint. Speak presets can be edited
+in both apps; preview playback currently runs only in Saul. Speech previews require
+a saved preset and connection. Stop or leaving the preview cancels generation and
+releases audio; audio and input are never saved to history. Realtime speech is
+generative, so exact wording is not guaranteed.
+
+Connection editors live in Providers. Presets contains provider, capability, model
+and applicable options; account selection, endpoint and credentials have no second
+editor there. Saul retains its API-only connection profiles under Providers and
+uses a compact selector at narrow widths. Each draft retains edits while navigating
+between sections or items; closing or reloading confirms discarding unsaved edits.
+Save validates connection syntax without requiring live credentials or model access.
+Availability is checked when a request is deliberately started.
 
 ## Illustration
 

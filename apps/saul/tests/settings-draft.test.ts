@@ -7,25 +7,23 @@ import {
 import { DEFAULT_SETTINGS } from '../src/storage/settings';
 import { configurationFor } from '../src/models/configuration';
 
-it('keeps profile credentials and model choices when switching presets and profiles', () => {
+it('keeps connection credentials separate when switching presets and connections', () => {
   let draft = createSettingsDraft(DEFAULT_SETTINGS);
   draft = editSettingsDraft(draft, {
-    type: 'remote',
-    patch: { apiKey: 'first-key', model: 'first-model' },
+    type: 'connection',
+    id: 'default',
+    patch: { apiKey: 'first-key' },
   });
-  draft = editSettingsDraft(draft, { type: 'add-profile', id: 'second' });
-  expect(draft.settings.openaiCompatible.apiKey).toBe('');
+  draft = editSettingsDraft(draft, { type: 'preset', patch: { model: 'first-model' } });
+  draft = editSettingsDraft(draft, { type: 'add-connection', id: 'second' });
   draft = editSettingsDraft(draft, {
-    type: 'remote',
-    patch: { apiKey: 'second-key', model: 'second-model' },
-  });
-  draft = editSettingsDraft(draft, { type: 'select-profile', id: 'default' });
-  expect(draft.settings.openaiCompatible).toMatchObject({
-    apiKey: 'first-key',
-    model: 'first-model',
+    type: 'connection',
+    id: 'second',
+    patch: { apiKey: 'second-key' },
   });
   draft = editSettingsDraft(draft, { type: 'add-preset', id: 'another' });
-  draft = editSettingsDraft(draft, { type: 'select-profile', id: 'second' });
+  draft = editSettingsDraft(draft, { type: 'preset-profile', id: 'second' });
+  draft = editSettingsDraft(draft, { type: 'preset', patch: { model: 'second-model' } });
   draft = editSettingsDraft(draft, { type: 'select-preset', id: 'preset-current' });
   expect(draft.settings.openaiCompatible).toMatchObject({
     apiKey: 'first-key',
@@ -41,18 +39,23 @@ it('keeps profile credentials and model choices when switching presets and profi
 
 it('clears credentials on origin changes while retaining same-origin path edits', () => {
   let draft = createSettingsDraft(DEFAULT_SETTINGS);
-  draft = editSettingsDraft(draft, { type: 'remote', patch: { apiKey: 'private' } });
   draft = editSettingsDraft(draft, {
-    type: 'remote',
+    type: 'connection',
+    id: 'default',
+    patch: { apiKey: 'private' },
+  });
+  draft = editSettingsDraft(draft, {
+    type: 'connection',
+    id: 'default',
     patch: { baseUrl: 'https://api.openai.com/other' },
   });
-  expect(draft.settings.openaiCompatible.apiKey).toBe('private');
+  expect(draft.settings.profiles![0]!.config.apiKey).toBe('private');
   draft = editSettingsDraft(draft, {
-    type: 'remote',
+    type: 'connection',
+    id: 'default',
     patch: { baseUrl: 'https://example.test/v1' },
   });
-  expect(draft.settings.openaiCompatible.apiKey).toBe('');
-  expect(draft.settings.profiles?.[0]?.config.apiKey).toBe('');
+  expect(draft.settings.profiles![0]!.config.apiKey).toBe('');
 });
 
 it('owns recipe/preset references and preserves editing selection across unrelated changes', () => {
@@ -110,4 +113,57 @@ it('preserves a shared Draw preset through unrelated settings and provider-name 
   const saved = settingsForSave(draft);
   expect(saved.configuration!.presets.find((p) => p.id === image.id)).toEqual(image);
   expect(saved.providers?.[1]).toEqual({ key: 'openai-api', name: 'My API', kind: 'openai-api' });
+});
+
+it('edits provider connections without overwriting a selected Speak or Write preset', () => {
+  let draft = createSettingsDraft(DEFAULT_SETTINGS);
+  draft = editSettingsDraft(draft, { type: 'preset', patch: { model: 'write-choice' } });
+  const write = structuredClone(configurationFor(draft.settings).presets[0]);
+  draft = editSettingsDraft(draft, {
+    type: 'connection',
+    id: 'default',
+    patch: { apiKey: 'private', baseUrl: 'https://api.openai.com/v1' },
+  });
+  expect(configurationFor(draft.settings).presets[0]).toEqual(write);
+  draft = editSettingsDraft(draft, { type: 'add-preset', id: 'speak' });
+  draft = editSettingsDraft(draft, { type: 'preset-provider', key: 'openai-api' });
+  draft = editSettingsDraft(draft, { type: 'preset', patch: { capability: 'speak' } });
+  draft = editSettingsDraft(draft, {
+    type: 'preset',
+    patch: { speechOptions: { voice: 'cedar' } },
+  });
+  const speech = structuredClone(configurationFor(draft.settings).presets.at(-1));
+  draft = editSettingsDraft(draft, { type: 'plan-account', accountId: 'explicit-account' });
+  draft = editSettingsDraft(draft, {
+    type: 'connection',
+    id: 'default',
+    patch: { baseUrl: 'https://example.test/v1' },
+  });
+  expect(configurationFor(draft.settings).presets.at(-1)).toEqual(speech);
+  expect(draft.settings.profiles![0]!.config.apiKey).toBe('');
+  draft = editSettingsDraft(draft, { type: 'select-preset', id: 'preset-current' });
+  expect(configurationFor(settingsForSave(draft)).presets.at(-1)).toEqual(speech);
+});
+
+it('keeps the chosen Write model when editing its connection, preferences and name', () => {
+  let draft = createSettingsDraft(DEFAULT_SETTINGS);
+  draft = editSettingsDraft(draft, { type: 'preset', patch: { model: 'chosen-model' } });
+  draft = editSettingsDraft(draft, {
+    type: 'connection',
+    id: 'default',
+    patch: { apiKey: 'fixture-key' },
+  });
+  draft = editSettingsDraft(draft, { type: 'settings', patch: { responseLanguage: 'Chinese' } });
+  draft = editSettingsDraft(draft, { type: 'preset-name', name: 'Chosen' });
+  expect(configurationFor(settingsForSave(draft)).presets[0]?.model).toBe('chosen-model');
+});
+
+it('gives a new reading action a Write preset when a Speak preset is being edited', () => {
+  let draft = createSettingsDraft(DEFAULT_SETTINGS);
+  const writing = draft.presetId;
+  draft = editSettingsDraft(draft, { type: 'add-preset', id: 'speak' });
+  draft = editSettingsDraft(draft, { type: 'preset-provider', key: 'openai-api' });
+  draft = editSettingsDraft(draft, { type: 'preset', patch: { capability: 'speak' } });
+  draft = editSettingsDraft(draft, { type: 'add-recipe', id: 'reading' });
+  expect(configurationFor(draft.settings).recipes.at(-1)?.presetId).toBe(writing);
 });

@@ -63,7 +63,6 @@ export type PlanRequest =
   | { action: 'login'; accountId?: string; consent?: boolean }
   | { action: 'logout'; accountId: string }
   | { action: 'models'; accountId: string }
-  | { action: 'speech'; accountId: string; input: string; voice: string }
   | {
       action: 'generate';
       accountId: string;
@@ -85,7 +84,6 @@ export interface PlanResults {
   login: { account: PlanAccount };
   logout: { account: PlanAccount; warning?: string };
   models: { models: PlanModel[] };
-  speech: { audioBase64: string; mimeType: 'audio/mpeg' };
 }
 export type PlanResult<T extends PlanControlRequest = PlanControlRequest> = {
   type: 'result';
@@ -115,7 +113,6 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
     login: ['accountId', 'consent'],
     logout: ['accountId'],
     models: ['accountId'],
-    speech: ['accountId', 'input', 'voice'],
     generate: ['accountId', 'model', 'effort', 'fast', 'systemPrompt', 'userPrompt', 'attachments'],
   };
   const keys = typeof v.action === 'string' ? operations[v.action] : undefined;
@@ -149,14 +146,6 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
       (v.consent !== undefined && typeof v.consent !== 'boolean'))
   )
     throw new Error('Invalid sign-in request');
-  if (
-    v.action === 'speech' &&
-    (!text(v.input, 512) ||
-      !v.input.trim() ||
-      typeof v.voice !== 'string' ||
-      !['coral', 'alloy', 'marin', 'cedar'].includes(v.voice))
-  )
-    throw new Error('Speech requires 1–512 characters and a supported voice.');
   if (
     v.action === 'generate' &&
     (!text(v.model, 256) ||
@@ -207,11 +196,6 @@ export function validatePlanResult<T extends PlanControlRequest>(
       login: (v) => account(v.account),
       logout: (v) =>
         account(v.account) && (v.warning === undefined || typeof v.warning === 'string'),
-      speech: (v) =>
-        v.mimeType === 'audio/mpeg' &&
-        text(v.audioBase64, 800000) &&
-        v.audioBase64.length % 4 === 0 &&
-        /^[A-Za-z0-9+/]+={0,2}$/.test(v.audioBase64),
       models: (v) => Array.isArray(v.models) && v.models.every(model),
     };
   if (

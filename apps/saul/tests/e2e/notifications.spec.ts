@@ -1,3 +1,4 @@
+import { apiConnections } from './driver.ts';
 import { settingsSection } from './driver.ts';
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider } from './support.ts';
@@ -46,7 +47,7 @@ test('mute from a toast applies across tabs and restart; Settings can unmute wit
   const toggle = popup.getByRole('checkbox', { name: 'Mute error notifications' });
   await expect(toggle).toBeChecked();
   await settingsSection(popup, 'Presets');
-  await popup.getByLabel('API connection', { exact: true }).click();
+  await apiConnections(popup);
   await popup.getByLabel('Base URL', { exact: true }).fill('invalid endpoint');
   await settingsSection(popup, 'Preferences');
   await toggle.uncheck();

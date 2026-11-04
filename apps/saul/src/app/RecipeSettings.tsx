@@ -78,9 +78,14 @@ export function RecipeSettings({
               <option value={recipe.presetId}>Unavailable preset</option>
             )}
             {configuration.presets.map((preset) => (
-              <option key={preset.id} value={preset.id} disabled={preset.capability === 'draw'}>
+              <option
+                key={preset.id}
+                value={preset.id}
+                disabled={!!preset.capability && preset.capability !== 'write'}
+              >
                 {preset.name}
                 {preset.capability === 'draw' ? ' · Draw unavailable in Saul' : ''}
+                {preset.capability === 'speak' ? ' · Speak preview only' : ''}
               </option>
             ))}
           </select>
