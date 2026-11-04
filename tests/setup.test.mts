@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createPlan, executePlan, installExtension, runCommand } from '../scripts/setup.mts';
+import { appSourceFingerprint, createBuildInfo } from '../scripts/build-identity.mts';
 
 const environment = {
   repo: '/fixture/repo',
@@ -109,11 +110,19 @@ test('tab preparation builds the board and both helpers share one activation tra
 test('extension copy retains bytes, verifies artifact, and refuses to replace existing data or symlinks', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'workspace-install-'));
   try {
-    const source = join(dir, 'source');
+    const source = join(dir, 'apps/saul/.output/chrome-mv3');
     const target = join(dir, 'installed');
-    await mkdir(source);
+    await mkdir(source, { recursive: true });
+    await writeFile(join(dir, 'apps/saul/build-inputs.json'), '["input"]');
+    await writeFile(join(dir, 'input'), 'source');
     await writeFile(join(source, 'manifest.json'), JSON.stringify({ manifest_version: 3 }));
     await writeFile(join(source, 'payload'), 'fixture');
+    await writeFile(
+      join(source, 'build-info.json'),
+      JSON.stringify(
+        createBuildInfo('saul', '0.0.0', await appSourceFingerprint(dir, 'saul'), 'fixture'),
+      ),
+    );
     await installExtension(source, target);
     assert.equal(await readFile(join(target, 'payload'), 'utf8'), 'fixture');
     await assert.rejects(installExtension(source, target), /already exists/);
@@ -122,7 +131,7 @@ test('extension copy retains bytes, verifies artifact, and refuses to replace ex
     await assert.rejects(installExtension(source, alias), /already exists/);
     const plan = createPlan(
       { components: 'extension', extensionDir: target, verify: true },
-      { ...environment, home: join(dir, 'home') },
+      { ...environment, repo: dir, home: join(dir, 'home') },
     );
     await executePlan(plan, {
       log() {},
@@ -130,8 +139,79 @@ test('extension copy retains bytes, verifies artifact, and refuses to replace ex
         throw new Error('Verification must not execute installers');
       },
     });
+    const loadedBuild = createPlan(
+      { components: 'extension', extensionDir: source, verify: true },
+      { ...environment, repo: dir, home: join(dir, 'home') },
+    );
+    await executePlan(loadedBuild, {
+      log() {},
+      run: async () => {
+        throw new Error('Read-only verification must not run installers');
+      },
+    });
+    assert.throws(
+      () =>
+        createPlan(
+          { components: 'extension', extensionDir: source },
+          { ...environment, repo: dir, home: join(dir, 'home') },
+        ),
+      /outside source/,
+    );
+    const verify = () =>
+      executePlan(plan, {
+        log() {},
+        run: async () => {
+          throw new Error('Verification must not execute installers');
+        },
+      });
+    await writeFile(join(target, 'payload'), 'changed');
+    await assert.rejects(verify(), /differs.*payload/);
+    await cp(join(source, 'payload'), join(target, 'payload'));
+    await rm(join(target, 'payload'));
+    await assert.rejects(verify(), /differs.*payload/);
+    await cp(join(source, 'payload'), join(target, 'payload'));
+    await writeFile(join(target, 'extra'), 'unexpected');
+    await assert.rejects(verify(), /differs.*extra/);
+    await rm(join(target, 'extra'));
+    await writeFile(join(dir, 'input'), 'edited after building');
+    await assert.rejects(verify(), /build is stale/);
     await writeFile(join(source, 'manifest.json'), '{}');
     await assert.rejects(installExtension(source, join(dir, 'bad')), /not a Chrome MV3/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('native verification requires both a valid signature and the current prepared payload', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'workspace-native-verify-'));
+  try {
+    const source = join(dir, 'apps/ez/dist/EZ.app');
+    const applications = join(dir, 'Applications');
+    await mkdir(join(source, 'Contents/Resources'), { recursive: true });
+    await writeFile(join(dir, 'apps/ez/build-inputs.json'), '["source"]');
+    await writeFile(join(dir, 'source'), 'current');
+    await writeFile(
+      join(source, 'Contents/Resources/build-info.json'),
+      JSON.stringify(
+        createBuildInfo('ez', '0.1.0', await appSourceFingerprint(dir, 'ez'), 'fixture'),
+      ),
+    );
+    await writeFile(join(source, 'Contents/executable'), 'new');
+    await mkdir(applications);
+    await cp(source, join(applications, 'EZ.app'), { recursive: true });
+    const plan = createPlan(
+      { components: 'ez', verify: true, applicationsDir: applications },
+      { ...environment, repo: dir },
+    );
+    const calls: string[] = [];
+    const run = async (command: string) => {
+      calls.push(command);
+      return '';
+    };
+    await executePlan(plan, { run, log() {} });
+    assert.deepEqual(calls, ['codesign']);
+    await writeFile(join(plan.app, 'Contents/executable'), 'old but signed');
+    await assert.rejects(executePlan(plan, { run, log() {} }), /differs.*executable/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

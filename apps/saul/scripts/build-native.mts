@@ -2,6 +2,12 @@ import { execFileSync } from 'node:child_process';
 import { copyFile, mkdir, writeFile, rename, rm, lstat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import {
+  invalidateNativeBuild,
+  nativeBuildCurrent,
+  nativeBuildFingerprint,
+  recordNativeBuild,
+} from './native-build-state.mts';
 
 const root = new URL('../', import.meta.url);
 const buildDirectory = new URL('.build/', root);
@@ -9,6 +15,13 @@ const previous = await lstat(buildDirectory).catch((error: NodeJS.ErrnoException
   if (error.code !== 'ENOENT') throw error;
 });
 if (previous?.isSymbolicLink()) throw new Error('Helper build directory must not be a symlink.');
+const rootPath = fileURLToPath(root);
+const input = await nativeBuildFingerprint(rootPath);
+if (await nativeBuildCurrent(rootPath, input)) {
+  console.error('Reusing verified native helper build.');
+  process.exit(0);
+}
+await invalidateNativeBuild(rootPath);
 // Never ship stale output from a removed or renamed source file.
 await rm(new URL('.build/native/', root), { recursive: true, force: true });
 const compiler = fileURLToPath(import.meta.resolve('typescript/bin/tsc'));
@@ -60,3 +73,6 @@ await writeFile(
   new URL('.build/native/installation-root.json', root),
   JSON.stringify({ version: 1, root: fileURLToPath(root) }),
 );
+if ((await nativeBuildFingerprint(rootPath)) !== input)
+  throw new Error('Helper inputs changed during the build. Run the command again.');
+await recordNativeBuild(rootPath, input);

@@ -1,0 +1,12 @@
+[
+  "apps/ez/build-inputs.json",
+  "apps/ez/Package.swift",
+  "apps/ez/Sources",
+  "apps/ez/Resources",
+  "apps/ez/scripts/build-app.sh",
+  "apps/ez/scripts/build-identity.swift",
+  "apps/ez/scripts/swift.sh",
+  "apps/ez/scripts/signing.sh",
+  "native/credentials/Package.swift",
+  "native/credentials/Sources"
+]

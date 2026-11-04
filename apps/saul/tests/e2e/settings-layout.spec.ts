@@ -15,6 +15,14 @@ test('focused settings preserves drafts across sections and keeps Min Mode conci
   await expect(popup.getByRole('main')).toHaveCount(1);
   await expect(popup.getByLabel('Default action', { exact: true })).toBeVisible();
   await expect(popup.getByLabel('Response language', { exact: true })).toBeVisible();
+  const identity = await popup.evaluate(async () => {
+    const response = await fetch(chrome.runtime.getURL('/build-info.json'));
+    const info = (await response.json()) as { build: string };
+    return { version: chrome.runtime.getManifest().version, build: info.build.slice(0, 12) };
+  });
+  await expect(popup.getByLabel('Saul version', { exact: true })).toHaveText(
+    `Version ${identity.version} · Build ${identity.build}`,
+  );
   await expect(popup.getByLabel('Model name', { exact: true })).toBeHidden();
   await settingsSection(popup, 'Presets');
   await popup.getByLabel('Model name', { exact: true }).fill('draft-model');

@@ -71,6 +71,24 @@ function command(f: ReturnType<typeof fixture>, name: string) {
   return execFileSync(join(f.root, 'bin', name), [], { encoding: 'utf8' }).trim();
 }
 
+it('verifies installed helper payload and dependencies against the selected prepared build', async () => {
+  const f = fixture();
+  await installHelpers({ ...f.options, components: ['tabs', 'chatgpt'] }, f.dependencies);
+  expect(verifyInstallation(f.root, 'tabs', { source: f.native }).generation).toBeTruthy();
+  expect(
+    verifyInstallation(f.root, 'chatgpt', { source: f.native, jose: f.dependencies.jose })
+      .generation,
+  ).toBeTruthy();
+  fs.writeFileSync(join(f.native, 'cli.mjs'), "console.log('next build');\n");
+  expect(() => verifyInstallation(f.root, 'tabs', { source: f.native })).toThrow(
+    /differs.*cli.mjs/,
+  );
+  fs.writeFileSync(join(f.dependencies.jose, 'index.js'), 'export const changed = true;');
+  expect(() =>
+    verifyInstallation(f.root, 'chatgpt', { source: f.native, jose: f.dependencies.jose }),
+  ).toThrow(/differs.*index.js/);
+});
+
 it('installs complete generations through stable entry paths and keeps credentials outside payloads', async () => {
   const f = fixture();
   fs.mkdirSync(join(f.root, 'chatgpt'), { recursive: true });

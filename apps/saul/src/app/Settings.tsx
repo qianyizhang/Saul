@@ -14,6 +14,7 @@ import { RecipeSettings } from './RecipeSettings';
 import { SUMMARY_ACTION_ID, SUMMARY_CLOSE_ID } from '../digest/actions';
 import { ActionSettings } from './ActionSettings';
 import type { SettingsSection } from './settings-sections';
+import { AppVersion } from './AppVersion';
 
 export function Settings({
   onDirty,
@@ -538,6 +539,7 @@ export function Settings({
           </label>
         </div>
         <div hidden={section !== 'overview'} className="settings-overview">
+          <AppVersion />
           <button className="settings-link" onClick={() => onSectionChange('connections')}>
             <span>Presets</span>
             <span>

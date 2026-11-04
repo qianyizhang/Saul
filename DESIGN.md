@@ -271,6 +271,9 @@ Keep the selected item beside its editor, one task visible at a time. Preserve
 editor drafts across section changes; switching items or closing asks before
 unsaved work is discarded. Keep native controls, existing density and Min Mode.
 Advanced options belong in named disclosures; errors and billing routes stay visible.
+Each Settings overview shows its own **Version · Build**, including in Min Mode.
+Use the loaded app's version and build identity; show **Unavailable** when the build
+identity is missing. Version bumps and build-input ownership live in [setup](docs/setup.md).
 
 Providers have stable unique keys and editable display names. Renaming a provider
 does not change a preset's binding. Existing plan presets default to `gpt-plan` /

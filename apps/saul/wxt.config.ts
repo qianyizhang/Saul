@@ -1,12 +1,36 @@
 import { defineConfig } from 'wxt';
 import tailwindcss from '@tailwindcss/vite';
-import { readdir } from 'node:fs/promises';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { appSourceFingerprint, createBuildInfo } from '../../scripts/build-identity.mts';
+
+const repo = fileURLToPath(new URL('../../', import.meta.url));
+let buildSource: string;
 
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   hooks: {
+    async 'build:before'() {
+      buildSource = await appSourceFingerprint(repo, 'saul');
+    },
+    async 'build:manifestGenerated'(_wxt, manifest) {
+      buildSource ??= await appSourceFingerprint(repo, 'saul');
+      const identity = createBuildInfo('saul', manifest.version, buildSource, process.version);
+      manifest.version_name = `${manifest.version} (${identity.build.slice(0, 12)})`;
+    },
+    async 'build:done'(wxt) {
+      if (buildSource !== (await appSourceFingerprint(repo, 'saul')))
+        throw new Error('Saul source changed during the build; rebuild before delivery.');
+      const { version } = JSON.parse(
+        await readFile(new URL('./package.json', import.meta.url), 'utf8'),
+      );
+      await writeFile(
+        join(wxt.config.outDir, 'build-info.json'),
+        JSON.stringify(createBuildInfo('saul', version, buildSource, process.version)) + '\n',
+      );
+    },
     async 'build:publicAssets'(_wxt, files) {
       // Text extraction can need built-in CMaps/fonts. Ship these with PDF.js,
       // including their licenses, rather than fetching runtime code or assets.

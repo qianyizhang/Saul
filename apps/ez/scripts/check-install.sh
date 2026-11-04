@@ -182,6 +182,12 @@ printf '%s\n' "$PWD/.build/release"
 SH
 cat > "$fixture/bin/swift" <<'SH'
 #!/bin/bash
+if [[ "$1" == scripts/build-identity.swift ]]; then
+    case "$2" in
+        prepare) printf '{"build":"fixture"}' > "$4";;
+        verify) test -s "$4";;
+    esac
+fi
 exit 0
 SH
 cat > "$fixture/bin/iconutil" <<'SH'
@@ -198,6 +204,7 @@ chmod +x scripts/swift.sh "$fixture/bin/"*
 reset_install
 bash scripts/build-app.sh > result.log
 [[ "$(cat .build/signing-used)" == "$fingerprint" ]]
+[[ "$(cat dist/EZ.app/Contents/Resources/build-info.json)" == '{"build":"fixture"}' ]]
 EZ_SIGNING_IDENTITY=- bash scripts/build-app.sh > result.log
 [[ "$(cat .build/signing-used)" == - ]]
 rm .local/signing-identity

@@ -103,6 +103,12 @@ const entries: Record<string, string[]> = {
   actions: ['action-host.mjs'],
 };
 const hostNames = { tabs: HOST_NAME, chatgpt: PLAN_HOST, actions: ACTION_HOST };
+const typescriptFiles = [
+  'package.json',
+  'lib/typescript.js',
+  'LICENSE.txt',
+  'ThirdPartyNoticeText.txt',
+];
 const launchers = {
   tabs: 'saul-native-host',
   chatgpt: 'saul-chatgpt-host',
@@ -804,12 +810,7 @@ export async function installHelpers(
         }
         if (component === 'actions') {
           const dependency = dirname(fileURLToPath(import.meta.resolve('typescript/package.json')));
-          for (const file of [
-            'package.json',
-            'lib/typescript.js',
-            'LICENSE.txt',
-            'ThirdPartyNoticeText.txt',
-          ])
+          for (const file of typescriptFiles)
             copyTree(join(dependency, file), join(payload, 'node_modules', 'typescript', file), io);
         }
         if (component === 'chatgpt' || component === 'actions') {
@@ -913,7 +914,11 @@ export async function installHelpers(
 export function verifyInstallation(
   installDir: string,
   component: Component,
-  { filesystem: io = fs } = {},
+  {
+    filesystem: io = fs,
+    source,
+    jose,
+  }: Pick<InstallDependencies, 'filesystem' | 'source' | 'jose'> = {},
 ) {
   const value = info(resolve(installDir), io);
   if (!value?.isDirectory() || value.isSymbolicLink())
@@ -924,6 +929,10 @@ export function verifyInstallation(
   const selected = active(root, io);
   if (!selected) throw new Error('Helper runtime is not installed.');
   if (selected.legacy) {
+    if (source)
+      throw new Error(
+        'Legacy helper freshness cannot be verified; use the explicit generation migration.',
+      );
     if (!entries[component]) throw new Error(`Unknown helper: ${component}`);
     directory(join(root, 'bin'), io);
     regular(join(root, 'bin', launchers[component]), io);
@@ -935,6 +944,37 @@ export function verifyInstallation(
   const registered = JSON.parse(io.readFileSync(helper.manifestPath, 'utf8'));
   if (JSON.stringify(registered) !== JSON.stringify(helper.manifest))
     throw new Error(`Host registration mismatch: ${component}`);
+  if (source) {
+    const installed = join(selected.path, component);
+    const expected = new Map<string, string>();
+    for (const file of payloadFiles[component]) {
+      regular(join(source, file), io);
+      expected.set(file, hash(io.readFileSync(join(source, file))));
+    }
+    if (component === 'chatgpt') {
+      const dependency = io.realpathSync(
+        jose ?? dirname(fileURLToPath(import.meta.resolve('jose/package.json'))),
+      );
+      for (const file of safeFiles(dependency, io))
+        expected.set(`node_modules/jose/${file}`, hash(io.readFileSync(join(dependency, file))));
+    }
+    if (component === 'actions') {
+      const dependency = dirname(fileURLToPath(import.meta.resolve('typescript/package.json')));
+      for (const file of typescriptFiles)
+        expected.set(
+          `node_modules/typescript/${file}`,
+          hash(io.readFileSync(join(dependency, file))),
+        );
+    }
+    if (component !== 'tabs')
+      expected.set('installation-root.json', hash(JSON.stringify({ version: 1, root })));
+    const actual = safeFiles(installed, io);
+    if (JSON.stringify(actual.sort()) !== JSON.stringify([...expected.keys()].sort()))
+      throw new Error(`Installed ${component} inventory differs from the prepared build.`);
+    for (const [file, expectedHash] of expected)
+      if (hash(io.readFileSync(join(installed, file))) !== expectedHash)
+        throw new Error(`Installed ${component} differs from the prepared build: ${file}`);
+  }
   return { generation: selected.generation, previous: selected.previous, helper };
 }
 

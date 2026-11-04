@@ -1,0 +1,14 @@
+[
+  "apps/saul/build-inputs.json",
+  "apps/saul/package.json",
+  "apps/saul/wxt.config.ts",
+  "apps/saul/tsconfig.json",
+  "apps/saul/src",
+  "apps/saul/native",
+  "apps/saul/entrypoints",
+  "apps/saul/assets",
+  "apps/saul/public",
+  "scripts/build-identity.mts",
+  "pnpm-lock.yaml",
+  ".node-version"
+]

@@ -19,6 +19,14 @@ struct SettingsView: View {
     private var version: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Development"
     }
+    private var build: String {
+        guard let url = Bundle.main.url(forResource: "build-info", withExtension: "json"),
+            let data = try? Data(contentsOf: url),
+            let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let identity = value["build"] as? String, identity.count == 64
+        else { return "Unavailable" }
+        return String(identity.prefix(12))
+    }
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -84,6 +92,10 @@ struct SettingsView: View {
 
     private var overviewBody: some View {
         VStack(alignment: .leading, spacing: 22) {
+            Text("Version \(version) · Build \(build)").font(AppStyle.caption).foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .accessibilityLabel("Version \(version) · Build \(build)")
+                .accessibilityIdentifier("ez-version")
             if !model.minimumMode { Text("Your current reading choices.").foregroundStyle(.secondary) }
             overviewRow("Action", value: model.currentAction?.name ?? "Unavailable", destination: .actions)
             overviewRow(

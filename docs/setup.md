@@ -12,7 +12,7 @@ EZ can also be built/installed directly with Make and Apple tools without Node.
 | `actions`   | Installed extension ID, Node 24, native host registration                    | EZ, tabs helper, Codex            |
 | `ez`        | macOS, Apple tools, pinned Apple signing; installs the Saul credential owner | Chrome UI, Node at runtime, Codex |
 
-Chrome on-device inference remains disabled. Reading with an OpenAI-compatible
+Chrome on-device inference is retired; saved selections require an explicit provider change. Reading with an OpenAI-compatible
 provider also requires `chatgpt` for shared history; it does not require sign-in. ChatGPT sign-in/inference and built-in tab summaries
 require `chatgpt`; external tab tools and native Chrome window names require `tabs`.
 Custom Summarize actions require the optional `actions` helper and an existing
@@ -134,14 +134,41 @@ connection with a read-only live inventory; this is separate from artifact check
 
 ## Verify and remove
 
+Saul and EZ are versioned independently. Saul's version owner is
+`apps/saul/package.json`; EZ's version owner is `apps/ez/Resources/Info.plist`
+(`CFBundleShortVersionString`, with a separate numeric `CFBundleVersion`). Keep
+three-part numeric semantic versions: patch for compatible fixes, minor for
+compatible features, major for intentional breaking product changes. Bump each
+affected app for its next delivered version; a shared change bumps both only when
+both apps change. Versions do not replace history-schema or transport versions.
+
+Both Settings overviews show **Version · Build**, including in Min Mode. The
+generated Build ID hashes selected source bytes and the build toolchain; dirty
+and untracked source files inside the selected trees count. Input selections live
+in each app's `build-inputs.json`; extend that owner when introducing a new build
+input. Build IDs distinguish builds without changing installed app identities.
+Missing build metadata is shown as **Unavailable**.
+
 ```sh
 node scripts/setup.mts --components extension --verify
 node scripts/setup.mts --components chatgpt,tabs --extension-id YOUR_ID --verify
 node scripts/setup.mts --components ez --verify
 ```
 
-Verification checks the selected helper generation inventory, file hashes and
-registrations, extension artifacts, or the app signature. Legacy helpers receive
+Pass `--extension-dir` with the established loaded path when it differs from the
+default. Read-only verification also permits an extension loaded directly from
+`apps/saul/.output/chrome-mv3`; installation there remains refused.
+
+Extension and EZ verification require a prepared build from the current selected
+source inputs. They compare the complete installed payload with that reference,
+rejecting changed, missing and extra files even when the version is unchanged.
+The native signature is checked separately. Verification does not build or write
+files; run the ordinary build first if the reference is absent or stale.
+Helper verification checks the selected generation inventory, file hashes and
+registrations against the current prepared helper build, including its packaged
+dependencies. It requires a current `build:native` receipt. Legacy helpers cannot
+prove freshness; use the explicit generation migration before this verification.
+Standalone legacy integrity checks through the helper lifecycle still provide
 only a file/registration check, with an explicit generation-integrity limitation;
 read-only verification does not migrate them. Verification never claims browser connectivity, live authentication, inference or running-version
 acceptance. Use disposable profiles for development browser tests.

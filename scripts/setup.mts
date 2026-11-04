@@ -19,6 +19,11 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createInterface } from 'node:readline/promises';
 import { installationPlan, verifyInstallation } from '../apps/saul/native/installation.mts';
+import { verifyArtifactTree, verifyBuildInfo } from './build-identity.mts';
+import {
+  nativeBuildCurrent,
+  nativeBuildFingerprint,
+} from '../apps/saul/scripts/native-build-state.mts';
 
 interface SetupOptions {
   components?: string;
@@ -46,8 +51,8 @@ export const help = `Selective setup (run from any directory)
   node scripts/setup.mts --components extension,chatgpt,tabs,ez --extension-id ID
 
 Components:
-  extension  Chrome extension; API-provider reading and local history work alone
-  chatgpt    Optional Node helper for ChatGPT sign-in, inference and summaries
+  extension  Chrome extension; reading and history require the chatgpt helper
+  chatgpt    Node helper for shared history, ChatGPT sign-in, inference and summaries
   tabs       Optional Node helper for external tab tools and native window names
   actions    Optional Node helper for custom Summarize actions
   ez         Independent native macOS app (no Node runtime dependency)
@@ -113,6 +118,7 @@ export function createPlan(
   const native = join(repo, 'apps/ez');
   const helperRoot = resolve(options.installDir ?? join(home, '.saul'));
   const extensionDir = resolve(options.extensionDir ?? join(helperRoot, 'extension'));
+  const extensionSource = join(browser, '.output/chrome-mv3');
   // Refuse targets that would replace source, home, or the helper runtime tree.
   for (const protectedPath of [
     repo,
@@ -122,10 +128,14 @@ export function createPlan(
     join(helperRoot, 'bin'),
     join(browser, '.output/chrome-mv3'),
   ]) {
-    if (protectedPath === extensionDir || protectedPath.startsWith(extensionDir + '/'))
+    if (protectedPath === extensionDir || protectedPath.startsWith(extensionDir + '/')) {
+      // Read-only checks may inspect an established extension loaded from the
+      // build output itself. This exception never authorizes installation there.
+      if (options.verify && options.extensionDir && extensionDir === extensionSource) continue;
       throw new Error(
         'Extension destination must be a dedicated directory outside source and helper runtime.',
       );
+    }
   }
   const applicationsDir = resolve(options.applicationsDir ?? join(home, 'Applications'));
   const hosts = components
@@ -195,7 +205,8 @@ export function createPlan(
     commands,
     hosts,
     extensionDir,
-    extensionSource: join(browser, '.output/chrome-mv3'),
+    extensionSource,
+    appSource: join(native, 'dist/EZ.app'),
     app: join(applicationsDir, 'EZ.app'),
     codex: Boolean(options.codex),
   };
@@ -272,8 +283,16 @@ export async function executePlan(
       const manifest = JSON.parse(await readFile(join(plan.extensionDir, 'manifest.json'), 'utf8'));
       if (manifest.manifest_version !== 3)
         throw new Error('Installed extension manifest is invalid.');
+      const info = await verifyBuildInfo(
+        join(plan.extensionSource, 'build-info.json'),
+        plan.repo,
+        'saul',
+      );
+      await verifyArtifactTree(plan.extensionSource, plan.extensionDir);
+      log(
+        `Saul ${info.version} · Build ${info.build.slice(0, 12)} matches the current prepared build.`,
+      );
     }
-    let legacyHelpers = false;
     for (const host of plan.hosts) {
       const manifest = JSON.parse(await readFile(host.manifestPath, 'utf8'));
       if (
@@ -283,13 +302,29 @@ export async function executePlan(
         throw new Error(`Host registration mismatch: ${host.component}`);
       if ((await realpath(manifest.path)) !== (await realpath(host.manifest.path)))
         throw new Error(`Host registration mismatch: ${host.component}`);
-      if (verifyInstallation(host.root, host.component as 'tabs' | 'chatgpt' | 'actions').legacy)
-        legacyHelpers = true;
     }
-    if (plan.components.includes('ez'))
+    if (plan.hosts.length) {
+      if (!(await nativeBuildCurrent(plan.browser, await nativeBuildFingerprint(plan.browser))))
+        throw new Error(
+          'Prepared helper build is absent or stale. Run build:native before verification.',
+        );
+      for (const host of plan.hosts)
+        verifyInstallation(host.root, host.component as 'tabs' | 'chatgpt' | 'actions', {
+          source: join(plan.browser, '.build/native'),
+        });
+    }
+    if (plan.components.includes('ez')) {
+      const info = await verifyBuildInfo(
+        join(plan.appSource, 'Contents/Resources/build-info.json'),
+        plan.repo,
+        'ez',
+      );
       await run('codesign', ['--verify', '--strict', plan.app], { cwd: plan.native });
-    if (legacyHelpers)
-      log('Legacy helper files checked; generation integrity requires the explicit migration.');
+      await verifyArtifactTree(plan.appSource, plan.app);
+      log(
+        `EZ ${info.version} · Build ${info.build.slice(0, 12)} matches the current prepared build.`,
+      );
+    }
     log(
       'Installed artifact checks passed. Browser connection, live OAuth/inference and running app versions were not tested.',
     );
