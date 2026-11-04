@@ -109,6 +109,8 @@ export interface ReadingConfiguration {
 }
 
 export interface UserSettings {
+  /** Per-installation choice; never portable to another machine's settings. */
+  sharedCredentials?: 'saul' | 'disconnected';
   summaryPdfProcessing?: 'attachment' | 'local';
   sharedPresetRevision?: number;
   providers?: SharedProvider[];
@@ -122,6 +124,7 @@ export interface UserSettings {
   openaiCompatible: {
     baseUrl: string;
     apiKey: string;
+    credentialOwner?: 'saul';
     model: string;
     temperature: number;
   };

@@ -13,6 +13,8 @@ struct SettingsView: View {
     }
     private var hasUnsavedChanges: Bool { configurationDirty || providerDirty }
     @State private var confirmDiscard = false
+    @State private var confirmSignOut = false
+    @State private var confirmRemoveKey = false
     @Environment(\.dismiss) private var dismiss
     private var version: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Development"
@@ -164,12 +166,40 @@ struct SettingsView: View {
                             }
                         }
                         Divider()
-                        if providerKey == "gpt-plan" { planConnection } else { apiConnection }
+                        if !model.sharedCredentialsConnected {
+                            Button("Connect to Saul") { Task { await model.connectCredentials() } }
+                                .buttonStyle(.borderedProminent)
+                        } else {
+                            if providerKey == "gpt-plan" { planConnection } else { apiConnection }
+                            Button("Disconnect app") { model.disconnectCredentials() }
+                                .help("Disconnect EZ; keep the shared Saul sign-in and API key.")
+                        }
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }
             }.padding(24)
         }
         .onAppear { if providerName.isEmpty { selectProvider(providerKey) } }
+        .task(id: providerKey) {
+            if providerKey == "gpt-plan" {
+                await model.connect(loadAccounts: true)
+            } else {
+                await model.restoreAPIKey()
+            }
+        }
+        .confirmationDialog(
+            "Sign out of Saul in both apps?", isPresented: $confirmSignOut, titleVisibility: .visible
+        ) {
+            Button("Sign out", role: .destructive) { Task { await model.signOut() } }
+        } message: {
+            Text("This shared ChatGPT sign-in will be unavailable in Saul and EZ.")
+        }
+        .confirmationDialog(
+            "Remove the API key from both apps?", isPresented: $confirmRemoveKey, titleVisibility: .visible
+        ) {
+            Button("Remove", role: .destructive) { Task { await model.removeAPIKey() } }
+        } message: {
+            Text("Saul and EZ will need a new OpenAI API key. ChatGPT sign-in stays connected.")
+        }
         .alert(
             "Discard provider edits?",
             isPresented: Binding(get: { pendingProvider != nil }, set: { if !$0 { pendingProvider = nil } })
@@ -211,7 +241,7 @@ struct SettingsView: View {
                     .accessibilityLabel("Save API key")
                 Button("Reload") { Task { await model.restoreAPIKey() } }
                 if model.apiConnected {
-                    Button("Remove", role: .destructive) { Task { await model.removeAPIKey() } }
+                    Button("Remove", role: .destructive) { confirmRemoveKey = true }
                 }
             }
             .disabled(model.busy || model.apiKeyBusy)
@@ -219,9 +249,10 @@ struct SettingsView: View {
                 Text(error).font(AppStyle.caption).foregroundStyle(.red).textSelection(.enabled)
             }
             if !model.minimumMode {
-                Text("Stored in this Mac's Keychain. Saving does not send a model request.").font(
-                    AppStyle.caption
-                ).foregroundStyle(.secondary)
+                Text("Shared with Saul through this Mac's Keychain. Saving does not send a model request.")
+                    .font(
+                        AppStyle.caption
+                    ).foregroundStyle(.secondary)
             }
             Text("OpenAI API · billed separately from ChatGPT").font(AppStyle.caption).foregroundStyle(
                 .secondary)
@@ -247,18 +278,18 @@ struct SettingsView: View {
                 model.signedIn
                     ? (model.planEnabled
                         ? "Using ChatGPT plan" : "Signed in · Plan usage not enabled")
-                    : "Not signed in"
+                    : (model.accountsLoaded ? "Not signed in" : "Connection not loaded")
             ).font(.callout)
             if !model.minimumMode {
                 Text(
-                    "Connect your eligible ChatGPT account and allow EZ to use your plan. Credentials stay in macOS Keychain. Model availability and limits depend on your account."
+                    "Connect your eligible ChatGPT account and allow Saul to use your plan in both apps. Credentials stay in macOS Keychain. Model availability and limits depend on your account."
                 ).font(.caption).foregroundStyle(.secondary)
             }
             if !model.minimumMode {
                 DisclosureGroup("Keychain") {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(
-                            "EZ saves sign-in tokens in its own Keychain record so you can stay signed in. It does not store your ChatGPT password or read other apps’ passwords."
+                            "The signed Saul helper owns the shared sign-in and API key. Neither app receives long-lived credentials from it."
                         )
                         Text(
                             "Allow Once approves this access; Always Allow remembers permission for this app and item. Deny prevents access to the saved sign-in. A local development rebuild may prompt again."
@@ -279,9 +310,9 @@ struct SettingsView: View {
                         Text("Finish signing in in your browser.").font(.caption)
                         Button("Cancel") { model.cancelLogin() }
                     } else if model.signedIn {
-                        Button(model.minimumMode ? "Disconnect" : "Sign out") {
-                            Task { await model.signOut() }
-                        }.help("Sign out").accessibilityLabel("Sign out")
+                        Button("Sign out") { confirmSignOut = true }
+                            .help("Sign out of ChatGPT in Saul and EZ").accessibilityLabel(
+                                "Sign out of ChatGPT in both apps")
                         if !model.planEnabled {
                             Button(model.minimumMode ? "Enable" : "Enable plan usage") {
                                 model.signIn(enablePlan: true)
@@ -316,7 +347,7 @@ struct SettingsView: View {
                     model.connecting
                         ? "Loading…" : (model.minimumMode ? "Refresh" : "Refresh models")
                 ) {
-                    Task { await model.connect() }
+                    Task { await model.connect(loadAccounts: true) }
                 }.help("Refresh models").accessibilityLabel("Refresh models").disabled(
                     model.offline || model.busy || model.connecting || model.signingIn
                         || !model.planEnabled)

@@ -14,12 +14,19 @@ export class ReadingRunner {
   private tasks = new Map<string, Task>();
   private failures = new Map<string, { runId: string; raw: string; error: string }>();
   private active = new Set<string>();
-  readonly ready: Promise<void>;
+  private recovery?: Promise<void>;
+  get ready(): Promise<void> {
+    this.recovery ??= this.db({ type: 'DB_RECOVER', payload: undefined }).catch((error) => {
+      this.recovery = undefined;
+      throw error;
+    });
+    return this.recovery;
+  }
   constructor(
     private db: DbCall,
     private changed: (url: string) => void,
   ) {
-    this.ready = db({ type: 'DB_RECOVER', payload: undefined });
+    void this.ready.catch(() => undefined);
   }
   async submit(submission: Submission, credential: string) {
     await this.ready;

@@ -66,7 +66,7 @@ import Foundation
         active = entry
         activeID = entry.id
         publish(entry, activity: .waiting, isActive: true)
-        task = Task {
+        task = Task { [self] in
             do {
                 try Task.checkCancellation()
                 let result = try await generate(entry) { [weak self] progress in
@@ -80,7 +80,6 @@ import Foundation
                 case .image(let png):
                     guard var image = active, activeID == entry.id else { return }
                     image.imageData = png
-                    image.imageFile = entry.id.uuidString.lowercased() + ".png"
                     active = image
                 }
                 finish(entry.id, status: "completed")
@@ -108,6 +107,7 @@ import Foundation
             try append(pending.terminal)
             unsaved.removeValue(forKey: id)
             var saved = pending.terminal
+            saved.storedImage = saved.imageData != nil || saved.storedImage
             saved.imageData = nil
             saved.inputImage?.data = nil
             publish(saved, activity: .finished, isActive: false)
@@ -140,6 +140,7 @@ import Foundation
         var visible = entry
         do {
             try append(entry)
+            visible.storedImage = visible.imageData != nil || visible.storedImage
             visible.imageData = nil
             visible.inputImage?.data = nil
         } catch {

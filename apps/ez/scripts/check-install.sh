@@ -14,6 +14,13 @@ set -eu
 mkdir -p dist/EZ.app
 printf new > dist/EZ.app/marker
 SH
+cat > "$fixture/scripts/install-credentials.sh" <<'SH'
+#!/bin/bash
+set -eu
+if [[ "${EZ_TEST_OWNER_FAIL:-0}" == 1 ]]; then printf 'fixture: credential owner rejected\n' >&2; exit 1; fi
+mkdir -p .build
+printf installed > .build/credentials-installed
+SH
 cat > "$fixture/bin/security" <<'SH'
 #!/bin/bash
 if [[ "${EZ_TEST_DUPLICATE_IDENTITY:-0}" == 1 ]]; then
@@ -68,6 +75,7 @@ SH
 chmod +x "$fixture/bin/"*
 export PATH="$fixture/bin:$PATH"
 export EZ_APPLICATIONS_DIR="$fixture/Applications"
+export SAUL_CREDENTIALS_DIR="$fixture/Credentials"
 unset EZ_SIGNING_IDENTITY
 cd "$fixture"
 
@@ -125,11 +133,15 @@ reset_install
 expect_failure 'fixture: final rename rejected' 1 env EZ_TEST_RENAME_FAIL=1 bash scripts/install-app.sh
 
 reset_install
+expect_failure 'fixture: credential owner rejected' 1 env EZ_TEST_OWNER_FAIL=1 bash scripts/install-app.sh
+
+reset_install
 expect_failure '' 143 env EZ_TEST_INTERRUPT=1 bash scripts/install-app.sh
 
 reset_install
 bash scripts/install-app.sh > result.log 2>&1
 [[ "$(cat "$EZ_APPLICATIONS_DIR/EZ.app/marker")" == new ]]
+[[ "$(cat .build/credentials-installed)" == installed ]]
 backups=("$EZ_APPLICATIONS_DIR"/.ez-upgrade.*/previous.app)
 [[ ${#backups[@]} == 1 && "$(cat "${backups[0]}/marker")" == old ]]
 
@@ -148,6 +160,11 @@ printf '%s\n' "$fingerprint" > .local/signing-identity
 # Setup rejects identity rotation and reads data rather than code.
 if EZ_SIGNING_IDENTITY=other bash scripts/configure-signing.sh > result.log 2>&1; then exit 1; fi
 [[ "$(cat .local/signing-identity)" == "$fingerprint" ]]
+if EZ_TEST_DUPLICATE_IDENTITY=1 EZ_SIGNING_IDENTITY=2222222222222222222222222222222222222222 bash scripts/configure-signing.sh --replace-pinned 3333333333333333333333333333333333333333 > result.log 2>&1; then exit 1; fi
+[[ "$(cat .local/signing-identity)" == "$fingerprint" ]]
+EZ_TEST_DUPLICATE_IDENTITY=1 EZ_SIGNING_IDENTITY=2222222222222222222222222222222222222222 bash scripts/configure-signing.sh --replace-pinned "$fingerprint" > result.log
+[[ "$(cat .local/signing-identity)" == 2222222222222222222222222222222222222222 ]]
+[[ "$(cat ".local/signing-identity.previous-$fingerprint")" == "$fingerprint" ]]
 printf 'touch SHOULD_NOT_EXIST\n' > .local/signing-identity
 if bash scripts/configure-signing.sh > result.log 2>&1; then exit 1; fi
 [[ ! -e SHOULD_NOT_EXIST ]]
@@ -158,7 +175,8 @@ printf fixture > Resources/Info.plist
 cat > scripts/swift.sh <<'SH'
 #!/bin/bash
 set -eu
-mkdir -p .build/release
+mkdir -p .build/release/EZ_EZCore.bundle
+printf schema > .build/release/EZ_EZCore.bundle/history.sql
 printf fixture > .build/release/EZ
 printf '%s\n' "$PWD/.build/release"
 SH

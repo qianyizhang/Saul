@@ -34,6 +34,7 @@ export function Library({
   const [page, setPage] = useState(0);
   const [more, setMore] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [image, setImage] = useState<string>();
   const [runs, setRuns] = useState<RunResult[]>([]);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
@@ -81,6 +82,7 @@ export function Library({
     }
     setExpanded(item.selectionId);
     setRuns([]);
+    setImage(undefined);
     try {
       if (item.completed)
         await sendDbMessage({
@@ -93,6 +95,14 @@ export function Library({
       });
       if (revision !== expandedRequest.current) return;
       setRuns(runs);
+      if (item.hasImage) {
+        const image = await sendDbMessage({
+          type: 'DB_IMAGE',
+          payload: { selectionId: item.selectionId },
+        });
+        if (revision === expandedRequest.current && image)
+          setImage(`data:${image.mediaType};base64,${image.data}`);
+      }
       setItems((rows) =>
         rows.map((row) => (row.selectionId === item.selectionId ? { ...row, unread: false } : row)),
       );
@@ -118,7 +128,7 @@ export function Library({
         <div>
           <h2 className="view-title">History</h2>
           <p className="muted small">
-            Select text on a page, then choose Explain. Find it here anytime.
+            Select text on a page, then choose Explain. Find it here alongside EZ history.
           </p>
         </div>
       </div>
@@ -248,6 +258,13 @@ export function Library({
                         {(item.completed || item.latest).inspection?.followUpQuestion}
                       </p>
                     )}
+                    {item.hasImage && image && (
+                      <img
+                        src={image}
+                        alt="Saved image from EZ"
+                        style={{ maxWidth: '100%', height: 'auto' }}
+                      />
+                    )}
                     <AnnotatedTextView segments={new TagStreamParser().feed(item.responseRaw)} />
                     <RunDetails
                       key={`details-${(item.completed || item.latest).id}`}
@@ -336,7 +353,9 @@ export function Library({
             className="btn danger"
             disabled={actionBusy}
             onClick={() => {
-              if (window.confirm('Delete all reading history and bookmarks from this device?'))
+              if (
+                window.confirm('Delete saved history and bookmarks from EZ and Saul on this Mac?')
+              )
                 action(async () => {
                   await clearAllHistory();
                   setPage(0);

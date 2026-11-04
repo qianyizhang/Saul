@@ -22,7 +22,7 @@ import Foundation
             try expect(f.model.inputValues == ["fuzzy term": text], "Selection or remaining fields changed")
             try expect(
                 !f.model.busy && !f.model.launcherPending && f.model.entries.isEmpty, "Autofill submitted")
-            try expect(try f.history.load().entries.isEmpty, "Autofill persisted a request")
+            try expect(try f.history.load().isEmpty, "Autofill persisted a request")
         },
         stateCase("selection autofill leaves empty input for unavailable invalid or oversized selections") {
             f in

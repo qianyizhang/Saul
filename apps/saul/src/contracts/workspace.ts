@@ -15,6 +15,7 @@ export function validateWorkspace(v: unknown): asserts v is DbRequest {
         (p.bookmarksOnly === undefined || typeof p.bookmarksOnly === 'boolean');
       break;
     case 'DB_DELETE_SELECTION':
+    case 'DB_IMAGE':
     case 'DB_RUNS':
     case 'DB_PASSAGE':
       valid = record(p) && id(p.selectionId);

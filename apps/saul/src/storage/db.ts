@@ -1,8 +1,7 @@
 import { digestStore } from '../digest/store';
-import sqlite3InitModule, { type Database, type SqlValue } from '@sqlite.org/sqlite-wasm';
-import wasmUrl from '@sqlite.org/sqlite-wasm/sqlite3.wasm?url';
+import type { SqlDatabase, SqlValue } from './sql';
 import { nanoid } from 'nanoid';
-import { migrate, searchableResponse } from './schema';
+import { searchableResponse } from './search';
 import { TagStreamParser } from '../parser/tag-stream-parser';
 import type {
   DbOperations,
@@ -30,38 +29,11 @@ const passageSelect = `SELECT s.*, p.url, p.title, p.canonical_url, b.selection_
  LEFT JOIN llm_run c ON c.rowid = ${success}`;
 
 export class SaulDatabase {
-  private db!: Database;
-  private initialized = false;
-  private initPromise: Promise<void> | null = null;
-  public async init(): Promise<void> {
-    if (this.initialized) return;
-    if (this.initPromise) return this.initPromise;
-    this.initPromise = (async () => {
-      try {
-        const sqlite = await (
-          sqlite3InitModule as unknown as (options: {
-            locateFile: () => string;
-          }) => ReturnType<typeof sqlite3InitModule>
-        )({ locateFile: () => wasmUrl });
-        const pool = await sqlite.installOpfsSAHPoolVfs({ directory: '/saul-opfs' });
-        this.db = new pool.OpfsSAHPoolDb('/saul.sqlite3');
-        this.db.exec('PRAGMA foreign_keys = ON');
-        migrate(this.db);
-        this.initialized = true;
-      } catch (error) {
-        this.db?.close();
-        throw new Error(
-          'Persistent storage is unavailable. History was not saved. ' +
-            (error instanceof Error ? error.message : String(error)),
-          { cause: error },
-        );
-      }
-    })();
-    try {
-      await this.initPromise;
-    } finally {
-      this.initPromise = null;
-    }
+  private db: SqlDatabase;
+  private owner: string;
+  constructor(db: SqlDatabase, owner = '') {
+    this.db = db;
+    this.owner = owner;
   }
   private rows(sql: string, bind: SqlValue[] = []): Row[] {
     return this.db.selectObjects(sql, bind);
@@ -184,12 +156,28 @@ export class SaulDatabase {
     if (existing.url !== url) throw new Error('This submission belongs to another page.');
     return String(existing.selection_id);
   }
-  private submit(payload: Submission): DbOperations['DB_SUBMIT']['result'] {
+  private submit(payload: Submission, operationId: string): DbOperations['DB_SUBMIT']['result'] {
     let result!: DbOperations['DB_SUBMIT']['result'];
     this.db.transaction(() => {
       const submitted = this.submittedSelection(payload.submissionId, payload.snapshot.page.url);
       if (submitted) {
-        result = { passageId: submitted };
+        const queued = this.rows(
+          "SELECT r.id,r.input_json FROM submission q JOIN llm_run r ON r.submission_id=q.id WHERE q.id=? AND q.operation_id=? AND r.status='queued'",
+          [payload.submissionId, operationId],
+        )[0];
+        result = {
+          passageId: submitted,
+          ...(queued
+            ? {
+                run: {
+                  id: String(queued.id),
+                  selectionId: submitted,
+                  pageUrl: payload.snapshot.page.url,
+                  input: JSON.parse(String(queued.input_json)) as RunInput,
+                },
+              }
+            : {}),
+        };
         return;
       }
       const { snapshot: s, input } = payload;
@@ -229,9 +217,10 @@ export class SaulDatabase {
             [selectionId],
           ).length)
       ) {
-        this.write('INSERT INTO submission(id,selection_id) VALUES (?,?)', [
+        this.write('INSERT INTO submission(id,selection_id,operation_id) VALUES (?,?,?)', [
           payload.submissionId,
           selectionId,
+          operationId,
         ]);
         result = { passageId: selectionId };
         return;
@@ -255,7 +244,7 @@ export class SaulDatabase {
         );
       const runId = nanoid();
       this.write(
-        `INSERT INTO llm_run (id,selection_id,widget_id,provider,model,prompt_version,prompt_raw,context_json,response_raw,status,created_at,submission_id,input_json) VALUES (?,?,'explain',?,?,'2',?,?,'','queued',?,?,?)`,
+        `INSERT INTO llm_run (id,selection_id,widget_id,provider,model,prompt_version,prompt_raw,context_json,response_raw,status,created_at,submission_id,input_json,owner) VALUES (?,?,'explain',?,?,'2',?,?,'','queued',?,?,?,?)`,
         [
           runId,
           selectionId,
@@ -270,11 +259,13 @@ export class SaulDatabase {
           Date.now(),
           payload.submissionId,
           JSON.stringify(input),
+          this.owner,
         ],
       );
-      this.write('INSERT INTO submission(id,selection_id) VALUES (?,?)', [
+      this.write('INSERT INTO submission(id,selection_id,operation_id) VALUES (?,?,?)', [
         payload.submissionId,
         selectionId,
+        operationId,
       ]);
       result = {
         passageId: selectionId,
@@ -285,12 +276,12 @@ export class SaulDatabase {
   }
   public async execute<K extends DbType>(
     message: DbRequest<K>,
+    operationId: string = crypto.randomUUID(),
   ): Promise<DbOperations[K]['result']> {
-    await this.init();
     // The switch is exhaustive; the generic signature preserves request/result pairs at callers.
-    return this.executeReady(message as DbRequest) as DbOperations[K]['result'];
+    return this.executeReady(message as DbRequest, operationId) as DbOperations[K]['result'];
   }
-  private executeReady(message: DbRequest): unknown {
+  private executeReady(message: DbRequest, operationId: string): unknown {
     switch (message.type) {
       case 'DB_READING_RESOLVE': {
         const { snapshot, submissionId, recipeId } = message.payload;
@@ -322,23 +313,26 @@ export class SaulDatabase {
       case 'DB_DIGEST_SOURCE':
       case 'DB_DIGEST_RECOVER':
       case 'DB_DIGEST_DELETE':
-        return digestStore(this.db, message);
+        return digestStore(this.db, message, this.owner);
       case 'DB_SUBMIT':
-        return this.submit(message.payload);
+        return this.submit(message.payload, operationId);
       case 'DB_RECOVER':
         this.write(
-          "UPDATE llm_run SET status='interrupted', reason='runner-lost', error_message='Generation was interrupted. Retry to send a new request.' WHERE status IN ('queued','running','saving')",
+          "UPDATE llm_run SET status='interrupted', reason='runner-lost', error_message='Generation was interrupted. Retry to send a new request.' WHERE status IN ('queued','running','saving') AND (owner=? OR owner='')",
+          [this.owner],
         );
         return;
       case 'DB_CLAIM':
-        this.write("UPDATE llm_run SET status='running' WHERE id=? AND status='queued'", [
-          message.payload.runId,
-        ]);
+        this.write(
+          "UPDATE llm_run SET status='running',transition_id=? WHERE id=? AND (status='queued' OR (status='running' AND transition_id=?))",
+          [operationId, message.payload.runId, operationId],
+        );
         return this.db.changes() === 1;
       case 'DB_SAVING':
-        this.write("UPDATE llm_run SET status='saving' WHERE id=? AND status='running'", [
-          message.payload.runId,
-        ]);
+        this.write(
+          "UPDATE llm_run SET status='saving',transition_id=? WHERE id=? AND (status='running' OR (status='saving' AND transition_id=?))",
+          [operationId, message.payload.runId, operationId],
+        );
         return this.db.changes() === 1;
       case 'DB_CHECKPOINT':
         this.write("UPDATE llm_run SET response_raw=? WHERE id=? AND status='running'", [
@@ -391,12 +385,26 @@ export class SaulDatabase {
         if (!row) throw new Error('This passage no longer exists.');
         return row.input_json ? JSON.parse(String(row.input_json)) : undefined;
       }
+      case 'DB_IMAGE': {
+        const row = this.rows('SELECT image FROM ez_entry WHERE id=?', [
+          message.payload.selectionId.slice(3),
+        ])[0];
+        if (!(row?.image instanceof Uint8Array)) return;
+        let binary = '';
+        for (const byte of row.image) binary += String.fromCharCode(byte);
+        return { data: btoa(binary), mediaType: 'image/png' };
+      }
       case 'DB_RUNS':
+        if (message.payload.selectionId.startsWith('ez:')) {
+          const item = this.ezHistory(message.payload.selectionId.slice(3));
+          return item ? [item.latest] : [];
+        }
         return this.rows(
           'SELECT * FROM llm_run WHERE selection_id=? ORDER BY created_at DESC,rowid DESC',
           [message.payload.selectionId],
         ).map((row) => this.run(row));
       case 'DB_VIEW':
+        if (message.payload.selectionId.startsWith('ez:')) return;
         this.write(
           "UPDATE llm_run SET viewed_at=? WHERE id=? AND selection_id=? AND status='completed'",
           [Date.now(), message.payload.runId, message.payload.selectionId],
@@ -411,6 +419,13 @@ export class SaulDatabase {
       case 'DB_GET_HISTORY':
         return this.history(message.payload);
       case 'DB_SET_BOOKMARK':
+        if (message.payload.selectionId.startsWith('ez:')) {
+          this.write('UPDATE ez_entry SET bookmarked=? WHERE id=?', [
+            message.payload.bookmarked ? 1 : 0,
+            message.payload.selectionId.slice(3),
+          ]);
+          return;
+        }
         this.write(
           message.payload.bookmarked
             ? 'INSERT OR IGNORE INTO bookmark(selection_id,created_at) VALUES (?,?)'
@@ -421,10 +436,46 @@ export class SaulDatabase {
         );
         return;
       case 'DB_DELETE_SELECTION':
-        this.write('DELETE FROM selection WHERE id=?', [message.payload.selectionId]);
+        if (message.payload.selectionId.startsWith('ez:')) {
+          const id = message.payload.selectionId.slice(3);
+          if (
+            this.rows(
+              "SELECT id FROM ez_entry WHERE id=? AND json_extract(data,'$.status')='pending'",
+              [id],
+            ).length
+          )
+            throw new Error('Stop the running request in EZ before deleting it.');
+          this.write('DELETE FROM ez_entry WHERE id=?', [id]);
+          return;
+        }
+        this.db.transaction(() => {
+          if (
+            this.rows(
+              "SELECT id FROM llm_run WHERE selection_id=? AND owner!=? AND status IN ('queued','running','saving')",
+              [message.payload.selectionId, this.owner],
+            ).length
+          )
+            throw new Error(
+              'Stop the running request in its browser profile before deleting this history.',
+            );
+          this.write('DELETE FROM selection WHERE id=?', [message.payload.selectionId]);
+        });
         return;
       case 'DB_CLEAR_HISTORY':
-        this.db.transaction(() => this.db.exec('DELETE FROM interaction; DELETE FROM page;'));
+        this.db.transaction(() => {
+          if (
+            this.rows("SELECT id FROM ez_entry WHERE json_extract(data,'$.status')='pending'")
+              .length ||
+            this.rows(
+              "SELECT id FROM llm_run WHERE owner!=? AND status IN ('queued','running','saving')",
+              [this.owner],
+            ).length
+          )
+            throw new Error(
+              'Stop active requests in EZ and other browser profiles before clearing shared history.',
+            );
+          this.db.exec('DELETE FROM interaction; DELETE FROM page; DELETE FROM ez_entry;');
+        });
         return;
       case 'DB_EXPORT_MARKDOWN':
         return this.exportMarkdown();
@@ -457,14 +508,28 @@ export class SaulDatabase {
       if (tokens) bind.push(tokens, tokens);
       bind.push(pattern, pattern, pattern, pattern);
     }
-    return this.rows(
-      passageSelect +
-        (filters.length ? ' WHERE ' + filters.join(' AND ') : '') +
-        ' ORDER BY s.created_at DESC,s.id DESC LIMIT ? OFFSET ?',
-      [...bind, Math.max(1, Math.min(5000, Math.trunc(limit))), Math.max(0, Math.trunc(offset))],
-    ).map((row) => {
-      const p = this.passage(row),
-        shown = p.completed || p.latest;
+    const nativeQuery = query
+      ? " AND (json_extract(data,'$.query') LIKE ? ESCAPE '\\' OR json_extract(data,'$.response') LIKE ? ESCAPE '\\' OR json_extract(data,'$.recipeSnapshot.name') LIKE ? ESCAPE '\\')"
+      : '';
+    const pattern = '%' + query.replace(/[\\%_]/g, (v) => '\\' + v) + '%';
+    const candidates = this.rows(
+      `SELECT s.id,s.created_at,'saul' AS app FROM selection s JOIN page p ON p.id=s.page_id LEFT JOIN bookmark b ON b.selection_id=s.id WHERE EXISTS(SELECT 1 FROM llm_run WHERE selection_id=s.id)` +
+        (filters.length ? ' AND ' + filters.join(' AND ') : '') +
+        ` UNION ALL SELECT id,created_at,'ez' AS app FROM ez_entry WHERE json_extract(data,'$.status')!='pending'` +
+        (bookmarksOnly ? ' AND bookmarked=1' : '') +
+        nativeQuery +
+        ' ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?',
+      [
+        ...bind,
+        ...(query ? [pattern, pattern, pattern] : []),
+        Math.max(1, Math.min(5000, Math.trunc(limit))),
+        Math.max(0, Math.trunc(offset)),
+      ],
+    );
+    return candidates.map((row) => {
+      if (row.app === 'ez') return this.ezHistory(String(row.id))!;
+      const p = this.passage(this.rows(passageSelect + ' WHERE s.id=?', [row.id!])[0]!);
+      const shown = p.completed || p.latest;
       return {
         selectionId: p.snapshot.id,
         selectedText: p.snapshot.text,
@@ -482,6 +547,63 @@ export class SaulDatabase {
       };
     });
   }
+  private ezHistory(id: string): HistoryItem | undefined {
+    const row = this.rows(
+      'SELECT data,created_at,bookmarked,image IS NOT NULL AS has_image FROM ez_entry WHERE id=?',
+      [id],
+    )[0];
+    if (!row) return;
+    const entry = JSON.parse(String(row.data)) as {
+      query: string;
+      response: string;
+      model: string;
+      instructions?: string;
+      status: string;
+      error?: string;
+      durationSeconds?: number;
+      followUpQuestion?: string;
+      recipeSnapshot?: { id: string; name: string };
+      presetSnapshot?: { id: string; name: string };
+      providerSnapshot?: { kind: string };
+      inputValues?: Record<string, string>;
+      citations?: { url: string; title?: string }[];
+    };
+    const run: RunResult = {
+      id: 'ez:' + id,
+      status: entry.status === 'pending' ? 'interrupted' : (entry.status as RunResult['status']),
+      responseRaw: entry.response,
+      model: entry.model,
+      provider: entry.providerSnapshot?.kind || 'chatgpt-plan',
+      createdAt: Number(row.created_at),
+      latencyMs: entry.durationSeconds === undefined ? undefined : entry.durationSeconds * 1000,
+      error: entry.error,
+      recipe: entry.recipeSnapshot,
+      preset: entry.presetSnapshot,
+      inspection: {
+        systemPrompt: entry.instructions || '',
+        userPrompt: entry.query,
+        followUpQuestion: entry.followUpQuestion,
+        context: { selection: entry.query, pageTitle: 'EZ', pageUrl: '' },
+      },
+    };
+    return {
+      selectionId: 'ez:' + id,
+      selectedText:
+        entry.followUpQuestion || Object.values(entry.inputValues || {}).join(' · ') || entry.query,
+      pageTitle: 'EZ' + (entry.recipeSnapshot?.name ? ' · ' + entry.recipeSnapshot.name : ''),
+      pageUrl: '',
+      responseRaw: entry.response,
+      model: entry.model,
+      provider: run.provider,
+      createdAt: Number(row.created_at),
+      bookmarked: !!row.bookmarked,
+      latest: run,
+      completed: run.status === 'completed' ? run : undefined,
+      unread: false,
+      hasImage: !!row.has_image,
+    };
+  }
+
   private exportMarkdown(): string {
     const lines = ['# Saul Knowledge Export', `Generated on: ${new Date().toISOString()}`];
     let total = 0;
@@ -495,6 +617,11 @@ export class SaulDatabase {
           `Captured: ${new Date(item.createdAt).toISOString()}`,
           item.bookmarked ? 'Bookmarked' : '',
         );
+        if (item.selectionId.startsWith('ez:')) {
+          lines.push(item.responseRaw);
+          if (item.hasImage) lines.push('[Saved PNG image in shared history]');
+          continue;
+        }
         const runs = this.rows(
           'SELECT * FROM llm_run WHERE selection_id=? ORDER BY created_at DESC,rowid DESC',
           [item.selectionId],
@@ -526,4 +653,3 @@ export class SaulDatabase {
     return lines.join('\n');
   }
 }
-export const saulDb = new SaulDatabase();

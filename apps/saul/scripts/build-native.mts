@@ -35,6 +35,21 @@ try {
 } finally {
   await rm(temporary, { force: true });
 }
+// Bundle the shared SQL owner into the native history module; installed helpers
+// never reach into a checkout or require browser runtime modules.
+await build({
+  entryPoints: [fileURLToPath(new URL('native/history.mts', root))],
+  outfile: fileURLToPath(new URL('.build/native/history.mjs', root)),
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+  target: 'node24',
+  logLevel: 'silent',
+});
+await copyFile(
+  new URL('../../contracts/history.sql', root),
+  new URL('.build/native/history.sql', root),
+);
 console.error('Built self-contained Tab board.');
 
 for (const asset of ['workspace.html', 'workspace.css', 'design-tokens.css']) {

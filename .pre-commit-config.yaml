@@ -44,7 +44,7 @@ repos:
         name: Native Swift format and correctness
         entry: make -C apps/ez lint-swift
         language: system
-        files: '^apps/ez/.*(\.swift$|\.swift-format$|\.swiftlint\.yml$|Makefile$)'
+        files: '^(apps/ez/|native/credentials/).*(\.swift$|\.swift-format$|\.swiftlint\.yml$|Makefile$)'
         pass_filenames: false
       - id: shell-lint
         name: Native shell syntax and ShellCheck
@@ -68,5 +68,5 @@ repos:
         entry: make -C apps/ez check
         language: system
         stages: [pre-push]
-        files: '^apps/ez/|^contracts/'
+        files: '^(apps/ez/|native/credentials/|contracts/)'
         pass_filenames: false

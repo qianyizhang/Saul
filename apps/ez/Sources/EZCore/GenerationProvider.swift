@@ -28,12 +28,11 @@ public struct ImageModelOption: Identifiable, Sendable {
 @MainActor public final class GenerationProvider {
     public typealias TextOperation =
         @MainActor (
-            HistoryEntry, String, @escaping @MainActor (ResponseAccumulator) -> Void
+            HistoryEntry, @escaping @MainActor (ResponseAccumulator) -> Void
         ) async throws -> ResponseAccumulator
     public typealias ImageOperation =
-        @MainActor (ImageGenerationRequest, String) async throws -> Data
+        @MainActor (ImageGenerationRequest) async throws -> Data
     public let id: GenerationProviderID
-    private let credential: @MainActor () async throws -> String
     private let textOperation: TextOperation?
     private let imageOperation: ImageOperation?
 
@@ -44,45 +43,13 @@ public struct ImageModelOption: Identifiable, Sendable {
         return supported
     }
 
-    private init(
-        id: GenerationProviderID, credential: @escaping @MainActor () async throws -> String,
+    init(
+        id: GenerationProviderID,
         text: TextOperation?, image: ImageOperation? = nil
     ) {
         self.id = id
-        self.credential = credential
         textOperation = text
         imageOperation = image
-    }
-
-    public static func chatGPTPlan(
-        accessToken: @escaping @MainActor () async throws -> String,
-        responses: ResponsesClient? = nil
-    ) -> GenerationProvider {
-        let client = responses ?? ResponsesClient()
-        return GenerationProvider(
-            id: .chatGPTPlan, credential: accessToken,
-            text: { entry, key, update in
-                try await client.stream(entry: entry, token: key, onUpdate: update)
-            })
-    }
-
-    public static func openAIAPI(
-        keyStore: any OpenAIKeyStorage, responses: ResponsesClient? = nil,
-        images: ImagesClient = ImagesClient()
-    ) -> GenerationProvider {
-        let client = responses ?? ResponsesClient()
-        return GenerationProvider(
-            id: .openAIAPI,
-            credential: {
-                guard let key = try await keyStore.read() else {
-                    throw EZError("Save an OpenAI API key in Providers before running.")
-                }
-                return try validatedOpenAIKey(key)
-            },
-            text: { entry, key, update in
-                try await client.stream(entry: entry, token: key, onUpdate: update)
-            },
-            image: { try await images.generate($0, apiKey: $1) })
     }
 
     public func streamText(
@@ -93,14 +60,7 @@ public struct ImageModelOption: Identifiable, Sendable {
         }
         guard let textOperation else { throw EZError("\(id.name) does not support Responses.") }
         try Task.checkCancellation()
-        let key = try await credential()
-        try Task.checkCancellation()
-        do { return try await textOperation(entry, key, onUpdate) } catch {
-            if error.localizedDescription.contains(key) {
-                throw EZError(error.localizedDescription.replacingOccurrences(of: key, with: "[redacted]"))
-            }
-            throw error
-        }
+        return try await textOperation(entry, onUpdate)
     }
 
     public func generateImage(_ request: ImageGenerationRequest) async throws -> Data {
@@ -109,8 +69,6 @@ public struct ImageModelOption: Identifiable, Sendable {
         }
         try request.validate()
         try Task.checkCancellation()
-        let key = try await credential()
-        try Task.checkCancellation()
-        return try await imageOperation(request, key)
+        return try await imageOperation(request)
     }
 }

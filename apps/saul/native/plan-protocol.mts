@@ -1,3 +1,4 @@
+import { validateHistoryRequest, type HistoryRequest } from './history-protocol.mts';
 import { isRecord } from './value.mts';
 import {
   validScopedConfig,
@@ -44,6 +45,7 @@ export function validPdfUrlAttachment(value: unknown): value is PdfUrlAttachment
   }
 }
 export type PlanRequest =
+  | { action: 'history'; request: HistoryRequest }
   | { action: 'config-read'; section: 'settings' | 'calls' }
   | {
       action: 'config-save';
@@ -75,6 +77,7 @@ export type PlanRequest =
     };
 export type PlanControlRequest = Exclude<PlanRequest, { action: 'generate' }>;
 export interface PlanResults {
+  history: { value: unknown };
   'config-read': { config: ScopedConfig };
   'config-save': { config: ScopedConfig };
   'presets-read': { library: SharedPresets };
@@ -104,6 +107,7 @@ const text = (v: unknown, max: number): v is string =>
 export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
   if (!isRecord(v)) throw new Error('Invalid plan request');
   const operations: Record<string, string[]> = {
+    history: ['request'],
     'config-read': ['section'],
     'config-save': ['section', 'revision', 'value'],
     'presets-read': [],
@@ -118,6 +122,10 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
   const keys = typeof v.action === 'string' ? operations[v.action] : undefined;
   if (!Array.isArray(keys) || Object.keys(v).some((k) => k !== 'action' && !keys.includes(k)))
     throw new Error('Unsupported plan operation');
+  if (v.action === 'history') {
+    validateHistoryRequest(v.request);
+    return;
+  }
   if (v.action === 'config-read' || v.action === 'config-save') {
     if (!['settings', 'calls'].includes(String(v.section)))
       throw new Error('Invalid config section.');
@@ -187,6 +195,7 @@ export function validatePlanResult<T extends PlanControlRequest>(
 ): asserts value is PlanResult<T> {
   const validators: Record<PlanControlRequest['action'], (v: Record<string, unknown>) => boolean> =
     {
+      history: (v) => Object.hasOwn(v, 'value'),
       'config-read': (v) => validScopedConfig(v.config),
       'config-save': (v) => validScopedConfig(v.config),
       'presets-read': sharedLibrary,

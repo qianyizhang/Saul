@@ -4,6 +4,8 @@ import type { UserSettings } from '../types';
 import type { SettingsEdit } from '../models/settings-draft';
 import type { PlanSettingsState } from './usePlanSettings';
 import { ChatGPTPlanSettings } from './ChatGPTPlanSettings';
+import { SharedCredentialSettings } from './SharedCredentialSettings';
+import { officialOpenAI } from '../../native/credentials-contract.mts';
 
 export function ProviderSettings({
   settings,
@@ -11,12 +13,16 @@ export function ProviderSettings({
   plan,
   disabled,
   visible,
+  credentialLocked,
+  changeCredentialOwner,
 }: {
   settings: UserSettings;
   edit: (edit: SettingsEdit) => void;
   plan: PlanSettingsState;
   disabled: boolean;
   visible: boolean;
+  credentialLocked: boolean;
+  changeCredentialOwner: (owner: 'saul' | 'disconnected') => Promise<void>;
 }) {
   const providers = settings.providers ?? DEFAULT_PROVIDERS;
   const [key, setKey] = useState('gpt-plan'),
@@ -50,6 +56,12 @@ export function ProviderSettings({
   return (
     <section hidden={!visible} className="settings-section" aria-label="Provider definitions">
       <h2 className="view-title">Providers</h2>
+      <SharedCredentialSettings
+        owner={settings.sharedCredentials}
+        disabled={disabled || credentialLocked}
+        visible={visible}
+        change={changeCredentialOwner}
+      />
       <div className="settings-models">
         <div className="preset-browser">
           <div className="preset-list" aria-label="Providers">
@@ -106,13 +118,16 @@ export function ProviderSettings({
               </dl>
             </>
           )}
-          {provider?.kind === 'chatgpt-plan' ? (
+          {settings.sharedCredentials === 'disconnected' && provider?.kind === 'chatgpt-plan' ? (
+            <p className="notice">Connect this app to Saul to manage ChatGPT sign-in.</p>
+          ) : provider?.kind === 'chatgpt-plan' ? (
             <ChatGPTPlanSettings
               plan={plan}
               mode="connection"
               visible={visible}
               disabled={disabled}
               test={() => {}}
+              shared={settings.sharedCredentials === 'saul'}
             />
           ) : (
             <fieldset className="stack settings-fields" disabled={disabled}>
@@ -170,28 +185,37 @@ export function ProviderSettings({
                       onChange={(e) => connection({ baseUrl: e.target.value })}
                     />
                   </label>
-                  <label className="field">
-                    API key
-                    <div className="row">
-                      <input
-                        className="grow"
-                        aria-label="API key"
-                        type={showKey ? 'text' : 'password'}
-                        placeholder="Optional for local models"
-                        autoComplete="off"
-                        value={profile.config.apiKey}
-                        onChange={(e) => connection({ apiKey: e.target.value })}
-                      />
-                      <button
-                        className="btn"
-                        type="button"
-                        aria-label={showKey ? 'Hide API key' : 'Show API key'}
-                        onClick={() => setShowKey(!showKey)}
-                      >
-                        {showKey ? 'Hide' : 'Show'}
-                      </button>
-                    </div>
-                  </label>
+                  {settings.sharedCredentials === 'disconnected' &&
+                  officialOpenAI(profile.config.baseUrl) ? (
+                    <p className="notice">Connect this app to Saul to manage the shared API key.</p>
+                  ) : (
+                    <label className="field">
+                      API key
+                      <div className="row">
+                        <input
+                          className="grow"
+                          aria-label="API key"
+                          type={showKey ? 'text' : 'password'}
+                          placeholder={
+                            profile.config.credentialOwner === 'saul'
+                              ? 'Replacement shared API key'
+                              : 'Optional for local models'
+                          }
+                          autoComplete="off"
+                          value={profile.config.apiKey}
+                          onChange={(e) => connection({ apiKey: e.target.value })}
+                        />
+                        <button
+                          className="btn"
+                          type="button"
+                          aria-label={showKey ? 'Hide API key' : 'Show API key'}
+                          onClick={() => setShowKey(!showKey)}
+                        >
+                          {showKey ? 'Hide' : 'Show'}
+                        </button>
+                      </div>
+                    </label>
+                  )}
                   {provider?.kind === 'openai-api' && (
                     <p className="small">
                       Separate API billing

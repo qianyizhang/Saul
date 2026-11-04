@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import EZCore
+import SaulCredentialStorage
 
 @MainActor final class AppModel: ObservableObject {
     enum SettingsSection: String, CaseIterable {
@@ -39,7 +40,7 @@ import EZCore
     @Published var connecting = false
     @Published var signedIn = false
     @Published var planEnabled = false
-    @Published var profiles: [AccountProfile] = []
+    @Published var profiles: [SaulAccount] = []
     @Published var accountID = ""
     @Published var signingIn = false
     @Published var busy = false
@@ -51,6 +52,7 @@ import EZCore
     @Published var apiConnected = false
     @Published var apiKeyBusy = false
     @Published var apiKeyError: String?
+    @Published private(set) var sharedCredentialsConnected = true
     let apiKeyStore: any OpenAIKeyStorage
     @Published var showSettings = false
     @Published var minimumMode = true {
@@ -62,42 +64,43 @@ import EZCore
     @Published var shortcutSettingsError: String?
     private var shortcutsLoaded = false
     let directory: URL
+    let historyDirectory: URL
     let offline: Bool
-    private let auth = ChatGPTAuth()
-    private let responses = ResponsesClient()
+    let auth = SaulConnection()
     private var history: HistoryStore?
     private var lock: SessionLock?
     private var attemptExecution: AttemptExecution?
     private var loginTask: Task<Void, Never>?
-    private var loaded = false
+    @Published private(set) var accountsLoaded = false
     private var configurationStore: ConfigurationStore?
     private var configurationLoaded = false
 
     init(
-        historyDirectory: URL? = nil, offline: Bool = false,
+        directory: URL? = nil, historyDirectory: URL? = nil, offline: Bool = false,
         attemptExecution: AttemptExecution? = nil, apiKeyStore: (any OpenAIKeyStorage)? = nil
     ) {
         self.offline = offline
-        self.apiKeyStore = apiKeyStore ?? (offline ? TemporaryAPIKeyStore() : OpenAIKeyStore())
+        sharedCredentialsConnected =
+            offline || !UserDefaults.standard.bool(forKey: "saulCredentialsDisconnected")
+        self.apiKeyStore = apiKeyStore ?? TemporaryAPIKeyStore()
         self.attemptExecution = attemptExecution
         minimumMode = offline ? true : UserDefaults.standard.object(forKey: "minimumMode") as? Bool ?? true
-        directory =
-            historyDirectory
+        self.directory =
+            directory
             ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("EZ", isDirectory: true)
+        self.historyDirectory = historyDirectory ?? (offline ? self.directory : HistoryStore.defaultDirectory)
         do {
-            lock = try SessionLock(directory: directory)
-            let store = try HistoryStore(directory: directory)
+            lock = try SessionLock(directory: self.directory)
+            let store = try HistoryStore(
+                directory: self.historyDirectory,
+                migrating: offline ? nil : self.directory)
             history = store
+            try store.recoverInterrupted()
             if !offline, attemptExecution == nil {
-                let auth = self.auth
-                let responses = self.responses
-                let provider = GenerationProvider.chatGPTPlan(
-                    accessToken: { [weak self] in
-                        defer { self?.syncAccount() }
-                        return try await auth.accessToken()
-                    }, responses: responses)
-                let api = GenerationProvider.openAIAPI(keyStore: self.apiKeyStore)
+                let provider = GenerationProvider.saul(
+                    .chatGPTPlan, accountID: { [weak self] in self?.accountID })
+                let api = GenerationProvider.saul(.openAIAPI)
                 self.attemptExecution = AttemptExecution(
                     generate: { entry, update in
                         guard let preset = entry.presetSnapshot, let connection = entry.providerSnapshot
@@ -120,13 +123,9 @@ import EZCore
                     append: { try store.append($0) })
             }
             let loaded = try store.load()
-            entries = loaded.entries
-            if loaded.damagedLines > 0 {
-                storageWarning =
-                    "Skipped \(loaded.damagedLines) damaged history lines. Original bytes are preserved."
-            }
+            entries = loaded
             let configStore = ConfigurationStore(
-                directory: directory, shared: offline ? nil : SharedPresetsStore())
+                directory: self.directory, shared: offline ? nil : SharedPresetsStore())
             configurationStore = configStore
             do {
                 if let saved = try configStore.load() {
@@ -153,7 +152,7 @@ import EZCore
                     "Configuration could not be loaded. Original file is preserved. \(error.localizedDescription)"
             }
             do {
-                shortcuts = try LookupShortcutsStore(directory: directory).load()
+                shortcuts = try LookupShortcutsStore(directory: self.directory).load()
                 shortcutsLoaded = true
             } catch {
                 shortcutSettingsError =
@@ -176,7 +175,7 @@ import EZCore
             throw EZError(
                 "Shortcut storage is unavailable. Restore defaults to replace an unreadable shortcuts file.")
         }
-        try LookupShortcutsStore(directory: directory).save(updated)
+        try LookupShortcutsStore(directory: self.directory).save(updated)
         shortcuts = updated
         shortcutSettingsError = nil
     }
@@ -184,7 +183,7 @@ import EZCore
     func restoreShortcuts() throws {
         guard lock != nil else { throw EZError("Shortcut storage is unavailable.") }
         let defaults = LookupShortcuts()
-        try LookupShortcutsStore(directory: directory).save(defaults)
+        try LookupShortcutsStore(directory: self.directory).save(defaults)
         shortcuts = defaults
         shortcutsLoaded = true
         shortcutSettingsError = nil
@@ -306,35 +305,74 @@ import EZCore
             && !signingIn
             && requestIssue == nil && history != nil && lock != nil
     }
-    func connect() async {
-        guard !offline, !connecting, !busy, !signingIn, lock != nil else { return }
+    func connect(loadAccounts: Bool = false) async {
+        guard !offline, sharedCredentialsConnected, !connecting, !busy, !signingIn, lock != nil else {
+            return
+        }
         connecting = true
         error = nil
         defer { connecting = false }
         await restoreAPIKey()
+        guard needsPlan || loadAccounts else {
+            await verifyCredentialMigration()
+            return
+        }
         do {
-            if !loaded {
-                try await auth.load()
-                loaded = true
-            }
+            try await auth.load()
+            accountsLoaded = true
             syncAccount()
             try await loadModels()
+            await verifyCredentialMigration()
         } catch {
             syncAccount()
             self.error = error.localizedDescription
         }
     }
+    private func verifyCredentialMigration() async {
+        do { _ = try await auth.call(["action": "migration-verified"]) } catch {
+            self.error = error.localizedDescription
+        }
+    }
+    func connectCredentials() async {
+        guard !offline, !busy, !signingIn, !launcherPending else { return }
+        sharedCredentialsConnected = true
+        UserDefaults.standard.set(false, forKey: "saulCredentialsDisconnected")
+        await connect(loadAccounts: true)
+    }
+    func disconnectCredentials() {
+        guard !offline, !busy, !connecting, !signingIn, !launcherPending else { return }
+        sharedCredentialsConnected = false
+        UserDefaults.standard.set(true, forKey: "saulCredentialsDisconnected")
+        profiles = []
+        accountID = ""
+        signedIn = false
+        planEnabled = false
+        accountsLoaded = false
+        apiConnected = false
+        models = []
+        error = nil
+    }
     private func syncAccount() {
-        profiles = auth.state.profiles
-        accountID = auth.state.selectedID ?? ""
-        signedIn = auth.selected?.credentials != nil
-        planEnabled = auth.selected?.credentials?.canUsePlan == true
+        profiles = auth.accounts
+        accountID = auth.selectedID ?? ""
+        signedIn = auth.selected?.signedIn == true
+        planEnabled = auth.selected?.planEnabled == true
     }
     private func loadModels() async throws {
         models = []
-        guard auth.selected?.credentials?.canUsePlan == true else { return }
-        let token = try await auth.accessToken()
-        models = try await responses.models(token: token)
+        guard auth.selected?.planEnabled == true, let id = auth.selectedID else { return }
+        let result = try await auth.call(["action": "models", "accountId": id])
+        guard let catalog = result["models"] as? [[String: Any]] else {
+            throw EZError("Saul returned an invalid model catalog.")
+        }
+        models = catalog.compactMap { value in
+            var value = value
+            value["visibility"] = "list"
+            value["default_reasoning_effort"] = value["defaultReasoningEffort"]
+            value["supported_reasoning_efforts"] = value["supportedReasoningEfforts"]
+            if let tier = value["fastTier"] { value["additional_speed_tiers"] = [tier] }
+            return ModelOption(catalog: value)
+        }
         guard !models.isEmpty else { throw EZError("No models are available for this ChatGPT account.") }
         initializeStarterPreset()
     }
@@ -469,10 +507,8 @@ import EZCore
                 loginTask = nil
             }
             do {
-                if !loaded {
-                    try await auth.load()
-                    loaded = true
-                }
+                try await auth.load()
+                accountsLoaded = true
                 try await auth.signIn(newAccount: newAccount, enablePlan: enablePlan) {
                     NSWorkspace.shared.open($0)
                 }
@@ -486,7 +522,6 @@ import EZCore
     }
     func cancelLogin() {
         loginTask?.cancel()
-        auth.cancelSignIn()
     }
     func selectAccount(_ id: String) async {
         guard !offline, !busy, !launcherPending, !connecting, !signingIn, !id.isEmpty else { return }
@@ -494,7 +529,7 @@ import EZCore
         error = nil
         defer { connecting = false }
         do {
-            try auth.select(id)
+            try await auth.select(id)
             syncAccount()
             try await loadModels()
         } catch {
@@ -582,6 +617,10 @@ import EZCore
         draftRevision += 1
     }
     func reuse(_ entry: HistoryEntry) {
+        guard entry.sourceID == nil else {
+            error = "Open this saved request in Saul to run it again."
+            return
+        }
         guard !busy, !launcherPending else { return }
         var saved = entry
         if saved.actionSnapshot == nil {
@@ -624,6 +663,19 @@ import EZCore
         } catch {
             self.error = "Lookup could not be deleted. \(error.localizedDescription)"
         }
+    }
+    func refreshHistory() {
+        guard let history else { return }
+        do {
+            let retained = entries.filter {
+                $0.id == attemptExecution?.activeID || attemptExecution?.saveError(for: $0.id) != nil
+            }
+            let ids = Set(retained.map(\.id))
+            entries = (retained + (try history.load()).filter { !ids.contains($0.id) }).sorted {
+                $0.createdAt > $1.createdAt
+            }
+            if let selection, !entries.contains(where: { $0.id == selection }) { self.selection = nil }
+        } catch { storageWarning = error.localizedDescription }
     }
     func revealHistory() { NSWorkspace.shared.activateFileViewerSelecting([history?.url ?? directory]) }
     func copy(_ text: String) {

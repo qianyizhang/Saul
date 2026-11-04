@@ -4,6 +4,8 @@ import { compareRunInput } from '../src/reading/input-change';
 import { validateDigest } from '../src/digest/contracts';
 import { initSummaryActions } from '../src/digest/actions';
 import { initPlanBridge } from '../src/native/plan';
+import { initCredentialBridge } from '../src/native/credentials';
+import { nativeCredentialAccess } from '../src/storage/credentials';
 import { initSpeechBridge } from '../src/speech/bridge';
 import { initActionBridge } from '../src/native/actions';
 import { actionState, validateActionRequest, validateActionState } from '../src/actions/contract';
@@ -47,7 +49,7 @@ import type { ResolvedContext, SelectionSnapshot } from '../src/types';
 
 const db: DbCall = (message) => runnerRequest({ operation: 'db', message: message as DbRequest });
 const callPresets = callPresetStorage();
-const settingsOwner = createSettingsOwner(undefined, sharedPresets);
+const settingsOwner = createSettingsOwner(undefined, sharedPresets, nativeCredentialAccess);
 async function currentSettings() {
   const result = await settingsOwner({ action: 'read' });
   if (result.state !== 'ready') throw new Error(result.error);
@@ -269,6 +271,7 @@ export default defineBackground(() => {
   initStorageSecurity();
   initNativeBridge();
   initPlanBridge();
+  initCredentialBridge();
   initSpeechBridge(currentSettings);
   initActionBridge();
   void db({ type: 'DB_UNREAD', payload: undefined })
@@ -351,6 +354,7 @@ export default defineBackground(() => {
         'saul-reading',
         'saul-workspace',
         'saul-settings',
+        'saul-credential-mode',
         'saul-events',
         'saul-open-source',
         'saul-source-ready',
@@ -359,6 +363,15 @@ export default defineBackground(() => {
     )
       return false;
     (async () => {
+      if (request.target === 'saul-credential-mode') {
+        if (
+          sender.id !== chrome.runtime.id ||
+          sender.tab ||
+          sender.url !== chrome.runtime.getURL('offscreen.html')
+        )
+          throw new Error('Runner only');
+        return { mode: (await currentSettings()).sharedCredentials ?? 'standalone' };
+      }
       if (request.target === 'saul-action-state') {
         if (
           sender.id !== chrome.runtime.id ||

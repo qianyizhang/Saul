@@ -12,30 +12,39 @@ build so the existing process does not continue running an older version.
 
 ## Local signing and installation
 
-Create a persistent identity once in **Keychain Access → Certificate Assistant →
-Create a Certificate**: name **EZ Local Signing**, identity type **Self Signed Root**,
-certificate type **Code Signing**. Override the defaults if you want a longer
-validity period (for example, 3,650 days). Keep the certificate and its private key
-in your login Keychain. If necessary, set this certificate's **Code Signing** trust
-policy to **Always Trust**; do not change its other trust policies.
-
-Then pin the existing identity and install:
+Use Xcode → Settings → Accounts with your Apple Account and free Personal Team.
+Create an **Apple Development** signing certificate. The shared Saul owner requires
+an Apple-issued certificate and Team ID. It does not need a provisioning profile
+for this plain macOS executable. Do not export a private key into the repository.
 
 ```sh
-make signing-setup
-# Quit EZ before installing or upgrading.
+EZ_SIGNING_IDENTITY="APPLE_DEVELOPMENT_SHA1" make signing-setup
+make credentials-install
+# Quit EZ before installation.
 make install
-open ~/Applications/EZ.app
 ```
 
-`signing-setup` selects exactly one valid identity named `EZ Local Signing` and
-saves its certificate fingerprint in ignored `.local/signing-identity`. To select
-another existing identity on initial setup, use
-`EZ_SIGNING_IDENTITY="certificate name or fingerprint" make signing-setup`.
-Setup reuses an existing pin and refuses to replace it with a different certificate.
-It does not create, export, or rotate private keys. Keep a secure backup of the
-identity through Keychain Access if you need recovery or signing on another Mac;
-recipients of the app do not need your private key.
+The certificate fingerprint is pinned in ignored `.local/signing-identity`.
+Initial setup accepts a certificate name or fingerprint; later setup preserves the
+pin. An intentional transition requires the exact old fingerprint:
+
+```sh
+EZ_SIGNING_IDENTITY="NEW_SHA1" bash scripts/configure-signing.sh --replace-pinned OLD_SHA1
+```
+
+The old pin is retained in `.local/signing-identity.previous-OLD_SHA1`. This does
+not rotate or export private keys. Certificate renewal is another explicit
+transition; a free development certificate is not Developer ID or notarization.
+
+`make credentials-install` stages the independently signed owner at
+`~/Library/Application Support/Little Clarity/Credentials/Saul.app` and registers
+`com.saul.credentials` for the exact installed extension ID. Supply
+`SAUL_EXTENSION_ID` if no existing ChatGPT host manifest identifies it. It verifies
+the signature before replacement and restores the prior app and manifest on
+activation failure. Once installed, `make install` updates the owner with EZ.
+`make install` installs the owner on a fresh Mac as well as updating it on upgrades.
+Connecting Chrome to Saul credentials is an explicit Providers action. EZ uses the
+owner by default and offers Disconnect app. Neither app's UI must keep running.
 
 `make app`, `make run`, and `make install` reuse the pin. If the configured identity
 is unavailable, the command stops rather than reverting to ad-hoc signing.
@@ -51,7 +60,8 @@ running. Replacement retains the old bundle under
 `~/Applications/.ez-upgrade.XXXXXX/previous.app`; an interrupted replacement attempts
 to restore it. Keep or remove that backup after verifying the upgrade. To roll
 back, quit EZ and move `previous.app` back to `~/Applications/EZ.app`, retaining the
-newer bundle elsewhere if desired. Installation does not launch EZ or change
+newer bundle elsewhere if desired. Rolling back a bundle does not undo credential
+migration; an old app may require fresh sign-in. Installation does not launch EZ or change
 credentials, history, or other app data.
 
 Certificate continuity does not establish prompt-free Keychain access. The Oct 16

@@ -19,13 +19,13 @@ defines configuration, template inputs, preset overrides, and historical snapsho
 | `AttemptExecution` | Frozen attempt, provider task, cancellation, durable outcome, save-only recovery |
 | `ChatGPTAuth` | OAuth registration, validated identity, consent, refresh, logout |
 | `LoopbackListener` | Bounded HTTP callback listener bound only to 127.0.0.1 |
-| `OIDC` | PKCE and RS256 identity verification using CryptoKit/Security |
-| `AuthStorage` | Keychain records and exclusive runtime lock |
-| `ResponsesClient` | Account model discovery and stateless streamed Responses requests |
-| `GenerationProvider` | Provider identity, credential resolution and supported generation operations; ChatGPT plan and OpenAI API adapters |
-| `ImagesClient` / `ProviderState` | Bounded PNG requests, local API connection, selected image loading and download |
-| `ResponseAccumulator` / `SSEParser` | Wire-event parsing and terminal completion checks |
-| `HistoryStore` | Owner-only, locked JSONL snapshots, deletion, and recovery |
+| `OIDC` | PKCE and RS256/ES256 identity verification using CryptoKit/Security |
+| `AuthStorage` | OAuth data models and exclusive app runtime lock |
+| `ResponsesRequest` / `SaulGeneration` | Frozen request serialization and shared-owner operations |
+| `GenerationProvider` | Provider identity and supported operations; no secret access |
+| `ImagesClient` / `ProviderState` | Owner-side bounded PNG requests, shared API connection metadata, selected image loading and download |
+| `ResponseAccumulator` / `CredentialSSE` | Wire-event parsing and terminal completion checks |
+| `HistoryStore` | Shared SQLite snapshots/image blobs, migration, deletion, and recovery |
 | `SharedPresetsStore` | Unified JSON model presets and EZ configuration scope; one-time import and stale-save detection |
 
 ## Direct plan-backed requests
@@ -49,7 +49,7 @@ or unsupported preview fields are added. Completion requires a terminal
 `ProviderDefinition` owns stable unique keys, display names and transport kind.
 Defaults are `gpt-plan` (Write) and `openai-api` (Write/Draw/Speak). Presets bind the key,
 capability, model and options, not a particular plan account. `GenerationProvider`
-resolves app-local credentials and derives supported operations from its handlers.
+requests operations from the signed Saul owner and derives supported operations from its handlers.
 No credential reaches an action or shared preset. Unknown/incompatible providers
 block before generation; no automatic model, account or billing fallback exists.
 
@@ -57,7 +57,7 @@ Legacy presets decode as `gpt-plan` / Write. Legacy action/history JSON keys
 `recipes` and `recipeSnapshot` remain stable. Provider definitions and presets share the `modelPresets` section and its revision
 with Saul. Reads adopt legacy EZ-scoped definitions only when the shared list is
 absent. Subsequent native scope writes omit providers; shared definitions win on
-reload. Credentials, Action inputs and runtime bindings remain local. `actionTypesVersion` seeds Illustration once;
+reload. Credentials stay in the Saul owner; Action inputs and runtime bindings stay app-owned. `actionTypesVersion` seeds Illustration once;
 IDs and existing behavior survive, and deletion is respected after migration.
 
 Illustration is a Draw action using `AppModel` and `AttemptExecution`, the same
@@ -67,30 +67,19 @@ plan Fast remains catalog-controlled. The [official Fast mode guide](https://dev
 owns API tier semantics. Text-only Draw sends one `POST /v1/images/generations`, defaulting to
 GPT Image 2.5 Flare, low quality, 1024×1024 PNG. Its action template is the exact
 compiled prompt. Image options belong to its preset. Key Save/Reload and inspection
-never generate. The Keychain service `local.ez.app.openai` remains unchanged.
+never generate. The old EZ Keychain services are retired only after verified migration to the Saul owner.
 
 Run freezes action, input values, preset and provider snapshots. Stop invalidates
 late output and cancels the local task without claiming the server stopped or
 billing was prevented. No automatic retries. Image requests time out after 180s,
 reject redirects, bound response bytes/dimensions and use safe status-specific errors.
 
-History writes PNG bytes atomically under `EZ/images/<lowercase-run-UUID>.png`
-(owner-only directory/file), before the terminal JSONL snapshot. JSON stores only
-the filename and frozen choices; it never contains base64 image bytes. The file
-name must match the entry ID; reads reject symlinks and arbitrary paths. The initial
-pending snapshot precedes generation. If PNG or terminal save fails, the in-memory
-terminal entry retains exact bytes as Unsaved; Save again retries storage only.
-Saved media loads asynchronously on selection; missing files are reported honestly.
-Download atomically exports original bytes through NSSavePanel. Deletion rewrites
-history then removes its PNG; removal errors remain visible and can be retried.
-An orphan PNG after a terminal-write failure is possible; no background cleanup ships.
-
-Both main and Quick Lookup render the saved image. Reuse restores a draft; image
-results do not accept text follow-ups. Draw launcher input always waits for explicit
-Run. Closing/hiding a surface preserves work; quitting cancels active execution.
-
-Schema follows the [official image API](https://developers.openai.com/api/reference/resources/images/methods/generate).
-Offline fixtures cannot establish account access or billed generation.
+History stores input and output image bytes as SQLite blobs beside the frozen
+entry JSON, atomically in the same row. It creates no image sidecar directory.
+The initial pending snapshot precedes generation. A failed terminal save retains
+both images in memory for save-only recovery. Deletion removes the record and
+its blobs together. The [shared history contract](../../../docs/architecture.md#shared-history)
+owns location, migration and cross-app behavior.
 
 ## Web search and image inputs
 
@@ -115,17 +104,17 @@ is introduced. See [OpenAI web search](https://developers.openai.com/api/docs/gu
 ImageAttachment validates detected PNG/JPEG/WebP content, one frame, at most 20 MB,
 40 megapixels and 8,192 pixels per edge. Choose, Paste and Drop prepare a draft
 only. Invalid replacement preserves the previous source. Run freezes exact bytes;
-History atomically saves them to `images/<run-UUID>-input` before the pending JSONL
-snapshot and before transmission. JSONL contains source name/format, never image
-bytes. An image input selects one multipart `POST /v1/images/edits` with the same
+History atomically saves them as input image BLOBs with the pending entry in the
+shared SQLite database before transmission. Entry metadata contains source
+name/format. An image input selects one multipart `POST /v1/images/edits` with the same
 model/size/quality/output contract as generation; there is no hidden text analysis
 or second image request. See [OpenAI image edits](https://developers.openai.com/api/docs/guides/image-generation#edit-images).
 
-Reuse loads and validates the saved source; missing or invalid files require
+Reuse loads and validates the saved source; missing or invalid bytes require
 reattachment. Save again retains exact source/result bytes and retries storage
-only. Deletion removes both owned sidecars without touching the original user's
-file or external exports. Sidecar paths derive from run identity and reject
-symlinks. Both native surfaces share the same draft and operations.
+only. Deletion removes the entry and its input/output BLOBs without touching the
+original user's file or external exports. Both native surfaces share the same
+draft and operations.
 
 ## Authentication invariants
 
@@ -135,17 +124,17 @@ symlinks. Both native surfaces share the same draft and operations.
   exchange. Reauthentication uses the saved ID and fresh state, nonce, and PKCE.
 - Listen on `127.0.0.1`, use `/auth/callback`, and preserve the exact redirect URI
   across authorization and exchange. Validate state, callback parameters, and client ID.
-- Verify RS256 signatures against OpenAI's discovered JWKS, plus issuer, audience,
+- Verify RS256 or ES256 signatures against OpenAI's discovered JWKS, plus issuer, audience,
   expiry, subject, and nonce. Reject unsupported algorithms. Do not trust decoded JWTs.
 - Identity sign-in and plan permission are distinct. Require granted
   `chatgpt.tokens.use.direct` before model discovery/inference.
 - Credentials stay in Keychain. Persist rotations together; serialize refresh in
-  the process and hold an exclusive runtime lock to prevent cross-process races.
+  the signed Saul owner using a kernel lease to prevent cross-process races.
 - Restore credentials asynchronously off the UI actor. Publish a complete read
   only after success and a cancellation check; do not freeze history access while
   Keychain authorization waits.
   `CredentialStore.read()` starts on the main actor, matching its authentication
-  caller; the Sendable Keychain store explicitly performs blocking reads in a
+  caller; the Sendable shared owner storage explicitly performs blocking reads in a
   detached task. Complete compiler concurrency checking enforces this boundary.
 - Clear tokens on terminal refresh failure, not on network/5xx errors. Logout
   attempts revocation; an unconfirmed remote revocation is shown explicitly.
@@ -284,25 +273,17 @@ text status and the divider light without a second spinner.
 See [Responses usage](https://developers.openai.com/api/reference/resources/responses)
 and [output counting](https://developers.openai.com/api/docs/guides/token-counting).
 
-Loading keeps the last valid entry for each ID. Invalid lines are counted and
-preserved. A missing final newline is separated before appending the next record.
-Reads, appends, and deletions use a stable `history.lock` sidecar with `flock`;
-writes use mode `0600` and `fsync`. Never silently submit an unrecorded query.
+SQLite upserts retain the current snapshot for each UUID. Writes are transactional
+and owner-only. Never silently submit an unrecorded query. Startup under EZ's
+session lock marks its abandoned pending records interrupted; refreshing history
+never alters another app's execution state. Shared history is read again on activation.
 
-Individual deletion belongs to the main window: an answer action or history-row
-context menu opens a destructive confirmation. Deletion is blocked during a request
-or pending launcher submission. Remove every JSON line with the selected UUID,
-including identifiable damaged snapshots; preserve all unrelated bytes verbatim.
-Write and flush an owner-only sibling, then atomically rename it over the history
-file while holding the sidecar lock. No backup copy is retained. Only successful
-persistence removes the visible entry and clears its selection in both surfaces;
-failures keep the lookup visible and show an error. Deleting preserves composer
-drafts, including an action/inputs already restored with Use again. Unidentifiable
-damaged lines are preserved and may still contain text from a deleted lookup;
-deletion does not remove exports, clipboard contents, or filesystem backups.
-
-Known scale boundary: history loads into memory. Introduce indexed storage only
-when real history size warrants it, with a tested import and export path.
+Individual deletion belongs to the main window and confirms deletion from EZ and
+Saul. It removes the selected native record and blobs, or the selected browser
+passage with its runs. Failure preserves unsaved recovery. Retired JSONL, lock and
+image files are read only by one-time migration, verified, then removed; malformed
+sources remain intact with a blocking error. There are no permanent backups or
+fallback writers. The shared database preserves browser anchors and native metadata.
 
 ## Extension points
 
@@ -459,3 +440,10 @@ Speak presets preserve a Realtime model and strict `speechOptions.voice` in the
 shared store. The native preset editor can change those choices. Playback currently
 runs only in Saul. Native availability/preparation and the final execution boundary
 block Speak before credential resolution; native actions expose Write and Draw.
+
+## Shared credential owner
+
+EZ uses the independently installed signed Saul owner for official OpenAI operations.
+See the [shared credential contract](../../../contracts/credentials.md) for caller
+validation, migration, disconnect, sign-out and failure behavior. The app has no
+production secret-reading adapter. Offline suites inject disposable credentials.

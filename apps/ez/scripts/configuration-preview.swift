@@ -9,7 +9,7 @@ import SwiftUI
     init() {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ez-configuration-preview-\(UUID())", isDirectory: true)
-        let model = AppModel(historyDirectory: directory, offline: true)
+        let model = AppModel(directory: directory, offline: true)
         model.models = [
             ModelOption(catalog: [
                 "visibility": "list", "slug": "fixture-luna", "display_name": "Luna (offline fixture)",

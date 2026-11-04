@@ -92,7 +92,7 @@ import SwiftUI
                     try history.append(entry)
                 })
         }
-        let model = AppModel(historyDirectory: directory, offline: true, attemptExecution: execution)
+        let model = AppModel(directory: directory, offline: true, attemptExecution: execution)
         _model = StateObject(wrappedValue: model)
         controller = QuickLookupController(model: model)
     }

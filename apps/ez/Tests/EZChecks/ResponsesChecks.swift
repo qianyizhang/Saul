@@ -1,5 +1,6 @@
 import EZCheckSupport
 import Foundation
+import SaulCredentialStorage
 
 @testable import EZCore
 
@@ -8,7 +9,7 @@ import Foundation
         CheckCase("responses: Responses request stays within plan preview contract") { _ in
             let entry = HistoryEntry(
                 mode: .ask, query: "hi", model: "test", effort: "low", requestedServiceTier: "fast")
-            let body = ResponsesClient.requestBody(entry: entry)
+            let body = ResponsesRequest.body(entry: entry)
             try expect(
                 body["store"] as? Bool == false && body["stream"] as? Bool == true,
                 "Required streaming/nonstorage flags")
@@ -21,17 +22,18 @@ import Foundation
             }
         },
         CheckCase("responses: SSE framing and completed text") { _ in
-            var parser = SSEParser()
+            var parser = CredentialSSE()
             var result = ResponseAccumulator()
             let events = [
                 #"{"type":"response.output_text.delta","delta":"你好"}"#,
                 #"{"type":"response.completed","response":{"status":"completed","service_tier":"default","output":[{"content":[{"type":"output_text","text":"你好!"}]}]}}"#,
             ]
             for event in events {
-                try expect(parser.feed("data: " + event) == nil, "Premature event")
-                guard let payload = parser.feed("") else {
-                    throw CheckFailure("SSE event did not flush at a blank line")
+                var payload: Data?
+                for byte in Data(("data: " + event + "\n\n").utf8) {
+                    if let event = try parser.append(byte) { payload = event }
                 }
+                guard let payload else { throw CheckFailure("Missing SSE event") }
                 try result.consume(payload)
             }
             try result.requireCompleted()
@@ -204,7 +206,10 @@ import Foundation
         CheckCase("responses: partial stream cannot complete") { _ in
             var result = ResponseAccumulator()
             try result.consume(Data(#"{"type":"response.output_text.delta","delta":"partial"}"#.utf8))
-            try expectThrows(EZError.self, matching: { $0.message.contains("before response.completed") }) {
+            try expectThrows(
+                EZError.self,
+                matching: { $0.localizedDescription.contains("before response.completed") }
+            ) {
                 try result.requireCompleted()
             }
             try expect(result.text == "partial" && !result.completed, "Partial text/status lost")
@@ -253,19 +258,21 @@ import Foundation
             try expect(
                 error.message == "Region unavailable" && error.requestID == "trace", "Admission error lost")
         },
-        CheckCase("responses: transport interruption publishes partial metrics before throwing") { _ in
+        CheckCase("responses: transport interruption publishes partial metrics before throwing") {
+            directory in
             let fixture = HTTPFixture { _ in
                 HTTPReply("data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n")
             }
             defer { fixture.close() }
             var last: ResponseAccumulator?
             try await expectAsyncThrows(
-                EZError.self, matching: { $0.message.contains("before response.completed") }
+                CredentialStorageError.self,
+                matching: { $0.localizedDescription.contains("before response.completed") }
             ) {
-                _ = try await ResponsesClient(session: fixture.session).stream(
+                _ = try await credentialProvider(directory: directory, http: fixture).streamText(
                     entry: HistoryEntry(
-                        mode: .ask, query: "hi", model: "test", effort: "", requestedServiceTier: nil),
-                    token: "synthetic"
+                        mode: .ask, query: "hi", model: "test", effort: "", requestedServiceTier: nil
+                    ).withAPIProvider()
                 ) { last = $0 }
             }
             try expect(last?.text == "partial" && last?.completed == false, "Interrupted answer lost")
@@ -274,7 +281,7 @@ import Foundation
                 "Interrupted timing lost")
             try expect(last?.metrics.outputTokens == nil, "Interrupted usage invented")
         },
-        CheckCase("responses: URLSession delivers fragmented Unicode SSE through completion") { _ in
+        CheckCase("responses: URLSession delivers fragmented Unicode SSE through completion") { directory in
             let fixture = HTTPFixture { request in
                 try expect(request.url?.path == "/v1/responses", "Wrong route")
                 try expect(
@@ -288,10 +295,10 @@ import Foundation
             }
             defer { fixture.close() }
             var updates: [String] = []
-            let result = try await ResponsesClient(session: fixture.session).stream(
+            let result = try await credentialProvider(directory: directory, http: fixture).streamText(
                 entry: HistoryEntry(
-                    mode: .ask, query: "hello", model: "test", effort: "low", requestedServiceTier: nil),
-                token: "synthetic"
+                    mode: .ask, query: "hello", model: "test", effort: "low", requestedServiceTier: nil
+                ).withAPIProvider()
             ) { updates.append($0.text) }
             try expect(result.completed && result.text == "Hello 你好", "URLSession SSE completion failed")
             try expect(

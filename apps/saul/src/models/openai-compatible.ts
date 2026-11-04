@@ -1,8 +1,10 @@
 import { eventData } from '../../native/sse.mts';
 import { IncompleteGeneration, type ModelEvent } from './events';
+import { credentialEvents } from '../native/credentials';
 export interface OpenAICompatibleConfig {
   baseUrl: string;
   apiKey: string;
+  credentialOwner?: 'saul';
   model: string;
   temperature?: number;
   maxTokens?: number;
@@ -14,6 +16,29 @@ export async function* streamOpenAICompatible(
   userPrompt: string,
   signal?: AbortSignal,
 ): AsyncGenerator<ModelEvent, void, unknown> {
+  if (config.credentialOwner === 'saul') {
+    if (
+      !['https://api.openai.com/v1', 'https://api.openai.com/v1/chat/completions'].includes(
+        config.baseUrl.replace(/\/+$/, ''),
+      )
+    )
+      throw new Error('The shared OpenAI credential cannot be used with a different endpoint.');
+    for await (const event of credentialEvents(
+      {
+        action: 'api-chat',
+        model: config.model,
+        systemPrompt,
+        userPrompt,
+        temperature: config.temperature,
+        maxTokens: config.maxTokens,
+      },
+      signal,
+    )) {
+      if (event.type === 'delta' || event.type === 'complete' || event.type === 'activity')
+        yield event;
+    }
+    return;
+  }
   const baseUrl = config.baseUrl.replace(/\/+$/, '');
   const url = baseUrl.endsWith('/chat/completions') ? baseUrl : `${baseUrl}/chat/completions`;
 

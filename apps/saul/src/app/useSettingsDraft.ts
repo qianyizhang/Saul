@@ -183,6 +183,28 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
       if (mounted.current) setResettingInvalidSettings(false);
     }
   }
+  async function setCredentialOwner(owner: 'saul' | 'disconnected') {
+    if (running.current || dirty || blocked || !baseline.current) return;
+    running.current = true;
+    setSaving(true);
+    setError('');
+    try {
+      const result = await requestSettings({
+        action: 'commit',
+        baseline: baseline.current,
+        settings: { ...settingsForSave(formRef.current), sharedCredentials: owner },
+      });
+      if (mounted.current) receiveLoaded(result);
+    } catch (cause) {
+      if (mounted.current) {
+        setError(message(cause));
+        setBlocked(true);
+      }
+    } finally {
+      running.current = false;
+      if (mounted.current) setSaving(false);
+    }
+  }
   return {
     settings: form.settings,
     selectedPresetId: form.presetId,
@@ -200,5 +222,6 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
     save,
     reload,
     resetInvalidSettings,
+    setCredentialOwner,
   };
 }

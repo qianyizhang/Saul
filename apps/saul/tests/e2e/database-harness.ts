@@ -2,6 +2,8 @@ import type { Page, Worker } from '@playwright/test';
 import type { DbRequest } from '../../src/types/storage';
 
 export type DatabaseFixtureRequest =
+  | { action: 'seed-native' }
+  | { action: 'reset-migration' }
   | { action: 'migrate'; legacy: string }
   | { action: 'scale'; runs: number }
   | { action: 'db'; message: DbRequest }
@@ -28,18 +30,15 @@ export interface MigrationReport {
 
 export function runDatabaseFixture<T>(page: Page, request: DatabaseFixtureRequest): Promise<T> {
   return page.evaluate(async (request) => {
-    const worker = new Worker(chrome.runtime.getURL('database-fixture.js'), { type: 'module' });
-    try {
-      const result = await new Promise<unknown>((resolve, reject) => {
-        worker.onmessage = ({ data }: MessageEvent<FixtureReply>) =>
-          data.success ? resolve(data.result) : reject(new Error(data.error));
-        worker.onerror = (event) => reject(new Error(event.message));
-        worker.postMessage(request);
-      });
-      return result as T;
-    } finally {
-      worker.terminate();
-    }
+    const { saul_test_history_url: endpoint } =
+      await chrome.storage.local.get('saul_test_history_url');
+    const response = await fetch(endpoint + '/fixture', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+    const reply: FixtureReply = await response.json();
+    if (!reply.success) throw new Error(reply.error);
+    return reply.result as T;
   }, request);
 }
 

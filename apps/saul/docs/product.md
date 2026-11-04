@@ -67,7 +67,7 @@ The full workspace provides:
 - Markdown export of retained passages and attempts, including incomplete labels;
 - deletion and **Clear all**, which cancel affected work and block late writes from recreating it.
 
-SQLite-WASM stores the library in OPFS for the current browser profile. Data is local to that profile and remains until explicit deletion or browser-profile removal.
+History shares `~/Library/Application Support/Little Clarity/history.sqlite3` with EZ. Both apps browse and delete the same saved records. The native helper is required even for API providers. Browser-profile removal does not delete shared history. The previous OPFS store is imported once and removed after verification.
 
 ## Settings and models
 

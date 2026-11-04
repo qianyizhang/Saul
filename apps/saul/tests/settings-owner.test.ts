@@ -24,6 +24,14 @@ function ready(state: SettingsState) {
   return state;
 }
 
+it('repairing invalid shared settings keeps the credential route disconnected', async () => {
+  const f = fixture({ sharedCredentials: 'saul', openaiCompatible: { temperature: 'invalid' } });
+  const invalid = await f.owner({ action: 'read' });
+  if (invalid.state !== 'invalid') throw new Error('Expected invalid shared settings');
+  const reset = ready(await f.owner({ action: 'reset', baseline: invalid.revision }));
+  expect(reset.settings.sharedCredentials).toBe('disconnected');
+});
+
 it('rejects a competing full draft without changing either draft or the first saved recipe', async () => {
   const f = fixture();
   const a = ready(await f.owner({ action: 'read' }));

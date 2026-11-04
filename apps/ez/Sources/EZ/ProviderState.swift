@@ -14,6 +14,7 @@ extension AppModel {
     }
     var needsPlan: Bool { currentProvider?.kind == .chatGPTPlan }
     var providerIssue: String? {
+        if !offline, !sharedCredentialsConnected { return "Connect to Saul in Providers." }
         guard currentPreset != nil else { return nil }
         guard let provider = currentProvider else {
             return "The selected preset's provider is unavailable. Open Providers."
@@ -31,11 +32,11 @@ extension AppModel {
         return nil
     }
     func restoreAPIKey() async {
-        guard !apiKeyBusy, !busy else { return }
+        guard !apiKeyBusy, !busy, sharedCredentialsConnected else { return }
         apiKeyBusy = true
         defer { apiKeyBusy = false }
         do {
-            apiConnected = try await apiKeyStore.read() != nil
+            apiConnected = offline ? try await apiKeyStore.read() != nil : try await auth.keyStatus()
             apiKeyError = nil
         } catch { apiKeyError = error.localizedDescription }
     }
@@ -45,7 +46,8 @@ extension AppModel {
         let submittedDraft = apiKeyDraft
         defer { apiKeyBusy = false }
         do {
-            try await apiKeyStore.write(validatedOpenAIKey(submittedDraft))
+            let key = try validatedOpenAIKey(submittedDraft)
+            if offline { try await apiKeyStore.write(key) } else { try await auth.saveKey(key) }
             apiConnected = true
             if apiKeyDraft == submittedDraft { apiKeyDraft = "" }
             apiKeyError = nil
@@ -56,7 +58,7 @@ extension AppModel {
         apiKeyBusy = true
         defer { apiKeyBusy = false }
         do {
-            try await apiKeyStore.write(nil)
+            if offline { try await apiKeyStore.write(nil) } else { try await auth.saveKey(nil) }
             apiConnected = false
             apiKeyDraft = ""
             apiKeyError = nil
@@ -79,7 +81,7 @@ extension AppModel {
             return
         }
         imageLoading = true
-        let directory = directory
+        let directory = historyDirectory
         imageLoadTask = Task { [weak self] in
             let data = try? await Task.detached {
                 try HistoryStore(directory: directory).image(for: entry)

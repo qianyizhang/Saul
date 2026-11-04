@@ -1,6 +1,6 @@
 # Saul
 
-Saul is a local-first Chrome extension for reading explanations and safe tab organization. It is built with WXT, React, TypeScript, and SQLite-WASM/OPFS.
+Saul is a local-first Chrome extension for reading explanations and safe tab organization. It is built with WXT, React, TypeScript, and shared native SQLite history.
 
 ## Capabilities
 
@@ -13,8 +13,8 @@ Saul is a local-first Chrome extension for reading explanations and safe tab org
 
 ## Install
 
-Use the [selective installer](../../docs/setup.md) for the extension alone, optional
-helpers, or both apps. EZ and Codex are not required for standalone Saul.
+Use the [selective installer](../../docs/setup.md) for the extension and its
+ChatGPT/history helper. Tab/action helpers are optional. EZ and Codex are not required.
 
 For optional Codex access, select the tab helper and `--codex` in the root setup.
 Then enable access in Saul Settings and run `pnpm verify:connection` from this

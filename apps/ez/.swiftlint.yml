@@ -7,6 +7,8 @@ included:
   - Tests
   - scripts
   - Package.swift
+  - ../../native/credentials/Sources
+  - ../../native/credentials/Package.swift
 only_rules:
   - blanket_disable_command
   - compiler_protocol_init

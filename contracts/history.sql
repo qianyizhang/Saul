@@ -1,0 +1,1 @@
+../apps/ez/Sources/EZCore/Resources/history.sql

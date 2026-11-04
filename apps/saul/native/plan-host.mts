@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { Fragments, packets } from './fragments.mts';
 import { isRecord } from './value.mts';
 import type { PlanRequest, PlanEvent } from './plan-protocol.mts';
 import { chatgptDirectory } from './installation-paths.mts';
@@ -12,8 +13,13 @@ if (!/^chrome-extension:\/\/[a-p]{32}\/$/.test(process.argv[2] || '')) process.e
 process.umask(0o077);
 const service = new PlanService(new PlanAuth(new PlanStore(chatgptDirectory(import.meta.url))));
 const running = new Map<string, { controller: AbortController; request: PlanRequest }>();
-const send = (id: string, event: PlanEvent) => process.stdout.write(encodeNative({ id, event }));
-const decode = nativeDecoder((message) => {
+const send = (id: string, event: PlanEvent) => {
+  for (const packet of packets({ id, event })) process.stdout.write(encodeNative(packet));
+};
+const fragments = new Fragments();
+const decode = nativeDecoder((packet) => {
+  const message = fragments.accept(packet);
+  if (message === undefined) return;
   if (!isRecord(message) || typeof message.id !== 'string' || message.id.length > 128)
     throw new Error('Invalid request ID');
   if (message.cancel === true) {
@@ -66,6 +72,7 @@ const decode = nativeDecoder((message) => {
     });
 });
 const shutdown = () => {
+  service.close();
   for (const { controller } of running.values()) controller.abort();
   process.exit(0);
 };

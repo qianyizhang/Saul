@@ -69,10 +69,11 @@ if [[ -d "$app" ]]; then
         codesign --verify -R "$staging/previous.req" "$staging/EZ.app"
         printf 'Verified update against the installed app identity.\n'
     else
-        printf 'Switching the installed app to the pinned certificate; macOS may request Keychain access once.\n'
+        printf 'Switching the installed app to the pinned certificate; macOS may request Keychain access. Self-signed changed builds can ask again.\n'
     fi
 fi
 require_stopped
+bash scripts/install-credentials.sh
 if [[ -e "$app" ]]; then mv "$app" "$staging/previous.app"; fi
 mv "$staging/EZ.app" "$app"
 printf 'Installed %s\nSigning identity: %s\n' "$app" "$pinned"

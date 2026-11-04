@@ -275,8 +275,10 @@ Advanced options belong in named disclosures; errors and billing routes stay vis
 Providers have stable unique keys and editable display names. Renaming a provider
 does not change a preset's binding. Existing plan presets default to `gpt-plan` /
 Write. OpenAI API uses `openai-api`, supports Write, Draw and Speak, and has separate API
-billing. Credentials and plan account selection remain app-owned. Keep the existing
-Connect/Add/Enable/Refresh/Usage/Disconnect account actions within its provider.
+billing. Plan account selection remains app-owned. Opted-in macOS installations use
+the shared Saul credential owner. Keep Connect/Add/Enable/Refresh/Usage/Sign out
+within its provider. Confirm that Sign out and Remove key affect both Saul and EZ.
+Disconnect app removes only that app’s binding; reconnect never restores retired keys.
 Saving or reloading an API key does not generate or test a request.
 
 Presets bind provider, capability, model and options. Write exposes reasoning and

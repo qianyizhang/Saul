@@ -13,6 +13,7 @@ function harness() {
     runtime: {
       id: 'extension',
       getURL: (path: string) => `chrome-extension://extension/${path}`,
+      onMessage: { addListener: vi.fn() },
       onConnect: {
         addListener: (fn: typeof accept) => {
           accept = fn;
@@ -57,7 +58,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
-it('rejects page callers and limits the offscreen runner to generation', () => {
+it('rejects page callers and limits the offscreen runner to generation and shared history', () => {
   vi.useFakeTimers();
   const h = harness();
   expect(h.connect('https://example.test', true).port.disconnect).toHaveBeenCalled();
@@ -136,4 +137,27 @@ it('rejects the removed OAuth speech operation for every caller', () => {
   expect(h.connectNative).not.toHaveBeenCalled();
   h.connect('chrome-extension://extension/library.html').receive(request);
   expect(h.connectNative).not.toHaveBeenCalled();
+});
+
+it('allows trusted history operations and rejects invalid migration identities', () => {
+  vi.useFakeTimers();
+  const h = harness();
+  const invalid = h.connect('chrome-extension://extension/offscreen.html');
+  invalid.receive({ action: 'history', request: { operation: 'import-begin', id: '../outside' } });
+  expect(h.connectNative).not.toHaveBeenCalled();
+  const runner = h.connect('chrome-extension://extension/offscreen.html');
+  runner.receive({
+    action: 'history',
+    request: {
+      operation: 'db',
+      requestId: '33333333-3333-3333-3333-333333333333',
+      owner: '11111111-1111-1111-1111-111111111111',
+      message: { type: 'DB_GET_HISTORY', payload: {} },
+    },
+  });
+  expect(h.connectNative).toHaveBeenCalledTimes(1);
+  const packet = h.native.postMessage.mock.calls[0]![0];
+  expect(packet.request.action).toBe('history');
+  h.emit({ id: packet.id, event: { type: 'result', value: [] } });
+  expect(runner.port.postMessage).toHaveBeenCalledWith({ type: 'result', value: [] });
 });

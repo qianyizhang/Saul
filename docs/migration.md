@@ -47,4 +47,5 @@ Application runtime/resource files and benchmark bytes remain unchanged by the
 reconciliation. The duplicate installer and native hook forwarding scripts are
 removed; callers use their current owners directly. The running EZ app was not
 replaced. Hosted CI and live-provider authentication/inference remain unverified;
-publication is held, and CI's ad-hoc app artifact is not a notarized public release.
+CI's ad-hoc app artifact is not a notarized public release. The later publication
+decision above supersedes the original hold.

@@ -1,3 +1,4 @@
+import { SharedHistory } from './history.mts';
 import type { PlanAuth } from './plan-auth.mts';
 import type { PlanModel, PlanEvent } from './plan-protocol.mts';
 import { isRecord } from './value.mts';
@@ -17,6 +18,7 @@ export class PlanService {
   catalogs: Map<string, PlanModel[]>;
   loadingCatalogs: Map<string, { controller: AbortController; promise?: Promise<PlanModel[]> }>;
   readonly presets: SharedPresetsStore;
+  private history?: SharedHistory;
   constructor(auth: PlanService['auth'], fetcher = fetch, presets = new SharedPresetsStore()) {
     this.presets = presets;
     this.auth = auth;
@@ -24,6 +26,9 @@ export class PlanService {
     this.blocked = new Set();
     this.catalogs = new Map();
     this.loadingCatalogs = new Map();
+  }
+  close() {
+    this.history?.close();
   }
   invalidateCatalog(accountId: string) {
     this.catalogs.delete(accountId);
@@ -72,6 +77,10 @@ export class PlanService {
   async run(request: unknown, emit: (event: PlanEvent) => void, signal?: AbortSignal) {
     validatePlanRequest(request);
     switch (request.action) {
+      case 'history':
+        this.history ??= new SharedHistory();
+        emit({ type: 'result', value: (await this.history.run(request.request)) ?? null });
+        return;
       case 'config-read':
         emit({ type: 'result', config: this.presets.readScope(request.section) });
         return;

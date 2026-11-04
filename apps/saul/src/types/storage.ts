@@ -59,6 +59,7 @@ export interface Submission {
   regenerate: boolean;
 }
 export interface HistoryItem {
+  hasImage?: boolean;
   bookmarked: boolean;
   selectionId: string;
   selectedText: string;
@@ -75,6 +76,10 @@ export interface HistoryItem {
 }
 
 export interface DbOperations extends DigestDbOperations {
+  DB_IMAGE: {
+    payload: { selectionId: string };
+    result: { data: string; mediaType: string } | undefined;
+  };
   DB_READING_RESOLVE: {
     payload: { snapshot: SelectionSnapshot; submissionId: string; recipeId: string };
     result: string | undefined;

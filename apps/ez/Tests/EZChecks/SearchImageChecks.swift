@@ -24,8 +24,8 @@ import Foundation
             }
             defer { fixture.close() }
             var activity: [ResponseActivity] = []
-            let response = try await ResponsesClient(session: fixture.session).stream(
-                entry: entry, token: "synthetic"
+            let response = try await credentialProvider(directory: directory, http: fixture).streamText(
+                entry: entry
             ) {
                 activity.append($0.activity)
             }
@@ -39,7 +39,7 @@ import Foundation
             entry.status = "completed"
             let history = try HistoryStore(directory: directory)
             try history.append(entry)
-            let saved = try history.load().entries[0]
+            let saved = try history.load()[0]
             try expectEqual(
                 saved.citedResponse, "😀 [News](https://example.com/news)", "Unicode citation shifted")
             let followUp = try saved.prepareFollowUp("What changed?", models: [])
@@ -68,16 +68,7 @@ import Foundation
                     try response.requireCompleted(webSearchRequired: true)
                 }
             }
-            let provider = GenerationProvider.chatGPTPlan(accessToken: {
-                throw CheckFailure("Credential resolved before rejecting search")
-            })
-            var entry = HistoryEntry(
-                mode: .ask, query: "hello", model: "test", effort: "", requestedServiceTier: nil)
-            entry.actionSnapshot = Action(
-                name: "Search", presetID: UUID(), template: "{{text}}", webSearch: true)
-            try await expectAsyncThrows(EZError.self) {
-                _ = try await provider.streamText(entry: entry) { _ in }
-            }
+
         },
         CheckCase("search: unsafe citation URLs and invalid offsets cannot create executable links") { _ in
             try expect(
@@ -121,20 +112,20 @@ import Foundation
                 mode: .ask, query: "meme", model: "test", effort: "", requestedServiceTier: nil)
             entry.inputImage = try ImageAttachment(data: fixturePNG, name: "my sketch.png")
             entry.imageData = fixturePNG
-            entry.imageFile = entry.id.uuidString.lowercased() + ".png"
             try store.append(entry)
-            let json = try String(contentsOf: store.url, encoding: .utf8)
-            try expect(!json.contains(fixturePNG.base64EncodedString()), "Image bytes entered JSONL")
-            let saved = try store.load().entries[0]
+            let json = try historySQL(store.url, "SELECT data FROM ez_entry") ?? ""
+            try expect(
+                !json.contains(fixturePNG.base64EncodedString()), "Image bytes entered the JSON payload")
+            let saved = try store.load()[0]
             try expect(saved.inputImage?.data == nil, "Metadata decoded bytes")
             try expectEqual(try store.inputImage(for: saved)?.data, fixturePNG, "Input image not restored")
             try store.delete(id: entry.id)
+            try expect(try store.load().isEmpty, "Deleted images left a history record")
             try expect(
-                try FileManager.default.contentsOfDirectory(
-                    atPath: directory.appendingPathComponent("images").path
-                ).isEmpty, "Delete left an owned image")
+                !FileManager.default.fileExists(atPath: directory.appendingPathComponent("images").path),
+                "SQLite history created a deprecated image directory")
         },
-        CheckCase("image input: invalid and oversized inputs fail locally and source symlinks are rejected") {
+        CheckCase("image input: invalid and oversized inputs fail locally and missing blobs are rejected") {
             directory in
             try expectThrows(EZError.self) {
                 _ = try ImageAttachment(data: Data("not an image".utf8), name: "fake.png")
@@ -148,15 +139,9 @@ import Foundation
                 mode: .ask, query: "meme", model: "test", effort: "", requestedServiceTier: nil)
             entry.inputImage = try ImageAttachment(data: fixturePNG, name: "sketch.png")
             try store.append(entry)
-            let saved = try store.load().entries[0]
-            let input = directory.appendingPathComponent(
-                "images/" + entry.id.uuidString.lowercased() + "-input")
-            try FileManager.default.removeItem(at: input)
-            let outside = directory.appendingPathComponent("outside.png")
-            try fixturePNG.write(to: outside)
-            try FileManager.default.createSymbolicLink(at: input, withDestinationURL: outside)
+            let saved = try store.load()[0]
+            _ = try historySQL(store.url, "UPDATE ez_entry SET input_image=NULL")
             try expectThrows(EZError.self) { _ = try store.inputImage(for: saved) }
-            try expectEqual(try Data(contentsOf: outside), fixturePNG, "External image changed")
         },
         CheckCase("actions: seed once, preserve edited or removed starters and decode old actions") { _ in
             var config = Configuration.starters(model: "fixture", effort: "low", fast: false)

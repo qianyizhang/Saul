@@ -14,7 +14,7 @@ import Foundation
             try expect(
                 !f.model.busy && !f.model.launcherPending && f.model.entries.isEmpty,
                 "Selected text started or queued a request")
-            try expect(try f.history.load().entries.isEmpty, "Draft was saved as a request")
+            try expect(try f.history.load().isEmpty, "Draft was saved as a request")
         },
         stateCase("selected text fills only the first field of a multi-input action") { f in
             f.model.chooseAction(f.multi.id)

@@ -1,4 +1,5 @@
 import { validateSharedProviders } from '../../native/shared-presets-contract.mts';
+import { officialOpenAI } from '../../native/credentials-contract.mts';
 import type { UserSettings } from '../types';
 import { DEFAULT_SYSTEM_PROMPT } from '../models/prompts';
 import { CHROME_AI_ENABLED, CHROME_AI_DISABLED_MESSAGE } from '../models/chrome-ai';
@@ -77,9 +78,12 @@ function normalizeRemoteConfig(
 ): UserSettings['openaiCompatible'] {
   if (value === undefined) return { ...fallback };
   const stored = record(value, 'OpenAI-compatible settings');
+  if (stored.credentialOwner !== undefined && stored.credentialOwner !== 'saul')
+    throw new Error('Saved API credential owner is not supported.');
   return {
     baseUrl: optionalString(stored.baseUrl, 'model endpoint') ?? fallback.baseUrl,
     apiKey: optionalString(stored.apiKey, 'API key') ?? fallback.apiKey,
+    ...(stored.credentialOwner === 'saul' ? { credentialOwner: 'saul' as const } : {}),
     model: optionalString(stored.model, 'model name') ?? fallback.model,
     temperature: optionalNumber(stored.temperature, 'provider temperature') ?? fallback.temperature,
   };
@@ -94,6 +98,11 @@ function recoveredProfileId(profiles: UserSettings['profiles']): string {
 
 export function normalizeSettings(value: unknown): UserSettings {
   const stored = record(value, 'settings');
+  if (
+    stored.sharedCredentials !== undefined &&
+    !['saul', 'disconnected'].includes(String(stored.sharedCredentials))
+  )
+    throw new Error('Saved credential connection is not supported.');
   const activeProvider = stored.activeProvider ?? DEFAULT_SETTINGS.activeProvider;
   if (
     activeProvider !== 'openai-compatible' &&
@@ -179,6 +188,9 @@ export function normalizeSettings(value: unknown): UserSettings {
   }
   const settings: UserSettings = {
     ...DEFAULT_SETTINGS,
+    ...(stored.sharedCredentials === undefined
+      ? {}
+      : { sharedCredentials: stored.sharedCredentials as 'saul' | 'disconnected' }),
     ...(stored.providers === undefined ? {} : { providers: stored.providers }),
     ...(providerConnections === undefined ? {} : { providerConnections }),
     summaryPdfProcessing,
@@ -291,6 +303,14 @@ export function validateSettingsConnections(settings: UserSettings): void {
 }
 
 export function validateProviderSettings(settings: UserSettings): URL | undefined {
+  if (
+    (settings.openaiCompatible.credentialOwner === 'saul' &&
+      settings.sharedCredentials !== 'saul') ||
+    (settings.sharedCredentials === 'disconnected' &&
+      (settings.activeProvider === 'chatgpt-plan' ||
+        officialOpenAI(settings.openaiCompatible.baseUrl)))
+  )
+    throw new Error('Connect this app to Saul credentials in Providers.');
   if (settings.activeProvider === 'chrome-ai') {
     if (!CHROME_AI_ENABLED) throw new Error(CHROME_AI_DISABLED_MESSAGE);
     return undefined;
@@ -327,6 +347,10 @@ export async function getSettings(): Promise<UserSettings> {
 export interface SharedPresetAccess {
   load(settings: UserSettings): Promise<UserSettings>;
   save(settings: UserSettings): Promise<UserSettings>;
+}
+export interface CredentialAccess {
+  prepare(settings: UserSettings, current: UserSettings): Promise<UserSettings>;
+  committed(settings: UserSettings, current: UserSettings): Promise<void>;
 }
 
 function settingsFromStored(stored: unknown): UserSettings {
@@ -365,6 +389,7 @@ export function createSettingsOwner(
     write: (values) => chrome.storage.local.set(values),
   },
   shared?: SharedPresetAccess,
+  credentials?: CredentialAccess,
 ): (request: unknown) => Promise<SettingsState> {
   let pending: Promise<unknown> = Promise.resolve();
   return (value) => {
@@ -422,6 +447,8 @@ export function createSettingsOwner(
         // Normalize and validate in the write owner, not only in the form.
         let settings = normalizeSettings(request.settings);
         validateSettingsConnections(settings);
+        if (credentials)
+          settings = await credentials.prepare(settings, loaded ?? settingsFromStored(stored));
         if (shared) settings = await shared.save(settings);
         try {
           await storage.write({ [SETTINGS_STORAGE_KEY]: settings });
@@ -432,6 +459,8 @@ export function createSettingsOwner(
             { cause },
           );
         }
+        if (credentials)
+          await credentials.committed(settings, loaded ?? settingsFromStored(stored));
         return {
           state: 'ready',
           settings,
@@ -459,6 +488,13 @@ export function createSettingsOwner(
         if (request.action === 'read') return { state: 'invalid', revision, error: error.message };
       }
       let settings = structuredClone(DEFAULT_SETTINGS);
+      if (
+        stored &&
+        typeof stored === 'object' &&
+        'sharedCredentials' in stored &&
+        ['saul', 'disconnected'].includes(String(stored.sharedCredentials))
+      )
+        settings.sharedCredentials = 'disconnected';
       if (shared) settings = await shared.load(settings);
       try {
         await storage.write({

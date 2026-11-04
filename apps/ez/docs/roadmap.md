@@ -4,6 +4,9 @@ Shipped behavior belongs in the [README](../README.md) and
 [changelog](../CHANGELOG.md); acceptance and remaining verification gaps belong
 in [verification](verification.md).
 
+Apple Development signing and the shared Saul credential owner are implemented.
+Changed-build acceptance and its limits are recorded in [verification](verification.md).
+
 ## Candidates, not commitments
 
 - Spotlight query entry alongside the existing Raycast integration.
@@ -13,9 +16,6 @@ in [verification](verification.md).
 - Additional provider instances/accounts and provider model discovery.
 - Optional selection of follow-up context beyond the saved conversation.
 - Signed/notarized distribution and an update channel.
-- Deferred: keep self-signing; revisit only when installation prompts bother us again.
-  Candidate: full Xcode + free Personal Team → Apple Development signing; verify
-  credential restoration across two changed builds. [Context](keychain.md#why-a-rebuild-can-ask-again).
 
 For each addition, define the interaction, data boundary, and acceptance checks
 before implementation. Keep the default experience fast and compact.

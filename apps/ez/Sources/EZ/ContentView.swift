@@ -74,7 +74,9 @@ struct ContentView: View {
                 .disabled(!model.canDeleteLookup)
             Button("Cancel", role: .cancel) {}
         } message: { entry in
-            Text("Delete “\(entry.displayQuery)” and its saved answer from this Mac? This cannot be undone.")
+            Text(
+                "Delete “\(entry.displayQuery)” and its saved answer from shared history in EZ and Saul? This cannot be undone."
+            )
         }
         .sheet(isPresented: $model.showSettings) { SettingsView(model: model) }
     }
@@ -210,6 +212,12 @@ struct ContentView: View {
             if let parentID = entry.parentID, model.entries.contains(where: { $0.id == parentID }) {
                 Button("Previous answer") { model.selection = parentID }.buttonStyle(.borderless)
             }
+            if let source = entry.sourceURL, let url = URL(string: source),
+                ["http", "https"].contains(url.scheme?.lowercased() ?? "")
+            {
+                Link(entry.sourceTitle?.isEmpty == false ? entry.sourceTitle! : source, destination: url)
+                    .font(AppStyle.caption)
+            }
             FollowUpComposer(model: model, entry: entry).id(entry.id)
             if entry.status != "pending" {
                 HStack {
@@ -223,12 +231,12 @@ struct ContentView: View {
                             Label("Copy", systemImage: "doc.on.doc")
                         }.disabled(entry.response.isEmpty)
                     }
-                    if !model.minimumMode {
+                    if !model.minimumMode && entry.sourceID == nil {
                         Button("Use again", systemImage: "arrow.counterclockwise") { model.reuse(entry) }
                             .disabled(model.busy || model.launcherPending)
                     }
                     Menu {
-                        if model.minimumMode {
+                        if model.minimumMode && entry.sourceID == nil {
                             Button("Reuse") { model.reuse(entry) }.disabled(
                                 model.busy || model.launcherPending
                             )

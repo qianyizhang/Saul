@@ -14,7 +14,7 @@ import Foundation
             let entry = try action.prepare(
                 values: ["fuzzy term": "elicit", "fuzzy context": "draw out"], preset: preset,
                 models: [option])
-            let body = ResponsesClient.requestBody(entry: entry)
+            let body = ResponsesRequest.body(entry: entry)
             let input = body["input"] as? [[String: String]]
             try expect(
                 input?.first?["content"] == "Find elicit for draw out; correct elicit.",
@@ -31,7 +31,7 @@ import Foundation
             edited.template = "New {{text}}"
             try ConfigurationStore(directory: directory).save(
                 Configuration(presets: [preset], actions: [edited]))
-            let entries = try store.load().entries
+            let entries = try store.load()
             try expectEqual(entries.count, 1, "Saved action history did not reload")
             let reloaded = entries[0]
             try expect(
@@ -57,7 +57,7 @@ import Foundation
                 old.actionSnapshot == nil && old.displayQuery == "old query",
                 "Legacy history no longer readable")
             try expect(
-                ResponsesClient.requestBody(entry: old)["instructions"] as? String
+                ResponsesRequest.body(entry: old)["instructions"] as? String
                     == QueryMode.ask.instruction,
                 "Legacy request semantics changed")
         },

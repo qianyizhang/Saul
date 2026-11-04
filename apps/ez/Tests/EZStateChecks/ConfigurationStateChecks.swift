@@ -8,7 +8,7 @@ import Foundation
             let configURL = directory.appendingPathComponent("configuration.json")
             let bytes = Data("{broken".utf8)
             try bytes.write(to: configURL)
-            let model = AppModel(historyDirectory: directory, offline: true)
+            let model = AppModel(directory: directory, offline: true)
             defer { model.shutdown() }
             try expect(model.configurationError != nil && !model.canSend, "Corruption silently reset")
             let revision = model.draftRevision

@@ -1,14 +1,13 @@
-// Compiled only into disposable test extension snapshots, never shipped.
-import sqlite3InitModule, { type Database } from '@sqlite.org/sqlite-wasm';
-import wasmUrl from '@sqlite.org/sqlite-wasm/sqlite3.wasm?url';
-import { SaulDatabase } from '../../src/storage/db';
-import { migrate, searchableResponse } from '../../src/storage/schema';
-import type { RunInput } from '../../src/types/storage';
-import type { DatabaseFixtureRequest, HistorySeed } from './database-harness';
-
-const repository = new SaulDatabase();
-async function seedHistory({ origin, count, options }: HistorySeed) {
-  const db = await rawDatabase();
+import type { SaulDatabase } from '../src/storage/db';
+import type { SqlDatabase } from '../src/storage/sql';
+type FixtureStore = { connection: SqlDatabase; browser: Pick<SaulDatabase, 'execute'> };
+import { HistoryConnection } from '../native/history.mts';
+import { migrate } from '../src/storage/schema';
+import { searchableResponse } from '../src/storage/search';
+import type { RunInput } from '../src/types/storage';
+import type { DatabaseFixtureRequest, HistorySeed } from './e2e/database-harness';
+async function seedHistory(repository: FixtureStore, { origin, count, options }: HistorySeed) {
+  const db = repository.connection;
   if (Number(db.selectValue('SELECT count(*) FROM selection')) !== 0)
     throw new Error('History seeding requires a fresh fixture database.');
   const raw =
@@ -51,13 +50,9 @@ async function seedHistory({ origin, count, options }: HistorySeed) {
     completed: Number(db.selectValue("SELECT count(*) FROM llm_run WHERE status='completed'")),
   };
 }
-async function rawDatabase() {
-  await repository.init();
-  return (repository as unknown as { db: Database }).db;
-}
 const baseline = `SELECT s.id,s.text,r.response_raw FROM selection s LEFT JOIN llm_run r ON r.rowid=(SELECT rowid FROM llm_run WHERE selection_id=s.id ORDER BY created_at DESC,rowid DESC LIMIT 1) ORDER BY s.created_at DESC,s.id DESC LIMIT 50`;
-async function measure() {
-  const db = await rawDatabase();
+async function measure(repository: FixtureStore) {
+  const db = repository.connection;
   const times = async (fn: () => unknown | Promise<unknown>, repeats = 5) => {
     const values: number[] = [];
     for (let i = 0; i < repeats; i++) {
@@ -77,24 +72,24 @@ async function measure() {
     sqlite: db.selectValue('SELECT sqlite_version()'),
   };
   report.history = await times(() =>
-    repository.execute({ type: 'DB_GET_HISTORY', payload: { limit: 50 } }),
+    repository.browser.execute({ type: 'DB_GET_HISTORY', payload: { limit: 50 } }),
   );
   report.historyOffset = await times(() =>
-    repository.execute({ type: 'DB_GET_HISTORY', payload: { limit: 50, offset: 9000 } }),
+    repository.browser.execute({ type: 'DB_GET_HISTORY', payload: { limit: 50, offset: 9000 } }),
   );
   report.page = await times(() =>
-    repository.execute({ type: 'DB_PAGE', payload: { url: 'https://scale.test/page-0' } }),
+    repository.browser.execute({ type: 'DB_PAGE', payload: { url: 'https://scale.test/page-0' } }),
   );
   report.search = await times(
     () =>
-      repository.execute({
+      repository.browser.execute({
         type: 'DB_GET_HISTORY',
         payload: { searchQuery: 'gradient', limit: 50 },
       }),
     3,
   );
   report.export = await times(
-    () => repository.execute({ type: 'DB_EXPORT_MARKDOWN', payload: undefined }),
+    () => repository.browser.execute({ type: 'DB_EXPORT_MARKDOWN', payload: undefined }),
     1,
   );
   report.plan = db.selectObjects('EXPLAIN QUERY PLAN ' + baseline);
@@ -110,8 +105,8 @@ async function measure() {
   );
   return report;
 }
-async function scale(runs: number) {
-  const db = await rawDatabase();
+async function scale(repository: FixtureStore, runs: number) {
+  const db = repository.connection;
   db.transaction(() => {
     db.exec('DELETE FROM interaction; DELETE FROM page; DELETE FROM submission;');
     for (let page = 0; page < 100; page++)
@@ -137,13 +132,10 @@ async function scale(runs: number) {
       });
     db.exec('INSERT INTO explanation_fts(rowid,body) SELECT rowid,response_raw FROM llm_run');
   });
-  return measure();
+  return measure(repository);
 }
 async function migrationChecks(legacy: string) {
-  const sqlite = await (
-    sqlite3InitModule as unknown as (o: unknown) => ReturnType<typeof sqlite3InitModule>
-  )({ locateFile: () => wasmUrl });
-  const db = new sqlite.oo1.DB(':memory:');
+  const db = new HistoryConnection(':memory:');
   try {
     db.exec('PRAGMA foreign_keys=ON');
     db.exec(legacy);
@@ -200,18 +192,43 @@ async function migrationChecks(legacy: string) {
     db.close();
   }
 }
-self.onmessage = async ({ data }: MessageEvent<DatabaseFixtureRequest>) => {
-  try {
-    const result =
-      data.action === 'scale'
-        ? await scale(data.runs!)
-        : data.action === 'migrate'
-          ? await migrationChecks(data.legacy!)
-          : data.action === 'seed-history'
-            ? await seedHistory(data.seed)
-            : await repository.execute(data.message);
-    self.postMessage({ success: true, result });
-  } catch (e) {
-    self.postMessage({ success: false, error: String(e) });
+export async function runHistoryFixture(
+  repository: FixtureStore,
+  data: DatabaseFixtureRequest,
+): Promise<unknown> {
+  if (data.action === 'reset-migration') {
+    if (repository.connection.selectValue('SELECT count(*) FROM selection') !== 0)
+      throw new Error('Migration fixture requires an empty target');
+    repository.connection.exec('DELETE FROM history_migration');
+    return;
   }
-};
+  if (data.action === 'seed-native') {
+    const id = '11111111-2222-3333-4444-555555555555';
+    const entry = {
+      schemaVersion: 1,
+      id,
+      createdAt: '2026-11-04T00:00:00Z',
+      mode: 'Ask',
+      query: 'Frozen native prompt',
+      instructions: 'Frozen native instructions',
+      response: 'Shared native answer 你好',
+      model: 'native-model',
+      effort: 'low',
+      status: 'completed',
+      inputValues: { text: 'Shared native input' },
+      recipeSnapshot: { id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', name: 'Native action' },
+    };
+    repository.connection.exec({
+      sql: 'INSERT INTO ez_entry(id,created_at,data) VALUES (?,?,?)',
+      bind: [id, Date.now(), JSON.stringify(entry)],
+    });
+    return id;
+  }
+  return data.action === 'scale'
+    ? scale(repository, data.runs!)
+    : data.action === 'migrate'
+      ? migrationChecks(data.legacy!)
+      : data.action === 'seed-history'
+        ? seedHistory(repository, data.seed)
+        : repository.browser.execute(data.message);
+}

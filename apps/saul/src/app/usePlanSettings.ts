@@ -10,6 +10,7 @@ export function usePlanSettings(
   onChange: (value: NonNullable<UserSettings['chatgptPlan']>) => void,
   onBusyChange: (busy: boolean) => void,
   enabled: boolean,
+  credentialOwner?: UserSettings['sharedCredentials'],
 ) {
   const { minimum } = useMinimumMode();
   const [accounts, setAccounts] = useState<PlanAccount[]>([]);
@@ -36,10 +37,15 @@ export function usePlanSettings(
   useEffect(() => {
     if (!enabled) return;
     mounted.current = true;
+    let activeEffect = true;
+    let refreshRevision = 0;
+    setError('');
     const refresh = (selectSoleAccount = false) => {
+      const stamp = ++refreshRevision;
       void planCall({ action: 'accounts' })
         .then((r) => {
-          if (!mounted.current) return;
+          if (!activeEffect || stamp !== refreshRevision) return;
+          setError('');
           setHelperReady(true);
           setAccounts(r.accounts);
           const selected = current.current.value.accountId;
@@ -52,7 +58,7 @@ export function usePlanSettings(
             current.current.onChange({ ...current.current.value, accountId: account.id });
         })
         .catch((e) => {
-          if (mounted.current) {
+          if (activeEffect && stamp === refreshRevision) {
             setHelperReady(false);
             setError(e.message);
           }
@@ -70,14 +76,18 @@ export function usePlanSettings(
         refresh();
     };
     chrome.runtime.onMessage.addListener(changed);
+    const focus = () => refresh();
+    window.addEventListener('focus', focus);
     refresh(true);
     return () => {
+      activeEffect = false;
       mounted.current = false;
       // Login belongs to the background owner and survives a popup closing for OAuth.
       revision.current++;
       chrome.runtime.onMessage.removeListener(changed);
+      window.removeEventListener('focus', focus);
     };
-  }, [enabled]);
+  }, [enabled, credentialOwner]);
   useEffect(() => {
     if (minimum || !accounts.some((account) => account.planEnabled)) return;
     let current = true;

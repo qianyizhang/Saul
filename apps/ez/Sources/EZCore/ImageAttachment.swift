@@ -2,7 +2,7 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-/// Exact user-supplied bytes. Codable stores metadata only; History owns the sidecar.
+/// Exact user-supplied bytes. Codable stores metadata only; History owns the SQLite blob.
 public struct ImageAttachment: Codable, Equatable, Sendable {
     public var name: String
     public var mediaType: String

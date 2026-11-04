@@ -1,5 +1,6 @@
 import { workspaceSender } from '../contracts/reading';
 import type { UserSettings } from '../types';
+import { credentialCall } from '../native/credentials';
 import { generateSpeech, speechCredential, SPEECH_PORT, validateSpeechRequest } from './realtime';
 
 export function initSpeechBridge(currentSettings: () => Promise<UserSettings>) {
@@ -27,7 +28,24 @@ export function initSpeechBridge(currentSettings: () => Promise<UserSettings>) {
         validateSpeechRequest(request);
         const settings = await currentSettings();
         const key = speechCredential(settings, request);
-        return generateSpeech(request, key, signal);
+        return generateSpeech(
+          request,
+          key,
+          signal,
+          key === undefined
+            ? {
+                authorize: async () => {
+                  const result = await credentialCall(
+                    { action: 'api-realtime', model: request.model, voice: request.voice },
+                    signal,
+                  );
+                  if (typeof result.clientSecret !== 'string')
+                    throw new Error('Saul returned an invalid Realtime authorization.');
+                  return result.clientSecret;
+                },
+              }
+            : {},
+        );
       })()
         .then(
           (result) => {

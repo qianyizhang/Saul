@@ -31,7 +31,7 @@ import Foundation
         // Seed before AppModel init so tests never read personal UserDefaults.
         try ConfigurationStore(directory: directory).save(config)
         history = try HistoryStore(directory: directory)
-        model = AppModel(historyDirectory: directory, offline: true, attemptExecution: attemptExecution)
+        model = AppModel(directory: directory, offline: true, attemptExecution: attemptExecution)
         model.models = [option]
     }
     func snapshot() throws -> HistoryEntry {

@@ -186,7 +186,7 @@ import Foundation
             let entry = try action.prepare(values: ["text": "Exact input"], preset: preset, models: [])
             try expectEqual(entry.requestedServiceTier, "priority", "API Fast was silently dropped")
             try expectEqual(
-                ResponsesClient.requestBody(entry: entry)["service_tier"] as? String,
+                ResponsesRequest.body(entry: entry)["service_tier"] as? String,
                 "priority", "Explicit API tier did not reach transport")
             var config = Configuration(presets: [preset], actions: [action])
             config.providers[1].name = "My API"
@@ -201,42 +201,34 @@ import Foundation
             let action = config.actions.first { $0.capability == .draw }!
             let preset = config.presets.first { $0.id == action.presetID }!
             var entry = try action.prepare(values: ["context": "Tree"], preset: preset, models: [])
-            entry.imageFile = entry.id.uuidString.lowercased() + ".png"
             entry.imageData = fixturePNG
             entry.status = "completed"
             try store.append(entry)
-            let bytes = try Data(contentsOf: store.url)
+            let json = try historySQL(store.url, "SELECT data FROM ez_entry") ?? ""
             try expect(
-                !String(decoding: bytes, as: UTF8.self).contains(fixturePNG.base64EncodedString()),
-                "PNG bytes entered JSONL")
-            let reloaded = try store.load().entries[0]
+                !json.contains(fixturePNG.base64EncodedString()),
+                "PNG bytes entered the JSON payload")
+            let reloaded = try store.load()[0]
             try expectEqual(
                 try store.image(for: reloaded), fixturePNG, "History did not restore original PNG")
-            let file = directory.appendingPathComponent("images/" + entry.imageFile!)
             let permissions =
-                try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int
-            try expectEqual(permissions, 0o600, "PNG is not owner-only")
+                try FileManager.default.attributesOfItem(atPath: store.url.path)[.posixPermissions] as? Int
+            try expectEqual(permissions, 0o600, "History is not owner-only")
             try store.delete(id: entry.id)
-            try expect(!FileManager.default.fileExists(atPath: file.path), "Deleted entry left its PNG")
+            try expect(try store.image(for: reloaded) == nil, "Deleted entry left its image")
         },
-        CheckCase("action contract: image storage rejects symlinks and image reference traversal") {
+        CheckCase("action contract: history storage rejects database symlinks") {
             directory in
             let store = try HistoryStore(directory: directory)
-            let external = directory.appendingPathComponent("outside", isDirectory: true)
-            try FileManager.default.createDirectory(at: external, withIntermediateDirectories: true)
-            try FileManager.default.createSymbolicLink(
-                at: directory.appendingPathComponent("images"), withDestinationURL: external)
             var entry = HistoryEntry(
                 mode: .ask, query: "Tree", model: "image", effort: "", requestedServiceTier: nil)
-            entry.imageFile = entry.id.uuidString.lowercased() + ".png"
             entry.imageData = fixturePNG
-            try expectThrows(EZError.self) { try store.append(entry) }
-            try expect(
-                try FileManager.default.contentsOfDirectory(atPath: external.path).isEmpty,
-                "Image write followed a symlink")
-            entry.imageData = nil
-            entry.imageFile = "../outside.png"
-            try expectThrows(EZError.self) { _ = try store.image(for: entry) }
+            try store.append(entry)
+            let linked = directory.appendingPathComponent("linked")
+            try FileManager.default.createDirectory(at: linked, withIntermediateDirectories: true)
+            try FileManager.default.createSymbolicLink(
+                at: linked.appendingPathComponent("history.sqlite3"), withDestinationURL: store.url)
+            try expectThrows(EZError.self) { _ = try HistoryStore(directory: linked) }
         },
     ]
 }

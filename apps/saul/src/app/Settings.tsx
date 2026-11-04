@@ -90,7 +90,8 @@ export function Settings({
         });
     },
     setPlanBusy,
-    loaded,
+    loaded && settings.sharedCredentials !== 'disconnected',
+    settings.sharedCredentials,
   );
   const error = draft.error || providerTest.error;
   function update(patch: Partial<UserSettings>) {
@@ -149,6 +150,8 @@ export function Settings({
         plan={plan}
         disabled={locked}
         visible={section === 'connections'}
+        credentialLocked={dirty}
+        changeCredentialOwner={draft.setCredentialOwner}
       />
       <section hidden={section !== 'models'} className="settings-section" aria-label="Presets">
         <h2 className="view-title">Presets</h2>

@@ -1,44 +1,5 @@
 import Foundation
 
-/// Preserve the empty lines that delimit SSE events, including fragmented UTF-8.
-public struct SSELineDecoder {
-    private var buffer = Data()
-    public init() {}
-    public mutating func feed(_ byte: UInt8) throws -> String? {
-        if byte != 0x0A {
-            guard buffer.count < 2_000_000 else {
-                throw EZError("Response event exceeded the supported size.")
-            }
-            buffer.append(byte)
-            return nil
-        }
-        if buffer.last == 0x0D { buffer.removeLast() }
-        defer { buffer.removeAll(keepingCapacity: true) }
-        guard let line = String(data: buffer, encoding: .utf8) else {
-            throw EZError("Invalid UTF-8 in response stream.")
-        }
-        return line
-    }
-}
-
-public struct SSEParser {
-    private var dataLines: [String] = []
-    public init() {}
-    public mutating func feed(_ line: String) -> Data? {
-        if line.isEmpty {
-            guard !dataLines.isEmpty else { return nil }
-            defer { dataLines.removeAll() }
-            return Data(dataLines.joined(separator: "\n").utf8)
-        }
-        if line.hasPrefix("data:") {
-            var value = String(line.dropFirst(5))
-            if value.hasPrefix(" ") { value.removeFirst() }
-            dataLines.append(value)
-        }
-        return nil
-    }
-}
-
 /// Transient UI activity; no reasoning content is retained.
 public enum ResponseActivity: Equatable, Sendable {
     case waiting, searching, thinking, responding, finished
@@ -163,24 +124,8 @@ public struct ResponseAccumulator {
     }
 }
 
-@MainActor public final class ResponsesClient {
-    private let session: URLSession
-    public init(session: URLSession? = nil) {
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 60
-        config.timeoutIntervalForResource = 180
-        self.session = session ?? URLSession(configuration: config)
-    }
-    public func models(token: String) async throws -> [ModelOption] {
-        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/models")!)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        let result = try await OpenAIHTTP.json(request, session: session)
-        guard let models = result["models"] as? [[String: Any]] else {
-            throw EZError("OpenAI returned an unexpected account model catalog.")
-        }
-        return models.compactMap(ModelOption.init(catalog:))
-    }
-    public static func requestBody(entry: HistoryEntry) -> [String: Any] {
+public enum ResponsesRequest {
+    public static func body(entry: HistoryEntry) -> [String: Any] {
         var body: [String: Any] = [
             "model": entry.model,
             "input": [["role": "user", "content": entry.query]], "store": false, "stream": true,
@@ -196,59 +141,5 @@ public struct ResponseAccumulator {
             body["tool_choice"] = "required"
         }
         return body
-    }
-    public func stream(entry: HistoryEntry, token: String, onUpdate: (ResponseAccumulator) -> Void)
-        async throws
-        -> ResponseAccumulator
-    {
-        if entry.usesWebSearch && entry.providerSnapshot?.kind != .openAIAPI {
-            throw EZError("Web search requires the OpenAI API provider.")
-        }
-        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/responses")!)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-        request.httpBody = try JSONSerialization.data(withJSONObject: Self.requestBody(entry: entry))
-        let clock = ContinuousClock()
-        let start = clock.now
-        var result = ResponseAccumulator()
-        func elapsedSeconds() -> Double {
-            let duration = start.duration(to: clock.now).components
-            return Double(duration.seconds) + Double(duration.attoseconds) / 1e18
-        }
-        defer {
-            // Publish partial metrics even when transport, parsing, or cancellation fails.
-            if result.metrics.durationSeconds == nil { result.metrics.durationSeconds = elapsedSeconds() }
-            onUpdate(result)
-        }
-        let (bytes, response) = try await session.bytes(for: request)
-        guard let response = response as? HTTPURLResponse else { throw EZError("Invalid HTTP response.") }
-        guard (200..<300).contains(response.statusCode) else {
-            var data = Data()
-            for try await byte in bytes {
-                data.append(byte)
-                if data.count >= 32768 { break }
-            }
-            throw APIError.parse(data: data, response: response)
-        }
-        var lines = SSELineDecoder()
-        var parser = SSEParser()
-        for try await byte in bytes {
-            try Task.checkCancellation()
-            guard let line = try lines.feed(byte) else { continue }
-            guard let data = parser.feed(line), String(data: data, encoding: .utf8) != "[DONE]" else {
-                continue
-            }
-            do { try result.consume(data, elapsedSeconds: elapsedSeconds()) } catch let error as APIError {
-                throw APIError(
-                    status: response.statusCode, code: error.code, message: error.message,
-                    requestID: response.value(forHTTPHeaderField: "x-request-id"))
-            }
-            onUpdate(result)
-            if result.completed { break }
-        }
-        try result.requireCompleted(webSearchRequired: entry.usesWebSearch)
-        return result
     }
 }

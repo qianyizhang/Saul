@@ -31,29 +31,40 @@ public enum OIDC {
             let signature = decode(pieces[2]),
             let header = try JSONSerialization.jsonObject(with: headerData) as? [String: Any],
             let claims = try JSONSerialization.jsonObject(with: claimsData) as? [String: Any],
-            header["alg"] as? String == "RS256", let kid = header["kid"] as? String,
-            let jwk = jwks.first(where: { $0["kid"] as? String == kid && $0["kty"] as? String == "RSA" }),
-            let n = jwk["n"] as? String, let e = jwk["e"] as? String,
-            let modulus = decode(n), let exponent = decode(e)
+            let alg = header["alg"] as? String, ["RS256", "ES256"].contains(alg),
+            let kid = header["kid"] as? String,
+            let jwk = jwks.first(where: { $0["kid"] as? String == kid })
         else { throw EZError("Invalid or unsupported sign-in identity signature.") }
         if let use = jwk["use"] as? String, use != "sig" {
             throw EZError("Identity key cannot verify signatures.")
         }
-        if let alg = jwk["alg"] as? String, alg != "RS256" {
+        if let keyAlgorithm = jwk["alg"] as? String, keyAlgorithm != alg {
             throw EZError("Identity key algorithm mismatch.")
         }
-        let keyData = der(0x30, integer(modulus) + integer(exponent))
-        var keyError: Unmanaged<CFError>?
-        guard
-            let key = SecKeyCreateWithData(
-                keyData as CFData,
-                [kSecAttrKeyType: kSecAttrKeyTypeRSA, kSecAttrKeyClass: kSecAttrKeyClassPublic]
-                    as CFDictionary, &keyError),
-            SecKeyVerifySignature(
-                key, .rsaSignatureMessagePKCS1v15SHA256, Data((pieces[0] + "." + pieces[1]).utf8) as CFData,
-                signature as CFData, &keyError)
-        else {
-            throw EZError("Sign-in identity signature verification failed.")
+        let input = Data((pieces[0] + "." + pieces[1]).utf8)
+        if alg == "ES256" {
+            guard jwk["kty"] as? String == "EC", jwk["crv"] as? String == "P-256",
+                let x = (jwk["x"] as? String).flatMap(decode), x.count == 32,
+                let y = (jwk["y"] as? String).flatMap(decode), y.count == 32,
+                let key = try? P256.Signing.PublicKey(x963Representation: Data([4]) + x + y),
+                let signature = try? P256.Signing.ECDSASignature(rawRepresentation: signature),
+                key.isValidSignature(signature, for: input)
+            else { throw EZError("Sign-in identity signature verification failed.") }
+        } else {
+            guard jwk["kty"] as? String == "RSA",
+                let n = (jwk["n"] as? String).flatMap(decode),
+                let e = (jwk["e"] as? String).flatMap(decode)
+            else { throw EZError("Invalid RSA identity key.") }
+            let keyData = der(0x30, integer(n) + integer(e))
+            var keyError: Unmanaged<CFError>?
+            guard
+                let key = SecKeyCreateWithData(
+                    keyData as CFData,
+                    [kSecAttrKeyType: kSecAttrKeyTypeRSA, kSecAttrKeyClass: kSecAttrKeyClassPublic]
+                        as CFDictionary, &keyError),
+                SecKeyVerifySignature(
+                    key, .rsaSignatureMessagePKCS1v15SHA256, input as CFData, signature as CFData, &keyError)
+            else { throw EZError("Sign-in identity signature verification failed.") }
         }
         let audiences = claims["aud"] as? [String] ?? (claims["aud"] as? String).map { [$0] } ?? []
         guard claims["iss"] as? String == "https://auth.openai.com", audiences.contains(clientID),
@@ -67,6 +78,9 @@ public enum OIDC {
         }
         if let nbf = claims["nbf"] as? Double, nbf > now.timeIntervalSince1970 + 30 {
             throw EZError("Sign-in identity is not yet valid.")
+        }
+        if let iat = claims["iat"] as? Double, iat > now.timeIntervalSince1970 + 30 {
+            throw EZError("Sign-in identity issue time is in the future.")
         }
         if let nonce, claims["nonce"] as? String != nonce {
             throw EZError("Sign-in identity nonce mismatch.")

@@ -24,8 +24,7 @@ release artifact can be built and installed independently.
 | Tab board host connection                  | [Host adapter](../apps/saul/native/ui/host-adapter.ts) using the pinned MCP Apps SDK        | Independent SDK host and the delivered document under CSP                                       |
 
 Views express user intent and render state. These owners hold the ordering,
-durability and lifecycle rules. Shared fixtures compare behavior without adding a
-shared runtime or requiring identical storage schemas. App-local details remain
+durability and lifecycle rules. Shared fixtures compare behavior; history uses the shared SQLite schema. App-local details remain
 in the [Saul](../apps/saul/docs/architecture.md) and
 [EZ](../apps/ez/docs/architecture.md) architecture documents.
 
@@ -37,13 +36,13 @@ maintenance scripts had escaped implementation checking behind handwritten decla
 files. Types now live with their implementation. External JSON still needs runtime
 validation; a cast does not establish trust. EZ remains Swift.
 
-| Compiler scope    | Runtime and output                                                       |
-| ----------------- | ------------------------------------------------------------------------ |
-| Extension         | WXT strict browser program; retains indexed-access checks                |
-| Board             | Strict DOM-only program; esbuild bundles the pinned MCP Apps SDK         |
-| Native helpers    | Strict NodeNext `.mts`; TypeScript emits `.mjs` and declarations         |
-| JXA               | Strict macOS script context; emits `window-names.jxa` with global `run`  |
-| Tooling and tests | Strict Node or mixed test programs; Node 24 runs erasable tooling source |
+| Compiler scope    | Runtime and output                                                                  |
+| ----------------- | ----------------------------------------------------------------------------------- |
+| Extension         | WXT strict browser program; retains indexed-access checks                           |
+| Board             | Strict DOM-only program; esbuild bundles the pinned MCP Apps SDK                    |
+| Native helpers    | Strict ESM `.mts`; TypeScript emits `.mjs` and declarations; history SQL is bundled |
+| JXA               | Strict macOS script context; emits `window-names.jxa` with global `run`             |
+| Tooling and tests | Strict Node or mixed test programs; Node 24 runs erasable tooling source            |
 
 `pnpm --dir apps/saul build:native` produces the complete disposable
 `apps/saul/.build/native/` tree: emitted modules, JXA, HTML, CSS and bundled board.
@@ -62,16 +61,10 @@ The cost is an explicit build before helper execution, already owned by package
 commands. There are no source compatibility shims or independently maintained `.d.mts`
 contracts. Build outputs are never hand-edited or committed.
 
-Local migration verification (2026-10-23): strict compiler scopes, lint, formatting
-and documentation links passed; 26 shared and 241 Saul tests passed. Native checks
-passed 62 core and 41 state cases. The isolated browser suite passed 77 cases with
-five existing opt-in skips; both updated setup-guidance checks passed on the final
-extension build. Personal installations were not changed or reconnected.
-
 ## Installation
 
 Extension, ChatGPT helper, tab helper, action helper and native app are explicit setup selections.
-The extension works with an OpenAI-compatible provider without a native app or helper.
+The extension requires the ChatGPT/history helper for shared persistence, including API-provider reading. It does not require EZ.
 ChatGPT plan features and built-in summaries need the ChatGPT helper. Custom
 Summarize modules use a third optional action helper and retain their selected
 provider's credential owner. External tab access
@@ -96,9 +89,12 @@ See [setup](setup.md) for migration and recovery commands.
 
 ## Optional shared capabilities
 
+This section governs optional account and execution replacements. Shared history
+below is the selected persistence owner and has no app-local fallback.
+
 Decision: allow an explicit opt-in replacement for duplicated behavior, including
-a possible shared desktop account module. This is a design contract only; no
-shared daemon, credential migration or runtime interface is introduced here.
+the macOS [Saul credential owner](../contracts/credentials.md). That concrete
+replacement is implemented; other replacements remain subject to this contract.
 
 A replacement must define a small versioned interface covering discovery,
 capabilities, explicit connection selection, operation/cancellation, and typed
@@ -108,7 +104,8 @@ separate; model/tier availability and refresh ownership are explicit.
 Before implementing a concrete replacement:
 
 1. Demonstrate two real consumers and a maintenance benefit over bespoke adapters.
-2. Keep standalone installation and the app-local implementation available.
+2. Keep independent installation. Retain standalone browser and custom-endpoint
+   routes for installations that do not opt in.
 3. Require explicit per-app opt-in; show which module owns the connection.
 4. Serialize credential refresh through one owner. Never have two implementations
    independently rotate the same refresh token. An account label is not identity.
@@ -121,8 +118,8 @@ Before implementing a concrete replacement:
 8. Test both adapters against the common contract and their own lifecycle failures.
 
 A desktop replacement cannot become a mandatory dependency for browser-only or
-mobile installation. Concrete transport, implementation language and credential
-migration are future decisions, informed by the provider's supported authorization flow.
+mobile installation. The macOS credential owner uses signed Swift, native pipes
+and Chrome Native Messaging. It starts on demand and has no daemon.
 
 ## Data ownership
 
@@ -130,9 +127,43 @@ ChatGPT model presets share one local JSON document through native Swift and
 Node adapters; [the shared contract](../contracts/README.md#providers-and-presets)
 defines migration, revisions and account-independent presets. App-specific
 preferences and recipes use `apps.saul` and `apps.ez` scopes in that document.
-Credentials, history and runtime state retain their existing owners. There is no
+Runtime state remains app-owned. In opted-in macOS installations, official OpenAI
+credentials use the [Saul owner](../contracts/credentials.md); other browser
+connections keep their existing local owner. Saved history uses one shared SQLite database. There is no
 cross-app recipe import, sync queue, remote library or
 Git sync. Multi-device sync remains separate work.
+
+## Shared history
+
+Decision — 2026-11-04: Saul and EZ use
+`~/Library/Application Support/Little Clarity/history.sqlite3`.
+The [schema](../contracts/history.sql) has one source, packaged as a native resource
+and copied into Saul's installed helper. Swift accesses SQLite directly; Saul
+uses its existing native-messaging helper. EZ has no Node runtime dependency.
+SQLite transactions serialize both adapters, with owner-only files, a busy timeout,
+foreign keys and secure deletion. There is no second history writer, sync queue,
+daemon, local fallback or compatibility shim.
+
+Browser relational records preserve page anchors, submissions, complete attempt
+history, bookmarks and saved summaries. Native records retain frozen JSON metadata
+and input/output image blobs in the same database. Both History views project
+reading passages and EZ lookups. Cross-app entries are readable, searchable,
+copyable and deletable; browser-specific execution stays in Saul. Saved summaries
+retain their existing dedicated Saul surfaces. Drafts, credentials and active
+execution stay app-owned. Browser recovery is scoped to the originating profile.
+History reloads on activation/focus rather than a recurring background timer.
+Bridge loss permits at most three connection attempts for safe history operations,
+using the same operation identity for submission/claim/save acknowledgement. These
+retries never repeat inference. Uncertain delete, clear and bookmark operations are
+not retried automatically. Operation IDs live with the existing run/submission
+rows; there is no separate receipt log containing deleted history.
+
+Migration imports the old browser OPFS database and EZ JSONL/images once. It
+validates records and attachments and commits a durable migration marker before
+removing the old files. Reopening after interrupted cleanup never reimports or
+resurrects deleted records. Conflicting, malformed, missing-attachment or unknown
+newer-schema data stops migration and preserves the source. Migration is the
+only reader of the retired formats; they are never used as runtime fallbacks.
 
 ## Naming reminder
 
@@ -142,18 +173,3 @@ and fixture formats use domain names, not branding. Installed identities such as
 `local.ez.app`, `ez:`, native host names, extension IDs and Keychain service IDs
 remain stable until a separately tested identity migration is designed. A display
 rename must not accidentally relocate data or create a new account registration.
-
-## Architecture slice verification — 2026-10-23
-
-`pnpm check:shared`, `pnpm check:saul` and `pnpm check:ez` passed: 26 shared tests,
-235 Saul tests, and 62 core plus 41 native state checks. The full isolated browser
-suite passed 77 cases; five existing live, headed or disabled-provider cases were
-skipped. The extension and signed EZ release bundle built successfully. Native
-preview inspection covered Unsaved retention, navigation and save-only recovery;
-browser checks covered competing Settings drafts and the board under CSP.
-
-These are local source/build checks. Personal installations were not replaced,
-live provider requests were not made, and the installed Codex host was not
-reconnected. Helper migration and retained-generation recovery were tested in
-disposable installations; the first personal upgrade still uses the documented
-maintenance window in [setup](setup.md#one-time-helper-migration).

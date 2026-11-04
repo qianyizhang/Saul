@@ -1,6 +1,5 @@
 import Darwin
 import Foundation
-import Security
 
 public struct Credentials: Codable, Sendable {
     public var accessToken: String
@@ -31,48 +30,7 @@ public protocol CredentialStore {
     func write(_ state: AuthState) throws
 }
 
-public struct KeychainStore: CredentialStore, Sendable {
-    private let service = "local.ez.app.chatgpt"
-    public init() {}
-    private var query: [String: Any] {
-        [
-            kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
-            kSecAttrAccount as String: "accounts",
-        ]
-    }
-    public func read() async throws -> AuthState {
-        // Keychain access can wait for macOS authorization. Keep it off the UI actor.
-        try await Task.detached(priority: .userInitiated) { try self.readStoredState() }.value
-    }
-    private func readStoredState() throws -> AuthState {
-        var query = query
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-        var result: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status == errSecItemNotFound { return AuthState() }
-        guard status == errSecSuccess, let data = result as? Data else { throw keychainError(status) }
-        return try JSONDecoder().decode(AuthState.self, from: data)
-    }
-    public func write(_ state: AuthState) throws {
-        let data = try JSONEncoder().encode(state)
-        let status = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
-        if status == errSecItemNotFound {
-            var add = query
-            add[kSecValueData as String] = data
-            add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-            let added = SecItemAdd(add as CFDictionary, nil)
-            guard added == errSecSuccess else { throw keychainError(added) }
-        } else if status != errSecSuccess {
-            throw keychainError(status)
-        }
-    }
-    private func keychainError(_ status: OSStatus) -> EZError {
-        EZError("Keychain: \(SecCopyErrorMessageString(status, nil) as String? ?? String(status))")
-    }
-}
-
-/// One runtime owns rotating refresh tokens; a second EZ process fails before reading credentials.
+/// One EZ process owns native draft/runtime coordination. The Saul owner separately serializes credentials.
 public final class SessionLock {
     private var fd: Int32 = -1
     public init(directory: URL) throws {

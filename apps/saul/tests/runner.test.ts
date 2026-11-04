@@ -314,3 +314,31 @@ it('exposes live provider activity without retaining reasoning or regressing aft
   await vi.waitFor(() => expect(current().status).toBe('completed'));
   expect(current().activity).toBeUndefined();
 });
+
+it('retries failed startup recovery without automatically sending a provider request', async () => {
+  let available = false,
+    recoveries = 0,
+    submissions = 0;
+  const db: DbCall = async (message) => {
+    if (message.type === 'DB_RECOVER') {
+      recoveries++;
+      if (!available) throw new Error('History helper unavailable');
+      return undefined as never;
+    }
+    if (message.type === 'DB_SUBMIT') {
+      submissions++;
+      return { passageId: 'saved' } as never;
+    }
+    throw new Error('Unexpected operation');
+  };
+  const runner = new ReadingRunner(db, () => {});
+  await expect(runner.ready).rejects.toThrow('History helper unavailable');
+  available = true;
+  await expect(runner.submit(submission('reopen'), 'token')).resolves.toEqual({
+    passageId: 'saved',
+    reused: true,
+  });
+  expect(recoveries).toBe(2);
+  expect(submissions).toBe(1);
+  expect(mocks.remote).not.toHaveBeenCalled();
+});

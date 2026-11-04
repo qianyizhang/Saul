@@ -104,11 +104,11 @@ concise-output contract with deterministic provider replies.
 
 ## Test layers
 
-| Layer          | Scope                                                                                                           |
-| -------------- | --------------------------------------------------------------------------------------------------------------- |
-| Vitest         | Contracts, parser/provider streams, settings, runner, storage, tab operations, native framing/CLI/MCP/installer |
-| Playwright     | Real extension contexts, SQLite-WASM/OPFS, page interaction, restart/loss, migrations, tabs, settings           |
-| Manual sandbox | Layout, reading flow, keyboard behavior, and interaction quality in a disposable browser                        |
+| Layer          | Scope                                                                                                                                   |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Vitest         | Contracts, parser/provider streams, settings, runner, storage, tab operations, native framing/CLI/MCP/installer                         |
+| Playwright     | Real extension contexts, shared native SQLite via isolated helper transport, page interaction, restart/loss, migrations, tabs, settings |
+| Manual sandbox | Layout, reading flow, keyboard behavior, and interaction quality in a disposable browser                                                |
 
 The browser harness is in `tests/e2e/support.ts` and `tests/e2e/fixtures.ts`. A sandbox snapshots the extension once and reuses the same profile across relaunches so restart tests prove persistence. Test-only database, marker and browser-tool fixtures are explicitly enabled and bundled only into disposable snapshots.
 
@@ -151,7 +151,7 @@ pnpm exec playwright show-trace ../../.artifacts/saul/e2e/latest/results/<case>/
 
 | Symptom                                             | Check first                                                                                                                                                                  |
 | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| OPFS unavailable or memory fallback                 | SQLite must run in `src/storage/db-worker.ts`; persistence errors must reach callers.                                                                                        |
+| Shared history unavailable                          | Check `native/history.mts` and the ChatGPT/history helper; persistence errors must reach callers without a separate local store.                                             |
 | Receiving end missing on cold start                 | `src/storage/client.ts` must lock the offscreen existence check and creation together.                                                                                       |
 | Background save gets no response                    | Popup/content route through background; background targets offscreen directly.                                                                                               |
 | Extension context invalidated after reload          | Page UI must check WXT context validity and dispose listeners/timers without calling a dead port.                                                                            |
@@ -188,6 +188,10 @@ long model/preset wrapping, keyboard disclosure activation and overflow at 360,
 440 and 1000 px in light/dark appearances. Inspected screenshots also covered
 settings, recipes, summary reading, tab boards and error states. All browser data
 came from disposable local fixtures; the installed extension was not reloaded.
+
+The harness uses the production native SQLite owner in a disposable directory and
+a test-only loopback transport. It installs no personal native host and reads no
+personal history. Native framing and installed payloads have separate checks.
 
 ## Evidence limits
 

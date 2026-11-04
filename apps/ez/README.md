@@ -249,8 +249,7 @@ Numbered and last-item navigation follow [Chrome’s shortcuts](https://support.
 
 ## Local data
 
-- Queries/answers: `~/Library/Application Support/EZ/history.jsonl`, owner-only.
-- Generated PNGs: `~/Library/Application Support/EZ/images/`, owner-only.
+- Shared history and input/output images: `~/Library/Application Support/Little Clarity/history.sqlite3`, owner-only. Saul and EZ browse the same saved records. The old JSONL/images are removed after verified migration.
 - OpenAI API key: macOS Keychain (`local.ez.app.openai`), separate from plan sign-ins.
 - Credentials, issued client IDs, and host ID: macOS Keychain (`local.ez.app.chatgpt`).
 - Shared model presets: owner-only `~/Library/Application Support/Little Clarity/settings.json` → `modelPresets`.

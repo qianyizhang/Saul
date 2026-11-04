@@ -46,7 +46,7 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
     try ConfigurationStore(directory: directory).save(config)
     let store = try HistoryStore(directory: directory)
     let execution = AttemptExecution(generate: generate, append: { try store.append($0) })
-    let model = AppModel(historyDirectory: directory, offline: true, attemptExecution: execution)
+    let model = AppModel(directory: directory, offline: true, attemptExecution: execution)
     model.apiConnected = true
     model.chooseAction(config.actions.first { $0.capability == .draw }!.id)
     model.query = "Trees share nutrients. 中文\n"
@@ -58,7 +58,7 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
         CheckCase("action: provider key failures preserve credential and editor draft without generation") {
             directory in
             let keys = IllustrationKeyFixture()
-            let model = AppModel(historyDirectory: directory, offline: true, apiKeyStore: keys)
+            let model = AppModel(directory: directory, offline: true, apiKeyStore: keys)
             defer { model.shutdown() }
             await model.restoreAPIKey()
             try expect(model.apiConnected, "Existing API key did not restore")
@@ -109,7 +109,7 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
             try expectEqual(entry.providerSnapshot?.key, "openai-api", "Provider key not frozen")
             try expectEqual(entry.status, "completed", "Image result not saved")
             try expectEqual(model.query, "Changed draft", "Completion cleared draft")
-            let saved = try HistoryStore(directory: directory).load().entries[0]
+            let saved = try HistoryStore(directory: directory).load()[0]
             try expectEqual(
                 try HistoryStore(directory: directory).image(for: saved), fixturePNG, "Saved PNG missing")
             model.newQuery()
@@ -126,8 +126,10 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
                     return .image(fixturePNG)
                 })
             defer { model.shutdown() }
-            let obstruction = directory.appendingPathComponent("images")
-            try Data("blocked".utf8).write(to: obstruction)
+            _ = try historySQL(
+                directory.appendingPathComponent("history.sqlite3"),
+                "CREATE TRIGGER fail_save BEFORE INSERT ON ez_entry WHEN json_extract(NEW.data,'$.status') != 'pending' BEGIN SELECT RAISE(ABORT,'Synthetic final save failure'); END"
+            )
             let (done, observer) = completionSignal(model)
             defer { observer.cancel() }
             model.send()
@@ -138,11 +140,11 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
             try expect(model.saveError(for: id) != nil, "Image persistence error hidden")
             model.newQuery()
             model.selection = id
-            try FileManager.default.removeItem(at: obstruction)
+            _ = try historySQL(directory.appendingPathComponent("history.sqlite3"), "DROP TRIGGER fail_save")
             model.saveAgain(id)
             try expectEqual(model.selectedEntry?.status, "completed", "Save-only recovery failed")
             try expectEqual(calls, 1, "Save-only recovery generated another image")
-            let saved = try HistoryStore(directory: directory).load().entries[0]
+            let saved = try HistoryStore(directory: directory).load()[0]
             try expectEqual(
                 try HistoryStore(directory: directory).image(for: saved), fixturePNG,
                 "Recovery did not save original PNG")
@@ -181,11 +183,9 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
             try await done.wait()
             try expectEqual(
                 model.selectedEntry?.inputValues?["context"], "Second", "Replacement image did not finish")
-            try expect(
-                !FileManager.default.fileExists(
-                    atPath: directory.appendingPathComponent(
-                        "images/" + oldID.uuidString.lowercased() + ".png"
-                    ).path), "Cancelled image was saved late")
+            let store = try HistoryStore(directory: directory)
+            let old = try store.load().first { $0.id == oldID }!
+            try expect(try store.image(for: old) == nil, "Cancelled image was saved late")
         },
         CheckCase("action: incompatible presets providers and missing API keys block before execution") {
             directory in

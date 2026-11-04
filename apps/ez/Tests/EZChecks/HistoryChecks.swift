@@ -5,141 +5,156 @@ import Foundation
 
 @MainActor func historyChecks() -> [CheckCase] {
     [
-        CheckCase("history: history snapshots, Unicode, permissions") { directory in
-            let store = try HistoryStore(directory: directory.appendingPathComponent("history"))
+        CheckCase("history: shared snapshots, Unicode and permissions") { directory in
+            let first = try HistoryStore(directory: directory)
             var entry = HistoryEntry(
                 mode: .dictionary, query: "你好\n\"serendipity\"", model: "m", effort: "low",
                 requestedServiceTier: "priority")
-            try store.append(entry)
+            entry.createdAt = Date(timeIntervalSince1970: 42)
+            try first.append(entry)
             entry.response = "A happy discovery.\n偶然的好运"
             entry.status = "completed"
             entry.metrics = ResponseMetrics(
                 inputTokens: 20, reasoningTokens: 10, outputTokens: 30, timeToFirstTokenSeconds: 0.4,
                 durationSeconds: 2)
-            try store.append(entry)
-            let result = try store.load()
-            try expect(result.entries.count == 1 && result.damagedLines == 0, "Latest snapshot should win")
-            try expect(
-                result.entries[0].query == entry.query && result.entries[0].response == entry.response,
-                "Text must round trip")
-            try expectEqual(result.entries[0].metrics, entry.metrics, "metrics mismatch")
-            let attributes = try FileManager.default.attributesOfItem(atPath: store.url.path)
-            try expect(
-                (attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600, "History must be owner-only")
+            try first.append(entry)
+            let second = try HistoryStore(directory: directory)
+            let result = try second.load()
+            try expectEqual(result, [entry], "Both connections must see the same exact snapshot")
+            let attributes = try FileManager.default.attributesOfItem(atPath: first.url.path)
+            try expectEqual(
+                (attributes[.posixPermissions] as? NSNumber)?.intValue, 0o600, "History must be owner-only")
+            try second.delete(id: entry.id)
+            try expect(try first.load().isEmpty, "Deletion must be shared")
         },
-        CheckCase("history: legacy snapshots without metrics remain readable") { directory in
-            let store = try HistoryStore(directory: directory.appendingPathComponent("legacy"))
-            let entry = HistoryEntry(
-                mode: .ask, query: "legacy", model: "m", effort: "", requestedServiceTier: nil)
+        CheckCase("history: migrates original snapshots once and removes the old files") { directory in
+            let legacy = directory.appendingPathComponent("old")
+            let shared = directory.appendingPathComponent("shared")
+            try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)
+            var entry = HistoryEntry(
+                mode: .ask, query: "legacy 你好", model: "m", effort: "", requestedServiceTier: nil)
+            entry.createdAt = Date(timeIntervalSince1970: 42)
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            var original = try encoder.encode(entry)
+            entry.response = "Final snapshot"
+            entry.status = "completed"
+            original.append(0x0A)
+            original.append(try encoder.encode(entry))
+            let source = legacy.appendingPathComponent("history.jsonl")
+            try original.write(to: source)
+            let store = try HistoryStore(directory: shared, migrating: legacy)
+            try expectEqual(try store.load(), [entry], "Latest original snapshot lost")
+            try expect(!FileManager.default.fileExists(atPath: source.path), "Original JSONL was not retired")
+            try expect(
+                !FileManager.default.fileExists(atPath: legacy.appendingPathComponent("history.lock").path),
+                "Original lock was not retired")
+            try store.delete(id: entry.id)
+            try original.write(to: source)
+            let reopened = try HistoryStore(directory: shared, migrating: legacy)
+            try expect(try reopened.load().isEmpty, "A cleanup retry resurrected a deleted record")
+        },
+        CheckCase("history: migrates image attachments into SQLite and removes sidecars") { directory in
+            let legacy = directory.appendingPathComponent("old")
+            let images = legacy.appendingPathComponent("images")
+            try FileManager.default.createDirectory(at: images, withIntermediateDirectories: true)
+            var entry = HistoryEntry(
+                mode: .ask, query: "Image context", model: "image", effort: "", requestedServiceTier: nil)
+            entry.createdAt = Date(timeIntervalSince1970: 42)
+            entry.status = "completed"
+            entry.inputImage = try ImageAttachment(data: fixturePNG, name: "source.png")
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
             guard var json = try JSONSerialization.jsonObject(with: encoder.encode(entry)) as? [String: Any]
-            else { throw CheckFailure("Expected history object") }
-            json.removeValue(forKey: "metrics")
-            try JSONSerialization.data(withJSONObject: json).write(to: store.url)
-            let result = try store.load()
-            try expectEqual(result.damagedLines, 0, "damagedLines mismatch")
+            else { throw CheckFailure("Expected original JSON") }
+            json["imageFile"] = entry.id.uuidString.lowercased() + ".png"
+            try JSONSerialization.data(withJSONObject: json).write(
+                to: legacy.appendingPathComponent("history.jsonl"))
+            try fixturePNG.write(to: images.appendingPathComponent(entry.id.uuidString.lowercased() + ".png"))
+            try fixturePNG.write(
+                to: images.appendingPathComponent(entry.id.uuidString.lowercased() + "-input"))
+            let store = try HistoryStore(
+                directory: directory.appendingPathComponent("shared"), migrating: legacy)
+            let saved = try store.load()[0]
+            try expect(saved.storedImage, "Migrated output image is not visible")
+            try expectEqual(try store.image(for: saved), fixturePNG, "Output image changed")
+            try expectEqual(try store.inputImage(for: saved)?.data, fixturePNG, "Input image changed")
             try expect(
-                result.entries.first?.metrics == nil && result.entries.first?.query == "legacy",
-                "Legacy history lost")
+                try FileManager.default.contentsOfDirectory(atPath: legacy.path).isEmpty,
+                "Migration left sidecars or backups")
         },
-        CheckCase("history: damaged tail and interrupted query recovery") { directory in
-            let store = try HistoryStore(directory: directory.appendingPathComponent("damaged"))
-            try Data("{\"unfinished\":".utf8).write(to: store.url)
+        CheckCase("history: damaged original blocks migration without dropping records") { directory in
+            let legacy = directory.appendingPathComponent("old")
+            try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)
+            let source = legacy.appendingPathComponent("history.jsonl")
+            let bytes = Data("{\"unfinished\":".utf8)
+            try bytes.write(to: source)
+            try expectThrows(EZError.self) { _ = try HistoryStore(directory: directory, migrating: legacy) }
+            try expectEqual(try Data(contentsOf: source), bytes, "Failed migration changed original bytes")
+            try expect(
+                try HistoryStore(directory: directory).load().isEmpty,
+                "Failed migration committed records")
+        },
+        CheckCase("history: abandoned pending snapshots remain interrupted") { directory in
+            let store = try HistoryStore(directory: directory)
             try store.append(
                 HistoryEntry(mode: .ask, query: "hello", model: "m", effort: "", requestedServiceTier: nil))
-            let result = try store.load()
-            try expect(
-                result.damagedLines == 1 && result.entries.count == 1,
-                "Damaged bytes must not poison future entries")
-            try expect(
-                result.entries[0].status == "interrupted", "Abandoned pending request must show interrupted")
-            try expect(
-                String(contentsOf: store.url, encoding: .utf8).hasPrefix("{\"unfinished\":\n"),
-                "Damaged bytes must be preserved")
+            try expectEqual(
+                try store.load().first?.status, "interrupted",
+                "Abandoned request should be interrupted")
         },
-        CheckCase("history: history failure surfaces and failed answers export") { directory in
-            let store = try HistoryStore(directory: directory.appendingPathComponent("blocked"))
-            try FileManager.default.createDirectory(at: store.url, withIntermediateDirectories: true)
-            var entry = HistoryEntry(
-                mode: .spelling, query: "teh", model: "m", effort: "low", requestedServiceTier: nil)
-            entry.status = "failed"
-            entry.error = "Usage limit"
-            entry.response = "partial"
-            try expectThrows(EZError.self) { try store.append(entry) }
-            try expect(
-                entry.markdown.contains("Usage limit") && entry.markdown.contains("partial"),
-                "Export should include failure and partial text")
+        CheckCase("history: invalid paths fail without creating another store") { directory in
+            let path = directory.appendingPathComponent("history.sqlite3")
+            try FileManager.default.createDirectory(at: path, withIntermediateDirectories: true)
+            try expectThrows(EZError.self) { _ = try HistoryStore(directory: directory) }
         },
-        CheckCase("history: lookup deletion removes all snapshots and preserves unrelated bytes") {
-            directory in
-            let store = try HistoryStore(directory: directory.appendingPathComponent("deletion"))
-            var removed = HistoryEntry(
-                mode: .dictionary, query: "delete me 你好", model: "m", effort: "low", requestedServiceTier: nil
-            )
-            let kept = HistoryEntry(
-                mode: .ask, query: "keep me", model: "m", effort: "", requestedServiceTier: nil)
-            try store.append(kept)
-            let keptBytes = try Data(contentsOf: store.url)
-            try store.append(removed)
-            removed.response = "private answer"
-            removed.status = "completed"
-            try store.append(removed)
-            // Even an invalid snapshot with an identifiable UUID must be removed.
-            let damagedTarget = Data("{\"id\":\"\(removed.id)\",\"invalid\":true}\n".utf8)
-            let tail = Data("\n{broken tail".utf8)
-            var original = try Data(contentsOf: store.url)
-            original.append(damagedTarget)
-            original.append(tail)
-            try original.write(to: store.url)
-            try store.delete(id: removed.id)
-            var expected = keptBytes
-            expected.append(tail)
-            try expect(
-                try Data(contentsOf: store.url) == expected,
-                "Unrelated bytes changed or deleted snapshots remain")
-            let loaded = try HistoryStore(directory: store.url.deletingLastPathComponent()).load()
-            try expect(
-                loaded.entries.map(\.id) == [kept.id] && loaded.damagedLines == 1,
-                "Deletion did not survive reload")
-            try store.delete(id: UUID())
-            try expect(try Data(contentsOf: store.url) == expected, "Unknown identity changed history")
-            let attributes = try FileManager.default.attributesOfItem(atPath: store.url.path)
-            try expect(
-                (attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600,
-                "Replacement is not owner-only")
-            try store.append(removed)
-            try expect(try store.load().entries.count == 2, "Append after replacement failed")
-            try store.delete(id: removed.id)
-            try store.delete(id: kept.id)
-            try expect(
-                try Data(contentsOf: store.url) == tail + Data([0x0A]),
-                "Deleting last lookup discarded unidentified damaged bytes")
-            let files = try FileManager.default.contentsOfDirectory(
-                atPath: store.url.deletingLastPathComponent().path)
-            try expect(
-                !files.contains { $0.hasPrefix(".history-") }, "Deletion left a temporary history copy")
-        },
-        CheckCase("history: lookup deletion handles empty stores and storage failures") { directory in
-            let store = try HistoryStore(directory: directory.appendingPathComponent("delete-empty"))
+        CheckCase("history: lookup deletion is durable and accepts new entries") { directory in
+            let store = try HistoryStore(directory: directory)
             let entry = HistoryEntry(
                 mode: .ask, query: "only entry", model: "m", effort: "", requestedServiceTier: nil)
             try store.delete(id: entry.id)
             try store.append(entry)
             try store.delete(id: entry.id)
-            try expect(
-                try Data(contentsOf: store.url).isEmpty && store.load().entries.isEmpty,
-                "Last deletion was not empty")
+            try expect(try store.load().isEmpty, "Last deletion was not empty")
             try store.append(entry)
-            try expect(try store.load().entries.count == 1, "Empty replacement cannot accept appends")
-            try FileManager.default.removeItem(at: store.url)
-            try FileManager.default.createDirectory(at: store.url, withIntermediateDirectories: true)
-            try expectThrows(NSError.self, matching: isFileError) { try store.delete(id: entry.id) }
-            try expect(
-                FileManager.default.fileExists(atPath: store.url.path),
-                "Failed deletion removed original storage")
+            try expectEqual(try store.load().count, 1, "Append after deletion failed")
         },
-        CheckCase("history: one process owns rotating credentials") { directory in
+        CheckCase("history: reads and deletes Saul records without changing frozen text") { directory in
+            let store = try HistoryStore(directory: directory)
+            _ = try historySQL(
+                store.url,
+                "INSERT INTO page(id,url,title,first_seen_at,last_seen_at) VALUES ('p','https://example.test/page','Source',1,1)"
+            )
+            _ = try historySQL(
+                store.url,
+                "INSERT INTO selection(id,page_id,text,created_at) VALUES ('selection','p','你好 gradient',1)")
+            _ = try historySQL(
+                store.url,
+                #"INSERT INTO llm_run(id,selection_id,widget_id,provider,model,prompt_version,prompt_raw,context_json,response_raw,status,created_at,input_json) VALUES ('run','selection','explain','openai-compatible','m','2','Original instructions','{}','A <term note="Slope">gradient</term>.','completed',42,'{"systemPrompt":"Frozen instructions","userPrompt":"Frozen query"}')"#
+            )
+            let entry = try store.load()[0]
+            try expectEqual(entry.sourceID, "selection", "Browser source identity lost")
+            try expectEqual(entry.displayQuery, "你好 gradient", "Browser selection lost")
+            try expectEqual(entry.query, "Frozen query", "Saved prompt reconstructed")
+            try expectEqual(entry.instructions, "Frozen instructions", "Saved instructions reconstructed")
+            try expect(
+                entry.response.contains("<term") && entry.citedResponse == "A gradient.",
+                "Raw response or reading projection changed")
+            try expectEqual(
+                try HistoryStore(directory: directory).load()[0].id, entry.id,
+                "Browser identity changes on reload")
+            _ = try historySQL(
+                store.url,
+                "INSERT INTO llm_run(id,selection_id,widget_id,provider,model,prompt_version,prompt_raw,context_json,status,created_at) VALUES ('active','selection','explain','openai-compatible','m','2','','{}','running',43)"
+            )
+            try expectThrows(EZError.self) { try store.delete(id: entry.id) }
+            _ = try historySQL(store.url, "UPDATE llm_run SET status='interrupted' WHERE id='active'")
+            try store.delete(id: entry.id)
+            try expectEqual(
+                try historySQL(store.url, "SELECT count(*) FROM llm_run"), "0",
+                "Cross-app deletion left browser runs")
+        },
+        CheckCase("history: one EZ process owns native runtime coordination") { directory in
             let lock = try SessionLock(directory: directory)
             try expectThrows(EZError.self) { _ = try SessionLock(directory: directory) }
             withExtendedLifetime(lock) {}

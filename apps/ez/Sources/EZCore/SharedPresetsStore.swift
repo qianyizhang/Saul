@@ -22,7 +22,7 @@ public struct SharedPresets: Codable {
     }
 }
 
-/// One shared Provider/Preset library; credentials, action inputs and history remain app-owned.
+/// Shared Provider/Preset configuration. Credentials and execution remain app-owned; history has its own store.
 public final class SharedPresetsStore {
     public static var defaultURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]

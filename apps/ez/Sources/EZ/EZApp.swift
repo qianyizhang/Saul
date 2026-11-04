@@ -106,6 +106,7 @@ private struct MainWindowView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) {
                 _ in
+                model.refreshHistory()
                 if !model.showSettings { model.refreshConfiguration() }
             }
     }

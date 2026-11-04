@@ -9,7 +9,7 @@ Saul is a Chrome MV3 extension with four runtime contexts. State crosses context
 | Content script     | `entrypoints/content.tsx`       | Capture selections, render the shadow-DOM reading UI, restore page markers                                    |
 | Service worker     | `entrypoints/background.ts`     | Validate callers, route reading/workspace requests, manage settings, badges, notifications, and native access |
 | Offscreen document | `entrypoints/offscreen/main.ts` | Own durable reading jobs and Chrome on-device generation                                                      |
-| Database worker    | `src/storage/db-worker.ts`      | Serialize SQLite-WASM operations against OPFS                                                                 |
+| Shared history     | `native/history.mts`            | SQLite through the native helper; OPFS is read only during one-time migration                                 |
 
 The popup and full workspace reuse the application views under `src/app/`. The full workspace owns global history, export, deletion, settings, and tab organization.
 
@@ -45,9 +45,9 @@ provider event followed by a successful save.
 
 ## Persistence and anchors
 
-- SQLite runs only in the dedicated worker. Production must not fall back silently to an in-memory database.
+- SQLite runs in the native helper at the [shared history path](../../../docs/architecture.md#shared-history). The offscreen runner uses validated native operations; helper loss fails visibly without local or in-memory fallback.
 - Schema changes are forward-only, versioned, and transactional. Unknown future schema versions are rejected; downgrades are unsupported.
-- API keys remain in trusted extension storage or runner memory; ChatGPT OAuth credentials remain in the native helper. They are excluded from page messages, stored run inputs, and exports.
+- Custom/standalone API keys remain in trusted extension storage or runner memory. In shared macOS mode, official OpenAI keys and ChatGPT tokens remain exclusively in the signed Saul native owner. They are excluded from page messages, stored run inputs, and exports.
 - A saved passage uses URL identity, quote context, and captured text offsets to restore one exact occurrence. Legacy metadata may remain stored but does not authorize a match.
 - Native CSS Custom Highlights mark exact, unambiguous occurrences without wrapping or replacing page text.
 - Missing or ambiguous passages remain accessible from the page list and library with location unavailable.
@@ -296,3 +296,14 @@ Text and audio remain in memory only. Preset or voice changes clear old audio.
 Realtime is generative; preview text is an instruction to read verbatim, not an
 exact-synthesis guarantee. See the [current speech flow](chatgpt-plan.md#speech-preview)
 and the historical OAuth endpoint probe below it.
+
+## Shared macOS credentials
+
+Providers can explicitly connect to the [Saul credential owner](../../../contracts/credentials.md)
+using `com.saul.credentials`. Long-lived keys and tokens stay in Keychain; the
+browser receives account/model summaries and results. Realtime receives only a
+short-lived client secret. A missing owner blocks without fallback. Per-install
+`sharedCredentials` and `credentialOwner` references never enter shared presets or
+portable configuration. Disconnect app preserves the shared connection; Sign out
+and Remove key confirm their both-app scope. Custom endpoints and standalone
+browser installations retain their existing route.

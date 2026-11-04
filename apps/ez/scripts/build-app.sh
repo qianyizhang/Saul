@@ -24,6 +24,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 mkdir -p "$staged_app/Contents/MacOS" "$staged_app/Contents/Resources"
 cp "$bin_dir/EZ" "$staged_app/Contents/MacOS/EZ"
+cp -R "$bin_dir/EZ_EZCore.bundle" "$staged_app/Contents/Resources/"
 cp Resources/Info.plist "$staged_app/Contents/Info.plist"
 CLANG_MODULE_CACHE_PATH="$PWD/.build/module-cache" swift scripts/icon.swift "$PWD/.build/EZ.iconset"
 iconutil -c icns .build/EZ.iconset -o "$staged_app/Contents/Resources/EZ.icns"

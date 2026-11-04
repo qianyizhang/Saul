@@ -15,7 +15,7 @@ Playwright startup probe; the runbook explains its retained errors.
 
 ## Choose the smallest useful check
 
-- Storage or messaging: use the built extension and real database worker; mocked SQLite alone does not establish persistence.
+- Storage or messaging: use the built extension and production native SQLite owner through the isolated helper transport; mocked SQLite alone does not establish persistence.
 - Reading UI: use the local model fixture and page interactions; direct database seeding covers storage contracts only.
 - Layout or usability: run `pnpm test:user`; its smoke mode verifies setup, not hands-on quality.
 - Focused rerun: reuse a build only when it matches the intended source. Each sandbox snapshots the bundle once.
@@ -24,7 +24,7 @@ Playwright startup probe; the runbook explains its retained errors.
 
 - Keep one disposable profile and extension snapshot across relaunches when proving durability.
 - Route popup/content through background; background calls offscreen directly.
-- Keep offscreen creation under one lock and SQLite in its dedicated OPFS worker; never add a silent in-memory fallback.
+- Keep offscreen creation under one lock. Shared history uses the native helper; OPFS is read only during one-time migration. Never add a local or in-memory fallback.
 - Exercise selection -> Explain -> saved history for reading changes.
 - Keep credentials out of fixtures. Do not require native-host installation or personal Chrome data.
 

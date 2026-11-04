@@ -7,6 +7,7 @@ pnpm-debug.log*
 
 # Dependencies and Build Outputs
 node_modules
+.pnpm-store/
 .output
 .wxt
 dist

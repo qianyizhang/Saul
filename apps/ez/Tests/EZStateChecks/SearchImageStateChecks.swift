@@ -5,6 +5,31 @@ import Foundation
 
 @MainActor func searchImageStateChecks() -> [CheckCase] {
     [
+        CheckCase("image action: saved images reload from shared history rather than app configuration") {
+            directory in
+            let local = directory.appendingPathComponent("local")
+            let shared = directory.appendingPathComponent("shared")
+            var config = Configuration.starters(model: "fixture", effort: "", fast: false)
+            config.addIllustration()
+            try ConfigurationStore(directory: local).save(config)
+            let action = config.actions.first { $0.capability == .draw }!
+            let preset = config.presets.first { $0.id == action.presetID }!
+            var entry = try action.prepare(values: ["context": "Tree"], preset: preset, models: [])
+            entry.imageData = fixturePNG
+            entry.status = "completed"
+            let store = try HistoryStore(directory: shared)
+            try store.append(entry)
+            let model = AppModel(directory: local, historyDirectory: shared, offline: true)
+            defer { model.shutdown() }
+            model.selection = entry.id
+            await model.imageLoadTask?.value
+            try expectEqual(
+                model.selectedImageData, fixturePNG, "Image reader used the configuration directory")
+            try expect(
+                !FileManager.default.fileExists(atPath: local.appendingPathComponent("history.sqlite3").path),
+                "Image reader created a second history store")
+        },
+
         CheckCase(
             "image action: freeze source before send, restore through reuse, preserve invalid replacement"
         ) { directory in
@@ -12,7 +37,7 @@ import Foundation
             let execution = AttemptExecution(
                 generate: { entry, _ in
                     try expectEqual(entry.inputImage?.data, fixturePNG, "Run did not freeze source bytes")
-                    let pending = try store.load().entries.first { $0.id == entry.id }!
+                    let pending = try store.load().first { $0.id == entry.id }!
                     try expectEqual(
                         try store.inputImage(for: pending)?.data, fixturePNG,
                         "Input was not saved before send")
@@ -39,8 +64,8 @@ import Foundation
             try expectEqual(model.inputImage?.data, fixturePNG, "Reuse lost sketch")
             try expectEqual(model.query, "Make a Monday meme", "Reuse lost instructions")
             try expect(model.canSend && model.selection == nil, "Reuse sent or could not prepare a draft")
-            try FileManager.default.removeItem(
-                at: directory.appendingPathComponent("images/" + saved.id.uuidString.lowercased() + "-input"))
+            _ = try historySQL(
+                directory.appendingPathComponent("history.sqlite3"), "UPDATE ez_entry SET input_image=NULL")
             model.newQuery()
             model.reuse(saved)
             try expect(
@@ -59,7 +84,10 @@ import Foundation
             let model = try newMemeModel(directory, execution: execution)
             defer { model.shutdown() }
             model.attachImage(data: fixturePNG, name: "source.png")
-            try Data("blocked".utf8).write(to: directory.appendingPathComponent("images"))
+            _ = try historySQL(
+                store.url,
+                "CREATE TRIGGER fail_save BEFORE INSERT ON ez_entry BEGIN SELECT RAISE(ABORT,'Synthetic initial save failure'); END"
+            )
             model.send()
             try expectEqual(calls, 0, "Source-save failure sent a request")
             try expect(!model.busy && model.error?.contains("not sent") == true, "Source-save failure hidden")
@@ -97,7 +125,7 @@ import Foundation
             model.newQuery()
             failTerminal = false
             model.saveAgain(unsaved.id)
-            let saved = try store.load().entries[0]
+            let saved = try store.load()[0]
             try expectEqual(saved.status, "completed", "Save recovery failed")
             try expectEqual(try store.inputImage(for: saved)?.data, fixturePNG, "Recovered source lost")
             try expectEqual(try store.image(for: saved), fixturePNG, "Recovered result lost")
@@ -118,7 +146,7 @@ import Foundation
             var config = Configuration.starters(model: "fixture", effort: "low", fast: false)
             config.addSearchAndMeme()
             try ConfigurationStore(directory: directory).save(config)
-            let model = AppModel(historyDirectory: directory, offline: true, attemptExecution: execution)
+            let model = AppModel(directory: directory, offline: true, attemptExecution: execution)
             defer { model.shutdown() }
             model.apiConnected = true
             model.chooseAction(config.actions.first { $0.webSearch }!.id)
@@ -144,7 +172,7 @@ import Foundation
     var config = Configuration.starters(model: "fixture", effort: "low", fast: false)
     config.addSearchAndMeme()
     try ConfigurationStore(directory: directory).save(config)
-    let model = AppModel(historyDirectory: directory, offline: true, attemptExecution: execution)
+    let model = AppModel(directory: directory, offline: true, attemptExecution: execution)
     model.apiConnected = true
     model.chooseAction(config.actions.first { $0.imageInput != nil }!.id)
     model.query = "Make a Monday meme"

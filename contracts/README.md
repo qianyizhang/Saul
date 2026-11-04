@@ -1,7 +1,7 @@
 # Shared behavior and interfaces
 
 This is the shared semantic contract, implemented in TypeScript and Swift.
-Model presets use one local store. App-specific configuration uses scoped sections; credentials and history remain app-owned.
+Model presets use one local store. App-specific configuration uses scoped sections; active execution remains app-owned; opted-in macOS credentials use the [Saul owner](credentials.md); saved history shares one SQLite store.
 
 ## Action preparation
 
@@ -39,7 +39,7 @@ outcome, and accepts explicit cancellation. Both adapters must:
 - Keep dismissing a view distinct from stopping work.
 - Keep draft restoration distinct from execution.
 
-Concurrency, source capture, anchors and storage engines are app-specific.
+Concurrency, source capture and anchors are app-specific. History shares SQLite.
 
 [Attempt fixtures](fixtures/attempts.json) run through both production execution
 owners: Saul's ReadingRunner and EZ's AttemptExecution via AppModel actions. They
@@ -67,7 +67,7 @@ Preset saves preserve all other sections. Each preset has a UUID `id`,
 `speechOptions` (`voice`).
 Absent typed fields decode as `gpt-plan` / Write. Image settings accept square,
 landscape or portrait PNG sizes and low/medium/high quality. Both clients preserve
-these fields even when the capability is unavailable locally. No credentials cross apps. Saves replace the file atomically; stale editor revisions require Reload and
+these fields even when the capability is unavailable locally. Credentials stay behind the selected owner. Saves replace the file atomically; stale editor revisions require Reload and
 preserve the draft. This beta uses last-save-wins if both apps save simultaneously;
 there is no sync service or cross-process transaction manager.
 
@@ -84,7 +84,7 @@ suffixes; preset IDs and action references are preserved or remapped locally.
 After migration the shared store owns these presets. Deleted presets stay deleted;
 actions referencing them need another explicit choice. Presets bind a stable provider key and capability, not a plan account.
 `gpt-plan` uses the explicitly selected local plan account when preparing a run;
-`openai-api` resolves the local API credential. Freeze that route for execution
+`openai-api` resolves its selected credential owner. Freeze that route for execution
 and retry. Provider display-name edits do not change keys or preset bindings. Legacy Saul
 preset account fields are ignored; selecting a preset cannot switch accounts.
 Existing Saul-only API/on-device presets remain Saul-scoped. Typed shared API
@@ -92,7 +92,7 @@ presets remain in the library; an unavailable local provider blocks execution.
 Saul preserves Draw records but blocks text execution and image-settings edits.
 EZ currently owns Draw execution. Both clients preserve and edit Speak model/voice
 choices; Saul alone runs its short-text preview through OpenAI Realtime. Speak
-presets cannot run as Write actions in either app. API credentials remain app-owned;
+presets cannot run as Write actions in either app. Custom API credentials remain browser-owned; shared official OpenAI credentials use the Saul owner;
 no audio, speech text or ephemeral Realtime token enters shared settings or history.
 Upgrade both clients/helper before saving typed
 presets; older strict readers cannot consume the additional fields.
@@ -110,7 +110,7 @@ Credentials stay outside prompts, saved results, shared fixtures and exports.
 Shared account labels and disclosure rules live in [DESIGN.md](../DESIGN.md).
 An optional shared implementation must satisfy the
 [replacement contract](../docs/architecture.md#optional-shared-capabilities) before
-an app can opt into it. No account sharing or credential migration ships here.
+an app can opt into it. The [macOS Saul credential owner](credentials.md) implements this replacement for official OpenAI connections.
 
 ## Presentation
 
@@ -130,8 +130,8 @@ Provider names and presets share the same stale-save revision. As with model pre
 cross-process writes remain last-save-wins; this is not a transaction service.
 
 Saul stores preferences, connection metadata, actions and non-plan model presets
-in its settings scope. API keys and the selected local ChatGPT account remain in
-trusted Chrome storage. Connection keys are restored only for the same connection
+in its settings scope. Custom API keys and local credential bindings remain in trusted Chrome storage;
+shared official credentials remain in the signed Saul owner. Connection keys are restored only for the same connection
 and endpoint. Shared Provider and Preset definitions come only from `modelPresets`.
 Saul’s `providerConnections` maps shared keys to local API profile IDs without
 copying credentials. It adopts only the already-selected official OpenAI endpoint
@@ -148,8 +148,7 @@ changing configuration owners.
 Further sharing candidates are literal action preparation and presentation
 preferences. Action input contracts differ between apps; browser Call actions
 and native template actions retain their runtime contracts. They remain app-scoped. Minimum Mode, EZ shortcuts,
-window placement and board layout still use app-local stores. Credentials,
-history and active execution are intentionally outside the unified config.
+window placement and board layout still use app-local stores. Credentials, history and active execution are outside the unified config. Saved history uses the [shared SQLite store](../docs/architecture.md#shared-history).
 
 ### Example configurations
 

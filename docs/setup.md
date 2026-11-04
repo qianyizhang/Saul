@@ -4,16 +4,16 @@ The root coordinator installs only selected components. It is a local command,
 not a published npm package. Run `node scripts/setup.mts --help` for all options.
 EZ can also be built/installed directly with Make and Apple tools without Node.
 
-| Selection   | Requires                                                     | Does not require                     |
-| ----------- | ------------------------------------------------------------ | ------------------------------------ |
-| `extension` | Chrome; Node 24 and pinned pnpm to build                     | EZ, helpers, Codex                   |
-| `chatgpt`   | Installed extension ID, Node 24, native host registration    | EZ, Codex                            |
-| `tabs`      | Installed extension ID, Node 24, native host registration    | EZ, Codex unless registering MCP     |
-| `actions`   | Installed extension ID, Node 24, native host registration    | EZ, tabs helper, Codex               |
-| `ez`        | macOS, Apple tools, pinned signing identity for installation | Saul, helper, Node at runtime, Codex |
+| Selection   | Requires                                                                     | Does not require                  |
+| ----------- | ---------------------------------------------------------------------------- | --------------------------------- |
+| `extension` | Chrome, ChatGPT/history helper; Node 24 and pinned pnpm to build             | EZ, tabs/actions helpers, Codex   |
+| `chatgpt`   | Installed extension ID, Node 24, native host registration                    | EZ, Codex                         |
+| `tabs`      | Installed extension ID, Node 24, native host registration                    | EZ, Codex unless registering MCP  |
+| `actions`   | Installed extension ID, Node 24, native host registration                    | EZ, tabs helper, Codex            |
+| `ez`        | macOS, Apple tools, pinned Apple signing; installs the Saul credential owner | Chrome UI, Node at runtime, Codex |
 
-Chrome on-device inference remains disabled. Extension-only reading can use an
-OpenAI-compatible provider. ChatGPT sign-in/inference and built-in tab summaries
+Chrome on-device inference remains disabled. Reading with an OpenAI-compatible
+provider also requires `chatgpt` for shared history; it does not require sign-in. ChatGPT sign-in/inference and built-in tab summaries
 require `chatgpt`; external tab tools and native Chrome window names require `tabs`.
 Custom Summarize actions require the optional `actions` helper and an existing
 saved model preset. A ChatGPT preset still requires `chatgpt`. The action host
@@ -120,10 +120,12 @@ background cleanup deletes files still in use. Unselected staging directories ar
 not active runtimes.
 
 EZ's ignored `apps/ez/.local/signing-identity` is not supplied by Git. On this Mac,
-the migration retains the existing fingerprint without exporting any private key.
+the credential migration explicitly replaces the legacy self-signed pin with the
+Apple Development fingerprint, retaining the old pin without exporting any private key.
 Other machines must perform their own explicit signing setup. Keep bundle ID,
-Keychain service, URL scheme and `~/Applications/EZ.app` stable. Installed history
-and credentials remain untouched.
+URL scheme and `~/Applications/EZ.app` stable. The separate
+[credential migration](../contracts/credentials.md) retires only verified old records. On first launch, history migrates to the shared
+SQLite store and verified old JSONL/images are removed.
 
 The coordinator refuses to overwrite an existing `saul-tabs` Codex registration.
 Omit `--codex` to preserve it. The browser application's advanced
@@ -144,10 +146,17 @@ only a file/registration check, with an explicit generation-integrity limitation
 read-only verification does not migrate them. Verification never claims browser connectivity, live authentication, inference or running-version
 acceptance. Use disposable profiles for development browser tests.
 
-Remove the extension through Chrome only when its profile-local data is no longer
-needed. Native helpers are separately removable using the documented
+After verified migration, removing the extension or its profile does not remove
+the shared history. Delete shared records through either app when needed. Native helpers are separately removable using the documented
 [helper lifecycle](../apps/saul/docs/native-messaging.md) and
 [ChatGPT helper guide](../apps/saul/docs/chatgpt-plan.md).
 Removing EZ.app does not remove its history or Keychain credentials; handle those
 through the app's documented account/history actions first. No coordinator uninstall
 command silently erases user records, accounts, shared runtimes or registrations.
+
+## Shared Saul credentials on macOS
+
+Follow [Apple signing and owner installation](../apps/ez/docs/releasing.md#local-signing-and-installation),
+then Connect to Saul in Chrome’s Providers settings. This optional installation
+uses the existing extension ID. It does not require the other app UI to run.
+EZ uses the same owner. Custom browser endpoints retain separate keys.

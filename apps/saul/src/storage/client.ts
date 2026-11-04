@@ -14,7 +14,7 @@ export async function ensureOffscreenDocument(): Promise<void> {
     await chrome.offscreen.createDocument({
       url: 'offscreen.html',
       reasons: [chrome.offscreen.Reason.WORKERS],
-      justification: 'Persistent reading jobs and SQLite worker',
+      justification: 'Persistent reading jobs and source/migration workers',
     });
   })();
   try {

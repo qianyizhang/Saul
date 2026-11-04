@@ -31,7 +31,7 @@ import Foundation
                 f.model.entries.isEmpty && f.model.selection == nil,
                 "Successful deletion left lookup selected")
             try expect(f.model.inputValues == draft, "Deletion discarded draft")
-            try expect(try f.history.load().entries.isEmpty, "Deletion did not persist")
+            try expect(try f.history.load().isEmpty, "Deletion did not persist")
         },
         stateCase("failed deletion keeps lookup selection and draft and displays error") { f in
             let entry = try f.selectLookup()

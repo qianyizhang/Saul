@@ -105,7 +105,7 @@ import Network
                     guard self.waiter != nil else { throw EZError("No sign-in pending.") }
                     self.respond(
                         connection, status: "200 OK",
-                        body: "Sign-in received. Return to EZ to finish connecting.")
+                        body: "Sign-in received. Return to Saul to finish connecting.")
                     self.timer?.cancel()
                     self.timer = nil
                     self.listener?.cancel()
@@ -116,7 +116,7 @@ import Network
                 } catch {
                     self.respond(
                         connection, status: "400 Bad Request",
-                        body: "Invalid sign-in callback. Return to EZ and try again.")
+                        body: "Invalid sign-in callback. Return to Saul and try again.")
                 }
             }
         }

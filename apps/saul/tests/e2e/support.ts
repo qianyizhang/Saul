@@ -1,3 +1,6 @@
+import { SharedHistory } from '../../.build/native/history.mjs';
+import { validateHistoryRequest } from '../../native/history-protocol.mts';
+import { randomUUID } from 'node:crypto';
 import { chromium, type BrowserContext } from '@playwright/test';
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -179,6 +182,7 @@ export interface SandboxOptions {
   headless?: boolean;
   artifactsDir?: string;
   databaseFixtures?: boolean;
+  legacyHistoryFixture?: boolean;
   browserToolsFixtures?: boolean;
   chromeAiFixtures?: boolean;
   handleProcessSignals?: boolean;
@@ -188,74 +192,127 @@ export async function createSandbox(options: SandboxOptions = {}) {
   const root = await mkdtemp(path.join(tmpdir(), 'saul-browser-'));
   const extension = path.join(root, 'extension');
   const profile = path.join(root, 'profile');
+  const history = new SharedHistory(path.join(root, 'history'));
+  const token = randomUUID();
+  const historyServer = createServer(async (request, response) => {
+    response.setHeader('Access-Control-Allow-Origin', '*');
+    try {
+      if (request.method !== 'POST' || !request.url?.startsWith('/' + token)) {
+        response.writeHead(404).end();
+        return;
+      }
+      let body = '';
+      for await (const chunk of request) {
+        body += chunk;
+        if (body.length > 128 * 1024 * 1024) throw new Error('Oversized fixture request');
+      }
+      const data: unknown = JSON.parse(body);
+      let result: unknown;
+      if (request.url === '/' + token + '/fixture' && options.databaseFixtures)
+        result = await (
+          await import('../history-fixtures.ts')
+        ).runHistoryFixture(history, data as import('./database-harness').DatabaseFixtureRequest);
+      else if (request.url === '/' + token) {
+        validateHistoryRequest(data);
+        result = await history.run(data);
+      } else throw new Error('Unavailable fixture route');
+      response.end(JSON.stringify({ success: true, result: result ?? null }));
+    } catch (error) {
+      response.end(
+        JSON.stringify({
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }
+  });
+  await new Promise<void>((resolve) => historyServer.listen(0, '127.0.0.1', resolve));
+  const historyEndpoint = `http://127.0.0.1:${(historyServer.address() as AddressInfo).port}/${token}`;
   // A fixed bundle path inside this sandbox preserves extension identity across
   // relaunches and prevents later builds in a shared checkout changing the test.
   try {
     await cp(extensionBuild, extension, { recursive: true });
-    if (options.databaseFixtures || options.browserToolsFixtures || options.chromeAiFixtures) {
-      const require = createRequire(import.meta.resolve('wxt'));
-      const { build } = await import(require.resolve('vite'));
-      if (options.databaseFixtures)
-        await writeFile(
-          path.join(extension, 'database-fixture.html'),
-          '<!doctype html><title>Saul database fixture</title>',
-        );
-      await build({
-        configFile: false,
-        publicDir: false,
-        logLevel: 'error',
-        build: {
-          lib: {
-            entry: {
-              ...(options.chromeAiFixtures
-                ? {
-                    'chrome-ai-fixture': fileURLToPath(
-                      new URL('./chrome-ai-fixture.ts', import.meta.url),
-                    ),
-                  }
-                : {}),
-              ...(options.browserToolsFixtures
-                ? {
-                    'browser-tools-fixture': fileURLToPath(
-                      new URL('./browser-tools-fixture.ts', import.meta.url),
-                    ),
-                  }
-                : {}),
-              ...(options.databaseFixtures
-                ? {
-                    'database-fixture': fileURLToPath(
-                      new URL('./database-fixture.ts', import.meta.url),
-                    ),
-                    'marker-fixture': fileURLToPath(
-                      new URL('./marker-fixture.ts', import.meta.url),
-                    ),
-                  }
-                : {}),
-            },
-            formats: ['es'],
-            fileName: (_format: string, name: string) => name + '.js',
-          },
-          outDir: extension,
-          emptyOutDir: false,
-          minify: false,
-        },
-      });
-      if (options.chromeAiFixtures) {
-        for (const page of ['popup.html', 'offscreen.html']) {
-          const file = path.join(extension, page);
-          const html = await readFile(file, 'utf8');
-          await writeFile(
-            file,
-            html.replace(
-              '<head>',
-              '<head><script type="module" src="/chrome-ai-fixture.js"></script>',
+    if (options.legacyHistoryFixture)
+      await writeFile(
+        path.join(extension, 'history-migration-fixture.html'),
+        '<!doctype html><title>Legacy history fixture</title>',
+      );
+    const require = createRequire(import.meta.resolve('wxt'));
+    const { build } = await import(require.resolve('vite'));
+    if (options.databaseFixtures)
+      await writeFile(
+        path.join(extension, 'database-fixture.html'),
+        '<!doctype html><title>Saul database fixture</title>',
+      );
+    await build({
+      configFile: false,
+      define: { __SAUL_HISTORY_ENDPOINT__: JSON.stringify(historyEndpoint) },
+      publicDir: false,
+      logLevel: 'error',
+      build: {
+        lib: {
+          entry: {
+            'history-transport-fixture': fileURLToPath(
+              new URL('./history-transport-fixture.ts', import.meta.url),
             ),
-          );
-        }
+            ...(options.legacyHistoryFixture
+              ? {
+                  'history-migration-fixture': fileURLToPath(
+                    new URL('./history-migration-fixture.ts', import.meta.url),
+                  ),
+                }
+              : {}),
+            ...(options.chromeAiFixtures
+              ? {
+                  'chrome-ai-fixture': fileURLToPath(
+                    new URL('./chrome-ai-fixture.ts', import.meta.url),
+                  ),
+                }
+              : {}),
+            ...(options.browserToolsFixtures
+              ? {
+                  'browser-tools-fixture': fileURLToPath(
+                    new URL('./browser-tools-fixture.ts', import.meta.url),
+                  ),
+                }
+              : {}),
+            ...(options.databaseFixtures
+              ? {
+                  'marker-fixture': fileURLToPath(new URL('./marker-fixture.ts', import.meta.url)),
+                }
+              : {}),
+          },
+          formats: ['es'],
+          fileName: (_format: string, name: string) => name + '.js',
+        },
+        outDir: extension,
+        emptyOutDir: false,
+        minify: false,
+      },
+    });
+    if (options.chromeAiFixtures) {
+      for (const page of ['popup.html', 'offscreen.html']) {
+        const file = path.join(extension, page);
+        const html = await readFile(file, 'utf8');
+        await writeFile(
+          file,
+          html.replace(
+            '<head>',
+            '<head><script type="module" src="/chrome-ai-fixture.js"></script>',
+          ),
+        );
       }
     }
+    const backgroundFile = path.join(extension, 'background.js');
+    await writeFile(
+      backgroundFile,
+      "importScripts('./history-transport-fixture.js');\n" +
+        (await readFile(backgroundFile, 'utf8')),
+    );
     if (options.artifactsDir) await mkdir(options.artifactsDir, { recursive: true });
   } catch (error) {
+    await new Promise<void>((resolve) => historyServer.close(() => resolve()));
+    history.close();
     await rm(root, { recursive: true, force: true });
     throw error;
   }
@@ -283,6 +340,7 @@ export async function createSandbox(options: SandboxOptions = {}) {
   return {
     profile,
     diagnosticsRoot: path.join(root, 'diagnostics'),
+    historyDirectory: path.join(root, 'history'),
     async launch() {
       await closeBrowser();
       context = await chromium.launchPersistentContext(profile, {
@@ -327,6 +385,8 @@ export async function createSandbox(options: SandboxOptions = {}) {
         }
         await closeBrowser();
       } finally {
+        await new Promise<void>((resolve) => historyServer.close(() => resolve()));
+        history.close();
         await rm(root, { recursive: true, force: true });
         if (options.artifactsDir) {
           if (failed)

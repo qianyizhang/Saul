@@ -11,6 +11,6 @@ for file in Sources/EZ/*.swift; do
     case "$file" in */EZApp.swift) ;; *) sources+=("$file");; esac
 done
 for script in scripts/*-preview.swift; do
-    xcrun swiftc -typecheck -parse-as-library "${flags[@]}" -I "$bin_dir/Modules" \
+    xcrun swiftc -typecheck -parse-as-library "${flags[@]}" -I "$bin_dir/Modules" -I Sources/CSQLite -lsqlite3 \
         "$script" "${sources[@]}"
 done

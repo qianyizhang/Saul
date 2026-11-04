@@ -1,4 +1,4 @@
-import type { Database } from '@sqlite.org/sqlite-wasm';
+import type { SqlDatabase } from '../storage/sql';
 import type {
   DigestBatch,
   DigestDbOperations,
@@ -10,9 +10,9 @@ type Request = {
   [K in keyof DigestDbOperations]: { type: K; payload: DigestDbOperations[K]['payload'] };
 }[keyof DigestDbOperations];
 export const DIGEST_SCHEMA = `
-CREATE TABLE digest_batch (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, data TEXT NOT NULL);
+CREATE TABLE digest_batch (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, data TEXT NOT NULL, owner TEXT NOT NULL DEFAULT '');
 CREATE TABLE digest_item (batch_id TEXT NOT NULL REFERENCES digest_batch(id) ON DELETE CASCADE, position INTEGER NOT NULL, data TEXT NOT NULL, source TEXT, PRIMARY KEY(batch_id,position));`;
-export function digestStore(db: Database, request: Request): unknown {
+export function digestStore(db: SqlDatabase, request: Request, owner = ''): unknown {
   const get = (id: string): DigestBatch => {
     const row = db.selectObject('SELECT data FROM digest_batch WHERE id=?', [id]);
     if (!row) throw new Error('This digest no longer exists.');
@@ -50,8 +50,8 @@ export function digestStore(db: Database, request: Request): unknown {
       db.transaction(() => {
         if (db.selectValue('SELECT id FROM digest_batch WHERE id=?', [meta.id])) return;
         db.exec({
-          sql: 'INSERT INTO digest_batch VALUES (?,?,?)',
-          bind: [meta.id, meta.createdAt, JSON.stringify(meta)],
+          sql: 'INSERT INTO digest_batch(id,created_at,data,owner) VALUES (?,?,?,?)',
+          bind: [meta.id, meta.createdAt, JSON.stringify(meta), owner],
         });
         for (const item of items)
           db.exec({
@@ -101,7 +101,10 @@ export function digestStore(db: Database, request: Request): unknown {
       return;
     case 'DB_DIGEST_RECOVER':
       db.transaction(() => {
-        for (const row of db.selectObjects('SELECT batch_id,position,data FROM digest_item')) {
+        for (const row of db.selectObjects(
+          "SELECT i.batch_id,i.position,i.data FROM digest_item i JOIN digest_batch b ON b.id=i.batch_id WHERE b.owner=? OR b.owner=''",
+          [owner],
+        )) {
           const item = JSON.parse(String(row.data)) as DigestItem;
           if (!['queued', 'capturing', 'running'].includes(item.status)) continue;
           item.status = 'interrupted';

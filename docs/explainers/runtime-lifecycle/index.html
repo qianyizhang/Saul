@@ -569,8 +569,8 @@
         <p class="eyebrow">Saul / EZ · Runtime guide</p>
         <h1>Where Saul runs</h1>
         <p class="intro">
-          Chrome holds the jobs. Local helpers handle ChatGPT and external tab access. Click a part
-          to see when it starts and stops.
+          Chrome holds the jobs. Local helpers handle ChatGPT, shared history and external tab
+          access. Click a part to see when it starts and stops.
         </p>
       </header>
       <div class="terms">
@@ -595,7 +595,7 @@
             <div class="nest">
               <button class="node" type="button" popovertarget="offscreen">
                 <strong>Hidden offscreen document</strong
-                ><small>Holds both runners and the database worker</small>
+                ><small>Holds both runners and the history adapter</small>
               </button>
               <button class="node" type="button" popovertarget="reading">
                 <strong>ReadingRunner</strong><small>Passage explanations</small>
@@ -604,25 +604,25 @@
                 <strong>DigestRunner</strong><small>Page and PDF summaries</small>
               </button>
               <button class="node" type="button" popovertarget="database">
-                <strong>Database worker → SQLite</strong
-                ><small>Saves history in Chrome’s private storage</small>
+                <strong>History adapter → native SQLite</strong
+                ><small>Uses the same saved history as EZ</small>
               </button>
             </div>
           </div>
           <div class="stack">
             <div class="zone">
               <h3>Local Node programs</h3>
-              <small>Two current helpers; one proposed action helper.</small>
+              <small>Tab, history/configuration and optional action helpers.</small>
               <button class="node" type="button" popovertarget="plan">
                 <strong>ChatGPT plan helper</strong
-                ><small><code>com.saul.chatgpt</code> · accounts and generation</small>
+                ><small><code>com.saul.chatgpt</code> · accounts, generation and history</small>
               </button>
               <button class="node" type="button" popovertarget="tabs">
                 <strong>Tab helper</strong
                 ><small><code>com.saul.tabs</code> · external control of Chrome tabs</small>
               </button>
               <div class="future-zone">
-                <p class="eyebrow">Proposed · not implemented</p>
+                <p class="eyebrow">Optional action helper</p>
                 <button class="node" type="button" popovertarget="action-host">
                   <strong>Action helper → your module</strong>
                   <small>Third Node helper · loads your JS/TS action</small>
@@ -644,7 +644,7 @@
               <h3>Separate Swift app</h3>
               <button class="node" type="button" popovertarget="ez">
                 <strong>EZ → AttemptExecution</strong
-                ><small>Own accounts, requests and history</small>
+                ><small>Own request lifecycle; shared credentials and history</small>
               </button>
             </div>
             <div>
@@ -757,9 +757,10 @@
             <title id="seq-title">New summary: reader to runner to helper to saved result</title>
             <desc id="seq-desc">
               The reader submits intent through the background worker to DigestRunner. The runner
-              asks the background to capture the source, saves it through the database worker, calls
-              the plan helper through the plan bridge, receives model text and completion, validates
-              and saves the result. The reader polls job state and can close independently.
+              asks the background to capture the source, saves it through the native history
+              adapter, calls the plan helper through the plan bridge, receives model text and
+              completion, validates and saves the result. The reader polls job state and can close
+              independently.
             </desc>
             <defs>
               <marker
@@ -858,12 +859,14 @@
                 <td>Saul’s private account registrations and tokens</td>
               </tr>
               <tr>
-                <td><code>OPFS: /saul-opfs → /saul.sqlite3</code></td>
-                <td>Saved Saul history in Chrome’s private storage</td>
+                <td><code>~/Library/Application Support/Little Clarity/history.sqlite3</code></td>
+                <td>Shared Saul/EZ history and image BLOBs; old OPFS data imports once</td>
               </tr>
               <tr>
                 <td><code>~/Library/Application Support/Little Clarity/settings.json</code></td>
-                <td>Shared model presets; no shared accounts or history</td>
+                <td>
+                  Shared model presets and scoped settings; accounts keep their existing owners
+                </td>
               </tr>
               <tr>
                 <td>
@@ -987,7 +990,11 @@
           <code>initPlanBridge()</code> routes ChatGPT calls. <code>initNativeBridge()</code> routes
           external tab commands. Both run here; neither is a separate process.
         </p>
-        <p>Losing a plan connection fails pending calls. Restart does not resume the stream.</p>
+        <p>
+          Losing a plan connection fails pending generation calls. Restart does not resume the
+          stream. Safe history operations use at most three connection attempts with the same
+          operation identity; uncertain deletion and bookmark changes are not retried automatically.
+        </p>
         <p>
           <a href="../../../apps/saul/entrypoints/background.ts">background.ts</a> ·
           <a href="../../../apps/saul/src/native/plan.ts">plan.ts</a> ·
@@ -1016,7 +1023,9 @@
         <dt>Starts</dt>
         <dd>First job or database request; reuses the document if it exists.</dd>
         <dt>Holds</dt>
-        <dd>Both runners and one database worker.</dd>
+        <dd>
+          Both runners and the shared-history adapter; workers extract sources or import old data.
+        </dd>
         <dt>Stops</dt>
         <dd>Browser exit, extension reload/disable or context loss. No app idle-close timer.</dd>
         <dt>Restarts</dt>
@@ -1125,8 +1134,8 @@
     <article id="database" popover="auto" role="dialog" aria-labelledby="database-title">
       <div class="overlay-head">
         <div>
-          <h2 id="database-title">Database worker</h2>
-          <small>SQLite-WASM in a Web Worker</small>
+          <h2 id="database-title">Shared history</h2>
+          <small>Native SQLite through the existing ChatGPT helper</small>
         </div>
         <button
           class="close"
@@ -1141,23 +1150,27 @@
       </div>
       <dl class="facts">
         <dt>Starts</dt>
-        <dd>Created with offscreen. SQLite opens on the first operation.</dd>
+        <dd>
+          The offscreen adapter connects through the background on the first history operation.
+        </dd>
         <dt>Does</dt>
-        <dd>Processes database requests one at a time.</dd>
+        <dd>Commits saved records to the same SQLite file used directly by EZ.</dd>
         <dt>Stops</dt>
-        <dd>Offscreen ends or the worker fails.</dd>
+        <dd>The client ends with offscreen; the helper closes when its native connection ends.</dd>
         <dt>Remains</dt>
-        <dd>Committed rows survive browser restart in Chrome’s private filesystem.</dd>
+        <dd>Committed rows survive browser restart and browser-profile removal.</dd>
       </dl>
       <details class="technical">
         <summary>Storage & sources</summary>
         <p>
-          <code>/saul-opfs</code> and <code>/saul.sqlite3</code> are browser-private paths, not
-          paths at your Mac’s root. Removing the extension or clearing its data can remove history.
+          <code>~/Library/Application Support/Little Clarity/history.sqlite3</code> is the single
+          history store. A one-time worker imports the old browser-private OPFS database and removes
+          it only after verified import. There is no runtime OPFS fallback.
         </p>
-        <p>A worker failure rejects pending requests; there is no silent in-memory fallback.</p>
+        <p>The native helper is required for history even when generation uses an API provider.</p>
         <p>
-          <a href="../../../apps/saul/src/storage/db-worker.ts">db-worker.ts</a> ·
+          <a href="../../../apps/saul/src/storage/history.ts">history.ts</a> ·
+          <a href="../../../apps/saul/native/history.mts">native/history.mts</a> ·
           <a href="../../../apps/saul/src/storage/db.ts">db.ts</a>
         </p>
       </details>
@@ -1166,14 +1179,14 @@
       <div class="overlay-head">
         <div>
           <h2 id="action-host-title">Action helper → your module</h2>
-          <small>Proposed third Node helper · not implemented</small>
+          <small>Optional Node action helper</small>
         </div>
         <button
           class="close"
           type="button"
           popovertarget="action-host"
           popovertargetaction="hide"
-          aria-label="Close proposed action helper details"
+          aria-label="Close action helper details"
           autofocus
         >
           ×
@@ -1194,41 +1207,11 @@
         <dd>Capture checks, account access, job state, Stop and durable history.</dd>
       </dl>
       <details class="technical">
-        <summary>Draft contracts & open decisions</summary>
+        <summary>Runtime contract</summary>
         <p>
-          Proposed route: Chrome background → native messaging → action helper → your module. The
-          other helpers keep their existing jobs; the ChatGPT helper still owns credentials.
-        </p>
-        <ul class="contract-list">
-          <li>
-            <strong>Call:</strong> Summarize runs the selected handler. Loading or reloading a
-            module does not invoke the handler.
-          </li>
-          <li>
-            <strong>Access:</strong> generation goes through a bound host interface to the existing
-            credential owner. The interface exposes neither raw tokens nor direct database access.
-          </li>
-          <li>
-            <strong>Stop / loss:</strong> cancellation reaches the run and its helper requests. Save
-            an honest terminal state; never resend automatically after uncertain loss.
-          </li>
-          <li>
-            <strong>Scope:</strong> one action slot and one module; existing summary is the default.
-            Explicit Reload, no file watcher.
-          </li>
-        </ul>
-        <p>
-          <strong>Still open:</strong> host start/idle/shutdown rules, result schema, code-revision
-          retention and cancellation of child processes. Agent execution needs that last contract
-          before it is enabled.
-        </p>
-        <p>
-          <strong>Trust:</strong> the interface is not a security sandbox. A Node module still has
-          its process’s OS permissions.
-        </p>
-        <p>
-          Design proposal from this discussion; no installed host name, transport or source file
-          exists yet.
+          The <a href="../../../apps/saul/docs/custom-actions.md">custom-action contract</a>
+          defines module loading, approved revisions, cancellation and typed results. Generation
+          uses the selected credential owner; modules receive no secrets.
         </p>
       </details>
     </article>
@@ -1236,7 +1219,7 @@
       <div class="overlay-head">
         <div>
           <h2 id="action-reload-title">Create an action, then hot-load it</h2>
-          <small>Proposed journey · uses your connected ChatGPT account</small>
+          <small>Explicit creation and approval · uses the selected preset</small>
         </div>
         <button
           class="close"
@@ -1263,11 +1246,11 @@
           syntax and contract shape. It does not run the script yet.
         </li>
         <li>
-          <strong>Choose Load or Replace.</strong> Saul shows what changes. Your click allows code
+          <strong>Save and select call preset.</strong> Review the candidate. Your click allows code
           loading; it does not submit a page for generation.
         </li>
         <li>
-          <strong>Use the action.</strong> The next Summarize runs the new revision. Existing
+          <strong>Use the action.</strong> The next Call Saul runs the selected revision. Existing
           summary stays the default until you replace it.
         </li>
       </ol>
@@ -1610,8 +1593,9 @@
           quitting.
         </p>
         <p>
-          History: <code>~/Library/Application Support/EZ/history.jsonl</code>. Credentials:
-          Keychain. Only model presets are shared with Saul.
+          History: <code>~/Library/Application Support/Little Clarity/history.sqlite3</code>, shared
+          with Saul. Swift reads SQLite directly. The signed Saul owner holds credentials and sends
+          official OpenAI requests; EZ owns the attempt lifecycle.
         </p>
         <p>
           <a href="../../../apps/ez/Sources/EZ/EZApp.swift">EZApp.swift</a> ·
@@ -1731,7 +1715,7 @@
       <details class="technical">
         <summary>Source</summary>
         <p>
-          JXA means JavaScript for Automation. It is separate from the proposed user-module host. A
+          JXA means JavaScript for Automation. It is separate from the user-module host. A
           preliminary process check has a 3 s timeout.
         </p>
         <p><a href="../../../apps/saul/native/window-names.mts">window-names.mts</a></p>

@@ -2,7 +2,8 @@
 
 ## Development setup and gates
 
-Install Apple Command Line Tools with Swift 6.3+ and
+Use Swift 6.3 from Apple Command Line Tools or CI’s Xcode 26.6. The build scripts
+consume that SwiftPM output layout. Install
 [uv](https://docs.astral.sh/uv/getting-started/installation/) (`brew install uv`),
 then run `make tools` from `apps/ez` and `bash scripts/install-hooks.sh` from the
 monorepo root. These install the native linters and shared Git hooks. `make tools`

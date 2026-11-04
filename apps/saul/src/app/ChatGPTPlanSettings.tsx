@@ -11,12 +11,14 @@ export function ChatGPTPlanSettings({
   visible,
   disabled,
   test,
+  shared = false,
 }: {
   plan: PlanSettingsState;
   mode: 'connection' | 'preset';
   visible: boolean;
   disabled: boolean;
   test: () => void;
+  shared?: boolean;
 }) {
   const { minimum } = useMinimumMode();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -209,7 +211,12 @@ export function ChatGPTPlanSettings({
                 className="btn"
                 disabled={locked}
                 aria-label="Sign out"
-                onClick={() =>
+                onClick={() => {
+                  if (
+                    shared &&
+                    !window.confirm('Sign out of this ChatGPT connection in Saul and EZ?')
+                  )
+                    return;
                   void plan.operation('logout', async (signal) => {
                     const r = await planCall({ action: 'logout', accountId: active.id }, signal);
                     if (!plan.mounted.current) return;
@@ -221,10 +228,10 @@ export function ChatGPTPlanSettings({
                       r.warning ||
                         'Signed out. Account registration is retained for your next sign-in.',
                     );
-                  })
-                }
+                  });
+                }}
               >
-                <ActionLabel short="Disconnect" full="Sign out" />
+                <ActionLabel short={shared ? 'Sign out' : 'Disconnect'} full="Sign out" />
               </button>
             )}
             <a

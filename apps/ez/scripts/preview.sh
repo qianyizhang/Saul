@@ -13,7 +13,7 @@ export CLANG_MODULE_CACHE_PATH="$PWD/.build/module-cache"
 bin_dir=$(./scripts/swift.sh build --show-bin-path)
 objects=()
 while IFS= read -r file; do
-    case "$file" in */EZCore.build/*.o) objects+=("$file");; esac
+    case "$file" in */EZCore.build/*.o|*/SaulCredentialStorage.build/*.o) objects+=("$file");; esac
 done < "$bin_dir/EZ.product/Objects.LinkFileList"
 sources=()
 for file in Sources/EZ/*.swift; do
@@ -37,7 +37,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 mkdir -p "$staged_app/Contents/MacOS"
 xcrun swiftc -parse-as-library -target "$(uname -m)-apple-macos14.0" -module-cache-path "$CLANG_MODULE_CACHE_PATH" \
-    -I "$bin_dir/Modules" "scripts/$kind-preview.swift" "${sources[@]}" "${objects[@]}" \
+    -I "$bin_dir/Modules" -I Sources/CSQLite -lsqlite3 "scripts/$kind-preview.swift" "${sources[@]}" "${objects[@]}" \
     -o "$staged_app/Contents/MacOS/$executable"
 cat > "$staged_app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

@@ -40,7 +40,10 @@ export function validateSpeechRequest(value: unknown): asserts value is SpeechRe
 }
 
 /** Resolve one saved connection. Never borrow another profile's key or use plan OAuth. */
-export function speechCredential(settings: UserSettings, request: SpeechRequest): string {
+export function speechCredential(
+  settings: UserSettings,
+  request: SpeechRequest,
+): string | undefined {
   validateSpeechRequest(request);
   const preset = configurationFor(settings).presets.find((p) => p.id === request.presetId);
   if (
@@ -65,6 +68,11 @@ export function speechCredential(settings: UserSettings, request: SpeechRequest)
     throw new Error(
       'Speak requires a connection to https://api.openai.com/v1. Choose it in Providers.',
     );
+  if (connection.credentialOwner === 'saul') {
+    if (settings.sharedCredentials !== 'saul')
+      throw new Error('Connect this app to Saul credentials in Providers.');
+    return undefined;
+  }
   if (!connection.apiKey.trim())
     throw new Error('Save an OpenAI API key in Providers before generating speech.');
   return connection.apiKey;
@@ -121,46 +129,52 @@ function wav(chunks: Uint8Array[], size: number): Uint8Array {
 /** One text-only Realtime response. A disconnect, failure or timeout never retries. */
 export async function generateSpeech(
   request: SpeechRequest,
-  apiKey: string,
+  apiKey: string | undefined,
   signal: AbortSignal,
   dependencies: {
     fetcher?: typeof fetch;
+    authorize?: () => Promise<string>;
     socket?: (url: string, protocols: string[]) => WebSocket;
   } = {},
 ): Promise<SpeechResult> {
   validateSpeechRequest(request);
   signal.throwIfAborted();
-  const response = await (dependencies.fetcher ?? fetch)(
-    'https://api.openai.com/v1/realtime/client_secrets',
-    {
-      method: 'POST',
-      redirect: 'error',
-      cache: 'no-store',
-      signal,
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session: {
-          type: 'realtime',
-          model: request.model,
-          output_modalities: ['audio'],
-          audio: {
-            input: { turn_detection: null },
-            output: { voice: request.voice, format: { type: 'audio/pcm', rate: 24000 } },
+  let secret: unknown;
+  if (dependencies.authorize) secret = { value: await dependencies.authorize() };
+  else {
+    if (!apiKey) throw new Error('Save an OpenAI API key in Providers before generating speech.');
+    const response = await (dependencies.fetcher ?? fetch)(
+      'https://api.openai.com/v1/realtime/client_secrets',
+      {
+        method: 'POST',
+        redirect: 'error',
+        cache: 'no-store',
+        signal,
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session: {
+            type: 'realtime',
+            model: request.model,
+            output_modalities: ['audio'],
+            audio: {
+              input: { turn_detection: null },
+              output: { voice: request.voice, format: { type: 'audio/pcm', rate: 24000 } },
+            },
+            tools: [],
+            max_output_tokens: 2048,
           },
-          tools: [],
-          max_output_tokens: 2048,
-        },
-      }),
-    },
-  );
-  // Provider response bodies can echo credentials or source text. Report only the status.
-  if (!response.ok)
-    throw new Error(
-      `OpenAI Realtime authorization failed (HTTP ${response.status}). Check the API key and model in Settings.`,
+        }),
+      },
     );
-  const secret: unknown = await response.json().catch(() => {
-    throw new Error('OpenAI returned an invalid Realtime client secret.');
-  });
+    // Provider response bodies can echo credentials or source text. Report only the status.
+    if (!response.ok)
+      throw new Error(
+        `OpenAI Realtime authorization failed (HTTP ${response.status}). Check the API key and model in Settings.`,
+      );
+    secret = await response.json().catch(() => {
+      throw new Error('OpenAI returned an invalid Realtime client secret.');
+    });
+  }
   if (
     !secret ||
     typeof secret !== 'object' ||

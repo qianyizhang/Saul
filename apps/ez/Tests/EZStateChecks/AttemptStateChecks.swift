@@ -147,7 +147,7 @@ import Foundation
             try await f.terminal.wait()
             let third = f.model.selectedEntry!
             try expect(third.query.contains(second.query), "Earlier exchanges lost")
-            let loaded = try f.state.history.load().entries
+            let loaded = try f.state.history.load()
             try expectEqual(
                 loaded.first(where: { $0.id == third.id })?.parentID, second.id, "Parent link did not persist"
             )
@@ -220,7 +220,7 @@ import Foundation
             try expectEqual(visibleDuringWrite, "pending", "Completion published before save")
             try expectEqual(f.model.selectedEntry?.status, "completed", "Saved outcome missing")
             try expectEqual(f.model.selectedEntry?.response, "Frozen answer", "Answer lost")
-            try expectEqual(try f.state.history.load().entries.count, 1, "One attempt became multiple rows")
+            try expectEqual(try f.state.history.load().count, 1, "One attempt became multiple rows")
         },
         attemptCase("immediate Stop prevents credential and provider work") { f in
             f.model.send()
@@ -259,7 +259,7 @@ import Foundation
             f.model.saveAgain(unsaved.id)
             f.model.saveAgain(UUID())
             try expectEqual(f.control.appends.count, 4, "Repeated recovery appended again")
-            try expectEqual(try f.state.history.load().entries.count, 1, "Retries duplicated lookup identity")
+            try expectEqual(try f.state.history.load().count, 1, "Retries duplicated lookup identity")
         },
         attemptCase("uncertain append retry retains one historical lookup") { f in
             f.control.failedWrites = [2]
@@ -269,7 +269,7 @@ import Foundation
             guard let entry = f.model.selectedEntry else { throw CheckFailure("Missing unsaved answer") }
             try expectEqual(entry.status, "unsaved", "Ambiguous write claimed success")
             f.model.saveAgain(entry.id)
-            let loaded = try f.state.history.load().entries
+            let loaded = try f.state.history.load()
             try expectEqual(loaded.count, 1, "Ambiguous write retry duplicated lookup")
             try expectEqual(loaded[0].response, "Frozen answer", "Retry lost answer")
             try expectEqual(loaded[0].status, "completed", "Retry did not retain terminal status")
@@ -368,15 +368,14 @@ import Foundation
             f.model.send()
             try await f.terminal.wait()
             let id = f.model.selection!
-            let bytes = try Data(contentsOf: f.state.history.url)
-            try FileManager.default.removeItem(at: f.state.history.url)
-            try FileManager.default.createDirectory(
-                at: f.state.history.url, withIntermediateDirectories: false)
+            _ = try historySQL(
+                f.state.history.url,
+                "CREATE TRIGGER fail_delete BEFORE DELETE ON ez_entry BEGIN SELECT RAISE(ABORT,'Synthetic delete failure'); END"
+            )
             f.model.deleteLookup(id)
             try expectEqual(f.model.selection, id, "Failed deletion changed selection")
             try expect(f.model.saveError(for: id) != nil, "Failed deletion discarded unsaved recovery")
-            try FileManager.default.removeItem(at: f.state.history.url)
-            try bytes.write(to: f.state.history.url)
+            _ = try historySQL(f.state.history.url, "DROP TRIGGER fail_delete")
             f.model.deleteLookup(id)
             try expect(f.model.entries.isEmpty && f.model.selection == nil, "Deleted lookup still visible")
             try expect(f.model.saveError(for: id) == nil, "Deleted lookup retained recovery state")
@@ -387,7 +386,7 @@ import Foundation
             f.control.failedWrites = [2]
             f.model.send()
             try await f.terminal.wait()
-            let loaded = try f.state.history.load().entries
+            let loaded = try f.state.history.load()
             try expectEqual(loaded.count, 1, "Initial record lost")
             try expectEqual(loaded[0].status, "interrupted", "Pending restart outcome changed")
             try expectEqual(loaded[0].response, "", "Reload invented unpersisted output")
@@ -448,7 +447,7 @@ private struct AttemptContract: Decodable {
                     try await f.terminal.wait()
                 }
                 let entry = f.model.selectedEntry
-                let saved = try f.state.history.load().entries.first
+                let saved = try f.state.history.load().first
                 try expectEqual(f.control.providerCalls, scenario.expected.providerCalls, "Provider count")
                 try expectEqual(
                     !(entry?.response ?? "").isEmpty, scenario.expected.hasOutput, "Retained output")

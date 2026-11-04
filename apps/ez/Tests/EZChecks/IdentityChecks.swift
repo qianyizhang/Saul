@@ -1,3 +1,4 @@
+import CryptoKit
 import EZCheckSupport
 import Foundation
 import Security
@@ -30,6 +31,38 @@ import Security
         },
         CheckCase("identity: signed OIDC identity and invalid claims") { _ in
             try checkSignedIdentity()
+        },
+        CheckCase("identity: ES256 identity, algorithm mismatch and future issue time") { _ in
+            let key = P256.Signing.PrivateKey()
+            let raw = key.publicKey.x963Representation
+            let jwk: [String: Any] = [
+                "kid": "ec", "kty": "EC", "crv": "P-256", "alg": "ES256", "x": OIDC.base64URL(raw[1..<33]),
+                "y": OIDC.base64URL(raw[33..<65]),
+            ]
+            let now = Date()
+            var claims: [String: Any] = [
+                "iss": "https://auth.openai.com", "aud": "client", "sub": "subject", "nonce": "nonce",
+                "exp": now.timeIntervalSince1970 + 600, "iat": now.timeIntervalSince1970,
+            ]
+            func signed() throws -> String {
+                let header = OIDC.base64URL(Data(#"{"alg":"ES256","kid":"ec"}"#.utf8))
+                let payload = OIDC.base64URL(try JSONSerialization.data(withJSONObject: claims))
+                let input = header + "." + payload
+                return input + "."
+                    + OIDC.base64URL(try key.signature(for: Data(input.utf8)).rawRepresentation)
+            }
+            let valid = try signed()
+            _ = try OIDC.validate(jwt: valid, jwks: [jwk], clientID: "client", nonce: "nonce", now: now)
+            var wrong = jwk
+            wrong["alg"] = "RS256"
+            try expectThrows(EZError.self) {
+                _ = try OIDC.validate(jwt: valid, jwks: [wrong], clientID: "client", nonce: "nonce", now: now)
+            }
+            claims["iat"] = now.timeIntervalSince1970 + 600
+            let future = try signed()
+            try expectThrows(EZError.self) {
+                _ = try OIDC.validate(jwt: future, jwks: [jwk], clientID: "client", nonce: "nonce", now: now)
+            }
         },
     ]
 }

@@ -8,7 +8,7 @@ import Foundation
     private var listener: LoopbackListener?
     private var refreshTask: Task<String, Error>?
     private var refreshingID: String?
-    public init(storage: CredentialStore = KeychainStore(), session: URLSession? = nil) {
+    public init(storage: CredentialStore, session: URLSession? = nil) {
         self.storage = storage
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 30
@@ -65,7 +65,7 @@ import Foundation
             "resource": "https://api.openai.com/v1", "state": stateToken, "nonce": nonce,
             "code_challenge_method": "S256", "code_challenge": OIDC.challenge(verifier),
         ]
-        if previous == nil { params["agent_name_hint"] = "EZ" }
+        if previous == nil { params["agent_name_hint"] = "Saul" }
         if let hint = previous?.credentials?.idToken { params["id_token_hint"] = hint }
         if let email = previous?.email { params["login_hint"] = email }
         if enablePlan { params["prompt"] = "consent" }
@@ -111,8 +111,10 @@ import Foundation
         try upsert(profile, select: true)
     }
     public func cancelSignIn() { listener?.cancel() }
-    public func accessToken() async throws -> String {
-        guard let profile = selected, let credentials = profile.credentials else {
+    public func accessToken(accountID: String? = nil) async throws -> String {
+        guard let profile = accountID.map({ id in state.profiles.first { $0.id == id } }) ?? selected,
+            let credentials = profile.credentials
+        else {
             throw EZError("Continue with ChatGPT to sign in.")
         }
         guard credentials.canUsePlan else {
@@ -190,7 +192,7 @@ import Foundation
                 guard response.statusCode == 200 else { throw APIError.parse(data: data, response: response) }
             } catch {
                 warning =
-                    "Signed out locally. Remote revocation was not confirmed; disconnect EZ in ChatGPT Settings → Usage."
+                    "Signed out locally. Remote revocation was not confirmed; disconnect Saul in ChatGPT Settings → Usage."
             }
         }
         profile.credentials = nil

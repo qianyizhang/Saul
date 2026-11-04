@@ -30,6 +30,17 @@ function credentialForFrozenInput(settings: UserSettings, input: RunInput): stri
       'The saved connection endpoint has changed. Choose a recipe to create a new request.',
     );
   const key = connection.openaiCompatible.apiKey;
+  if (
+    input.remote.credentialOwner === 'saul' &&
+    connection.openaiCompatible.credentialOwner !== 'saul'
+  )
+    throw new Error(
+      'This request uses shared Saul credentials. Reconnect Saul or create a new request.',
+    );
+  if (connection.openaiCompatible.credentialOwner === 'saul') {
+    input.remote.credentialOwner = 'saul';
+    return '';
+  }
   if (!key && !isLoopbackEndpoint(endpoint))
     throw new Error('API key is missing. Configure it in Saul Settings.');
   return key;
@@ -53,6 +64,9 @@ export function prepareRecipeRun(
     baseUrl: selected.openaiCompatible.baseUrl,
     model: selected.openaiCompatible.model,
     temperature: selected.openaiCompatible.temperature,
+    ...(selected.openaiCompatible.credentialOwner
+      ? { credentialOwner: selected.openaiCompatible.credentialOwner }
+      : {}),
   };
   const language = settings.responseLanguage
     ? `Respond in ${settings.responseLanguage}.`

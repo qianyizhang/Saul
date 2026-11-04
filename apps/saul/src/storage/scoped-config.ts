@@ -29,11 +29,16 @@ export async function scopedCall(request: Request): Promise<ScopedConfig> {
 export function portableSettings(settings: UserSettings): Record<string, unknown> {
   const value = structuredClone(settings);
   delete value.chatgptPlan;
+  delete value.sharedCredentials;
   delete value.sharedPresetRevision;
   delete value.providers;
   delete value.scopedConfigRevision;
   value.openaiCompatible.apiKey = '';
-  for (const profile of value.profiles || []) profile.config.apiKey = '';
+  delete value.openaiCompatible.credentialOwner;
+  for (const profile of value.profiles || []) {
+    profile.config.apiKey = '';
+    delete profile.config.credentialOwner;
+  }
   if (value.configuration)
     value.configuration.presets = value.configuration.presets.filter(
       (p) => p.provider !== 'chatgpt-plan' && !p.shared,
@@ -56,9 +61,22 @@ export function restoreSettings(local: UserSettings, config: ScopedConfig): User
     return connection?.baseUrl === baseUrl ? connection.apiKey : '';
   };
   value.openaiCompatible.apiKey = keyFor(value.activeProfileId, value.openaiCompatible.baseUrl);
-  for (const profile of value.profiles || [])
+  const ownerFor = (id: string | undefined, endpoint: string) => {
+    const connection = id
+      ? local.profiles?.find((p) => p.id === id)?.config
+      : local.openaiCompatible;
+    return connection?.baseUrl === endpoint ? connection.credentialOwner : undefined;
+  };
+  value.openaiCompatible.credentialOwner = ownerFor(
+    value.activeProfileId,
+    value.openaiCompatible.baseUrl,
+  );
+  for (const profile of value.profiles || []) {
     profile.config.apiKey = keyFor(profile.id, profile.config.baseUrl);
+    profile.config.credentialOwner = ownerFor(profile.id, profile.config.baseUrl);
+  }
   value.chatgptPlan = local.chatgptPlan;
+  value.sharedCredentials = local.sharedCredentials;
   value.configuration!.presets.push(
     ...(local.configuration?.presets || []).filter(
       (p) => p.provider === 'chatgpt-plan' || p.shared,

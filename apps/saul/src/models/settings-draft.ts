@@ -3,6 +3,7 @@ import {
   SPEECH_MODEL,
   validateSharedProviders,
 } from '../../native/shared-presets-contract.mts';
+import { officialOpenAI } from '../../native/credentials-contract.mts';
 import type { ModelPreset, ProviderType, Recipe, UserSettings } from '../types';
 import { DEFAULT_SETTINGS, validateSettingsConnections } from '../storage/settings';
 import {
@@ -151,7 +152,11 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
       const profile = settings.profiles?.find((p) => p.id === edit.id);
       if (!profile) throw new Error('Choose an existing connection.');
       const config = { ...profile.config, ...edit.patch };
-      if (origin(config.baseUrl) !== origin(profile.config.baseUrl)) config.apiKey = '';
+      if (!officialOpenAI(config.baseUrl)) delete config.credentialOwner;
+      if (origin(config.baseUrl) !== origin(profile.config.baseUrl)) {
+        config.apiKey = '';
+        delete config.credentialOwner;
+      }
       return {
         ...draft,
         settings: {
@@ -162,6 +167,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
                   ...settings.openaiCompatible,
                   baseUrl: config.baseUrl,
                   apiKey: config.apiKey,
+                  credentialOwner: config.credentialOwner,
                 },
               }
             : {}),

@@ -1,6 +1,6 @@
 import { DIGEST_SCHEMA } from '../digest/store';
-import type { Database } from '@sqlite.org/sqlite-wasm';
-import { TagStreamParser } from '../parser/tag-stream-parser';
+import type { SqlDatabase } from './sql';
+import { searchableResponse } from './search';
 
 const LEGACY_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS page (
@@ -86,7 +86,7 @@ END;
 
 export const SCHEMA_VERSION = 2;
 
-export function migrate(db: Database): void {
+export function migrate(db: SqlDatabase): void {
   const version = Number(db.selectValue('PRAGMA user_version') || 0);
   if (version > SCHEMA_VERSION)
     throw new Error(
@@ -116,25 +116,16 @@ export function migrate(db: Database): void {
       UPDATE llm_run SET viewed_at = created_at WHERE status = 'completed';
       UPDATE llm_run SET status = 'interrupted', reason = 'upgrade', error_message = 'Interrupted before upgrade. Retry explicitly.' WHERE status IN ('running', 'aborted');
     `);
-      db.exec({
-        sql: 'SELECT rowid, response_raw FROM llm_run WHERE rowid NOT IN (SELECT rowid FROM explanation_fts)',
-        rowMode: 'object',
-        callback: (row) => {
-          db.exec({
-            sql: 'INSERT INTO explanation_fts(rowid, body) VALUES (?, ?)',
-            bind: [row.rowid, searchableResponse(String(row.response_raw || ''))],
-          });
-        },
-      });
+      for (const row of db.selectObjects(
+        'SELECT rowid,response_raw FROM llm_run WHERE rowid NOT IN (SELECT rowid FROM explanation_fts)',
+      )) {
+        db.exec({
+          sql: 'INSERT INTO explanation_fts(rowid,body) VALUES (?,?)',
+          bind: [row.rowid!, searchableResponse(String(row.response_raw || ''))],
+        });
+      }
     }
     if (version < 2) db.exec(DIGEST_SCHEMA);
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
   });
-}
-
-export function searchableResponse(raw: string): string {
-  return new TagStreamParser()
-    .feed(raw)
-    .map((s) => (s.type === 'text' ? s.text : s.term + ' ' + s.note))
-    .join(' ');
 }
