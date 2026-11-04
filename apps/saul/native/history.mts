@@ -18,6 +18,9 @@ import type { SqlDatabase, SqlValue } from '../src/storage/sql.ts';
 import type { DbRequest } from '../src/types/storage.ts';
 import type { HistoryRequest } from './history-protocol.mts';
 
+// Freeze the schema with this loaded runtime, including during later checkout builds.
+const historySchema = readFileSync(new URL('./history.sql', import.meta.url), 'utf8');
+
 export const historyDirectory = () =>
   join(homedir(), 'Library', 'Application Support', 'Little Clarity');
 export class HistoryConnection implements SqlDatabase {
@@ -79,7 +82,7 @@ export class SharedHistory {
         const version = Number(this.connection.selectValue('PRAGMA user_version'));
         if (version !== 0 && version !== 3) throw new Error('Unsupported shared history version.');
         if (!version) {
-          this.connection.exec(readFileSync(new URL('./history.sql', import.meta.url), 'utf8'));
+          this.connection.exec(historySchema);
           this.connection.exec('PRAGMA user_version=3');
         }
       });
