@@ -6,18 +6,21 @@ public struct ImageGenerationRequest: Equatable, Sendable {
     public var model: String
     public var size: String
     public var quality: String
+    public var image: ImageAttachment?
 
     public init(
         prompt: String, model: String = "gpt-image-2.5-flare",
-        size: String = "1024x1024", quality: String = "low"
+        size: String = "1024x1024", quality: String = "low", image: ImageAttachment? = nil
     ) {
         self.prompt = prompt
         self.model = model
         self.size = size
         self.quality = quality
+        self.image = image
     }
 
     public func validate() throws {
+        if let image { _ = try image.validatedData() }
         guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw EZError("Enter some context to illustrate.")
         }
@@ -53,15 +56,38 @@ public struct ImagesClient: Sendable {
         try input.validate()
         let key = try validatedOpenAIKey(apiKey)
         try Task.checkCancellation()
-        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/images/generations")!)
+        let endpoint = input.image == nil ? "generations" : "edits"
+        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/images/\(endpoint)")!)
         request.httpMethod = "POST"
         request.timeoutInterval = 180
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "model": input.model, "prompt": input.prompt, "n": 1,
+        let fields = [
+            "model": input.model, "prompt": input.prompt, "n": "1",
             "size": input.size, "quality": input.quality, "output_format": "png",
-        ])
+        ]
+        if let image = input.image {
+            let boundary = "EZ-" + UUID().uuidString
+            request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+            var body = Data()
+            func add(_ text: String) { body.append(Data(text.utf8)) }
+            for key in fields.keys.sorted() {
+                add(
+                    "--\(boundary)\r\nContent-Disposition: form-data; name=\"\(key)\"\r\n\r\n\(fields[key]!)\r\n"
+                )
+            }
+            // A constant filename keeps user filenames out of multipart headers.
+            add(
+                "--\(boundary)\r\nContent-Disposition: form-data; name=\"image[]\"; filename=\"input\"\r\nContent-Type: \(image.mediaType)\r\n\r\n"
+            )
+            body.append(try image.validatedData())
+            add("\r\n--\(boundary)--\r\n")
+            request.httpBody = body
+        } else {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            var object: [String: Any] = fields
+            object["n"] = 1
+            request.httpBody = try JSONSerialization.data(withJSONObject: object)
+        }
         let (bytes, response) = try await session.bytes(for: request, delegate: ImageRedirectPolicy())
         guard let response = response as? HTTPURLResponse else {
             throw EZError("OpenAI returned an invalid image response.")

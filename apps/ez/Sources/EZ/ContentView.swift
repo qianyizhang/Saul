@@ -218,7 +218,7 @@ struct ContentView: View {
                             .disabled(!entry.hasImage || model.imageLoading)
                     } else {
                         Button {
-                            model.copy(entry.response)
+                            model.copy(entry.citedResponse)
                         } label: {
                             Label("Copy", systemImage: "doc.on.doc")
                         }.disabled(entry.response.isEmpty)
@@ -307,7 +307,10 @@ struct ContentView: View {
                     }
                 }.controlSize(.small).disabled(model.needsPlan && model.connecting)
                 if model.currentProvider?.kind == .openAIAPI {
-                    Text("OpenAI API · billed separately").font(AppStyle.caption).foregroundStyle(.secondary)
+                    Text(
+                        model.currentAction?.webSearch == true
+                            ? "OpenAI API · search charges apply" : "OpenAI API · billed separately"
+                    ).font(AppStyle.caption).foregroundStyle(.secondary)
                 }
                 if !composerHint.isEmpty {
                     Text(composerHint).font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)

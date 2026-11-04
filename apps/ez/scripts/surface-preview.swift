@@ -25,6 +25,49 @@ import SwiftUI
                         }
                         return .image(try previewPNG())
                     }
+                    if entry.usesWebSearch {
+                        var result = ResponseAccumulator()
+                        try result.consume(Data(#"{"type":"response.web_search_call.searching"}"#.utf8))
+                        update(result)
+                        if entry.query.contains("[slow]") { try await Task.sleep(for: .seconds(120)) }
+                        if entry.query.contains("[fail]") {
+                            throw EZError("Synthetic search failed. Your draft is retained.")
+                        }
+                        let text = "The sketch becomes a meme through an image edit. OpenAI documentation"
+                        try result.consume(
+                            JSONSerialization.data(withJSONObject: [
+                                "type": "response.completed",
+                                "response": [
+                                    "status": "completed",
+                                    "output": [
+                                        [
+                                            "type": "web_search_call", "status": "completed",
+                                            "action": ["type": "search"],
+                                        ],
+                                        [
+                                            "type": "message",
+                                            "content": [
+                                                [
+                                                    "type": "output_text", "text": text,
+                                                    "annotations": [
+                                                        [
+                                                            "type": "url_citation",
+                                                            "start_index": text.unicodeScalars.count
+                                                                - "OpenAI documentation".unicodeScalars.count,
+                                                            "end_index": text.unicodeScalars.count,
+                                                            "url":
+                                                                "https://developers.openai.com/api/docs/guides/image-generation",
+                                                            "title": "OpenAI image generation",
+                                                        ]
+                                                    ],
+                                                ]
+                                            ],
+                                        ],
+                                    ],
+                                ],
+                            ]))
+                        return .text(result)
+                    }
                     var result = ResponseAccumulator()
                     try result.consume(
                         JSONSerialization.data(withJSONObject: [
@@ -93,6 +136,8 @@ private struct SurfacePreviewControls: View {
                             "Streaming", "Blocked", "Prose corrections",
                             "No actions", "Selector hitboxes", "Long metadata", "Legacy answer",
                             "Draw", "Draw result", "Draw waiting", "Draw error",
+                            "Research", "Research result", "Research waiting", "Research error",
+                            "Meme", "Meme result", "Meme invalid",
                         ] + (syntheticAttempt ? ["Unsaved"] : []), id: \.self
                     ) {
                         Text($0)
@@ -165,10 +210,15 @@ private struct SurfacePreviewControls: View {
                     template: (1...8).map { "{{Input \($0)}}" }.joined(separator: "\n")))
         }
         if scenario.hasPrefix("Draw") { config.addIllustration() }
+        if scenario.hasPrefix("Meme") || scenario.hasPrefix("Research") { config.addSearchAndMeme() }
         if scenario == "No actions" { config.actions = [] }
         do { try model.saveConfiguration(config) } catch { model.error = error.localizedDescription }
         let action: Action?
-        if scenario.hasPrefix("Draw") {
+        if scenario.hasPrefix("Meme") {
+            action = config.actions.first { $0.imageInput != nil }
+        } else if scenario.hasPrefix("Research") {
+            action = config.actions.first { $0.webSearch }
+        } else if scenario.hasPrefix("Draw") {
             action = config.actions.first { $0.capability == .draw }
         } else if scenario == "Two inputs" {
             action = config.actions[3]
@@ -182,6 +232,21 @@ private struct SurfacePreviewControls: View {
         model.planEnabled = scenario != "Signed out"
         model.entries = []
         model.apiConnected = true
+        if scenario.hasPrefix("Meme") {
+            model.query = "Make this a Monday meme. Caption: already?"
+            if scenario == "Meme invalid" {
+                model.attachImage(data: Data("invalid".utf8), name: "bad.png")
+            } else if let png = try? previewPNG() {
+                model.attachImage(data: png, name: "sketch.png")
+            }
+            if scenario == "Meme result" { model.send() }
+        }
+        if scenario.hasPrefix("Research") {
+            model.query = "How does sketch-to-meme work?"
+            if scenario == "Research waiting" { model.query += " [slow]" }
+            if scenario == "Research error" { model.query += " [fail]" }
+            if scenario != "Research" { model.send() }
+        }
         if scenario.hasPrefix("Draw") {
             model.query = "A tree shares nutrients through its roots and fungi."
             if scenario == "Draw waiting" { model.query += " [slow]" }

@@ -7,6 +7,6 @@ import Foundation
             await CheckRunner.run(
                 recipeStateChecks() + historyStateChecks() + configurationStateChecks()
                     + shortcutStateChecks() + selectedTextChecks() + quickLookupStateChecks()
-                    + attemptStateChecks() + illustrationStateChecks()))
+                    + attemptStateChecks() + illustrationStateChecks() + searchImageStateChecks()))
     }
 }

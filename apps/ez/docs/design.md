@@ -133,3 +133,14 @@ Multi-input actions retain a label above each field after typing; single-input
 actions keep the compact placeholder. Fixed shortcut references use aligned
 label/value rows too. The offline preview includes Long metadata and Legacy
 answer fixtures for wrapping and unavailable-data review.
+
+## Search and source images
+
+Research and Make meme use the existing Action picker and shared composer. A named
+image field shows preview, Choose/Replace, Paste and Remove above the instructions;
+its error stays beside the image and an invalid replacement keeps the prior draft.
+Quick Lookup reserves height for the attachment and keeps Run reachable. Search
+policy and image-input naming live in the Action editor. API/search charges remain
+visible in both modes. Both answer readers show clickable inline citations;
+Details records required/completed search and source image name. Reuse prepares
+an editable draft, including the saved source, and never submits it.

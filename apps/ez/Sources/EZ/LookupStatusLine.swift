@@ -45,6 +45,12 @@ struct LookupDetails: View {
                     "Provider",
                     value: entry.providerSnapshot?.key ?? entry.presetSnapshot?.providerKey ?? "gpt-plan")
                 MetadataRow("Capability", value: entry.capability.name)
+                if entry.usesWebSearch {
+                    MetadataRow(
+                        "Web search",
+                        value: entry.webSearchCompleted == true ? "Completed" : "Required · not completed")
+                }
+                if let image = entry.inputImage { MetadataRow("Input image", value: image.name) }
                 if entry.capability == .draw {
                     MetadataRow("Size", value: (entry.presetSnapshot?.imageOptions ?? ImageOptions()).size)
                     MetadataRow(

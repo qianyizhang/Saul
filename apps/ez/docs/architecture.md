@@ -64,7 +64,7 @@ Illustration is a Draw action using `AppModel` and `AttemptExecution`, the same
 workspace, composer and single active request as Write. API Write presets use
 an explicit model ID. Its explicit Fast choice sends `service_tier: priority`;
 plan Fast remains catalog-controlled. The [official Fast mode guide](https://developers.openai.com/api/docs/guides/fast-mode)
-owns API tier semantics. Draw sends one `POST /v1/images/generations`, defaulting to
+owns API tier semantics. Text-only Draw sends one `POST /v1/images/generations`, defaulting to
 GPT Image 2.5 Flare, low quality, 1024×1024 PNG. Its action template is the exact
 compiled prompt. Image options belong to its preset. Key Save/Reload and inspection
 never generate. The Keychain service `local.ez.app.openai` remains unchanged.
@@ -91,6 +91,41 @@ Run. Closing/hiding a surface preserves work; quitting cancels active execution.
 
 Schema follows the [official image API](https://developers.openai.com/api/reference/resources/images/methods/generate).
 Offline fixtures cannot establish account access or billed generation.
+
+## Web search and image inputs
+
+EZ-local Action fields `webSearch` (default false) and `imageInput` (a named required
+image, absent by default) extend existing text-template fields. They never enter
+shared Presets or Saul actions. `actionTypesVersion = 2` seeds editable Research
+and Make meme actions/presets once, preserving existing IDs, names, bindings and
+user removals. Research defaults to API Write / GPT-6.1 Sol; Make meme defaults
+to API Draw / GPT Image 2.5 Flare. Saved incompatible choices remain blocked.
+
+Search requests use Responses `tools: [{type: "web_search"}]` and
+`tool_choice: "required"`. Only the API provider can execute them. A completed
+text answer without a completed `web_search_call` search action fails the attempt;
+no fallback request or retry occurs. The accumulator records observed searching
+activity, completed search and validated HTTP(S) URL annotations. History retains
+citation offsets and URLs independently of raw answer text. Both readers and
+Markdown export render inline source links; raw inspection retains exact model
+text. Explicit follow-ups inherit the saved search policy and API preset. No
+background research, custom search engine, domain controls or automatic search
+is introduced. See [OpenAI web search](https://developers.openai.com/api/docs/guides/tools-web-search).
+
+ImageAttachment validates detected PNG/JPEG/WebP content, one frame, at most 20 MB,
+40 megapixels and 8,192 pixels per edge. Choose, Paste and Drop prepare a draft
+only. Invalid replacement preserves the previous source. Run freezes exact bytes;
+History atomically saves them to `images/<run-UUID>-input` before the pending JSONL
+snapshot and before transmission. JSONL contains source name/format, never image
+bytes. An image input selects one multipart `POST /v1/images/edits` with the same
+model/size/quality/output contract as generation; there is no hidden text analysis
+or second image request. See [OpenAI image edits](https://developers.openai.com/api/docs/guides/image-generation#edit-images).
+
+Reuse loads and validates the saved source; missing or invalid files require
+reattachment. Save again retains exact source/result bytes and retries storage
+only. Deletion removes both owned sidecars without touching the original user's
+file or external exports. Sidecar paths derive from run identity and reject
+symlinks. Both native surfaces share the same draft and operations.
 
 ## Authentication invariants
 

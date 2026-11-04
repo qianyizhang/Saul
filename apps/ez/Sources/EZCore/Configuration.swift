@@ -84,10 +84,12 @@ public struct Action: Codable, Equatable, Identifiable, Sendable {
     public var template: String
     public var legacyMode: QueryMode?
     public var capability: ActionCapability
+    public var webSearch: Bool
+    public var imageInput: String?
 
     public init(
         id: UUID = UUID(), name: String, presetID: UUID, template: String, legacyMode: QueryMode? = nil,
-        capability: ActionCapability = .write
+        capability: ActionCapability = .write, webSearch: Bool = false, imageInput: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -95,9 +97,13 @@ public struct Action: Codable, Equatable, Identifiable, Sendable {
         self.template = template
         self.legacyMode = legacyMode
         self.capability = capability
+        self.webSearch = webSearch
+        self.imageInput = imageInput
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, presetID, template, legacyMode, capability }
+    private enum CodingKeys: String, CodingKey {
+        case id, name, presetID, template, legacyMode, capability, webSearch, imageInput
+    }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
@@ -106,13 +112,34 @@ public struct Action: Codable, Equatable, Identifiable, Sendable {
         template = try c.decode(String.self, forKey: .template)
         legacyMode = try c.decodeIfPresent(QueryMode.self, forKey: .legacyMode)
         capability = try c.decodeIfPresent(ActionCapability.self, forKey: .capability) ?? .write
+        webSearch = try c.decodeIfPresent(Bool.self, forKey: .webSearch) ?? false
+        imageInput = try c.decodeIfPresent(String.self, forKey: .imageInput)
     }
 
     public var symbol: String { capability == .draw ? "photo" : legacyMode?.symbol ?? "text.badge.plus" }
 
-    public func prepare(values: [String: String], preset: ModelPreset, models: [ModelOption]) throws
+    public func validateInputs() throws {
+        if webSearch && capability != .write { throw EZError("Web search requires Write.") }
+        if let imageInput {
+            guard capability == .draw, !imageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                imageInput.count <= 80
+            else { throw EZError("Name the image input on a Draw action (up to 80 characters).") }
+        }
+    }
+
+    public func prepare(
+        values: [String: String], preset: ModelPreset, models: [ModelOption], image: ImageAttachment? = nil
+    ) throws
         -> HistoryEntry
     {
+        try validateInputs()
+        if webSearch && preset.providerKey == "gpt-plan" {
+            throw EZError("Web search needs an OpenAI API Write preset.")
+        }
+        if imageInput != nil {
+            guard let image else { throw EZError("Attach an image before running.") }
+            _ = try image.validatedData()
+        }
         guard capability == preset.capability else {
             throw EZError("Choose a \(capability.name) preset for this action.")
         }
@@ -127,6 +154,7 @@ public struct Action: Codable, Equatable, Identifiable, Sendable {
         entry.actionSnapshot = self
         entry.presetSnapshot = preset
         entry.inputValues = values
+        entry.inputImage = imageInput == nil ? nil : image
         entry.instructions = ""
         return entry
     }
@@ -263,6 +291,7 @@ public struct Configuration: Codable, Equatable {
             guard sharedPresetRevision != nil || presets.contains(where: { $0.id == action.presetID }) else {
                 throw EZError("Action ‘\(action.name)’ needs an existing default preset.")
             }
+            try action.validateInputs()
             _ = try PromptTemplate(action.template)
         }
         for preset in presets {
@@ -290,6 +319,45 @@ public struct Configuration: Codable, Equatable {
                 capability: .draw))
         return true
     }
+    /// Versioned seeding belongs to configuration; removed starters stay removed.
+    @discardableResult public mutating func addSearchAndMeme() -> Bool {
+        guard (actionTypesVersion ?? 0) < 2 else { return false }
+        if actionTypesVersion == nil { addIllustration() }
+        let researchID = UUID(uuidString: "2C033F95-23BE-487B-A133-CC97898568C1")!
+        let researchPreset = ModelPreset(
+            id: UUID(uuidString: "D036EAF4-2134-4AF6-A755-0742AE678352")!,
+            name: uniqueName("Research", in: presets.map(\.name)), model: "gpt-6.1-sol",
+            effort: "", fast: false, providerKey: "openai-api")
+        if !presets.contains(where: { $0.id == researchPreset.id }) { presets.append(researchPreset) }
+        if !actions.contains(where: { $0.id == researchID }) {
+            actions.append(
+                Action(
+                    id: researchID, name: uniqueName("Research", in: actions.map(\.name)),
+                    presetID: researchPreset.id,
+                    template:
+                        "Search the web to answer the following question. Answer directly in the user's language, cite sources inline, and state material uncertainty.\n\n{{Question}}",
+                    webSearch: true))
+        }
+        let memeID = UUID(uuidString: "8ED3A908-D0BF-4FB8-8A61-86549BE9ED49")!
+        let memePreset = ModelPreset(
+            id: UUID(uuidString: "8F092456-F150-4B43-B9FB-D58345429826")!,
+            name: uniqueName("Make meme", in: presets.map(\.name)), model: "gpt-image-2.5-flare",
+            effort: "", fast: false, providerKey: "openai-api", capability: .draw,
+            imageOptions: ImageOptions())
+        if !presets.contains(where: { $0.id == memePreset.id }) { presets.append(memePreset) }
+        if !actions.contains(where: { $0.id == memeID }) {
+            actions.append(
+                Action(
+                    id: memeID, name: uniqueName("Make meme", in: actions.map(\.name)),
+                    presetID: memePreset.id,
+                    template:
+                        "Turn the supplied sketch into a meme. Preserve its recognizable subjects and composition. Follow these instructions, using any quoted caption exactly:\n\n{{Instructions}}",
+                    capability: .draw, imageInput: "Sketch"))
+        }
+        actionTypesVersion = 2
+        return true
+    }
+
     private func uniqueName(_ proposed: String, in names: [String]) -> String {
         var name = proposed
         var suffix = 2

@@ -21,6 +21,9 @@ import EZCore
     @Published var selectedActionID: UUID?
     @Published var overridePresetID: UUID?
     @Published var inputValues: [String: String] = [:]
+    var imageImportID = UUID()
+    @Published var inputImage: ImageAttachment? { didSet { imageImportID = UUID() } }
+    @Published var inputImageError: String?
     @Published private(set) var draftRevision = 0
     @Published private(set) var replayEntry: HistoryEntry?
     @Published var configurationError: String?
@@ -108,7 +111,8 @@ import EZCore
                             let output = try await selected.generateImage(
                                 ImageGenerationRequest(
                                     prompt: entry.query,
-                                    model: preset.model, size: options.size, quality: options.quality))
+                                    model: preset.model, size: options.size, quality: options.quality,
+                                    image: entry.inputImage))
                             return .image(output)
                         }
                         return .text(try await selected.streamText(entry: entry, onUpdate: update))
@@ -137,10 +141,9 @@ import EZCore
                     configuration = try configStore.load() ?? configuration
                 }
                 configurationLoaded = true
-                if !offline, configuration.actionTypesVersion == nil {
+                if !offline, (configuration.actionTypesVersion ?? 0) < 2 {
                     var upgraded = configuration
-                    upgraded.addIllustration()
-                    upgraded.actionTypesVersion = 1
+                    upgraded.addSearchAndMeme()
                     try configStore.save(upgraded)
                     configuration = try configStore.load() ?? upgraded
                 }
@@ -270,7 +273,14 @@ import EZCore
             return "Choose a \(action.capability.name) preset for this action."
         }
         if let issue = preset.availabilityError(in: models) { return issue }
-        do { _ = try PromptTemplate(action.template).render(inputValues) } catch {
+        if action.webSearch && currentProvider?.kind != .openAIAPI {
+            return "Web search needs an OpenAI API Write preset."
+        }
+        if action.imageInput != nil && inputImage == nil { return "Attach an image before running." }
+        do {
+            try action.validateInputs()
+            _ = try PromptTemplate(action.template).render(inputValues)
+        } catch {
             return error.localizedDescription
         }
         return nil
@@ -351,6 +361,8 @@ import EZCore
         replayEntry = nil
         overridePresetID = nil
         inputValues = [:]
+        inputImage = nil
+        inputImageError = nil
         selection = nil
         error = nil
         draftRevision += 1
@@ -377,6 +389,10 @@ import EZCore
             chooseAction(saved.actions.first?.id)
         } else {
             inputValues = inputValues.filter { inputFields.contains($0.key) }
+            if currentAction?.imageInput == nil {
+                inputImage = nil
+                inputImageError = nil
+            }
         }
     }
     func refreshConfiguration() {
@@ -392,7 +408,7 @@ import EZCore
     }
     func fillQuickLookupSelection(_ text: String?) {
         guard !busy, !launcherPending, !signingIn, !showSettings,
-            selection == nil, inputValues.values.allSatisfy({ $0.isEmpty }),
+            selection == nil, inputImage == nil, inputValues.values.allSatisfy({ $0.isEmpty }),
             let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             text.utf8.count <= 16_384, let field = inputFields.first
         else { return }
@@ -413,7 +429,7 @@ import EZCore
         guard !showSettings else {
             throw EZError("Close EZ Settings before looking up selected text.")
         }
-        guard inputValues.values.allSatisfy({ $0.isEmpty }) else {
+        guard inputImage == nil, inputValues.values.allSatisfy({ $0.isEmpty }) else {
             throw EZError(
                 "EZ has a draft. Finish it, then choose New lookup before looking up selected text.")
         }
@@ -503,7 +519,9 @@ import EZCore
         }
         error = nil
         var entry: HistoryEntry
-        do { entry = try action.prepare(values: inputValues, preset: preset, models: models) } catch {
+        do {
+            entry = try action.prepare(values: inputValues, preset: preset, models: models, image: inputImage)
+        } catch {
             self.error = error.localizedDescription
             return
         }
@@ -553,6 +571,8 @@ import EZCore
         guard !busy, !launcherPending else { return }
         selection = nil
         inputValues = [:]
+        inputImage = nil
+        inputImageError = nil
         overridePresetID = nil
         replayEntry = nil
         if !configuration.actions.contains(where: { $0.id == selectedActionID }) {
@@ -573,6 +593,13 @@ import EZCore
                 template: entry.mode.instruction + "\n\n{{text}}", legacyMode: entry.mode)
             saved.presetSnapshot = preset
             saved.inputValues = ["text": entry.query]
+        }
+        do {
+            inputImage = try history?.inputImage(for: saved)
+            inputImageError = nil
+        } catch {
+            inputImage = nil
+            inputImageError = "The saved input image is unavailable. Attach it again."
         }
         replayEntry = saved
         inputValues = saved.inputValues ?? [:]

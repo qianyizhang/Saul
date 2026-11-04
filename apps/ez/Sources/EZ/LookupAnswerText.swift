@@ -29,7 +29,7 @@ struct LookupAnswerText: View {
                         .foregroundStyle(.orange)
                 }
             }
-        } else if let comparison = SpellingComparison(entry: entry) {
+        } else if !entry.usesWebSearch, let comparison = SpellingComparison(entry: entry) {
             SpellingComparisonView(comparison: comparison, compact: compact)
         } else {
             VStack(alignment: .leading, spacing: 16) {
@@ -44,10 +44,13 @@ struct LookupAnswerText: View {
                         .textSelection(.enabled)
                 }
                 if entry.response.isEmpty && entry.status == "pending" {
-                    Text(activity == .thinking ? "Thinking…" : "Waiting for answer…")
-                        .foregroundStyle(.secondary)
+                    Text(
+                        activity == .searching
+                            ? "Searching…" : activity == .thinking ? "Thinking…" : "Waiting for answer…"
+                    )
+                    .foregroundStyle(.secondary)
                 } else {
-                    AnswerMarkdown(text: entry.response)
+                    AnswerMarkdown(text: entry.citedResponse)
                 }
             }
         }

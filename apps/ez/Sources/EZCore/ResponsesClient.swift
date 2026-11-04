@@ -41,14 +41,16 @@ public struct SSEParser {
 
 /// Transient UI activity; no reasoning content is retained.
 public enum ResponseActivity: Equatable, Sendable {
-    case waiting, thinking, responding, finished
+    case waiting, searching, thinking, responding, finished
 
-    public var showsThinkingLight: Bool { self == .waiting || self == .thinking }
+    public var showsThinkingLight: Bool { self == .waiting || self == .searching || self == .thinking }
 }
 
 public struct ResponseAccumulator {
     public private(set) var text = ""
     public private(set) var completed = false
+    public private(set) var citations: [WebCitation] = []
+    public private(set) var webSearchCompleted = false
     public private(set) var activity: ResponseActivity = .waiting
     public internal(set) var metrics = ResponseMetrics()
     public private(set) var actualServiceTier: String?
@@ -57,6 +59,22 @@ public struct ResponseAccumulator {
         guard let event = try JSONSerialization.jsonObject(with: data) as? [String: Any],
             let type = event["type"] as? String
         else { throw EZError("Malformed response event.") }
+        if type == "response.output_text.annotation.added",
+            let annotation = event["annotation"] as? [String: Any],
+            let citation = WebCitation(annotation: annotation)
+        {
+            if !citations.contains(citation) { citations.append(citation) }
+        }
+        if type.hasPrefix("response.web_search_call.") && text.isEmpty {
+            activity = .searching
+        }
+        if type == "response.output_item.done",
+            let item = event["item"] as? [String: Any], item["type"] as? String == "web_search_call",
+            item["status"] as? String == "completed",
+            (item["action"] as? [String: Any])?["type"] as? String == "search"
+        {
+            webSearchCompleted = true
+        }
         if type == "response.output_item.added",
             let item = event["item"] as? [String: Any], item["type"] as? String == "reasoning",
             text.isEmpty
@@ -93,6 +111,28 @@ public struct ResponseAccumulator {
                 return nil
             }.joined(separator: "\n\n")
             if !finalText.isEmpty { text = finalText }
+            var finalCitations: [WebCitation] = []
+            var offset = 0
+            for item in output {
+                if item["type"] as? String == "web_search_call",
+                    item["status"] as? String == "completed",
+                    (item["action"] as? [String: Any])?["type"] as? String == "search"
+                {
+                    webSearchCompleted = true
+                }
+                for part in item["content"] as? [[String: Any]] ?? [] {
+                    let value =
+                        part["type"] as? String == "output_text"
+                        ? part["text"] as? String
+                        : part["type"] as? String == "refusal" ? part["refusal"] as? String : nil
+                    guard let value else { continue }
+                    finalCitations += (part["annotations"] as? [[String: Any]] ?? []).compactMap {
+                        WebCitation(annotation: $0, offset: offset)
+                    }
+                    offset += value.unicodeScalars.count + 2
+                }
+            }
+            if !finalText.isEmpty { citations = finalCitations }
             actualServiceTier = response["service_tier"] as? String
             completed = true
         }
@@ -107,7 +147,12 @@ public struct ResponseAccumulator {
                     ?? "Response incomplete\(reason.map { ": \($0)" } ?? ".")", requestID: nil)
         }
     }
-    public func requireCompleted() throws {
+    public func requireCompleted(webSearchRequired: Bool = false) throws {
+        if webSearchRequired && !webSearchCompleted {
+            throw EZError(
+                "OpenAI did not complete the required web search. The answer is incomplete; run again explicitly."
+            )
+        }
         guard completed else {
             throw EZError(
                 "The stream ended before response.completed. The partial answer has been preserved.")
@@ -146,12 +191,19 @@ public struct ResponseAccumulator {
         // Codex's speed label is `fast`; the public Responses API tier is `priority`.
         body["service_tier"] =
             entry.requestedServiceTier == "fast" ? "priority" : entry.requestedServiceTier ?? "default"
+        if entry.usesWebSearch {
+            body["tools"] = [["type": "web_search"]]
+            body["tool_choice"] = "required"
+        }
         return body
     }
     public func stream(entry: HistoryEntry, token: String, onUpdate: (ResponseAccumulator) -> Void)
         async throws
         -> ResponseAccumulator
     {
+        if entry.usesWebSearch && entry.providerSnapshot?.kind != .openAIAPI {
+            throw EZError("Web search requires the OpenAI API provider.")
+        }
         var request = URLRequest(url: URL(string: "https://api.openai.com/v1/responses")!)
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -196,7 +248,7 @@ public struct ResponseAccumulator {
             onUpdate(result)
             if result.completed { break }
         }
-        try result.requireCompleted()
+        try result.requireCompleted(webSearchRequired: entry.usesWebSearch)
         return result
     }
 }

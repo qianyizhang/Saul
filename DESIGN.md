@@ -330,6 +330,21 @@ request. Historical results remain separate runs and are not replaced by a new r
 Images do not offer text follow-ups; Reuse restores a draft for an explicit new Run.
 Deleting a run removes its PNG; external downloads remain outside EZ's ownership.
 
+EZ Draw actions may declare one named, required image input. Choose, paste or drop
+shows its preview and a replace/remove action beside the instructions. Invalid
+replacement keeps the previous image and shows a field error. Run freezes and
+saves the source bytes before sending an image edit; text-only Draw still generates
+from scratch. Reuse restores source and instructions; a missing source blocks Run
+until reattached. History deletion removes the owned source and result.
+
+EZ Write actions may enable **Search the web**. Each explicit Run or follow-up
+requires a completed search through an API Write preset; incompatible providers
+block without fallback. Show API/search charges at Run, **Searching…** from real
+tool activity and prominent clickable inline citations in the answer. Record
+sources and search completion with the attempt. Search failure preserves the draft
+and any partial answer, marked failed. Research and Make meme are editable starters
+added once; removing them does not cause them to return on launch.
+
 ## Keyboard and focus
 
 | Intent                    | EZ                                   | Saul                                                                 |
@@ -417,9 +432,11 @@ timing by unit, with tabular digits and units beside the values.
 Details describes the displayed answer. Keep current draft settings separate:
 show them when composing, or behind **Next lookup** when reading. Do not expand
 both model summaries by default. Keep requested speed and recorded service tier
-separately labelled; unknown values stay unknown. Place **Details** directly beside
-**Inspect input/output**, not inside More. Inspection need not repeat metadata
-already available for the same answer. Use full-row disclosure targets.
+separately labelled; unknown values stay unknown. Keep **Details** outside More.
+EZ places **Inspect** inside Details in Min Mode; Standard view also exposes the
+main-window inspector directly. Saul keeps **Inspect input/output** beside Details.
+Inspection need not repeat metadata already available for the same answer.
+Use full-row disclosure targets.
 
 ### Input/output inspection
 

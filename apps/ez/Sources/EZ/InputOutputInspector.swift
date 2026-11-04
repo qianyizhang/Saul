@@ -42,6 +42,9 @@ struct InputOutputInspector: View {
                             .font(AppStyle.caption).foregroundStyle(.secondary)
                     }
                 }
+                if let image = entry.inputImage {
+                    MetadataRow("Input image", value: "\(image.name) · \(image.mediaType)")
+                }
                 InspectionTextBlock(label: "Prompt · user", text: entry.query)
                 if entry.capability == .draw {
                     Text(entry.hasImage ? "Response · PNG image" : "No image returned.").font(

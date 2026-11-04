@@ -76,7 +76,7 @@ import Foundation
                 switch result {
                 case .text(let response):
                     progress(response, for: entry.id)
-                    try response.requireCompleted()
+                    try response.requireCompleted(webSearchRequired: entry.usesWebSearch)
                 case .image(let png):
                     guard var image = active, activeID == entry.id else { return }
                     image.imageData = png
@@ -109,6 +109,7 @@ import Foundation
             unsaved.removeValue(forKey: id)
             var saved = pending.terminal
             saved.imageData = nil
+            saved.inputImage?.data = nil
             publish(saved, activity: .finished, isActive: false)
         } catch {
             pending.error = error.localizedDescription
@@ -123,6 +124,8 @@ import Foundation
     private func progress(_ result: ResponseAccumulator, for id: UUID) {
         guard var entry = active, activeID == id else { return }
         entry.response = result.text
+        entry.citations = result.citations
+        entry.webSearchCompleted = result.webSearchCompleted
         entry.metrics = result.metrics
         entry.actualServiceTier = result.actualServiceTier
         active = entry
@@ -138,6 +141,7 @@ import Foundation
         do {
             try append(entry)
             visible.imageData = nil
+            visible.inputImage?.data = nil
         } catch {
             unsaved[id] = Unsaved(terminal: entry, error: error.localizedDescription)
             visible = unsavedProjection(entry)

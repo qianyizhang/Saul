@@ -19,6 +19,9 @@ public final class HistoryStore {
         var data = try encoder.encode(entry)
         data.append(0x0A)
         try withLock {
+            if let image = entry.inputImage, image.data != nil {
+                try saveImage(try image.validatedData(), id: entry.id, input: true)
+            }
             if let png = entry.imageData { try saveImage(png, id: entry.id) }
             let fd = Darwin.open(url.path, O_CREAT | O_RDWR | O_APPEND, 0o600)
             guard fd >= 0 else {
@@ -97,18 +100,19 @@ public final class HistoryStore {
     private var imagesURL: URL {
         url.deletingLastPathComponent().appendingPathComponent("images", isDirectory: true)
     }
-    private func imageURL(_ id: UUID) throws -> URL {
+    private func imageURL(_ id: UUID, input: Bool = false) throws -> URL {
         if (try? imagesURL.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true {
             throw EZError("History images directory must not be a symbolic link.")
         }
-        let result = imagesURL.appendingPathComponent(id.uuidString.lowercased() + ".png")
+        let result = imagesURL.appendingPathComponent(
+            id.uuidString.lowercased() + (input ? "-input" : ".png"))
         if (try? result.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true {
             throw EZError("History image must not be a symbolic link.")
         }
         return result
     }
-    private func saveImage(_ png: Data, id: UUID) throws {
-        let target = try imageURL(id)
+    private func saveImage(_ png: Data, id: UUID, input: Bool = false) throws {
+        let target = try imageURL(id, input: input)
         try FileManager.default.createDirectory(
             at: imagesURL, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         let temporary = imagesURL.appendingPathComponent(".\(UUID().uuidString).tmp")
@@ -130,10 +134,27 @@ public final class HistoryStore {
         }
         return try Data(contentsOf: imageURL(entry.id))
     }
+    public func inputImage(for entry: HistoryEntry) throws -> ImageAttachment? {
+        guard let metadata = entry.inputImage else { return nil }
+        if metadata.data != nil {
+            _ = try metadata.validatedData()
+            return metadata
+        }
+        let url = try imageURL(entry.id, input: true)
+        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max
+        guard size <= ImageAttachment.byteLimit else { throw EZError("The saved input image is too large.") }
+        let image = try ImageAttachment(data: Data(contentsOf: url), name: metadata.name)
+        guard image.mediaType == metadata.mediaType else {
+            throw EZError("The saved input image format changed.")
+        }
+        return image
+    }
     private func removeImage(_ id: UUID) throws {
-        let image = try imageURL(id)
-        if FileManager.default.fileExists(atPath: image.path) {
-            try FileManager.default.removeItem(at: image)
+        for input in [false, true] {
+            let image = try imageURL(id, input: input)
+            if FileManager.default.fileExists(atPath: image.path) {
+                try FileManager.default.removeItem(at: image)
+            }
         }
     }
     private func withLock<T>(_ operation: () throws -> T) throws -> T {

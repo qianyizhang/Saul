@@ -88,6 +88,9 @@ public struct ImageModelOption: Identifiable, Sendable {
     public func streamText(
         entry: HistoryEntry, onUpdate: @escaping @MainActor (ResponseAccumulator) -> Void
     ) async throws -> ResponseAccumulator {
+        if entry.usesWebSearch && id != .openAIAPI {
+            throw EZError("Web search requires OpenAI API. Choose an API Write preset explicitly.")
+        }
         guard let textOperation else { throw EZError("\(id.name) does not support Responses.") }
         try Task.checkCancellation()
         let key = try await credential()

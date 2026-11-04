@@ -122,13 +122,16 @@ public struct HistoryEntry: Codable, Identifiable, Equatable, Sendable {
     public var imageFile: String?
     /// Retained only for an unsaved image; PNG bytes never enter JSONL.
     public var imageData: Data?
+    public var inputImage: ImageAttachment?
+    public var citations: [WebCitation]?
+    public var webSearchCompleted: Bool?
     public var providerSnapshot: ProviderDefinition?
     private enum CodingKeys: String, CodingKey {
         case schemaVersion, id, createdAt, mode, query, response, model, effort
         case requestedServiceTier, actualServiceTier, status, error, durationSeconds, metrics
         case actionSnapshot = "recipeSnapshot"
         case presetSnapshot, inputValues, instructions, followUpQuestion, parentID, imageFile,
-            providerSnapshot
+            providerSnapshot, inputImage, citations, webSearchCompleted
     }
     public var capability: ActionCapability {
         actionSnapshot?.capability ?? presetSnapshot?.capability ?? .write
@@ -176,7 +179,7 @@ public struct HistoryEntry: Codable, Identifiable, Equatable, Sendable {
                 + query
             : query
         let prompt =
-            context + "\n\n--- Previous answer ---\n" + response
+            context + "\n\n--- Previous answer ---\n" + citedResponse
             + "\n\n--- Follow-up question ---\n" + question
             + "\n\nAnswer the follow-up question directly using the saved context above."
         guard prompt.utf16.count <= 120_000 else {
@@ -185,17 +188,23 @@ public struct HistoryEntry: Codable, Identifiable, Equatable, Sendable {
         var entry = HistoryEntry(
             mode: .ask, query: prompt, model: model, effort: effort,
             requestedServiceTier: requestedServiceTier)
-        entry.instructions = QueryMode.ask.instruction
+        entry.instructions =
+            usesWebSearch
+            ? "Answer the follow-up using web search. Cite sources inline and distinguish current sources from the saved context."
+            : QueryMode.ask.instruction
         entry.followUpQuestion = question
         entry.parentID = id
         entry.presetSnapshot = preset
         entry.actionSnapshot = Action(
-            name: "Follow-up", presetID: preset.id, template: "{{text}}", legacyMode: .ask)
+            name: "Follow-up", presetID: preset.id, template: "{{text}}", legacyMode: .ask,
+            webSearch: usesWebSearch)
         entry.inputValues = ["text": prompt]
         return entry
     }
+    public var usesWebSearch: Bool { actionSnapshot?.webSearch == true }
+    public var citedResponse: String { WebCitation.markdown(response, citations: citations ?? []) }
     public var markdown: String {
-        "# \(actionName)\n\n\(createdAt.formatted()) · \(model) · \(effort) · \(serviceDescription) · \(status)\n\n## Query\n\n\(displayQuery)\n\n## Compiled prompt\n\n\(query)\n\n## Response\n\n\(response)\n"
+        "# \(actionName)\n\n\(createdAt.formatted()) · \(model) · \(effort) · \(serviceDescription) · \(status)\n\n## Query\n\n\(displayQuery)\n\n## Compiled prompt\n\n\(query)\n\n## Response\n\n\(citedResponse)\n"
             + (error.map { "\nError: \($0)\n" } ?? "")
     }
 }

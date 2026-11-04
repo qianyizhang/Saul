@@ -162,6 +162,9 @@ struct ActionInputs: View {
     @FocusState private var focusedField: String?
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if let label = model.currentAction?.imageInput {
+                ImageInputView(model: model, label: label)
+            }
             if model.inputFields.isEmpty {
                 Button(model.minimumMode ? "Actions" : "Configure actions") {
                     if let onConfigure { onConfigure() } else { model.openSettings(.actions) }
@@ -172,7 +175,7 @@ struct ActionInputs: View {
                         VStack(spacing: 8) {
                             ForEach(model.inputFields, id: \.self) { field in
                                 VStack(alignment: .leading, spacing: 4) {
-                                    if model.inputFields.count > 1 {
+                                    if model.inputFields.count > 1 || model.currentAction?.imageInput != nil {
                                         Text(field).font(AppStyle.caption).foregroundStyle(
                                             AppStyle.secondaryText)
                                     }
@@ -193,9 +196,10 @@ struct ActionInputs: View {
                         if let field { proxy.scrollTo(field) }
                     }
                 }.frame(
-                    height: compact
+                    height: (compact
                         ? QuickLookupLayout.inputHeight(fieldCount: model.inputFields.count)
-                        : min(180, CGFloat(model.inputFields.count) * (model.inputFields.count > 1 ? 74 : 54))
+                        : min(180, CGFloat(model.inputFields.count) * (model.inputFields.count > 1 ? 74 : 54)))
+                        + (model.currentAction?.imageInput != nil && model.inputFields.count == 1 ? 20 : 0)
                 )
             }
         }

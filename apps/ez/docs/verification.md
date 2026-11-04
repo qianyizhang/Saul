@@ -4,6 +4,32 @@ Current repository migration/packaging checks are recorded in the
 [monorepo verification](../../../docs/migration.md#verification--2026-10-20).
 The dated native and live-provider evidence below remains scoped to its original build.
 
+## Search and sketch inputs — 2026-11-04
+
+Research requires a completed web search through an API Write preset. Answers,
+Copy and Markdown export retain source links. Make meme and custom Draw actions
+can require one image; exact source bytes are saved before transmission and
+restored through Reuse. Existing actions and text-only Draw retain their behavior.
+Both editable starters are seeded once, including for existing installations.
+
+`make format` and `make check` passed: **87 core + 57 state** cases, native build,
+Swift/Shell/workflow lint, preview typechecking and installation-script checks.
+`pnpm check:shared` passed **27 shared** cases; design consistency and links passed.
+Transport fixtures cover required search, missing/failed search, Unicode citations,
+image edits, invalid/oversized media and no automatic retry. State/storage checks
+cover save-before-send, invalid replacement retention, missing-source reuse,
+source-save blocking and exact save-only recovery of both source/result images.
+
+Production-view offline review exercised the main and minimum-size Quick Lookup
+composer, image Run/result/Reuse/Remove, source and search settings, inline sources,
+and light Min Mode / dark Standard mode. The review fixed clipped image-action
+instructions and added Quick Lookup's missing Reuse entry. The signed release was
+installed and relaunched with its existing identity verified and rollback retained;
+both starter actions and the installed empty sketch composer were inspected.
+Live billed search/image requests, drag/paste from external apps, the full keyboard
+and VoiceOver matrix remain unverified. Synthetic previews do not prove model
+access, caption fidelity or image quality.
+
 ## Actions and shared configuration — 2026-11-04
 
 Illustration is a Draw action in the shared main/Quick Lookup workspace. History

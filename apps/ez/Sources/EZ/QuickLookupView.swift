@@ -18,6 +18,13 @@ struct QuickLookupView: View {
                     onConfigure: { controller.showMain(settings: true) })
             }
             actions
+            if showsInputs, model.currentProvider?.kind == .openAIAPI {
+                Text(
+                    model.currentAction?.webSearch == true
+                        ? "OpenAI API · search charges apply" : "OpenAI API · billed separately"
+                )
+                .font(AppStyle.caption).foregroundStyle(.secondary)
+            }
             if !notices.isEmpty || needsSetup || (model.needsPlan && model.connecting) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
@@ -96,6 +103,10 @@ struct QuickLookupView: View {
                 Image(systemName: "sidebar.left")
             }.help("Open EZ & history").accessibilityLabel("Open EZ & history")
             Menu {
+                if let entry = model.selectedEntry, entry.status != "pending" {
+                    Button("Reuse") { model.reuse(entry) }.disabled(model.busy || model.launcherPending)
+                    Divider()
+                }
                 Toggle("Min Mode", isOn: $model.minimumMode)
                 Divider()
                 Button("Settings…") { controller.showMain(settings: true) }
@@ -170,7 +181,7 @@ struct QuickLookupView: View {
                 Button("Download") { model.downloadImage(entry) }.buttonStyle(.borderless)
                     .disabled(model.imageLoading)
             } else if let entry = model.selectedEntry, !entry.response.isEmpty {
-                Button("Copy") { model.copy(entry.response) }.buttonStyle(.borderless)
+                Button("Copy") { model.copy(entry.citedResponse) }.buttonStyle(.borderless)
                     .help("Copy answer")
             }
         }.font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
@@ -227,6 +238,7 @@ struct QuickLookupView: View {
             showsNotice: !notices.isEmpty || needsSetup || (model.needsPlan && model.connecting),
             showsAnswer: model.selectedEntry != nil,
             showsFollowUp: model.selectedEntry?.status == "completed"
-                && model.selectedEntry?.capability == .write)
+                && model.selectedEntry?.capability == .write,
+            showsImageInput: showsInputs && model.currentAction?.imageInput != nil)
     }
 }

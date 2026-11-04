@@ -8,7 +8,7 @@ import Foundation
             + modelChecks() + templateChecks() + configurationChecks()
             + spellingComparisonChecks() + recipeHistoryChecks() + responsesChecks() + authenticationChecks()
             + shortcutChecks() + sharedContractChecks() + illustrationChecks() + providerChecks()
-            + actionContractChecks()
+            + actionContractChecks() + searchImageChecks()
         exit(await CheckRunner.run(cases))
     }
 }

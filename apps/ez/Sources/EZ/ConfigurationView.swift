@@ -304,7 +304,12 @@ struct ConfigurationView: View {
                     .init(value: $0, title: $0.name)
                 },
                 selection: actionBinding(\.capability))
-            let compatible = model.configuration.presets.filter { $0.capability == action?.capability }
+            let compatible = model.configuration.presets.filter { preset in
+                preset.capability == action?.capability
+                    && (action?.webSearch != true
+                        || model.configuration.providers.first { $0.key == preset.providerKey }?.kind
+                            == .openAIAPI)
+            }
             let presetOptions: [SelectorOption<UUID>] =
                 (compatible.contains { $0.id == action?.presetID }
                     ? []
@@ -315,6 +320,28 @@ struct ConfigurationView: View {
                 "Default preset",
                 options: presetOptions,
                 selection: actionBinding(\.presetID))
+            if action?.capability == .write {
+                Toggle("Search the web", isOn: actionBinding(\.webSearch))
+                if action?.webSearch == true {
+                    Text("Requires an API Write preset. Each Run searches and adds search charges.")
+                        .font(AppStyle.caption).foregroundStyle(.secondary)
+                }
+            }
+            if action?.capability == .draw {
+                Toggle(
+                    "Image input",
+                    isOn: Binding(
+                        get: { action?.imageInput != nil },
+                        set: { action?.imageInput = $0 ? "Image" : nil }))
+                if action?.imageInput != nil {
+                    TextField(
+                        "Image input name",
+                        text: Binding(
+                            get: { action?.imageInput ?? "Image" }, set: { action?.imageInput = $0 })
+                    )
+                    .textFieldStyle(.roundedBorder).accessibilityLabel("Image input name")
+                }
+            }
             Text("Prompt").font(.subheadline.weight(.medium))
             TextEditor(text: actionBinding(\.template)).font(.system(size: 12, design: .monospaced))
                 .frame(height: 125).padding(6)
@@ -464,6 +491,8 @@ struct ConfigurationView: View {
             return
         }
         item.name = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if item.capability != .write { item.webSearch = false }
+        if item.capability != .draw { item.imageInput = nil }
         var updated = model.configuration
         if let index = updated.actions.firstIndex(where: { $0.id == item.id }) {
             updated.actions[index] = item

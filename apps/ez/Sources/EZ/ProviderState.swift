@@ -6,7 +6,11 @@ extension AppModel {
         configuration.providers.first { $0.key == currentPreset?.providerKey }
     }
     var compatiblePresets: [ModelPreset] {
-        configuration.presets.filter { $0.capability == currentAction?.capability }
+        configuration.presets.filter { preset in
+            preset.capability == currentAction?.capability
+                && (currentAction?.webSearch != true
+                    || configuration.providers.first { $0.key == preset.providerKey }?.kind == .openAIAPI)
+        }
     }
     var needsPlan: Bool { currentProvider?.kind == .chatGPTPlan }
     var providerIssue: String? {
@@ -95,5 +99,31 @@ extension AppModel {
         panel.nameFieldStringValue = "EZ-\(entry.id.uuidString.prefix(8)).png"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do { try data.write(to: url, options: .atomic) } catch { self.error = error.localizedDescription }
+    }
+}
+
+extension AppModel {
+    func attachImage(url: URL) {
+        imageImportID = UUID()
+        guard url.isFileURL else {
+            inputImageError = "Choose an image on this Mac."
+            return
+        }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max
+            guard size <= ImageAttachment.byteLimit else { throw EZError("Choose an image up to 20 MB.") }
+            attachImage(data: try Data(contentsOf: url), name: url.lastPathComponent)
+        } catch { inputImageError = error.localizedDescription }
+    }
+
+    func attachImage(data: Data, name: String) {
+        imageImportID = UUID()
+        guard !busy, !launcherPending, currentAction?.imageInput != nil else { return }
+        do {
+            inputImage = try ImageAttachment(data: data, name: name)
+            inputImageError = nil
+        } catch { inputImageError = error.localizedDescription }
     }
 }

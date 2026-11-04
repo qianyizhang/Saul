@@ -12,8 +12,9 @@ See the [monorepo setup guide](../../docs/setup.md) for component selection.
 ## Run
 
 Requires macOS 14+ and Apple Command Line Tools with Swift 6.3+ (`xcode-select --install`).
-The app has no third-party runtime packages. Text lookups use ChatGPT sign-in;
-the optional Illustration action uses an OpenAI API key. No Codex installation is needed.
+The app has no third-party runtime packages. Write actions use ChatGPT sign-in or
+an explicit OpenAI API preset. Draw and web search use an OpenAI API key with
+separate billing. No Codex installation is needed.
 
 ```sh
 make tools
@@ -43,6 +44,19 @@ Settings uses the same focused design as Saul: Overview, Presets, Actions,
 Preferences, Providers and Shortcuts. One editor is shown at a time and section
 changes preserve drafts. Min Mode assumes a familiar user: everyday controls
 stay visible, with one-word or symbol-only actions. Turn Min Mode off for explanatory help.
+
+**Research** searches the web on each Run and returns clickable inline citations.
+Its API Write preset is explicit; missing search/model access fails without changing
+providers. **Settings → Actions → Search the web** enables this for other Write
+actions. Search-enabled follow-ups search again and add API/search charges.
+
+**Make meme** accepts a sketch plus instructions. Drop, paste or choose one PNG,
+JPEG or WebP (up to 20 MB), then Run. Attachments prepare a draft without sending.
+The source is saved with History for Reuse; deletion removes that saved copy and
+the generated PNG. Your original file remains yours. **Settings → Actions → Image
+input** adds a named required image to other Draw actions. Existing text-only
+Illustration still generates from a prompt. Both starters are editable and added
+once; removing them is respected.
 
 Selected answers open in a reading view. **Edit** reveals your current inputs;
 **Hide** returns to reading, and **More → Reuse** restores the saved request.

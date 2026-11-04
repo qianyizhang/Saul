@@ -9,7 +9,9 @@ struct ThinkingDivider: View {
 
     private var active: Bool { activity?.showsThinkingLight == true }
     private var lightColor: Color { activity == .thinking ? AppStyle.accent : AppStyle.waitingActivity }
-    private var label: String { activity == .thinking ? "Thinking…" : "Waiting for answer…" }
+    private var label: String {
+        activity == .searching ? "Searching…" : activity == .thinking ? "Thinking…" : "Waiting for answer…"
+    }
 
     var body: some View {
         Divider()
