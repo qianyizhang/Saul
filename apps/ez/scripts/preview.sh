@@ -8,17 +8,10 @@ case "${1:-}" in
     *) printf 'Usage: bash scripts/preview.sh design|configuration|surface\n' >&2; exit 1;;
 esac
 kind="$1"
-export CLANG_MODULE_CACHE_PATH="$PWD/.build/module-cache"
-./scripts/swift.sh build --product EZ
-bin_dir=$(./scripts/swift.sh build --show-bin-path)
-objects=()
-while IFS= read -r file; do
-    case "$file" in */EZCore.build/*.o|*/SaulCredentialStorage.build/*.o) objects+=("$file");; esac
-done < "$bin_dir/EZ.product/Objects.LinkFileList"
-sources=()
-for file in Sources/EZ/*.swift; do
-    case "$file" in */EZApp.swift) ;; *) sources+=("$file");; esac
-done
+source scripts/lib/swift-build.sh
+ez_build_product EZ
+ez_link_modules EZ EZCore SaulCredentialStorage
+ez_application_sources
 mkdir -p dist
 preview="$PWD/dist/$label.app"
 staging=$(mktemp -d "$PWD/dist/.ez-preview.XXXXXX")
@@ -36,8 +29,7 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 mkdir -p "$staged_app/Contents/MacOS"
-xcrun swiftc -parse-as-library -target "$(uname -m)-apple-macos14.0" -module-cache-path "$CLANG_MODULE_CACHE_PATH" \
-    -I "$bin_dir/Modules" -I Sources/CSQLite -lsqlite3 "scripts/$kind-preview.swift" "${sources[@]}" "${objects[@]}" \
+ez_compile_library "Tests/Previews/$kind.swift" "${ez_app_sources[@]}" "${ez_objects[@]}" \
     -o "$staged_app/Contents/MacOS/$executable"
 cat > "$staged_app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

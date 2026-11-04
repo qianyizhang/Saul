@@ -63,7 +63,7 @@ unknown options fail rather than pretending to run checks. Cases run serially;
 its executable once with the case name: a non-cooperative task cannot safely be
 abandoned and allowed to leak into later cases.
 
-`state-checks.sh` builds the normal app and compiles its `AppModel.swift` and
+`scripts/check.sh state` builds the normal app and compiles its `AppModel.swift` and
 `ProviderState.swift` alongside the state cases, linking SwiftPM's core/support objects. This keeps
 app-only state out of EZCore and requires no Xcode test host. These checks do not
 launch the native interface or prove focus, layout, shortcuts, or live inference;
@@ -93,3 +93,18 @@ Typed-action checks cover legacy Write defaults, shared Draw preset preservation
 exact compiled prompts, explicit API tiers, owner-only PNG persistence/deletion,
 path/symlink rejection, unavailable provider/type/key blockers, Stop/late-result
 isolation and save-only recovery with the original bytes and no second request.
+
+## Tooling and previews
+
+`make` is the public entry point. `scripts/check.sh` owns core/state, Services,
+row interaction and preview-source checks. `scripts/lib/swift-build.sh` owns
+compiler flags and module/object discovery for SwiftPM and Xcode build layouts;
+missing required objects fail before linking. `make test-tooling` tests both
+layouts with disposable files and is part of `make check`.
+
+Offline preview app sources live in `Tests/Previews/`; `make design-preview`,
+`make configuration-preview` and `make surface-preview` package them through
+`scripts/preview.sh`. The Services callback check lives in `Tests/Services/`.
+These are development fixtures, not shipped application resources. Build,
+installation, signing and tool bootstrap scripts stay separate because they own
+different effects and recovery contracts.
