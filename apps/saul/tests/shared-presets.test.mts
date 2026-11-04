@@ -4,11 +4,36 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SharedPresetsStore } from '../native/shared-presets.mts';
 import { sharedPresets } from '../src/storage/shared-presets';
+import { validatePlanResult } from '../native/plan-protocol.mts';
+import { DEFAULT_PROVIDERS, resolveSharedPresets } from '../native/shared-presets-contract.mts';
 import {
   createSettingsOwner,
   DEFAULT_SETTINGS,
   SETTINGS_STORAGE_KEY,
 } from '../src/storage/settings';
+
+it('normalizes legacy helper replies once while preserving explicit empty providers', () => {
+  const request = { action: 'presets-read' } as const;
+  const legacy: unknown = { type: 'result', library: { revision: 2, presets: [] } };
+  validatePlanResult(request, legacy);
+  const resolved = resolveSharedPresets(legacy.library);
+  expect(resolved.providers).toEqual(DEFAULT_PROVIDERS);
+  resolved.providers[0]!.name = 'Changed locally';
+  expect(resolveSharedPresets(legacy.library).providers[0]!.name).toBe('ChatGPT plan');
+  const empty: unknown = {
+    type: 'result',
+    library: { revision: 2, presets: [], providers: [] },
+  };
+  validatePlanResult(request, empty);
+  expect(resolveSharedPresets(empty.library).providers).toEqual([]);
+  for (const providers of [null, {}, [{ key: 'invalid' }]])
+    expect(() =>
+      validatePlanResult(request, {
+        type: 'result',
+        library: { revision: 2, presets: [], providers },
+      }),
+    ).toThrow('invalid reply');
+});
 
 it('shares edits, migrates once, keeps accounts outside presets, and refuses a stale settings save', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'saul-shared-presets-'));

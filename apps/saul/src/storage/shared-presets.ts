@@ -1,5 +1,5 @@
 import {
-  DEFAULT_PROVIDERS,
+  resolveSharedPresets,
   validateScopedConfigValue,
 } from '../../native/shared-presets-contract.mts';
 import { scopedCall, portableSettings, restoreSettings } from './scoped-config';
@@ -23,7 +23,7 @@ async function sharedCall(request: PresetRequest): Promise<SharedPresets> {
   });
   if (reply?.event?.type === 'error') throw new Error(reply.event.message);
   validatePlanResult(request, reply?.event);
-  return reply.event.library;
+  return resolveSharedPresets(reply.event.library);
 }
 
 // Stable migration IDs leave saved attempts untouched and keep recipe references together.
@@ -68,7 +68,7 @@ const definitions = (settings: UserSettings) =>
 
 function project(settings: UserSettings, library: SharedPresets): UserSettings {
   const configuration = configurationFor(settings);
-  const providers = structuredClone([...(library.providers ?? DEFAULT_PROVIDERS)]);
+  const providers = structuredClone(library.providers);
   const providerConnections = { ...settings.providerConnections };
   // Adopt only the already-selected official OpenAI connection. Never borrow a key from another endpoint.
   if (

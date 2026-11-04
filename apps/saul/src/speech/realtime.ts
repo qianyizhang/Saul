@@ -55,7 +55,7 @@ export function speechCredential(
     (preset.speechOptions?.voice ?? 'marin') !== request.voice
   )
     throw new Error('The Speak preset changed. Save or reload Presets before generating speech.');
-  const provider = settings.providers?.find((p) => p.key === preset.providerKey);
+  const provider = settings.providers.find((p) => p.key === preset.providerKey);
   if (
     (settings.providers && provider?.kind !== 'openai-api') ||
     (!settings.providers && preset.providerKey !== 'openai-api')

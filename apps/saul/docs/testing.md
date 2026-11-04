@@ -171,7 +171,7 @@ In `pnpm test:user`:
 3. Open the marker, inspect notes, close it, refresh, and reopen the restored result.
 4. Check unread state, **Alt+Shift+L**, source navigation, keyboard/pin/follow-up/stop behavior, and direct tab edits or Codex proposal review when relevant.
 5. Toggle **Mute error notifications** in Settings; verify another tab and a browser relaunch observe the setting, then turn it off.
-6. Toggle **Minimum Mode** while a page explanation and full History workspace are open. Check that the presentation changes immediately, remains after restart, and can change with an invalid provider draft. In Minimum Mode, verify **More**, **Details**, source links, errors, and unsaved changes.
+6. Toggle **Min Mode** while a page explanation and full History workspace are open. Check that the presentation changes immediately, remains after restart, and can change with an invalid provider draft. In Min Mode, verify **More**, **Details**, source links, errors, and unsaved changes.
 7. Check **Command/Ctrl+Enter** on a source selection, **Escape** while generation is active, and **Command/Ctrl+.** with the job open. Editable fields and Chrome shortcuts must keep their existing behavior.
 
 A successful smoke run verifies setup only. Record the built source scope, passed checks, and untested live-provider behavior after hands-on review.
@@ -182,7 +182,7 @@ Formatting, lint, types, local links, design receipts and the production build p
 All 194 unit/transport cases passed across the sandboxed run and the approved rerun
 of the two socket-dependent files. Browser coverage finished with 72 cases passing
 and five optional/disabled cases skipped: the initial broad run passed 70, then all
-14 affected layout/configuration/inspection/Minimum Mode cases passed after fixing
+14 affected layout/configuration/inspection/Min Mode cases passed after fixing
 two test assumptions. The final rerun checked labelled value-column alignment,
 long model/preset wrapping, keyboard disclosure activation and overflow at 360,
 440 and 1000 px in light/dark appearances. Inspected screenshots also covered
@@ -195,9 +195,9 @@ personal history. Native framing and installed payloads have separate checks.
 
 ## Evidence limits
 
-The default browser suite uses deterministic local fixtures. It does not verify live provider credentials/output, actual Chrome on-device model download/generation, personal native-host registration, or other browsers. Benchmark reproduction and scope are documented in [benchmarks](benchmarks/README.md).
+The default browser suite uses deterministic local fixtures. It does not verify live provider credentials/output, personal native-host registration, or other browsers. Benchmark reproduction and scope are documented in [benchmarks](benchmarks/README.md).
 
-On-device generation is temporarily disabled. Its integration cases are retained and skipped until re-enabled; the active regression verifies the disabled option and recovery from saved local selections. When enabled, tests include a real, read-only `LanguageModel.availability()` probe with a JSON attachment recording the browser version, API exposure, and result. The disposable model fixture separately verifies user-activated preparation, honest readiness/errors, generation, and selection → offscreen runner → saved history. Fixture success does not establish live Gemini inference. Playwright's default switches disable background networking, component updates, and optimization hints, so its disposable profile's availability is not evidence of model eligibility in the user's normal Chrome profile. For that browser, inspect `chrome://on-device-internals` and the [Prompt API requirements](https://developer.chrome.com/docs/ai/prompt-api#hardware-requirements).
+Chrome on-device generation is retired. The remaining regression verifies that legacy saved selections remain visible, reject execution, and allow an explicit change to an available provider. No Chrome model download, preparation, or generation fixture remains.
 
 Agent workflow: [saul-browser-testing skill](../../../.agents/skills/saul-browser-testing/SKILL.md).
 

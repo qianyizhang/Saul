@@ -10,7 +10,7 @@ import {
   openFirstPageExplanation,
 } from './driver.ts';
 import type { PlanRequest, PlanEvent } from '../../native/plan-protocol.mts';
-import type { SharedPresets } from '../../native/shared-presets-contract.mts';
+import type { SharedPresetsReply } from '../../native/shared-presets-contract.mts';
 
 test('ChatGPT provider settings route reading streams, preserve partial failures, and switch back', async ({
   sandbox,
@@ -22,7 +22,7 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   // Replace only the OS transport. UI, sender validation, offscreen runner and
   // durable database are production code; no native registration or real quota.
   await worker.evaluate(() => {
-    let library: SharedPresets = { revision: 0, presets: [] };
+    let library: SharedPresetsReply = { revision: 0, presets: [] };
     const sections: Record<string, { revision: number; value?: Record<string, unknown> }> = {};
     chrome.runtime.sendNativeMessage = (async (
       _host: string,

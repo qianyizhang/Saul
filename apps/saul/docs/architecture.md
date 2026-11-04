@@ -8,13 +8,13 @@ Saul is a Chrome MV3 extension with four runtime contexts. State crosses context
 | ------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | Content script     | `entrypoints/content.tsx`       | Capture selections, render the shadow-DOM reading UI, restore page markers                                    |
 | Service worker     | `entrypoints/background.ts`     | Validate callers, route reading/workspace requests, manage settings, badges, notifications, and native access |
-| Offscreen document | `entrypoints/offscreen/main.ts` | Own durable reading jobs and Chrome on-device generation                                                      |
+| Offscreen document | `entrypoints/offscreen/main.ts` | Own durable reading and summary jobs                                                                          |
 | Shared history     | `native/history.mts`            | SQLite through the native helper; OPFS is read only during one-time migration                                 |
 
 The popup and full workspace reuse the application views under `src/app/`. The full workspace owns global history, export, deletion, settings, and tab organization.
 
 Presentation preferences are separate from provider drafts. `src/storage/presentation.ts`
-owns the default-on Minimum Mode value in trusted extension storage. Popup and
+owns the default-on Min Mode value in trusted extension storage. Popup and
 workspace listeners share changes immediately; the background broadcasts only the
 boolean presentation value over the existing validated reading subscription. Content
 scripts do not gain direct storage or credential access. Provider validation or an
@@ -27,12 +27,12 @@ page selection
   -> content script captures text, context, and anchor
   -> background validates the source page and freezes settings
   -> offscreen runner queues and streams generation
-  -> database worker checkpoints and commits the attempt
+  -> native history helper checkpoints and commits the attempt
   -> background updates page subscribers and the unread badge
   -> content script restores the marker and opens results on request
 ```
 
-`src/reading/runner.ts` owns queueing, cancellation, checkpoints, completion classification, and restart reconciliation. Remote providers allow two concurrent jobs; Chrome on-device generation allows one. Jobs are never replayed automatically after uncertain runner/browser loss.
+`src/reading/runner.ts` owns queueing, cancellation, checkpoints, completion classification, and restart reconciliation. Providers allow two concurrent jobs. Jobs are never replayed automatically after uncertain runner/browser loss.
 
 An answer is ready only after a provider completion signal, readable output, and a successful database commit. Interrupted, stopped, provider-error, and save-error states retain honest status and available partial text.
 
@@ -77,7 +77,7 @@ Runtime messages do not return to their sender. Content and popup requests there
 
 ## Model boundary
 
-`src/models/provider.ts` is the streaming facade used by the reading runner and generation tests. It dispatches to OpenAI-compatible, Chrome on-device, or ChatGPT plan adapters and returns the same delta/completion events. Both HTTP adapters reuse `native/sse.mts` for bounded SSE framing across UTF-8 chunks, CRLF/LF separators, multiline `data:` fields, provider errors, cancellation, and incomplete output. The retained Chrome adapter uses the modern `LanguageModel` API in the offscreen document, but `CHROME_AI_ENABLED` in `src/models/chrome-ai.ts` is false: on-device generation is disabled in this build.
+`src/models/provider.ts` is the streaming facade used by the reading runner and generation tests. It dispatches to OpenAI-compatible or ChatGPT plan adapters and returns the same delta/completion events. Both HTTP adapters reuse `native/sse.mts` for bounded SSE framing across UTF-8 chunks, CRLF/LF separators, multiline `data:` fields, provider errors, cancellation, and incomplete output. Chrome on-device AI is retired. Legacy saved selections and frozen requests remain readable but reject execution with an explicit provider-choice message; no model preparation or local streaming implementation remains.
 
 Prompts and context are frozen when a job is submitted. Later settings edits do not change an in-flight job. Provider keys are associated with their endpoint origin and are not persisted with job inputs. ChatGPT plan jobs freeze a non-secret account registration ID and model; OAuth credentials stay in the native helper.
 
@@ -207,7 +207,7 @@ must be updated to accept attachments. Source input and coverage use existing
 JSON source rows; PDF bytes are never persisted. See the
 [PDF capture contract](product.md#summaries) for triggers, bounds and limitations.
 
-The existing offscreen document hosts the digest runner alongside reading jobs. Both use the same database worker; built-in digest generation uses the native ChatGPT transport and calls the existing plan adapter with a frozen account, prompt, model and effort. Digest control actions serialize, generation uses two concurrent workers, and there is no automatic retry. All workers settle before a stop/delete/retry control can complete. Schema version 2 adds digest metadata and item/source rows without rewriting reading data. Restart reconciliation marks unfinished items interrupted. The UI polls saved/live state while mounted and renders built-in English before Chinese from validated pairs; raw model text is never interpreted as HTML.
+The existing offscreen document hosts the digest runner alongside reading jobs. Both use the shared native history helper; built-in digest generation uses the native ChatGPT transport and calls the existing plan adapter with a frozen account, prompt, model and effort. Digest control actions serialize, generation uses two concurrent workers, and there is no automatic retry. All workers settle before a stop/delete/retry control can complete. The current shared history schema is version 3. The old browser schema version 2 is a one-time import format, including digest metadata and item/source rows. Restart reconciliation marks unfinished items interrupted. The UI polls saved/live state while mounted and renders built-in English before Chinese from validated pairs; raw model text is never interpreted as HTML.
 
 `src/app/Summaries.tsx` owns saved-summary history and live reading under
 `library.html#summary/<id>`. A new reader checks saved input reuse before account
@@ -254,7 +254,7 @@ build tooling, independent of authentication, inference, and storage runtimes.
 | `src/models/`    | Provider adapters, prompts, and stream events                                |
 | `src/native/`    | Extension-side tab operations and native bridge                              |
 | `src/reading/`   | Durable runner, anchor restoration, and markers                              |
-| `src/storage/`   | Settings, client routing, schema, database, and worker                       |
+| `src/storage/`   | Settings, native history routing, and legacy OPFS import                     |
 | `src/surface/`   | Page-side React UI                                                           |
 | `native/`        | Node CLI, MCP server, native host, transport, installer, and shared protocol |
 

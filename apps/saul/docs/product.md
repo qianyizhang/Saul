@@ -87,10 +87,10 @@ across sections; preferences and access retain their independent immediate-save 
 - Save, connection test, and generation test use the current draft without overwriting unreadable stored settings.
 - Model setup appears first. Save and validation feedback stay visible while scrolling; leaving a changed draft asks before discarding it.
 - Response language and context controls apply to new submissions.
-- Chrome on-device AI is temporarily disabled while live model setup remains unverified. Saved selections remain readable and prompt an explicit switch to ChatGPT plan or OpenAI compatible. New local requests are blocked; Saul does not switch providers automatically.
+- Chrome on-device AI is retired. Saved selections remain readable and prompt an explicit switch to ChatGPT plan or OpenAI compatible. New local requests are blocked; Saul does not switch providers automatically.
 - [ChatGPT plan](chatgpt-plan.md) uses the same sign-in flow and control labels as EZ, with separate saved sign-ins. Its account catalog supplies model names, reasoning effort, and Fast/Standard choices. Saved unavailable choices block requests rather than changing silently. It requires the local helper, omits unsupported temperature and output-token options, and never switches billing providers after a failure.
 
-Local tests cover the provider boundary with deterministic fixtures. They do not establish external-provider authentication, model quality, Chrome model availability/download, or device performance.
+Local tests cover the provider boundary with deterministic fixtures. They do not establish external-provider authentication, model quality, or device performance.
 
 ## Window and Tab board
 

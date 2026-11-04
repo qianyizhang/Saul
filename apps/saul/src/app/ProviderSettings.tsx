@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { DEFAULT_PROVIDERS, providerCapabilities } from '../../native/shared-presets-contract.mts';
+import { providerCapabilities } from '../../native/shared-presets-contract.mts';
 import type { UserSettings } from '../types';
 import type { SettingsEdit } from '../models/settings-draft';
 import type { PlanSettingsState } from './usePlanSettings';
@@ -24,7 +24,7 @@ export function ProviderSettings({
   credentialLocked: boolean;
   changeCredentialOwner: (owner: 'saul' | 'disconnected') => Promise<void>;
 }) {
-  const providers = settings.providers ?? DEFAULT_PROVIDERS;
+  const providers = settings.providers;
   const [key, setKey] = useState('gpt-plan'),
     [profileId, setProfileId] = useState(''),
     [showKey, setShowKey] = useState(false);

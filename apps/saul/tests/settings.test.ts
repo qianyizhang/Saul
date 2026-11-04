@@ -5,6 +5,7 @@ import {
   getSettings,
   InvalidStoredSettingsError,
   validateProviderSettings,
+  normalizeSettings,
 } from '../src/storage/settings';
 
 const get = vi.fn();
@@ -15,11 +16,20 @@ beforeEach(() => {
   vi.stubGlobal('chrome', { storage: { local: { get, set } } });
 });
 afterEach(() => vi.unstubAllGlobals());
+it('resolves provider definitions at the persisted settings boundary', () => {
+  const legacy = normalizeSettings({});
+  expect(legacy.providers).toEqual(DEFAULT_SETTINGS.providers);
+  legacy.providers[0]!.name = 'Local edit';
+  expect(normalizeSettings({}).providers[0]!.name).toBe('ChatGPT plan');
+  expect(normalizeSettings({ providers: [] }).providers).toEqual([]);
+  for (const providers of [null, {}, [{ key: 'invalid' }]])
+    expect(() => normalizeSettings({ providers })).toThrow('Providers need unique');
+});
 it('retains saved on-device settings while requiring an explicit enabled provider choice', async () => {
   get.mockResolvedValueOnce({ saul_user_settings: { activeProvider: 'chrome-ai' } });
   const settings = await getSettings();
   expect(settings.activeProvider).toBe('chrome-ai');
-  expect(() => validateProviderSettings(settings)).toThrow('temporarily disabled');
+  expect(() => validateProviderSettings(settings)).toThrow('has been retired');
   expect(set).not.toHaveBeenCalled();
 });
 

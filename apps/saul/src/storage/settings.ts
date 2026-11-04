@@ -1,12 +1,16 @@
-import { validateSharedProviders } from '../../native/shared-presets-contract.mts';
+import {
+  DEFAULT_PROVIDERS,
+  validateSharedProviders,
+} from '../../native/shared-presets-contract.mts';
 import { officialOpenAI } from '../../native/credentials-contract.mts';
 import type { UserSettings } from '../types';
 import { DEFAULT_SYSTEM_PROMPT } from '../models/prompts';
-import { CHROME_AI_ENABLED, CHROME_AI_DISABLED_MESSAGE } from '../models/chrome-ai';
+import { CHROME_AI_RETIRED_MESSAGE } from '../models/retired-provider';
 import { normalizeConfiguration, starterConfiguration } from '../models/configuration';
 import { validateSettingsRequest, type SettingsState } from '../contracts/settings';
 
 const DEFAULT_CONNECTION_SETTINGS: UserSettings = {
+  providers: structuredClone([...DEFAULT_PROVIDERS]),
   activeProvider: 'openai-compatible',
   openaiCompatible: {
     baseUrl: 'https://api.openai.com/v1',
@@ -191,7 +195,9 @@ export function normalizeSettings(value: unknown): UserSettings {
     ...(stored.sharedCredentials === undefined
       ? {}
       : { sharedCredentials: stored.sharedCredentials as 'saul' | 'disconnected' }),
-    ...(stored.providers === undefined ? {} : { providers: stored.providers }),
+    providers: structuredClone(
+      stored.providers === undefined ? DEFAULT_SETTINGS.providers : stored.providers,
+    ),
     ...(providerConnections === undefined ? {} : { providerConnections }),
     summaryPdfProcessing,
     scopedConfigRevision: optionalNumber(stored.scopedConfigRevision, 'scoped config revision'),
@@ -294,8 +300,7 @@ function validateEndpoint(baseUrl: string): URL {
 
 /** Connection editing validates syntax; credentials and model availability belong to Run. */
 export function validateSettingsConnections(settings: UserSettings): void {
-  if (settings.activeProvider === 'chrome-ai' && !CHROME_AI_ENABLED)
-    throw new Error(CHROME_AI_DISABLED_MESSAGE);
+  if (settings.activeProvider === 'chrome-ai') throw new Error(CHROME_AI_RETIRED_MESSAGE);
   if (settings.activeProvider === 'openai-compatible' && !settings.openaiCompatible.model.trim())
     throw new Error('Enter a model name available from this provider.');
   for (const profile of settings.profiles ?? [])
@@ -311,10 +316,7 @@ export function validateProviderSettings(settings: UserSettings): URL | undefine
         officialOpenAI(settings.openaiCompatible.baseUrl)))
   )
     throw new Error('Connect this app to Saul credentials in Providers.');
-  if (settings.activeProvider === 'chrome-ai') {
-    if (!CHROME_AI_ENABLED) throw new Error(CHROME_AI_DISABLED_MESSAGE);
-    return undefined;
-  }
+  if (settings.activeProvider === 'chrome-ai') throw new Error(CHROME_AI_RETIRED_MESSAGE);
   if (settings.activeProvider === 'chatgpt-plan') {
     if (!settings.chatgptPlan?.accountId || !settings.chatgptPlan.model.trim())
       throw new Error('Choose a ChatGPT account and model.');

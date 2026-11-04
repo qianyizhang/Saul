@@ -184,7 +184,6 @@ export interface SandboxOptions {
   databaseFixtures?: boolean;
   legacyHistoryFixture?: boolean;
   browserToolsFixtures?: boolean;
-  chromeAiFixtures?: boolean;
   handleProcessSignals?: boolean;
 }
 
@@ -262,13 +261,6 @@ export async function createSandbox(options: SandboxOptions = {}) {
                   ),
                 }
               : {}),
-            ...(options.chromeAiFixtures
-              ? {
-                  'chrome-ai-fixture': fileURLToPath(
-                    new URL('./chrome-ai-fixture.ts', import.meta.url),
-                  ),
-                }
-              : {}),
             ...(options.browserToolsFixtures
               ? {
                   'browser-tools-fixture': fileURLToPath(
@@ -290,19 +282,6 @@ export async function createSandbox(options: SandboxOptions = {}) {
         minify: false,
       },
     });
-    if (options.chromeAiFixtures) {
-      for (const page of ['popup.html', 'offscreen.html']) {
-        const file = path.join(extension, page);
-        const html = await readFile(file, 'utf8');
-        await writeFile(
-          file,
-          html.replace(
-            '<head>',
-            '<head><script type="module" src="/chrome-ai-fixture.js"></script>',
-          ),
-        );
-      }
-    }
     const backgroundFile = path.join(extension, 'background.js');
     await writeFile(
       backgroundFile,

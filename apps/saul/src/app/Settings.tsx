@@ -1,8 +1,4 @@
-import {
-  DEFAULT_PROVIDERS,
-  providerCapabilities,
-  SPEECH_VOICES,
-} from '../../native/shared-presets-contract.mts';
+import { providerCapabilities, SPEECH_VOICES } from '../../native/shared-presets-contract.mts';
 import { ProviderSettings } from './ProviderSettings';
 import { usePlanSettings } from './usePlanSettings';
 import { SpeechTest } from './SpeechTest';
@@ -12,7 +8,7 @@ import { useEffect, useState } from 'react';
 import type { UserSettings } from '../types';
 import { useSettingsDraft } from './useSettingsDraft';
 import { useProviderTest } from './useProviderTest';
-import { CHROME_AI_ENABLED, CHROME_AI_DISABLED_MESSAGE } from '../models/chrome-ai';
+import { CHROME_AI_RETIRED_MESSAGE } from '../models/retired-provider';
 import { configurationFor } from '../models/configuration';
 import { RecipeSettings } from './RecipeSettings';
 import { SUMMARY_ACTION_ID, SUMMARY_CLOSE_ID } from '../digest/actions';
@@ -30,7 +26,7 @@ export function Settings({
 }) {
   const draft = useSettingsDraft(onDirty);
   const { settings, loaded, dirty, saved, saving, save } = draft;
-  const providerTest = useProviderTest(settings.activeProvider);
+  const providerTest = useProviderTest();
   const { testing, notice } = providerTest;
   const [presetSearch, setPresetSearch] = useState('');
   const [planBusy, setPlanBusy] = useState(false);
@@ -102,9 +98,9 @@ export function Settings({
     draft.edit(patch);
     providerTest.clear();
   };
-  const test = (mode: 'endpoint' | 'generation' | 'prepare') =>
+  const test = (mode: 'endpoint' | 'generation') =>
     providerTest.test(mode, settings, selectedPreset?.id);
-  const presetProviders = settings.providers ?? DEFAULT_PROVIDERS;
+  const presetProviders = settings.providers;
   const currentProvider = presetProviders.find((p) => p.key === selectedPreset?.providerKey);
   const locked = testing || planBusy || speechBusy;
   if (!loaded)
@@ -273,9 +269,11 @@ export function Settings({
                         {selectedPreset.providerKey} · unavailable
                       </option>
                     )}
-                    <option value="chrome-ai" disabled={!CHROME_AI_ENABLED}>
-                      Chrome on-device AI{CHROME_AI_ENABLED ? '' : ' (temporarily disabled)'}
-                    </option>
+                    {selectedPreset.provider === 'chrome-ai' && (
+                      <option value="chrome-ai" disabled>
+                        Chrome on-device AI (retired)
+                      </option>
+                    )}
                   </select>
                 </label>
                 <label className="field">
@@ -374,7 +372,7 @@ export function Settings({
                     test={() => test('generation')}
                   />
                 ) : selectedPreset.provider === 'chrome-ai' ? (
-                  <p className="notice">{CHROME_AI_DISABLED_MESSAGE}</p>
+                  <p className="notice">{CHROME_AI_RETIRED_MESSAGE}</p>
                 ) : (
                   <>
                     {!selectedPreset.providerKey && (
@@ -659,7 +657,7 @@ export function Settings({
         {testing && (
           <div className="row">
             <span role="status" className="small muted">
-              {providerTest.preparing ? 'Preparing on-device model…' : 'Testing provider…'}
+              Testing provider…
             </span>
             <button
               className="btn"

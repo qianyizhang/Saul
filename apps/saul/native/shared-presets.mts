@@ -98,7 +98,7 @@ export class SharedPresetsStore {
       throw new Error(
         'Shared presets changed in the other app. Reload saved settings before saving again.',
       );
-    const definitions = providers ?? current.providers ?? structuredClone([...DEFAULT_PROVIDERS]);
+    const definitions = providers ?? current.providers;
     validateSharedProviders(definitions);
     const document = this.document();
     const saved = {

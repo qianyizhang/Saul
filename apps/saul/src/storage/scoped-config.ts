@@ -27,7 +27,8 @@ export async function scopedCall(request: Request): Promise<ScopedConfig> {
 
 // Connection secrets and the selected local account never enter the JSON file.
 export function portableSettings(settings: UserSettings): Record<string, unknown> {
-  const value = structuredClone(settings);
+  const value: Omit<UserSettings, 'providers'> & { providers?: UserSettings['providers'] } =
+    structuredClone(settings);
   delete value.chatgptPlan;
   delete value.sharedCredentials;
   delete value.sharedPresetRevision;

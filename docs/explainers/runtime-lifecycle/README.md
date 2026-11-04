@@ -4,43 +4,24 @@
 
 ## Outcome and scope
 
-Requested reading guide for the current helpers, bridges and runners, their exact
-names, execution locations, start/stop/restart rules, persistence and the proposed
-user-action host. Includes a containment map, lifecycle scenarios, summary sequence
-and source links. Map buttons open native HTML popover cards in place. Each card
-shows short start/stop/recovery facts, with technical limits and sources in a
-secondary disclosure. CSS radio controls switch lifecycle scenarios. The page
-executes no scripts, model calls or background work.
+Reading guide for the helpers, bridges and runners: their execution locations,
+start/stop/restart rules, persistence and user-action lifecycle. The HTML includes
+a containment map, lifecycle scenarios, a summary sequence and source links.
+Native HTML popovers disclose details; the page executes no scripts, model calls
+or background work.
 
-The proposed action helper now sits inside the same Local Node programs group
-as the existing ChatGPT and tab helpers, marked not implemented. The helper is
-the process; the user module loads inside it. Its overlay explains input/output, ownership,
-credential access and draft call/reload/stop/reuse contracts. Host lifecycle and child-process rules are labelled as open at the survey baseline. The separate proposal
-section was removed so this information has one home. This changes the explainer
-only; no action host or executable contract is implemented.
+The action helper is implemented. It stages and checks candidate revisions,
+loads an explicitly selected revision in an isolated worker, and retains the
+active revision for in-flight runs. Loading is distinct from invoking a handler.
+Shared history is owned by the native SQLite helper; browser OPFS is used only
+for one-time import. The HTML already reflects those ownership changes.
 
-The map's Create & reload overlay explains the proposed prompt-to-action journey:
-generate a fixed-format candidate through the existing plan account, stage and
-check without execution, offer Load/Replace, load an approved revision in a fresh
-Node worker, then switch future runs only after readiness. Active runs keep the
-old revision; loading does not invoke the handler. Code validity is distinct from
-trust, and initialization side effects are not claimed to be reversible. This
-journey and worker design describe the survey proposal; the separate hot-reload
-implementation owns their executable contracts.
-
-The simplification follows `practices/ui-ux.md` and the Communication rules in
-`AGENTS.md`: one home for each fact, short sentences, and details after interest.
-The duplicate inventory and lifecycle table were removed. Total visible and
-disclosed prose initially fell from 3,670 to 2,174 words, before adding the requested
-action-host contracts. Modern browser Popover support is
-required; native controls handle Escape, outside-click dismissal and focus return.
-
-Source baseline: `dc724fcf7cbd27cf7baec5c9aa1f2540099d2b40`, reviewed 2026-10-29.
-This includes the committed PDF flow, standalone board and EZ Quick Lookup.
-The separate in-progress action-host implementation is excluded. This is not a claim about
-installed/running versions. The page embeds a snapshot of the generated Little
-Clarity CSS tokens; it stays aligned with the root design owner rather than
-introducing a separate theme.
+The original survey baseline was `dc724fcf7cbd27cf7baec5c9aa1f2540099d2b40`
+(2026-10-29). The guide has since been updated for implemented actions and shared
+history. Historical checks below describe their recorded source, not current
+installed or running versions. Current executable contracts live in
+[Saul architecture](../../../apps/saul/docs/architecture.md) and
+[shared architecture](../../architecture.md).
 
 ## Verification
 
@@ -70,25 +51,11 @@ Temporary review captures belong under root `.artifacts/saul/runtime-explainer/`
 and are disposable after review. No personal credentials, history or installation
 metadata were copied into the bundle.
 
-## Documentation corrections
+## Current scope
 
-- [Saul architecture](../../../apps/saul/docs/architecture.md) describes the retained
-  Chrome on-device path without marking it disabled. The executable
-  [flag](../../../apps/saul/src/models/chrome-ai.ts) is false and the
-  [product guide](../../../apps/saul/docs/product.md) already states the restriction.
-  **Resolved in this closeout:** the architecture now states that the retained
-  adapter is disabled by `CHROME_AI_ENABLED`.
-- Earlier during inspection, architecture described scripting capture and product
-  text described loaded page text, while local [capture](../../../apps/saul/src/digest/capture.ts),
-  [source](../../../apps/saul/src/digest/source.ts) and
-  [PDF](../../../apps/saul/src/digest/pdf.ts) owners also download/extract PDFs in
-  offscreen. Proposed correction: document the split, limits and fetched-versus-viewer
-  caveat. **Resolved by concurrent edits before handoff:** both architecture and
-  product now document those details. No existing file was changed for this survey.
+Chrome on-device AI is retired. Old saved selections are readable and reject
+execution until the user chooses an available provider. The map describes the
+remote provider routes; it does not establish live-provider acceptance.
 
-- The explainer originally described local PDF extraction without naming its
-  opt-in setting. It now follows `captureSummarySource`: PDF URL attachment is the
-  default, local extraction is optional, and provider errors never switch modes.
-
-Method: the user-invoked `show-me` skill; prose and diagrams are newly authored for
-this guide. No third-party code, image or skill text is embedded.
+Method: the user-invoked `show-me` skill for the original survey. No third-party
+code, image or skill text is embedded.

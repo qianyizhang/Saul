@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { ReadingRunner } from '../src/reading/runner';
 import type { DbCall, DbRequest, Passage, Submission, RunStatus } from '../src/types/storage';
-const mocks = vi.hoisted(() => ({ remote: vi.fn(), local: vi.fn() }));
+const mocks = vi.hoisted(() => ({ remote: vi.fn() }));
 
 const attemptContract = JSON.parse(
   readFileSync(new URL('../../../contracts/fixtures/attempts.json', import.meta.url), 'utf8'),
@@ -18,12 +18,6 @@ const attemptContract = JSON.parse(
   }[];
 };
 vi.mock('../src/models/openai-compatible', () => ({ streamOpenAICompatible: mocks.remote }));
-// Exercise queue scheduling independently of the temporary product availability switch.
-vi.mock('../src/models/chrome-ai', () => ({
-  streamChromeAi: mocks.local,
-  CHROME_AI_ENABLED: true,
-  CHROME_AI_DISABLED_MESSAGE: 'Chrome on-device AI is temporarily disabled.',
-}));
 const submission = (id: string): Submission => ({
   submissionId: id,
   regenerate: true,
@@ -100,7 +94,6 @@ beforeEach(() => {
     yield { type: 'delta', text: 'Retained text' };
     yield { type: 'complete' };
   });
-  mocks.local.mockReset().mockImplementation(mocks.remote);
 });
 for (const scenario of attemptContract.cases) {
   it(`satisfies shared Attempt contract: ${scenario.id}`, async () => {
@@ -192,48 +185,6 @@ it('persists a stranded storage failure before allowing explicit retry', async (
   expect(db.rows.get('first')).toEqual({ status: 'failed', raw: 'Retained text' });
   expect(mocks.remote).toHaveBeenCalledTimes(2);
 });
-it('limits on-device work to one active request and Stop releases its queue', async () => {
-  const db = store();
-  let started = 0;
-  mocks.local.mockImplementation(async function* (_config, _system, _user, signal: AbortSignal) {
-    started++;
-    yield { type: 'delta', text: 'Partial' };
-    await new Promise<void>((resolve) => {
-      if (signal.aborted) resolve();
-      else signal.addEventListener('abort', () => resolve(), { once: true });
-    });
-  });
-  // This test permits distinct passages in the store, so their queue isolation is observable.
-  const call = (async (message: DbRequest) => {
-    if (message.type === 'DB_SUBMIT') {
-      const p = message.payload;
-      db.rows.set(p.submissionId, { status: 'queued', raw: '' });
-      return {
-        passageId: p.snapshot.id,
-        run: {
-          id: p.submissionId,
-          selectionId: p.snapshot.id,
-          pageUrl: p.snapshot.page.url,
-          input: p.input,
-        },
-      };
-    }
-    return db.call(message);
-  }) as DbCall;
-  const runner = new ReadingRunner(call, () => {});
-  const a = submission('a'),
-    b = submission('b');
-  a.input.provider = b.input.provider = 'chrome-ai';
-  b.snapshot.id = 'second';
-  await runner.submit(a, '');
-  await runner.submit(b, '');
-  await vi.waitFor(() => expect(started).toBe(1));
-  await runner.stop('passage');
-  await vi.waitFor(() => expect(started).toBe(2));
-  await runner.stop('second');
-  await vi.waitFor(() => expect(db.rows.get('b')?.status).toBe('cancelled'));
-});
-
 afterEach(() => vi.useRealTimers());
 it('flushes the tail of a fast burst while the provider is silent, then completes without Stop', async () => {
   vi.useFakeTimers();

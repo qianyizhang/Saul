@@ -1,8 +1,4 @@
-import {
-  DEFAULT_PROVIDERS,
-  SPEECH_MODEL,
-  validateSharedProviders,
-} from '../../native/shared-presets-contract.mts';
+import { SPEECH_MODEL, validateSharedProviders } from '../../native/shared-presets-contract.mts';
 import { officialOpenAI } from '../../native/credentials-contract.mts';
 import type { ModelPreset, ProviderType, Recipe, UserSettings } from '../types';
 import { DEFAULT_SETTINGS, validateSettingsConnections } from '../storage/settings';
@@ -215,15 +211,13 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
         ...draft,
         settings: {
           ...settings,
-          providers: (settings.providers ?? DEFAULT_PROVIDERS).map((provider) =>
+          providers: settings.providers.map((provider) =>
             provider.key === edit.key ? { ...provider, name: edit.name } : provider,
           ),
         },
       };
     case 'preset-provider': {
-      const provider = (settings.providers ?? DEFAULT_PROVIDERS).find(
-        (item) => item.key === edit.key,
-      );
+      const provider = settings.providers.find((item) => item.key === edit.key);
       const preset = configuration.presets.find((item) => item.id === draft.presetId);
       if (!provider || !preset) throw new Error('Choose an available provider.');
       const kind = provider.kind === 'chatgpt-plan' ? 'chatgpt-plan' : 'openai-compatible';

@@ -1,7 +1,6 @@
 import { apiConnections } from './driver.ts';
 import { readingMore } from './driver.ts';
 import { settingsSection } from './driver.ts';
-import { CHROME_AI_ENABLED } from '../../src/models/chrome-ai';
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider, createFixtureServer } from './support.ts';
 import { seedPersistedHistory } from './database-harness.ts';
@@ -336,7 +335,7 @@ test('stopping a slow explanation retains partial text without saving a complete
   }
 });
 
-test('workspace navigation protects drafts and respects on-device availability', async ({
+test('workspace navigation protects drafts and offers only available providers', async ({
   sandbox,
 }) => {
   const { popup } = await sandbox.launch();
@@ -362,35 +361,7 @@ test('workspace navigation protects drafts and respects on-device availability',
   await popup.goBack();
   await expect(popup.getByLabel('Model name', { exact: true })).not.toHaveValue('unsaved-model');
 
-  if (!CHROME_AI_ENABLED) {
-    await expect(popup.locator('option[value="chrome-ai"]')).toHaveJSProperty('disabled', true);
-    return;
-  }
-
-  // Deterministic preparation that remains pending until cancelled; no model download.
-  await popup.evaluate(() => {
-    Object.defineProperty(globalThis, 'LanguageModel', {
-      configurable: true,
-      value: {
-        availability: async () => 'downloadable',
-        create: ({ signal }: { signal: AbortSignal }) =>
-          new Promise((_, reject) => {
-            signal.addEventListener(
-              'abort',
-              () => reject(new DOMException('Stopped', 'AbortError')),
-              { once: true },
-            );
-          }),
-      },
-    });
-  });
-  await settingsSection(popup, 'Presets');
-  await popup.getByLabel('Provider', { exact: true }).selectOption('chrome-ai');
-  await popup.getByRole('button', { name: 'Prepare on-device model' }).click();
-  await expect(popup.getByLabel('Provider', { exact: true })).toBeDisabled();
-  await popup.getByRole('button', { name: 'Stop test' }).click();
-  await expect(popup.getByRole('alert')).toContainText('Test stopped');
-  await expect(popup.getByLabel('Provider', { exact: true })).toBeEnabled();
+  await expect(popup.locator('option[value="chrome-ai"]')).toHaveCount(0);
 });
 
 test('save locks the draft; provider tests lock only provider settings and remain cancellable', async ({

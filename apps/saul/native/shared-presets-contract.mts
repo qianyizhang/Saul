@@ -84,8 +84,18 @@ export function validateSharedProviders(value: unknown): asserts value is Shared
 export interface SharedPresets {
   revision: number;
   presets: SharedPreset[];
+  providers: SharedProvider[];
+}
+export interface SharedPresetsReply extends Omit<SharedPresets, 'providers'> {
   /** Absent only in legacy replies; both current stores return shared definitions. */
   providers?: SharedProvider[];
+}
+export function resolveSharedPresets(reply: SharedPresetsReply): SharedPresets {
+  return {
+    ...reply,
+    providers:
+      reply.providers === undefined ? structuredClone([...DEFAULT_PROVIDERS]) : reply.providers,
+  };
 }
 export function validateSharedPresets(value: unknown): asserts value is SharedPreset[] {
   if (

@@ -68,7 +68,7 @@ export class ReadingRunner {
       const count = [...this.active].filter(
         (id) => this.tasks.get(id)?.input.provider === provider,
       ).length;
-      if (count >= (provider === 'chrome-ai' ? 1 : 2)) continue;
+      if (count >= 2) continue;
       this.active.add(task.id);
       void this.execute(task);
     }

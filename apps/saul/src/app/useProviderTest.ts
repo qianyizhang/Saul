@@ -1,49 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import type { UserSettings } from '../types';
 import { streamModel } from '../models/provider';
-import { chromeAiAvailability, prepareChromeAi, CHROME_AI_ENABLED } from '../models/chrome-ai';
 import { validateProviderSettings } from '../storage/settings';
 import { configurationFor, settingsForPreset } from '../models/configuration';
-export function useProviderTest(provider: UserSettings['activeProvider']) {
+export function useProviderTest() {
   const [testing, setTesting] = useState(false),
-    [preparing, setPreparing] = useState(false),
     [notice, setNotice] = useState(''),
-    [error, setError] = useState(''),
-    [availability, setAvailability] = useState('Checking…');
+    [error, setError] = useState('');
   const controller = useRef<AbortController | null>(null),
     mounted = useRef(true);
-  const availabilityRevision = useRef(0);
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
-      availabilityRevision.current++;
       controller.current?.abort();
     };
   }, []);
-  useEffect(() => {
-    availabilityRevision.current++;
-    if (provider === 'chrome-ai' && CHROME_AI_ENABLED) void refreshAvailability();
-  }, [provider]);
-  async function refreshAvailability(clearError = true) {
-    const revision = ++availabilityRevision.current;
-    if (clearError) setError('');
-    setAvailability('Checking…');
-    try {
-      const value = await chromeAiAvailability();
-      if (mounted.current && availabilityRevision.current === revision) setAvailability(value);
-    } catch (e) {
-      if (mounted.current && availabilityRevision.current === revision) {
-        setAvailability('check failed');
-        setError(`Could not check Chrome on-device AI: ${(e as Error).message}`);
-      }
-    }
-  }
-  async function test(
-    mode: 'endpoint' | 'generation' | 'prepare',
-    draft: UserSettings,
-    presetId?: string,
-  ) {
+  async function test(mode: 'endpoint' | 'generation', draft: UserSettings, presetId?: string) {
     if (controller.current) return;
     let settings = structuredClone(draft);
     const ac = new AbortController();
@@ -51,14 +24,10 @@ export function useProviderTest(provider: UserSettings['activeProvider']) {
     setError('');
     setNotice('');
     setTesting(true);
-    setPreparing(mode === 'prepare');
-    const timeout =
-      mode === 'prepare'
-        ? undefined
-        : setTimeout(
-            () => ac.abort(),
-            settings.activeProvider === 'openai-compatible' ? 20000 : 120000,
-          );
+    const timeout = setTimeout(
+      () => ac.abort(),
+      settings.activeProvider === 'openai-compatible' ? 20000 : 120000,
+    );
     try {
       if (presetId) {
         const preset = configurationFor(settings).presets.find((p) => p.id === presetId);
@@ -66,17 +35,7 @@ export function useProviderTest(provider: UserSettings['activeProvider']) {
         settings = settingsForPreset(settings, preset);
       }
       validateProviderSettings(settings);
-      if (settings.activeProvider === 'chrome-ai' && mode === 'prepare') {
-        const availability = await prepareChromeAi(ac.signal, (progress) => {
-          if (mounted.current && !ac.signal.aborted)
-            setNotice(`Downloading model: ${Math.round(progress * 100)}%`);
-        });
-        if (ac.signal.aborted) throw new Error('Stopped');
-        if (mounted.current) {
-          setAvailability(availability);
-          setNotice('On-device model is ready.');
-        }
-      } else if (mode === 'endpoint' && settings.activeProvider === 'openai-compatible') {
+      if (mode === 'endpoint' && settings.activeProvider === 'openai-compatible') {
         const base = settings.openaiCompatible.baseUrl
           .replace(/\/+$/, '')
           .replace(/\/chat\/completions$/, '');
@@ -121,24 +80,19 @@ export function useProviderTest(provider: UserSettings['activeProvider']) {
             ? 'Test stopped or timed out. Try again when the provider is ready.'
             : (e as Error).message,
         );
-      if (settings.activeProvider === 'chrome-ai') await refreshAvailability(false);
     } finally {
       clearTimeout(timeout);
       controller.current = null;
       if (mounted.current) {
         setTesting(false);
-        setPreparing(false);
       }
     }
   }
   return {
     testing,
-    preparing,
     notice,
     error,
-    availability,
     test,
-    refreshAvailability,
     stop: () => controller.current?.abort(),
     clear: () => {
       setError('');

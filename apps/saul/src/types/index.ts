@@ -113,7 +113,7 @@ export interface UserSettings {
   sharedCredentials?: 'saul' | 'disconnected';
   summaryPdfProcessing?: 'attachment' | 'local';
   sharedPresetRevision?: number;
-  providers?: SharedProvider[];
+  providers: SharedProvider[];
   /** App-local provider key → API profile ID; contains no credential. */
   providerConnections?: Record<string, string>;
   scopedConfigRevision?: number;

@@ -8,7 +8,7 @@ import {
   validateSharedProviders,
   type SharedProvider,
   type SharedPreset,
-  type SharedPresets,
+  type SharedPresetsReply,
 } from './shared-presets-contract.mts';
 export interface PlanAccount {
   id: string;
@@ -80,9 +80,9 @@ export interface PlanResults {
   history: { value: unknown };
   'config-read': { config: ScopedConfig };
   'config-save': { config: ScopedConfig };
-  'presets-read': { library: SharedPresets };
-  'presets-import': { library: SharedPresets };
-  'presets-save': { library: SharedPresets };
+  'presets-read': { library: SharedPresetsReply };
+  'presets-import': { library: SharedPresetsReply };
+  'presets-save': { library: SharedPresetsReply };
   accounts: { accounts: PlanAccount[] };
   login: { account: PlanAccount };
   logout: { account: PlanAccount; warning?: string };
