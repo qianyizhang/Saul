@@ -1,3 +1,4 @@
+import { createBoardDrag } from './board-drag';
 import type { CallToolResult } from '@modelcontextprotocol/client';
 import type { McpUiHostCapabilities } from '@modelcontextprotocol/ext-apps';
 import type { AppArgs } from '../app-protocol.mts';
@@ -18,38 +19,6 @@ type DisplayProposal = Pick<
 > &
   Partial<WorkspaceProposal>;
 type MenuAction = readonly [string, () => void, boolean?];
-type DropTarget = {
-  destination: string | number;
-  card: HTMLElement;
-  label: string;
-  beforeId?: number;
-  groupId?: number;
-  list?: HTMLOListElement;
-  markerY?: number;
-};
-interface PointerDrag {
-  id: number;
-  startX: number;
-  startY: number;
-  x: number;
-  y: number;
-  item: HTMLLIElement;
-  tabId: number;
-  frame?: number;
-  ghost?: HTMLLIElement;
-  indicator?: HTMLDivElement;
-  badge?: HTMLDivElement;
-  previousTime?: number;
-  target?: DropTarget;
-}
-interface WindowDrag {
-  id: number;
-  x: number;
-  y: number;
-  card: HTMLElement;
-  ghost?: HTMLElement;
-  target?: HTMLElement;
-}
 interface DraftLayout {
   source: TabSnapshot;
   windows: BoardWindow[];
@@ -129,21 +98,48 @@ let busy = false,
 let capabilities: McpUiHostCapabilities = {};
 let poll: number | undefined,
   resizeObserver: ResizeObserver | undefined,
-  draggedTab: number | undefined,
-  selectedTab: number | undefined,
-  pointerDrag: PointerDrag | undefined;
+  selectedTab: number | undefined;
 let deferredResult: { result: CallToolResult; sequence?: number } | undefined;
 const selection = new Set<number>();
 let selectedGroup: number | undefined;
 const foldedWindows = new Set<string>();
-let windowOrder: string[] = [],
-  windowDrag: WindowDrag | undefined;
+let windowOrder: string[] = [];
 let contextMenu: { node: HTMLDivElement; anchor: HTMLElement } | undefined;
 let draftLayout: DraftLayout | undefined;
 let queuedEdit: { args: AppArgs['saul_workspace_propose']; sequence: number } | undefined;
 let staging = false,
   editSequence = 0,
   animateNextRender = false;
+const drag = createBoardDrag({
+  layout,
+  canEdit,
+  canReorder: () => !busy && !staging,
+  onWindowStart: () => closeActions(),
+  onSelect: (tabId) => {
+    if (selection.has(tabId)) selection.delete(tabId);
+    else selection.add(tabId);
+    selectedTab = tabId;
+    selectedGroup = undefined;
+    render();
+  },
+  onMove: (...args) => {
+    void moveTab(...args);
+  },
+  onReorder: (fromId, toId) => {
+    const from = windowOrder.indexOf(fromId);
+    const to = windowOrder.indexOf(toId);
+    windowOrder.splice(from, 1);
+    windowOrder.splice(to, 0, fromId);
+    render();
+  },
+  onCancelled: () => status('Move cancelled.'),
+  onEnd: () => {
+    if (!deferredResult) return;
+    const result = deferredResult;
+    deferredResult = undefined;
+    receive(result.result, result.sequence);
+  },
+});
 const fixed = (tab: TabView) => tab.pinned || tab.groupId >= 0;
 const quantity = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 function status(message: string, error = false) {
@@ -167,7 +163,7 @@ function receive(result: CallToolResult, sequence?: number) {
         'Saul could not complete the request',
     );
   if (!isRecord(result?.structuredContent) || !('sessions' in result.structuredContent)) return;
-  if (pointerDrag || windowDrag || draggedTab !== undefined) {
+  if (drag.active) {
     deferredResult = { result, sequence };
     return;
   }
@@ -216,209 +212,6 @@ function canEdit() {
     !['pending', 'expired'].includes(data?.proposal?.status ?? '') &&
     !draftLayout,
   );
-}
-function endDrag() {
-  if (pointerDrag) {
-    if (pointerDrag.frame !== undefined) cancelAnimationFrame(pointerDrag.frame);
-    pointerDrag.ghost?.remove();
-    pointerDrag.indicator?.remove();
-  }
-  document.body.classList.remove('is-dragging');
-  draggedTab = undefined;
-  pointerDrag = undefined;
-  document.querySelectorAll('.dragging, .drop-target').forEach((node) => {
-    node.classList.remove('dragging', 'drop-target');
-  });
-  if (deferredResult) {
-    const result = deferredResult;
-    deferredResult = undefined;
-    receive(result.result, result.sequence);
-  }
-}
-function dragDestination(x: number, y: number): DropTarget | undefined {
-  const hit = document.elementFromPoint(x, y);
-  const card = hit?.closest<HTMLElement>('[data-drop-window]');
-  if (!card || !hit) return;
-  if (card.id === 'new-window') return { destination: 'new', card, label: 'Create a new window' };
-  const { source, windows } = layout();
-  const window = windows.find((w) => String(w.id) === card.dataset.dropWindow);
-  if (!window || !source) return;
-  const ids = window.tabIds.filter(
-    (id) => id !== draggedTab && !source.tabs.find((t) => t.id === id)!.pinned,
-  );
-  const groupHead = hit.closest<HTMLElement>('[data-group-id]');
-  if (groupHead)
-    return {
-      destination: window.id,
-      groupId: Number(groupHead.dataset.groupId),
-      card,
-      label: window.title + ' · ' + groupHead.textContent,
-    };
-  const list = card.querySelector<HTMLOListElement>('.tabs');
-  if (!list) return;
-  const rows = [...list.querySelectorAll<HTMLLIElement>('.tab[data-movable="true"]')].filter(
-    (row) => Number(row.dataset.tabId) !== draggedTab,
-  );
-  const bounds = list.getBoundingClientRect();
-  let beforeId: number | undefined,
-    markerY = bounds.bottom;
-  const footer = hit.closest('.window-end');
-  if (list.hidden) return { destination: window.id, card, label: `${window.title} · at the end` };
-  if (hit.closest('.window-head')) {
-    beforeId = ids[0];
-    const first = rows[0]?.getBoundingClientRect();
-    markerY = first ? Math.max(bounds.top, first.top) : bounds.bottom;
-  } else if (!footer) {
-    const next = rows.find((row) => {
-      const rect = row.getBoundingClientRect();
-      return y < rect.top + rect.height / 2;
-    });
-    if (next) {
-      beforeId = Number(next.dataset.tabId);
-      markerY = next.getBoundingClientRect().top;
-    } else if (rows.length) {
-      const last = rows.at(-1)!;
-      beforeId = ids[ids.indexOf(Number(last.dataset.tabId)) + 1];
-      markerY = last.getBoundingClientRect().bottom;
-    }
-  }
-  markerY = Math.max(bounds.top, Math.min(bounds.bottom, markerY));
-  const index = beforeId === undefined ? ids.length : ids.indexOf(beforeId);
-  return {
-    destination: window.id,
-    beforeId,
-    groupId:
-      beforeId === undefined
-        ? undefined
-        : (source.tabs.find((t) => t.id === beforeId)?.groupId ?? -1) >= 0
-          ? source.tabs.find((t) => t.id === beforeId)!.groupId
-          : undefined,
-    card,
-    list,
-    markerY,
-    label: `${window.title} · ${index === ids.length ? 'at the end' : `position ${index + 1}`}`,
-  };
-}
-function updateDrag() {
-  const drag = pointerDrag;
-  if (!drag?.ghost || !drag.badge || !drag.indicator || drag.previousTime === undefined) return;
-  const { x, y } = drag;
-  drag.ghost.style.transform = `translate3d(${Math.min(x + 16, innerWidth - drag.ghost.offsetWidth - 8)}px, ${Math.max(8, Math.min(y + 14, innerHeight - drag.ghost.offsetHeight - 8))}px, 0)`;
-  const target = dragDestination(x, y);
-  if (drag.target?.card !== target?.card) {
-    drag.target?.card.classList.remove('drop-target');
-    target?.card.classList.add('drop-target');
-  }
-  drag.target = target;
-  drag.badge.textContent = target ? target.label : 'Outside a window · release to cancel';
-  drag.ghost.classList.toggle('invalid-drop', !target);
-  drag.indicator.hidden = !target?.list;
-  if (target?.list) {
-    const rect = target.list.getBoundingClientRect();
-    Object.assign(drag.indicator.style, {
-      left: `${rect.left + 8}px`,
-      top: `${target.markerY! - 6}px`,
-      width: `${rect.width - 16}px`,
-    });
-  }
-}
-function startDrag(item: HTMLLIElement, tabId: number) {
-  draggedTab = tabId;
-  item.classList.add('dragging');
-  document.body.classList.add('is-dragging');
-  if (!pointerDrag) return;
-  const ghost = item.cloneNode(true) as HTMLLIElement;
-  ghost.className = 'tab drag-ghost';
-  ghost.removeAttribute('data-tab-id');
-  ghost.removeAttribute('data-focus-key');
-  ghost.removeAttribute('title');
-  ghost.setAttribute('aria-hidden', 'true');
-  ghost.querySelectorAll('button').forEach((button) => button.remove());
-  ghost.style.width = `${Math.min(320, item.getBoundingClientRect().width)}px`;
-  const badge = element('div', 'drag-destination');
-  ghost.append(badge);
-  const indicator = element('div', 'drop-indicator');
-  indicator.setAttribute('aria-hidden', 'true');
-  document.body.append(ghost, indicator);
-  Object.assign(pointerDrag, { ghost, indicator, badge, previousTime: performance.now() });
-  updateDrag();
-  const tick = (time: number) => {
-    const drag = pointerDrag;
-    if (!drag?.ghost || !drag.badge || !drag.indicator || drag.previousTime === undefined) return;
-    const elapsed = Math.min(32, time - drag.previousTime);
-    drag.previousTime = time;
-    const hit = document.elementFromPoint(drag.x, drag.y);
-    const list = hit?.closest('.tabs');
-    const velocity = (position: number, start: number, end: number) => {
-      const edge = Math.min(56, (end - start) / 3);
-      if (position < start + edge) return -14 * Math.min(1, (start + edge - position) / edge) ** 2;
-      if (position > end - edge) return 14 * Math.min(1, (position - end + edge) / edge) ** 2;
-      return 0;
-    };
-    if (list) {
-      const rect = list.getBoundingClientRect();
-      list.scrollTop += (velocity(drag.y, rect.top, rect.bottom) * elapsed) / 16;
-    }
-    window.scrollBy(0, (velocity(drag.y, 0, innerHeight) * elapsed) / 16);
-    updateDrag();
-    drag.frame = requestAnimationFrame(tick);
-  };
-  pointerDrag.frame = requestAnimationFrame(tick);
-}
-function pointerSource(item: HTMLLIElement, tabId: number, sourceGroupId?: number) {
-  item.addEventListener('pointerdown', (event) => {
-    if (
-      !canEdit() ||
-      event.button !== 0 ||
-      !event.isPrimary ||
-      (event.target instanceof Element && event.target.closest('button, input, select'))
-    )
-      return;
-    // Touch scrolling stays native; number buttons expose tap-based moves.
-    if (event.pointerType === 'touch') return;
-    event.preventDefault();
-    pointerDrag = {
-      id: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      x: event.clientX,
-      y: event.clientY,
-      item,
-      tabId,
-    };
-    item.setPointerCapture(event.pointerId);
-  });
-  item.addEventListener('pointermove', (event) => {
-    const drag = pointerDrag;
-    if (!drag || drag.id !== event.pointerId) return;
-    drag.x = event.clientX;
-    drag.y = event.clientY;
-    if (draggedTab === undefined && Math.hypot(drag.x - drag.startX, drag.y - drag.startY) >= 6)
-      startDrag(item, tabId);
-  });
-  item.addEventListener('pointerup', (event) => {
-    if (pointerDrag?.id !== event.pointerId) return;
-    pointerDrag.x = event.clientX;
-    pointerDrag.y = event.clientY;
-    updateDrag();
-    const target = pointerDrag.target;
-    const moved = draggedTab !== undefined;
-    endDrag();
-    if (moved && target)
-      void moveTab(tabId, target.destination, target.beforeId, target.groupId, sourceGroupId);
-    else if (moved) status('Move cancelled.');
-    else if (sourceGroupId === undefined) {
-      if (selection.has(tabId)) selection.delete(tabId);
-      else selection.add(tabId);
-      selectedTab = tabId;
-      selectedGroup = undefined;
-      render();
-    }
-  });
-  item.addEventListener('pointercancel', endDrag);
-  item.addEventListener('lostpointercapture', () => {
-    if (pointerDrag) endDrag();
-  });
 }
 function selectedIds(source = data?.snapshot) {
   if (!source) return [];
@@ -586,7 +379,7 @@ async function stageDraft(
     status(`${errorMessage(error)}. Draft retained. Choose Retry.`, true);
   } finally {
     staging = false;
-    if (!pointerDrag) render();
+    if (!drag.tabActive) render();
   }
 }
 function displayProposal(): DisplayProposal | null | undefined {
@@ -742,78 +535,16 @@ function windowActions(window: BoardWindow, head: HTMLElement): MenuAction[] {
     ['Move later on board', () => shift(1), index >= windowOrder.length - 1],
   ];
 }
-function endWindowDrag(commit = false) {
-  const drag = windowDrag;
-  if (!drag) return;
-  drag.ghost?.remove();
-  drag.card.classList.remove('dragging');
-  drag.target?.classList.remove('window-drop-target');
-  document.body.classList.remove('is-dragging');
-  windowDrag = undefined;
-  if (commit && drag.target) {
-    const from = windowOrder.indexOf(drag.card.dataset.windowId!);
-    const to = windowOrder.indexOf(drag.target.dataset.windowId!);
-    windowOrder.splice(from, 1);
-    windowOrder.splice(to, 0, drag.card.dataset.windowId!);
-    render();
-  }
-  if (deferredResult) {
-    const result = deferredResult;
-    deferredResult = undefined;
-    receive(result.result, result.sequence);
-  }
-}
-function windowPointerSource(head: HTMLElement, card: HTMLElement) {
-  head.addEventListener('pointerdown', (event) => {
-    if (
-      event.button !== 0 ||
-      !event.isPrimary ||
-      (event.target instanceof Element && event.target.closest('button, input')) ||
-      busy ||
-      staging
-    )
-      return;
-    closeActions();
-    windowDrag = { id: event.pointerId, x: event.clientX, y: event.clientY, card };
-    head.setPointerCapture(event.pointerId);
-    event.preventDefault();
-  });
-  head.addEventListener('pointermove', (event) => {
-    const drag = windowDrag;
-    if (drag?.id !== event.pointerId) return;
-    if (!drag.ghost && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 6) return;
-    if (!drag.ghost) {
-      drag.ghost = head.cloneNode(true) as HTMLElement;
-      drag.ghost.className = 'window-head window-ghost';
-      drag.ghost.setAttribute('aria-hidden', 'true');
-      drag.ghost.style.width = `${card.offsetWidth}px`;
-      drag.ghost.style.setProperty('--window-color', card.style.getPropertyValue('--window-color'));
-      document.body.append(drag.ghost);
-      card.classList.add('dragging');
-      document.body.classList.add('is-dragging');
-    }
-    drag.ghost.style.transform = `translate(${Math.max(8, Math.min(event.clientX - 40, innerWidth - card.offsetWidth - 8))}px, ${Math.max(8, event.clientY - 20)}px)`;
-    const target = document
-      .elementFromPoint(event.clientX, event.clientY)
-      ?.closest<HTMLElement>('.window');
-    drag.target?.classList.remove('window-drop-target');
-    drag.target = target && target !== card ? target : undefined;
-    drag.target?.classList.add('window-drop-target');
-  });
-  head.addEventListener('pointerup', () => endWindowDrag(true));
-  head.addEventListener('pointercancel', () => endWindowDrag());
-  head.addEventListener('lostpointercapture', () => endWindowDrag());
-}
 document.addEventListener('pointerdown', (event) => {
   if (contextMenu && event.target instanceof Node && !contextMenu.node.contains(event.target))
     closeActions();
 });
 window.addEventListener('blur', () => {
   closeActions();
-  endWindowDrag();
+  drag.cancelWindow();
 });
 window.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape') endWindowDrag();
+  if (event.key === 'Escape') drag.cancelWindow();
 });
 
 function renderMoveControls(
@@ -1169,7 +900,7 @@ function render() {
         render();
       };
       head.prepend(selectAll);
-      windowPointerSource(head, card);
+      drag.attachWindow(head, card);
       head.tabIndex = 0;
       head.setAttribute('aria-label', `${w.title}: drag to reorder, or open actions`);
       bindActions(head, () => windowActions(w, head));
@@ -1195,7 +926,7 @@ function render() {
         item.dataset.tabId = String(tab.id);
         item.draggable = false;
         item.dataset.movable = String(Boolean(editable && !tab.pinned));
-        if (!tab.pinned && editable) pointerSource(item, tab.id);
+        if (!tab.pinned && editable) drag.attachTab(item, tab.id);
         const name = tabSite(tab.url);
         const text = element('div');
         const title = element('div', 'tab-title', tab.label);
@@ -1255,7 +986,7 @@ function render() {
           groupHead.dataset.groupId = String(group.id);
           groupHead.tabIndex = 0;
           groupHead.setAttribute('aria-label', 'Tab group: ' + (group.title || 'Unnamed group'));
-          if (editable) pointerSource(groupHead, tab.id, group.id);
+          if (editable) drag.attachTab(groupHead, tab.id, group.id);
           groupHead.onclick = () => {
             selection.clear();
             source.tabs.filter((t) => t.groupId === group.id).forEach((t) => selection.add(t.id));
@@ -1321,7 +1052,7 @@ function render() {
   for (const list of document.querySelectorAll<HTMLOListElement>('.tabs'))
     list.scrollTop = scroll.get(list.dataset.windowId) ?? 0;
   // Anchor the board when the review bar appears; retain each window's scroll position.
-  if (oldCards.size && !pointerDrag)
+  if (oldCards.size && !drag.tabActive)
     window.scrollBy(0, $('board').getBoundingClientRect().top - oldBoardTop);
   if (animateNextRender && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
     for (const node of document.querySelectorAll<HTMLElement>('.tab')) {
@@ -1345,16 +1076,7 @@ function render() {
     status(data.error || data.snapshot?.nativeNames?.message || '', true);
 }
 async function refresh() {
-  if (
-    busy ||
-    staging ||
-    refreshing ||
-    !ready ||
-    pointerDrag ||
-    windowDrag ||
-    draggedTab !== undefined
-  )
-    return;
+  if (busy || staging || refreshing || !ready || drag.active) return;
   refreshing = true;
   $('refresh').disabled = true;
   try {
@@ -1370,7 +1092,7 @@ async function refresh() {
     status(errorMessage(error), true);
   } finally {
     refreshing = false;
-    if (!pointerDrag && !windowDrag && draggedTab === undefined) render();
+    if (!drag.active) render();
   }
 }
 async function applyPlan() {
@@ -1472,10 +1194,10 @@ $('session').onchange = async () => {
   await refresh();
 };
 $('filter').oninput = render;
-window.addEventListener('blur', endDrag);
+window.addEventListener('blur', drag.cancelTab);
 window.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && pointerDrag) {
-    endDrag();
+  if (event.key === 'Escape' && drag.tabActive) {
+    drag.cancelTab();
     status('Drag cancelled.');
   } else if (event.key === 'Escape' && selectedTab !== undefined) cancelMove();
 });
@@ -1552,7 +1274,7 @@ const host = createBoardConnection({
     ready = false;
     clearInterval(poll);
     resizeObserver?.disconnect();
-    endDrag();
+    drag.cancelTab();
     render();
     status(
       'Host connection closed. Reopen the board to inspect current state; do not repeat an uncertain action.',
@@ -1575,7 +1297,7 @@ try {
         !document.hidden &&
         !draftLayout &&
         !contextMenu &&
-        !windowDrag &&
+        !drag.windowActive &&
         !document.activeElement?.closest('#session, #proposal, #group-form, select')
       )
         void refresh();

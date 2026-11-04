@@ -84,6 +84,75 @@ export async function captureWorkspace(host: Page, ui: FrameLocator, path: strin
   });
 }
 
+export async function workspaceInputGeometry(host: Page, ui: FrameLocator) {
+  const session = await host.context().newCDPSession(host);
+  try {
+    return {
+      window: await session.send('Browser.getWindowForTarget'),
+      host: await host.evaluate(() => ({
+        innerWidth,
+        innerHeight,
+        outerWidth,
+        outerHeight,
+        screenWidth: screen.width,
+        screenHeight: screen.height,
+      })),
+      iframe: await host.locator('iframe').boundingBox(),
+      control: await ui.locator('#apply').evaluate((control) => {
+        const rect = control.getBoundingClientRect();
+        const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+        return {
+          rect: rect.toJSON(),
+          hit: hit ? `${hit.tagName}#${hit.id}` : null,
+          disabled: (control as HTMLButtonElement).disabled,
+        };
+      }),
+    };
+  } finally {
+    await session.detach();
+  }
+}
+
+// Keep pointer dispatch and SDK dispatch separately observable when a real click
+// fails in an opaque iframe. This listener never changes focus or event handling.
+export async function observeWorkspaceInput(ui: FrameLocator) {
+  await ui.locator('body').evaluate((body) => {
+    const events: { type: string; target: string; x: number; y: number }[] = [];
+    const documentWithEvents = body.ownerDocument as Document & {
+      boardInputEvents?: typeof events;
+    };
+    documentWithEvents.boardInputEvents = events;
+    for (const type of ['pointerdown', 'pointerup', 'click'])
+      body.addEventListener(
+        type,
+        (event) => {
+          const pointer = event as MouseEvent;
+          const target =
+            event.target instanceof Element
+              ? event.target.closest('button') || event.target
+              : undefined;
+          events.push({
+            type,
+            target: target
+              ? `${target.tagName}#${target.id}: ${target.textContent?.slice(0, 80)}`
+              : 'unknown',
+            x: pointer.clientX,
+            y: pointer.clientY,
+          });
+          if (events.length > 12) events.shift();
+        },
+        true,
+      );
+  });
+  return () =>
+    ui
+      .locator('body')
+      .evaluate(
+        (body) =>
+          (body.ownerDocument as Document & { boardInputEvents?: unknown[] }).boardInputEvents,
+      );
+}
+
 export async function openWorkspace(
   sandbox: ExtensionSandbox,
   fixtureServer: FixtureServer,

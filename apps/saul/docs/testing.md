@@ -195,6 +195,8 @@ personal history. Native framing and installed payloads have separate checks.
 
 ## Evidence limits
 
+Linux CI skips the board journey “shared window labels load initially and duplicate removals stay editable until Apply”. Its native-pointer delivery remains unverified on that runner; the journey stays enabled on macOS. The other board and summary journeys remain enabled.
+
 The default browser suite uses deterministic local fixtures. It does not verify live provider credentials/output, personal native-host registration, or other browsers. Benchmark reproduction and scope are documented in [benchmarks](benchmarks/README.md).
 
 Chrome on-device generation is retired. The remaining regression verifies that legacy saved selections remain visible, reject execution, and allow an explicit change to an available provider. No Chrome model download, preparation, or generation fixture remains.

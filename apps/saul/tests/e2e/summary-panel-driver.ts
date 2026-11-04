@@ -1,4 +1,4 @@
-import type { BrowserContext } from '@playwright/test';
+import { expect, type BrowserContext } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import { reviewScreenshots } from './artifacts.ts';
 
@@ -62,6 +62,26 @@ export async function summaryPanelDriver(context: BrowserContext) {
   }
   return {
     evaluate,
+    async reload() {
+      const marker = crypto.randomUUID();
+      await evaluate((marker) => {
+        (globalThis as typeof globalThis & { saulFixtureDocument?: string }).saulFixtureDocument =
+          marker;
+        location.reload();
+      }, marker);
+      // Runtime.evaluate returns after scheduling navigation. Require a fresh
+      // global context before a ready-state poll can accept the old reader.
+      await expect
+        .poll(() =>
+          evaluate(
+            (marker) =>
+              (globalThis as typeof globalThis & { saulFixtureDocument?: string })
+                .saulFixtureDocument !== marker,
+            marker,
+          ).catch(() => false),
+        )
+        .toBe(true);
+    },
     async appearance(value: 'light' | 'dark') {
       await send('Emulation.setEmulatedMedia', {
         features: [{ name: 'prefers-color-scheme', value }],

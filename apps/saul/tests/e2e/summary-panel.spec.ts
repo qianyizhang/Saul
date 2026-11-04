@@ -105,7 +105,7 @@ test('summary side panel keeps the source active, survives tab switches and clos
     );
     expect(persistedRoute).toBe(readyRoute);
     await source.goto(fixtureServer.origin + '/anchors');
-    await panel.evaluate(() => location.reload());
+    await panel.reload();
     await expect
       .poll(() =>
         panel
@@ -141,15 +141,21 @@ test('summary side panel keeps the source active, survives tab switches and clos
           }),
         ),
       );
-    await panel.detach();
-
+    // Keep diagnostics attached until the close result is observable. A reported
+    // API error must not become an unexplained context-count timeout on Linux.
     await expect
-      .poll(() =>
-        worker.evaluate(
+      .poll(async () => {
+        const count = await worker.evaluate(
           async () => (await chrome.runtime.getContexts({ contextTypes: ['SIDE_PANEL'] })).length,
-        ),
-      )
+        );
+        if (!count) return 0;
+        const error = await panel
+          .evaluate(() => document.querySelector('[role="alert"]')?.textContent)
+          .catch(() => undefined);
+        return error || count;
+      })
       .toBe(0);
+    await panel.detach();
     await source.close();
     await popup.getByRole('button', { name: 'History', exact: true }).click();
     await popup.getByRole('button', { name: 'Summaries', exact: true }).click();
