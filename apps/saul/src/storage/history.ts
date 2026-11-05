@@ -1,36 +1,18 @@
 import { HistoryDisconnected, planCall } from '../models/chatgpt-plan';
 import MigrationWorker from './migration-worker?worker';
-import type { DbCall, DbRequest } from '../types/storage';
-import type { HistoryRequest } from '../../native/history-protocol.mts';
+import type { DbCall, DbRequest, DbType } from '../types/storage';
+import {
+  HISTORY_OPERATIONS,
+  type HistoryOperationPolicy,
+  type HistoryRequest,
+} from '../../native/history-protocol.mts';
+const policies: Record<DbType, HistoryOperationPolicy> &
+  Record<Exclude<keyof typeof HISTORY_OPERATIONS, DbType>, never> = HISTORY_OPERATIONS;
+function canReconnectHistory(operation: string): boolean {
+  return Object.hasOwn(policies, operation) && policies[operation as DbType] !== 'explicit-write';
+}
 let ready: Promise<void> | undefined;
 let owner = '';
-const reconnectable = new Set([
-  'DB_READING_RESOLVE',
-  'DB_SUBMIT',
-  'DB_RECOVER',
-  'DB_CLAIM',
-  'DB_SAVING',
-  'DB_CHECKPOINT',
-  'DB_FINISH',
-  'DB_PAGE',
-  'DB_PASSAGE',
-  'DB_CONTEXT',
-  'DB_INPUT',
-  'DB_RUNS',
-  'DB_VIEW',
-  'DB_UNREAD',
-  'DB_GET_HISTORY',
-  'DB_EXPORT_MARKDOWN',
-  'DB_IMAGE',
-  'DB_DIGEST_FIND',
-  'DB_DIGEST_ACTION_REVISIONS',
-  'DB_DIGEST_CREATE',
-  'DB_DIGEST_GET',
-  'DB_DIGEST_LIST',
-  'DB_DIGEST_ITEM',
-  'DB_DIGEST_SOURCE',
-  'DB_DIGEST_RECOVER',
-]);
 export async function historyCall(request: HistoryRequest): Promise<unknown> {
   for (let attempt = 0; ; attempt++) {
     try {
@@ -39,7 +21,7 @@ export async function historyCall(request: HistoryRequest): Promise<unknown> {
       if (
         !(error instanceof HistoryDisconnected) ||
         request.operation !== 'db' ||
-        !reconnectable.has(request.message.type) ||
+        !canReconnectHistory(request.message.type) ||
         attempt >= 2
       )
         throw error;

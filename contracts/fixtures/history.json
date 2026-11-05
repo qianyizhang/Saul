@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "query": "Frozen query 你好",
+  "response": "Frozen answer 🌱",
+  "cases": [
+    {
+      "name": "repeated terminal save retains one exact record",
+      "kind": "repeat-save",
+      "entries": 1
+    },
+    { "name": "successful deletion is visible on reopen", "kind": "delete", "entries": 0 },
+    { "name": "foreign active attempts block deletion", "kind": "active-delete", "entries": 1 },
+    { "name": "unknown newer schema is rejected", "kind": "newer-schema", "schemaVersion": 999 }
+  ]
+}

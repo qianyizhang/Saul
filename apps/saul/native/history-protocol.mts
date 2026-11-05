@@ -9,37 +9,45 @@ export type HistoryRequest =
   | { operation: 'import-begin'; id: string }
   | { operation: 'import-chunk'; id: string; offset: number; data: string }
   | { operation: 'import-finish'; id: string; size: number };
-const operations = new Set([
-  'DB_IMAGE',
-  'DB_READING_RESOLVE',
-  'DB_SUBMIT',
-  'DB_RECOVER',
-  'DB_CLAIM',
-  'DB_SAVING',
-  'DB_CHECKPOINT',
-  'DB_FINISH',
-  'DB_PAGE',
-  'DB_PASSAGE',
-  'DB_CONTEXT',
-  'DB_INPUT',
-  'DB_RUNS',
-  'DB_VIEW',
-  'DB_UNREAD',
-  'DB_GET_HISTORY',
-  'DB_SET_BOOKMARK',
-  'DB_DELETE_SELECTION',
-  'DB_CLEAR_HISTORY',
-  'DB_EXPORT_MARKDOWN',
-  'DB_DIGEST_FIND',
-  'DB_DIGEST_ACTION_REVISIONS',
-  'DB_DIGEST_CREATE',
-  'DB_DIGEST_GET',
-  'DB_DIGEST_LIST',
-  'DB_DIGEST_ITEM',
-  'DB_DIGEST_SOURCE',
-  'DB_DIGEST_RECOVER',
-  'DB_DIGEST_DELETE',
-]);
+export type HistoryOperationPolicy = 'read' | 'repeatable-write' | 'explicit-write';
+// One exhaustive catalogue owns admission and reconnect eligibility. Sender permissions stay separate.
+export const HISTORY_OPERATIONS = {
+  DB_IMAGE: 'read',
+  DB_READING_RESOLVE: 'repeatable-write',
+  DB_SUBMIT: 'repeatable-write',
+  DB_RECOVER: 'repeatable-write',
+  DB_CLAIM: 'repeatable-write',
+  DB_SAVING: 'repeatable-write',
+  DB_CHECKPOINT: 'repeatable-write',
+  DB_FINISH: 'repeatable-write',
+  DB_PAGE: 'read',
+  DB_PASSAGE: 'read',
+  DB_CONTEXT: 'read',
+  DB_INPUT: 'read',
+  DB_RUNS: 'read',
+  DB_VIEW: 'repeatable-write',
+  DB_UNREAD: 'read',
+  DB_GET_HISTORY: 'read',
+  DB_SET_BOOKMARK: 'explicit-write',
+  DB_DELETE_SELECTION: 'explicit-write',
+  DB_CLEAR_HISTORY: 'explicit-write',
+  DB_EXPORT_MARKDOWN: 'read',
+  DB_DIGEST_FIND: 'read',
+  DB_DIGEST_ACTION_REVISIONS: 'read',
+  DB_DIGEST_CREATE: 'repeatable-write',
+  DB_DIGEST_GET: 'read',
+  DB_DIGEST_LIST: 'read',
+  DB_DIGEST_ITEM: 'repeatable-write',
+  DB_DIGEST_SOURCE: 'read',
+  DB_DIGEST_RECOVER: 'repeatable-write',
+  DB_DIGEST_DELETE: 'explicit-write',
+} as const satisfies Record<string, HistoryOperationPolicy>;
+type HistoryOperation = keyof typeof HISTORY_OPERATIONS;
+export function historyOperationPolicy(operation: string): HistoryOperationPolicy | undefined {
+  return Object.hasOwn(HISTORY_OPERATIONS, operation)
+    ? HISTORY_OPERATIONS[operation as HistoryOperation]
+    : undefined;
+}
 export function validateHistoryRequest(v: unknown): asserts v is HistoryRequest {
   if (!isRecord(v)) throw new Error('Invalid history request.');
   if (v.operation === 'db') {
@@ -50,7 +58,7 @@ export function validateHistoryRequest(v: unknown): asserts v is HistoryRequest 
     if (
       !isRecord(v.message) ||
       typeof v.message.type !== 'string' ||
-      !operations.has(v.message.type) ||
+      historyOperationPolicy(v.message.type) === undefined ||
       (v.message.payload !== undefined && !isRecord(v.message.payload))
     )
       throw new Error('Invalid history operation.');

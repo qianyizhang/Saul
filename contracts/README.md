@@ -51,6 +51,37 @@ terminal record. Saul retains its existing failed/save-failed projection and
 durable recovery before an explicit new attempt. Neither app reports saved success
 from a provider completion signal alone.
 
+## History operations
+
+Saul and EZ share the SQLite schema and these behavioral meanings, with native
+interfaces and record projections in each app:
+
+| Operation             | Shared outcome                                                                                                                                                                |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Read                  | Return literal saved prompts/output, including Unicode; never generate.                                                                                                       |
+| Save a frozen attempt | Repeating the same terminal save retains one record and its original input/output. Publish saved success only after storage acknowledges it.                                  |
+| Delete                | Refuse deletion while the other app owns an active attempt. A successful delete remains absent on reopen; the execution owner discards that attempt's unsaved recovery state. |
+| Open a store          | Reject an unknown newer schema, preserving it for recovery.                                                                                                                   |
+
+[History fixtures](fixtures/history.json) run against the production Node and Swift
+stores: repeated terminal saves, durable deletion, foreign active-attempt guards,
+and newer-schema rejection. The existing [Attempt fixtures](fixtures/attempts.json)
+and execution-owner checks cover save failure, no inference replay and invalidated
+recovery. An upsert primitive is not permission to retry a deleted attempt.
+
+Only Saul needs reconnect after Native Messaging loss. Its exhaustive
+[operation catalogue](../apps/saul/native/history-protocol.mts) owns admission and
+classifies reads, repeatable writes and explicit writes. The browser derives
+reconnect eligibility from that catalogue: at most three connection attempts,
+keeping the same request identity. Delete, Clear and Bookmark stay single-attempt
+after an uncertain reply; migration transfers and unknown operations never
+reconnect automatically. Sender permissions remain separately validated.
+
+EZ accesses SQLite directly. It retains explicit Save again for the exact unsaved
+terminal snapshot, and never adds a reconnect loop or repeats generation. The
+native implementations remain separate; this contract adds no Node dependency,
+shared process, runtime manifest or database migration.
+
 ## Providers and presets
 
 ChatGPT model presets share `~/Library/Application Support/Little Clarity/settings.json`.

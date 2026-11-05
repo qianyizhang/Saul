@@ -152,6 +152,10 @@ copyable and deletable; browser-specific execution stays in Saul. Saved summarie
 retain their existing dedicated Saul surfaces. Drafts, credentials and active
 execution stay app-owned. Browser recovery is scoped to the originating profile.
 History reloads on activation/focus rather than a recurring background timer.
+The [History operation contract](../contracts/README.md#history-operations) shares
+recovery/deletion meanings and real-store fixtures across Swift and Node. Saul's
+typed operation catalogue owns Native Messaging admission and reconnect policy;
+EZ keeps direct SQLite access and explicit save-only recovery.
 Bridge loss permits at most three connection attempts for safe history operations,
 using the same operation identity for submission/claim/save acknowledgement. These
 retries never repeat inference. Uncertain delete, clear and bookmark operations are

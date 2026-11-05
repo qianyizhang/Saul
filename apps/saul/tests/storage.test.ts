@@ -44,8 +44,10 @@ function submission(id = 'selection'): Submission {
     regenerate: false,
   };
 }
-async function complete(store: SharedHistory) {
-  const result = await store.browser.execute({ type: 'DB_SUBMIT', payload: submission() });
+async function complete(store: SharedHistory, frozen?: { query: string; response: string }) {
+  const payload = submission();
+  if (frozen) payload.input.userPrompt = frozen.query;
+  const result = await store.browser.execute({ type: 'DB_SUBMIT', payload });
   const id = result.run!.id;
   await store.browser.execute({ type: 'DB_CLAIM', payload: { runId: id } });
   await store.browser.execute({ type: 'DB_SAVING', payload: { runId: id } });
@@ -53,13 +55,86 @@ async function complete(store: SharedHistory) {
     type: 'DB_FINISH',
     payload: {
       runId: id,
-      raw: 'A <term note="Slope">gradient</term>.',
+      raw: frozen?.response ?? 'A <term note="Slope">gradient</term>.',
       status: 'completed',
       latencyMs: 5,
     },
   });
   return id;
 }
+
+const historyContract = JSON.parse(
+  readFileSync(new URL('../../../contracts/fixtures/history.json', import.meta.url), 'utf8'),
+) as {
+  version: number;
+  query: string;
+  response: string;
+  cases: {
+    name: string;
+    kind: 'repeat-save' | 'delete' | 'active-delete' | 'newer-schema';
+    entries?: number;
+    schemaVersion?: number;
+  }[];
+};
+it.each(historyContract.cases)('shared History contract: $name', async (fixture) => {
+  expect(historyContract.version).toBe(1);
+  const store = history();
+  if (fixture.kind === 'newer-schema') {
+    store.connection.exec(`PRAGMA user_version=${fixture.schemaVersion}`);
+    expect(() => new SharedHistory(store.directory)).toThrow('Unsupported shared history version');
+    return;
+  }
+  if (fixture.kind === 'active-delete') {
+    const id = randomUUID();
+    store.connection.exec({
+      sql: 'INSERT INTO ez_entry(id,created_at,data) VALUES (?,?,?)',
+      bind: [
+        id,
+        1,
+        JSON.stringify({
+          schemaVersion: 1,
+          id,
+          query: historyContract.query,
+          response: '',
+          model: 'fixture',
+          status: 'pending',
+        }),
+      ],
+    });
+    await expect(
+      store.browser.execute({ type: 'DB_DELETE_SELECTION', payload: { selectionId: 'ez:' + id } }),
+    ).rejects.toThrow('Stop the running request in EZ');
+    expect(Number(store.connection.selectValue('SELECT count(*) FROM ez_entry'))).toBe(
+      fixture.entries,
+    );
+    return;
+  }
+  const runId = await complete(store, historyContract);
+  if (fixture.kind === 'repeat-save') {
+    await store.browser.execute({
+      type: 'DB_FINISH',
+      payload: { runId, status: 'completed', raw: historyContract.response, latencyMs: 5 },
+    });
+  } else if (fixture.kind === 'delete') {
+    await store.browser.execute({
+      type: 'DB_DELETE_SELECTION',
+      payload: { selectionId: 'selection' },
+    });
+    // Late completion cannot recreate a deleted browser attempt.
+    await store.browser.execute({
+      type: 'DB_FINISH',
+      payload: { runId, status: 'completed', raw: historyContract.response, latencyMs: 5 },
+    });
+  } else throw new Error('Unknown History contract case');
+  const reopened = new SharedHistory(store.directory);
+  open.push(reopened);
+  const rows = await reopened.browser.execute({ type: 'DB_GET_HISTORY', payload: {} });
+  expect(rows).toHaveLength(fixture.entries!);
+  if (rows.length) {
+    expect(rows[0]!.responseRaw).toBe(historyContract.response);
+    expect(rows[0]!.latest.inspection!.userPrompt).toBe(historyContract.query);
+  }
+});
 it('shares browser history across connections with exact frozen prompts, full-text search and durable deletion', async () => {
   const first = history();
   const run = await complete(first);

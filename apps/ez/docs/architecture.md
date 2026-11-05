@@ -105,6 +105,10 @@ validation, migration, refresh, disconnect and sign-out. Owner-side OAuth must:
 
 ## Persistence contract
 
+The [History operation contract](../../../contracts/README.md#history-operations)
+and real-store fixtures share saved-output, recovery and deletion meanings with
+Saul. EZ retains direct SQLite access; transport reconnect remains browser-owned.
+
 [Shared history](../../../docs/architecture.md#shared-history) owns database
 location, schema, cross-app behavior and one-time migration. Native entries retain
 `schemaVersion: 1` and UUID identity; SQLite upserts one current snapshot per UUID.
