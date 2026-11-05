@@ -102,7 +102,13 @@ including connection-key clearing and the persisted projections. Settings views
 hold independent drafts and submit through `saul-settings`; the trusted background
 owns one serialized read/commit/recovery lane in `src/storage/settings.ts`.
 A commit compares the loaded raw record's opaque fingerprint before writing.
-There is no stored revision field and loading does not rewrite legacy records.
+The Chrome record uses an opaque fingerprint; shared sections have numeric
+revisions. Initial shared-settings adoption may persist migration IDs/revisions
+during a read. Later reads do not rewrite the Chrome record.
+The native configuration owner checks shared and scoped revisions under one
+cross-process lease and commits both sections in one JSON replacement. The
+[shared contract](../../../contracts/README.md#unified-configuration-scopes) owns
+the lock, failure and upgrade rules.
 A stale Save preserves all draft fields and selections and blocks another Save
 until explicit reload; discarding a dirty draft for reload requires confirmation.
 An uncertain response also preserves the draft without replaying the write.

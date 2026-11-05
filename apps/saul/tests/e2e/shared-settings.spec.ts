@@ -40,6 +40,27 @@ test('shared provider edits keep stable preset bindings and preserve Draw throug
       message: { id: string; request: PlanControlRequest },
     ) => {
       const request = message.request;
+      if (request.action === 'config-commit') {
+        if (
+          (state.sections[request.section]?.revision || 0) !== request.revision ||
+          state.library.revision !== request.presetRevision
+        )
+          throw new Error('Settings changed. Reload before saving again.');
+        state.sections[request.section] = { revision: request.revision + 1, value: request.value };
+        state.library = {
+          revision: request.presetRevision + 1,
+          presets: request.presets,
+          providers: request.providers || state.library.providers,
+        };
+        return {
+          id: message.id,
+          event: {
+            type: 'result',
+            config: state.sections[request.section],
+            library: state.library,
+          },
+        };
+      }
       if (request.action === 'config-read')
         return {
           id: message.id,

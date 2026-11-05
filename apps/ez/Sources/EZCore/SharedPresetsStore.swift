@@ -1,3 +1,5 @@
+import CSQLite
+import Darwin
 import Foundation
 
 public struct SharedPresets: Codable {
@@ -31,6 +33,38 @@ public final class SharedPresetsStore {
     public let url: URL
     public init(url: URL = SharedPresetsStore.defaultURL) { self.url = url }
 
+    private func update<T>(_ change: (inout [String: Any]) throws -> T) throws -> T {
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700])
+        let lockURL = URL(fileURLWithPath: url.path + ".lock.sqlite3")
+        for path in [url, lockURL] {
+            if let kind = try? FileManager.default.attributesOfItem(atPath: path.path)[.type],
+                kind as? FileAttributeType != .typeRegular
+            {
+                throw EZError("Settings paths must be regular files.")
+            }
+        }
+        var lock: OpaquePointer?
+        guard
+            sqlite3_open_v2(lockURL.path, &lock, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK
+        else {
+            sqlite3_close(lock)
+            throw EZError("Cannot open the configuration lock.")
+        }
+        defer { sqlite3_close(lock) }
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: lockURL.path)
+        sqlite3_busy_timeout(lock, 5000)
+        guard sqlite3_exec(lock, "BEGIN IMMEDIATE", nil, nil, nil) == SQLITE_OK else {
+            throw EZError("Configuration is busy. Try Save again.")
+        }
+        defer { sqlite3_exec(lock, "ROLLBACK", nil, nil, nil) }
+        var document = try document()
+        let result = try change(&document)
+        try writeDocument(document)
+        return result
+    }
+
     private func document() throws -> [String: Any] {
         let data: Data
         do { data = try Data(contentsOf: url) } catch CocoaError.fileReadNoSuchFile {
@@ -42,7 +76,11 @@ public final class SharedPresetsStore {
         return value
     }
     public func readAppSection(_ section: String) throws -> (revision: Int, value: [String: Any]?) {
-        let document = try document()
+        try appSection(document(), section)
+    }
+    private func appSection(_ document: [String: Any], _ section: String) throws -> (
+        revision: Int, value: [String: Any]?
+    ) {
         guard let rawApps = document["apps"] else { return (0, nil) }
         guard let apps = rawApps as? [String: Any] else { throw EZError("Invalid app settings.") }
         guard let rawEZ = apps["ez"] else { return (0, nil) }
@@ -56,16 +94,21 @@ public final class SharedPresetsStore {
     @discardableResult public func saveAppSection(_ section: String, value: [String: Any], revision: Int)
         throws -> Int
     {
-        guard try readAppSection(section).revision == revision else {
+        try update { document in
+            try setAppSection(&document, section, value: value, revision: revision)
+        }
+    }
+    private func setAppSection(
+        _ document: inout [String: Any], _ section: String, value: [String: Any], revision: Int
+    ) throws -> Int {
+        guard try appSection(document, section).revision == revision else {
             throw EZError("EZ settings changed. Reload before saving again.")
         }
-        var document = try document()
         var apps = document["apps"] as? [String: Any] ?? [:]
         var ez = apps["ez"] as? [String: Any] ?? [:]
         ez[section] = ["revision": revision + 1, "value": value]
         apps["ez"] = ez
         document["apps"] = apps
-        try writeDocument(document)
         return revision + 1
     }
     private func writeDocument(_ document: [String: Any]) throws {
@@ -74,11 +117,30 @@ public final class SharedPresetsStore {
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o700])
-        try data.write(to: url, options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        let temporary = url.deletingLastPathComponent().appendingPathComponent(".settings-\(UUID()).tmp")
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        guard
+            FileManager.default.createFile(
+                atPath: temporary.path, contents: data, attributes: [.posixPermissions: 0o600])
+        else {
+            throw EZError("Cannot stage configuration. Previous settings are preserved.")
+        }
+        let handle = try FileHandle(forWritingTo: temporary)
+        do {
+            try handle.synchronize()
+            try handle.close()
+        } catch {
+            try? handle.close()
+            throw error
+        }
+        guard Darwin.rename(temporary.path, url.path) == 0 else {
+            throw EZError("Cannot replace configuration. Previous settings are preserved.")
+        }
     }
     public func read() throws -> SharedPresets {
-        let document = try document()
+        try library(document())
+    }
+    private func library(_ document: [String: Any]) throws -> SharedPresets {
         let legacy =
             (((document["apps"] as? [String: Any])?["ez"] as? [String: Any])?["configuration"]
             as? [String: Any])?["value"] as? [String: Any]
@@ -121,8 +183,16 @@ public final class SharedPresetsStore {
     public func save(_ presets: [ModelPreset], revision: Int, providers: [ProviderDefinition]? = nil) throws
         -> SharedPresets
     {
+        try update { document in
+            try setPresets(&document, presets, revision: revision, providers: providers)
+        }
+    }
+    private func setPresets(
+        _ document: inout [String: Any], _ presets: [ModelPreset], revision: Int,
+        providers: [ProviderDefinition]?
+    ) throws -> SharedPresets {
         try validate(presets)
-        let current = try read()
+        let current = try library(document)
         guard current.revision == revision else {
             throw EZError(
                 "Shared presets changed in the other app. Reload saved settings before saving again.")
@@ -130,19 +200,22 @@ public final class SharedPresetsStore {
         let definitions = providers ?? current.providers
         try ProviderDefinition.validate(definitions)
         let saved = SharedPresets(revision: revision + 1, presets: presets, providers: definitions)
-        var document = try document()
         var section = document["modelPresets"] as? [String: Any] ?? [:]
         let fields =
             try JSONSerialization.jsonObject(with: JSONEncoder().encode(saved)) as? [String: Any] ?? [:]
         section.merge(fields) { _, new in new }
         document["modelPresets"] = section
-        try writeDocument(document)
         return saved
     }
     public func migrate(_ presets: [ModelPreset], providers: [ProviderDefinition]? = nil) throws
         -> SharedPresets
     {
-        let current = try read()
+        try update { document in try importPresets(&document, presets, providers: providers) }
+    }
+    private func importPresets(
+        _ document: inout [String: Any], _ presets: [ModelPreset], providers: [ProviderDefinition]?
+    ) throws -> SharedPresets {
+        let current = try library(document)
         var imported = current.presets
         for var preset in presets where !imported.contains(where: { $0.id == preset.id }) {
             let original = preset.name
@@ -156,11 +229,32 @@ public final class SharedPresetsStore {
             }
             imported.append(preset)
         }
-        let owned = (try document()["modelPresets"] as? [String: Any])?["providers"] != nil
+        let owned = (document["modelPresets"] as? [String: Any])?["providers"] != nil
         let definitions = owned ? current.providers : (providers ?? current.providers)
         try ProviderDefinition.validate(definitions)
         return try imported == current.presets && definitions == current.providers && owned
             ? current
-            : save(imported, revision: current.revision, providers: definitions)
+            : setPresets(&document, imported, revision: current.revision, providers: definitions)
+    }
+    public func saveConfiguration(_ configuration: Configuration, scopedRevision: Int) throws -> Int {
+        try update { document in
+            guard try appSection(document, "configuration").revision == scopedRevision else {
+                throw EZError("EZ settings changed. Reload before saving again.")
+            }
+            if let revision = configuration.sharedPresetRevision {
+                _ = try setPresets(
+                    &document, configuration.presets, revision: revision, providers: configuration.providers)
+            } else {
+                _ = try importPresets(&document, configuration.presets, providers: configuration.providers)
+            }
+            guard
+                var value = try JSONSerialization.jsonObject(with: JSONEncoder().encode(configuration))
+                    as? [String: Any]
+            else {
+                throw EZError("Configuration must be an object.")
+            }
+            for key in ["presets", "providers", "sharedPresetRevision"] { value.removeValue(forKey: key) }
+            return try setAppSection(&document, "configuration", value: value, revision: scopedRevision)
+        }
     }
 }

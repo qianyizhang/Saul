@@ -260,7 +260,10 @@ decode as `gpt-plan`/Write; persisted `recipes`/`recipeSnapshot` keys remain sta
 Account choice/secrets never belong to a preset. Shortcuts, Min Mode and window
 placement keep their local stores.
 
-Save is explicit. Preset/Action editors stay mounted across Settings sections;
+Save is explicit. The shared configuration owner checks both revisions and saves Presets and the EZ
+scope in one locked JSON replacement; conflicts or staging failures change neither.
+See the [shared transaction contract](../../../contracts/README.md#unified-configuration-scopes).
+Preset/Action editors stay mounted across Settings sections;
 item changes, Add and dismissal guard dirty edits. Save failure keeps the draft.
 Configuration editing preserves lookup overrides and restored historical actions.
 Speak presets retain Realtime model and strict `speechOptions.voice`; EZ can edit

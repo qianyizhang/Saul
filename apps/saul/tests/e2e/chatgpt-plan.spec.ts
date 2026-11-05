@@ -29,6 +29,26 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
       message: { id: string; request: PlanRequest },
     ) => {
       const request = message.request;
+      if (request.action === 'config-commit') {
+        if (
+          request.revision !== (sections[request.section]?.revision || 0) ||
+          request.presetRevision !== library.revision
+        )
+          return {
+            id: message.id,
+            event: { type: 'error', message: 'Settings changed. Reload saved settings.' },
+          };
+        sections[request.section] = { revision: request.revision + 1, value: request.value };
+        library = {
+          revision: library.revision + 1,
+          presets: request.presets,
+          providers: request.providers || library.providers,
+        };
+        return {
+          id: message.id,
+          event: { type: 'result', config: sections[request.section], library },
+        };
+      }
       if (request.action === 'config-read')
         return {
           id: message.id,

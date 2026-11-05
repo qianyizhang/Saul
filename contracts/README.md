@@ -68,8 +68,10 @@ Preset saves preserve all other sections. Each preset has a UUID `id`,
 Absent typed fields decode as `gpt-plan` / Write. Image settings accept square,
 landscape or portrait PNG sizes and low/medium/high quality. Both clients preserve
 these fields even when the capability is unavailable locally. Credentials stay behind the selected owner. Saves replace the file atomically; stale editor revisions require Reload and
-preserve the draft. This beta uses last-save-wins if both apps save simultaneously;
-there is no sync service or cross-process transaction manager.
+preserve the draft. Both native adapters serialize the read/check/replace through
+`settings.json.lock.sqlite3`: a SQLite `BEGIN IMMEDIATE` lease with a five-second
+busy timeout and no settings data. The lease is released on process exit. Keep
+the lock file in place while either app may use it; deleting it would split the lock.
 
 Write presets show Model, Effort and Standard/Fast speed where supported.
 Draw presets hold image model and optional size/quality in the preset editor. Plan
@@ -123,11 +125,18 @@ native visual or live-provider acceptance.
 
 The same JSON document holds `apps.saul.settings`, `apps.saul.calls`, and
 `apps.ez.configuration`. Each section has a numeric `revision` and object `value`;
-atomic replacement preserves sibling scopes and unknown root fields. Stale saves
-block before updating shared model presets. Browser scopes are limited to 750 KB
+one locked atomic replacement preserves sibling scopes and unknown root fields.
+An editor Save checks both expected revisions and commits its scope and shared
+providers/presets together, or changes neither. Stale saves preserve the draft.
+Browser scopes are limited to 750 KB
 of serialized UTF-8 JSON, leaving room under the 1 MiB native-message limit.
-Provider names and presets share the same stale-save revision. As with model presets, simultaneous
-cross-process writes remain last-save-wins; this is not a transaction service.
+Provider names and presets share the same stale-save revision. An unrelated scope
+can change concurrently without being overwritten. Both adapters stage and flush
+the complete JSON before replacement; validation or staging failure retains the
+previous document. Chrome-local credential writes remain separate and report
+uncertain completion without replay. There is no background process or settings
+database migration. Upgrade both apps/helper before relying on this guarantee;
+an older writer does not honor the lease.
 
 Saul stores preferences, connection metadata, actions and non-plan model presets
 in its settings scope. Custom API keys and local credential bindings remain in trusted Chrome storage;

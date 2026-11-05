@@ -427,26 +427,10 @@ public final class ConfigurationStore {
 
     public func save(_ configuration: Configuration) throws {
         try configuration.validate()
-        var saved = configuration
         if let shared {
-            guard try shared.readAppSection("configuration").revision == scopedRevision else {
-                throw EZError("EZ settings changed. Reload before saving again.")
-            }
-            let library =
-                try configuration.sharedPresetRevision.map {
-                    try shared.save(configuration.presets, revision: $0, providers: configuration.providers)
-                } ?? shared.migrate(configuration.presets, providers: configuration.providers)
-            saved.presets = library.presets
-            saved.providers = library.providers
-            saved.sharedPresetRevision = library.revision
-        }
-        do {
-            if let shared { try writeScope(saved, shared: shared) } else { try writeLocal(saved) }
-        } catch {
-            if shared == nil { throw error }
-            throw EZError(
-                "Configuration could not be saved. Shared presets may already be saved; reload before editing again. \(error.localizedDescription)"
-            )
+            scopedRevision = try shared.saveConfiguration(configuration, scopedRevision: scopedRevision)
+        } else {
+            try writeLocal(configuration)
         }
     }
     private func writeScope(_ configuration: Configuration, shared: SharedPresetsStore) throws {

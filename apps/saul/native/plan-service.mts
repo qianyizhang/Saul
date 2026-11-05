@@ -90,6 +90,19 @@ export class PlanService {
           config: this.presets.saveScope(request.section, request.revision, request.value),
         });
         return;
+      case 'config-commit':
+        emit({
+          type: 'result',
+          ...this.presets.commit(
+            request.section,
+            request.revision,
+            request.value,
+            request.presetRevision,
+            request.presets,
+            request.providers,
+          ),
+        });
+        return;
       case 'presets-read':
         emit({ type: 'result', library: this.presets.read() });
         return;

@@ -54,6 +54,7 @@ it('shares edits, migrates once, keeps accounts outside presets, and refuses a s
               section: string;
               value: Record<string, unknown>;
               revision: number;
+              presetRevision: number;
               presets: Parameters<typeof store.import>[0];
               providers?: Parameters<typeof store.save>[2];
             };
@@ -62,21 +63,30 @@ it('shares edits, migrates once, keeps accounts outside presets, and refuses a s
           id,
           event: {
             type: 'result',
-            ...(request.action.startsWith('config-')
-              ? {
-                  config:
-                    request.action === 'config-read'
-                      ? store.readScope(request.section)
-                      : store.saveScope(request.section, request.revision, request.value),
-                }
-              : {
-                  library:
-                    request.action === 'presets-read'
-                      ? store.read()
-                      : request.action === 'presets-import'
-                        ? store.import(request.presets)
-                        : store.save(request.revision, request.presets, request.providers),
-                }),
+            ...(request.action === 'config-commit'
+              ? store.commit(
+                  request.section,
+                  request.revision,
+                  request.value,
+                  request.presetRevision,
+                  request.presets,
+                  request.providers,
+                )
+              : request.action.startsWith('config-')
+                ? {
+                    config:
+                      request.action === 'config-read'
+                        ? store.readScope(request.section)
+                        : store.saveScope(request.section, request.revision, request.value),
+                  }
+                : {
+                    library:
+                      request.action === 'presets-read'
+                        ? store.read()
+                        : request.action === 'presets-import'
+                          ? store.import(request.presets)
+                          : store.save(request.revision, request.presets, request.providers),
+                  }),
           },
         }),
       },

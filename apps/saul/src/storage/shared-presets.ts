@@ -150,25 +150,23 @@ export const sharedPresets = {
     }
     if (settings.scopedConfigRevision === undefined)
       throw new Error('Reload settings before saving unified config.');
-    const current = await scopedCall({ action: 'config-read', section: 'settings' });
-    if (current.revision !== settings.scopedConfigRevision)
-      throw new Error('Scoped settings changed. Reload before saving again.');
     validateScopedConfigValue(portableSettings(settings));
-    const projected = project(
-      settings,
-      await sharedCall({
-        action: 'presets-save',
-        revision: settings.sharedPresetRevision,
-        presets,
-        providers: settings.providers,
-      }),
-    );
-    const config = await scopedCall({
-      action: 'config-save',
+    const request = {
+      action: 'config-commit',
       section: 'settings',
       revision: settings.scopedConfigRevision,
-      value: portableSettings(projected),
+      presetRevision: settings.sharedPresetRevision,
+      presets,
+      providers: settings.providers,
+      value: portableSettings(settings),
+    } as const;
+    const reply = await chrome.runtime.sendNativeMessage(PLAN_HOST, {
+      id: crypto.randomUUID(),
+      request,
     });
-    return { ...projected, scopedConfigRevision: config.revision };
+    if (reply?.event?.type === 'error') throw new Error(reply.event.message);
+    validatePlanResult(request, reply?.event);
+    const projected = project(settings, resolveSharedPresets(reply.event.library));
+    return { ...projected, scopedConfigRevision: reply.event.config.revision };
   },
 };

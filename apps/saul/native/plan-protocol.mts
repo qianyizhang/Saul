@@ -54,6 +54,15 @@ export type PlanRequest =
       value: Record<string, unknown>;
     }
   | { action: 'presets-read' }
+  | {
+      action: 'config-commit';
+      section: 'settings';
+      revision: number;
+      value: Record<string, unknown>;
+      presetRevision: number;
+      presets: SharedPreset[];
+      providers?: SharedProvider[];
+    }
   | { action: 'presets-import'; presets: SharedPreset[] }
   | {
       action: 'presets-save';
@@ -80,6 +89,7 @@ export interface PlanResults {
   history: { value: unknown };
   'config-read': { config: ScopedConfig };
   'config-save': { config: ScopedConfig };
+  'config-commit': { config: ScopedConfig; library: SharedPresetsReply };
   'presets-read': { library: SharedPresetsReply };
   'presets-import': { library: SharedPresetsReply };
   'presets-save': { library: SharedPresetsReply };
@@ -110,6 +120,7 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
     history: ['request'],
     'config-read': ['section'],
     'config-save': ['section', 'revision', 'value'],
+    'config-commit': ['section', 'revision', 'value', 'presetRevision', 'presets', 'providers'],
     'presets-read': [],
     'presets-import': ['presets'],
     'presets-save': ['revision', 'presets', 'providers'],
@@ -124,6 +135,19 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
     throw new Error('Unsupported plan operation');
   if (v.action === 'history') {
     validateHistoryRequest(v.request);
+    return;
+  }
+  if (v.action === 'config-commit') {
+    if (
+      v.section !== 'settings' ||
+      !validScopedConfig(v) ||
+      !Number.isSafeInteger(v.presetRevision) ||
+      Number(v.presetRevision) < 0
+    )
+      throw new Error('Invalid configuration transaction.');
+    validateScopedConfigValue(v.value);
+    validateSharedPresets(v.presets);
+    if (v.providers !== undefined) validateSharedProviders(v.providers);
     return;
   }
   if (v.action === 'config-read' || v.action === 'config-save') {
@@ -198,6 +222,7 @@ export function validatePlanResult<T extends PlanControlRequest>(
       history: (v) => Object.hasOwn(v, 'value'),
       'config-read': (v) => validScopedConfig(v.config),
       'config-save': (v) => validScopedConfig(v.config),
+      'config-commit': (v) => validScopedConfig(v.config) && sharedLibrary(v),
       'presets-read': sharedLibrary,
       'presets-import': sharedLibrary,
       'presets-save': sharedLibrary,

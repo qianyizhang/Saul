@@ -457,7 +457,7 @@ export function createSettingsOwner(
         } catch (cause) {
           if (!shared) throw cause;
           throw new Error(
-            'Settings could not be saved. Shared presets may already be saved; reload saved settings before saving again.',
+            'Settings could not be saved locally. Shared configuration may already be saved; reload saved settings before saving again.',
             { cause },
           );
         }

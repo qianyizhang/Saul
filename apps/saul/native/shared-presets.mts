@@ -1,4 +1,16 @@
-import { mkdirSync, readFileSync, writeFileSync, renameSync, rmSync } from 'node:fs';
+import {
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  renameSync,
+  rmSync,
+  lstatSync,
+  chmodSync,
+  openSync,
+  fsyncSync,
+  closeSync,
+} from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -22,6 +34,34 @@ export class SharedPresetsStore {
   constructor(path = sharedPresetsPath()) {
     this.path = path;
   }
+  private update<T>(change: (document: Record<string, unknown>) => T): T {
+    mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 });
+    const lockPath = `${this.path}.lock.sqlite3`;
+    for (const path of [this.path, lockPath]) {
+      try {
+        if (!lstatSync(path).isFile()) throw new Error('Settings paths must be regular files.');
+      } catch (error) {
+        if (errorCode(error) !== 'ENOENT') throw error;
+      }
+    }
+    // SQLite supplies the same crash-released process lock to Swift and Node.
+    // It contains no settings; all data remains in the JSON document.
+    const lock = new DatabaseSync(lockPath);
+    try {
+      chmodSync(lockPath, 0o600);
+      lock.exec('PRAGMA busy_timeout=5000; BEGIN IMMEDIATE');
+      try {
+        const document = this.document();
+        const result = change(document);
+        this.writeDocument(document);
+        return result;
+      } finally {
+        lock.exec('ROLLBACK');
+      }
+    } finally {
+      lock.close();
+    }
+  }
   private document(): Record<string, unknown> {
     let value: unknown;
     try {
@@ -34,7 +74,13 @@ export class SharedPresetsStore {
     return value;
   }
   readScope(section: string): import('./shared-presets-contract.mts').ScopedConfig {
-    const apps = this.document().apps;
+    return this.scope(this.document(), section);
+  }
+  private scope(
+    document: Record<string, unknown>,
+    section: string,
+  ): import('./shared-presets-contract.mts').ScopedConfig {
+    const apps = document.apps;
     if (apps !== undefined && !isRecord(apps)) throw new Error('Invalid app settings.');
     const saul = apps?.saul;
     if (saul !== undefined && !isRecord(saul)) throw new Error('Invalid Saul settings.');
@@ -46,14 +92,21 @@ export class SharedPresetsStore {
     return value;
   }
   saveScope(section: string, revision: number, value: Record<string, unknown>) {
+    return this.update((document) => this.setScope(document, section, revision, value));
+  }
+  private setScope(
+    document: Record<string, unknown>,
+    section: string,
+    revision: number,
+    value: Record<string, unknown>,
+  ) {
     validateScopedConfigValue(value);
-    if (this.readScope(section).revision !== revision)
+    if (this.scope(document, section).revision !== revision)
       throw new Error('Scoped settings changed. Reload before saving again.');
     const saved = { revision: revision + 1, value };
-    const document = this.document();
     const apps = isRecord(document.apps) ? document.apps : {};
     const saul = isRecord(apps.saul) ? apps.saul : {};
-    this.writeDocument({ ...document, apps: { ...apps, saul: { ...saul, [section]: saved } } });
+    document.apps = { ...apps, saul: { ...saul, [section]: saved } };
     return saved;
   }
   private writeDocument(document: Record<string, unknown>) {
@@ -64,13 +117,21 @@ export class SharedPresetsStore {
         mode: 0o600,
         flag: 'wx',
       });
+      const descriptor = openSync(temporary, 'r');
+      try {
+        fsyncSync(descriptor);
+      } finally {
+        closeSync(descriptor);
+      }
       renameSync(temporary, this.path);
     } finally {
       rmSync(temporary, { force: true });
     }
   }
   read(): SharedPresets {
-    const document = this.document();
+    return this.library(this.document());
+  }
+  private library(document: Record<string, unknown>): SharedPresets {
     const value = document.modelPresets;
     const apps = isRecord(document.apps) ? document.apps : {};
     const ez = isRecord(apps.ez) ? apps.ez : {};
@@ -92,15 +153,22 @@ export class SharedPresetsStore {
     };
   }
   save(revision: number, presets: SharedPreset[], providers?: SharedProvider[]): SharedPresets {
+    return this.update((document) => this.setPresets(document, revision, presets, providers));
+  }
+  private setPresets(
+    document: Record<string, unknown>,
+    revision: number,
+    presets: SharedPreset[],
+    providers?: SharedProvider[],
+  ): SharedPresets {
     validateSharedPresets(presets);
-    const current = this.read();
+    const current = this.library(document);
     if (current.revision !== revision)
       throw new Error(
         'Shared presets changed in the other app. Reload saved settings before saving again.',
       );
     const definitions = providers ?? current.providers;
     validateSharedProviders(definitions);
-    const document = this.document();
     const saved = {
       ...(isRecord(document.modelPresets) ? document.modelPresets : {}),
       revision: revision + 1,
@@ -108,26 +176,41 @@ export class SharedPresetsStore {
       providers: definitions,
     };
     document.modelPresets = saved;
-    this.writeDocument(document);
     return saved;
   }
+  commit(
+    section: string,
+    revision: number,
+    value: Record<string, unknown>,
+    presetRevision: number,
+    presets: SharedPreset[],
+    providers?: SharedProvider[],
+  ) {
+    return this.update((document) => {
+      const config = this.setScope(document, section, revision, value);
+      const library = this.setPresets(document, presetRevision, presets, providers);
+      return { config, library };
+    });
+  }
   import(presets: SharedPreset[]): SharedPresets {
-    validateSharedPresets(presets);
-    const current = this.read();
-    const imported = [...current.presets];
-    for (const item of presets) {
-      if (imported.some((p) => p.id.toLowerCase() === item.id.toLowerCase())) continue;
-      let name = item.name;
-      for (
-        let n = 2;
-        imported.some((p) => p.name.trim().toLowerCase() === name.trim().toLowerCase());
-        n++
-      )
-        name = `${item.name.slice(0, 65)} (${n})`;
-      imported.push({ ...item, id: item.id.toLowerCase(), name });
-    }
-    return imported.length === current.presets.length
-      ? current
-      : this.save(current.revision, imported);
+    return this.update((document) => {
+      validateSharedPresets(presets);
+      const current = this.library(document);
+      const imported = [...current.presets];
+      for (const item of presets) {
+        if (imported.some((p) => p.id.toLowerCase() === item.id.toLowerCase())) continue;
+        let name = item.name;
+        for (
+          let n = 2;
+          imported.some((p) => p.name.trim().toLowerCase() === name.trim().toLowerCase());
+          n++
+        )
+          name = `${item.name.slice(0, 65)} (${n})`;
+        imported.push({ ...item, id: item.id.toLowerCase(), name });
+      }
+      return imported.length === current.presets.length
+        ? current
+        : this.setPresets(document, current.revision, imported);
+    });
   }
 }

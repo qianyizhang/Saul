@@ -5,6 +5,32 @@ import Foundation
 
 @MainActor func configurationChecks() -> [CheckCase] {
     [
+        CheckCase("configuration: whole saves reject either stale revision without partial changes") {
+            directory in
+            let shared = SharedPresetsStore(url: directory.appendingPathComponent("settings.json"))
+            try Data("{\"future\":7,\"apps\":{\"saul\":{\"future\":true}}}".utf8).write(to: shared.url)
+            let store = ConfigurationStore(directory: directory.appendingPathComponent("ez"), shared: shared)
+            let initial = Configuration.starters(model: "fixture", effort: "low", fast: false)
+            try store.save(initial)
+            var draft = try store.load()!
+            let original = try Data(contentsOf: shared.url)
+            draft.sharedPresetRevision = 0
+            try expectThrows(EZError.self) { try store.save(draft) }
+            try expectEqual(
+                try Data(contentsOf: shared.url), original, "Preset conflict partially saved the app scope")
+            draft = try store.load()!
+            _ = try shared.saveAppSection(
+                "configuration", value: ["actions": []],
+                revision: shared.readAppSection("configuration").revision)
+            let concurrent = try Data(contentsOf: shared.url)
+            try expectThrows(EZError.self) { try store.save(draft) }
+            try expectEqual(
+                try Data(contentsOf: shared.url), concurrent, "Scope conflict partially saved presets")
+            let json = try JSONSerialization.jsonObject(with: concurrent) as? [String: Any]
+            try expectEqual(json?["future"] as? Int, 7, "Unknown root field lost")
+            let saul = (json?["apps"] as? [String: Any])?["saul"] as? [String: Any]
+            try expectEqual(saul?["future"] as? Bool, true, "Sibling app scope lost")
+        },
         CheckCase("configuration: documented examples load in the native production store") { directory in
             for name in ["config.example.json", "contracts/fixtures/config.calls.json"] {
                 let source = URL(fileURLWithPath: #filePath)
