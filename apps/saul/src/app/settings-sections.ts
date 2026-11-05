@@ -4,7 +4,7 @@ export const SETTINGS_SECTIONS = [
   ['reading', 'Actions'],
   ['summaries', 'Summaries'],
   ['preferences', 'Preferences'],
-  ['connections', 'Providers'],
+  ['connections', 'Connections'],
 ] as const;
 
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number][0];

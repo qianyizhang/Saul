@@ -173,15 +173,17 @@ import Foundation
             var unsaved = first
             unsaved.status = "unsaved"
             try expectThrows(EZError.self) {
-                _ = try unsaved.prepareFollowUp("Why?", models: f.model.models)
+                _ = try unsaved.prepareFollowUp(
+                    "Why?", models: f.model.models, provider: .chatGPTPlan)
             }
             try expectThrows(EZError.self) {
-                _ = try first.prepareFollowUp("Why?", models: [])
+                _ = try first.prepareFollowUp("Why?", models: [], provider: .chatGPTPlan)
             }
             var long = first
             long.query = String(repeating: "x", count: 120_000)
             try expectThrows(EZError.self) {
-                _ = try long.prepareFollowUp("Why?", models: f.model.models)
+                _ = try long.prepareFollowUp(
+                    "Why?", models: f.model.models, provider: .chatGPTPlan)
             }
             try expectEqual(f.model.selectedEntry?.response, first.response, "Failure lost original answer")
         },

@@ -87,12 +87,12 @@ function credentialForChoices(settings: UserSettings, input: Choices): string {
     throw new Error(SELECT_NEW_PRESET);
   }
   const frozenSettings =
-    input.preset.providerKey && input.preset.profileId
+    input.preset.connectionKey && input.preset.profileId
       ? {
           ...settings,
-          providerConnections: {
-            ...settings.providerConnections,
-            [input.preset.providerKey]: input.preset.profileId,
+          connectionProfiles: {
+            ...settings.connectionProfiles,
+            [input.preset.connectionKey]: input.preset.profileId,
           },
         }
       : settings;
@@ -114,13 +114,13 @@ function credentialForChoices(settings: UserSettings, input: Choices): string {
 
 function mediaSettings(settings: UserSettings, preset: ModelPreset): UserSettings {
   const capability = preset.capability === 'draw' ? 'Draw' : 'Speak';
-  const provider = settings.providers.find((p) => p.key === preset.providerKey);
-  if (preset.provider !== 'openai-compatible' || provider?.kind !== 'openai-api')
-    throw new Error(`${capability} requires an OpenAI API provider. Open Providers.`);
+  const connection = settings.connections.find((p) => p.key === preset.connectionKey);
+  if (preset.provider !== 'openai-compatible' || connection?.kind !== 'openai-api')
+    throw new Error(`${capability} requires an OpenAI API connection. Open Connections.`);
   const source = connectionForPreset(settings, preset, false, preset.capability === 'draw');
   if (source.config.baseUrl.replace(/\/+$/, '') !== 'https://api.openai.com/v1')
     throw new Error(
-      `${capability} requires a connection to https://api.openai.com/v1. Choose it in Providers.`,
+      `${capability} requires a connection to https://api.openai.com/v1. Choose it in Connections.`,
     );
   return {
     ...settings,
@@ -136,8 +136,25 @@ function connectionForPreset(
   editing = false,
   allowImplicit = true,
 ): { id: string | undefined; config: UserSettings['openaiCompatible'] } {
-  const id = preset.providerKey
-    ? settings.providerConnections?.[preset.providerKey] || preset.profileId
+  const connection = settings.connections.find((p) => p.key === preset.connectionKey);
+  if (
+    connection?.kind === 'openai-api' &&
+    settings.sharedCredentials === 'saul' &&
+    connection.baseUrl
+  ) {
+    return {
+      id: connection.key,
+      config: {
+        baseUrl: connection.baseUrl ?? 'https://api.openai.com/v1',
+        apiKey: '',
+        credentialOwner: 'saul',
+        model: preset.model,
+        temperature: preset.temperature ?? 0.3,
+      },
+    };
+  }
+  const id = preset.connectionKey
+    ? settings.connectionProfiles?.[preset.connectionKey] || preset.profileId
     : preset.profileId;
   const profile = settings.profiles?.find((profile) => profile.id === id);
   const implicit =
@@ -164,17 +181,17 @@ function projectPreset(settings: UserSettings, preset: ModelPreset, editing = fa
     );
   if (preset.capability === 'draw' && !editing)
     throw new Error(`Preset “${preset.name}” uses Draw. Choose it for an Illustrate action.`);
-  if (preset.providerKey && settings.providers) {
-    const provider = settings.providers.find((item) => item.key === preset.providerKey);
-    if (!provider && !editing)
-      throw new Error(`Provider “${preset.providerKey}” is unavailable. Open Providers.`);
+  if (preset.connectionKey && settings.connections) {
+    const connection = settings.connections.find((item) => item.key === preset.connectionKey);
+    if (!connection && !editing)
+      throw new Error(`Connection “${preset.connectionKey}” is unavailable. Open Connections.`);
     if (
-      provider &&
-      (provider.kind === 'chatgpt-plan' ? 'chatgpt-plan' : 'openai-compatible') !==
+      connection &&
+      (connection.kind === 'chatgpt-plan' ? 'chatgpt-plan' : 'openai-compatible') !==
         preset.provider &&
       !editing
     )
-      throw new Error('The preset provider changed. Reload settings before running.');
+      throw new Error('The preset connection changed. Reload settings before running.');
   }
   if (preset.provider === 'openai-compatible') {
     if (!editing && (preset.effort || preset.fast))
@@ -194,11 +211,14 @@ function projectPreset(settings: UserSettings, preset: ModelPreset, editing = fa
     };
   }
   if (preset.provider === 'chatgpt-plan') {
+    const connection = settings.connections.find((p) => p.key === preset.connectionKey);
+    if (!editing && settings.sharedCredentials === 'saul' && connection && !connection.accountId)
+      throw new Error('Choose an account for this connection in Settings → Connections.');
     return {
       ...settings,
       activeProvider: preset.provider,
       chatgptPlan: {
-        accountId: settings.chatgptPlan?.accountId || '',
+        accountId: connection?.accountId ?? settings.chatgptPlan?.accountId ?? '',
         model: preset.model,
         ...(preset.effort === undefined ? {} : { effort: preset.effort }),
         ...(preset.fast === undefined ? {} : { fast: preset.fast }),

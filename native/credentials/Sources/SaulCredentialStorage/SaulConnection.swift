@@ -36,25 +36,6 @@ public struct SaulAccount: Codable, Equatable, Sendable, Identifiable {
     selectedID = selected
     apiConnected = connected
   }
-  public func select(_ id: String) async throws {
-    _ = try await call(["action": "select", "accountId": id])
-    try await load()
-  }
-  public func signIn(
-    newAccount: Bool = false, enablePlan: Bool = false,
-    openBrowser: @escaping @MainActor (URL) -> Bool
-  ) async throws {
-    var request: [String: Any] = ["action": "login", "consent": enablePlan]
-    if !newAccount, let selectedID { request["accountId"] = selectedID }
-    _ = try await call(request, authorize: openBrowser)
-    try await load()
-  }
-  public func signOut() async throws -> String? {
-    guard let selectedID else { return nil }
-    let result = try await call(["action": "logout", "accountId": selectedID])
-    try await load()
-    return result["warning"] as? String
-  }
   public func keyStatus() async throws -> Bool {
     let result = try await call(["action": "api-key-status"])
     guard let connected = result["apiConnected"] as? Bool else {
@@ -62,12 +43,6 @@ public struct SaulAccount: Codable, Equatable, Sendable, Identifiable {
     }
     apiConnected = connected
     return connected
-  }
-  public func saveKey(_ key: String?) async throws {
-    var request: [String: Any] = ["action": key == nil ? "api-key-remove" : "api-key-save"]
-    if let key { request["key"] = key }
-    _ = try await call(request)
-    _ = try await keyStatus()
   }
   public func call(
     _ request: [String: Any],
@@ -77,7 +52,19 @@ public struct SaulAccount: Codable, Equatable, Sendable, Identifiable {
     let id = UUID().uuidString
     let frame = try NativeFrames.encode(["version": 1, "id": id, "request": request])
     let replies = try transport(frame)
-    defer { replies.close() }
+    let seconds: Int64 =
+      request["action"] as? String == "login"
+      ? 320
+      : ["connection-catalog", "connection-status"].contains(request["action"] as? String ?? "")
+        ? 30 : 190
+    let deadline = Task {
+      try await Task.sleep(for: .seconds(seconds))
+      replies.close()
+    }
+    defer {
+      deadline.cancel()
+      replies.close()
+    }
     for try await data in replies.stream {
       try Task.checkCancellation()
       guard let reply = try JSONSerialization.jsonObject(with: data) as? [String: Any],

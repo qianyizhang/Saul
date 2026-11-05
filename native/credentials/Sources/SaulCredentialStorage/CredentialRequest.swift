@@ -1,7 +1,7 @@
 import CoreFoundation
 import Foundation
 
-/// The wire boundary has no token-read operation or caller-supplied destination URL.
+/// No token-read operation. Setup binds endpoints; generation cannot choose another destination.
 public struct CredentialRequest {
   public let id: String
   public let action: String
@@ -24,14 +24,21 @@ public struct CredentialRequest {
         "accountId", "model", "effort", "fast", "systemPrompt", "userPrompt", "attachments",
       ],
       "api-key-status": [], "api-key-save": ["key"], "api-key-remove": [],
+      "connection-status": ["connectionKey"],
+      "connection-catalog": ["connectionKey", "force"],
+      "connection-key-save": ["connectionKey", "endpoint", "key"],
+      "connection-key-remove": ["connectionKey", "endpoint"],
       "api-key-import": ["key", "selectedAccountId"],
-      "api-chat": ["model", "systemPrompt", "userPrompt", "temperature", "maxTokens"],
-      "api-realtime": ["model", "voice"],
-      "native-responses": ["provider", "accountId", "body"],
+      "api-chat": [
+        "model", "systemPrompt", "userPrompt", "temperature", "maxTokens", "connectionKey",
+      ],
+      "api-realtime": ["model", "voice", "connectionKey"],
+      "native-responses": ["provider", "accountId", "body", "connectionKey"],
       "native-image": [
         "prompt", "model", "size", "quality", "outputFormat", "imageBase64", "imageName",
+        "connectionKey",
       ],
-      "api-image": ["prompt", "model", "size", "quality", "outputFormat"],
+      "api-image": ["prompt", "model", "size", "quality", "outputFormat", "connectionKey"],
       "migration-verified": [],
     ]
     guard let fields = operations[action],
@@ -45,10 +52,21 @@ public struct CredentialRequest {
       guard let text = raw as? String else { return false }
       return (empty || !text.isEmpty) && text.utf8.count <= max
     }
-    for flag in ["consent", "fast"] where value[flag] != nil {
+    for flag in ["consent", "fast", "force"] where value[flag] != nil {
       guard let number = value[flag] as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID()
       else { throw invalid() }
 
+    }
+    if action.hasPrefix("connection-") || value["connectionKey"] != nil {
+      guard text("connectionKey", max: 64),
+        (value["connectionKey"] as? String)?.range(
+          of: "^[a-z][a-z0-9-]{0,63}$", options: .regularExpression) != nil
+      else { throw invalid() }
+    }
+    if action == "connection-key-save" || action == "connection-key-remove" {
+      guard text("endpoint", max: 2048),
+        action != "connection-key-save" || text("key", max: 512, empty: true)
+      else { throw invalid() }
     }
     if ["select", "logout", "models", "generate"].contains(action), !text("accountId", max: 256) {
       throw invalid()

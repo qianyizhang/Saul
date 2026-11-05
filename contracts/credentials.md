@@ -17,7 +17,7 @@ replacement of the previous app-owned credential boundary, not account merging.
 - Validate native callers and the exact operation at the boundary. Requests are
   versioned, bounded and cancelable. Account summaries and provider results may
   leave the owner; access/refresh/identity tokens and long-lived API keys may not.
-  A browser Realtime session may receive only its short-lived client secret.
+  A browser or native Realtime preview may receive only its short-lived client secret.
 - Preserve the original Saul host ID, issued client IDs, identities and grants
   when importing. Never combine one registration's tokens with another's client
   ID. New registrations use `agent_name_hint=Saul`. Serialize refresh and writes
@@ -25,7 +25,8 @@ replacement of the previous app-owned credential boundary, not account merging.
 - Shared mode is explicitly selected for both current installations by this
   migration. A lost owner blocks affected operations. It never triggers an
   app-local credential fallback, automatic replay or a different billing route.
-  Custom OpenAI-compatible endpoints remain Saul-specific.
+  Explicitly added custom endpoints use connection-keyed records with a fixed
+  endpoint. Legacy browser-only profiles remain local until explicitly replaced.
 
 ## Migration and removal
 
@@ -61,6 +62,31 @@ History schema, app identifiers and extension identity remain unchanged.
 
 Implementation: `native/credentials` owns the pipe, caller checks, framing and
 Keychain access; `apps/ez/Sources/SaulCredentialOwner` owns authentication and
-fixed official OpenAI operations. `com.saul.credentials` is a separate native host
+official OpenAI and bound custom-endpoint operations. `com.saul.credentials` is a separate native host
 from the existing standalone `com.saul.chatgpt` history/configuration helper.
 Shared mode is explicit; standalone browser installations keep their existing route.
+
+## Connection identity and catalogs
+
+The Connections UI stores public definitions in the shared settings document.
+The signed owner stores API keys with their immutable endpoint, separately from
+that document. Key replacement cannot change the endpoint. Removal leaves a
+retired binding so the same ID cannot later send another key to another origin.
+Plan definitions pin their account registration; an unbound migrated entry asks
+for an explicit selection. Setup writes credentials before the public definition;
+a failed definition save keeps the setup draft and same ID for an explicit retry.
+It does not silently switch or delete another connection.
+
+`connection-status` returns identity, endpoint, masked key suffix and availability.
+`connection-catalog` returns current models, last successful fetch time and a
+separate refresh error. The owner keeps only `connection-catalogs.json`, a bounded,
+owner-only current cache, and never stores prompts or tokens there. Discovery uses
+the same cross-process lease as refresh. HTTP redirects are refused. Custom HTTPS
+endpoints and HTTP loopback endpoints use stored destinations, never a caller's
+arbitrary generation URL. Catalogue and status calls time out after 30 seconds.
+
+Both apps offer a short-text Speak preview. The native client uses the same
+short-lived Realtime authorization as the browser, accumulates bounded PCM only
+until a completed response, and exposes WAV playback. Stop, cancellation and
+leaving the view close the socket and release in-memory audio. No preview inference
+runs automatically and failures never replay it.

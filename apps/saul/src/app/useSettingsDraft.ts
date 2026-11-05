@@ -8,6 +8,7 @@ import {
 } from '../models/settings-draft';
 import { DEFAULT_SETTINGS } from '../storage/settings';
 import { requestSettings, SettingsDeliveryError } from '../storage/settings-client';
+import type { ConnectionDefinition } from '../../native/shared-presets-contract.mts';
 
 const message = (error: unknown) =>
   error instanceof Error ? error.message : 'Settings could not be loaded.';
@@ -205,6 +206,33 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
       if (mounted.current) setSaving(false);
     }
   }
+  async function commitConnections(connections: ConnectionDefinition[]) {
+    if (running.current || dirty || blocked || !baseline.current)
+      throw new Error('Save or reload the current settings draft before changing connections.');
+    running.current = true;
+    setSaving(true);
+    try {
+      const result = await requestSettings({
+        action: 'commit',
+        baseline: baseline.current,
+        settings: { ...settingsForSave(formRef.current), connections },
+      });
+      if (!mounted.current) return;
+      if (result.state !== 'ready') {
+        setBlocked(true);
+        throw new Error(result.error);
+      }
+      const selected = formRef.current.presetId;
+      receiveLoaded(result);
+      replaceForm({ ...formRef.current, presetId: selected });
+    } catch (cause) {
+      if (cause instanceof SettingsDeliveryError) setBlocked(true);
+      throw cause;
+    } finally {
+      running.current = false;
+      if (mounted.current) setSaving(false);
+    }
+  }
   return {
     settings: form.settings,
     selectedPresetId: form.presetId,
@@ -223,5 +251,6 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
     reload,
     resetInvalidSettings,
     setCredentialOwner,
+    commitConnections,
   };
 }

@@ -18,7 +18,7 @@ struct QuickLookupView: View {
                     onConfigure: { controller.showMain(settings: true) })
             }
             actions
-            if showsInputs, model.currentProvider?.kind == .openAIAPI {
+            if showsInputs, model.currentConnection?.kind == .openAIAPI {
                 Text(
                     model.currentAction?.webSearch == true
                         ? "OpenAI API · search charges apply" : "OpenAI API · billed separately"
@@ -47,7 +47,7 @@ struct QuickLookupView: View {
                                         : !model.planEnabled ? "Enable plan access" : "Open Configuration")
                             ) {
                                 controller.showMain(
-                                    settings: true, section: needsAccount ? .account : .configuration)
+                                    settings: true, section: needsAccount ? .connections : .configuration)
                             }.controlSize(.small)
                         }
                     }.frame(maxWidth: .infinity, alignment: .leading)
@@ -110,7 +110,7 @@ struct QuickLookupView: View {
                 Toggle("Min Mode", isOn: $model.minimumMode)
                 Divider()
                 Button("Settings…") { controller.showMain(settings: true) }
-                Button("Providers…") { controller.showMain(settings: true, section: .account) }
+                Button("Connections…") { controller.showMain(settings: true, section: .connections) }
             } label: {
                 Image(systemName: "ellipsis")
             }.menuStyle(.borderlessButton).fixedSize()
@@ -216,22 +216,20 @@ struct QuickLookupView: View {
 
     private var notices: [String] {
         var messages: [String] = []
-        let presetIssue =
-            model.planEnabled && !model.models.isEmpty
-            ? model.currentPreset?.availabilityError(in: model.models) : nil
+        let presetIssue = model.currentPreset.flatMap { model.presetIssue($0) }
         for message in [
-            controller.shortcutError, controller.launcherError, model.storageWarning, model.providerIssue,
+            controller.shortcutError, controller.launcherError, model.storageWarning, model.connectionIssue,
             model.configurationError, model.error, presetIssue,
         ].compactMap({ $0 }) {
             if !messages.contains(message) { messages.append(message) }
         }
         return messages
     }
-    private var needsAccount: Bool { model.providerIssue != nil }
+    private var needsAccount: Bool { model.connectionIssue != nil }
     private var needsSetup: Bool {
         needsAccount
             || (model.currentAction != nil
-                && (model.currentPreset == nil || (model.needsPlan && model.currentModel == nil)
+                && (model.currentPreset == nil || model.currentPreset.flatMap { model.presetIssue($0) } != nil
                     || model.configurationError != nil))
     }
     private var layout: QuickLookupLayout {

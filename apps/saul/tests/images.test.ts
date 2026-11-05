@@ -22,6 +22,7 @@ function prepared() {
   settings.profiles = [{ id: 'api', name: 'API', config: { ...settings.openaiCompatible } }];
   settings.configuration = starterConfiguration(settings);
   const preset = settings.configuration.presets.find((p) => p.capability === 'draw')!;
+  preset.model = 'gpt-image-2.6-flare';
   preset.imageOptions!.outputFormat = 'gif';
   return {
     settings,

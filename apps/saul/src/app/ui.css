@@ -880,3 +880,50 @@ progress::-webkit-progress-value {
     display: flex;
   }
 }
+
+.connection-row {
+  padding: 20px 0;
+  border-bottom: 1px solid var(--border);
+}
+.connection-row p {
+  margin: 7px 0;
+}
+.connection-identity {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.connection-more {
+  position: relative;
+}
+.connection-more > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 4px 10px;
+}
+.connection-more[open] > div {
+  position: absolute;
+  right: 0;
+  z-index: 2;
+  min-width: 160px;
+  padding: 12px;
+  background: var(--design-color-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.connection-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.connection-capabilities {
+  display: flex;
+  gap: 8px;
+}
+.connection-capabilities code {
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--design-color-subtle);
+  color: var(--muted);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}

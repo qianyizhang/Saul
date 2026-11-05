@@ -28,7 +28,7 @@ import Foundation
                 "Invalid or duplicate catalog options changed defaults")
             try expect(
                 ModelPreset(name: "Default", model: "test", effort: "", fast: false)
-                    .availabilityError(in: [invalidDefault]) == nil,
+                    .availabilityError(in: [invalidDefault], provider: .chatGPTPlan) == nil,
                 "Default effort should omit the request option")
         },
         CheckCase("preset: presets refuse unavailable models, effort, and Fast without fallback") {
@@ -38,24 +38,56 @@ import Foundation
             let preset = f.preset
             let action = f.action
 
-            try expect(preset.availabilityError(in: [option]) == nil, "Valid preset rejected")
+            try expect(
+                preset.availabilityError(in: [option], provider: .chatGPTPlan) == nil, "Valid preset rejected"
+            )
             var changed = preset
             changed.model = "missing"
-            try expect(changed.availabilityError(in: [option]) != nil, "Unavailable model accepted")
+            try expect(
+                changed.availabilityError(in: [option], provider: .chatGPTPlan) != nil,
+                "Unavailable model accepted")
             changed = preset
             changed.effort = "ultra"
-            try expect(changed.availabilityError(in: [option]) != nil, "Unsupported effort accepted")
+            try expect(
+                changed.availabilityError(in: [option], provider: .chatGPTPlan) != nil,
+                "Unsupported effort accepted")
             let noFast = ModelOption(catalog: [
                 "visibility": "list", "slug": "fixture",
                 "supported_reasoning_levels": [["effort": "medium"]],
             ])!
-            try expect(preset.availabilityError(in: [noFast]) != nil, "Fast silently downgraded")
+            try expect(
+                preset.availabilityError(in: [noFast], provider: .chatGPTPlan) != nil,
+                "Fast silently downgraded")
             try expectThrows(EZError.self) {
                 _ = try action.prepare(
                     values: ["fuzzy term": "word", "fuzzy context": "context"], preset: changed,
-                    models: [option])
+                    models: [option], provider: .chatGPTPlan)
             }
             try expect(changed.effort == "ultra" && preset.fast, "Validation mutated choices")
+        },
+        CheckCase("preset: added plan connections use their provider's model and Fast rules") { _ in
+            let fixture = RecipeFixture()
+            var preset = fixture.preset
+            preset.connectionKey = "second-account"
+            try expect(
+                preset.availabilityError(in: [], provider: .chatGPTPlan) != nil,
+                "Added account bypassed model validation")
+            let option = ModelOption(catalog: [
+                "visibility": "list", "slug": preset.model,
+                "supported_reasoning_levels": [["effort": preset.effort]], "additional_speed_tiers": ["fast"],
+            ])!
+            let entry = try fixture.action.prepare(
+                values: ["fuzzy term": "word", "fuzzy context": "context"], preset: preset, models: [option],
+                provider: .chatGPTPlan)
+            try expectEqual(
+                entry.requestedServiceTier, "fast", "Added plan account used the API priority default")
+            var search = fixture.action
+            search.webSearch = true
+            try expectThrows(EZError.self) {
+                _ = try search.prepare(
+                    values: ["fuzzy term": "word", "fuzzy context": "context"], preset: preset,
+                    models: [option], provider: .chatGPTPlan)
+            }
         },
     ]
 }

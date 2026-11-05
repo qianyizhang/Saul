@@ -39,6 +39,7 @@ export async function generateImage(
   const options = input.preset?.imageOptions;
   const request = {
     action: 'api-image',
+    ...(input.preset?.connectionKey ? { connectionKey: input.preset.connectionKey } : {}),
     model: input.remote.model,
     prompt: [input.systemPrompt, input.userPrompt].filter(Boolean).join('\n\n'),
     size: options?.size ?? '1024x1024',

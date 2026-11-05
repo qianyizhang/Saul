@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { test, expect } from './fixtures.ts';
 import { getFirstHistory, getHistory, openFirstPageExplanation, sendDb } from './driver.ts';
+import { DEFAULT_SETTINGS } from '../../src/storage/settings';
 import { reviewScreenshots } from './artifacts.ts';
 
 const gif = readFileSync(new URL('../../../../contracts/fixtures/animation.gif', import.meta.url));
@@ -9,9 +10,14 @@ test('Illustrate chooses GIF at runtime, saves exact bytes, previews and downloa
   fixtureServer,
 }, info) => {
   let browser = await sandbox.launch();
-  await browser.popup.evaluate(async () => {
+  const settings = structuredClone(DEFAULT_SETTINGS);
+  settings.configuration!.presets.forEach((p) => {
+    if (p.capability === 'draw') p.model = 'gpt-image-2.6-flare';
+  });
+  await browser.popup.evaluate(async (settings) => {
     await chrome.storage.local.set({
       saul_user_settings: {
+        ...settings,
         sharedCredentials: 'saul',
         activeProvider: 'openai-compatible',
         openaiCompatible: {
@@ -22,7 +28,7 @@ test('Illustrate chooses GIF at runtime, saves exact bytes, previews and downloa
         },
       },
     });
-  });
+  }, settings);
   await browser.worker.evaluate((encoded) => {
     const original = chrome.runtime.connectNative.bind(chrome.runtime);
     const requests: unknown[] = [];
@@ -48,9 +54,25 @@ test('Illustrate chooses GIF at runtime, saves exact bytes, previews and downloa
               listener({
                 id: packet.id,
                 event:
-                  request.action === 'api-image'
-                    ? { type: 'result', imageBase64: encoded }
-                    : { type: 'result', accounts: [], apiConnected: true },
+                  request.action === 'connection-catalog'
+                    ? {
+                        type: 'result',
+                        catalog: {
+                          fetchedAt: Date.now() / 1000,
+                          models: [
+                            {
+                              id: 'gpt-image-2.6-flare',
+                              name: 'Fixture image',
+                              capabilities: ['draw'],
+                              efforts: [],
+                              defaultEffort: '',
+                            },
+                          ],
+                        },
+                      }
+                    : request.action === 'api-image'
+                      ? { type: 'result', imageBase64: encoded }
+                      : { type: 'result', accounts: [], apiConnected: true },
               }),
             ),
           );

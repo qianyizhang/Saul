@@ -99,7 +99,7 @@ Runtime messages do not return to their sender. Content and popup requests there
 
 `src/models/provider.ts` is the streaming facade used by the reading runner and generation tests. It dispatches to OpenAI-compatible or ChatGPT plan adapters and returns the same delta/completion events. Both HTTP adapters reuse `native/sse.mts` for bounded SSE framing across UTF-8 chunks, CRLF/LF separators, multiline `data:` fields, provider errors, cancellation, and incomplete output. Chrome on-device AI is retired. Legacy saved selections and frozen requests remain readable but reject execution with an explicit provider-choice message; no model preparation or local streaming implementation remains.
 
-Prompts and context are frozen when a job is submitted. Later settings edits do not change an in-flight job. Provider keys are associated with their endpoint origin and are not persisted with job inputs. ChatGPT plan jobs freeze a non-secret account registration ID and model; OAuth credentials stay in the native helper.
+Prompts and context are frozen when a job is submitted. Later settings edits do not change an in-flight job. API credentials are associated with their endpoint origin and are not persisted with job inputs. Saved connection IDs remain in frozen preset inputs. ChatGPT plan jobs freeze a non-secret account registration ID and model; OAuth credentials stay in the native helper.
 
 Reading results project only saved instruction text, user prompt and context fields
 into `inspection`. Connection settings and account identifiers are excluded. The
@@ -117,9 +117,9 @@ the frozen owner again immediately before opening its transport.
 Legacy settings migrate to an Explain recipe and a Current preset; prompt roles,
 the active connection, and the selected model are preserved. Recipes contain
 literal prompt templates and reference a default preset. Presets identify a
-provider, API connection profile where applicable, and model options; they contain no keys.
-ChatGPT presets do not select an account. Saul uses its app-selected account; legacy
-preset account fields remain historical data only.
+connection, capability, model and options; they contain no keys. Managed ChatGPT
+connections pin one account. Standalone installations retain an app-owned account
+and API profile binding until explicitly connected to the shared credential owner.
 The existing model controls edit the selected preset, so there is one authority
 for each model choice.
 
@@ -130,7 +130,8 @@ owns one serialized read/commit/recovery lane in `src/storage/settings.ts`.
 A commit compares the loaded raw record's opaque fingerprint before writing.
 The Chrome record uses an opaque fingerprint; shared sections have numeric
 revisions. Initial shared-settings adoption may persist migration IDs/revisions
-during a read. Later reads do not rewrite the Chrome record.
+during a read. A one-time connection-name upgrade also writes canonical fields;
+unchanged reads do not rewrite the Chrome record.
 The native configuration owner checks shared and scoped revisions under one
 cross-process lease and commits both sections in one JSON replacement. The
 [shared contract](../../../contracts/README.md#unified-configuration-scopes) owns
@@ -239,7 +240,7 @@ must be updated to accept attachments. Source input and coverage use existing
 JSON source rows; PDF bytes are never persisted. See the
 [PDF capture contract](product.md#summaries) for triggers, bounds and limitations.
 
-The existing offscreen document hosts the digest runner alongside reading jobs. Both use the shared native history helper; built-in digest generation uses the native ChatGPT transport and calls the existing plan adapter with a frozen account, prompt, model and effort. Digest control actions serialize, generation uses two concurrent workers, and there is no automatic retry. All workers settle before a stop/delete/retry control can complete. The current shared history schema is version 3. The old browser schema version 2 is a one-time import format, including digest metadata and item/source rows. Restart reconciliation marks unfinished items interrupted. The UI polls saved/live state while mounted and renders built-in English before Chinese from validated pairs; raw model text is never interpreted as HTML.
+The existing offscreen document hosts the digest runner alongside reading jobs. Both use the shared native history helper; built-in digest generation uses the native ChatGPT transport and calls the existing plan adapter with a frozen account, prompt, model and effort. Digest control actions serialize, generation uses two concurrent workers, and there is no automatic retry. All workers settle before a stop/delete/retry control can complete. The current shared history schema is version 4. The browser import schema version 3 is a one-time import format, including digest metadata and item/source rows. Restart reconciliation marks unfinished items interrupted. The UI polls saved/live state while mounted and renders built-in English before Chinese from validated pairs; raw model text is never interpreted as HTML.
 
 `src/app/Summaries.tsx` owns saved-summary history and live reading under
 `library.html#summary/<id>`. A new reader checks saved input reuse before account

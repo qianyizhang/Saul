@@ -13,7 +13,7 @@ import Foundation
 
             let entry = try action.prepare(
                 values: ["fuzzy term": "elicit", "fuzzy context": "draw out"], preset: preset,
-                models: [option])
+                models: [option], provider: .chatGPTPlan)
             let body = ResponsesRequest.body(entry: entry)
             let input = body["input"] as? [[String: String]]
             try expect(

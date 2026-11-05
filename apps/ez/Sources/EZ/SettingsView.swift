@@ -3,18 +3,10 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var model: AppModel
     @State private var configurationDirty = false
-    @State private var providerKey = "gpt-plan"
-    @State private var providerName = ""
-    @State private var providerMessage: String?
-    @State private var pendingProvider: String?
-    private var providerDirty: Bool {
-        !providerName.isEmpty
-            && providerName != model.configuration.providers.first(where: { $0.key == providerKey })?.name
-    }
-    private var hasUnsavedChanges: Bool { configurationDirty || providerDirty }
+    @State private var connectionDirty = false
+    @State private var viewingPresetID: UUID?
+    private var hasUnsavedChanges: Bool { configurationDirty || connectionDirty }
     @State private var confirmDiscard = false
-    @State private var confirmSignOut = false
-    @State private var confirmRemoveKey = false
     @Environment(\.dismiss) private var dismiss
     private var version: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Development"
@@ -36,6 +28,28 @@ struct SettingsView: View {
                     if hasUnsavedChanges { confirmDiscard = true } else { dismiss() }
                 }.keyboardShortcut(.cancelAction)
             }.padding(22)
+            ForEach(
+                model.configuration.presets.filter { preset in
+                    if model.settingsSection == .configuration && preset.id == viewingPresetID {
+                        return false
+                    }
+                    guard let catalog = model.connectionCatalogs[preset.connectionKey],
+                        catalog.fetchedAt > 0,
+                        !preset.model.isEmpty
+                    else { return false }
+                    return !catalog.models.contains { $0.id == preset.model }
+                }.prefix(1)
+            ) { preset in
+                HStack {
+                    Text("‘\(preset.name)’: model ‘\(preset.model)’ is no longer available.")
+                        .foregroundStyle(.red)
+                    Spacer()
+                    Button("Edit preset") {
+                        model.settingsPresetID = preset.id
+                        model.settingsSection = .configuration
+                    }
+                }.padding(.horizontal, 22).padding(.bottom, 8)
+            }
             Divider()
             HStack(alignment: .top, spacing: 0) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -59,15 +73,24 @@ struct SettingsView: View {
                 Divider()
                 ZStack {
                     // One mounted owner keeps both drafts when navigating between tasks.
-                    ConfigurationView(model: model, hasUnsavedChanges: $configurationDirty)
-                        .opacity(isConfiguration ? 1 : 0)
-                        .allowsHitTesting(isConfiguration)
-                        .disabled(!isConfiguration)
-                        .accessibilityHidden(!isConfiguration)
+                    ConfigurationView(
+                        model: model, hasUnsavedChanges: $configurationDirty,
+                        viewingPresetID: $viewingPresetID
+                    )
+                    .opacity(isConfiguration ? 1 : 0)
+                    .allowsHitTesting(isConfiguration)
+                    .disabled(!isConfiguration)
+                    .accessibilityHidden(!isConfiguration)
+                    ConnectionsView(
+                        model: model, hasUnsavedChanges: $connectionDirty,
+                        visible: model.settingsSection == .connections
+                    )
+                    .opacity(model.settingsSection == .connections ? 1 : 0)
+                    .allowsHitTesting(model.settingsSection == .connections)
+                    .accessibilityHidden(model.settingsSection != .connections)
                     if model.settingsSection == .shortcuts {
                         ShortcutSettingsView(model: model)
-                    } else if model.settingsSection == .account {
-                        providersBody
+
                     } else if model.settingsSection == .overview {
                         overviewBody
                     } else if model.settingsSection == .preferences {
@@ -78,13 +101,19 @@ struct SettingsView: View {
         }.frame(width: 880, height: 720).tint(AppStyle.accent)
             .labelStyle(EverydayLabelStyle(minimum: model.minimumMode))
             .disclosureGroupStyle(FullRowDisclosureStyle())
+            .task {
+                for connection in model.configuration.connections {
+                    guard !Task.isCancelled else { return }
+                    await model.refreshConnection(connection)
+                }
+            }
             .interactiveDismissDisabled(hasUnsavedChanges)
             .alert("Discard unsaved edits?", isPresented: $confirmDiscard) {
                 Button("Keep", role: .cancel) {}
                 Button("Discard", role: .destructive) { dismiss() }
             } message: {
                 Text(
-                    "Your provider, preset or action has unsaved edits. Return to its editor to save them before closing."
+                    "Your connection, preset or action has unsaved edits. Return to its editor to save them before closing."
                 )
             }
     }
@@ -101,7 +130,8 @@ struct SettingsView: View {
             overviewRow(
                 "Preset", value: model.currentPreset?.name ?? "Unavailable", destination: .configuration)
             overviewRow(
-                "Provider", value: model.currentProvider?.name ?? "Unavailable", destination: .account)
+                "Connection", value: model.currentConnection?.name ?? "Unavailable", destination: .connections
+            )
             Spacer()
         }.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -136,234 +166,21 @@ struct SettingsView: View {
             if !model.minimumMode {
                 Text("Saves immediately.").font(AppStyle.caption).foregroundStyle(.secondary)
             }
+            DisclosureGroup("Integrations") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("The signed credential helper manages shared sign-in and keys.").font(
+                        AppStyle.caption)
+                    Button(model.sharedCredentialsConnected ? "Disconnect app" : "Connect to Saul") {
+                        if model.sharedCredentialsConnected {
+                            model.disconnectCredentials()
+                        } else {
+                            Task { await model.connectCredentials() }
+                        }
+                    }
+                }.padding(.top, 8)
+            }
             Spacer()
         }.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private var providersBody: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text("Providers").font(AppStyle.subject)
-                HStack(alignment: .top, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach(model.configuration.providers) { provider in
-                            FullRowButton {
-                                if providerDirty {
-                                    pendingProvider = provider.key
-                                } else {
-                                    selectProvider(provider.key)
-                                }
-                            } label: {
-                                Text(provider.name).frame(maxWidth: .infinity, alignment: .leading).padding(8)
-                                    .background(
-                                        providerKey == provider.key ? AppStyle.accent.opacity(0.12) : .clear,
-                                        in: RoundedRectangle(cornerRadius: 6))
-                            }
-                        }
-                    }.frame(width: 140)
-                    Divider()
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Name").font(AppStyle.caption)
-                        TextField("Provider name", text: $providerName).textFieldStyle(.roundedBorder)
-                        MetadataRow("Key", value: providerKey)
-                        MetadataRow(
-                            "Capabilities",
-                            value: model.configuration.providers.first(where: { $0.key == providerKey })?
-                                .capabilities.map(\.name).joined(separator: " · ") ?? "Unavailable")
-                        HStack {
-                            Button("Save") { saveProvider() }.disabled(
-                                !providerDirty || model.configurationLocked)
-                            if let providerMessage {
-                                Text(providerMessage).font(AppStyle.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                        Divider()
-                        if !model.sharedCredentialsConnected {
-                            Button("Connect to Saul") { Task { await model.connectCredentials() } }
-                                .buttonStyle(.borderedProminent)
-                        } else {
-                            if providerKey == "gpt-plan" { planConnection } else { apiConnection }
-                            Button("Disconnect app") { model.disconnectCredentials() }
-                                .help("Disconnect EZ; keep the shared Saul sign-in and API key.")
-                        }
-                    }.frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }.padding(24)
-        }
-        .onAppear { if providerName.isEmpty { selectProvider(providerKey) } }
-        .task(id: providerKey) {
-            if providerKey == "gpt-plan" {
-                await model.connect(loadAccounts: true)
-            } else {
-                await model.restoreAPIKey()
-            }
-        }
-        .confirmationDialog(
-            "Sign out of Saul in both apps?", isPresented: $confirmSignOut, titleVisibility: .visible
-        ) {
-            Button("Sign out", role: .destructive) { Task { await model.signOut() } }
-        } message: {
-            Text("This shared ChatGPT sign-in will be unavailable in Saul and EZ.")
-        }
-        .confirmationDialog(
-            "Remove the API key from both apps?", isPresented: $confirmRemoveKey, titleVisibility: .visible
-        ) {
-            Button("Remove", role: .destructive) { Task { await model.removeAPIKey() } }
-        } message: {
-            Text("Saul and EZ will need a new OpenAI API key. ChatGPT sign-in stays connected.")
-        }
-        .alert(
-            "Discard provider edits?",
-            isPresented: Binding(get: { pendingProvider != nil }, set: { if !$0 { pendingProvider = nil } })
-        ) {
-            Button("Keep", role: .cancel) { pendingProvider = nil }
-            Button("Discard", role: .destructive) {
-                if let key = pendingProvider { selectProvider(key) }
-                pendingProvider = nil
-            }
-        } message: {
-            Text("Save the provider name before switching, or discard its edits.")
-        }
-    }
-    private func selectProvider(_ key: String) {
-        providerKey = key
-        providerName = model.configuration.providers.first { $0.key == key }?.name ?? ""
-        providerMessage = nil
-    }
-    private func saveProvider() {
-        var updated = model.configuration
-        guard let index = updated.providers.firstIndex(where: { $0.key == providerKey }) else { return }
-        updated.providers[index].name = providerName.trimmingCharacters(in: .whitespacesAndNewlines)
-        do {
-            try model.saveConfiguration(updated)
-            selectProvider(providerKey)
-            providerMessage = "Saved"
-        } catch { providerMessage = error.localizedDescription }
-    }
-    private var apiConnection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(model.apiConnected ? "API key saved" : "API key required").font(.callout)
-            SecureField(
-                model.apiConnected ? "Replacement API key" : "OpenAI API key", text: $model.apiKeyDraft
-            )
-            .textFieldStyle(.roundedBorder).accessibilityLabel("OpenAI API key")
-            .disabled(model.busy || model.apiKeyBusy)
-            HStack {
-                Button("Save") { Task { await model.saveAPIKey() } }.disabled(model.apiKeyDraft.isEmpty)
-                    .accessibilityLabel("Save API key")
-                Button("Reload") { Task { await model.restoreAPIKey() } }
-                if model.apiConnected {
-                    Button("Remove", role: .destructive) { confirmRemoveKey = true }
-                }
-            }
-            .disabled(model.busy || model.apiKeyBusy)
-            if let error = model.apiKeyError {
-                Text(error).font(AppStyle.caption).foregroundStyle(.red).textSelection(.enabled)
-            }
-            if !model.minimumMode {
-                Text("Shared with Saul through this Mac's Keychain. Saving does not send a model request.")
-                    .font(
-                        AppStyle.caption
-                    ).foregroundStyle(.secondary)
-            }
-            Text("OpenAI API · billed separately from ChatGPT").font(AppStyle.caption).foregroundStyle(
-                .secondary)
-        }
-    }
-
-    private var planConnection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("ChatGPT account", systemImage: "person.crop.circle").font(.headline)
-            if !model.profiles.isEmpty {
-                SelectorPicker(
-                    "Provider",
-                    options: model.profiles.map { .init(value: $0.id, title: $0.label) },
-                    selection: Binding(
-                        get: { model.accountID },
-                        set: { value in Task { await model.selectAccount(value) } })
-                )
-                .disabled(
-                    model.offline || model.busy || model.connecting || model.signingIn
-                        || model.launcherPending)
-            }
-            Text(
-                model.signedIn
-                    ? (model.planEnabled
-                        ? "Using ChatGPT plan" : "Signed in · Plan usage not enabled")
-                    : (model.accountsLoaded ? "Not signed in" : "Connection not loaded")
-            ).font(.callout)
-            if !model.minimumMode {
-                Text(
-                    "Connect your eligible ChatGPT account and allow Saul to use your plan in both apps. Credentials stay in macOS Keychain. Model availability and limits depend on your account."
-                ).font(.caption).foregroundStyle(.secondary)
-            }
-            if !model.minimumMode {
-                DisclosureGroup("Keychain") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(
-                            "The signed Saul helper owns the shared sign-in and API key. Neither app receives long-lived credentials from it."
-                        )
-                        Text(
-                            "Allow Once approves this access; Always Allow remembers permission for this app and item. Deny prevents access to the saved sign-in. A local development rebuild may prompt again."
-                        )
-                        Link(
-                            "Permissions",
-                            destination: URL(
-                                string:
-                                    "https://support.apple.com/guide/keychain-access/kyca1243/mac"
-                            )!)
-                    }.font(.caption).foregroundStyle(.secondary).padding(.top, 6)
-                }.font(.caption)
-            }
-            HStack(spacing: 8) {
-                Group {
-                    if model.signingIn {
-                        ProgressView().controlSize(.small)
-                        Text("Finish signing in in your browser.").font(.caption)
-                        Button("Cancel") { model.cancelLogin() }
-                    } else if model.signedIn {
-                        Button("Sign out") { confirmSignOut = true }
-                            .help("Sign out of ChatGPT in Saul and EZ").accessibilityLabel(
-                                "Sign out of ChatGPT in both apps")
-                        if !model.planEnabled {
-                            Button(model.minimumMode ? "Enable" : "Enable plan usage") {
-                                model.signIn(enablePlan: true)
-                            }.help("Enable plan usage").accessibilityLabel("Enable plan usage")
-                        }
-                        Button(model.minimumMode ? "Add" : "Add account") {
-                            model.signIn(newAccount: true)
-                        }.help("Add account").accessibilityLabel("Add account")
-                    } else {
-                        Button(model.minimumMode ? "Connect" : "Continue with ChatGPT") {
-                            model.signIn()
-                        }.help("Continue with ChatGPT").accessibilityLabel(
-                            "Continue with ChatGPT"
-                        )
-                        .buttonStyle(
-                            .borderedProminent)
-                        if !model.profiles.isEmpty {
-                            Button(model.minimumMode ? "Add" : "Add account") {
-                                model.signIn(newAccount: true)
-                            }.help("Add account").accessibilityLabel("Add account")
-                        }
-                    }
-                }.disabled(model.offline || model.busy || model.connecting)
-                Spacer()
-                Link(
-                    model.minimumMode ? "Usage" : "Manage usage",
-                    destination: URL(string: "https://chatgpt.com/settings/usage")!
-                )
-                .help("Manage usage").accessibilityLabel("Manage usage")
-                .buttonStyle(.bordered)
-                Button(
-                    model.connecting
-                        ? "Loading…" : (model.minimumMode ? "Refresh" : "Refresh models")
-                ) {
-                    Task { await model.connect(loadAccounts: true) }
-                }.help("Refresh models").accessibilityLabel("Refresh models").disabled(
-                    model.offline || model.busy || model.connecting || model.signingIn
-                        || !model.planEnabled)
-            }.controlSize(.regular)
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
-    }
 }

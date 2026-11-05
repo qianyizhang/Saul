@@ -7,7 +7,7 @@ export const SPEECH_PORT = 'saul-speech';
 const MAX_AUDIO_BYTES = 6_000_000;
 export interface SpeechRequest {
   presetId: string;
-  providerKey: string;
+  connectionKey: string;
   model: string;
   voice: string;
   input: string;
@@ -23,12 +23,12 @@ export function validateSpeechRequest(value: unknown): asserts value is SpeechRe
   const v = value as Record<string, unknown>;
   if (
     Object.keys(v).length !== 5 ||
-    !['presetId', 'providerKey', 'model', 'voice', 'input'].every(
+    !['presetId', 'connectionKey', 'model', 'voice', 'input'].every(
       (key) => typeof v[key] === 'string',
     ) ||
     !String(v.presetId).length ||
     String(v.presetId).length > 128 ||
-    String(v.providerKey).length > 64 ||
+    String(v.connectionKey).length > 64 ||
     !/^gpt-realtime(?:-[a-z0-9.]+)*$/.test(String(v.model)) ||
     String(v.model).length > 256 ||
     !validSpeechOptions({ voice: v.voice }) ||
@@ -51,7 +51,7 @@ export function speechCredential(
     !preset ||
     preset.capability !== 'speak' ||
     preset.provider !== 'openai-compatible' ||
-    preset.providerKey !== request.providerKey ||
+    preset.connectionKey !== request.connectionKey ||
     preset.model !== request.model ||
     (preset.speechOptions?.voice ?? 'marin') !== request.voice
   )

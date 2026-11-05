@@ -173,7 +173,7 @@ func rejects(_ operation: () throws -> Void) throws {
     _ = try sse.append(255)
     try rejects { _ = try sse.append(10) }
     try expect(
-      try OfficialOpenAI.request(route: .chat, body: nil, credential: "fixture").url?.absoluteString
+      try ConnectionHTTP.request(route: .chat, body: nil, credential: "fixture").url?.absoluteString
         == "https://api.openai.com/v1/chat/completions", "Credential destination changed")
 
     let root = URL(fileURLWithPath: "/private/tmp").appendingPathComponent(

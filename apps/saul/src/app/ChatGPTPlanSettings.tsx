@@ -123,7 +123,7 @@ export function ChatGPTPlanSettings({
             </p>
           )}
           {!active?.planEnabled && (
-            <p className="notice">Connect a ChatGPT account in Providers.</p>
+            <p className="notice">Connect a ChatGPT account in Connections.</p>
           )}
           <details>
             <summary aria-label="Connection and tests">
@@ -273,19 +273,6 @@ export function ChatGPTPlanSettings({
             >
               <ActionLabel short="Refresh" full="Refresh accounts" />
             </button>
-          </details>
-          <details open={plan.helperReady === false}>
-            <summary aria-label="ChatGPT helper setup">
-              <ActionLabel short="Setup" full="ChatGPT helper setup" />
-            </summary>
-            <div className="stack settings-disclosure">
-              <p className="small muted standard-only">
-                Build and install the ChatGPT helper for this extension, then reconnect.
-              </p>
-              <code className="code">
-                pnpm native:install --chatgpt --extension-id {chrome.runtime.id}
-              </code>
-            </div>
           </details>
           <p className="small muted standard-only">
             ChatGPT requests use plan allowance. API connections are billed separately.

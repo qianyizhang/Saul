@@ -9,10 +9,15 @@ import Foundation
             directory in
             var config = Configuration.starters(model: "fixture", effort: "low", fast: false)
             config.addSearchAndMeme()
+            for index in config.presets.indices where config.presets[index].model.isEmpty {
+                config.presets[index].model =
+                    config.presets[index].capability == .draw ? "gpt-image-2.6-flare" : "test"
+            }
             let action = config.actions.first { $0.webSearch }!
             let preset = config.presets.first { $0.id == action.presetID }!
-            var entry = try action.prepare(values: ["Question": "Recent news?"], preset: preset, models: [])
-            entry.providerSnapshot = ProviderDefinition.defaults[1]
+            var entry = try action.prepare(
+                values: ["Question": "Recent news?"], preset: preset, models: [], provider: .openAIAPI)
+            entry.connectionSnapshot = ConnectionDefinition.defaults[1]
             let fixture = HTTPFixture { request in
                 guard
                     let body = try JSONSerialization.jsonObject(with: requestData(request)) as? [String: Any]
@@ -42,7 +47,8 @@ import Foundation
             let saved = try history.load()[0]
             try expectEqual(
                 saved.citedResponse, "😀 [News](https://example.com/news)", "Unicode citation shifted")
-            let followUp = try saved.prepareFollowUp("What changed?", models: [])
+            let followUp = try saved.prepareFollowUp(
+                "What changed?", models: [], provider: .openAIAPI)
             try expect(followUp.usesWebSearch, "Follow-up lost required search policy")
             try expect(
                 followUp.instructions?.contains("Never use tools") == false, "Search follow-up forbids search"
@@ -101,7 +107,8 @@ import Foundation
             }
             defer { fixture.close() }
             let result = try await ImagesClient(session: fixture.session).generate(
-                ImageGenerationRequest(prompt: "caption 中文", image: image), apiKey: "sk-synthetic")
+                ImageGenerationRequest(prompt: "caption 中文", model: "gpt-image-2.6-flare", image: image),
+                apiKey: "sk-synthetic")
             try expectEqual(result, fixturePNG, "Edited PNG changed")
             try expectEqual(fixture.requests.count, 1, "Edit automatically retried")
         },
@@ -147,6 +154,10 @@ import Foundation
             var config = Configuration.starters(model: "fixture", effort: "low", fast: false)
             let originals = config.actions
             config.addSearchAndMeme()
+            for index in config.presets.indices where config.presets[index].model.isEmpty {
+                config.presets[index].model =
+                    config.presets[index].capability == .draw ? "gpt-image-2.6-flare" : "test"
+            }
             try expect(config.actions.starts(with: originals), "Existing actions replaced")
             config.actions.removeAll { $0.webSearch }
             let before = config

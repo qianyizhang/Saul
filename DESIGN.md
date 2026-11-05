@@ -250,8 +250,8 @@ device” on every answer. Place storage explanations in Settings.
 Keep meaningful differences explicit. **Explain** starts a reading request from
 selected text; **Send** submits a draft. **Use again** restores an editable draft;
 **Regenerate** starts another attempt. An **action** declares inputs, capability,
-instructions and a result; a **preset** binds provider key, capability, model and
-options; a **provider** is a named connection with a stable key. Do not call
+instructions and a result; a **preset** binds connection key, capability, model and
+options; a **connection** is a saved account or endpoint with a stable key. Do not call
 all three “model.” Hide technical identifiers from routine reading, not from the
 settings or details needed to inspect them.
 
@@ -263,9 +263,9 @@ alternative account, model, service tier, or billing path. Fast is a request,
 not a promise of latency. Details identifies the requested speed; show the actual
 service tier only when it was returned and recorded, never inferred from Fast.
 
-## Providers, presets, and actions
+## Connections, presets, and actions
 
-Settings uses focused sections: Overview, Presets, Actions, Preferences, Providers
+Settings uses focused sections: Overview, Presets, Actions, Preferences, Connections
 and Shortcuts (EZ), with Saul's Summaries and other app-specific destinations.
 Keep the selected item beside its editor, one task visible at a time. Preserve
 editor drafts across section changes; switching items or closing asks before
@@ -275,22 +275,46 @@ Each Settings overview shows its own **Version · Build**, including in Min Mode
 Use the loaded app's version and build identity; show **Unavailable** when the build
 identity is missing. Version bumps and build-input ownership live in [setup](docs/setup.md).
 
-Providers have stable unique keys and editable display names. Renaming a provider
-does not change a preset's binding. Existing plan presets default to `gpt-plan` /
-Write. OpenAI API uses `openai-api`, supports Write, Draw and Speak, and has separate API
-billing. Plan account selection remains app-owned. Opted-in macOS installations use
-the shared Saul credential owner. Keep Connect/Add/Enable/Refresh/Usage/Sign out
-within its provider. Confirm that Sign out and Remove key affect both Saul and EZ.
-Disconnect app removes only that app’s binding; reconnect never restores retired keys.
-Saving or reloading an API key does not generate or test a request.
+Connections is the common Settings destination in Saul and EZ. Start with ChatGPT
+plan and OpenAI API. Each row uses the same order: name, one capability line, one
+identification line (account email or endpoint and key suffix), then status and
+Check. Render each capability as an inline-code chip (`Write`, `Draw`, `Speak`) on
+one line. Render the key suffix as `sk-***abcd`, not “Key ending abcd”; keep the
+endpoint and mask on the identification line. Do not show technical IDs, name editors, secret fields or cross-app footers
+in the default list. Errors and recovery remain visible in Min Mode.
 
-Presets bind provider, capability, model and options. Write exposes reasoning and
+A saved connection pins its account or endpoint. Add creates another connection;
+existing presets never follow a different selected account. Keep stable persisted
+keys during migration. An unbound legacy connection asks the user to choose its
+account; do not resolve conflicting account choices automatically. Setup is specific
+to plan sign-in, official API key, or a custom endpoint. Keep credentials behind
+the selected owner, and serialize refresh there. Replace key and Sign in again
+repair the same identity. Sign out and Remove key state their effect on both apps.
+
+Check is an explicit bounded protocol check, not generation. Show failures with a
+recovery action and distinguish authentication, helper availability and catalog
+failure. Helper setup, app binding and migration cleanup belong in Preferences →
+Integrations. Model and generation options belong in Presets.
+
+Model options come from the connection catalog, not a model-ID allowlist. Refresh
+on setup, Settings entry and stale action preparation; coalesce requests and retain
+only the latest successful catalog and timestamp per connection. Stop on timeout,
+cancellation or connection change. Failed discovery keeps last-known options and
+shows uncertainty. Confirmed removal keeps the saved model ID, marks the preset
+and affected action, and offers Edit preset. Never replace the model or replay a
+request automatically. Capability support remains separate from catalog membership.
+
+Speak preview is available in both apps: short text, Generate/Stop, explicit API
+billing and AI-generated audio, then deliberate playback. Audio and preview text
+stay in memory. Preserve draft input while a preset is repaired.
+
+Presets bind connection, capability, model and options. Write exposes reasoning and
 requested speed where supported; Draw exposes its model and an Image settings
 disclosure for size/quality. Speak exposes a Realtime model and voice, with a
-short-text preview in Saul. Its Generate action shows API billing and AI-generated
+short-text preview in both apps. Its Generate action shows API billing and AI-generated
 audio in both display modes. Keep unsupported saved choices visible and block Run
 with a useful reason. Never change the provider, model or billing route implicitly.
-Plan models still come from the selected local account's catalog. API Write uses
+Plan models come from the connection's bound account catalog. API Write uses
 an explicit model ID. Exact recorded choices belong in run Details.
 
 Actions declare Write or Draw, literal prompt templates and a compatible default
@@ -299,24 +323,22 @@ EZ collects generated input fields; Saul supplies selected text and enabled page
 context. Action names are personal data. The legacy word Recipe and JSON keys are
 storage contracts, not another visible settings concept. Chaining is out of scope.
 
-The shared settings store owns Provider definitions and Presets, including stable
+The shared settings store owns Connection definitions and Presets, including stable
 keys, display names, kinds, capabilities and model options. Both apps use that same
-configuration and revision; a provider rename preserves preset bindings. Local
-connection bindings and Action inputs stay app-owned. History and credential
+configuration and revision; a provider rename preserves preset bindings. Legacy standalone browser bindings and Action inputs stay app-owned. History and credential
 ownership follow the architecture's [data ownership](docs/architecture.md#data-ownership).
 Both apps edit Draw presets and execute image actions. Speak presets can be edited
-in both apps; preview playback currently runs only in Saul. Speech previews require
+and previewed in both apps. Speech previews require
 a saved preset and connection. Stop or leaving the preview cancels generation and
 releases audio; audio and input are never saved to history. Realtime speech is
 generative, so exact wording is not guaranteed.
 
-Connection editors live in Providers. Presets contains provider, capability, model
+Connection setup lives in Connections. Presets contains connection, capability, model
 and applicable options; account selection, endpoint and credentials have no second
-editor there. Saul retains its API-only connection profiles under Providers and
-uses a compact selector at narrow widths. Each draft retains edits while navigating
+editor there. Standalone browser installations retain their existing local-profile editor. Each draft retains edits while navigating
 between sections or items; closing or reloading confirms discarding unsaved edits.
 Save validates connection syntax without requiring live credentials or model access.
-Availability is checked when a request is deliberately started.
+Availability is refreshed on Settings entry and before stale action preparation.
 
 ## Illustration
 
@@ -496,7 +518,7 @@ Add concrete motion/effect tokens and platform mappings when an actual effect is
 ### Summaries
 
 **Call Saul** is the page command (Control+S). **Call preset** selects the work;
-**Model preset** selects model capacity and options without an account binding.
+**Model preset** selects a connection, model and options. Managed connections pin the account.
 Settings → Summaries shows the Call preset selector before **Customize Call Saul**.
 **Summarize (default)** is always available. Saving a checked action with
 **Save and select call preset** retains older actions for later selection; switching

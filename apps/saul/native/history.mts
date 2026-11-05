@@ -1,3 +1,4 @@
+import { upgradeHistoryConnections } from '../src/storage/connection-upgrade.ts';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -80,10 +81,14 @@ export class SharedHistory {
     try {
       this.connection.transaction(() => {
         const version = Number(this.connection.selectValue('PRAGMA user_version'));
-        if (version !== 0 && version !== 3) throw new Error('Unsupported shared history version.');
+        if (version !== 0 && version !== 3 && version !== 4)
+          throw new Error('Unsupported shared history version.');
         if (!version) {
           this.connection.exec(historySchema);
-          this.connection.exec('PRAGMA user_version=3');
+          this.connection.exec('PRAGMA user_version=4');
+        } else if (version === 3) {
+          upgradeHistoryConnections(this.connection, true);
+          this.connection.exec('PRAGMA user_version=4');
         }
       });
     } catch (error) {

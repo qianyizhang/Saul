@@ -2,32 +2,46 @@ import AppKit
 import EZCore
 
 extension AppModel {
-    var currentProvider: ProviderDefinition? {
-        configuration.providers.first { $0.key == currentPreset?.providerKey }
+    var currentConnection: ConnectionDefinition? {
+        configuration.connections.first { $0.key == currentPreset?.connectionKey }
     }
     var compatiblePresets: [ModelPreset] {
         configuration.presets.filter { preset in
             preset.capability == currentAction?.capability
                 && (currentAction?.webSearch != true
-                    || configuration.providers.first { $0.key == preset.providerKey }?.kind == .openAIAPI)
+                    || configuration.connections.first { $0.key == preset.connectionKey }?.kind == .openAIAPI)
         }
     }
-    var needsPlan: Bool { currentProvider?.kind == .chatGPTPlan }
-    var providerIssue: String? {
-        if !offline, !sharedCredentialsConnected { return "Connect to Saul in Providers." }
+    var needsPlan: Bool { currentConnection?.kind == .chatGPTPlan }
+    var connectionIssue: String? {
+        if !offline, !sharedCredentialsConnected {
+            return "Connect to Saul in Settings → Preferences → Integrations."
+        }
         guard currentPreset != nil else { return nil }
-        guard let provider = currentProvider else {
-            return "The selected preset's provider is unavailable. Open Providers."
+        guard let connection = currentConnection else {
+            return "The selected preset's connection is unavailable. Open Connections."
         }
-        guard provider.capabilities.contains(currentPreset?.capability ?? .write) else {
+        guard connection.capabilities.contains(currentPreset?.capability ?? .write) else {
             return
-                "Provider ‘\(provider.name)’ cannot \(currentPreset?.capability.rawValue ?? "write"). Choose a compatible preset."
+                "Connection ‘\(connection.name)’ cannot \(currentPreset?.capability.rawValue ?? "write"). Choose a compatible preset."
         }
-        if provider.kind == .chatGPTPlan {
-            if !signedIn { return "Connect ‘\(provider.name)’ in Providers." }
-            if !planEnabled { return "Enable plan usage in Providers." }
+        if !offline {
+            if connection.kind == .chatGPTPlan && connection.accountId == nil {
+                return "Choose an account for this connection in Settings → Connections."
+            }
+            if let error = connectionErrors[connection.key], connectionStatuses[connection.key] == nil {
+                return error
+            }
+            if connectionStatuses[connection.key]?.connected != true {
+                return "Set up ‘\(connection.name)’ in Connections."
+            }
+            return nil
+        }
+        if connection.kind == .chatGPTPlan {
+            if !signedIn { return "Connect ‘\(connection.name)’ in Connections." }
+            if !planEnabled { return "Enable plan usage in Connections." }
         } else if !apiConnected {
-            return "Save an API key for ‘\(provider.name)’ in Providers."
+            return "Save an API key for ‘\(connection.name)’ in Connections."
         }
         return nil
     }
@@ -37,30 +51,6 @@ extension AppModel {
         defer { apiKeyBusy = false }
         do {
             apiConnected = offline ? try await apiKeyStore.read() != nil : try await auth.keyStatus()
-            apiKeyError = nil
-        } catch { apiKeyError = error.localizedDescription }
-    }
-    func saveAPIKey() async {
-        guard !apiKeyBusy, !busy else { return }
-        apiKeyBusy = true
-        let submittedDraft = apiKeyDraft
-        defer { apiKeyBusy = false }
-        do {
-            let key = try validatedOpenAIKey(submittedDraft)
-            if offline { try await apiKeyStore.write(key) } else { try await auth.saveKey(key) }
-            apiConnected = true
-            if apiKeyDraft == submittedDraft { apiKeyDraft = "" }
-            apiKeyError = nil
-        } catch { apiKeyError = error.localizedDescription }
-    }
-    func removeAPIKey() async {
-        guard !apiKeyBusy, !busy else { return }
-        apiKeyBusy = true
-        defer { apiKeyBusy = false }
-        do {
-            if offline { try await apiKeyStore.write(nil) } else { try await auth.saveKey(nil) }
-            apiConnected = false
-            apiKeyDraft = ""
             apiKeyError = nil
         } catch { apiKeyError = error.localizedDescription }
     }

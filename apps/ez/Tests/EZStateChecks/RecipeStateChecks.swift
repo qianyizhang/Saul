@@ -39,7 +39,8 @@ import Foundation
                 "Launcher sent incomplete action")
             f.model.inputValues["fuzzy context"] = "draw out"
             let snapshot = try f.multi.prepare(
-                values: f.model.inputValues, preset: f.alternate, models: f.model.models)
+                values: f.model.inputValues, preset: f.alternate, models: f.model.models,
+                provider: .chatGPTPlan)
             try expect(snapshot.inputValues == f.model.inputValues, "Completed launcher inputs lost")
         },
         stateCase("busy guards preserve action and reject configuration saves") { f in

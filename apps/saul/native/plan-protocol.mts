@@ -5,10 +5,10 @@ import {
   validateScopedConfigValue,
   type ScopedConfig,
   validateSharedPresets,
-  validateSharedProviders,
-  type SharedProvider,
+  validateConnections,
+  type ConnectionDefinition,
   type SharedPreset,
-  type SharedPresetsReply,
+  type SharedPresets,
 } from './shared-presets-contract.mts';
 export interface PlanAccount {
   id: string;
@@ -61,14 +61,14 @@ export type PlanRequest =
       value: Record<string, unknown>;
       presetRevision: number;
       presets: SharedPreset[];
-      providers?: SharedProvider[];
+      connections?: ConnectionDefinition[];
     }
   | { action: 'presets-import'; presets: SharedPreset[] }
   | {
       action: 'presets-save';
       revision: number;
       presets: SharedPreset[];
-      providers?: SharedProvider[];
+      connections?: ConnectionDefinition[];
     }
   | { action: 'accounts' }
   | { action: 'login'; accountId?: string; consent?: boolean }
@@ -89,10 +89,10 @@ export interface PlanResults {
   history: { value: unknown };
   'config-read': { config: ScopedConfig };
   'config-save': { config: ScopedConfig };
-  'config-commit': { config: ScopedConfig; library: SharedPresetsReply };
-  'presets-read': { library: SharedPresetsReply };
-  'presets-import': { library: SharedPresetsReply };
-  'presets-save': { library: SharedPresetsReply };
+  'config-commit': { config: ScopedConfig; library: SharedPresets };
+  'presets-read': { library: SharedPresets };
+  'presets-import': { library: SharedPresets };
+  'presets-save': { library: SharedPresets };
   accounts: { accounts: PlanAccount[] };
   login: { account: PlanAccount };
   logout: { account: PlanAccount; warning?: string };
@@ -120,10 +120,10 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
     history: ['request'],
     'config-read': ['section'],
     'config-save': ['section', 'revision', 'value'],
-    'config-commit': ['section', 'revision', 'value', 'presetRevision', 'presets', 'providers'],
+    'config-commit': ['section', 'revision', 'value', 'presetRevision', 'presets', 'connections'],
     'presets-read': [],
     'presets-import': ['presets'],
-    'presets-save': ['revision', 'presets', 'providers'],
+    'presets-save': ['revision', 'presets', 'connections'],
     accounts: [],
     login: ['accountId', 'consent'],
     logout: ['accountId'],
@@ -147,7 +147,7 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
       throw new Error('Invalid configuration transaction.');
     validateScopedConfigValue(v.value);
     validateSharedPresets(v.presets);
-    if (v.providers !== undefined) validateSharedProviders(v.providers);
+    if (v.connections !== undefined) validateConnections(v.connections);
     return;
   }
   if (v.action === 'config-read' || v.action === 'config-save') {
@@ -162,7 +162,7 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
   if (v.action === 'presets-read') return;
   if (v.action === 'presets-import' || v.action === 'presets-save') {
     validateSharedPresets(v.presets);
-    if (v.providers !== undefined) validateSharedProviders(v.providers);
+    if (v.connections !== undefined) validateConnections(v.connections);
     if (
       v.action === 'presets-save' &&
       (!Number.isSafeInteger(v.revision) || Number(v.revision) < 0)
@@ -250,7 +250,7 @@ function sharedLibrary(value: Record<string, unknown>): boolean {
     return false;
   try {
     validateSharedPresets(value.library.presets);
-    if (value.library.providers !== undefined) validateSharedProviders(value.library.providers);
+    validateConnections(value.library.connections);
     return true;
   } catch {
     return false;

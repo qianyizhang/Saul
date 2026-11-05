@@ -10,6 +10,7 @@ public struct CredentialStorageError: LocalizedError, Sendable {
 public enum CredentialRecord: String, Sendable {
   case chatGPT = "com.saul.credentials.chatgpt"
   case openAI = "com.saul.credentials.openai"
+  case connections = "com.saul.credentials.connections"
   public var account: String { self == .chatGPT ? "accounts" : "api-key" }
 }
 

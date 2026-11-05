@@ -4,7 +4,7 @@ import { DEFAULT_SETTINGS } from '../src/storage/settings';
 
 const request = {
   presetId: 'speak',
-  providerKey: 'openai-api',
+  connectionKey: 'openai-api',
   model: 'gpt-realtime-2.1-mini',
   voice: 'marin',
   input: 'Hello.',
@@ -30,11 +30,11 @@ function harness() {
       config: { ...settings.openaiCompatible, apiKey: 'fixture-key' },
     },
   ];
-  settings.providerConnections = { 'openai-api': 'official' };
+  settings.connectionProfiles = { 'openai-api': 'official' };
   settings.configuration!.presets.push({
     id: 'speak',
     name: 'Speak',
-    providerKey: 'openai-api',
+    connectionKey: 'openai-api',
     provider: 'openai-compatible',
     capability: 'speak',
     model: request.model,

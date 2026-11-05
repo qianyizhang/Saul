@@ -1,9 +1,10 @@
-import {
-  providerCapabilities,
-  SPEECH_VOICES,
-  IMAGE_MODELS,
-} from '../../native/shared-presets-contract.mts';
-import { ProviderSettings } from './ProviderSettings';
+import { connectionCapabilities, SPEECH_VOICES } from '../../native/shared-presets-contract.mts';
+import { ConnectionSettings, ConnectionPresetWarnings } from './ConnectionSettings';
+import { NativeBridge } from './NativeBridge';
+import { StandaloneConnectionSettings } from './StandaloneConnectionSettings';
+import { SharedCredentialSettings } from './SharedCredentialSettings';
+import { useConnectionCatalog } from './useConnectionCatalog';
+import { catalogIssue } from '../../native/connections-contract.mts';
 import { usePlanSettings } from './usePlanSettings';
 import { SpeechTest } from './SpeechTest';
 import { ActionLabel } from '../surface/ActionLabel';
@@ -29,7 +30,8 @@ export function Settings({
   section?: SettingsSection;
   onSectionChange?: (section: SettingsSection) => void;
 }) {
-  const draft = useSettingsDraft(onDirty);
+  const [connectionDirty, setConnectionDirty] = useState(false);
+  const draft = useSettingsDraft((value) => onDirty?.(value || connectionDirty));
   const { settings, loaded, dirty, saved, saving, save } = draft;
   const providerTest = useProviderTest();
   const { testing, notice } = providerTest;
@@ -74,9 +76,38 @@ export function Settings({
   const selectedPreset = configuration.presets.find(
     (preset) => preset.id === draft.selectedPresetId,
   );
+  const selectedConnection = settings.connections.find(
+    (p) => p.key === selectedPreset?.connectionKey,
+  );
+  const localConnection =
+    settings.sharedCredentials === undefined && selectedPreset?.provider === 'openai-compatible'
+      ? (settings.profiles?.find(
+          (p) =>
+            p.id ===
+            (settings.connectionProfiles?.[selectedPreset.connectionKey ?? ''] ||
+              selectedPreset.profileId),
+        )?.config ?? settings.openaiCompatible)
+      : undefined;
+  const connectionCatalog = useConnectionCatalog(
+    selectedConnection?.key,
+    loaded && section === 'models' && (settings.sharedCredentials === 'saul' || !!localConnection),
+    localConnection,
+  );
+  const modelOptions =
+    connectionCatalog.catalog?.models.filter(
+      (m) =>
+        !m.capabilities.length || m.capabilities.includes(selectedPreset?.capability ?? 'write'),
+    ) ?? [];
+  const selectedModelIssue =
+    selectedPreset && selectedPreset.provider !== 'chatgpt-plan' && !selectedPreset.model.trim()
+      ? 'Choose a model in Presets.'
+      : settings.sharedCredentials === 'saul'
+        ? catalogIssue(connectionCatalog.catalog, selectedPreset?.model ?? '')
+        : undefined;
   const plan = usePlanSettings(
     {
       ...(settings.chatgptPlan ?? { accountId: '', model: '' }),
+      ...(selectedConnection?.accountId ? { accountId: selectedConnection.accountId } : {}),
       ...(selectedPreset?.provider === 'chatgpt-plan'
         ? { model: selectedPreset.model, effort: selectedPreset.effort, fast: selectedPreset.fast }
         : {}),
@@ -91,7 +122,7 @@ export function Settings({
         });
     },
     setPlanBusy,
-    loaded && settings.sharedCredentials !== 'disconnected',
+    loaded && settings.sharedCredentials === undefined,
     settings.sharedCredentials,
   );
   const error = draft.error || providerTest.error;
@@ -105,8 +136,8 @@ export function Settings({
   };
   const test = (mode: 'endpoint' | 'generation') =>
     providerTest.test(mode, settings, selectedPreset?.id);
-  const presetProviders = settings.providers;
-  const currentProvider = presetProviders.find((p) => p.key === selectedPreset?.providerKey);
+  const presetConnections = settings.connections;
+  const currentConnection = presetConnections.find((p) => p.key === selectedPreset?.connectionKey);
   const locked = testing || planBusy || speechBusy;
   if (!loaded)
     return error ? (
@@ -145,15 +176,42 @@ export function Settings({
     );
   return (
     <fieldset className="stack settings-layout settings-fields" disabled={saving}>
-      <ProviderSettings
-        settings={settings}
-        edit={draft.edit}
-        plan={plan}
-        disabled={locked}
-        visible={section === 'connections'}
-        credentialLocked={dirty}
-        changeCredentialOwner={draft.setCredentialOwner}
-      />
+      {loaded &&
+        settings.sharedCredentials === 'saul' &&
+        settings.connections.map((connection) => (
+          <ConnectionPresetWarnings
+            key={connection.key}
+            connection={connection}
+            omitPresetId={section === 'models' ? selectedPreset?.id : undefined}
+            presets={configuration.presets}
+            edit={(id) => {
+              draft.edit({ type: 'select-preset', id });
+              onSectionChange('models');
+            }}
+          />
+        ))}
+      {settings.sharedCredentials === undefined ? (
+        <StandaloneConnectionSettings
+          settings={settings}
+          edit={draft.edit}
+          plan={plan}
+          disabled={locked}
+          visible={section === 'connections'}
+        />
+      ) : (
+        <ConnectionSettings
+          settings={settings}
+          disabled={locked}
+          visible={section === 'connections'}
+          dirty={dirty}
+          commit={draft.commitConnections}
+          onDirty={(value) => {
+            setConnectionDirty(value);
+            onDirty?.(value || dirty);
+          }}
+          integrations={() => onSectionChange('preferences')}
+        />
+      )}
       <section hidden={section !== 'models'} className="settings-section" aria-label="Presets">
         <h2 className="view-title">Presets</h2>
         <div className="settings-models">
@@ -243,19 +301,19 @@ export function Settings({
                   />
                 </label>
                 <label className="field">
-                  Provider
+                  Connection
                   <select
-                    aria-label="Provider"
+                    aria-label="Connection"
                     disabled={locked}
                     value={
-                      selectedPreset.providerKey ||
+                      selectedPreset.connectionKey ||
                       (selectedPreset.provider === 'chatgpt-plan'
                         ? 'gpt-plan'
                         : selectedPreset.provider)
                     }
                     onChange={(e) => {
-                      if (presetProviders.some((p) => p.key === e.target.value))
-                        draft.edit({ type: 'preset-provider', key: e.target.value });
+                      if (presetConnections.some((p) => p.key === e.target.value))
+                        draft.edit({ type: 'preset-connection', key: e.target.value });
                       else
                         draft.edit({
                           type: 'preset-local-provider',
@@ -263,15 +321,15 @@ export function Settings({
                         });
                     }}
                   >
-                    {presetProviders.map((p) => (
+                    {presetConnections.map((p) => (
                       <option key={p.key} value={p.key}>
                         {p.name}
                       </option>
                     ))}
                     <option value="openai-compatible">API connection</option>
-                    {selectedPreset.providerKey && !currentProvider && (
-                      <option value={selectedPreset.providerKey} disabled>
-                        {selectedPreset.providerKey} · unavailable
+                    {selectedPreset.connectionKey && !currentConnection && (
+                      <option value={selectedPreset.connectionKey} disabled>
+                        {selectedPreset.connectionKey} · unavailable
                       </option>
                     )}
                     {selectedPreset.provider === 'chrome-ai' && (
@@ -281,6 +339,16 @@ export function Settings({
                     )}
                   </select>
                 </label>
+                {selectedModelIssue && (
+                  <p className="notice error" role="alert">
+                    {selectedModelIssue}
+                  </p>
+                )}
+                {connectionCatalog.catalog?.error && connectionCatalog.catalog.fetchedAt > 0 && (
+                  <p className="notice" role="status">
+                    {connectionCatalog.catalog.error} Last known models are shown.
+                  </p>
+                )}
                 <label className="field">
                   Capability
                   <select
@@ -290,7 +358,13 @@ export function Settings({
                     onChange={(e) =>
                       editPreset({
                         type: 'preset',
-                        patch: { capability: e.target.value as 'write' | 'draw' | 'speak' },
+                        patch: {
+                          capability: e.target.value as 'write' | 'draw' | 'speak',
+                          model:
+                            connectionCatalog.catalog?.models.find((m) =>
+                              m.capabilities.includes(e.target.value as 'write' | 'draw' | 'speak'),
+                            )?.id ?? '',
+                        },
                       })
                     }
                   >
@@ -298,7 +372,8 @@ export function Settings({
                     <option
                       value="draw"
                       disabled={
-                        !currentProvider || !providerCapabilities(currentProvider).includes('draw')
+                        !currentConnection ||
+                        !connectionCapabilities(currentConnection).includes('draw')
                       }
                     >
                       Draw
@@ -306,11 +381,13 @@ export function Settings({
                     <option
                       value="speak"
                       disabled={
-                        !currentProvider || !providerCapabilities(currentProvider).includes('speak')
+                        !currentConnection ||
+                        !connectionCapabilities(currentConnection).includes('speak')
                       }
                     >
                       Speak
-                      {!currentProvider || !providerCapabilities(currentProvider).includes('speak')
+                      {!currentConnection ||
+                      !connectionCapabilities(currentConnection).includes('speak')
                         ? ' · requires OpenAI API'
                         : ''}
                     </option>
@@ -328,8 +405,17 @@ export function Settings({
                           editPreset({ type: 'preset', patch: { model: e.target.value } })
                         }
                       >
-                        {IMAGE_MODELS.map((m) => (
-                          <option key={m}>{m}</option>
+                        {!modelOptions.some((m) => m.id === selectedPreset.model) && (
+                          <option value={selectedPreset.model}>
+                            {selectedPreset.model || 'Choose a model'} ·{' '}
+                            {connectionCatalog.loading ? 'loading' : 'unavailable'}
+                          </option>
+                        )}
+                        {modelOptions.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                            {!m.capabilities.length ? ' · capability unverified' : ''}
+                          </option>
                         ))}
                       </select>
                     </label>
@@ -381,14 +467,26 @@ export function Settings({
                   <>
                     <label className="field">
                       Model
-                      <input
+                      <select
                         aria-label="Speech model"
                         disabled={locked}
                         value={selectedPreset.model}
                         onChange={(e) =>
                           editPreset({ type: 'preset', patch: { model: e.target.value } })
                         }
-                      />
+                      >
+                        {!modelOptions.some((m) => m.id === selectedPreset.model) && (
+                          <option value={selectedPreset.model}>
+                            {selectedPreset.model || 'Choose a model'} · unavailable
+                          </option>
+                        )}
+                        {modelOptions.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                            {!m.capabilities.length ? ' · capability unverified' : ''}
+                          </option>
+                        ))}
+                      </select>
                     </label>
                     <label className="field">
                       Voice
@@ -415,11 +513,101 @@ export function Settings({
                         key={selectedPreset.id}
                         preset={selectedPreset}
                         saved={!dirty}
-                        disabled={testing || planBusy}
+                        disabled={testing || planBusy || !!selectedModelIssue}
                         onBusyChange={setSpeechBusy}
                       />
                     )}
                   </>
+                ) : selectedPreset.provider === 'chatgpt-plan' &&
+                  settings.sharedCredentials === 'saul' ? (
+                  <div className="stack">
+                    <label className="field">
+                      Model
+                      <select
+                        aria-label="ChatGPT model"
+                        value={selectedPreset.model}
+                        onChange={(event) => {
+                          const choice = modelOptions.find((m) => m.id === event.target.value);
+                          editPreset({
+                            type: 'preset',
+                            patch: {
+                              model: event.target.value,
+                              effort:
+                                choice?.efforts.find((e) =>
+                                  ['none', 'minimal', 'low'].includes(e),
+                                ) ??
+                                choice?.defaultEffort ??
+                                '',
+                              fast: false,
+                            },
+                          });
+                        }}
+                      >
+                        {!modelOptions.some((m) => m.id === selectedPreset.model) && (
+                          <option value={selectedPreset.model}>
+                            {selectedPreset.model || 'Choose a model'} · unavailable
+                          </option>
+                        )}
+                        {modelOptions.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                            {!m.capabilities.length ? ' · capability unverified' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <details>
+                      <summary>Options</summary>
+                      <div className="stack settings-disclosure">
+                        <label className="field">
+                          Effort
+                          <select
+                            value={selectedPreset.effort ?? ''}
+                            onChange={(e) =>
+                              editPreset({ type: 'preset', patch: { effort: e.target.value } })
+                            }
+                          >
+                            <option value="">Default</option>
+                            {selectedPreset.effort &&
+                              !modelOptions
+                                .find((m) => m.id === selectedPreset.model)
+                                ?.efforts.includes(selectedPreset.effort) && (
+                                <option value={selectedPreset.effort}>
+                                  {selectedPreset.effort} · unavailable
+                                </option>
+                              )}
+                            {modelOptions
+                              .find((m) => m.id === selectedPreset.model)
+                              ?.efforts.map((e) => (
+                                <option key={e}>{e}</option>
+                              ))}
+                          </select>
+                        </label>
+                        <label className="field">
+                          Speed
+                          <select
+                            value={String(!!selectedPreset.fast)}
+                            onChange={(e) =>
+                              editPreset({
+                                type: 'preset',
+                                patch: { fast: e.target.value === 'true' },
+                              })
+                            }
+                          >
+                            <option value="false">Standard</option>
+                            <option
+                              value="true"
+                              disabled={
+                                !modelOptions.find((m) => m.id === selectedPreset.model)?.fastTier
+                              }
+                            >
+                              Fast
+                            </option>
+                          </select>
+                        </label>
+                      </div>
+                    </details>
+                  </div>
                 ) : selectedPreset.provider === 'chatgpt-plan' ? (
                   <ChatGPTPlanSettings
                     plan={plan}
@@ -432,7 +620,7 @@ export function Settings({
                   <p className="notice">{CHROME_AI_RETIRED_MESSAGE}</p>
                 ) : (
                   <>
-                    {!selectedPreset.providerKey && (
+                    {!selectedPreset.connectionKey && (
                       <label className="field">
                         Connection
                         <select
@@ -454,11 +642,20 @@ export function Settings({
                       Model
                       <input
                         aria-label="Model name"
+                        list="connection-model-options"
                         value={selectedPreset.model}
                         onChange={(e) =>
                           editPreset({ type: 'preset', patch: { model: e.target.value } })
                         }
                       />
+                      <datalist id="connection-model-options">
+                        {modelOptions.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                            {!m.capabilities.length ? ' · capability unverified' : ''}
+                          </option>
+                        ))}
+                      </datalist>
                     </label>
                     <details>
                       <summary aria-label="Model options and tests">
@@ -508,7 +705,7 @@ export function Settings({
                 )}
                 <div className="row between">
                   <button className="btn quiet" onClick={() => onSectionChange('connections')}>
-                    Providers
+                    Connections
                   </button>
                   <button
                     className="btn danger"
@@ -653,6 +850,28 @@ export function Settings({
           />
         </div>
       </section>
+      <details hidden={section !== 'preferences'} className="panel">
+        <summary>Integrations</summary>
+        <SharedCredentialSettings
+          owner={settings.sharedCredentials}
+          disabled={locked || dirty}
+          visible={section === 'preferences'}
+          change={draft.setCredentialOwner}
+        />
+        <p className="small">
+          The signed credential helper manages shared sign-in and keys. Install or update it if
+          connections are unavailable.
+        </p>
+        <NativeBridge />
+        {settings.sharedCredentials === undefined && (
+          <details>
+            <summary>ChatGPT helper setup</summary>
+            <code className="code">
+              pnpm native:install --chatgpt --extension-id {chrome.runtime.id}
+            </code>
+          </details>
+        )}
+      </details>
       <details hidden={section !== 'preferences'} className="panel shortcuts">
         <summary>Shortcuts</summary>
         <dl>
@@ -703,13 +922,14 @@ export function Settings({
         className="settings-save"
         hidden={
           !dirty &&
+          !saved &&
           !error &&
           !notice &&
           !testing &&
           !planBusy &&
           !speechBusy &&
           !actionBuilding &&
-          section === 'preferences'
+          (section === 'preferences' || section === 'connections')
         }
       >
         {testing && (
@@ -748,7 +968,7 @@ export function Settings({
                 : 'Account operation in progress.'}
             </span>
             <button className="btn" onClick={() => onSectionChange('connections')}>
-              Providers
+              Connections
             </button>
           </div>
         )}

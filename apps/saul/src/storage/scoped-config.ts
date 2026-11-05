@@ -27,12 +27,12 @@ export async function scopedCall(request: Request): Promise<ScopedConfig> {
 
 // Connection secrets and the selected local account never enter the JSON file.
 export function portableSettings(settings: UserSettings): Record<string, unknown> {
-  const value: Omit<UserSettings, 'providers'> & { providers?: UserSettings['providers'] } =
+  const value: Omit<UserSettings, 'connections'> & { connections?: UserSettings['connections'] } =
     structuredClone(settings);
   delete value.chatgptPlan;
   delete value.sharedCredentials;
   delete value.sharedPresetRevision;
-  delete value.providers;
+  delete value.connections;
   delete value.scopedConfigRevision;
   value.openaiCompatible.apiKey = '';
   delete value.openaiCompatible.credentialOwner;
@@ -51,8 +51,8 @@ export function restoreSettings(local: UserSettings, config: ScopedConfig): User
   const value = normalizeSettings({
     ...config.value,
     sharedPresetRevision: local.sharedPresetRevision,
-    providers: local.providers,
-    providerConnections: config.value.providerConnections ?? local.providerConnections,
+    connections: local.connections,
+    connectionProfiles: config.value.connectionProfiles ?? local.connectionProfiles,
   });
   const keyFor = (id: string | undefined, baseUrl: string) => {
     const connection = id

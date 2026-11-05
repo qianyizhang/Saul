@@ -43,6 +43,9 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
 {
     var config = Configuration.starters(model: "fixture", effort: "low", fast: false)
     config.addIllustration()
+    for index in config.presets.indices where config.presets[index].capability == .draw {
+        config.presets[index].model = "gpt-image-2.6-flare"
+    }
     try ConfigurationStore(directory: directory).save(config)
     let store = try HistoryStore(directory: directory)
     let execution = AttemptExecution(generate: generate, append: { try store.append($0) })
@@ -55,30 +58,28 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
 
 @MainActor func illustrationStateChecks() -> [CheckCase] {
     [
-        CheckCase("action: provider key failures preserve credential and editor draft without generation") {
+        CheckCase("action: connection key failures preserve credential and configuration without generation")
+        {
             directory in
             let keys = IllustrationKeyFixture()
             let model = AppModel(directory: directory, offline: true, apiKeyStore: keys)
             defer { model.shutdown() }
             await model.restoreAPIKey()
             try expect(model.apiConnected, "Existing API key did not restore")
-            model.apiKeyDraft = "sk-replacement"
+            let connection = ConnectionDefinition.defaults[1]
             await keys.setFailure(true)
-            await model.saveAPIKey()
-            try expect(
-                model.apiConnected && model.apiKeyDraft == "sk-replacement",
-                "Failed save lost the connection or draft")
-            await model.removeAPIKey()
-            try expect(
-                model.apiConnected && model.apiKeyError != nil, "Failed removal disconnected or hid the error"
-            )
+            try await expectAsyncThrows(EZError.self) {
+                try await model.saveConnection(connection, key: "sk-replacement")
+            }
+            try expect(model.apiConnected, "Failed save lost the existing connection")
+            try await expectAsyncThrows(EZError.self) {
+                try await model.removeConnectionCredential(connection)
+            }
+            try expect(model.apiConnected, "Failed removal disconnected the credential")
             await keys.setFailure(false)
-            await model.saveAPIKey()
-            try expect(
-                model.apiKeyDraft.isEmpty && model.apiKeyError == nil,
-                "Successful save kept a secret in the editor")
-            await model.removeAPIKey()
-            try expect(!model.apiConnected && model.entries.isEmpty, "Provider editing generated work")
+            try await model.saveConnection(connection, key: "sk-replacement")
+            try await model.removeConnectionCredential(connection)
+            try expect(!model.apiConnected && model.entries.isEmpty, "Connection setup generated work")
         },
         CheckCase("action: runtime GIF format freezes in history and reuse without changing preset defaults")
         { directory in
@@ -132,7 +133,7 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
             try expectEqual(calls, 1, "Duplicate Run started more work")
             try expectEqual(
                 entry.inputValues?["context"], "Trees share nutrients. 中文\n", "Frozen image inputs changed")
-            try expectEqual(entry.providerSnapshot?.key, "openai-api", "Provider key not frozen")
+            try expectEqual(entry.connectionSnapshot?.key, "openai-api", "Connection key not frozen")
             try expectEqual(entry.status, "completed", "Image result not saved")
             try expectEqual(model.query, "Changed draft", "Completion cleared draft")
             let saved = try HistoryStore(directory: directory).load()[0]
@@ -213,7 +214,7 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
             let old = try store.load().first { $0.id == oldID }!
             try expect(try store.image(for: old) == nil, "Cancelled image was saved late")
         },
-        CheckCase("action: incompatible presets providers and missing API keys block before execution") {
+        CheckCase("action: incompatible presets connections and missing API keys block before execution") {
             directory in
             var calls = 0
             let model = try imageModel(
@@ -236,11 +237,11 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
                 "Incompatible preset offered for Draw")
             model.choosePreset(model.configuration.presets.first { $0.capability == .draw }!.id)
             var unavailable = model.configuration
-            unavailable.providers.removeAll { $0.key == "openai-api" }
+            unavailable.connections.removeAll { $0.key == "openai-api" }
             try model.saveConfiguration(unavailable)
             model.send()
             try expect(
-                !model.canSend && calls == 0 && model.providerIssue != nil,
+                !model.canSend && calls == 0 && model.connectionIssue != nil,
                 "Unavailable provider silently selected a different connection")
         },
     ]

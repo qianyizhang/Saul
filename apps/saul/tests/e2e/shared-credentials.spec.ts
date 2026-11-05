@@ -29,7 +29,7 @@ test('shared credential adoption preserves denied sources, removes verified offi
           config: { ...official, baseUrl: 'https://custom.test/v1', apiKey: 'fixture-custom-key' },
         },
       ],
-      providerConnections: { ...saved.providerConnections, 'openai-api': 'official' },
+      connectionProfiles: { ...saved.connectionProfiles, 'openai-api': 'official' },
     };
     await chrome.storage.local.set({
       [key]: settings,
@@ -77,6 +77,33 @@ test('shared credential adoption preserves denied sources, removes verified offi
                   retired: !state.cleanupDenied,
                 };
                 break;
+              case 'connection-status':
+                event = {
+                  type: 'result',
+                  connection: {
+                    connected: state.connected,
+                    endpoint: 'https://api.openai.com/v1',
+                    keySuffix: '-key',
+                  },
+                };
+                break;
+              case 'connection-catalog':
+                event = {
+                  type: 'result',
+                  catalog: {
+                    fetchedAt: Date.now() / 1000,
+                    models: [
+                      {
+                        id: 'future-model',
+                        name: 'Future model',
+                        capabilities: ['write'],
+                        efforts: [],
+                        defaultEffort: '',
+                      },
+                    ],
+                  },
+                };
+                break;
               case 'api-key-remove':
                 state.connected = false;
                 event = { type: 'result', apiConnected: false };
@@ -97,7 +124,9 @@ test('shared credential adoption preserves denied sources, removes verified offi
   }, DEFAULT_SETTINGS);
   await popup.reload();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Providers');
+  await settingsSection(popup, 'Preferences');
+  if (!(await popup.getByRole('button', { name: 'Connect to Saul', exact: true }).isVisible()))
+    await popup.getByText('Integrations', { exact: true }).click();
   await popup.getByRole('button', { name: 'Connect to Saul', exact: true }).click();
   await expect(
     popup.getByRole('alert').filter({ hasText: 'Synthetic Keychain denial' }),
@@ -119,7 +148,9 @@ test('shared credential adoption preserves denied sources, removes verified offi
       false;
   });
   await popup.getByRole('button', { name: 'Reload saved settings', exact: true }).click();
-  await settingsSection(popup, 'Providers');
+  await settingsSection(popup, 'Preferences');
+  if (!(await popup.getByRole('button', { name: 'Connect to Saul', exact: true }).isVisible()))
+    await popup.getByText('Integrations', { exact: true }).click();
   await popup.getByRole('button', { name: 'Connect to Saul', exact: true }).click();
   await expect(popup.getByText('OpenAI API key saved', { exact: true })).toBeVisible();
   await expect(
@@ -148,7 +179,15 @@ test('shared credential adoption preserves denied sources, removes verified offi
   );
   expect(adopted.saul_user_settings_recovery_backup.openaiCompatible.apiKey).toBe('');
   await popup.setViewportSize({ width: 640, height: 720 });
+  await settingsSection(popup, 'Connections');
+  const api = popup.getByRole('article', { name: 'OpenAI API', exact: true });
+  await expect(api.locator('.connection-capabilities code')).toHaveText(['Write', 'Draw', 'Speak']);
+  await expect(api.getByText(/sk-\*\*\*-key/)).toBeVisible();
+  await expect(popup.getByLabel('Connection name')).toHaveCount(0);
+  await api.getByRole('button', { name: 'Check', exact: true }).click();
+  await expect(api.getByRole('status')).toHaveText('✓ Connected');
   await popup.screenshot({ path: info.outputPath('shared-credentials.png') });
+  await settingsSection(popup, 'Preferences');
   await popup.getByRole('button', { name: 'Disconnect app', exact: true }).click();
   await expect(popup.getByRole('button', { name: 'Connect to Saul', exact: true })).toBeVisible();
   expect((await state()).saul_user_settings.sharedCredentials).toBe('disconnected');

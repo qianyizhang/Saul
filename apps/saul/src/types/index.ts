@@ -2,7 +2,7 @@ import type {
   ActionCapability,
   SharedImageOptions,
   SharedSpeechOptions,
-  SharedProvider,
+  ConnectionDefinition,
 } from '../../native/shared-presets-contract.mts';
 export interface SelectionSnapshot {
   id: string;
@@ -68,7 +68,7 @@ export type TagSegment =
 
 export type ProviderType = 'openai-compatible' | 'chrome-ai' | 'chatgpt-plan';
 
-export interface ProviderProfile {
+export interface APIProfile {
   id: string;
   name: string;
   config: UserSettings['openaiCompatible'];
@@ -80,13 +80,11 @@ export interface ModelPreset {
   provider: ProviderType;
   model: string;
   profileId?: string;
-  /** Legacy historical snapshots only; new model presets never select an account. */
-  accountId?: string;
   temperature?: number;
   topK?: number;
   effort?: string;
   fast?: boolean;
-  providerKey?: string;
+  connectionKey?: string;
   capability?: ActionCapability;
   imageOptions?: SharedImageOptions;
   speechOptions?: SharedSpeechOptions;
@@ -114,11 +112,11 @@ export interface UserSettings {
   sharedCredentials?: 'saul' | 'disconnected';
   summaryPdfProcessing?: 'attachment' | 'local';
   sharedPresetRevision?: number;
-  providers: SharedProvider[];
-  /** App-local provider key → API profile ID; contains no credential. */
-  providerConnections?: Record<string, string>;
+  connections: ConnectionDefinition[];
+  /** App-local connection key → API profile ID; contains no credential. */
+  connectionProfiles?: Record<string, string>;
   scopedConfigRevision?: number;
-  profiles?: ProviderProfile[];
+  profiles?: APIProfile[];
   activeProfileId?: string;
   responseLanguage?: string;
   activeProvider: ProviderType;

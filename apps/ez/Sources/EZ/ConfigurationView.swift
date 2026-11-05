@@ -4,6 +4,7 @@ import SwiftUI
 struct ConfigurationView: View {
     @ObservedObject var model: AppModel
     @Binding var hasUnsavedChanges: Bool
+    @Binding var viewingPresetID: UUID?
     @State private var confirmSelection = false
     @State private var pendingSelection: (() -> Void)?
     @State private var preset: ModelPreset?
@@ -23,7 +24,7 @@ struct ConfigurationView: View {
                 }
                 HStack {
                     if !model.minimumMode {
-                        Text("Model presets are shared with Saul. Accounts and actions stay in each app.")
+                        Text("Connections and presets are shared with Saul. Actions stay in this app.")
                             .font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
                     }
                     Spacer()
@@ -53,8 +54,21 @@ struct ConfigurationView: View {
             if preset == nil { preset = model.configuration.presets.first }
             if action == nil { action = model.configuration.actions.first }
         }
+        .task(id: "\(model.settingsSection.rawValue):\(preset?.connectionKey ?? "")") {
+            if model.settingsSection == .configuration,
+                let connection = model.configuration.connections.first(where: {
+                    $0.key == preset?.connectionKey
+                })
+            {
+                await model.refreshConnection(connection)
+            }
+        }
+        .onChange(of: preset?.id, initial: true) { _, id in viewingPresetID = id }
         .onChange(of: presetIsDirty || actionIsDirty, initial: true) { _, dirty in
             hasUnsavedChanges = dirty
+        }
+        .onChange(of: model.settingsPresetID, initial: true) { _, id in
+            if let chosen = model.configuration.presets.first(where: { $0.id == id }) { selectPreset(chosen) }
         }
         .alert("Discard unsaved edits?", isPresented: $confirmSelection) {
             Button("Keep", role: .cancel) { pendingSelection = nil }
@@ -66,6 +80,21 @@ struct ConfigurationView: View {
         } message: {
             Text("Save this item before switching, or discard its edits.")
         }
+    }
+
+    private var catalogModels: [ConnectionModel] {
+        if let catalog = model.connectionCatalogs[preset?.connectionKey ?? ""] { return catalog.models }
+        guard model.offline else { return [] }
+        var options = model.models.map {
+            ConnectionModel(
+                id: $0.model, name: $0.displayName,
+                capabilities: [.write], efforts: $0.supportedReasoningEfforts.map(\.reasoningEffort),
+                defaultEffort: $0.defaultReasoningEffort, fastTier: $0.fastTier)
+        }
+        if let preset, !options.contains(where: { $0.id == preset.model }) {
+            options.append(ConnectionModel(id: preset.model, capabilities: [preset.capability]))
+        }
+        return options
     }
 
     private var presetSection: some View {
@@ -124,25 +153,26 @@ struct ConfigurationView: View {
                 get: { preset?.model ?? "" },
                 set: { value in
                     preset?.model = value
-                    if let option = model.models.first(where: { $0.model == value }) {
+                    if let option = catalogModels.first(where: { $0.id == value }) {
                         preset?.effort =
-                            option.supportedReasoningEfforts.isEmpty ? "" : option.quickEffort
+                            option.efforts.first(where: { ["none", "minimal", "low"].contains($0) })
+                            ?? option.defaultEffort
                         preset?.fast = false
                     }
                 })
             SelectorPicker(
-                "Provider",
-                options: (model.configuration.providers.contains { $0.key == preset?.providerKey }
+                "Connection",
+                options: (model.configuration.connections.contains { $0.key == preset?.connectionKey }
                     ? []
                     : [
                         .init(
-                            value: preset?.providerKey ?? "",
-                            title: "\(preset?.providerKey ?? "Unknown") (unavailable)", enabled: false)
+                            value: preset?.connectionKey ?? "",
+                            title: "\(preset?.connectionKey ?? "Unknown") (unavailable)", enabled: false)
                     ])
-                    + model.configuration.providers.map { .init(value: $0.key, title: $0.name) },
-                selection: presetBinding(\.providerKey))
+                    + model.configuration.connections.map { .init(value: $0.key, title: $0.name) },
+                selection: presetBinding(\.connectionKey))
             let supported =
-                model.configuration.providers.first { $0.key == preset?.providerKey }?.capabilities ?? []
+                model.configuration.connections.first { $0.key == preset?.connectionKey }?.capabilities ?? []
             SelectorPicker(
                 "Capability",
                 options: ActionCapability.allCases.map {
@@ -150,93 +180,80 @@ struct ConfigurationView: View {
                         value: $0, title: supported.contains($0) ? $0.name : "\($0.name) (unavailable)",
                         enabled: supported.contains($0))
                 }, selection: presetCapabilityBinding)
+            let available = catalogModels.filter {
+                $0.capabilities.isEmpty || $0.capabilities.contains(preset?.capability ?? .write)
+            }
+            SelectorPicker(
+                "Model",
+                options: (available.contains { $0.id == preset?.model }
+                    ? []
+                    : [
+                        .init(
+                            value: preset?.model ?? "",
+                            title:
+                                "\(preset?.model.isEmpty == false ? preset!.model : "Choose a model") (unavailable)"
+                        )
+                    ])
+                    + available.map {
+                        .init(
+                            value: $0.id,
+                            title: $0.name + ($0.capabilities.isEmpty ? " · capability unverified" : ""))
+                    },
+                selection: modelSelection)
             if preset?.capability == .draw {
-                let images: [SelectorOption<String>] = ImageModelOption.openAIModels.map {
-                    .init(value: $0.id, title: $0.name)
-                }
-                SelectorPicker(
-                    "Model",
-                    options: (images.contains(where: { $0.value == preset?.model })
-                        ? [] : [.init(value: preset?.model ?? "", title: "Choose an image model")]) + images,
-                    selection: presetBinding(\.model))
                 DisclosureGroup("Image settings") {
-                    VStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 12) {
                         SelectorPicker(
                             "Output format",
-                            options: ImageModelOption.formats.map {
+                            options: ImageOptions.formats.map {
                                 .init(value: $0, title: $0.uppercased())
                             }, selection: imageOptionBinding(\.outputFormat))
                         SelectorPicker(
                             "Size",
-                            options: ImageModelOption.sizes.map {
+                            options: ImageOptions.sizes.map {
                                 .init(value: $0, title: $0.replacingOccurrences(of: "x", with: " × "))
                             }, selection: imageOptionBinding(\.size))
                         SelectorPicker(
                             "Quality",
-                            options: ImageModelOption.qualities.map {
+                            options: ImageOptions.qualities.map {
                                 .init(value: $0, title: $0.capitalized)
                             }, selection: imageOptionBinding(\.quality))
                     }.padding(.top, 8)
                 }
             } else if preset?.capability == .speak {
-                Text("Model").font(AppStyle.caption)
-                TextField(SpeechOptions.defaultModel, text: presetBinding(\.model)).textFieldStyle(
-                    .roundedBorder)
                 SelectorPicker(
-                    "Voice", options: SpeechOptions.voices.map { .init(value: $0, title: $0.capitalized) },
-                    selection: speechVoiceBinding)
-            } else if preset?.providerKey != "gpt-plan" {
-                Text("Model").font(AppStyle.caption)
-                TextField("Model ID", text: presetBinding(\.model)).textFieldStyle(.roundedBorder)
-                DisclosureGroup("Options") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        TextField("Reasoning effort · optional", text: presetBinding(\.effort))
-                            .textFieldStyle(.roundedBorder)
-                        Toggle("Fast", isOn: presetBinding(\.fast))
-                    }.padding(.top, 8)
-                }
+                    "Voice",
+                    options: SpeechOptions.voices.map {
+                        .init(value: $0, title: $0.capitalized)
+                    }, selection: speechVoiceBinding)
+                if let preset { SpeakPreview(model: model, preset: preset, saved: !presetIsDirty) }
             } else {
-                let modelOptions: [SelectorOption<String>] =
-                    (model.models.contains(where: { $0.model == preset?.model })
-                        ? []
-                        : [
+                DisclosureGroup("Options") {
+                    let selected = catalogModels.first { $0.id == preset?.model }
+                    let efforts = selected?.efforts ?? []
+                    SelectorPicker(
+                        "Effort",
+                        options: [.init(value: "", title: "Default")]
+                            + ((!efforts.contains(preset?.effort ?? "") && preset?.effort.isEmpty == false)
+                                ? [.init(value: preset!.effort, title: "\(preset!.effort) (unavailable)")]
+                                : []) + efforts.map { .init(value: $0, title: $0.capitalized) },
+                        selection: presetBinding(\.effort))
+                    let officialAPI =
+                        model.configuration.connections.first { $0.key == preset?.connectionKey }.map {
+                            $0.kind == .openAIAPI && $0.endpoint == "https://api.openai.com/v1"
+                        } ?? false
+                    let supportsFast = selected?.fastTier != nil || officialAPI
+                    SelectorPicker(
+                        "Speed",
+                        options: [
+                            .init(value: false, title: "Standard"),
                             .init(
-                                value: preset?.model ?? "",
-                                title: preset?.model.isEmpty == false
-                                    ? "\(preset!.model) (unavailable)" : "Connect to choose a model")
-                        ]) + model.models.map { .init(value: $0.model, title: $0.displayName) }
-                SelectorPicker("Model", options: modelOptions, selection: modelSelection)
-                let efforts =
-                    model.models.first { $0.model == preset?.model }?.supportedReasoningEfforts.map(
-                        \.reasoningEffort) ?? []
-                let effortOptions: [SelectorOption<String>] =
-                    [.init(value: "", title: "Default")]
-                    + (efforts.contains(preset?.effort ?? "") || preset?.effort.isEmpty != false
-                        ? []
-                        : [
-                            .init(
-                                value: preset?.effort ?? "",
-                                title: preset?.effort.isEmpty == false
-                                    ? "\(preset!.effort.capitalized) (unavailable)" : "Default")
-                        ]) + efforts.map { .init(value: $0, title: $0.capitalized) }
-                SelectorPicker("Effort", options: effortOptions, selection: presetBinding(\.effort))
-                let supportsFast = model.models.first { $0.model == preset?.model }?.fastTier != nil
-                SelectorPicker(
-                    "Speed",
-                    options: [
-                        .init(value: false, title: "Standard"),
-                        .init(
-                            value: true, title: supportsFast ? "Fast" : "Fast (unavailable)",
-                            enabled: supportsFast),
-                    ], selection: presetBinding(\.fast)
-                )
-                .help("Fast requests priority service and may use more plan allowance.")
-                if !model.minimumMode {
-                    Text("Fast may use more plan allowance.").font(AppStyle.caption).foregroundStyle(
-                        AppStyle.secondaryText)
+                                value: true, title: supportsFast ? "Fast" : "Fast (unavailable)",
+                                enabled: supportsFast),
+                        ], selection: presetBinding(\.fast))
                 }
             }
-            if let preset, let issue = preset.availabilityError(in: model.models) {
+            if let preset, let issue = model.presetIssue(preset) {
                 Text(issue).font(AppStyle.caption).foregroundStyle(.orange)
             }
             HStack {
@@ -312,7 +329,7 @@ struct ConfigurationView: View {
             let compatible = model.configuration.presets.filter { preset in
                 preset.capability == action?.capability
                     && (action?.webSearch != true
-                        || model.configuration.providers.first { $0.key == preset.providerKey }?.kind
+                        || model.configuration.connections.first { $0.key == preset.connectionKey }?.kind
                             == .openAIAPI)
             }
             let presetOptions: [SelectorOption<UUID>] =
@@ -449,7 +466,7 @@ struct ConfigurationView: View {
             get: { preset?.capability ?? .write },
             set: { capability in
                 if capability == .speak && preset?.capability != .speak {
-                    preset?.model = SpeechOptions.defaultModel
+                    preset?.model = catalogModels.first(where: { $0.capabilities.contains(.speak) })?.id ?? ""
                     preset?.effort = ""
                     preset?.fast = false
                     preset?.speechOptions = preset?.speechOptions ?? SpeechOptions()

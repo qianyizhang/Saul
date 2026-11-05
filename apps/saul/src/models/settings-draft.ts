@@ -1,5 +1,5 @@
 import { projectPresetForEditing as settingsForPreset } from './preset-resolution';
-import { SPEECH_MODEL, validateSharedProviders } from '../../native/shared-presets-contract.mts';
+import { validateConnections } from '../../native/shared-presets-contract.mts';
 import { officialOpenAI } from '../../native/credentials-contract.mts';
 import type { ModelPreset, ProviderType, Recipe, UserSettings } from '../types';
 import { DEFAULT_SETTINGS, validateSettingsConnections } from '../storage/settings';
@@ -23,8 +23,8 @@ export type SettingsEdit =
   | { type: 'select-preset'; id: string }
   | { type: 'add-preset'; id: string }
   | { type: 'preset-name'; name: string }
-  | { type: 'provider-name'; key: string; name: string }
-  | { type: 'preset-provider'; key: string }
+  | { type: 'connection-name'; key: string; name: string }
+  | { type: 'preset-connection'; key: string }
   | { type: 'preset-local-provider'; provider: Exclude<ProviderType, 'chatgpt-plan'> }
   | {
       type: 'preset';
@@ -47,7 +47,7 @@ export type SettingsEdit =
       patch: Partial<Pick<UserSettings['openaiCompatible'], 'baseUrl' | 'apiKey'>>;
       name?: string;
     }
-  | { type: 'provider-connection'; key: string; profileId: string }
+  | { type: 'connection-profile'; key: string; profileId: string }
   | { type: 'plan-account'; accountId: string }
   | { type: 'add-connection'; id: string }
   | { type: 'preset-profile'; id: string }
@@ -183,14 +183,14 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
         },
       };
     }
-    case 'provider-connection': {
+    case 'connection-profile': {
       if (!settings.profiles?.some((p) => p.id === edit.profileId))
         throw new Error('Choose an existing connection.');
       return {
         ...draft,
         settings: {
           ...settings,
-          providerConnections: { ...settings.providerConnections, [edit.key]: edit.profileId },
+          connectionProfiles: { ...settings.connectionProfiles, [edit.key]: edit.profileId },
         },
       };
     }
@@ -200,14 +200,14 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
       const updated = { ...preset, ...edit.patch };
       if (edit.patch.capability === 'draw' && preset.capability !== 'draw')
         Object.assign(updated, {
-          model: illustrationPreset(settings).model,
+          model: edit.patch.model ?? '',
           effort: '',
           fast: false,
           imageOptions: { size: '1024x1024', quality: 'low', outputFormat: 'png' },
         });
       if (edit.patch.capability === 'speak' && preset.capability !== 'speak')
         Object.assign(updated, {
-          model: SPEECH_MODEL,
+          model: edit.patch.model ?? '',
           effort: '',
           fast: false,
           speechOptions: { voice: 'marin' },
@@ -221,21 +221,21 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
       };
       return { ...draft, settings: settingsForPreset(next, updated) };
     }
-    case 'provider-name':
+    case 'connection-name':
       return {
         ...draft,
         settings: {
           ...settings,
-          providers: settings.providers.map((provider) =>
-            provider.key === edit.key ? { ...provider, name: edit.name } : provider,
+          connections: settings.connections.map((connection) =>
+            connection.key === edit.key ? { ...connection, name: edit.name } : connection,
           ),
         },
       };
-    case 'preset-provider': {
-      const provider = settings.providers.find((item) => item.key === edit.key);
+    case 'preset-connection': {
+      const connection = settings.connections.find((item) => item.key === edit.key);
       const preset = configuration.presets.find((item) => item.id === draft.presetId);
-      if (!provider || !preset) throw new Error('Choose an available provider.');
-      const kind = provider.kind === 'chatgpt-plan' ? 'chatgpt-plan' : 'openai-compatible';
+      if (!connection || !preset) throw new Error('Choose an available connection.');
+      const kind = connection.kind === 'chatgpt-plan' ? 'chatgpt-plan' : 'openai-compatible';
       const choices =
         preset.provider === kind
           ? preset
@@ -248,18 +248,18 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
         temperature: choices.temperature,
         topK: choices.topK,
         shared: settings.sharedPresetRevision !== undefined,
-        providerKey: provider.key,
+        connectionKey: connection.key,
         provider:
-          provider.kind === 'chatgpt-plan'
+          connection.kind === 'chatgpt-plan'
             ? ('chatgpt-plan' as const)
             : ('openai-compatible' as const),
         profileId:
-          provider.kind === 'openai-api'
-            ? settings.providerConnections?.[provider.key] ||
+          connection.kind === 'openai-api'
+            ? settings.connectionProfiles?.[connection.key] ||
               (settings.openaiCompatible.baseUrl.replace(/\/+$/, '') === 'https://api.openai.com/v1'
                 ? settings.activeProfileId
                 : undefined) ||
-              provider.key
+              connection.key
             : undefined,
       };
       const configured = {
@@ -284,7 +284,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
       const updated = {
         ...preset,
         ...choices,
-        providerKey: undefined,
+        connectionKey: undefined,
         shared: undefined,
         effort: choices.effort,
         fast: choices.fast,
@@ -457,11 +457,8 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
 
 export function settingsForSave(draft: SettingsDraft): UserSettings {
   const settings = draft.settings;
-  const selected = configurationFor(settings).presets.find((p) => p.id === draft.presetId);
-  if (selected && !selected.model.trim())
-    throw new Error('Enter a model name available from this provider.');
   validateConfiguration(configurationFor(settings), settings.sharedPresetRevision !== undefined);
   validateSettingsConnections(settings);
-  if (settings.providers) validateSharedProviders(settings.providers);
+  if (settings.connections) validateConnections(settings.connections);
   return structuredClone(settings);
 }

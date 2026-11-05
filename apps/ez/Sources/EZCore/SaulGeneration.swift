@@ -3,10 +3,9 @@ import SaulCredentialStorage
 
 extension GenerationProvider {
     public static func saul(
-        _ id: GenerationProviderID, connection: SaulConnection = SaulConnection(),
-        accountID: @escaping @MainActor () -> String? = { nil }
+        _ id: GenerationProviderID, connection: SaulConnection = SaulConnection()
     ) -> GenerationProvider {
-        let client = SaulGeneration(connection: connection, accountID: accountID)
+        let client = SaulGeneration(connection: connection)
         let text: TextOperation = { entry, update in
             try await client.stream(entry: entry, onUpdate: update)
         }
@@ -20,17 +19,17 @@ extension GenerationProvider {
 
 @MainActor private struct SaulGeneration {
     let connection: SaulConnection
-    let accountID: @MainActor () -> String?
     func stream(entry: HistoryEntry, onUpdate: @escaping @MainActor (ResponseAccumulator) -> Void)
         async throws -> ResponseAccumulator
     {
-        let plan = entry.providerSnapshot?.kind != .openAIAPI
+        let plan = entry.connectionSnapshot?.kind != .openAIAPI
         var request: [String: Any] = [
             "action": "native-responses", "provider": plan ? "chatgpt-plan" : "openai-api",
             "body": ResponsesRequest.body(entry: entry),
         ]
+        if let key = entry.connectionSnapshot?.key { request["connectionKey"] = key }
         if plan {
-            guard let account = accountID(), !account.isEmpty else {
+            guard let account = entry.connectionSnapshot?.accountId, !account.isEmpty else {
                 throw EZError("Choose a Saul ChatGPT account before running.")
             }
             request["accountId"] = account
@@ -63,6 +62,7 @@ extension GenerationProvider {
             "action": "native-image", "prompt": input.prompt, "model": input.model,
             "size": input.size, "quality": input.quality, "outputFormat": input.outputFormat,
         ]
+        if let key = input.connectionKey { request["connectionKey"] = key }
         if let image = input.image {
             request["imageBase64"] = try image.validatedData().base64EncodedString()
             request["imageName"] = image.name

@@ -71,7 +71,7 @@ export async function openFirstPageExplanation(page: Page): Promise<void> {
 /** Navigate through the same settings sections as a user, preserving the mounted draft. */
 export async function settingsSection(
   page: Page,
-  section: 'Overview' | 'Presets' | 'Actions' | 'Summaries' | 'Preferences' | 'Providers',
+  section: 'Overview' | 'Presets' | 'Actions' | 'Summaries' | 'Preferences' | 'Connections',
 ): Promise<void> {
   await page
     .getByRole('navigation', { name: 'Settings sections' })
@@ -95,9 +95,9 @@ export async function summaryMore(page: Page): Promise<void> {
 
 /** Open the connection editor through visible navigation at either width. */
 export async function apiConnections(page: Page): Promise<void> {
-  await settingsSection(page, 'Providers');
+  await settingsSection(page, 'Connections');
   const item = page.getByRole('button', { name: 'API connections', exact: true });
   if (await item.isVisible()) await item.click();
   else
-    await page.getByLabel('Edit provider', { exact: true }).selectOption('local-api-connections');
+    await page.getByLabel('Edit connection', { exact: true }).selectOption('local-api-connections');
 }

@@ -124,11 +124,11 @@ and Chrome Native Messaging. It starts on demand and has no daemon.
 ## Data ownership
 
 ChatGPT model presets share one local JSON document through native Swift and
-Node adapters; [the shared contract](../contracts/README.md#providers-and-presets)
-defines migration, revisions and account-independent presets. App-specific
+Node adapters; [the shared contract](../contracts/README.md#connections-and-presets)
+defines migration, revisions and presets bound to stable connections. App-specific
 preferences and recipes use `apps.saul` and `apps.ez` scopes in that document.
-Runtime state remains app-owned. In opted-in macOS installations, official OpenAI
-credentials use the [Saul owner](../contracts/credentials.md); other browser
+Runtime state remains app-owned. In opted-in macOS installations, managed connection
+credentials use the [Saul owner](../contracts/credentials.md); standalone browser
 connections keep their existing local owner. Saved history uses one shared SQLite database. There is no
 cross-app recipe import, sync queue, remote library or
 Git sync. Multi-device sync remains separate work.
@@ -177,3 +177,49 @@ and fixture formats use domain names, not branding. Installed identities such as
 `local.ez.app`, `ez:`, native host names, extension IDs and Keychain service IDs
 remain stable until a separately tested identity migration is designed. A display
 rename must not accidentally relocate data or create a new account registration.
+
+## Managed connections
+
+Decision — 2026-11-05: Connections is the user-facing instance concept. A preset
+selects one saved account or endpoint through its existing `connectionKey`. Provider
+remains the protocol/authentication implementation. Bound identities cannot be
+retargeted; adding another account or endpoint creates another connection. Existing
+IDs and historical snapshots remain stable. Legacy unbound plan definitions need
+an explicit account choice, preserving potentially different prior app selections.
+
+The existing signed credential owner owns refresh, endpoint-key binding, masked
+status and live catalogs. SwiftUI and React implement the same settings journey;
+there is no new runtime dependency, daemon or form-description language. Shared
+configuration, native wire validation and each app's state checks exercise the
+same semantics. New catalog choices are dynamic; a saved removed model blocks with
+an update request rather than being silently replaced. The credential contract
+owns cache retention and operation admission; DESIGN.md owns presentation.
+
+### Provider, connection and protocol
+
+The [glossary](../GLOSSARY.md) owns the terms. A provider is broader than a wire
+protocol: it includes authentication, token lifecycle and supported capabilities.
+The implemented provider kinds are `chatgpt-plan` and `openai-api`. The API kind
+uses official OpenAI routes or the supported chat-completions adapter for a custom
+endpoint. Responses, Chat Completions and Realtime are protocols/routes, not saved
+connections. Adding a second account or endpoint adds a connection, not a provider.
+
+| Source or stored name                                  | Meaning                                                               |
+| ------------------------------------------------------ | --------------------------------------------------------------------- |
+| `kind: chatgpt-plan` / `kind: openai-api`              | Provider integration used by a connection.                            |
+| `key: gpt-plan` / `key: openai-api`                    | Stable IDs of the two default connections. There is no `gpt-api` ID.  |
+| `ConnectionDefinition` (Swift and TypeScript)          | Saved account or endpoint definition.                                 |
+| `connections` / `connectionKey` / `connectionSnapshot` | Connection list, preset reference and frozen history snapshot.        |
+| `connectionProfiles` / `APIProfile` (Saul)             | Standalone browser connection bindings and app-owned API credentials. |
+
+Current types and wire messages accept only these names. Storage upgrades consume
+old connection field names once, preserve IDs, models and arbitrary user input,
+and write the canonical representation. Conflicting old/new fields stop the
+upgrade and preserve the original. There are no alias types or old-reply fallbacks.
+Shared history schema 4 and browser import schema 3 upgrade frozen snapshots in
+one transaction. Older runtimes cannot open the newer history schema; update both
+apps and helpers together before reopening shared data.
+
+The three original architecture candidates were implemented together: connection
+identity/binding, credential-owner lifecycle/catalogs, and matching native UI adapters.
+They are parts of one change, not three remaining alternatives.

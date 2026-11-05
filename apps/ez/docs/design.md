@@ -49,10 +49,9 @@ full accessible names/help. Hide routine hints, help-only disclosures, documenta
 links and pinned metric strips; retain errors, blocked choices, unsaved work and
 recovery. Omit the routine Standard preset suffix; Fast stays explicit.
 
-Settings has Overview, Presets, Actions, Preferences, Providers and Shortcuts.
+Settings has Overview, Presets, Actions, Preferences, Connections and Shortcuts.
 Show one editor at a time, preserving drafts across sections and guarding item
-changes/dismissal. Overview routes current choices to their editor. Align the plan
-account actions in one row; put History's title and Reveal action together.
+changes/dismissal. Overview routes current choices to their editor. Use the shared connection-row layout; put History's title and Reveal action together.
 [Surfaces](surfaces.md) owns reading/editing and action placement.
 
 ## Controls and metadata

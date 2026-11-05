@@ -86,10 +86,10 @@ it('keeps invalid edits in the draft until explicit validation succeeds', () => 
   expect(configurationFor(DEFAULT_SETTINGS).recipes[0]?.template).not.toBe('{{text');
 });
 
-it('preserves a shared Draw preset through unrelated settings and provider-name edits', () => {
+it('preserves a shared Draw preset through unrelated settings and connection-name edits', () => {
   const source = structuredClone(DEFAULT_SETTINGS);
   source.sharedPresetRevision = 2;
-  source.providers = [
+  source.connections = [
     { key: 'gpt-plan', name: 'Plan', kind: 'chatgpt-plan' },
     { key: 'openai-api', name: 'API', kind: 'openai-api' },
   ];
@@ -97,7 +97,7 @@ it('preserves a shared Draw preset through unrelated settings and provider-name 
     id: 'c14b29f3-3ec2-4efc-8bed-e05531aef2cb',
     name: 'Illustration',
     provider: 'openai-compatible' as const,
-    providerKey: 'openai-api',
+    connectionKey: 'openai-api',
     capability: 'draw' as const,
     shared: true,
     model: 'gpt-image-2.5-flare',
@@ -109,10 +109,10 @@ it('preserves a shared Draw preset through unrelated settings and provider-name 
   let draft = createSettingsDraft(source);
   draft = editSettingsDraft(draft, { type: 'select-preset', id: image.id });
   draft = editSettingsDraft(draft, { type: 'settings', patch: { responseLanguage: 'Chinese' } });
-  draft = editSettingsDraft(draft, { type: 'provider-name', key: 'openai-api', name: 'My API' });
+  draft = editSettingsDraft(draft, { type: 'connection-name', key: 'openai-api', name: 'My API' });
   const saved = settingsForSave(draft);
   expect(saved.configuration!.presets.find((p) => p.id === image.id)).toEqual(image);
-  expect(saved.providers?.[1]).toEqual({ key: 'openai-api', name: 'My API', kind: 'openai-api' });
+  expect(saved.connections?.[1]).toEqual({ key: 'openai-api', name: 'My API', kind: 'openai-api' });
 });
 
 it('edits provider connections without overwriting a selected Speak or Write preset', () => {
@@ -126,7 +126,7 @@ it('edits provider connections without overwriting a selected Speak or Write pre
   });
   expect(configurationFor(draft.settings).presets[0]).toEqual(write);
   draft = editSettingsDraft(draft, { type: 'add-preset', id: 'speak' });
-  draft = editSettingsDraft(draft, { type: 'preset-provider', key: 'openai-api' });
+  draft = editSettingsDraft(draft, { type: 'preset-connection', key: 'openai-api' });
   draft = editSettingsDraft(draft, { type: 'preset', patch: { capability: 'speak' } });
   draft = editSettingsDraft(draft, {
     type: 'preset',
@@ -162,7 +162,7 @@ it('gives a new reading action a Write preset when a Speak preset is being edite
   let draft = createSettingsDraft(DEFAULT_SETTINGS);
   const writing = draft.presetId;
   draft = editSettingsDraft(draft, { type: 'add-preset', id: 'speak' });
-  draft = editSettingsDraft(draft, { type: 'preset-provider', key: 'openai-api' });
+  draft = editSettingsDraft(draft, { type: 'preset-connection', key: 'openai-api' });
   draft = editSettingsDraft(draft, { type: 'preset', patch: { capability: 'speak' } });
   draft = editSettingsDraft(draft, { type: 'add-recipe', id: 'reading' });
   expect(configurationFor(draft.settings).recipes.at(-1)?.presetId).toBe(writing);

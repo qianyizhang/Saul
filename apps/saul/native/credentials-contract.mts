@@ -1,4 +1,6 @@
 import { isRecord } from './value.mts';
+import { validConnectionCatalog, validConnectionStatus } from './connections-contract.mts';
+import { validConnectionEndpoint } from './shared-presets-contract.mts';
 import { validatePlanRequest, type PlanRequest } from './plan-protocol.mts';
 
 export const CREDENTIALS_HOST = 'com.saul.credentials';
@@ -14,21 +16,27 @@ export type CredentialPlanRequest = Extract<
 >;
 export type CredentialRequest =
   | CredentialPlanRequest
+  | { action: 'connection-status'; connectionKey: string }
+  | { action: 'connection-catalog'; connectionKey: string; force?: boolean }
+  | { action: 'connection-key-save'; connectionKey: string; endpoint: string; key: string }
+  | { action: 'connection-key-remove'; connectionKey: string; endpoint: string }
   | { action: 'status' | 'api-key-status' | 'api-key-remove' | 'migration-verified' }
   | { action: 'select'; accountId: string }
   | { action: 'api-key-save'; key: string }
   | { action: 'api-key-import'; key: string; selectedAccountId?: string }
   | {
       action: 'api-chat';
+      connectionKey?: string;
       model: string;
       systemPrompt: string;
       userPrompt: string;
       temperature?: number;
       maxTokens?: number;
     }
-  | { action: 'api-realtime'; model: string; voice: string }
+  | { action: 'api-realtime'; model: string; voice: string; connectionKey?: string }
   | {
       action: 'api-image';
+      connectionKey?: string;
       prompt: string;
       model: string;
       size: string;
@@ -62,23 +70,44 @@ export function validateCredentialRequest(value: unknown): asserts value is Cred
     'api-key-remove': [],
     'api-key-save': ['key'],
     'api-key-import': ['key', 'selectedAccountId'],
-    'api-chat': ['model', 'systemPrompt', 'userPrompt', 'temperature', 'maxTokens'],
-    'api-realtime': ['model', 'voice'],
-    'api-image': ['prompt', 'model', 'size', 'quality', 'outputFormat'],
+    'connection-status': ['connectionKey'],
+    'connection-catalog': ['connectionKey', 'force'],
+    'connection-key-save': ['connectionKey', 'endpoint', 'key'],
+    'connection-key-remove': ['connectionKey', 'endpoint'],
+    'api-chat': [
+      'model',
+      'systemPrompt',
+      'userPrompt',
+      'temperature',
+      'maxTokens',
+      'connectionKey',
+    ],
+    'api-realtime': ['model', 'voice', 'connectionKey'],
+    'api-image': ['prompt', 'model', 'size', 'quality', 'outputFormat', 'connectionKey'],
     'migration-verified': [],
   };
   const fields = operations[value.action];
   if (!fields || Object.keys(value).some((key) => key !== 'action' && !fields.includes(key)))
     throw new Error('Unsupported Saul credential operation.');
   if (
+    (value.action.startsWith('connection-') || value.connectionKey !== undefined) &&
+    (!text(value.connectionKey, 64) || !/^[a-z][a-z0-9-]{0,63}$/.test(value.connectionKey))
+  )
+    throw new Error('Choose a saved connection.');
+  if (value.force !== undefined && typeof value.force !== 'boolean')
+    throw new Error('Invalid refresh request.');
+  if (value.action === 'connection-key-save' || value.action === 'connection-key-remove') {
+    if (
+      !validConnectionEndpoint(value.endpoint) ||
+      (value.action === 'connection-key-save' &&
+        (!text(value.key, 512, true) || !/^[!-~]*$/.test(value.key)))
+    )
+      throw new Error('Enter a valid endpoint and key without spaces.');
+  }
+  if (
     value.action === 'api-image' &&
     (!text(value.prompt, 32_000) ||
-      ![
-        'gpt-image-2.6-flare',
-        'gpt-image-2.6-sunburst',
-        'gpt-image-2.5-flare',
-        'gpt-image-2.5-sunburst',
-      ].includes(String(value.model)) ||
+      !text(value.model, 256) ||
       !['1024x1024', '1536x1024', '1024x1536'].includes(String(value.size)) ||
       !['low', 'medium', 'high'].includes(String(value.quality)) ||
       !['png', 'gif'].includes(String(value.outputFormat)) ||
@@ -150,6 +179,8 @@ export function validateCredentialEvent(value: unknown): asserts value is Creden
             'retired',
             'clientSecret',
             'imageBase64',
+            'connection',
+            'catalog',
           ].includes(key),
       )
     )
@@ -193,6 +224,8 @@ export function validateCredentialEvent(value: unknown): asserts value is Creden
     )
       throw new Error('Invalid image result.');
     if (
+      (value.connection !== undefined && !validConnectionStatus(value.connection)) ||
+      (value.catalog !== undefined && !validConnectionCatalog(value.catalog)) ||
       (value.accounts !== undefined &&
         (!Array.isArray(value.accounts) ||
           value.accounts.length > 1000 ||

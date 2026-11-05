@@ -22,7 +22,7 @@ test('mute from a toast applies across tabs and restart; Settings can unmute wit
   const other = await context.newPage();
   await other.goto(fixtureServer.origin + '/article');
   await explain(page);
-  await expect(page.getByRole('alert')).toContainText('API key is missing');
+  await expect(page.getByRole('alert')).toContainText('Enter a model name');
   await page.getByRole('button', { name: 'Mute error notifications' }).click();
   await expect(page.getByRole('alert')).toHaveCount(0);
   await explain(other);
@@ -61,7 +61,7 @@ test('mute from a toast applies across tabs and restart; Settings can unmute wit
     )
     .toBe(false);
   await explain(page);
-  await expect(page.getByRole('alert')).toContainText('API key is missing');
+  await expect(page.getByRole('alert')).toContainText('Enter a model name');
   await page.getByRole('button', { name: 'Mute error notifications' }).click();
   await expect(toggle).toBeChecked();
 

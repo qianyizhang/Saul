@@ -57,7 +57,7 @@ test('focused settings preserves drafts across sections and keeps Min Mode conci
     'Actions',
     'Summaries',
     'Preferences',
-    'Providers',
+    'Connections',
   ] as const) {
     await settingsSection(popup, section);
     for (const width of [390, 640, 1100]) {

@@ -186,7 +186,10 @@ export function initCredentialBridge() {
       started = true;
       try {
         validateCredentialRequest(message);
-        if (offscreen && !['generate', 'api-chat', 'api-image'].includes(message.action))
+        if (
+          offscreen &&
+          !['generate', 'api-chat', 'api-image', 'connection-catalog'].includes(message.action)
+        )
           throw new Error('The runner may only generate text or images.');
         login = message.action === 'login';
         id = crypto.randomUUID();

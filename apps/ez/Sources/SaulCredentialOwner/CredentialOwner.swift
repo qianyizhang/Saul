@@ -4,17 +4,22 @@ import SaulCredentialStorage
 
 @MainActor package final class CredentialOwner {
     let storage: SharedAuthStorage
-    let http: OfficialOpenAI
+    let http: ConnectionHTTP
     let caller: CredentialCaller
     let emit: ([String: Any]) -> Void
+    let connectionDefinitions: () throws -> [ConnectionDefinition]
     private var catalogs: [String: [ModelOption]] = [:]
     package init(
-        storage: SharedAuthStorage, caller: CredentialCaller, http: OfficialOpenAI = OfficialOpenAI(),
+        storage: SharedAuthStorage, caller: CredentialCaller, http: ConnectionHTTP = ConnectionHTTP(),
+        connectionDefinitions: @escaping () throws -> [ConnectionDefinition] = {
+            try SharedPresetsStore().read().connections
+        },
         emit: @escaping ([String: Any]) -> Void
     ) {
         self.storage = storage
         self.caller = caller
         self.emit = emit
+        self.connectionDefinitions = connectionDefinitions
         self.http = http
     }
     private func locked<T>(_ operation: (ChatGPTAuth) async throws -> T) async throws -> T {
@@ -52,12 +57,82 @@ import SaulCredentialStorage
         defer { withExtendedLifetime(lease) {} }
         return try storage.apiKey()
     }
+    private func apiConnection(_ value: [String: Any], officialOnly: Bool = false) async throws
+        -> SharedAuthStorage.APIConnection
+    {
+        let id = value["connectionKey"] as? String ?? "openai-api"
+        if value["connectionKey"] != nil {
+            let model =
+                value["model"] as? String ?? (value["body"] as? [String: Any])?["model"] as? String ?? ""
+            try await requireModel(model, connectionKey: id)
+        }
+        let lease = try await CredentialLease.acquire(in: storage.directory)
+        defer { withExtendedLifetime(lease) {} }
+        let record = try storage.apiConnection(id)
+        if officialOnly, record.endpoint != "https://api.openai.com/v1" {
+            throw CredentialStorageError("This capability requires an official OpenAI connection.")
+        }
+        return record
+    }
     package func run(_ request: CredentialRequest) async throws {
+        do { try await execute(request) } catch {
+            if let failure = error as? CredentialHTTPError, failure.code == "model_not_found" {
+                let connection: ConnectionDefinition?
+                if let key = request.value["connectionKey"] as? String {
+                    connection = try? connectionDefinition(key)
+                } else if let account = request.value["accountId"] as? String {
+                    connection = try? connectionDefinitions().first { $0.accountId == account }
+                } else {
+                    connection = nil
+                }
+                if let connection { _ = try? await connectionCatalog(connection, force: true) }
+                throw CredentialStorageError(
+                    "The selected model is unavailable. Update its preset in Settings.")
+            }
+            throw error
+        }
+    }
+    private func execute(_ request: CredentialRequest) async throws {
         let value = request.value
         func result(_ value: [String: Any] = [:]) {
             emit(value.merging(["type": "result"]) { _, new in new })
         }
         switch request.action {
+        case "connection-status":
+            let definition = try connectionDefinition(value["connectionKey"] as? String ?? "")
+            if definition.kind == .chatGPTPlan {
+                result([
+                    "connection": try await locked { auth in
+                        guard let id = definition.accountId,
+                            let account = auth.state.profiles.first(where: { $0.id == id })
+                        else {
+                            return ["connected": false, "identity": "Choose an account"] as [String: Any]
+                        }
+                        return [
+                            "connected": account.credentials?.canUsePlan == true,
+                            "identity": account.email ?? "Signed-in account",
+                            "signedIn": account.credentials != nil,
+                        ]
+                    }
+                ])
+            } else {
+                let lease = try await CredentialLease.acquire(in: storage.directory)
+                defer { withExtendedLifetime(lease) {} }
+                result(["connection": try storage.connectionStatus(definition.key)])
+            }
+        case "connection-catalog":
+            let definition = try connectionDefinition(value["connectionKey"] as? String ?? "")
+            let catalog = try await connectionCatalog(definition, force: value["force"] as? Bool == true)
+            result(["catalog": try JSONSerialization.jsonObject(with: JSONEncoder().encode(catalog))])
+        case "connection-key-save", "connection-key-remove":
+            let lease = try await CredentialLease.acquire(in: storage.directory)
+            defer { withExtendedLifetime(lease) {} }
+            let id = value["connectionKey"] as? String ?? ""
+            try storage.saveConnectionKey(
+                id, endpoint: value["endpoint"] as? String ?? "",
+                key: request.action == "connection-key-save" ? value["key"] as? String : nil)
+            try invalidateCatalog(id)
+            result(["connection": try storage.connectionStatus(id)])
         case "status", "accounts":
             emit(try await locked { try self.status($0) })
         case "select":
@@ -146,7 +221,7 @@ import SaulCredentialStorage
             }
             result(["apiConnected": try storage.records.contains(.openAI)])
         case "api-chat":
-            let key = try await apiKey()
+            let connection = try await apiConnection(value)
             let body: [String: Any] = [
                 "model": value["model"]!,
                 "messages": [
@@ -158,7 +233,8 @@ import SaulCredentialStorage
             ]
             var finished = false
             try await http.stream(
-                route: .chat, body: JSONSerialization.data(withJSONObject: body), credential: key
+                route: .chat, body: JSONSerialization.data(withJSONObject: body), credential: connection.key,
+                endpoint: connection.endpoint
             ) { data, _ in
                 if String(data: data, encoding: .utf8) == "[DONE]" {
                     finished = true
@@ -188,7 +264,8 @@ import SaulCredentialStorage
             }
             emit(["type": "complete"])
         case "api-realtime":
-            let key = try await apiKey()
+            let connection = try await apiConnection(value, officialOnly: true)
+            let key = connection.key
             let body: [String: Any] = [
                 "session": [
                     "type": "realtime", "model": value["model"]!, "output_modalities": ["audio"],
@@ -214,7 +291,16 @@ import SaulCredentialStorage
             let plan = value["provider"] as? String == "chatgpt-plan"
             let id = value["accountId"] as? String
             let credential: String
-            if plan { credential = try await token(accountID: id!) } else { credential = try await apiKey() }
+            if plan {
+                credential = try await token(accountID: id!)
+            } else {
+                let connection = try await apiConnection(value)
+                if connection.endpoint != "https://api.openai.com/v1" {
+                    try await streamCompatible(body, connection: connection)
+                    return
+                }
+                credential = connection.key
+            }
             if plan {
                 let models = try await catalog(accountID: id!, token: credential)
                 let effort = (body["reasoning"] as? [String: Any])?["effort"] as? String
@@ -228,7 +314,7 @@ import SaulCredentialStorage
             }
             try await streamResponses(body, token: credential, accountID: plan ? id : nil, native: true)
         case "native-image", "api-image":
-            let key = try await apiKey()
+            let key = try await apiConnection(value, officialOnly: true).key
             var image: ImageAttachment?
             if let encoded = value["imageBase64"] as? String {
                 guard let data = Data(base64Encoded: encoded) else {
@@ -274,7 +360,8 @@ import SaulCredentialStorage
         -> String
     {
         guard let option = models.first(where: { $0.model == model }) else {
-            throw CredentialStorageError("The chosen ChatGPT model is unavailable. Refresh models.")
+            throw CredentialStorageError(
+                "The chosen ChatGPT model is unavailable. Update its preset in Settings.")
         }
         if let effort, !effort.isEmpty,
             !option.supportedReasoningEfforts.contains(where: { $0.reasoningEffort == effort })

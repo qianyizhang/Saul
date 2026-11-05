@@ -82,19 +82,25 @@ terminal snapshot, and never adds a reconnect loop or repeats generation. The
 native implementations remain separate; this contract adds no Node dependency,
 shared process, runtime manifest or database migration.
 
-## Providers and presets
+## Connections and presets
 
 ChatGPT model presets share `~/Library/Application Support/Little Clarity/settings.json`.
 The JSON document has a `modelPresets` section containing one `revision`, `presets`
-and `providers`. The legacy section name is retained for migration. Each provider
-has a stable unique `key`, editable `name` and `kind` (`chatgpt-plan` / `openai-api`).
-Capabilities derive from kind: plan supports Write; API supports Write, Draw and Speak.
-Both clients read and save these same definitions; neither owns a second provider list.
+and `connections`. Each connection has a
+stable unique `key`, `name`, `kind` (`chatgpt-plan` / `openai-api`), optional pinned
+`accountId` for plan connections, and optional `baseUrl` for API connections.
+Account and endpoint cannot change once bound; another identity needs another
+connection. Plan supports Write; official OpenAI supports Write, Draw and Speak;
+custom chat-completions endpoints support Write.
+Both clients read and save these same connection definitions; neither owns a second list.
+`kind` selects the provider; `key` identifies the saved connection. The default connection
+IDs are `gpt-plan` and `openai-api`, not provider identifiers or a `gpt-api` kind.
+See the [source-name mapping and storage upgrade policy](../docs/architecture.md#provider-connection-and-protocol).
 Legacy definitions in EZ’s app scope seed the shared list once; the shared list
-then wins. [Provider fixtures](fixtures/providers.json) are validated in both runtimes.
+then wins. [Connection fixtures](fixtures/connections.json) are validated in both runtimes.
 Preset saves preserve all other sections. Each preset has a UUID `id`,
 `name`, `model`, `effort` (empty means Default), and `fast`, plus optional
-`providerKey`, `capability` (`write` / `draw` / `speak`), `imageOptions` (`size`, `quality`, optional `outputFormat`) and
+`connectionKey`, `capability` (`write` / `draw` / `speak`), `imageOptions` (`size`, `quality`, optional `outputFormat`) and
 `speechOptions` (`voice`).
 Absent typed fields decode as `gpt-plan` / Write. Image settings accept square,
 landscape or portrait sizes and low/medium/high quality. `outputFormat` accepts
@@ -108,8 +114,8 @@ busy timeout and no settings data. The lease is released on process exit. Keep
 the lock file in place while either app may use it; deleting it would split the lock.
 
 Write presets show Model, Effort and Standard/Fast speed where supported.
-Draw presets hold image model, size, quality and default output format. New Draw
-starters use GPT Image 2.6 Flare. Both apps freeze a runtime PNG/GIF choice in the
+Draw presets hold image model, size, quality and default output format. New API
+starters leave the model unassigned until a current catalog choice is made. Both apps freeze a runtime PNG/GIF choice in the
 attempt preset snapshot. Saul supports selection-based Illustrate; EZ also supports
 image edits with PNG output. Existing saved model choices are retained until edited. Plan
 Fast is selectable only when the account catalog advertises it. Native API Write
@@ -121,29 +127,41 @@ then the advertised default, then the first effort, and start at Standard.
 Each app imports its old ChatGPT presets once. Duplicate names get numeric
 suffixes; preset IDs and action references are preserved or remapped locally.
 After migration the shared store owns these presets. Deleted presets stay deleted;
-actions referencing them need another explicit choice. Presets bind a stable provider key and capability, not a plan account.
-`gpt-plan` uses the explicitly selected local plan account when preparing a run;
-`openai-api` resolves its selected credential owner. Freeze that route for execution
-and retry. A changed credential owner or endpoint blocks the saved attempt with a
-hint to select a new preset and start a new attempt. There is no legacy route
-promotion during retry; saved output stays readable. Provider display-name edits do not change keys or preset bindings. Legacy Saul
-preset account fields are ignored; selecting a preset cannot switch accounts.
-Existing Saul-only API/on-device presets remain Saul-scoped. Typed shared API
-presets remain in the library; an unavailable local provider blocks execution.
-Saul preserves Draw records but blocks text execution and image-settings edits.
-EZ currently owns Draw execution. Both clients preserve and edit Speak model/voice
-choices; Saul alone runs its short-text preview through OpenAI Realtime. Speak
-presets cannot run as Write actions in either app. Custom API credentials remain browser-owned; shared official OpenAI credentials use the Saul owner;
-no audio, speech text or ephemeral Realtime token enters shared settings or history.
-Upgrade both clients/helper before saving typed
-presets; older strict readers cannot consume the additional fields.
+actions referencing them need another explicit choice. Presets retain `connectionKey`
+as their stored connection reference. Managed plan connections pin one `accountId`;
+preset selection cannot retarget that connection. Unbound legacy entries require
+an explicit account choice in Connections. Existing standalone browser routes keep
+their local account/profile selection until explicitly connected to the shared owner.
+Freeze connection, account, endpoint, model and billing route for execution and retry.
+A changed owner or endpoint blocks the saved attempt; never promote an old route or
+retry inference automatically. Historical output remains readable.
+
+Both apps edit Draw presets and execute image actions; native additionally supports
+image inputs. Speak previews run in both Settings surfaces through OpenAI Realtime,
+with deliberate playback and no audio or preview-text history. Speak is not a Write
+action. The signed owner stores official and explicitly added custom API keys by
+connection; existing standalone browser credentials keep their local owner. Secrets
+and ephemeral speech authorization never enter the settings document or history.
+
+Model choices use live connection catalogs. The shared owner serializes discovery
+and refresh, caches one validated snapshot per connection for five minutes, and
+keeps the last successful models on failure. Settings entry, setup and stale action
+preparation trigger bounded refresh; Check forces it. A successful complete empty
+catalog means no models; malformed or incomplete discovery does not mean removal.
+A removed model stays in the preset with a visible update requirement. Presets are
+never rewritten to another model. Protocol-family support is separate from catalog
+membership; unknown capabilities are not inferred from a successful HTTP request.
+No recurring polling process or catalog history is retained.
+
+Upgrade both clients and the signed credential helper before saving connection
+bindings; older strict readers cannot consume the added fields.
 Swift and Node read the same JSON file; Saul accesses it through its existing ChatGPT helper.
 Neither app needs the other app running. Settings load/reload and new requests
 read the current store; EZ also reads on activation outside Settings. Open editors
 keep their drafts until Save or Reload. Historical and prepared requests stay frozen.
 
 The conceptual interface exposes identity, permission, available models and
-supported options, then resolves an explicitly selected local connection for
+supported options, then resolves the preset's fixed managed connection (or a standalone local profile) for
 execution. Sign-in and plan-use permission are separate. Unsupported model,
 effort, account or tier blocks; no silent provider, account or billing fallback.
 Credentials stay outside prompts, saved results, shared fixtures and exports.
@@ -166,10 +184,10 @@ The same JSON document holds `apps.saul.settings`, `apps.saul.calls`, and
 `apps.ez.configuration`. Each section has a numeric `revision` and object `value`;
 one locked atomic replacement preserves sibling scopes and unknown root fields.
 An editor Save checks both expected revisions and commits its scope and shared
-providers/presets together, or changes neither. Stale saves preserve the draft.
+connections/presets together, or changes neither. Stale saves preserve the draft.
 Browser scopes are limited to 750 KB
 of serialized UTF-8 JSON, leaving room under the 1 MiB native-message limit.
-Provider names and presets share the same stale-save revision. An unrelated scope
+Connection names and presets share the same stale-save revision. An unrelated scope
 can change concurrently without being overwritten. Both adapters stage and flush
 the complete JSON before replacement; validation or staging failure retains the
 previous document. Chrome-local credential writes remain separate and report
@@ -180,8 +198,8 @@ an older writer does not honor the lease.
 Saul stores preferences, connection metadata, actions and non-plan model presets
 in its settings scope. Custom API keys and local credential bindings remain in trusted Chrome storage;
 shared official credentials remain in the signed Saul owner. Connection keys are restored only for the same connection
-and endpoint. Shared Provider and Preset definitions come only from `modelPresets`.
-Saul’s `providerConnections` maps shared keys to local API profile IDs without
+and endpoint. Shared Connection and Preset definitions come only from `modelPresets`.
+For standalone browser connections, Saul’s `connectionProfiles` maps shared keys to local API profile IDs without
 copying credentials. It adopts only the already-selected official OpenAI endpoint
 or an explicit profile choice. EZ stores actions and configuration choices in its scope; its old configuration file is retained for
 recovery after migration. Neither app needs the other running.

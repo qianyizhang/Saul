@@ -78,7 +78,7 @@ export function usePlanSettings(
     chrome.runtime.onMessage.addListener(changed);
     const focus = () => refresh();
     window.addEventListener('focus', focus);
-    refresh(true);
+    refresh(credentialOwner !== 'saul');
     return () => {
       activeEffect = false;
       mounted.current = false;

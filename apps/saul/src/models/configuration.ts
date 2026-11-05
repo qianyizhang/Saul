@@ -1,8 +1,4 @@
-import {
-  IMAGE_MODEL,
-  validImageOptions,
-  validSpeechOptions,
-} from '../../native/shared-presets-contract.mts';
+import { validImageOptions, validSpeechOptions } from '../../native/shared-presets-contract.mts';
 import type {
   ModelPreset,
   ReadingConfiguration,
@@ -168,11 +164,10 @@ export function illustrationPreset(settings: UserSettings): ModelPreset {
     id: 'preset-illustration',
     name: 'Saul illustration',
     provider: 'openai-compatible',
-    providerKey: 'openai-api',
+    connectionKey: 'openai-api',
     capability: 'draw',
-    model: IMAGE_MODEL,
-    profileId:
-      settings.providerConnections?.['openai-api'] || settings.activeProfileId || 'default',
+    model: '',
+    profileId: settings.connectionProfiles?.['openai-api'] || settings.activeProfileId || 'default',
     imageOptions: { size: '1024x1024', quality: 'low', outputFormat: 'png' },
   };
 }
@@ -251,9 +246,9 @@ export function normalizeConfiguration(
         topK: optionalNumber(preset.topK, 'Preset top K'),
         effort: optionalText(preset.effort, 'Preset effort'),
         fast: preset.fast as boolean | undefined,
-        ...(preset.providerKey === undefined
+        ...(preset.connectionKey === undefined
           ? {}
-          : { providerKey: string(preset.providerKey, 'Provider key', 64) }),
+          : { connectionKey: string(preset.connectionKey, 'Connection key', 64) }),
         ...(preset.capability === undefined
           ? {}
           : { capability: preset.capability as ModelPreset['capability'] }),

@@ -18,12 +18,12 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 it('resolves provider definitions at the persisted settings boundary', () => {
   const legacy = normalizeSettings({});
-  expect(legacy.providers).toEqual(DEFAULT_SETTINGS.providers);
-  legacy.providers[0]!.name = 'Local edit';
-  expect(normalizeSettings({}).providers[0]!.name).toBe('ChatGPT plan');
-  expect(normalizeSettings({ providers: [] }).providers).toEqual([]);
-  for (const providers of [null, {}, [{ key: 'invalid' }]])
-    expect(() => normalizeSettings({ providers })).toThrow('Providers need unique');
+  expect(legacy.connections).toEqual(DEFAULT_SETTINGS.connections);
+  legacy.connections[0]!.name = 'Local edit';
+  expect(normalizeSettings({}).connections[0]!.name).toBe('ChatGPT plan');
+  expect(normalizeSettings({ connections: [] }).connections).toEqual([]);
+  for (const connections of [null, {}, [{ key: 'invalid' }]])
+    expect(() => normalizeSettings({ connections })).toThrow('Connections need unique');
 });
 it('retains saved on-device settings while requiring an explicit enabled provider choice', async () => {
   get.mockResolvedValueOnce({ saul_user_settings: { activeProvider: 'chrome-ai' } });
@@ -149,7 +149,7 @@ it.each([
   ],
   [
     { profiles: [{ id: 'missing-name', config: {} }] },
-    'Saved provider profiles require an ID and name.',
+    'Saved API profiles require an ID and name.',
   ],
   [
     {
@@ -158,7 +158,7 @@ it.each([
         { id: 'same', name: 'Second' },
       ],
     },
-    'Saved provider profile IDs must be unique.',
+    'Saved API profile IDs must be unique.',
   ],
 ] as const)(
   'identifies malformed saved settings without leaking invalid runtime types: %o',

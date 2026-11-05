@@ -11,14 +11,17 @@ test('shared provider edits keep stable preset bindings and preserve Draw throug
   sandbox,
 }, info) => {
   const { popup, worker, context } = await sandbox.launch();
-  const providers = JSON.parse(
-    readFileSync(new URL('../../../../contracts/fixtures/providers.json', import.meta.url), 'utf8'),
-  ).providers;
-  await worker.evaluate((providers) => {
+  const connections = JSON.parse(
+    readFileSync(
+      new URL('../../../../contracts/fixtures/connections.json', import.meta.url),
+      'utf8',
+    ),
+  ).connections;
+  await worker.evaluate((connections) => {
     const state = {
       library: {
         revision: 0,
-        providers,
+        connections,
         presets: [
           {
             id: 'c14b29f3-3ec2-4efc-8bed-e05531aef2cb',
@@ -26,7 +29,7 @@ test('shared provider edits keep stable preset bindings and preserve Draw throug
             model: 'gpt-image-2.5-flare',
             effort: '',
             fast: false,
-            providerKey: 'openai-api',
+            connectionKey: 'openai-api',
             capability: 'draw' as const,
             imageOptions: { size: '1536x1024', quality: 'medium' },
           },
@@ -50,7 +53,7 @@ test('shared provider edits keep stable preset bindings and preserve Draw throug
         state.library = {
           revision: request.presetRevision + 1,
           presets: request.presets,
-          providers: request.providers || state.library.providers,
+          connections: request.connections || state.library.connections,
         };
         return {
           id: message.id,
@@ -80,14 +83,14 @@ test('shared provider edits keep stable preset bindings and preserve Draw throug
         state.library = {
           revision: request.revision + 1,
           presets: request.presets,
-          providers: request.providers || state.library.providers,
+          connections: request.connections || state.library.connections,
         };
       }
       if (request.action === 'presets-read' || request.action === 'presets-save')
         return { id: message.id, event: { type: 'result', library: state.library } };
       throw new Error('Unexpected provider operation');
     }) as typeof chrome.runtime.sendNativeMessage;
-  }, providers);
+  }, connections);
   const page = await context.newPage();
   await page.goto(popup.url().replace('popup.html', 'library.html'));
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -97,10 +100,10 @@ test('shared provider edits keep stable preset bindings and preserve Draw throug
   await expect(page.getByLabel('Model name', { exact: true })).toBeHidden();
   await settingsSection(page, 'Actions');
   await page.getByLabel('Response language', { exact: true }).selectOption('Chinese');
-  await settingsSection(page, 'Providers');
+  await settingsSection(page, 'Connections');
   await page.getByRole('button', { name: 'My API', exact: true }).click();
-  await expect(page.getByLabel('Provider name', { exact: true })).toHaveValue('My API');
-  await page.getByLabel('Provider name', { exact: true }).fill('Renamed in Saul');
+  await expect(page.getByLabel('Connection name', { exact: true })).toHaveValue('My API');
+  await page.getByLabel('Connection name', { exact: true }).fill('Renamed in Saul');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByText('Saved', { exact: true })).toBeVisible();
   const saved = await worker.evaluate(
@@ -114,17 +117,17 @@ test('shared provider edits keep stable preset bindings and preserve Draw throug
         }
       ).sharedSettingsFixture,
   );
-  expect(saved.library.providers?.[1]).toEqual({
+  expect(saved.library.connections?.[1]).toEqual({
     key: 'openai-api',
     name: 'Renamed in Saul',
     kind: 'openai-api',
   });
   expect(saved.library.presets[0]).toMatchObject({
-    providerKey: 'openai-api',
+    connectionKey: 'openai-api',
     capability: 'draw',
     imageOptions: { size: '1536x1024', quality: 'medium' },
   });
-  expect(saved.sections.settings?.value).not.toHaveProperty('providers');
+  expect(saved.sections.settings?.value).not.toHaveProperty('connections');
   for (const width of [390, 1100])
     for (const colorScheme of ['light', 'dark'] as const) {
       await page.setViewportSize({ width, height: 800 });
@@ -134,18 +137,18 @@ test('shared provider edits keep stable preset bindings and preserve Draw throug
       );
       if (reviewScreenshots)
         await page.screenshot({
-          path: info.outputPath(`providers-${width}-${colorScheme}.png`),
+          path: info.outputPath(`connections-${width}-${colorScheme}.png`),
           animations: 'disabled',
         });
     }
   await worker.evaluate(() => {
     const state = (globalThis as unknown as { sharedSettingsFixture: { library: SharedPresets } })
       .sharedSettingsFixture;
-    state.library.providers![1]!.name = 'Renamed in EZ';
+    state.library.connections![1]!.name = 'Renamed in EZ';
     state.library.revision++;
   });
   await page.reload();
-  await settingsSection(page, 'Providers');
+  await settingsSection(page, 'Connections');
   await page.getByRole('button', { name: 'Renamed in EZ', exact: true }).click();
-  await expect(page.getByLabel('Provider name', { exact: true })).toHaveValue('Renamed in EZ');
+  await expect(page.getByLabel('Connection name', { exact: true })).toHaveValue('Renamed in EZ');
 });

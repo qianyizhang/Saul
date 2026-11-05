@@ -1,3 +1,4 @@
+import { upgradeHistoryConnections } from './connection-upgrade';
 import { DIGEST_SCHEMA } from '../digest/store';
 import type { SqlDatabase } from './sql';
 import { searchableResponse } from './search';
@@ -84,7 +85,7 @@ CREATE TRIGGER IF NOT EXISTS explanation_ad AFTER DELETE ON llm_run BEGIN
 END;
 `;
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export function migrate(db: SqlDatabase): void {
   const version = Number(db.selectValue('PRAGMA user_version') || 0);
@@ -126,6 +127,7 @@ export function migrate(db: SqlDatabase): void {
       }
     }
     if (version < 2) db.exec(DIGEST_SCHEMA);
+    if (version < 3) upgradeHistoryConnections(db, false);
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
   });
 }

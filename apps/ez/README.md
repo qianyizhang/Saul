@@ -31,17 +31,17 @@ self-signing alone does not prevent Keychain prompts after upgrades. See
 [the Keychain limitation](docs/keychain.md#why-a-rebuild-can-ask-again).
 The previous installed bundle is retained for rollback.
 
-In EZ, open **Settings → Providers → ChatGPT plan → Connect**, finish sign-in
+In EZ, open **Settings → Connections → ChatGPT plan → Set up**, finish sign-in
 in your browser, and allow ChatGPT plan usage. Choose an action, fill its inputs,
 then press **⌘ Return**. **Min Mode** is on by default: the draft sits below
 the new-lookup heading, answers get a quiet reading view, and **Details** holds
 request settings, token counts, and timing. Turn it off in Settings → Preferences or Quick
 Lookup's actions menu to restore extra guidance and the persistent metrics footer.
-The choice is saved on this Mac. Check Settings → Manage usage for ChatGPT plan
+The choice is saved on this Mac. Check Connections → ChatGPT plan → More → Usage for ChatGPT plan
 allowance. Metrics are saved with new lookups; older history has no metrics.
 **⌘ N** starts a new lookup and **⌘ .** stops generation.
 Settings uses the same focused design as Saul: Overview, Presets, Actions,
-Preferences, Providers and Shortcuts. One editor is shown at a time and section
+Preferences, Connections and Shortcuts. One editor is shown at a time and section
 changes preserve drafts. Min Mode assumes a familiar user: everyday controls
 stay visible, with one-word or symbol-only actions. Turn Min Mode off for explanatory help.
 
@@ -161,12 +161,12 @@ A cold start may also show EZ's main window.
 ## Illustration
 
 Choose **Illustration** in the Action picker. Save your OpenAI API key in
-**Settings → Providers → OpenAI API**, fill Context and click **Run** (⌘Return).
-Key Save/Reload do not test the key or send a request. API usage is billed
+**Settings → Connections → OpenAI API**, fill Context and click **Run** (⌘Return).
+Saving a key refreshes its model catalog; Check retries discovery without generating output. API usage is billed
 separately from ChatGPT plan usage. Each Run requests one image. Choose **PNG** or **GIF · animated** in the Draw composer.
 
 **Settings → Presets → Illustration** owns the image model and optional size/quality.
-New starters default to GPT Image 2.6 Flare, low, 1024×1024. Existing presets retain
+New starters use low quality and 1024×1024; choose a model from the live catalog. Existing presets retain
 their saved model; choose a 2.6 model in Presets for GIF output. Access depends on your API project
 and organization. **Stop** (⌘.) cancels locally; OpenAI may still finish and bill an
 accepted request. There are no automatic retries.
@@ -179,19 +179,22 @@ image bytes. GIF is generation-only; image edits require PNG.
 If saving fails, **Unsaved → Save again** retries the exact result without generation.
 Save or download unsaved results before quitting.
 
-## Configure providers, presets and actions
+## Configure connections, presets and actions
 
-**Providers** names the connection and displays its stable key and capabilities.
-`gpt-plan` supports Write; `openai-api` supports Write, Draw and Speak. Renaming a provider
-preserves preset bindings. Plan sign-ins and the API key remain separate records behind the shared Saul
-credential owner. Presets never select a different plan account implicitly.
+**Connections** shows a capability line, an account email or endpoint/key suffix, status,
+and Check. Add another connection for another account or endpoint. Existing identities
+are fixed; More contains sign-in or key replacement. The signed Saul owner manages
+credentials and token refresh. Helper and app-binding controls live in Preferences → Integrations.
 
-**Presets** binds provider key, Write/Draw, model and supported options. Existing
-presets default to `gpt-plan` / Write, retaining their IDs and behavior. Provider definitions and Presets
-share the local store and stale-save revision with Saul; both apps must use a compatible build to preserve
-the typed fields. Saul supports Draw through its selection-based Illustrate action; Speak has its
-preview in Saul.
-API Write uses an explicit model ID. Unavailable choices block rather than falling back.
+**Presets** binds a connection, Write/Draw/Speak, model and supported options. Connections
+and presets share the local store and stale-save revision with Saul; both apps and the
+helper must use compatible builds. Models refresh from each connection's catalog.
+Removed models remain in saved presets with an explicit repair warning; no model or
+account is substituted. Unbound old plan connections require an explicit account choice.
+
+Both apps edit and execute Draw. Speak presets offer short-text generation and deliberate
+playback in Settings → Presets. Audio and preview text remain in memory and are never
+saved to history. API speech is billed separately from ChatGPT plan usage.
 
 **Actions** owns instructions, type and a compatible default preset. Use
 `{{fuzzy term}}` and `{{fuzzy context}}` to generate two required inputs. Repeated

@@ -5,34 +5,23 @@ import { join } from 'node:path';
 import { SharedPresetsStore } from '../native/shared-presets.mts';
 import { sharedPresets } from '../src/storage/shared-presets';
 import { validatePlanResult } from '../native/plan-protocol.mts';
-import { DEFAULT_PROVIDERS, resolveSharedPresets } from '../native/shared-presets-contract.mts';
 import {
   createSettingsOwner,
   DEFAULT_SETTINGS,
   SETTINGS_STORAGE_KEY,
 } from '../src/storage/settings';
 
-it('normalizes legacy helper replies once while preserving explicit empty providers', () => {
+it('rejects incomplete old helper replies instead of synthesizing connections', () => {
   const request = { action: 'presets-read' } as const;
-  const legacy: unknown = { type: 'result', library: { revision: 2, presets: [] } };
-  validatePlanResult(request, legacy);
-  const resolved = resolveSharedPresets(legacy.library);
-  expect(resolved.providers).toEqual(DEFAULT_PROVIDERS);
-  resolved.providers[0]!.name = 'Changed locally';
-  expect(resolveSharedPresets(legacy.library).providers[0]!.name).toBe('ChatGPT plan');
-  const empty: unknown = {
-    type: 'result',
-    library: { revision: 2, presets: [], providers: [] },
-  };
-  validatePlanResult(request, empty);
-  expect(resolveSharedPresets(empty.library).providers).toEqual([]);
-  for (const providers of [null, {}, [{ key: 'invalid' }]])
-    expect(() =>
-      validatePlanResult(request, {
-        type: 'result',
-        library: { revision: 2, presets: [], providers },
-      }),
-    ).toThrow('invalid reply');
+  expect(() =>
+    validatePlanResult(request, { type: 'result', library: { revision: 2, presets: [] } }),
+  ).toThrow('invalid reply');
+  expect(() =>
+    validatePlanResult(request, {
+      type: 'result',
+      library: { revision: 2, presets: [], connections: [] },
+    }),
+  ).not.toThrow();
 });
 
 it('shares edits, migrates once, keeps accounts outside presets, and refuses a stale settings save', async () => {
@@ -56,7 +45,7 @@ it('shares edits, migrates once, keeps accounts outside presets, and refuses a s
               revision: number;
               presetRevision: number;
               presets: Parameters<typeof store.import>[0];
-              providers?: Parameters<typeof store.save>[2];
+              connections?: Parameters<typeof store.save>[2];
             };
           },
         ) => ({
@@ -70,7 +59,7 @@ it('shares edits, migrates once, keeps accounts outside presets, and refuses a s
                   request.value,
                   request.presetRevision,
                   request.presets,
-                  request.providers,
+                  request.connections,
                 )
               : request.action.startsWith('config-')
                 ? {
@@ -85,7 +74,7 @@ it('shares edits, migrates once, keeps accounts outside presets, and refuses a s
                         ? store.read()
                         : request.action === 'presets-import'
                           ? store.import(request.presets)
-                          : store.save(request.revision, request.presets, request.providers),
+                          : store.save(request.revision, request.presets, request.connections),
                   }),
           },
         }),
@@ -97,7 +86,6 @@ it('shares edits, migrates once, keeps accounts outside presets, and refuses a s
       name: 'Current',
       provider: 'chatgpt-plan',
       model: 'fixture',
-      accountId: 'local-account',
       effort: 'low',
       fast: true,
     };
@@ -145,7 +133,7 @@ it('shares edits, migrates once, keeps accounts outside presets, and refuses a s
       model: 'gpt-image-2.5-flare',
       effort: '',
       fast: false,
-      providerKey: 'openai-api',
+      connectionKey: 'openai-api',
       capability: 'draw' as const,
       imageOptions: { size: '1536x1024', quality: 'medium' },
     };
@@ -211,7 +199,7 @@ it('preserves typed image definitions and rejects malformed image options', asyn
       model: 'gpt-image-2.5-flare',
       effort: '',
       fast: false,
-      providerKey: 'openai-api',
+      connectionKey: 'openai-api',
       capability: 'draw' as const,
       imageOptions: { size: '1536x1024', quality: 'medium' },
     };
@@ -223,7 +211,7 @@ it('preserves typed image definitions and rejects malformed image options', asyn
       model: 'fixture',
       effort: 'low',
       fast: false,
-      providerKey: 'gpt-plan',
+      connectionKey: 'gpt-plan',
       capability: 'write',
     });
     store.save(library.revision, library.presets);
@@ -237,12 +225,12 @@ it('preserves typed image definitions and rejects malformed image options', asyn
 });
 
 it('uses the shared provider fixture, preserves definitions on preset-only saves, and rejects invalid changes', async () => {
-  const { validateSharedProviders } = await import('../native/shared-presets-contract.mts');
+  const { validateConnections } = await import('../native/shared-presets-contract.mts');
   const { validatePlanRequest } = await import('../native/plan-protocol.mts');
   const fixture = JSON.parse(
-    readFileSync(new URL('../../../contracts/fixtures/providers.json', import.meta.url), 'utf8'),
+    readFileSync(new URL('../../../contracts/fixtures/connections.json', import.meta.url), 'utf8'),
   );
-  const directory = mkdtempSync(join(tmpdir(), 'saul-shared-providers-'));
+  const directory = mkdtempSync(join(tmpdir(), 'saul-shared-connections-'));
   try {
     const store = new SharedPresetsStore(join(directory, 'settings.json'));
     writeFileSync(
@@ -250,35 +238,35 @@ it('uses the shared provider fixture, preserves definitions on preset-only saves
       JSON.stringify({
         modelPresets: { revision: 0, presets: [], future: 'retained' },
         apps: {
-          ez: { configuration: { revision: 1, value: { providers: fixture.providers } } },
+          ez: { configuration: { revision: 1, value: { connections: fixture.connections } } },
         },
       }),
     );
     // Native-scoped names migrate into the common owner rather than being replaced with defaults.
-    expect(store.read().providers).toEqual(fixture.providers);
+    expect(store.read().connections).toEqual(fixture.connections);
     const first = store.save(0, []);
-    expect(first.providers).toEqual(fixture.providers);
-    const renamed = structuredClone(first.providers!);
+    expect(first.connections).toEqual(fixture.connections);
+    const renamed = structuredClone(first.connections!);
     renamed[1]!.name = 'Renamed in Saul';
     const saved = store.save(first.revision, [], renamed);
-    expect(store.read().providers?.[1]).toEqual({
-      ...fixture.providers[1],
+    expect(store.read().connections?.[1]).toEqual({
+      ...fixture.connections[1],
       name: 'Renamed in Saul',
     });
     expect(JSON.parse(readFileSync(store.path, 'utf8')).modelPresets.future).toBe('retained');
     const bytes = readFileSync(store.path, 'utf8');
-    expect(() => store.save(first.revision, [], fixture.providers)).toThrow('changed');
-    for (const providers of fixture.invalid) {
-      expect(() => validateSharedProviders(providers)).toThrow();
+    expect(() => store.save(first.revision, [], fixture.connections)).toThrow('changed');
+    for (const connections of fixture.invalid) {
+      expect(() => validateConnections(connections)).toThrow();
       expect(() =>
         validatePlanRequest({
           action: 'presets-save',
           revision: saved.revision,
           presets: [],
-          providers,
+          connections,
         }),
       ).toThrow();
-      expect(() => store.save(saved.revision, [], providers)).toThrow();
+      expect(() => store.save(saved.revision, [], connections)).toThrow();
       expect(readFileSync(store.path, 'utf8')).toBe(bytes);
     }
   } finally {
@@ -301,7 +289,7 @@ it('rejects malformed image options without coercion in shared and app-scoped pr
     model: 'gpt-image-2.5-flare',
     effort: '',
     fast: false,
-    providerKey: 'openai-api',
+    connectionKey: 'openai-api',
     capability: 'draw',
   };
   for (const imageOptions of fixture.valid) {
@@ -332,7 +320,7 @@ it('round trips Speak presets and rejects malformed speech options without chang
     const preset = {
       id: 'c14b29f3-3ec2-4efc-8bed-e05531aef2cb',
       name: 'Speak',
-      providerKey: 'openai-api',
+      connectionKey: 'openai-api',
       capability: 'speak' as const,
       model: 'gpt-realtime-2.1-mini',
       effort: '',

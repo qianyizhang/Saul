@@ -8,11 +8,12 @@ public struct ImageGenerationRequest: Equatable, Sendable {
     public var quality: String
     public var outputFormat: String
     public var image: ImageAttachment?
+    public var connectionKey: String?
 
     public init(
-        prompt: String, model: String = "gpt-image-2.6-flare",
+        prompt: String, model: String = "",
         size: String = "1024x1024", quality: String = "low", outputFormat: String = "png",
-        image: ImageAttachment? = nil
+        image: ImageAttachment? = nil, connectionKey: String? = nil
     ) {
         self.prompt = prompt
         self.model = model
@@ -20,10 +21,11 @@ public struct ImageGenerationRequest: Equatable, Sendable {
         self.quality = quality
         self.outputFormat = outputFormat
         self.image = image
+        self.connectionKey = connectionKey
     }
 
     public func validate() throws {
-        guard ImageModelOption.formats.contains(outputFormat) else {
+        guard ImageOptions.formats.contains(outputFormat) else {
             throw EZError("Choose PNG or GIF output.")
         }
         if outputFormat == "gif" {
@@ -43,8 +45,8 @@ public struct ImageGenerationRequest: Equatable, Sendable {
         guard prompt.unicodeScalars.count <= 32_000, prompt.utf8.count <= 128_000 else {
             throw EZError("Shorten the prompt to fit 32,000 characters.")
         }
-        guard ImageModelOption.openAIModels.contains(where: { $0.id == model }),
-            ImageModelOption.sizes.contains(size), ImageModelOption.qualities.contains(quality)
+        guard !model.isEmpty, model.utf8.count <= 256,
+            ImageOptions.sizes.contains(size), ImageOptions.qualities.contains(quality)
         else { throw EZError("Choose a supported image model, size and quality.") }
     }
 }

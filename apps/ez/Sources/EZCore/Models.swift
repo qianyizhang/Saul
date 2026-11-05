@@ -132,14 +132,14 @@ public struct HistoryEntry: Codable, Identifiable, Equatable, Sendable {
     public var inputImage: ImageAttachment?
     public var citations: [WebCitation]?
     public var webSearchCompleted: Bool?
-    public var providerSnapshot: ProviderDefinition?
+    public var connectionSnapshot: ConnectionDefinition?
     private enum CodingKeys: String, CodingKey {
         case sourceID, sourceText, sourceURL, sourceTitle
         case schemaVersion, id, createdAt, mode, query, response, model, effort
         case requestedServiceTier, actualServiceTier, status, error, durationSeconds, metrics
         case actionSnapshot = "recipeSnapshot"
         case presetSnapshot, inputValues, instructions, followUpQuestion, parentID,
-            providerSnapshot, inputImage, citations, webSearchCompleted
+            connectionSnapshot, inputImage, citations, webSearchCompleted
     }
     public var capability: ActionCapability {
         sourceCapability ?? actionSnapshot?.capability ?? presetSnapshot?.capability ?? .write
@@ -170,7 +170,9 @@ public struct HistoryEntry: Codable, Identifiable, Equatable, Sendable {
         else { return query }
         return template.fields.compactMap { values[$0] }.joined(separator: " · ")
     }
-    public func prepareFollowUp(_ question: String, models: [ModelOption]) throws -> HistoryEntry {
+    public func prepareFollowUp(_ question: String, models: [ModelOption], provider: GenerationProviderID)
+        throws -> HistoryEntry
+    {
         guard sourceID == nil else { throw EZError("Open this saved request in Saul to ask a follow-up.") }
         guard capability == .write else { throw EZError("Use again to prepare another image action.") }
         guard status == "completed", !response.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -184,7 +186,7 @@ public struct HistoryEntry: Codable, Identifiable, Equatable, Sendable {
         let preset =
             presetSnapshot
             ?? ModelPreset(name: "Saved", model: model, effort: effort, fast: requestedServiceTier != nil)
-        if let issue = preset.availabilityError(in: models) { throw EZError(issue) }
+        if let issue = preset.availabilityError(in: models, provider: provider) { throw EZError(issue) }
         let originalInstructions = instructions ?? mode.instruction
         let context =
             parentID == nil && !originalInstructions.isEmpty

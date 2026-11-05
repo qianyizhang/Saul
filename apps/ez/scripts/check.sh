@@ -16,14 +16,14 @@ case "$kind" in
         ./scripts/swift.sh build --product EZ
         ez_build_product EZChecks
         ez_link_modules EZChecks EZCore SaulCredentialStorage EZCheckSupport
-        ez_compile_library Sources/EZ/AppModel.swift Sources/EZ/ProviderState.swift \
+        ez_compile_library Sources/EZ/AppModel.swift Sources/EZ/GenerationState.swift Sources/EZ/ConnectionState.swift \
             Tests/EZStateChecks/*.swift "${ez_objects[@]}" -o "$ez_bin_dir/EZStateChecks"
         exec "$ez_bin_dir/EZStateChecks" "$@"
         ;;
     services)
         ez_build_product EZChecks
         ez_link_modules EZChecks EZCore SaulCredentialStorage EZCheckSupport
-        ez_compile_library Sources/EZ/AppModel.swift Sources/EZ/ProviderState.swift \
+        ez_compile_library Sources/EZ/AppModel.swift Sources/EZ/GenerationState.swift Sources/EZ/ConnectionState.swift \
             Sources/EZ/SelectedTextService.swift Tests/EZStateChecks/StateFixture.swift \
             Tests/Services/check.swift "${ez_objects[@]}" -o "$ez_bin_dir/EZServicesChecks"
         exec "$ez_bin_dir/EZServicesChecks" "$@"

@@ -64,7 +64,7 @@ its executable once with the case name: a non-cooperative task cannot safely be
 abandoned and allowed to leak into later cases.
 
 `scripts/check.sh state` builds the normal app and compiles its `AppModel.swift` and
-`ProviderState.swift` alongside the state cases, linking SwiftPM's core/support objects. This keeps
+`GenerationState.swift` alongside the state cases, linking SwiftPM's core/support objects. This keeps
 app-only state out of EZCore and requires no Xcode test host. These checks do not
 launch the native interface or prove focus, layout, shortcuts, or live inference;
 those remain separate acceptance checks in `docs/verification.md`.

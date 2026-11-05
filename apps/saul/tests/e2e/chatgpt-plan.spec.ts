@@ -10,7 +10,7 @@ import {
   openFirstPageExplanation,
 } from './driver.ts';
 import type { PlanRequest, PlanEvent } from '../../native/plan-protocol.mts';
-import type { SharedPresetsReply } from '../../native/shared-presets-contract.mts';
+import { DEFAULT_CONNECTIONS, type SharedPresets } from '../../native/shared-presets-contract.mts';
 
 test('ChatGPT provider settings route reading streams, preserve partial failures, and switch back', async ({
   sandbox,
@@ -21,170 +21,177 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   const initialApiRequests = fixtureServer.requests.length;
   // Replace only the OS transport. UI, sender validation, offscreen runner and
   // durable database are production code; no native registration or real quota.
-  await worker.evaluate(() => {
-    let library: SharedPresetsReply = { revision: 0, presets: [] };
-    const sections: Record<string, { revision: number; value?: Record<string, unknown> }> = {};
-    chrome.runtime.sendNativeMessage = (async (
-      _host: string,
-      message: { id: string; request: PlanRequest },
-    ) => {
-      const request = message.request;
-      if (request.action === 'config-commit') {
-        if (
-          request.revision !== (sections[request.section]?.revision || 0) ||
-          request.presetRevision !== library.revision
-        )
+  await worker.evaluate(
+    (connections) => {
+      let library: SharedPresets = { revision: 0, presets: [], connections };
+      const sections: Record<string, { revision: number; value?: Record<string, unknown> }> = {};
+      chrome.runtime.sendNativeMessage = (async (
+        _host: string,
+        message: { id: string; request: PlanRequest },
+      ) => {
+        const request = message.request;
+        if (request.action === 'config-commit') {
+          if (
+            request.revision !== (sections[request.section]?.revision || 0) ||
+            request.presetRevision !== library.revision
+          )
+            return {
+              id: message.id,
+              event: { type: 'error', message: 'Settings changed. Reload saved settings.' },
+            };
+          sections[request.section] = { revision: request.revision + 1, value: request.value };
+          library = {
+            revision: library.revision + 1,
+            presets: request.presets,
+            connections: request.connections || library.connections,
+          };
           return {
             id: message.id,
-            event: { type: 'error', message: 'Settings changed. Reload saved settings.' },
+            event: { type: 'result', config: sections[request.section], library },
           };
-        sections[request.section] = { revision: request.revision + 1, value: request.value };
-        library = {
-          revision: library.revision + 1,
-          presets: request.presets,
-          providers: request.providers || library.providers,
-        };
-        return {
-          id: message.id,
-          event: { type: 'result', config: sections[request.section], library },
-        };
-      }
-      if (request.action === 'config-read')
-        return {
-          id: message.id,
-          event: { type: 'result', config: sections[request.section] || { revision: 0 } },
-        };
-      if (request.action === 'config-save') {
-        if (request.revision !== (sections[request.section]?.revision || 0))
-          return { id: message.id, event: { type: 'error', message: 'Scoped settings changed.' } };
-        sections[request.section] = { revision: request.revision + 1, value: request.value };
-        return { id: message.id, event: { type: 'result', config: sections[request.section] } };
-      }
-      if (request.action === 'presets-save') {
-        if (request.revision !== library.revision)
+        }
+        if (request.action === 'config-read')
           return {
             id: message.id,
-            event: { type: 'error', message: 'Shared presets changed. Reload saved settings.' },
+            event: { type: 'result', config: sections[request.section] || { revision: 0 } },
           };
-        library = {
-          revision: library.revision + 1,
-          presets: request.presets,
-          providers: request.providers || library.providers,
-        };
-      } else if (request.action === 'presets-import') {
-        library = {
-          revision: library.revision + 1,
-          presets: [...library.presets, ...request.presets],
-        };
-      }
-      return { id: message.id, event: { type: 'result', library } };
-    }) as typeof chrome.runtime.sendNativeMessage;
-    const state = {
-      requests: [] as PlanRequest[],
-      fail: false,
-      signedIn: false,
-      holdLogin: true,
-      finishLogin: () => {},
-      holdModels: true,
-      finishModels: () => {},
-      reducedCapabilities: false,
-      cancelled: false,
-      hold: false,
-      phased: false,
-      sendGeneration: (_event: PlanEvent) => {},
-      holdLogout: false,
-      finishLogout: () => {},
-    };
-    Object.assign(globalThis, { planFixture: state, scopedConfigs: sections });
-    chrome.runtime.connectNative = (() => {
-      const listeners: ((m: { id: string; event: PlanEvent }) => void)[] = [];
-      return {
-        onMessage: {
-          addListener: (fn: (m: { id: string; event: PlanEvent }) => void) => listeners.push(fn),
-        },
-        onDisconnect: { addListener: () => {} },
-        postMessage: (message: { id: string; request: PlanRequest; cancel?: boolean }) => {
-          if (message.cancel) {
-            state.cancelled = true;
-            return;
-          }
-          state.requests.push(message.request);
-          const emit = (event: PlanEvent) =>
-            listeners.forEach((fn) => fn({ id: message.id, event }));
-          const account = {
-            id: 'oaiapp_fixture',
-            label: 'Fixture account · fixture',
-            signedIn: state.signedIn,
-            planEnabled: state.signedIn,
+        if (request.action === 'config-save') {
+          if (request.revision !== (sections[request.section]?.revision || 0))
+            return {
+              id: message.id,
+              event: { type: 'error', message: 'Scoped settings changed.' },
+            };
+          sections[request.section] = { revision: request.revision + 1, value: request.value };
+          return { id: message.id, event: { type: 'result', config: sections[request.section] } };
+        }
+        if (request.action === 'presets-save') {
+          if (request.revision !== library.revision)
+            return {
+              id: message.id,
+              event: { type: 'error', message: 'Shared presets changed. Reload saved settings.' },
+            };
+          library = {
+            revision: library.revision + 1,
+            presets: request.presets,
+            connections: request.connections || library.connections,
           };
-          queueMicrotask(() => {
-            switch (message.request.action) {
-              case 'accounts':
-                emit({ type: 'result', accounts: [account] });
-                break;
-              case 'login':
-                state.finishLogin = () => {
-                  state.signedIn = true;
-                  emit({
-                    type: 'result',
-                    account: { ...account, signedIn: true, planEnabled: true },
-                  });
-                };
-                if (!state.holdLogin) state.finishLogin();
-                break;
-              case 'models':
-                state.finishModels = () =>
-                  emit({
-                    type: 'result',
-                    models: [
-                      {
-                        slug: 'plan-fixture-model',
-                        display_name: 'Plan fixture model',
-                        supportedReasoningEfforts: state.reducedCapabilities
-                          ? [{ effort: 'low', description: 'Quick' }]
-                          : [
-                              { effort: 'low', description: 'Quick' },
-                              { effort: 'high', description: 'Thorough' },
-                            ],
-                        defaultReasoningEffort: 'low',
-                        ...(state.reducedCapabilities ? {} : { fastTier: 'priority' }),
-                        isDefault: true,
-                      },
-                    ],
-                  });
-                if (!state.holdModels) state.finishModels();
-                break;
-              case 'logout':
-                state.finishLogout = () => {
-                  state.signedIn = false;
-                  emit({
-                    type: 'result',
-                    account: { ...account, signedIn: false, planEnabled: false },
-                  });
-                };
-                if (!state.holdLogout) state.finishLogout();
-                break;
-              case 'generate':
-                state.sendGeneration = emit;
-                if (state.phased) return;
-                emit({ type: 'delta', text: 'A plan-backed explanation.' });
-                if (!state.hold)
-                  emit(
-                    state.fail
-                      ? {
-                          type: 'error',
-                          message: 'ChatGPT app usage limit reached. Manage usage.',
-                          reason: 'subscription_sharing_usage_limit_exceeded',
-                        }
-                      : { type: 'complete' },
-                  );
+        } else if (request.action === 'presets-import') {
+          library = {
+            revision: library.revision + 1,
+            presets: [...library.presets, ...request.presets],
+            connections: library.connections,
+          };
+        }
+        return { id: message.id, event: { type: 'result', library } };
+      }) as typeof chrome.runtime.sendNativeMessage;
+      const state = {
+        requests: [] as PlanRequest[],
+        fail: false,
+        signedIn: false,
+        holdLogin: true,
+        finishLogin: () => {},
+        holdModels: true,
+        finishModels: () => {},
+        reducedCapabilities: false,
+        cancelled: false,
+        hold: false,
+        phased: false,
+        sendGeneration: (_event: PlanEvent) => {},
+        holdLogout: false,
+        finishLogout: () => {},
+      };
+      Object.assign(globalThis, { planFixture: state, scopedConfigs: sections });
+      chrome.runtime.connectNative = (() => {
+        const listeners: ((m: { id: string; event: PlanEvent }) => void)[] = [];
+        return {
+          onMessage: {
+            addListener: (fn: (m: { id: string; event: PlanEvent }) => void) => listeners.push(fn),
+          },
+          onDisconnect: { addListener: () => {} },
+          postMessage: (message: { id: string; request: PlanRequest; cancel?: boolean }) => {
+            if (message.cancel) {
+              state.cancelled = true;
+              return;
             }
-          });
-        },
-        disconnect: () => {},
-      } as unknown as chrome.runtime.Port;
-    }) as typeof chrome.runtime.connectNative;
-  });
+            state.requests.push(message.request);
+            const emit = (event: PlanEvent) =>
+              listeners.forEach((fn) => fn({ id: message.id, event }));
+            const account = {
+              id: 'oaiapp_fixture',
+              label: 'Fixture account · fixture',
+              signedIn: state.signedIn,
+              planEnabled: state.signedIn,
+            };
+            queueMicrotask(() => {
+              switch (message.request.action) {
+                case 'accounts':
+                  emit({ type: 'result', accounts: [account] });
+                  break;
+                case 'login':
+                  state.finishLogin = () => {
+                    state.signedIn = true;
+                    emit({
+                      type: 'result',
+                      account: { ...account, signedIn: true, planEnabled: true },
+                    });
+                  };
+                  if (!state.holdLogin) state.finishLogin();
+                  break;
+                case 'models':
+                  state.finishModels = () =>
+                    emit({
+                      type: 'result',
+                      models: [
+                        {
+                          slug: 'plan-fixture-model',
+                          display_name: 'Plan fixture model',
+                          supportedReasoningEfforts: state.reducedCapabilities
+                            ? [{ effort: 'low', description: 'Quick' }]
+                            : [
+                                { effort: 'low', description: 'Quick' },
+                                { effort: 'high', description: 'Thorough' },
+                              ],
+                          defaultReasoningEffort: 'low',
+                          ...(state.reducedCapabilities ? {} : { fastTier: 'priority' }),
+                          isDefault: true,
+                        },
+                      ],
+                    });
+                  if (!state.holdModels) state.finishModels();
+                  break;
+                case 'logout':
+                  state.finishLogout = () => {
+                    state.signedIn = false;
+                    emit({
+                      type: 'result',
+                      account: { ...account, signedIn: false, planEnabled: false },
+                    });
+                  };
+                  if (!state.holdLogout) state.finishLogout();
+                  break;
+                case 'generate':
+                  state.sendGeneration = emit;
+                  if (state.phased) return;
+                  emit({ type: 'delta', text: 'A plan-backed explanation.' });
+                  if (!state.hold)
+                    emit(
+                      state.fail
+                        ? {
+                            type: 'error',
+                            message: 'ChatGPT app usage limit reached. Manage usage.',
+                            reason: 'subscription_sharing_usage_limit_exceeded',
+                          }
+                        : { type: 'complete' },
+                    );
+              }
+            });
+          },
+          disconnect: () => {},
+        } as unknown as chrome.runtime.Port;
+      }) as typeof chrome.runtime.connectNative;
+    },
+    [...DEFAULT_CONNECTIONS],
+  );
   const resetCall = await popup.evaluate(async () =>
     chrome.runtime.sendMessage({ target: 'saul-action', message: { action: 'builtin' } }),
   );
@@ -198,16 +205,16 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   ).toEqual({ library: [] });
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await settingsSection(popup, 'Presets');
-  await popup.getByLabel('Provider', { exact: true }).selectOption('gpt-plan');
+  await popup.getByLabel('Connection', { exact: true }).selectOption('gpt-plan');
   await expect(popup.getByPlaceholder('Optional for local models')).toBeHidden();
   await expect(popup.getByLabel(/Temperature/)).toBeHidden();
-  await settingsSection(popup, 'Providers');
+  await settingsSection(popup, 'Connections');
   await popup.getByRole('button', { name: 'Continue with ChatGPT', exact: true }).click();
   await expect(
     popup.getByText('Complete sign-in in the opened tab.', { exact: true }),
   ).toBeVisible();
   await expect(popup.getByLabel('Preset', { exact: true })).toBeDisabled();
-  await expect(popup.getByLabel('Provider', { exact: true })).toBeDisabled();
+  await expect(popup.getByLabel('Connection', { exact: true })).toBeDisabled();
   await expect(popup.getByRole('button', { name: 'Cancel', exact: true })).toBeEnabled();
   const popupUrl = popup.url();
   await popup.close();
@@ -215,7 +222,7 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   await popup.goto(popupUrl);
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await settingsSection(popup, 'Presets');
-  await popup.getByLabel('Provider', { exact: true }).selectOption('gpt-plan');
+  await popup.getByLabel('Connection', { exact: true }).selectOption('gpt-plan');
   await expect(popup.getByText('ChatGPT helper connected.', { exact: true })).not.toBeVisible();
   await worker.evaluate(() => {
     (
@@ -229,7 +236,7 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   await expect(popup.getByText('Loading available models…', { exact: true })).toBeVisible();
   await expect(popup.getByLabel('ChatGPT model', { exact: true })).toBeDisabled();
   await expect(popup.getByLabel('Preset', { exact: true })).toBeDisabled();
-  await expect(popup.getByLabel('Provider', { exact: true })).toBeDisabled();
+  await expect(popup.getByLabel('Connection', { exact: true })).toBeDisabled();
   await worker.evaluate(() => {
     const fixture = (
       globalThis as unknown as {
@@ -276,7 +283,7 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   await popup.reload();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await settingsSection(popup, 'Presets');
-  await expect(popup.getByLabel('Provider', { exact: true })).toHaveValue('gpt-plan');
+  await expect(popup.getByLabel('Connection', { exact: true })).toHaveValue('gpt-plan');
   await expect(popup.getByLabel('ChatGPT model', { exact: true })).toHaveValue(
     'plan-fixture-model',
   );
@@ -394,7 +401,7 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
     (globalThis as unknown as { planFixture: { holdLogout: boolean } }).planFixture.holdLogout =
       true;
   });
-  await settingsSection(popup, 'Providers');
+  await settingsSection(popup, 'Connections');
   await popup.getByLabel('Manage accounts', { exact: true }).click();
   await popup.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(popup.getByText('Signing out…', { exact: true })).toBeVisible();
@@ -409,7 +416,7 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   ).toBeVisible();
   await settingsSection(popup, 'Presets');
   await expect(popup.getByRole('button', { name: 'Test generation', exact: true })).toBeDisabled();
-  await popup.getByLabel('Provider', { exact: true }).selectOption('openai-compatible');
+  await popup.getByLabel('Connection', { exact: true }).selectOption('openai-compatible');
   await apiConnections(popup);
   await expect(popup.getByPlaceholder('Optional for local models')).toBeVisible();
   expect(fixtureServer.requests).toHaveLength(initialApiRequests); // No fallback to the API-key provider.
@@ -421,14 +428,14 @@ test('missing ChatGPT helper shows setup recovery without altering the existing 
   const { popup } = await sandbox.launch();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await settingsSection(popup, 'Presets');
-  await popup.getByLabel('Provider', { exact: true }).selectOption('gpt-plan');
+  await popup.getByLabel('Connection', { exact: true }).selectOption('gpt-plan');
   await expect(popup.getByRole('alert')).toContainText('helper');
-  await settingsSection(popup, 'Providers');
+  await settingsSection(popup, 'Preferences');
+  await popup.getByText('Integrations', { exact: true }).click();
+  await popup.getByText('ChatGPT helper setup', { exact: true }).click();
   await expect(popup.getByText('pnpm native:install', { exact: false })).toBeVisible();
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(popup.getByRole('alert').filter({ hasText: 'Enter a model name' })).toBeVisible();
   await settingsSection(popup, 'Presets');
-  await popup.getByLabel('Provider', { exact: true }).selectOption('openai-compatible');
+  await popup.getByLabel('Connection', { exact: true }).selectOption('openai-compatible');
   await apiConnections(popup);
   await expect(popup.getByPlaceholder('Optional for local models')).toBeVisible();
 });

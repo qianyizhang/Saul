@@ -25,6 +25,7 @@ final class HTTPFixture: @unchecked Sendable {
     private var pending: [(FixtureProtocol, HTTPReply)] = []
     private var released = false
     private var closed = false
+    private var catalogIDs: [String]?
     private let handler: (URLRequest) throws -> HTTPReply
     let received = CheckSignal()
     let session: URLSession
@@ -32,6 +33,12 @@ final class HTTPFixture: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return recorded
+    }
+    /// An explicit prerequisite for generation-only cases. Catalog behavior has its own cases.
+    func installModelCatalog(_ ids: [String]) {
+        lock.lock()
+        defer { lock.unlock() }
+        catalogIDs = ids
     }
     init(_ handler: @escaping (URLRequest) throws -> HTTPReply) {
         self.handler = handler
@@ -52,6 +59,16 @@ final class HTTPFixture: @unchecked Sendable {
         return registry[id]
     }
     fileprivate func respond(to transport: FixtureProtocol) {
+        lock.lock()
+        let catalog = catalogIDs
+        lock.unlock()
+        if transport.request.httpMethod == "GET", transport.request.url?.path == "/v1/models", let catalog {
+            do {
+                let data = try JSONSerialization.data(withJSONObject: ["data": catalog.map { ["id": $0] }])
+                transport.deliver(HTTPReply(String(decoding: data, as: UTF8.self)))
+            } catch { transport.fail(error) }
+            return
+        }
         defer { Task { await received.signal() } }
         lock.lock()
         recorded.append(transport.request)

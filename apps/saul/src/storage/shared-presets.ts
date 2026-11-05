@@ -1,7 +1,4 @@
-import {
-  resolveSharedPresets,
-  validateScopedConfigValue,
-} from '../../native/shared-presets-contract.mts';
+import { validateScopedConfigValue } from '../../native/shared-presets-contract.mts';
 import { scopedCall, portableSettings, restoreSettings } from './scoped-config';
 import type { UserSettings, ModelPreset } from '../types';
 import type { SharedPreset, SharedPresets } from '../../native/shared-presets-contract.mts';
@@ -23,7 +20,7 @@ async function sharedCall(request: PresetRequest): Promise<SharedPresets> {
   });
   if (reply?.event?.type === 'error') throw new Error(reply.event.message);
   validatePlanResult(request, reply?.event);
-  return resolveSharedPresets(reply.event.library);
+  return reply.event.library;
 }
 
 // Stable migration IDs leave saved attempts untouched and keep recipe references together.
@@ -56,7 +53,7 @@ const portable = (p: ModelPreset): SharedPreset => ({
   model: p.model,
   effort: p.effort ?? '',
   fast: p.fast ?? false,
-  ...(p.providerKey ? { providerKey: p.providerKey } : {}),
+  ...(p.connectionKey ? { connectionKey: p.connectionKey } : {}),
   ...(p.capability ? { capability: p.capability } : {}),
   ...(p.imageOptions ? { imageOptions: p.imageOptions } : {}),
   ...(p.speechOptions ? { speechOptions: p.speechOptions } : {}),
@@ -68,19 +65,19 @@ const definitions = (settings: UserSettings) =>
 
 function project(settings: UserSettings, library: SharedPresets): UserSettings {
   const configuration = configurationFor(settings);
-  const providers = structuredClone(library.providers);
-  const providerConnections = { ...settings.providerConnections };
+  const connections = structuredClone(library.connections);
+  const connectionProfiles = { ...settings.connectionProfiles };
   // Adopt only the already-selected official OpenAI connection. Never borrow a key from another endpoint.
   if (
-    !providerConnections['openai-api'] &&
+    !connectionProfiles['openai-api'] &&
     settings.openaiCompatible.baseUrl.replace(/\/+$/, '') === 'https://api.openai.com/v1'
   )
-    providerConnections['openai-api'] = settings.activeProfileId || 'default';
+    connectionProfiles['openai-api'] = settings.activeProfileId || 'default';
   return {
     ...settings,
-    providerConnections,
+    connectionProfiles,
     sharedPresetRevision: library.revision,
-    providers,
+    connections,
     configuration: {
       ...configuration,
       presets: [
@@ -89,18 +86,19 @@ function project(settings: UserSettings, library: SharedPresets): UserSettings {
           ...p,
           id: p.id.toLowerCase(),
           provider:
-            !p.providerKey ||
-            providers.find((provider) => provider.key === p.providerKey)?.kind === 'chatgpt-plan'
+            !p.connectionKey ||
+            connections.find((connection) => connection.key === p.connectionKey)?.kind ===
+              'chatgpt-plan'
               ? 'chatgpt-plan'
               : 'openai-compatible',
-          ...(p.providerKey
+          ...(p.connectionKey
             ? {
                 shared: true,
                 profileId:
-                  providers.find((provider) => provider.key === p.providerKey)?.kind ===
+                  connections.find((connection) => connection.key === p.connectionKey)?.kind ===
                   'chatgpt-plan'
                     ? undefined
-                    : providerConnections[p.providerKey] || p.providerKey,
+                    : connectionProfiles[p.connectionKey] || p.connectionKey,
               }
             : {}),
         })),
@@ -157,7 +155,7 @@ export const sharedPresets = {
       revision: settings.scopedConfigRevision,
       presetRevision: settings.sharedPresetRevision,
       presets,
-      providers: settings.providers,
+      connections: settings.connections,
       value: portableSettings(settings),
     } as const;
     const reply = await chrome.runtime.sendNativeMessage(PLAN_HOST, {
@@ -166,7 +164,7 @@ export const sharedPresets = {
     });
     if (reply?.event?.type === 'error') throw new Error(reply.event.message);
     validatePlanResult(request, reply?.event);
-    const projected = project(settings, resolveSharedPresets(reply.event.library));
+    const projected = project(settings, reply.event.library);
     return { ...projected, scopedConfigRevision: reply.event.config.revision };
   },
 };

@@ -12,20 +12,6 @@ public enum GenerationProviderID: String, Codable, Sendable {
     }
 }
 
-public struct ImageModelOption: Identifiable, Sendable {
-    public let id: String
-    public let name: String
-    public static let openAIModels = [
-        ImageModelOption(id: "gpt-image-2.6-flare", name: "GPT Image 2.6 Flare"),
-        ImageModelOption(id: "gpt-image-2.6-sunburst", name: "GPT Image 2.6 Sunburst"),
-        ImageModelOption(id: "gpt-image-2.5-flare", name: "GPT Image 2.5 Flare"),
-        ImageModelOption(id: "gpt-image-2.5-sunburst", name: "GPT Image 2.5 Sunburst"),
-    ]
-    public static let formats = ["png", "gif"]
-    public static let sizes = ["1024x1024", "1536x1024", "1024x1536"]
-    public static let qualities = ["low", "medium", "high"]
-}
-
 /// Provider identity, credential resolution and supported operations have one owner.
 /// Transport clients know HTTP; actions request a capability without receiving credentials.
 @MainActor public final class GenerationProvider {

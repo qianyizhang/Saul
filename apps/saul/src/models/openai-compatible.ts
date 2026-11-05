@@ -5,6 +5,7 @@ export interface OpenAICompatibleConfig {
   baseUrl: string;
   apiKey: string;
   credentialOwner?: 'saul';
+  connectionKey?: string;
   model: string;
   temperature?: number;
   maxTokens?: number;
@@ -18,6 +19,7 @@ export async function* streamOpenAICompatible(
 ): AsyncGenerator<ModelEvent, void, unknown> {
   if (config.credentialOwner === 'saul') {
     if (
+      !config.connectionKey &&
       !['https://api.openai.com/v1', 'https://api.openai.com/v1/chat/completions'].includes(
         config.baseUrl.replace(/\/+$/, ''),
       )
@@ -26,6 +28,7 @@ export async function* streamOpenAICompatible(
     for await (const event of credentialEvents(
       {
         action: 'api-chat',
+        ...(config.connectionKey ? { connectionKey: config.connectionKey } : {}),
         model: config.model,
         systemPrompt,
         userPrompt,
@@ -51,7 +54,7 @@ export async function* streamOpenAICompatible(
   }
 
   const body = {
-    model: config.model || 'gpt-4o-mini',
+    model: config.model,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },

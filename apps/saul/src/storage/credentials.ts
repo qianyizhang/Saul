@@ -50,7 +50,7 @@ export const nativeCredentialAccess: CredentialAccess = {
     const adopting = current.sharedCredentials !== 'saul';
     if (adopting) {
       const status = await nativeCredentialCall({ action: 'status' });
-      const selected = settings.providerConnections?.['openai-api'] || settings.activeProfileId;
+      const selected = settings.connectionProfiles?.['openai-api'] || settings.activeProfileId;
       const profile = settings.profiles?.find((p) => p.id === selected);
       const source = profile?.config ?? settings.openaiCompatible;
       if (officialOpenAI(source.baseUrl) && source.apiKey.trim())

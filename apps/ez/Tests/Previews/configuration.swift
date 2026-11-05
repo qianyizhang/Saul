@@ -18,6 +18,32 @@ import SwiftUI
             ])!
         ]
         var config = Configuration.starters(model: "fixture-luna", effort: "medium", fast: true)
+        config.connections[0].accountId = "fixture-account"
+        config.connections[1].baseUrl = "https://api.openai.com/v1"
+        model.signedIn = true
+        model.apiConnected = true
+        model.connectionStatuses = [
+            "gpt-plan": ConnectionStatus(connected: true, identity: "alex@example.com", signedIn: true),
+            "openai-api": ConnectionStatus(
+                connected: true, endpoint: "https://api.openai.com/v1", keySuffix: "7K2m"),
+        ]
+        model.connectionCatalogs = [
+            "gpt-plan": ConnectionCatalog(
+                models: [
+                    ConnectionModel(
+                        id: "fixture-luna", name: "Luna (offline fixture)", capabilities: [.write],
+                        efforts: ["low", "medium", "high"], defaultEffort: "low", fastTier: "priority")
+                ], fetchedAt: Date().timeIntervalSince1970),
+            "openai-api": ConnectionCatalog(
+                models: [
+                    ConnectionModel(id: "gpt-image-fixture", capabilities: [.draw]),
+                    ConnectionModel(id: "gpt-realtime-fixture", capabilities: [.speak]),
+                ], fetchedAt: Date().timeIntervalSince1970),
+        ]
+        config.presets.append(
+            ModelPreset(
+                name: "Speak", model: "gpt-realtime-fixture", effort: "", fast: false,
+                connectionKey: "openai-api", capability: .speak, speechOptions: SpeechOptions()))
         config.presets[0].name = "lit"
         config.presets.append(ModelPreset(name: "steady", model: "fixture-luna", effort: "high", fast: false))
         do { try model.saveConfiguration(config) } catch { model.error = error.localizedDescription }

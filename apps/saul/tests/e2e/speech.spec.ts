@@ -7,12 +7,15 @@ test('Speak preview uses its saved API preset, stops on navigation and retains n
   sandbox,
 }, info) => {
   const { worker, popup } = await sandbox.launch();
+  await popup.route('https://api.openai.com/v1/models', (route) =>
+    route.fulfill({ json: { data: [{ id: 'gpt-realtime-2.1-mini' }] } }),
+  );
   const settings = structuredClone(DEFAULT_SETTINGS);
   settings.configuration!.presets.push({
     id: 'speech-preset',
     name: 'Voice preview',
     provider: 'openai-compatible',
-    providerKey: 'openai-api',
+    connectionKey: 'openai-api',
     capability: 'speak',
     model: 'gpt-realtime-2.1-mini',
     speechOptions: { voice: 'marin' },
@@ -25,7 +28,7 @@ test('Speak preview uses its saved API preset, stops on navigation and retains n
       config: { ...settings.openaiCompatible, apiKey: 'fixture-key' },
     },
   ];
-  settings.providerConnections = { 'openai-api': 'official' };
+  settings.connectionProfiles = { 'openai-api': 'official' };
   await worker.evaluate(async (settings) => {
     await chrome.storage.local.set({ saul_user_settings: settings });
     const fixture = { mode: 'hold', tokenRequests: 0, requests: [] as unknown[], closed: 0 };
@@ -153,24 +156,36 @@ test('creates a Speak preset through its editor and keeps API setup in Providers
   sandbox,
 }, info) => {
   const { popup } = await sandbox.launch();
+  await popup.route('https://api.openai.com/v1/models', (route) =>
+    route.fulfill({ json: { data: [{ id: 'gpt-realtime-2.1-mini' }] } }),
+  );
+  await popup.evaluate(async (defaults) => {
+    const settings = structuredClone(defaults);
+    settings.openaiCompatible.apiKey = 'fixture-no-network';
+    await chrome.storage.local.set({ saul_user_settings: settings });
+  }, DEFAULT_SETTINGS);
   await popup.setViewportSize({ width: 390, height: 850 });
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await settingsSection(popup, 'Presets');
   await popup.getByRole('button', { name: 'Add preset', exact: true }).click();
   await popup.getByLabel('Preset name', { exact: true }).fill('Narration');
-  await popup.getByLabel('Provider', { exact: true }).selectOption('openai-api');
+  await popup.getByLabel('Connection', { exact: true }).selectOption('openai-api');
   await popup.getByLabel('Capability', { exact: true }).selectOption('speak');
+  await expect(
+    popup.getByLabel('Speech model').locator('option[value="gpt-realtime-2.1-mini"]'),
+  ).toHaveCount(1);
+  await popup.getByLabel('Speech model').selectOption('gpt-realtime-2.1-mini');
   await expect(popup.getByLabel('Speech model')).toHaveValue('gpt-realtime-2.1-mini');
   await popup.getByLabel('Speech voice').selectOption('cedar');
   await expect(popup.getByLabel('API key', { exact: true })).toBeHidden();
-  await settingsSection(popup, 'Providers');
-  await popup.getByLabel('Edit provider', { exact: true }).selectOption('openai-api');
+  await settingsSection(popup, 'Connections');
+  await popup.getByLabel('Edit connection', { exact: true }).selectOption('openai-api');
   await popup.getByLabel('API key', { exact: true }).fill('fixture-only-no-network');
   await expect(popup.getByLabel('Speech model')).toBeHidden();
   for (const minimum of [true, false]) {
     await settingsSection(popup, 'Preferences');
     await popup.getByRole('checkbox', { name: /Min Mode/ }).setChecked(minimum);
-    await settingsSection(popup, 'Providers');
+    await settingsSection(popup, 'Connections');
     for (const width of [390, 1100])
       for (const colorScheme of ['light', 'dark'] as const) {
         await popup.setViewportSize({ width, height: 1350 });

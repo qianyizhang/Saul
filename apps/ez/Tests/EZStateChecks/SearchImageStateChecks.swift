@@ -11,10 +11,14 @@ import Foundation
             let shared = directory.appendingPathComponent("shared")
             var config = Configuration.starters(model: "fixture", effort: "", fast: false)
             config.addIllustration()
+            for index in config.presets.indices where config.presets[index].capability == .draw {
+                config.presets[index].model = "gpt-image-2.6-flare"
+            }
             try ConfigurationStore(directory: local).save(config)
             let action = config.actions.first { $0.capability == .draw }!
             let preset = config.presets.first { $0.id == action.presetID }!
-            var entry = try action.prepare(values: ["context": "Tree"], preset: preset, models: [])
+            var entry = try action.prepare(
+                values: ["context": "Tree"], preset: preset, models: [], provider: .openAIAPI)
             entry.imageData = fixturePNG
             entry.status = "completed"
             let store = try HistoryStore(directory: shared)
@@ -145,6 +149,13 @@ import Foundation
                 }, append: { try store.append($0) })
             var config = Configuration.starters(model: "fixture", effort: "low", fast: false)
             config.addSearchAndMeme()
+            for index in config.presets.indices where config.presets[index].model.isEmpty {
+                config.presets[index].model =
+                    config.presets[index].capability == .draw ? "gpt-image-2.6-flare" : "test"
+            }
+            for index in config.presets.indices where config.presets[index].capability == .draw {
+                config.presets[index].model = "gpt-image-2.6-flare"
+            }
             try ConfigurationStore(directory: directory).save(config)
             let model = AppModel(directory: directory, offline: true, attemptExecution: execution)
             defer { model.shutdown() }
@@ -152,7 +163,7 @@ import Foundation
             model.chooseAction(config.actions.first { $0.webSearch }!.id)
             model.query = "Question"
             try expect(
-                model.compatiblePresets.allSatisfy { $0.providerKey == "openai-api" },
+                model.compatiblePresets.allSatisfy { $0.connectionKey == "openai-api" },
                 "Plan presets offered for search")
             let done = CheckSignal()
             let observer = model.$busy.dropFirst().filter { !$0 }.sink { _ in Task { await done.signal() } }
@@ -171,6 +182,9 @@ import Foundation
 @MainActor private func newMemeModel(_ directory: URL, execution: AttemptExecution) throws -> AppModel {
     var config = Configuration.starters(model: "fixture", effort: "low", fast: false)
     config.addSearchAndMeme()
+    for index in config.presets.indices where config.presets[index].capability == .draw {
+        config.presets[index].model = "gpt-image-2.6-flare"
+    }
     try ConfigurationStore(directory: directory).save(config)
     let model = AppModel(directory: directory, offline: true, attemptExecution: execution)
     model.apiConnected = true

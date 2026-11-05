@@ -268,7 +268,6 @@ it('a model preset uses the selected local account and freezes it for retries', 
     id: 'preset-current',
     name: 'Plan',
     provider: 'chatgpt-plan',
-    accountId: 'saved-account',
     model: 'plan-model',
     effort: 'high',
     fast: true,
@@ -309,7 +308,7 @@ it('blocks shared API options before transport rather than silently discarding t
   const settings = configured();
   const preset = configurationFor(settings).presets[0]!;
   for (const options of [{ effort: 'low' }, { fast: true }]) {
-    const request = { ...preset, ...options, providerKey: 'openai-api', shared: true };
+    const request = { ...preset, ...options, connectionKey: 'openai-api', shared: true };
     expect(() => preparePreset(settings, request)).toThrow('Run it in EZ');
     expect(projectPresetForEditing(settings, request).activeProvider).toBe('openai-compatible');
   }

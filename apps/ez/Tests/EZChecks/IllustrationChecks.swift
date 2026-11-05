@@ -6,7 +6,7 @@ import Foundation
     [
         CheckCase("illustration: one explicit image request with frozen context and API credentials") { _ in
             let input = ImageGenerationRequest(
-                prompt: "Illustrate roots exchanging nutrients. 中文\nWatercolor")
+                prompt: "Illustrate roots exchanging nutrients. 中文\nWatercolor", model: "gpt-image-2.6-flare")
             let fixture = HTTPFixture { request in
                 try expectEqual(
                     request.url?.absoluteString, "https://api.openai.com/v1/images/generations",
@@ -78,7 +78,8 @@ import Foundation
             defer { fixture.close() }
             let client = ImagesClient(session: fixture.session)
             let output = try await client.generate(
-                ImageGenerationRequest(prompt: "A waving tree, looping", outputFormat: "gif"),
+                ImageGenerationRequest(
+                    prompt: "A waving tree, looping", model: "gpt-image-2.6-flare", outputFormat: "gif"),
                 apiKey: "sk-fixture")
             try expectEqual(output, gif, "Animation bytes changed")
             let store = try HistoryStore(directory: directory)
@@ -91,7 +92,7 @@ import Foundation
             for input in [
                 ImageGenerationRequest(prompt: "Tree", model: "gpt-image-2.5-flare", outputFormat: "gif"),
                 ImageGenerationRequest(
-                    prompt: "Tree", outputFormat: "gif",
+                    prompt: "Tree", model: "gpt-image-2.6-flare", outputFormat: "gif",
                     image: try ImageAttachment(data: fixturePNG, name: "source.png")),
             ] {
                 try await expectAsyncThrows(EZError.self) {
@@ -109,12 +110,14 @@ import Foundation
             defer { fixture.close() }
             let client = ImagesClient(session: fixture.session)
             for input in [
-                ImageGenerationRequest(prompt: " \n"),
-                ImageGenerationRequest(prompt: String(repeating: "x", count: 32_001)),
-                ImageGenerationRequest(prompt: String(repeating: "e\u{301}", count: 16_001)),
-                ImageGenerationRequest(prompt: "Tree", model: "unknown"),
-                ImageGenerationRequest(prompt: "Tree", size: "4096x4096"),
-                ImageGenerationRequest(prompt: "Tree", quality: "max"),
+                ImageGenerationRequest(prompt: " \n", model: "gpt-image-2.6-flare"),
+                ImageGenerationRequest(
+                    prompt: String(repeating: "x", count: 32_001), model: "gpt-image-2.6-flare"),
+                ImageGenerationRequest(
+                    prompt: String(repeating: "e\u{301}", count: 16_001), model: "gpt-image-2.6-flare"),
+                ImageGenerationRequest(prompt: "Tree", model: ""),
+                ImageGenerationRequest(prompt: "Tree", model: "gpt-image-2.6-flare", size: "4096x4096"),
+                ImageGenerationRequest(prompt: "Tree", model: "gpt-image-2.6-flare", quality: "max"),
             ] {
                 try await expectAsyncThrows(EZError.self) {
                     _ = try await client.generate(input, apiKey: "sk-test")
@@ -122,7 +125,8 @@ import Foundation
             }
             try await expectAsyncThrows(EZError.self) {
                 _ = try await client.generate(
-                    ImageGenerationRequest(prompt: "Tree"), apiKey: "key\r\nInjected: header")
+                    ImageGenerationRequest(prompt: "Tree", model: "gpt-image-2.6-flare"),
+                    apiKey: "key\r\nInjected: header")
             }
             try expectEqual(fixture.requests.count, 0, "Validation sent a request")
         },
@@ -139,7 +143,8 @@ import Foundation
                 defer { fixture.close() }
                 let error = try await expectAsyncThrows(EZError.self) {
                     _ = try await ImagesClient(session: fixture.session).generate(
-                        ImageGenerationRequest(prompt: "Tree"), apiKey: "sk-test")
+                        ImageGenerationRequest(prompt: "Tree", model: "gpt-image-2.6-flare"),
+                        apiKey: "sk-test")
                 }
                 try expect(error.localizedDescription.contains(hint), "Missing actionable recovery")
                 try expect(!error.localizedDescription.contains("sk-test"), "Provider echoed a credential")
@@ -171,7 +176,7 @@ import Foundation
                 EZError.self, matching: { $0.localizedDescription.contains("too large") }
             ) {
                 _ = try await ImagesClient(session: fixture.session).generate(
-                    ImageGenerationRequest(prompt: "Tree"), apiKey: "sk-test")
+                    ImageGenerationRequest(prompt: "Tree", model: "gpt-image-2.6-flare"), apiKey: "sk-test")
             }
         },
         CheckCase("illustration: cancelling an in-flight HTTP request never publishes an image") { _ in
@@ -179,7 +184,7 @@ import Foundation
             defer { fixture.close() }
             let task = Task {
                 try await ImagesClient(session: fixture.session).generate(
-                    ImageGenerationRequest(prompt: "Tree"), apiKey: "sk-test")
+                    ImageGenerationRequest(prompt: "Tree", model: "gpt-image-2.6-flare"), apiKey: "sk-test")
             }
             try await fixture.received.wait()
             task.cancel()

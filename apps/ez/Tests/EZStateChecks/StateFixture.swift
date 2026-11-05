@@ -37,7 +37,7 @@ import Foundation
     func snapshot() throws -> HistoryEntry {
         try multi.prepare(
             values: ["fuzzy term": "elicit", "fuzzy context": "draw out"],
-            preset: alternate, models: model.models)
+            preset: alternate, models: model.models, provider: .chatGPTPlan)
     }
     func selectLookup() throws -> HistoryEntry {
         let entry = try snapshot()

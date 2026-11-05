@@ -36,7 +36,12 @@ export function initSpeechBridge(currentSettings: () => Promise<UserSettings>) {
             ? {
                 authorize: async () => {
                   const result = await credentialCall(
-                    { action: 'api-realtime', model: request.model, voice: request.voice },
+                    {
+                      action: 'api-realtime',
+                      model: request.model,
+                      voice: request.voice,
+                      connectionKey: request.connectionKey,
+                    },
                     signal,
                   );
                   if (typeof result.clientSecret !== 'string')

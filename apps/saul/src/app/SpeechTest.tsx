@@ -50,7 +50,7 @@ export function SpeechTest({
       const blob = await requestSpeech(
         {
           presetId: preset.id,
-          providerKey: preset.providerKey ?? '',
+          connectionKey: preset.connectionKey ?? '',
           model: preset.model,
           voice: preset.speechOptions?.voice ?? 'marin',
           input,

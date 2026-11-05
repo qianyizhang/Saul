@@ -774,11 +774,15 @@ it('installs a standalone plan host with its verifier dependency and exchanges f
   expect(manifest.allowed_origins).toEqual([`chrome-extension://${'a'.repeat(32)}/`]);
   const child = spawn(manifest.path, [`chrome-extension://${'a'.repeat(32)}/`]);
   const stopped = once(child, 'exit');
+  let stderr = '';
+  child.stderr.on('data', (chunk: Buffer) => {
+    stderr += chunk.toString();
+  });
   try {
     const result = await new Promise((resolve, reject) => {
       const decode = nativeDecoder(resolve);
       child.once('error', reject);
-      child.once('exit', () => reject(new Error('Host exited before responding')));
+      child.once('exit', () => reject(new Error(`Host exited before responding: ${stderr}`)));
       child.stdout.on('data', decode);
       child.stdin.write(encodeNative({ id: 'test', request: { action: 'accounts' } }));
     });

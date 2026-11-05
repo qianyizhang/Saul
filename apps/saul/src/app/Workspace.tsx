@@ -4,7 +4,6 @@ import { Library } from './Library';
 import { Settings } from './Settings';
 import { Tabs } from './Tabs';
 import { SummaryHistory, SummaryReader } from './Summaries';
-import { NativeBridge } from './NativeBridge';
 import { useMinimumMode } from './useMinimumMode';
 import { PresentationSettings } from './PresentationSettings';
 import { NotificationSettings } from './NotificationSettings';
@@ -167,15 +166,6 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
               section={settingsSection}
               onSectionChange={setSettingsSection}
             />
-            <section
-              hidden={settingsSection !== 'connections'}
-              className="settings-section"
-              aria-label="Connections"
-            >
-              <h3>Connections</h3>
-              <p className="small muted standard-only">Access changes save immediately.</p>
-              <NativeBridge />
-            </section>
           </div>
         </div>
       )}

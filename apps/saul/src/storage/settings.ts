@@ -1,7 +1,5 @@
-import {
-  DEFAULT_PROVIDERS,
-  validateSharedProviders,
-} from '../../native/shared-presets-contract.mts';
+import { upgradeConnectionSettings } from '../../native/connection-migration.mts';
+import { DEFAULT_CONNECTIONS, validateConnections } from '../../native/shared-presets-contract.mts';
 import { officialOpenAI } from '../../native/credentials-contract.mts';
 import type { UserSettings } from '../types';
 import { DEFAULT_SYSTEM_PROMPT } from '../models/prompts';
@@ -10,12 +8,12 @@ import { normalizeConfiguration, starterConfiguration } from '../models/configur
 import { validateSettingsRequest, type SettingsState } from '../contracts/settings';
 
 const DEFAULT_CONNECTION_SETTINGS: UserSettings = {
-  providers: structuredClone([...DEFAULT_PROVIDERS]),
+  connections: structuredClone([...DEFAULT_CONNECTIONS]),
   activeProvider: 'openai-compatible',
   openaiCompatible: {
     baseUrl: 'https://api.openai.com/v1',
     apiKey: '',
-    model: 'gpt-4o-mini',
+    model: '',
     temperature: 0.3,
   },
   chromeAi: {
@@ -129,15 +127,15 @@ export function normalizeSettings(value: unknown): UserSettings {
       ? undefined
       : (() => {
           if (!Array.isArray(stored.profiles))
-            throw new Error('Saved provider profiles must be a list.');
+            throw new Error('Saved API profiles must be a list.');
           const ids = new Set<string>();
           return stored.profiles.map((value, index) => {
-            const profile = record(value, `provider profile ${index + 1}`);
+            const profile = record(value, `API profile ${index + 1}`);
             const id = optionalString(profile.id, 'profile ID');
             const name = optionalString(profile.name, 'profile name');
             if (!id || name === undefined)
-              throw new Error('Saved provider profiles require an ID and name.');
-            if (ids.has(id)) throw new Error('Saved provider profile IDs must be unique.');
+              throw new Error('Saved API profiles require an ID and name.');
+            if (ids.has(id)) throw new Error('Saved API profile IDs must be unique.');
             ids.add(id);
             return { id, name, config: normalizeRemoteConfig(profile.config) };
           });
@@ -177,28 +175,28 @@ export function normalizeSettings(value: unknown): UserSettings {
   if (summaryPdfProcessing !== 'attachment' && summaryPdfProcessing !== 'local')
     throw new Error('Saved PDF processing must be attachment or local.');
 
-  if (stored.providers !== undefined) validateSharedProviders(stored.providers);
-  let providerConnections: Record<string, string> | undefined;
-  if (stored.providerConnections !== undefined) {
-    const bindings = record(stored.providerConnections, 'Provider connections');
+  if (stored.connections !== undefined) validateConnections(stored.connections);
+  let connectionProfiles: Record<string, string> | undefined;
+  if (stored.connectionProfiles !== undefined) {
+    const bindings = record(stored.connectionProfiles, 'Connection profiles');
     if (
       Object.entries(bindings).some(
         ([key, id]) =>
           !/^[a-z][a-z0-9-]{0,63}$/.test(key) || typeof id !== 'string' || !id || id.length > 128,
       )
     )
-      throw new Error('Invalid local provider connection.');
-    providerConnections = bindings as Record<string, string>;
+      throw new Error('Invalid local connection profile.');
+    connectionProfiles = bindings as Record<string, string>;
   }
   const settings: UserSettings = {
     ...DEFAULT_SETTINGS,
     ...(stored.sharedCredentials === undefined
       ? {}
       : { sharedCredentials: stored.sharedCredentials as 'saul' | 'disconnected' }),
-    providers: structuredClone(
-      stored.providers === undefined ? DEFAULT_SETTINGS.providers : stored.providers,
+    connections: structuredClone(
+      stored.connections === undefined ? DEFAULT_SETTINGS.connections : stored.connections,
     ),
-    ...(providerConnections === undefined ? {} : { providerConnections }),
+    ...(connectionProfiles === undefined ? {} : { connectionProfiles }),
     summaryPdfProcessing,
     scopedConfigRevision: optionalNumber(stored.scopedConfigRevision, 'scoped config revision'),
     ...(stored.sharedPresetRevision === undefined
@@ -301,8 +299,6 @@ function validateEndpoint(baseUrl: string): URL {
 /** Connection editing validates syntax; credentials and model availability belong to Run. */
 export function validateSettingsConnections(settings: UserSettings): void {
   if (settings.activeProvider === 'chrome-ai') throw new Error(CHROME_AI_RETIRED_MESSAGE);
-  if (settings.activeProvider === 'openai-compatible' && !settings.openaiCompatible.model.trim())
-    throw new Error('Enter a model name available from this provider.');
   for (const profile of settings.profiles ?? [])
     if (profile.config.baseUrl) validateEndpoint(profile.config.baseUrl);
 }
@@ -315,7 +311,7 @@ export function validateProviderSettings(settings: UserSettings): URL | undefine
       (settings.activeProvider === 'chatgpt-plan' ||
         officialOpenAI(settings.openaiCompatible.baseUrl)))
   )
-    throw new Error('Connect this app to Saul credentials in Providers.');
+    throw new Error('Connect this app in Settings → Preferences → Integrations.');
   if (settings.activeProvider === 'chrome-ai') throw new Error(CHROME_AI_RETIRED_MESSAGE);
   if (settings.activeProvider === 'chatgpt-plan') {
     if (!settings.chatgptPlan?.accountId || !settings.chatgptPlan.model.trim())
@@ -335,7 +331,13 @@ export function isLoopbackEndpoint(endpoint: URL): boolean {
 async function readStoredSettings(): Promise<unknown> {
   try {
     const result = await chrome.storage.local.get(SETTINGS_STORAGE_KEY);
-    return result[SETTINGS_STORAGE_KEY];
+    const stored: unknown = result[SETTINGS_STORAGE_KEY];
+    const upgraded = upgradeConnectionSettings(stored);
+    if (JSON.stringify(stored) !== JSON.stringify(upgraded)) {
+      normalizeSettings(upgraded);
+      await chrome.storage.local.set({ [SETTINGS_STORAGE_KEY]: upgraded });
+    }
+    return upgraded;
   } catch (err) {
     throw new Error('Could not read saved settings. Reload Saul and try again.', { cause: err });
   }
@@ -399,7 +401,13 @@ export function createSettingsOwner(
     const request: unknown = structuredClone(value);
     const result = pending.then(async (): Promise<SettingsState> => {
       validateSettingsRequest(request);
-      const stored = await storage.read();
+      let stored = await storage.read();
+      const upgraded = upgradeConnectionSettings(stored);
+      if (JSON.stringify(stored) !== JSON.stringify(upgraded)) {
+        normalizeSettings(upgraded);
+        await storage.write({ [SETTINGS_STORAGE_KEY]: upgraded });
+        stored = upgraded;
+      }
       let loaded: UserSettings | undefined;
       try {
         loaded = settingsFromStored(stored);
@@ -407,7 +415,7 @@ export function createSettingsOwner(
       } catch (error) {
         if (!(error instanceof InvalidStoredSettingsError)) throw error;
       }
-      // The only migration write: retain remapped recipe IDs and migration revisions.
+      // Initial shared adoption: retain remapped action IDs and migration revisions.
       if (
         request.action === 'read' &&
         shared &&

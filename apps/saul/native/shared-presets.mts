@@ -1,3 +1,4 @@
+import { upgradeConnectionDocument } from './connection-migration.mts';
 import {
   mkdirSync,
   readFileSync,
@@ -19,9 +20,10 @@ import {
   validScopedConfig,
   validateScopedConfigValue,
   validateSharedPresets,
-  validateSharedProviders,
-  DEFAULT_PROVIDERS,
-  type SharedProvider,
+  validateConnections,
+  validateConnectionChanges,
+  DEFAULT_CONNECTIONS,
+  type ConnectionDefinition,
   type SharedPreset,
   type SharedPresets,
 } from './shared-presets-contract.mts';
@@ -51,7 +53,8 @@ export class SharedPresetsStore {
       chmodSync(lockPath, 0o600);
       lock.exec('PRAGMA busy_timeout=5000; BEGIN IMMEDIATE');
       try {
-        const document = this.document();
+        const document = upgradeConnectionDocument(this.document());
+        this.library(document);
         const result = change(document);
         this.writeDocument(document);
         return result;
@@ -73,8 +76,14 @@ export class SharedPresetsStore {
     if (!isRecord(value)) throw new Error('Shared settings must be a JSON object.');
     return value;
   }
+  private readDocument(): Record<string, unknown> {
+    const original = this.document();
+    const upgraded = upgradeConnectionDocument(original);
+    if (JSON.stringify(original) === JSON.stringify(upgraded)) return original;
+    return this.update((document) => document);
+  }
   readScope(section: string): import('./shared-presets-contract.mts').ScopedConfig {
-    return this.scope(this.document(), section);
+    return this.scope(this.readDocument(), section);
   }
   private scope(
     document: Record<string, unknown>,
@@ -129,37 +138,35 @@ export class SharedPresetsStore {
     }
   }
   read(): SharedPresets {
-    return this.library(this.document());
+    return this.library(this.readDocument());
   }
   private library(document: Record<string, unknown>): SharedPresets {
     const value = document.modelPresets;
-    const apps = isRecord(document.apps) ? document.apps : {};
-    const ez = isRecord(apps.ez) ? apps.ez : {};
-    const scope = isRecord(ez.configuration) ? ez.configuration : {};
-    const configuration = isRecord(scope.value) ? scope.value : {};
-    const providers =
-      isRecord(value) && value.providers !== undefined
-        ? value.providers
-        : (configuration.providers ?? structuredClone([...DEFAULT_PROVIDERS]));
-    validateSharedProviders(providers);
-    if (value === undefined) return { revision: 0, presets: [], providers };
+    if (value === undefined)
+      return { revision: 0, presets: [], connections: structuredClone([...DEFAULT_CONNECTIONS]) };
+    const connections = isRecord(value) ? value.connections : undefined;
+    validateConnections(connections);
     if (!isRecord(value) || !Number.isSafeInteger(value.revision) || Number(value.revision) < 0)
       throw new Error('Shared presets could not be read. The original file is preserved.');
     validateSharedPresets(value.presets);
     return {
       revision: Number(value.revision),
-      providers,
+      connections,
       presets: value.presets.map((p) => ({ ...p, id: p.id.toLowerCase() })),
     };
   }
-  save(revision: number, presets: SharedPreset[], providers?: SharedProvider[]): SharedPresets {
-    return this.update((document) => this.setPresets(document, revision, presets, providers));
+  save(
+    revision: number,
+    presets: SharedPreset[],
+    connections?: ConnectionDefinition[],
+  ): SharedPresets {
+    return this.update((document) => this.setPresets(document, revision, presets, connections));
   }
   private setPresets(
     document: Record<string, unknown>,
     revision: number,
     presets: SharedPreset[],
-    providers?: SharedProvider[],
+    connections?: ConnectionDefinition[],
   ): SharedPresets {
     validateSharedPresets(presets);
     const current = this.library(document);
@@ -167,13 +174,14 @@ export class SharedPresetsStore {
       throw new Error(
         'Shared presets changed in the other app. Reload saved settings before saving again.',
       );
-    const definitions = providers ?? current.providers;
-    validateSharedProviders(definitions);
+    const definitions = connections ?? current.connections;
+    validateConnections(definitions);
+    validateConnectionChanges(current.connections, definitions);
     const saved = {
       ...(isRecord(document.modelPresets) ? document.modelPresets : {}),
       revision: revision + 1,
       presets,
-      providers: definitions,
+      connections: definitions,
     };
     document.modelPresets = saved;
     return saved;
@@ -184,11 +192,11 @@ export class SharedPresetsStore {
     value: Record<string, unknown>,
     presetRevision: number,
     presets: SharedPreset[],
-    providers?: SharedProvider[],
+    connections?: ConnectionDefinition[],
   ) {
     return this.update((document) => {
       const config = this.setScope(document, section, revision, value);
-      const library = this.setPresets(document, presetRevision, presets, providers);
+      const library = this.setPresets(document, presetRevision, presets, connections);
       return { config, library };
     });
   }

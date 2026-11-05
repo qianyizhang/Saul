@@ -5,22 +5,23 @@ import SaulCredentialStorage
 
 @MainActor final class AppModel: ObservableObject {
     enum SettingsSection: String, CaseIterable {
-        case overview, configuration, actions, preferences, account, shortcuts
+        case overview, configuration, actions, preferences, connections, shortcuts
         var title: String {
             switch self {
             case .overview: "Overview"
             case .configuration: "Presets"
             case .actions: "Actions"
             case .preferences: "Preferences"
-            case .account: "Providers"
+            case .connections: "Connections"
             case .shortcuts: "Shortcuts"
             }
         }
     }
     @Published var settingsSection: SettingsSection = .overview
+    @Published var settingsPresetID: UUID?
     @Published private(set) var configuration = Configuration()
-    @Published var selectedActionID: UUID?
-    @Published var overridePresetID: UUID?
+    @Published var selectedActionID: UUID? { didSet { refreshActiveConnection() } }
+    @Published var overridePresetID: UUID? { didSet { refreshActiveConnection() } }
     @Published var inputValues: [String: String] = [:]
     var imageImportID = UUID()
     @Published var inputImage: ImageAttachment? { didSet { imageImportID = UUID() } }
@@ -31,8 +32,18 @@ import SaulCredentialStorage
     @Published private(set) var replayEntry: HistoryEntry?
     @Published var configurationError: String?
     @Published var models: [ModelOption] = []
+    @Published var connectionCatalogs: [String: ConnectionCatalog] = [:]
+    @Published var connectionStatuses: [String: ConnectionStatus] = [:]
+    @Published var connectionErrors: [String: String] = [:]
+    @Published var checkingConnections: Set<String> = []
+    var activeConnectionRefresh: Task<Void, Never>?
     @Published var entries: [HistoryEntry] = []
-    @Published var selection: UUID? { didSet { loadSelectedImage() } }
+    @Published var selection: UUID? {
+        didSet {
+            loadSelectedImage()
+            refreshActiveConnection()
+        }
+    }
     @Published var selectedImageData: Data?
     @Published var imageLoading = false
     var imageLoadTask: Task<Void, Never>?
@@ -50,7 +61,6 @@ import SaulCredentialStorage
     @Published var launcherPending = false
     @Published var error: String?
     @Published var storageWarning: String?
-    @Published var apiKeyDraft = ""
     @Published var apiConnected = false
     @Published var apiKeyBusy = false
     @Published var apiKeyError: String?
@@ -72,7 +82,6 @@ import SaulCredentialStorage
     private var history: HistoryStore?
     private var lock: SessionLock?
     private var attemptExecution: AttemptExecution?
-    private var loginTask: Task<Void, Never>?
     @Published private(set) var accountsLoaded = false
     private var configurationStore: ConfigurationStore?
     private var configurationLoaded = false
@@ -100,16 +109,15 @@ import SaulCredentialStorage
             history = store
             try store.recoverInterrupted()
             if !offline, attemptExecution == nil {
-                let provider = GenerationProvider.saul(
-                    .chatGPTPlan, accountID: { [weak self] in self?.accountID })
+                let provider = GenerationProvider.saul(.chatGPTPlan)
                 let api = GenerationProvider.saul(.openAIAPI)
                 self.attemptExecution = AttemptExecution(
                     generate: { entry, update in
-                        guard let preset = entry.presetSnapshot, let connection = entry.providerSnapshot
-                        else { throw EZError("The action's provider snapshot is missing.") }
+                        guard let preset = entry.presetSnapshot, let connection = entry.connectionSnapshot
+                        else { throw EZError("The action's connection snapshot is missing.") }
                         let selected = connection.kind == .chatGPTPlan ? provider : api
                         guard preset.capability != .speak else {
-                            throw EZError("Speak previews run in Saul.")
+                            throw EZError("Speak previews run in Settings → Presets.")
                         }
                         if preset.capability == .draw {
                             let options = preset.imageOptions ?? ImageOptions()
@@ -118,7 +126,7 @@ import SaulCredentialStorage
                                     prompt: entry.query,
                                     model: preset.model, size: options.size, quality: options.quality,
                                     outputFormat: options.outputFormat,
-                                    image: entry.inputImage))
+                                    image: entry.inputImage, connectionKey: connection.key))
                             return .image(output)
                         }
                         return .text(try await selected.streamText(entry: entry, onUpdate: update))
@@ -274,8 +282,8 @@ import SaulCredentialStorage
         guard action.capability == preset.capability else {
             return "Choose a \(action.capability.name) preset for this action."
         }
-        if let issue = preset.availabilityError(in: models) { return issue }
-        if action.webSearch && currentProvider?.kind != .openAIAPI {
+        if let issue = presetIssue(preset) { return issue }
+        if action.webSearch && currentConnection?.kind != .openAIAPI {
             return "Web search needs an OpenAI API Write preset."
         }
         if preset.capability == .draw && outputFormat == "gif" {
@@ -307,7 +315,7 @@ import SaulCredentialStorage
             }
     }
     var canSend: Bool {
-        attemptExecution != nil && providerIssue == nil && !apiKeyBusy && !busy && !launcherPending
+        attemptExecution != nil && connectionIssue == nil && !apiKeyBusy && !busy && !launcherPending
             && !(needsPlan && connecting)
             && !signingIn
             && requestIssue == nil && history != nil && lock != nil
@@ -320,6 +328,7 @@ import SaulCredentialStorage
         error = nil
         defer { connecting = false }
         await restoreAPIKey()
+        if let connection = currentConnection { await refreshConnection(connection) }
         guard needsPlan || loadAccounts else {
             await verifyCredentialMigration()
             return
@@ -328,7 +337,6 @@ import SaulCredentialStorage
             try await auth.load()
             accountsLoaded = true
             syncAccount()
-            try await loadModels()
             await verifyCredentialMigration()
         } catch {
             syncAccount()
@@ -365,28 +373,11 @@ import SaulCredentialStorage
         signedIn = auth.selected?.signedIn == true
         planEnabled = auth.selected?.planEnabled == true
     }
-    private func loadModels() async throws {
-        models = []
-        guard auth.selected?.planEnabled == true, let id = auth.selectedID else { return }
-        let result = try await auth.call(["action": "models", "accountId": id])
-        guard let catalog = result["models"] as? [[String: Any]] else {
-            throw EZError("Saul returned an invalid model catalog.")
-        }
-        models = catalog.compactMap { value in
-            var value = value
-            value["visibility"] = "list"
-            value["default_reasoning_effort"] = value["defaultReasoningEffort"]
-            value["supported_reasoning_efforts"] = value["supportedReasoningEfforts"]
-            if let tier = value["fastTier"] { value["additional_speed_tiers"] = [tier] }
-            return ModelOption(catalog: value)
-        }
-        guard !models.isEmpty else { throw EZError("No models are available for this ChatGPT account.") }
-        initializeStarterPreset()
-    }
     func initializeStarterPreset() {
         // Only initialize the unassigned starter. Saved choices never silently normalize.
         guard let starterID = configuration.unassignedStarterID,
             let index = configuration.presets.firstIndex(where: { $0.id == starterID && $0.model.isEmpty }),
+            offline || configuration.presets[index].connectionKey == currentPreset?.connectionKey,
             let option = models.first(where: { $0.isDefault }) ?? models.first
         else { return }
         var updated = configuration
@@ -506,59 +497,11 @@ import SaulCredentialStorage
         inputValues = prepared.values
         return prepared.submit
     }
-    func signIn(newAccount: Bool = false, enablePlan: Bool = false) {
-        guard !offline, !busy, !launcherPending, !connecting, !signingIn, lock != nil else { return }
-        signingIn = true
-        error = nil
-        loginTask = Task {
-            defer {
-                signingIn = false
-                loginTask = nil
-            }
-            do {
-                try await auth.load()
-                accountsLoaded = true
-                try await auth.signIn(newAccount: newAccount, enablePlan: enablePlan) {
-                    NSWorkspace.shared.open($0)
-                }
-                syncAccount()
-                try await loadModels()
-            } catch is CancellationError { syncAccount() } catch {
-                syncAccount()
-                self.error = error.localizedDescription
-            }
-        }
-    }
-    func cancelLogin() {
-        loginTask?.cancel()
-    }
-    func selectAccount(_ id: String) async {
-        guard !offline, !busy, !launcherPending, !connecting, !signingIn, !id.isEmpty else { return }
-        connecting = true
-        error = nil
-        defer { connecting = false }
-        do {
-            try await auth.select(id)
-            syncAccount()
-            try await loadModels()
-        } catch {
-            syncAccount()
-            self.error = error.localizedDescription
-        }
-    }
-    func signOut() async {
-        guard !offline, !busy, !launcherPending, !connecting, !signingIn else { return }
-        connecting = true
-        defer { connecting = false }
-        do {
-            error = try await auth.signOut()
-            syncAccount()
-            models = []
-        } catch { self.error = error.localizedDescription }
-    }
     func send() {
         refreshConfiguration()
-        guard canSend, let action = currentAction, var preset = currentPreset, let attemptExecution else {
+        guard canSend, let action = currentAction, var preset = currentPreset,
+            let connection = currentConnection, let attemptExecution
+        else {
             return
         }
         error = nil
@@ -569,12 +512,14 @@ import SaulCredentialStorage
         }
         var entry: HistoryEntry
         do {
-            entry = try action.prepare(values: inputValues, preset: preset, models: models, image: inputImage)
+            entry = try action.prepare(
+                values: inputValues, preset: preset, models: modelsForPreset(preset),
+                provider: connection.kind, image: inputImage)
         } catch {
             self.error = error.localizedDescription
             return
         }
-        entry.providerSnapshot = currentProvider
+        entry.connectionSnapshot = currentConnection
         do { try attemptExecution.start(entry) } catch {
             self.error = error.localizedDescription
             return
@@ -585,10 +530,13 @@ import SaulCredentialStorage
         attemptExecution?.stop()
     }
     var canFollowUp: Bool {
-        let key = selectedEntry?.presetSnapshot?.providerKey ?? "gpt-plan"
-        let provider = configuration.providers.first { $0.key == key }
-        return provider != nil && selectedEntry?.capability != .draw
-            && (provider?.kind == .chatGPTPlan ? signedIn && planEnabled : apiConnected)
+        let key = selectedEntry?.presetSnapshot?.connectionKey ?? "gpt-plan"
+        let connection = configuration.connections.first { $0.key == key }
+        let connected =
+            offline
+            ? (connection?.kind == .chatGPTPlan ? signedIn && planEnabled : apiConnected)
+            : connectionStatuses[key]?.connected == true
+        return connection != nil && selectedEntry?.capability != .draw && connected
             && attemptExecution != nil && !busy && !launcherPending && !connecting
             && !signingIn && history != nil && lock != nil
     }
@@ -597,12 +545,21 @@ import SaulCredentialStorage
             return
         }
         do {
-            var entry = try parent.prepareFollowUp(followUpDrafts[id] ?? "", models: models)
-            let key = entry.presetSnapshot?.providerKey ?? "gpt-plan"
-            entry.providerSnapshot = configuration.providers.first { $0.key == key }
-            guard let provider = entry.providerSnapshot,
-                provider.kind == .chatGPTPlan ? signedIn && planEnabled : apiConnected
-            else { throw EZError("Connect the saved action's provider before sending a follow-up.") }
+            let key = parent.presetSnapshot?.connectionKey ?? "gpt-plan"
+            guard let connection = configuration.connections.first(where: { $0.key == key }),
+                offline
+                    ? (connection.kind == .chatGPTPlan ? signedIn && planEnabled : apiConnected)
+                    : connectionStatuses[connection.key]?.connected == true
+            else { throw EZError("Set up the saved action's connection before sending a follow-up.") }
+            let preset =
+                parent.presetSnapshot
+                ?? ModelPreset(
+                    name: "Saved", model: parent.model, effort: parent.effort,
+                    fast: parent.requestedServiceTier != nil)
+            if let issue = presetIssue(preset) { throw EZError(issue) }
+            var entry = try parent.prepareFollowUp(
+                followUpDrafts[id] ?? "", models: modelsForPreset(preset), provider: connection.kind)
+            entry.connectionSnapshot = connection
             try attemptExecution.start(entry)
             followUpDrafts[id] = nil
             if followUpTargetID == id { followUpTargetID = nil }
@@ -663,8 +620,8 @@ import SaulCredentialStorage
         draftRevision += 1
     }
     func shutdown() {
+        activeConnectionRefresh?.cancel()
         imageLoadTask?.cancel()
-        cancelLogin()
         stop()
     }
     var canDeleteLookup: Bool { !busy && !launcherPending && history != nil && lock != nil }

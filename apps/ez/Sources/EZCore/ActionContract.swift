@@ -5,29 +5,41 @@ public enum ActionCapability: String, Codable, CaseIterable, Sendable {
     public var name: String { rawValue.capitalized }
 }
 
-public struct ProviderDefinition: Codable, Equatable, Identifiable, Sendable {
+public struct ConnectionDefinition: Codable, Equatable, Identifiable, Sendable {
     public let key: String
     public var name: String
     public let kind: GenerationProviderID
+    public var accountId: String?
+    public var baseUrl: String?
+    public var endpoint: String { baseUrl ?? "https://api.openai.com/v1" }
     public var id: String { key }
-    public var capabilities: [ActionCapability] { kind == .chatGPTPlan ? [.write] : [.write, .draw, .speak] }
-    public init(key: String, name: String, kind: GenerationProviderID) {
+    public var capabilities: [ActionCapability] {
+        kind == .chatGPTPlan || endpoint != "https://api.openai.com/v1" ? [.write] : [.write, .draw, .speak]
+    }
+    public init(
+        key: String, name: String, kind: GenerationProviderID, accountId: String? = nil,
+        baseUrl: String? = nil
+    ) {
         self.key = key
         self.name = name
         self.kind = kind
+        self.accountId = accountId
+        self.baseUrl = baseUrl
     }
-    private enum CodingKeys: String, CodingKey, CaseIterable { case key, name, kind }
+    private enum CodingKeys: String, CodingKey, CaseIterable { case key, name, kind, accountId, baseUrl }
     public init(from decoder: Decoder) throws {
         let fields = try contractFields(decoder, keys: CodingKeys.self)
         key = try fields.decode(String.self, forKey: .key)
         name = try fields.decode(String.self, forKey: .name)
         kind = try fields.decode(GenerationProviderID.self, forKey: .kind)
+        accountId = try fields.decodeIfPresent(String.self, forKey: .accountId)
+        baseUrl = try fields.decodeIfPresent(String.self, forKey: .baseUrl)
     }
     public static let defaults = [
-        ProviderDefinition(key: "gpt-plan", name: "ChatGPT plan", kind: .chatGPTPlan),
-        ProviderDefinition(key: "openai-api", name: "OpenAI API", kind: .openAIAPI),
+        ConnectionDefinition(key: "gpt-plan", name: "ChatGPT plan", kind: .chatGPTPlan),
+        ConnectionDefinition(key: "openai-api", name: "OpenAI API", kind: .openAIAPI),
     ]
-    public static func validate(_ values: [ProviderDefinition]) throws {
+    public static func validate(_ values: [ConnectionDefinition]) throws {
         guard values.count <= 32, Set(values.map(\.key)).count == values.count,
             Set(values.map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }).count
                 == values.count,
@@ -35,16 +47,29 @@ public struct ProviderDefinition: Codable, Equatable, Identifiable, Sendable {
                 $0.key.range(of: "^[a-z][a-z0-9-]{0,63}$", options: .regularExpression) != nil
                     && !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     && $0.name.utf16.count <= 80
+                    && ($0.accountId == nil
+                        || ($0.kind == .chatGPTPlan && !$0.accountId!.isEmpty
+                            && $0.accountId!.utf8.count <= 256))
+                    && ($0.baseUrl == nil || ($0.kind == .openAIAPI && Self.validEndpoint($0.baseUrl!)))
             })
         else {
             throw EZError(
-                "Providers need unique keys and names. Keys use lowercase letters, digits and hyphens.")
+                "Connections need unique keys and names. Keys use lowercase letters, digits and hyphens.")
         }
+    }
+    public static func validEndpoint(_ value: String) -> Bool {
+        guard value.utf8.count <= 2048, let url = URL(string: value), let host = url.host, !host.isEmpty,
+            url.absoluteString == value, host == host.lowercased(),
+            !(url.scheme == "https" && url.port == 443), !(url.scheme == "http" && url.port == 80),
+            url.user == nil, url.password == nil, url.query == nil, url.fragment == nil,
+            !value.hasSuffix("/")
+        else { return false }
+        return url.scheme == "https"
+            || (url.scheme == "http" && ["localhost", "127.0.0.1", "[::1]", "::1"].contains(host))
     }
 }
 
 public struct SpeechOptions: Codable, Equatable, Sendable {
-    public static let defaultModel = "gpt-realtime-2.1-mini"
     public static let voices = [
         "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar",
     ]
@@ -63,6 +88,9 @@ public struct SpeechOptions: Codable, Equatable, Sendable {
 }
 
 public struct ImageOptions: Codable, Equatable, Sendable {
+    public static let formats = ["png", "gif"]
+    public static let sizes = ["1024x1024", "1536x1024", "1024x1536"]
+    public static let qualities = ["low", "medium", "high"]
     public var size: String
     public var quality: String
     public var outputFormat: String
@@ -80,8 +108,8 @@ public struct ImageOptions: Codable, Equatable, Sendable {
             fields.contains(.outputFormat) ? try fields.decode(String.self, forKey: .outputFormat) : "png"
     }
     public func validate() throws {
-        guard ImageModelOption.sizes.contains(size), ImageModelOption.qualities.contains(quality),
-            ImageModelOption.formats.contains(outputFormat)
+        guard ImageOptions.sizes.contains(size), ImageOptions.qualities.contains(quality),
+            ImageOptions.formats.contains(outputFormat)
         else {
             throw EZError("Choose a supported image size and quality in Presets.")
         }

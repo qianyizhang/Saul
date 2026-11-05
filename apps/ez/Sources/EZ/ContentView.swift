@@ -148,7 +148,7 @@ struct ContentView: View {
             Spacer(minLength: 0)
             Divider()
             FullRowButton {
-                model.openSettings(model.signedIn ? .overview : .account)
+                model.openSettings(model.signedIn ? .overview : .connections)
             } label: {
                 HStack {
                     if !model.minimumMode { Image(systemName: "person.crop.circle").font(.title3) }
@@ -158,7 +158,7 @@ struct ContentView: View {
                         ).font(
                             .system(size: 12, weight: .medium))
                         if model.connecting || !model.minimumMode {
-                            Text(model.connecting ? "Connecting…" : "Providers, presets & actions")
+                            Text(model.connecting ? "Connecting…" : "Connections, presets & actions")
                                 .font(AppStyle.caption).foregroundStyle(.secondary)
                         }
                     }
@@ -181,7 +181,7 @@ struct ContentView: View {
             }
             if model.needsPlan && !model.signedIn {
                 Button {
-                    model.openSettings(.account)
+                    model.openSettings(.connections)
                 } label: {
                     Label(
                         model.minimumMode ? "Connect" : "Continue with ChatGPT",
@@ -314,7 +314,7 @@ struct ContentView: View {
                             .help("Run · \(model.shortcuts.binding(for: .send).display)")
                     }
                 }.controlSize(.small).disabled(model.needsPlan && model.connecting)
-                if model.currentProvider?.kind == .openAIAPI {
+                if model.currentConnection?.kind == .openAIAPI {
                     Text(
                         model.currentAction?.webSearch == true
                             ? "OpenAI API · search charges apply" : "OpenAI API · billed separately"
@@ -323,6 +323,12 @@ struct ContentView: View {
                 if !composerHint.isEmpty {
                     Text(composerHint).font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+                if let preset = model.currentPreset, model.presetIssue(preset) != nil {
+                    Button("Edit preset") {
+                        model.settingsPresetID = preset.id
+                        model.openSettings(.configuration)
+                    }.disabled(model.busy)
                 }
             }
         }.frame(maxWidth: .infinity, alignment: .leading).padding(16).background(
@@ -333,7 +339,7 @@ struct ContentView: View {
     }
     private var composerHint: String {
         if model.needsPlan && model.connecting { return "Connecting to ChatGPT…" }
-        if let issue = model.providerIssue { return issue }
+        if let issue = model.connectionIssue { return issue }
         return model.requestIssue
             ?? (model.minimumMode
                 ? "" : "\(model.shortcuts.binding(for: .send).display) to send · Each lookup starts fresh.")

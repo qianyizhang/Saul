@@ -72,7 +72,7 @@ History shares `~/Library/Application Support/Little Clarity/history.sqlite3` wi
 ## Settings and models
 
 Settings has focused sections: Overview, Presets, Actions, Summaries, Preferences
-and Providers. Overview leads with reading defaults; Presets keeps the selected
+and Connections. Overview leads with reading defaults; Presets keeps the selected
 preset beside its fields, with a compact selector at narrow widths. Section changes
 preserve the mounted configuration draft. Save and conflict recovery remain reachable
 across sections; preferences and access retain their independent immediate-save behavior.
@@ -126,8 +126,8 @@ Pinned/grouped tabs stay protected in automated proposals.
 
 On macOS Chrome, the native helper imports **Name Window** labels through
 AppleScript and verifies reviewed renames. Automation errors remain visible;
-other platforms use Saul labels. Connection and page-access settings live
-under **Settings → Connections**. External access is off by default.
+other platforms use Saul labels. Helper and page-access controls live
+under **Settings → Preferences → Integrations**. External access is off by default.
 See [native messaging](native-messaging.md).
 
 ### Summaries
@@ -253,17 +253,17 @@ the saved request. Reading and summary inspectors share the large-text viewer.
 - The native bridge supports macOS and Linux Chromium-family browsers; Google Chrome is the verified target.
 - See [testing](testing.md) for covered behavior and evidence limits.
 
-Shared presets also preserve stable `providerKey`, Write/Draw/Speak capability and image/speech
-options from EZ. Missing typed fields default to `gpt-plan` / Write. Saul retains
-Draw presets but blocks text execution; image settings and execution currently
-belong in EZ. Provider definitions and Presets use the same shared configuration and revision
-as EZ. Credentials, local connection bindings and Action inputs remain app-owned.
-Providers edits the shared display name without changing the key; preset selection
-binds that key. Legacy API profiles remain available for Saul-specific connections.
+Shared presets retain `connectionKey` as a saved connection reference, capability and
+model options. Both apps edit and execute Draw; EZ also supports image inputs.
+Managed connections pin an account or endpoint, while secrets stay with the signed
+owner. Standalone browser installations retain their local profiles. Connections
+shows identity, capabilities and health, with type-specific setup and repair.
+Model options refresh from the connection catalog. Missing saved models remain
+visible and require a preset update; failed discovery does not imply removal.
 
-Speech previews live in Settings → Presets for Speak presets. Providers owns the
+Speech previews live in Settings → Presets for Speak presets. Connections owns the
 OpenAI API connection and key; Presets owns the Realtime model and voice. Generate
 sends at most 512 characters using the saved configuration and separate API billing.
 Stop, navigation or closing cancels generation and clears audio. Text/audio are
 never added to reading history. Speak is a preview capability; reading actions
-continue to require Write presets.
+use compatible Write or Draw presets.

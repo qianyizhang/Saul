@@ -98,6 +98,7 @@ test('provider profiles preserve their own credentials and clear keys across ori
   await popup
     .getByLabel('Preset connection', { exact: true })
     .selectOption({ label: 'Local test' });
+  await popup.getByLabel('Model name', { exact: true }).fill('fixture-model');
   await popup.getByLabel('Model options and tests', { exact: true }).click();
   await popup.getByRole('button', { name: 'Test generation', exact: true }).click();
   await expect(popup.getByText(/Generation succeeded:/)).toBeVisible();
@@ -253,7 +254,7 @@ test('malformed settings expose their field error and require explicit backup be
     'Saved provider temperature must be a finite number',
   );
   await popup.getByRole('button', { name: 'Back up and reset settings', exact: true }).click();
-  await expect(popup.getByLabel('Provider', { exact: true })).toBeVisible();
+  await expect(popup.getByLabel('Connection', { exact: true })).toBeVisible();
   await expect(
     popup.getByText(
       'Defaults restored. The previous saved settings remain in a local recovery backup.',
@@ -265,7 +266,7 @@ test('malformed settings expose their field error and require explicit backup be
   );
   expect(stored.saul_user_settings).toMatchObject({
     activeProvider: 'openai-compatible',
-    openaiCompatible: { model: 'gpt-4o-mini' },
+    openaiCompatible: { model: '' },
   });
   expect(stored.saul_user_settings_recovery_backup).toEqual(invalid);
 });
@@ -335,7 +336,7 @@ test('stopping a slow explanation retains partial text without saving a complete
   }
 });
 
-test('workspace navigation protects drafts and offers only available providers', async ({
+test('workspace navigation protects drafts and offers only available connections', async ({
   sandbox,
 }) => {
   const { popup } = await sandbox.launch();
@@ -376,7 +377,7 @@ test('save locks the draft; provider tests lock only provider settings and remai
     await settingsSection(popup, 'Presets');
     await popup.getByLabel('Model options and tests', { exact: true }).click();
     await popup.getByRole('button', { name: 'Test generation', exact: true }).click();
-    await settingsSection(popup, 'Providers');
+    await settingsSection(popup, 'Connections');
     await expect(popup.getByLabel('Profile name', { exact: true })).toBeDisabled();
     await expect(popup.getByLabel('Response language', { exact: true })).toBeEnabled();
     await settingsSection(popup, 'Actions');

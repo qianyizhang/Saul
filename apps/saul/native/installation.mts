@@ -157,6 +157,7 @@ export const payloadFiles: Record<string, string[]> = {
     'plan-models.mjs',
     'shared-presets.mjs',
     'shared-presets-contract.mjs',
+    'connection-migration.mjs',
     'plan-auth.mjs',
     'plan-store.mjs',
     'responses.mjs',

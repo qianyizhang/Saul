@@ -1,70 +1,59 @@
 import { useEffect, useState } from 'react';
-import { providerCapabilities } from '../../native/shared-presets-contract.mts';
+import { connectionCapabilities } from '../../native/shared-presets-contract.mts';
 import type { UserSettings } from '../types';
 import type { SettingsEdit } from '../models/settings-draft';
 import type { PlanSettingsState } from './usePlanSettings';
 import { ChatGPTPlanSettings } from './ChatGPTPlanSettings';
-import { SharedCredentialSettings } from './SharedCredentialSettings';
 import { officialOpenAI } from '../../native/credentials-contract.mts';
 
-export function ProviderSettings({
+export function StandaloneConnectionSettings({
   settings,
   edit,
   plan,
   disabled,
   visible,
-  credentialLocked,
-  changeCredentialOwner,
 }: {
   settings: UserSettings;
   edit: (edit: SettingsEdit) => void;
   plan: PlanSettingsState;
   disabled: boolean;
   visible: boolean;
-  credentialLocked: boolean;
-  changeCredentialOwner: (owner: 'saul' | 'disconnected') => Promise<void>;
 }) {
-  const providers = settings.providers;
+  const connections = settings.connections;
   const [key, setKey] = useState('gpt-plan'),
     [profileId, setProfileId] = useState(''),
     [showKey, setShowKey] = useState(false);
-  const provider = providers.find((p) => p.key === key);
-  const boundId = settings.providerConnections?.[key];
+  const connection = connections.find((p) => p.key === key);
+  const boundId = settings.connectionProfiles?.[key];
   const official = settings.profiles?.find(
     (p) =>
       p.id === settings.activeProfileId &&
       p.config.baseUrl.replace(/\/+$/, '') === 'https://api.openai.com/v1',
   );
   const selectedId =
-    provider?.kind === 'openai-api'
+    connection?.kind === 'openai-api'
       ? boundId || official?.id || ''
       : profileId || settings.activeProfileId;
   const profile = settings.profiles?.find((p) => p.id === selectedId);
   useEffect(() => setShowKey(false), [key, selectedId, visible]);
   const selectProfile = (id: string) => {
     setShowKey(false);
-    if (provider?.kind === 'openai-api') edit({ type: 'provider-connection', key, profileId: id });
+    if (connection?.kind === 'openai-api') edit({ type: 'connection-profile', key, profileId: id });
     else setProfileId(id);
   };
-  const connection = (patch: Partial<UserSettings['openaiCompatible']>) => {
+  const editProfile = (patch: Partial<UserSettings['openaiCompatible']>) => {
     if (profile) edit({ type: 'connection', id: profile.id, patch });
   };
   const options = [
-    ...providers.map((p) => ({ key: p.key, name: p.name })),
+    ...connections.map((p) => ({ key: p.key, name: p.name })),
     { key: 'local-api-connections', name: 'API connections' },
   ];
   return (
-    <section hidden={!visible} className="settings-section" aria-label="Provider definitions">
-      <h2 className="view-title">Providers</h2>
-      <SharedCredentialSettings
-        owner={settings.sharedCredentials}
-        disabled={disabled || credentialLocked}
-        visible={visible}
-        change={changeCredentialOwner}
-      />
+    <section hidden={!visible} className="settings-section" aria-label="Connections">
+      <h2 className="view-title">Connections</h2>
       <div className="settings-models">
         <div className="preset-browser">
-          <div className="preset-list" aria-label="Providers">
+          <div className="preset-list" aria-label="Connections">
             {options.map((p) => (
               <button
                 type="button"
@@ -80,9 +69,9 @@ export function ProviderSettings({
         </div>
         <div className="stack preset-editor">
           <label className="field compact-preset">
-            Provider
+            Connection
             <select
-              aria-label="Edit provider"
+              aria-label="Edit connection"
               disabled={disabled}
               value={key}
               onChange={(e) => setKey(e.target.value)}
@@ -94,33 +83,33 @@ export function ProviderSettings({
               ))}
             </select>
           </label>
-          {provider && (
+          {connection && (
             <>
               <label className="field">
                 Name
                 <input
-                  aria-label="Provider name"
-                  value={provider.name}
+                  aria-label="Connection name"
+                  value={connection.name}
                   maxLength={80}
                   disabled={disabled}
-                  onChange={(e) => edit({ type: 'provider-name', key, name: e.target.value })}
+                  onChange={(e) => edit({ type: 'connection-name', key, name: e.target.value })}
                 />
               </label>
               <dl className="saul-metadata">
                 <dt>Key</dt>
-                <dd>{provider.key}</dd>
+                <dd>{connection.key}</dd>
                 <dt>Capabilities</dt>
                 <dd>
-                  {providerCapabilities(provider)
+                  {connectionCapabilities(connection)
                     .map((c) => c[0]!.toUpperCase() + c.slice(1))
                     .join(' · ')}
                 </dd>
               </dl>
             </>
           )}
-          {settings.sharedCredentials === 'disconnected' && provider?.kind === 'chatgpt-plan' ? (
+          {settings.sharedCredentials === 'disconnected' && connection?.kind === 'chatgpt-plan' ? (
             <p className="notice">Connect this app to Saul to manage ChatGPT sign-in.</p>
-          ) : provider?.kind === 'chatgpt-plan' ? (
+          ) : connection?.kind === 'chatgpt-plan' ? (
             <ChatGPTPlanSettings
               plan={plan}
               mode="connection"
@@ -182,7 +171,7 @@ export function ProviderSettings({
                     <input
                       value={profile.config.baseUrl}
                       placeholder="https://api.openai.com/v1"
-                      onChange={(e) => connection({ baseUrl: e.target.value })}
+                      onChange={(e) => editProfile({ baseUrl: e.target.value })}
                     />
                   </label>
                   {settings.sharedCredentials === 'disconnected' &&
@@ -203,7 +192,7 @@ export function ProviderSettings({
                           }
                           autoComplete="off"
                           value={profile.config.apiKey}
-                          onChange={(e) => connection({ apiKey: e.target.value })}
+                          onChange={(e) => editProfile({ apiKey: e.target.value })}
                         />
                         <button
                           className="btn"
@@ -216,7 +205,7 @@ export function ProviderSettings({
                       </div>
                     </label>
                   )}
-                  {provider?.kind === 'openai-api' && (
+                  {connection?.kind === 'openai-api' && (
                     <p className="small">
                       Separate API billing
                       {profile.config.baseUrl.replace(/\/+$/, '') === 'https://api.openai.com/v1'
@@ -233,7 +222,7 @@ export function ProviderSettings({
                         ['Ollama', 'http://localhost:11434/v1'],
                         ['OpenRouter', 'https://openrouter.ai/api/v1'],
                       ].map(([name, baseUrl]) => (
-                        <button className="btn" key={name} onClick={() => connection({ baseUrl })}>
+                        <button className="btn" key={name} onClick={() => editProfile({ baseUrl })}>
                           {name}
                         </button>
                       ))}
@@ -245,7 +234,7 @@ export function ProviderSettings({
                   </p>
                 </>
               ) : (
-                <p className="notice">Choose or add a connection for this provider.</p>
+                <p className="notice">Choose or add a connection for this connection.</p>
               )}
             </fieldset>
           )}

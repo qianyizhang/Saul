@@ -99,7 +99,7 @@ struct RequestDetails: View {
             if let preset = model.currentPreset {
                 MetadataRow("Preset", value: preset.name)
                 MetadataRow("Model", value: preset.model)
-                MetadataRow("Provider", value: preset.providerKey)
+                MetadataRow("Connection", value: preset.connectionKey)
                 MetadataRow("Capability", value: preset.capability.name)
                 if preset.capability == .draw {
                     MetadataRow("Output format", value: model.outputFormat.uppercased())
@@ -166,7 +166,7 @@ struct ActionInputs: View {
             if model.currentAction?.capability == .draw {
                 SelectorPicker(
                     "Output format",
-                    options: ImageModelOption.formats.map {
+                    options: ImageOptions.formats.map {
                         .init(value: $0, title: $0 == "gif" ? "GIF · animated" : "PNG")
                     },
                     selection: Binding(get: { model.outputFormat }, set: { model.outputFormatOverride = $0 }))

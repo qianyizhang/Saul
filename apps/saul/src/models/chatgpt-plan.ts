@@ -40,7 +40,7 @@ export async function* planEvents(
       mode = String(reply.result.mode);
     }
     if (mode === 'disconnected')
-      throw new Error('Connect this app to Saul credentials in Providers.');
+      throw new Error('Connect this app to Saul credentials in Connections.');
     if (expectedOwner !== undefined && expectedOwner !== (mode === 'saul' ? 'saul' : 'local'))
       throw new Error(SELECT_NEW_PRESET);
     if (mode === 'saul') {

@@ -1,6 +1,6 @@
 import Foundation
 
-public enum OfficialOpenAIRoute: String, Sendable {
+public enum ConnectionRoute: String, Sendable {
   case models, responses
   case chat = "chat/completions"
   case realtime = "realtime/client_secrets"
@@ -18,9 +18,9 @@ public struct CredentialHTTPError: LocalizedError, Sendable {
   }
 }
 
-/// Fixed official destinations keep an API key from being forwarded to an edited endpoint.
+/// The credential owner supplies an endpoint bound to the saved key, never an arbitrary caller URL.
 /// Provider error bodies never leave this owner, because they can echo credentials.
-public struct OfficialOpenAI: Sendable {
+public struct ConnectionHTTP: Sendable {
   private let session: URLSession
   public init(session: URLSession? = nil) {
     if let session {
@@ -34,24 +34,40 @@ public struct OfficialOpenAI: Sendable {
       self.session = URLSession(configuration: configuration)
     }
   }
-  public static func request(route: OfficialOpenAIRoute, body: Data?, credential: String) throws
+  public static func request(
+    route: ConnectionRoute, body: Data?, credential: String,
+    endpoint: String = "https://api.openai.com/v1"
+  ) throws
     -> URLRequest
   {
-    guard !credential.isEmpty, credential.utf8.count <= 32_000,
+    guard let base = URL(string: endpoint), let host = base.host, !host.isEmpty, base.user == nil,
+      base.password == nil,
+      base.query == nil, base.fragment == nil,
+      base.scheme == "https"
+        || (base.scheme == "http"
+          && ["localhost", "127.0.0.1", "::1", "[::1]"].contains(base.host ?? "")),
+      !credential.isEmpty || ["localhost", "127.0.0.1", "::1", "[::1]"].contains(base.host ?? ""),
+      credential.utf8.count <= 32_000,
       credential.utf8.allSatisfy({ $0 > 32 && $0 < 127 })
     else { throw CredentialStorageError("The selected Saul credential is invalid. Connect again.") }
-    var request = URLRequest(url: URL(string: "https://api.openai.com/v1/\(route.rawValue)")!)
+    var request = URLRequest(url: base.appendingPathComponent(route.rawValue))
     request.httpMethod = route == .models ? "GET" : "POST"
     request.httpBody = body
-    request.setValue("Bearer \(credential)", forHTTPHeaderField: "Authorization")
+    if !credential.isEmpty {
+      request.setValue("Bearer \(credential)", forHTTPHeaderField: "Authorization")
+    }
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
     return request
   }
-  public func json(route: OfficialOpenAIRoute, body: Data? = nil, credential: String) async throws
+  public func json(
+    route: ConnectionRoute, body: Data? = nil, credential: String,
+    endpoint: String = "https://api.openai.com/v1"
+  ) async throws
     -> [String: Any]
   {
-    let request = try Self.request(route: route, body: body, credential: credential)
+    let request = try Self.request(
+      route: route, body: body, credential: credential, endpoint: endpoint)
     let (bytes, response) = try await session.bytes(for: request, delegate: NoCredentialRedirect())
     guard let response = response as? HTTPURLResponse else { throw CredentialHTTPError(status: 0) }
     var data = Data()
@@ -71,10 +87,12 @@ public struct OfficialOpenAI: Sendable {
     return result
   }
   public func stream(
-    route: OfficialOpenAIRoute, body: Data, credential: String,
+    route: ConnectionRoute, body: Data, credential: String,
+    endpoint: String = "https://api.openai.com/v1",
     onEvent: @MainActor @Sendable (Data, Double) async throws -> Bool
   ) async throws {
-    let request = try Self.request(route: route, body: body, credential: credential)
+    let request = try Self.request(
+      route: route, body: body, credential: credential, endpoint: endpoint)
     let start = ContinuousClock.now
     let (bytes, response) = try await session.bytes(for: request, delegate: NoCredentialRedirect())
     guard let response = response as? HTTPURLResponse else { throw CredentialHTTPError(status: 0) }

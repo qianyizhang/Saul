@@ -11,14 +11,14 @@ import { validatePlanRequest } from '../native/plan-protocol.mts';
 
 const request: SpeechRequest = {
   presetId: 'speak',
-  providerKey: 'openai-api',
+  connectionKey: 'openai-api',
   model: 'gpt-realtime-2.1-mini',
   voice: 'marin',
   input: 'Hello.',
 };
 function connection() {
   const settings = structuredClone(DEFAULT_SETTINGS);
-  settings.providerConnections = { 'openai-api': 'official' };
+  settings.connectionProfiles = { 'openai-api': 'official' };
   settings.profiles = [
     {
       id: 'official',
@@ -29,7 +29,7 @@ function connection() {
   settings.configuration!.presets.push({
     id: request.presetId,
     name: 'Speak',
-    providerKey: request.providerKey,
+    connectionKey: request.connectionKey,
     provider: 'openai-compatible',
     model: request.model,
     capability: 'speak',
@@ -89,12 +89,12 @@ it('uses exactly the selected saved API connection and rejects stale or non-Spea
   for (const patch of [
     { model: 'gpt-realtime-2.1' },
     { voice: 'cedar' },
-    { providerKey: 'another' },
+    { connectionKey: 'another' },
   ])
     expect(() => speechCredential(settings, { ...request, ...patch })).toThrow('changed');
-  settings.providerConnections!['openai-api'] = 'missing';
+  settings.connectionProfiles!['openai-api'] = 'missing';
   expect(() => speechCredential(settings, request)).toThrow('connection');
-  settings.providerConnections!['openai-api'] = 'official';
+  settings.connectionProfiles!['openai-api'] = 'official';
   settings.profiles![0]!.config.baseUrl = 'https://example.com/v1';
   expect(() => speechCredential(settings, request)).toThrow('https://api.openai.com/v1');
   settings.profiles![0]!.config.baseUrl = 'https://api.openai.com/v1';

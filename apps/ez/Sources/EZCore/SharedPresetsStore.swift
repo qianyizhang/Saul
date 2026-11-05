@@ -5,26 +5,25 @@ import Foundation
 public struct SharedPresets: Codable {
     public let revision: Int
     public var presets: [ModelPreset]
-    public var providers: [ProviderDefinition]
+    public var connections: [ConnectionDefinition]
     public init(
-        revision: Int, presets: [ModelPreset], providers: [ProviderDefinition] = ProviderDefinition.defaults
+        revision: Int, presets: [ModelPreset],
+        connections: [ConnectionDefinition] = ConnectionDefinition.defaults
     ) {
         self.revision = revision
         self.presets = presets
-        self.providers = providers
+        self.connections = connections
     }
-    private enum CodingKeys: String, CodingKey { case revision, presets, providers }
+    private enum CodingKeys: String, CodingKey { case revision, presets, connections }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         revision = try c.decode(Int.self, forKey: .revision)
         presets = try c.decode([ModelPreset].self, forKey: .presets)
-        providers =
-            c.contains(.providers)
-            ? try c.decode([ProviderDefinition].self, forKey: .providers) : ProviderDefinition.defaults
+        connections = try c.decode([ConnectionDefinition].self, forKey: .connections)
     }
 }
 
-/// Shared Provider/Preset configuration. Credentials and execution remain app-owned; history has its own store.
+/// Shared connection/preset configuration. Secrets stay with their credential owner.
 public final class SharedPresetsStore {
     public static var defaultURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -59,7 +58,8 @@ public final class SharedPresetsStore {
             throw EZError("Configuration is busy. Try Save again.")
         }
         defer { sqlite3_exec(lock, "ROLLBACK", nil, nil, nil) }
-        var document = try document()
+        var document = try ConnectionMigration.document(document())
+        _ = try library(document)
         let result = try change(&document)
         try writeDocument(document)
         return result
@@ -75,8 +75,14 @@ public final class SharedPresetsStore {
         }
         return value
     }
+    private func readDocument() throws -> [String: Any] {
+        let original = try document()
+        let upgraded = try ConnectionMigration.document(original)
+        if NSDictionary(dictionary: original).isEqual(to: upgraded) { return original }
+        return try update { $0 }
+    }
     public func readAppSection(_ section: String) throws -> (revision: Int, value: [String: Any]?) {
-        try appSection(document(), section)
+        try appSection(readDocument(), section)
     }
     private func appSection(_ document: [String: Any], _ section: String) throws -> (
         revision: Int, value: [String: Any]?
@@ -138,12 +144,9 @@ public final class SharedPresetsStore {
         }
     }
     public func read() throws -> SharedPresets {
-        try library(document())
+        try library(readDocument())
     }
     private func library(_ document: [String: Any]) throws -> SharedPresets {
-        let legacy =
-            (((document["apps"] as? [String: Any])?["ez"] as? [String: Any])?["configuration"]
-            as? [String: Any])?["value"] as? [String: Any]
         var section: [String: Any]
         if let raw = document["modelPresets"] {
             guard let value = raw as? [String: Any] else {
@@ -151,17 +154,14 @@ public final class SharedPresetsStore {
             }
             section = value
         } else {
-            section = ["revision": 0, "presets": []]
-        }
-        if section["providers"] == nil, let providers = legacy?["providers"] {
-            section["providers"] = providers
+            return SharedPresets(revision: 0, presets: [])
         }
         let result = try JSONDecoder().decode(
             SharedPresets.self,
             from: JSONSerialization.data(withJSONObject: section))
         guard result.revision >= 0 else { throw EZError("Invalid shared preset revision.") }
         try validate(result.presets)
-        try ProviderDefinition.validate(result.providers)
+        try ConnectionDefinition.validate(result.connections)
         return result
     }
     private func validate(_ presets: [ModelPreset]) throws {
@@ -174,22 +174,23 @@ public final class SharedPresetsStore {
             })
         else { throw EZError("Shared presets need unique IDs and names, a model, effort, and speed.") }
         for preset in presets {
-            guard preset.providerKey.range(of: "^[a-z][a-z0-9-]{0,63}$", options: .regularExpression) != nil
-            else { throw EZError("Invalid provider key in shared presets.") }
+            guard preset.connectionKey.range(of: "^[a-z][a-z0-9-]{0,63}$", options: .regularExpression) != nil
+            else { throw EZError("Invalid connection key in shared presets.") }
             if let options = preset.imageOptions { try options.validate() }
             if let options = preset.speechOptions { try options.validate() }
         }
     }
-    public func save(_ presets: [ModelPreset], revision: Int, providers: [ProviderDefinition]? = nil) throws
+    public func save(_ presets: [ModelPreset], revision: Int, connections: [ConnectionDefinition]? = nil)
+        throws
         -> SharedPresets
     {
         try update { document in
-            try setPresets(&document, presets, revision: revision, providers: providers)
+            try setPresets(&document, presets, revision: revision, connections: connections)
         }
     }
     private func setPresets(
         _ document: inout [String: Any], _ presets: [ModelPreset], revision: Int,
-        providers: [ProviderDefinition]?
+        connections: [ConnectionDefinition]?
     ) throws -> SharedPresets {
         try validate(presets)
         let current = try library(document)
@@ -197,9 +198,18 @@ public final class SharedPresetsStore {
             throw EZError(
                 "Shared presets changed in the other app. Reload saved settings before saving again.")
         }
-        let definitions = providers ?? current.providers
-        try ProviderDefinition.validate(definitions)
-        let saved = SharedPresets(revision: revision + 1, presets: presets, providers: definitions)
+        let definitions = connections ?? current.connections
+        try ConnectionDefinition.validate(definitions)
+        for existing in current.connections {
+            guard let next = definitions.first(where: { $0.key == existing.key }) else { continue }
+            guard next.kind == existing.kind,
+                existing.accountId == nil || next.accountId == existing.accountId,
+                existing.kind != .openAIAPI || next.endpoint == existing.endpoint
+            else {
+                throw EZError("A connection cannot change its account or endpoint. Add another connection.")
+            }
+        }
+        let saved = SharedPresets(revision: revision + 1, presets: presets, connections: definitions)
         var section = document["modelPresets"] as? [String: Any] ?? [:]
         let fields =
             try JSONSerialization.jsonObject(with: JSONEncoder().encode(saved)) as? [String: Any] ?? [:]
@@ -207,13 +217,13 @@ public final class SharedPresetsStore {
         document["modelPresets"] = section
         return saved
     }
-    public func migrate(_ presets: [ModelPreset], providers: [ProviderDefinition]? = nil) throws
+    public func migrate(_ presets: [ModelPreset], connections: [ConnectionDefinition]? = nil) throws
         -> SharedPresets
     {
-        try update { document in try importPresets(&document, presets, providers: providers) }
+        try update { document in try importPresets(&document, presets, connections: connections) }
     }
     private func importPresets(
-        _ document: inout [String: Any], _ presets: [ModelPreset], providers: [ProviderDefinition]?
+        _ document: inout [String: Any], _ presets: [ModelPreset], connections: [ConnectionDefinition]?
     ) throws -> SharedPresets {
         let current = try library(document)
         var imported = current.presets
@@ -229,12 +239,12 @@ public final class SharedPresetsStore {
             }
             imported.append(preset)
         }
-        let owned = (document["modelPresets"] as? [String: Any])?["providers"] != nil
-        let definitions = owned ? current.providers : (providers ?? current.providers)
-        try ProviderDefinition.validate(definitions)
-        return try imported == current.presets && definitions == current.providers && owned
+        let owned = (document["modelPresets"] as? [String: Any])?["connections"] != nil
+        let definitions = owned ? current.connections : (connections ?? current.connections)
+        try ConnectionDefinition.validate(definitions)
+        return try imported == current.presets && definitions == current.connections && owned
             ? current
-            : setPresets(&document, imported, revision: current.revision, providers: definitions)
+            : setPresets(&document, imported, revision: current.revision, connections: definitions)
     }
     public func saveConfiguration(_ configuration: Configuration, scopedRevision: Int) throws -> Int {
         try update { document in
@@ -243,9 +253,11 @@ public final class SharedPresetsStore {
             }
             if let revision = configuration.sharedPresetRevision {
                 _ = try setPresets(
-                    &document, configuration.presets, revision: revision, providers: configuration.providers)
+                    &document, configuration.presets, revision: revision,
+                    connections: configuration.connections)
             } else {
-                _ = try importPresets(&document, configuration.presets, providers: configuration.providers)
+                _ = try importPresets(
+                    &document, configuration.presets, connections: configuration.connections)
             }
             guard
                 var value = try JSONSerialization.jsonObject(with: JSONEncoder().encode(configuration))
@@ -253,7 +265,7 @@ public final class SharedPresetsStore {
             else {
                 throw EZError("Configuration must be an object.")
             }
-            for key in ["presets", "providers", "sharedPresetRevision"] { value.removeValue(forKey: key) }
+            for key in ["presets", "connections", "sharedPresetRevision"] { value.removeValue(forKey: key) }
             return try setAppSection(&document, "configuration", value: value, revision: scopedRevision)
         }
     }

@@ -15,6 +15,15 @@ private final class FixtureCredentialRecords: CredentialRecords, @unchecked Send
     directory: URL, http: HTTPFixture, key: String? = "synthetic",
     id: GenerationProviderID = .openAIAPI
 ) throws -> GenerationProvider {
+    http.installModelCatalog(["test"])
+    return GenerationProvider.saul(
+        id, connection: try credentialConnection(directory: directory, http: http, key: key))
+}
+
+@MainActor func credentialConnection(
+    directory: URL, http: HTTPFixture, key: String? = "synthetic",
+    definitions: [ConnectionDefinition] = ConnectionDefinition.defaults
+) throws -> SaulConnection {
     try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
     let records = FixtureCredentialRecords()
     records.values[.openAI] = key.map { Data($0.utf8) }
@@ -29,7 +38,8 @@ private final class FixtureCredentialRecords: CredentialRecords, @unchecked Send
         let request = try CredentialRequest.decode(data, caller: .ez)
         let stream = AsyncThrowingStream<Data, Error> { continuation in
             let owner = CredentialOwner(
-                storage: storage, caller: .ez, http: OfficialOpenAI(session: http.session)
+                storage: storage, caller: .ez, http: ConnectionHTTP(session: http.session),
+                connectionDefinitions: { definitions }
             ) { event in
                 do {
                     continuation.yield(
@@ -48,13 +58,13 @@ private final class FixtureCredentialRecords: CredentialRecords, @unchecked Send
         }
         return NativeCredentialReplies(stream: stream, close: {})
     }
-    return GenerationProvider.saul(id, connection: connection)
+    return connection
 }
 
 extension HistoryEntry {
     func withAPIProvider() -> HistoryEntry {
         var entry = self
-        entry.providerSnapshot = ProviderDefinition.defaults[1]
+        entry.connectionSnapshot = ConnectionDefinition.defaults[1]
         return entry
     }
 }

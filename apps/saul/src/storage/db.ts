@@ -651,7 +651,7 @@ export class SaulDatabase {
         capability?: RunResult['capability'];
         imageOptions?: RunResult['imageOptions'];
       };
-      providerSnapshot?: { kind: string };
+      connectionSnapshot?: { kind: string };
       inputValues?: Record<string, string>;
       citations?: { url: string; title?: string }[];
     };
@@ -663,7 +663,7 @@ export class SaulDatabase {
       status: entry.status === 'pending' ? 'interrupted' : (entry.status as RunResult['status']),
       responseRaw: entry.response,
       model: entry.model,
-      provider: entry.providerSnapshot?.kind || 'chatgpt-plan',
+      provider: entry.connectionSnapshot?.kind || 'chatgpt-plan',
       createdAt: Number(row.created_at),
       latencyMs: entry.durationSeconds === undefined ? undefined : entry.durationSeconds * 1000,
       error: entry.error,

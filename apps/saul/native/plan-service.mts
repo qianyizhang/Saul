@@ -99,7 +99,7 @@ export class PlanService {
             request.value,
             request.presetRevision,
             request.presets,
-            request.providers,
+            request.connections,
           ),
         });
         return;
@@ -112,7 +112,7 @@ export class PlanService {
       case 'presets-save':
         emit({
           type: 'result',
-          library: this.presets.save(request.revision, request.presets, request.providers),
+          library: this.presets.save(request.revision, request.presets, request.connections),
         });
         return;
       case 'accounts':

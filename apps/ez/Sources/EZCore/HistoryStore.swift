@@ -33,7 +33,7 @@ public final class HistoryStore {
             try execute("PRAGMA foreign_keys=ON; PRAGMA secure_delete=ON;")
             try transaction {
                 let version = try rows("PRAGMA user_version").first?["user_version"] as? Int64 ?? 0
-                guard version == 0 || version == 3 else {
+                guard version == 0 || version == 3 || version == 4 else {
                     throw EZError("Unsupported shared history version.")
                 }
                 if version == 0 {
@@ -45,7 +45,10 @@ public final class HistoryStore {
                             forResource: "history", withExtension: "sql")
                     else { throw EZError("Shared history schema is missing.") }
                     try execute(String(contentsOf: schema, encoding: .utf8))
-                    try execute("PRAGMA user_version=3")
+                    try execute("PRAGMA user_version=4")
+                } else if version == 3 {
+                    try upgradeConnectionNames()
+                    try execute("PRAGMA user_version=4")
                 }
             }
             if let legacyDirectory { try migrate(from: legacyDirectory) }
@@ -56,6 +59,36 @@ public final class HistoryStore {
         }
     }
     deinit { sqlite3_close(database) }
+
+    private func upgradeConnectionNames() throws {
+        for (table, field, upgrade) in [
+            ("ez_entry", "data", ConnectionMigration.history),
+            ("llm_run", "input_json", ConnectionMigration.run),
+        ] {
+            for row in try rows("SELECT id,\(field) AS value FROM \(table) WHERE \(field) IS NOT NULL") {
+                guard let json = row["value"] as? String,
+                    let value = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+                else { throw EZError("Invalid stored history. Original data preserved.") }
+                let data = try JSONSerialization.data(withJSONObject: upgrade(value))
+                try execute(
+                    "UPDATE \(table) SET \(field)=? WHERE id=?",
+                    [String(decoding: data, as: UTF8.self), row["id"]])
+            }
+        }
+        for row in try rows("SELECT id,data FROM digest_batch") {
+            guard let json = row["data"] as? String,
+                var value = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+            else { throw EZError("Invalid stored summary. Original data preserved.") }
+            if var action = value["action"] as? [String: Any], let input = action["input"] as? [String: Any] {
+                action["input"] = try ConnectionMigration.run(input)
+                value["action"] = action
+            }
+            let data = try JSONSerialization.data(withJSONObject: value)
+            try execute(
+                "UPDATE digest_batch SET data=? WHERE id=?",
+                [String(decoding: data, as: UTF8.self), row["id"]])
+        }
+    }
 
     public func recoverInterrupted() throws {
         try execute(
@@ -132,7 +165,7 @@ public final class HistoryStore {
                             ImageOptions.self, from: JSONSerialization.data(withJSONObject: options))
                     }
                     if entry.sourceCapability == .draw {
-                        entry.providerSnapshot = ProviderDefinition(
+                        entry.connectionSnapshot = ConnectionDefinition(
                             key: "openai-api", name: "OpenAI API", kind: .openAIAPI)
                     }
                 }
@@ -213,7 +246,13 @@ public final class HistoryStore {
             for line in data.split(separator: 0x0A)
             where !line.allSatisfy({ [0x20, 0x09, 0x0D].contains($0) }) {
                 do {
-                    let entry = try decoder.decode(HistoryEntry.self, from: Data(line))
+                    guard let raw = try JSONSerialization.jsonObject(with: Data(line)) as? [String: Any]
+                    else {
+                        throw EZError("Invalid original history record.")
+                    }
+                    let upgraded = try ConnectionMigration.history(raw)
+                    let entry = try decoder.decode(
+                        HistoryEntry.self, from: JSONSerialization.data(withJSONObject: upgraded))
                     guard entry.schemaVersion == 1 else {
                         throw EZError("Unsupported original history version.")
                     }

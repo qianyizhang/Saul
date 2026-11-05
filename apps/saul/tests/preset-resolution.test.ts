@@ -53,15 +53,15 @@ it('rejects both credential-owner changes, including legacy requests, without ch
 
 it('retains the original Connection when the Provider is rebound to another profile', () => {
   const value = settings();
-  const preset = { ...value.configuration!.presets[0]!, providerKey: 'openai-api' };
-  value.providerConnections = { 'openai-api': 'original' };
+  const preset = { ...value.configuration!.presets[0]!, connectionKey: 'openai-api' };
+  value.connectionProfiles = { 'openai-api': 'original' };
   const prepared = preparePreset(value, preset);
   value.profiles!.push({
     id: 'other',
     name: 'Other',
     config: { ...value.openaiCompatible, apiKey: 'other-key' },
   });
-  value.providerConnections['openai-api'] = 'other';
+  value.connectionProfiles['openai-api'] = 'other';
   const input = { ...prepared.choices, context, systemPrompt: '', userPrompt: 'source' };
   expect(prepareFrozenPreset(value, input).credential).toBe('fixture-key');
   value.profiles!.shift();

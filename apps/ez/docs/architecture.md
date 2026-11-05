@@ -9,7 +9,7 @@ Node, Python, Electron or webview runtime.
 | Owner                                                        | Responsibility                                                                 |
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------ |
 | `EZApp` / `QuickLookupController`                            | Windows, menu bar, Services, launcher and keyboard lifecycle                   |
-| `AppModel` / `ProviderState`                                 | User actions, selected configuration, draft, history and visible errors        |
+| `AppModel` / `GenerationState`                                 | User actions, selected configuration, draft, history and visible errors        |
 | `AttemptExecution`                                           | Frozen attempt, generation, cancellation, terminal save and save-only recovery |
 | `GenerationProvider` / `SaulGeneration`                      | Supported operations and requests to the signed credential owner               |
 | `ChatGPTAuth` / `LoopbackListener` / `OIDC`                  | Owner-side OAuth, bounded loopback callback and verified identity              |
@@ -39,16 +39,16 @@ partial streams remain incomplete.
 
 ## Providers and Illustration
 
-`ProviderDefinition` owns stable keys, names and transports. Defaults are `gpt-plan`
-(Write) and `openai-api` (Write/Draw/Speak). Presets bind provider, capability, model
-and options, never a plan account or secret. Unknown/incompatible choices block
+`ConnectionDefinition` owns stable keys, names and transports. Defaults are `gpt-plan`
+(Write) and `openai-api` (Write/Draw/Speak). Presets bind connection, capability, model
+and options. Each managed connection pins its account or endpoint; presets contain no secrets. Unknown/incompatible choices block
 before generation. Never silently change account, model, billing or service tier.
 
 Illustration uses the same workspace and single active attempt as Write. API Write
 uses an explicit model ID; Fast sends `service_tier: priority`, while plan Fast is
 catalog-controlled. See the [API Fast guide](https://developers.openai.com/api/docs/guides/fast-mode).
-Text-only Draw sends one `POST /v1/images/generations`; its default is GPT Image
-2.6 Flare, low quality, 1024×1024 PNG. The compiled template is the exact prompt;
+Text-only Draw sends one `POST /v1/images/generations`; the user selects a current
+catalog model. Initial image options are low quality, 1024×1024 PNG. The compiled template is the exact prompt;
 image options belong to the preset. The Draw composer can override output format
 for one draft; Run freezes it in the preset snapshot. GIF uses `output_format: "gif"`
 and API animation defaults. It is generation-only and requires a 2.6 model; input
@@ -56,7 +56,7 @@ images with GIF output fail before send. Exact GIF bytes remain in SQLite and
 Download preserves `.gif`. Native previews animate unless reduced motion is enabled.
 Key Save/Reload and inspection never generate.
 
-Run freezes action, inputs, preset and provider snapshots. Stop cancels locally
+Run freezes action, inputs, preset and connection snapshots. Stop cancels locally
 and rejects late output; it cannot promise server cancellation or avoided billing.
 There are no automatic generation retries. Image requests time out after 180s,
 reject redirects, bound bytes/dimensions and report safe status-specific errors.
@@ -65,8 +65,9 @@ reject redirects, bound bytes/dimensions and report safe status-specific errors.
 
 Action-only `webSearch` (default false) and optional named, required `imageInput`
 never enter shared presets or Saul actions. Versioned migrations seed Illustration,
-Research and Make meme once, preserving IDs, edits and removals. Research defaults
-to API Write / GPT-6.1 Sol; Make meme to API Draw / GPT Image 2.6 Flare.
+Research and Make meme once, preserving IDs, edits and removals. Research uses API Write; Make meme uses API Draw. New presets leave the model
+unassigned until the user chooses from the current connection catalog. Saved model
+IDs remain unchanged.
 
 Search requires the API provider and Responses
 `tools: [{type: "web_search"}]`, `tool_choice: "required"`. A completed text answer
@@ -144,7 +145,7 @@ error. No fallback writer or permanent migration backup is created.
 
 A saved, completed native Write answer can supply explicit follow-up context.
 `HistoryEntry.prepareFollowUp` keeps the saved request, instructions, earlier
-exchanges, model/effort/speed and search policy, using the selected local account.
+exchanges, model/effort/speed and search policy, using the saved connection's bound account.
 Each Send creates a linked history entry; no context is silently dropped.
 Questions are limited to 2,000 UTF-16 units and compiled conversations to 120,000.
 Unsaved/partial answers must finish or recover first. Draw and browser entries
@@ -260,13 +261,13 @@ the same long-input bound and falls back to one unhighlighted pair.
 
 ## Unified configuration
 
-`Little Clarity/settings.json` holds shared providers/presets in `modelPresets`
+`Little Clarity/settings.json` holds shared connections/presets in `modelPresets`
 and EZ actions in `apps.ez.configuration`. Section revisions reject stale saves;
 `ConfigurationStore` imports old `EZ/configuration.json` once and retains it for
-recovery. Shared provider definitions win; legacy EZ definitions are adopted only
+recovery. Shared connection definitions win; legacy EZ definitions are adopted only
 when the shared list is absent and omitted on later scope writes. Legacy presets
 decode as `gpt-plan`/Write; persisted `recipes`/`recipeSnapshot` keys remain stable.
-Account choice/secrets never belong to a preset. Shortcuts, Min Mode and window
+Account identity belongs to the saved connection; secrets stay with its credential owner. Shortcuts, Min Mode and window
 placement keep their local stores.
 
 Save is explicit. The shared configuration owner checks both revisions and saves Presets and the EZ
@@ -275,8 +276,9 @@ See the [shared transaction contract](../../../contracts/README.md#unified-confi
 Preset/Action editors stay mounted across Settings sections;
 item changes, Add and dismissal guard dirty edits. Save failure keeps the draft.
 Configuration editing preserves lookup overrides and restored historical actions.
-Speak presets retain Realtime model and strict `speechOptions.voice`; EZ can edit
-them but blocks execution before credentials. Playback runs only in Saul.
+Speak presets retain a catalog model and strict `speechOptions.voice`. `SpeechPreviewClient`
+uses bounded Realtime events and validates completion before creating in-memory WAV
+audio; `SpeakPreview` owns Generate/Stop and explicit playback. It never writes history.
 
 ## Local packaging identity
 
@@ -287,7 +289,7 @@ prompt-free Keychain upgrades; see [Keychain diagnosis](keychain.md#why-a-rebuil
 
 ## Shared credential owner
 
-EZ requests official OpenAI operations from the independently installed signed
+EZ requests official OpenAI and bound custom-endpoint operations from the independently installed signed
 Saul owner. Production has no app-local secret-reading adapter or fallback;
 offline suites inject disposable credentials. The [shared contract](../../../contracts/credentials.md)
 owns the protocol and lifecycle; [verification](verification.md) separates offline,

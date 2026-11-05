@@ -269,7 +269,7 @@ private struct SurfacePreviewControls: View {
             let preset = model.currentPreset
         {
             if var entry = try? action.prepare(
-                values: model.inputValues, preset: preset, models: model.models)
+                values: model.inputValues, preset: preset, models: model.models, provider: .chatGPTPlan)
             {
                 entry.response =
                     "**Serendipity** means finding something valuable or pleasant by chance.\n\nExample: finding a book you love while searching for something else."

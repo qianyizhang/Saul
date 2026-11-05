@@ -61,7 +61,9 @@ for (const name of [
       const restored = restoreSettings(local, store.readScope('settings'));
       expect(restored.configuration!.recipes[0]!.presetId).toBe(library.presets[0]!.id);
       expect(restored.configuration!.presets).toHaveLength(2);
-      expect(restored.configuration!.presets.every((p) => !p.accountId)).toBe(true);
+      expect(restored.configuration!.presets.every((p) => !Object.hasOwn(p, 'accountId'))).toBe(
+        true,
+      );
       const calls: unknown = store.readScope('calls').value;
       validateActionState(calls);
       for (const choice of calls.library || []) {
