@@ -8,9 +8,11 @@ Saul (Chrome) and EZ (macOS) are independently installed applications. Read the
 Follow the app-local instructions in `apps/saul/AGENTS.md` or `apps/ez/AGENTS.md`.
 
 For cross-app features, read the [shared contracts](contracts/README.md). Share
-behavior and interfaces; keep implementations native to their runtimes. Data,
-credentials and execution remain app-owned. Add shared runtime code only for
-concrete consumers; opt-in replacement requirements live in the architecture.
+behavior and interfaces; keep implementations native to their runtimes. Follow
+the architecture's [data ownership](docs/architecture.md#data-ownership): shared
+history, opted-in official OpenAI credentials behind the Saul owner, and app-owned
+drafts and active request state. Add shared runtime code only for concrete
+consumers; opt-in replacement requirements live in the architecture.
 
 For UI changes, read [DESIGN.md](DESIGN.md) and complete the
 [feature UI review](design/SKILL.md#feature-ui-review). Generate tokens with

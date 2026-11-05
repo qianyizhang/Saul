@@ -145,6 +145,14 @@ public struct Action: Codable, Equatable, Identifiable, Sendable {
         }
         if let message = preset.availabilityError(in: models) { throw EZError(message) }
         let prompt = try PromptTemplate(template).render(values)
+        if capability == .draw {
+            let options = preset.imageOptions ?? ImageOptions()
+            try ImageGenerationRequest(
+                prompt: prompt, model: preset.model, size: options.size,
+                quality: options.quality, outputFormat: options.outputFormat,
+                image: imageInput == nil ? nil : image
+            ).validate()
+        }
         var entry = HistoryEntry(
             mode: legacyMode ?? .ask, query: prompt, model: preset.model,
             effort: preset.effort,
@@ -307,7 +315,7 @@ public struct Configuration: Codable, Equatable {
         guard !actions.contains(where: { $0.id == actionID }) else { return false }
         let preset = ModelPreset(
             id: UUID(uuidString: "C14B29F3-3EC2-4EFC-8BED-E05531AEF2CB")!,
-            name: uniqueName("Illustration", in: presets.map(\.name)), model: "gpt-image-2.5-flare",
+            name: uniqueName("Illustration", in: presets.map(\.name)), model: "gpt-image-2.6-flare",
             effort: "", fast: false,
             providerKey: "openai-api", capability: .draw, imageOptions: ImageOptions())
         if !presets.contains(where: { $0.id == preset.id }) { presets.append(preset) }
@@ -341,7 +349,7 @@ public struct Configuration: Codable, Equatable {
         let memeID = UUID(uuidString: "8ED3A908-D0BF-4FB8-8A61-86549BE9ED49")!
         let memePreset = ModelPreset(
             id: UUID(uuidString: "8F092456-F150-4B43-B9FB-D58345429826")!,
-            name: uniqueName("Make meme", in: presets.map(\.name)), model: "gpt-image-2.5-flare",
+            name: uniqueName("Make meme", in: presets.map(\.name)), model: "gpt-image-2.6-flare",
             effort: "", fast: false, providerKey: "openai-api", capability: .draw,
             imageOptions: ImageOptions())
         if !presets.contains(where: { $0.id == memePreset.id }) { presets.append(memePreset) }

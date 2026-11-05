@@ -166,7 +166,9 @@ struct QuickLookupView: View {
                             : "\($0.name) · \(entry.requestedServiceTier == nil ? "Standard" : "Fast")"
                     } ?? "Details"
                 )
-                .lineLimit(1).help(entry.capability == .draw ? "Draw · PNG" : entry.serviceDescription)
+                .lineLimit(1).help(
+                    entry.capability == .draw
+                        ? "Draw · \(entry.imageOptions.outputFormat.uppercased())" : entry.serviceDescription)
             }
             Button {
                 showDetails.toggle()

@@ -102,6 +102,7 @@ struct RequestDetails: View {
                 MetadataRow("Provider", value: preset.providerKey)
                 MetadataRow("Capability", value: preset.capability.name)
                 if preset.capability == .draw {
+                    MetadataRow("Output format", value: model.outputFormat.uppercased())
                     MetadataRow("Size", value: (preset.imageOptions ?? ImageOptions()).size)
                     MetadataRow("Quality", value: (preset.imageOptions ?? ImageOptions()).quality.capitalized)
                 } else {
@@ -162,6 +163,14 @@ struct ActionInputs: View {
     @FocusState private var focusedField: String?
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if model.currentAction?.capability == .draw {
+                SelectorPicker(
+                    "Output format",
+                    options: ImageModelOption.formats.map {
+                        .init(value: $0, title: $0 == "gif" ? "GIF · animated" : "PNG")
+                    },
+                    selection: Binding(get: { model.outputFormat }, set: { model.outputFormatOverride = $0 }))
+            }
             if let label = model.currentAction?.imageInput {
                 ImageInputView(model: model, label: label)
             }

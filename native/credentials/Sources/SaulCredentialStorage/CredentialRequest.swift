@@ -28,7 +28,10 @@ public struct CredentialRequest {
       "api-chat": ["model", "systemPrompt", "userPrompt", "temperature", "maxTokens"],
       "api-realtime": ["model", "voice"],
       "native-responses": ["provider", "accountId", "body"],
-      "native-image": ["prompt", "model", "size", "quality", "imageBase64", "imageName"],
+      "native-image": [
+        "prompt", "model", "size", "quality", "outputFormat", "imageBase64", "imageName",
+      ],
+      "api-image": ["prompt", "model", "size", "quality", "outputFormat"],
       "migration-verified": [],
     ]
     guard let fields = operations[action],
@@ -136,9 +139,11 @@ public struct CredentialRequest {
         throw invalid()
       }
     }
-    if action == "native-image" {
+    if action == "native-image" || action == "api-image" {
       guard text("prompt", max: 128_000), text("model", max: 256), text("size", max: 64),
         text("quality", max: 64),
+        value["outputFormat"] == nil
+          || ["png", "gif"].contains(value["outputFormat"] as? String ?? ""),
         text("imageBase64", max: 28_000_000, required: false),
         text("imageName", max: 800, required: false)
       else { throw invalid() }

@@ -94,6 +94,7 @@ export interface ModelPreset {
 }
 
 export interface Recipe {
+  capability?: 'write' | 'draw';
   id: string;
   name: string;
   presetId: string;

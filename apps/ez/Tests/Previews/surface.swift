@@ -23,6 +23,11 @@ import SwiftUI
                         if entry.query.contains("[fail]") {
                             throw EZError("Synthetic image request failure. Your draft is retained.")
                         }
+                        if entry.presetSnapshot?.imageOptions?.outputFormat == "gif" {
+                            let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+                                .appendingPathComponent("../../../../contracts/fixtures/animation.gif")
+                            return .image(try Data(contentsOf: url))
+                        }
                         return .image(try previewPNG())
                     }
                     if entry.usesWebSearch {
@@ -135,7 +140,7 @@ private struct SurfacePreviewControls: View {
                             "Thinking",
                             "Streaming", "Blocked", "Prose corrections",
                             "No actions", "Selector hitboxes", "Long metadata", "Legacy answer",
-                            "Draw", "Draw result", "Draw waiting", "Draw error",
+                            "Draw", "Draw result", "Draw GIF", "Draw waiting", "Draw error",
                             "Research", "Research result", "Research waiting", "Research error",
                             "Meme", "Meme result", "Meme invalid",
                         ] + (syntheticAttempt ? ["Unsaved"] : []), id: \.self
@@ -248,6 +253,7 @@ private struct SurfacePreviewControls: View {
             if scenario != "Research" { model.send() }
         }
         if scenario.hasPrefix("Draw") {
+            if scenario == "Draw GIF" { model.outputFormatOverride = "gif" }
             model.query = "A tree shares nutrients through its roots and fungi."
             if scenario == "Draw waiting" { model.query += " [slow]" }
             if scenario == "Draw error" { model.query += " [fail]" }

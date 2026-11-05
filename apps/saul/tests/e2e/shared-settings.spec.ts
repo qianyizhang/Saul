@@ -93,9 +93,7 @@ test('shared provider edits keep stable preset bindings and preserve Draw throug
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await settingsSection(page, 'Presets');
   await page.getByRole('button', { name: 'Illustration', exact: true }).click();
-  await expect(
-    page.getByText('Draw preset · edit image settings in EZ. Saul currently runs Write actions.'),
-  ).toBeVisible();
+  await expect(page.getByLabel('Image model', { exact: true })).toHaveValue('gpt-image-2.5-flare');
   await expect(page.getByLabel('Model name', { exact: true })).toBeHidden();
   await settingsSection(page, 'Actions');
   await page.getByLabel('Response language', { exact: true }).selectOption('Chinese');

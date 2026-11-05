@@ -47,7 +47,11 @@ struct InputOutputInspector: View {
                 }
                 InspectionTextBlock(label: "Prompt · user", text: entry.query)
                 if entry.capability == .draw {
-                    Text(entry.hasImage ? "Response · PNG image" : "No image returned.").font(
+                    Text(
+                        entry.hasImage
+                            ? "Response · \(entry.imageOptions.outputFormat.uppercased()) image"
+                            : "No image returned."
+                    ).font(
                         AppStyle.caption)
                 } else {
                     InspectionTextBlock(label: "Response · raw text", text: entry.response, response: true)

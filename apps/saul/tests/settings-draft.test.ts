@@ -75,7 +75,7 @@ it('owns recipe/preset references and preserves editing selection across unrelat
   draft = editSettingsDraft(draft, { type: 'remove-recipe' });
   draft = editSettingsDraft(draft, { type: 'remove-preset' });
   expect(draft.presetId).toBe('preset-current');
-  expect(configurationFor(settingsForSave(draft)).recipes).toHaveLength(3);
+  expect(configurationFor(settingsForSave(draft)).recipes).toHaveLength(4);
 });
 
 it('keeps invalid edits in the draft until explicit validation succeeds', () => {

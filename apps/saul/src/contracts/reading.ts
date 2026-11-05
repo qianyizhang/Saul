@@ -7,12 +7,23 @@ export interface ReadingOperations {
     request: { action: 'review'; selectionId: string; context: ResolvedContext; recipeId?: string };
     result: import('../reading/input-change').InputComparison;
   };
+  image: {
+    request: { action: 'image'; selectionId: string; runId: string };
+    result: import('../types/storage').DbOperations['DB_IMAGE']['result'];
+  };
   list: { request: { action: 'list' }; result: { passages: Passage[] } };
   policy: {
     request: { action: 'policy' };
     result: {
       policy: ContextPolicy;
-      recipes: { id: string; name: string; presetName: string; fast: boolean }[];
+      recipes: {
+        id: string;
+        name: string;
+        presetName: string;
+        fast: boolean;
+        capability?: 'write' | 'draw';
+        outputFormat?: 'png' | 'gif';
+      }[];
       selectedRecipeId: string;
     };
   };
@@ -27,6 +38,7 @@ export interface ReadingOperations {
       snapshot: SelectionSnapshot;
       context: ResolvedContext;
       recipeId?: string;
+      outputFormat?: 'png' | 'gif';
       regenerate?: boolean;
     };
     result: { passageId: string; reused: boolean };
@@ -42,6 +54,7 @@ export interface ReadingOperations {
     };
     result: { passageId: string; reused: boolean };
   };
+  'save-image': { request: { action: 'save-image'; selectionId: string }; result: EmptyResult };
   stop: { request: { action: 'stop'; selectionId: string }; result: EmptyResult };
   runs: {
     request: { action: 'runs'; selectionId: string };
@@ -123,6 +136,7 @@ export function validateReading(v: unknown): asserts v is ReadingRequest {
     case 'submit':
       valid =
         id(v.submissionId) &&
+        (v.outputFormat === undefined || v.outputFormat === 'png' || v.outputFormat === 'gif') &&
         validSnapshot(v.snapshot) &&
         validContext(v.context) &&
         (v.regenerate === undefined || typeof v.regenerate === 'boolean') &&
@@ -145,6 +159,10 @@ export function validateReading(v: unknown): asserts v is ReadingRequest {
         (v.runId === undefined || id(v.runId)) &&
         (v.instruction === undefined || text(v.instruction, 2000));
       break;
+    case 'image':
+      valid = id(v.selectionId) && id(v.runId);
+      break;
+    case 'save-image':
     case 'stop':
     case 'runs':
       valid = id(v.selectionId);

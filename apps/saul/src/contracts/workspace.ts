@@ -16,6 +16,8 @@ export function validateWorkspace(v: unknown): asserts v is DbRequest {
       break;
     case 'DB_DELETE_SELECTION':
     case 'DB_IMAGE':
+      valid = record(p) && id(p.selectionId) && (p.runId === undefined || id(p.runId));
+      break;
     case 'DB_RUNS':
     case 'DB_PASSAGE':
       valid = record(p) && id(p.selectionId);

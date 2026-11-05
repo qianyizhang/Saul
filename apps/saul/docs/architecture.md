@@ -43,6 +43,26 @@ reasoning-item event; only its activity signal is forwarded, never reasoning tex
 Answer or refusal text stops the light, and completion still requires the terminal
 provider event followed by a successful save.
 
+## Illustrate
+
+A Draw reading action uses an explicit OpenAI API preset. New installations include
+Illustrate; existing action libraries can add it from Settings → Actions. The
+selection widget offers PNG/GIF before the explicit Illustrate click. The runner
+freezes format in the preset snapshot and makes one Images generation request;
+ChatGPT-plan and custom endpoints cannot receive this operation. GIF requires a
+2.6 image model. Preset editing retains older models without silently replacing them.
+
+The signed credential owner admits bounded `api-image` generation without image
+attachments or arbitrary URLs. Local API connections use the same request shape.
+The response is bounded to 20 MB of decoded image data and 4,096 pixels per edge.
+The runner saves 200,000-character base64 chunks into the existing SQLite
+`response_structured` field. Offsets make acknowledgement replay idempotent;
+completion requires a complete image. Passage/history lists return metadata only;
+image bytes load for a selected attempt. A failed save retains exact bytes in the
+current runner for Download and Retry saving image, with no inference replay.
+Closing/restarting the runner loses unsaved in-memory output. Deletion makes late
+writes inert and removes saved output through the existing foreign-key cascade.
+
 ## Persistence and anchors
 
 - SQLite runs in the native helper at the [shared history path](../../../docs/architecture.md#shared-history). The offscreen runner uses validated native operations; helper loss fails visibly without local or in-memory fallback.

@@ -1,3 +1,4 @@
+import type { GeneratedImage } from '../models/images';
 import type { DbCall, Passage, RunResult, QueuedRun, Submission } from '../types/storage';
 import { streamModel } from '../models/provider';
 import { type ModelActivity, type ModelEvent, IncompleteGeneration } from '../models/events';
@@ -7,12 +8,17 @@ type Task = QueuedRun & {
   credential: string;
   controller: AbortController;
   raw: string;
+  image?: GeneratedImage;
   saving: boolean;
   activity: ModelActivity;
 };
 export class ReadingRunner {
   private tasks = new Map<string, Task>();
-  private failures = new Map<string, { runId: string; raw: string; error: string }>();
+  private failures = new Map<
+    string,
+    { runId: string; raw: string; error: string; image?: GeneratedImage; latencyMs?: number }
+  >();
+  private savingImages = new Set<string>();
   private active = new Set<string>();
   private recovery?: Promise<void>;
   get ready(): Promise<void> {
@@ -31,6 +37,8 @@ export class ReadingRunner {
   async submit(submission: Submission, credential: string) {
     await this.ready;
     const failed = this.failures.get(submission.snapshot.id);
+    if (failed?.image)
+      throw new Error('Save or download the unsaved image before starting another attempt.');
     if (failed) {
       await this.db({
         type: 'DB_FINISH',
@@ -114,6 +122,7 @@ export class ReadingRunner {
           pending = undefined;
           if (result.done) break;
           const event = result.value;
+          if (event.type === 'image') task.image = event.image;
           if (event.type === 'complete') {
             completed = true;
             break;
@@ -141,11 +150,13 @@ export class ReadingRunner {
           'Generation ended without a completion signal.',
         );
       if (
+        !task.image &&
         !new TagStreamParser()
           .feed(task.raw)
           .some((s) => (s.type === 'text' ? s.text : s.term).trim())
       )
         throw new Error('The model returned no explanation. Check the model and endpoint.');
+      if (task.image) await this.writeImage(task.id, task.image, signal);
       task.saving = true;
       if (!(await this.db({ type: 'DB_SAVING', payload: { runId: task.id } }))) return;
       this.changed(task.pageUrl);
@@ -160,6 +171,16 @@ export class ReadingRunner {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      if (task.image && !signal.aborted) {
+        this.failures.set(task.selectionId, {
+          runId: task.id,
+          raw: task.raw,
+          image: task.image,
+          latencyMs: Date.now() - started,
+          error: 'Image not saved. Download it or retry saving before closing Saul. ' + message,
+        });
+        return;
+      }
       try {
         await this.db({
           type: 'DB_FINISH',
@@ -199,6 +220,59 @@ export class ReadingRunner {
       this.active.delete(task.id);
       this.changed(task.pageUrl);
       this.pump();
+    }
+  }
+  private async writeImage(runId: string, image: GeneratedImage, signal?: AbortSignal) {
+    for (let offset = 0; offset < image.data.length; offset += 200_000) {
+      signal?.throwIfAborted();
+      await this.db({
+        type: 'DB_IMAGE_CHUNK',
+        payload: {
+          runId,
+          offset,
+          data: image.data.slice(offset, offset + 200_000),
+          mediaType: image.mediaType,
+          last: offset + 200_000 >= image.data.length,
+        },
+      });
+    }
+  }
+  unsavedImage(selectionId: string, runId: string) {
+    const failure = this.failures.get(selectionId);
+    return failure?.runId === runId ? failure.image : undefined;
+  }
+  async saveImage(selectionId: string) {
+    const failure = this.failures.get(selectionId);
+    if (!failure?.image || this.savingImages.has(selectionId))
+      throw new Error('No unsaved image is ready to save.');
+    this.savingImages.add(selectionId);
+    try {
+      const passage = await this.db({ type: 'DB_PASSAGE', payload: { selectionId } });
+      if (passage?.latest.id !== failure.runId) throw new Error('The image attempt changed.');
+      if (passage.latest.status !== 'completed') {
+        await this.writeImage(failure.runId, failure.image);
+        if (
+          passage.latest.status !== 'saving' &&
+          !(await this.db({ type: 'DB_SAVING', payload: { runId: failure.runId } }))
+        )
+          throw new Error('The image attempt is no longer available.');
+        await this.db({
+          type: 'DB_FINISH',
+          payload: {
+            runId: failure.runId,
+            raw: failure.raw,
+            status: 'completed',
+            latencyMs: failure.latencyMs ?? 0,
+          },
+        });
+        const saved = await this.db({ type: 'DB_PASSAGE', payload: { selectionId } });
+        if (saved?.latest.id !== failure.runId || saved.latest.status !== 'completed')
+          throw new Error('The image could not be saved.');
+      }
+      this.failures.delete(selectionId);
+    } finally {
+      this.savingImages.delete(selectionId);
+      this.changed('*');
     }
   }
   async stop(selectionId: string) {
@@ -247,6 +321,7 @@ export class ReadingRunner {
     const task = this.tasks.get(run.id);
     if (task && run.status === 'running') run = { ...run, activity: task.activity };
     const failed = this.failures.get(selectionId);
+    if (failed?.runId === run.id && run.status === 'completed') this.failures.delete(selectionId);
     return failed?.runId === run.id && ['queued', 'running', 'saving'].includes(run.status)
       ? {
           ...run,
@@ -254,6 +329,7 @@ export class ReadingRunner {
           responseRaw: failed.raw,
           error: failed.error,
           reason: 'save-failed',
+          hasImage: !!failed.image,
         }
       : run;
   }

@@ -65,18 +65,24 @@ public struct SpeechOptions: Codable, Equatable, Sendable {
 public struct ImageOptions: Codable, Equatable, Sendable {
     public var size: String
     public var quality: String
-    public init(size: String = "1024x1024", quality: String = "low") {
+    public var outputFormat: String
+    public init(size: String = "1024x1024", quality: String = "low", outputFormat: String = "png") {
         self.size = size
         self.quality = quality
+        self.outputFormat = outputFormat
     }
-    private enum CodingKeys: String, CodingKey, CaseIterable { case size, quality }
+    private enum CodingKeys: String, CodingKey, CaseIterable { case size, quality, outputFormat }
     public init(from decoder: Decoder) throws {
         let fields = try contractFields(decoder, keys: CodingKeys.self)
         size = try fields.decode(String.self, forKey: .size)
         quality = try fields.decode(String.self, forKey: .quality)
+        outputFormat =
+            fields.contains(.outputFormat) ? try fields.decode(String.self, forKey: .outputFormat) : "png"
     }
     public func validate() throws {
-        guard ImageModelOption.sizes.contains(size), ImageModelOption.qualities.contains(quality) else {
+        guard ImageModelOption.sizes.contains(size), ImageModelOption.qualities.contains(quality),
+            ImageModelOption.formats.contains(outputFormat)
+        else {
             throw EZError("Choose a supported image size and quality in Presets.")
         }
     }

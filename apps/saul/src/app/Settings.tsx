@@ -1,4 +1,8 @@
-import { providerCapabilities, SPEECH_VOICES } from '../../native/shared-presets-contract.mts';
+import {
+  providerCapabilities,
+  SPEECH_VOICES,
+  IMAGE_MODELS,
+} from '../../native/shared-presets-contract.mts';
 import { ProviderSettings } from './ProviderSettings';
 import { usePlanSettings } from './usePlanSettings';
 import { SpeechTest } from './SpeechTest';
@@ -282,17 +286,22 @@ export function Settings({
                   <select
                     aria-label="Capability"
                     value={selectedPreset.capability ?? 'write'}
-                    disabled={locked || selectedPreset.capability === 'draw'}
+                    disabled={locked}
                     onChange={(e) =>
                       editPreset({
                         type: 'preset',
-                        patch: { capability: e.target.value as 'write' | 'speak' },
+                        patch: { capability: e.target.value as 'write' | 'draw' | 'speak' },
                       })
                     }
                   >
                     <option value="write">Write</option>
-                    <option value="draw" disabled>
-                      Draw · edit in EZ
+                    <option
+                      value="draw"
+                      disabled={
+                        !currentProvider || !providerCapabilities(currentProvider).includes('draw')
+                      }
+                    >
+                      Draw
                     </option>
                     <option
                       value="speak"
@@ -308,18 +317,65 @@ export function Settings({
                   </select>
                 </label>
                 {selectedPreset.capability === 'draw' ? (
-                  <div>
-                    <p role="status">
-                      Draw preset · edit image settings in EZ. Saul currently runs Write actions.
-                    </p>
-                    <dl className="saul-metadata">
-                      <dt>Model</dt>
-                      <dd>{selectedPreset.model}</dd>
-                      <dt>Size</dt>
-                      <dd>{selectedPreset.imageOptions?.size || '1024x1024'}</dd>
-                      <dt>Quality</dt>
-                      <dd>{selectedPreset.imageOptions?.quality || 'low'}</dd>
-                    </dl>
+                  <div className="stack">
+                    <label className="field">
+                      Image model
+                      <select
+                        aria-label="Image model"
+                        value={selectedPreset.model}
+                        disabled={locked}
+                        onChange={(e) =>
+                          editPreset({ type: 'preset', patch: { model: e.target.value } })
+                        }
+                      >
+                        {IMAGE_MODELS.map((m) => (
+                          <option key={m}>{m}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <details>
+                      <summary>Image settings</summary>
+                      {(['size', 'quality', 'outputFormat'] as const).map((key) => (
+                        <label className="field" key={key}>
+                          {{ size: 'Size', quality: 'Quality', outputFormat: 'Output format' }[key]}
+                          <select
+                            aria-label={
+                              {
+                                size: 'Image size',
+                                quality: 'Image quality',
+                                outputFormat: 'Image output format',
+                              }[key]
+                            }
+                            disabled={locked}
+                            value={
+                              selectedPreset.imageOptions?.[key] ??
+                              { size: '1024x1024', quality: 'low', outputFormat: 'png' }[key]
+                            }
+                            onChange={(e) =>
+                              editPreset({
+                                type: 'preset',
+                                patch: {
+                                  imageOptions: {
+                                    size: '1024x1024',
+                                    quality: 'low',
+                                    ...selectedPreset.imageOptions,
+                                    [key]: e.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          >
+                            {{
+                              size: ['1024x1024', '1536x1024', '1024x1536'],
+                              quality: ['low', 'medium', 'high'],
+                              outputFormat: ['png', 'gif'],
+                            }[key].map((v) => (
+                              <option key={v}>{v}</option>
+                            ))}
+                          </select>
+                        </label>
+                      ))}
+                    </details>
                   </div>
                 ) : selectedPreset.capability === 'speak' ? (
                   <>

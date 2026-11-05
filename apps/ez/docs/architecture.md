@@ -48,8 +48,13 @@ Illustration uses the same workspace and single active attempt as Write. API Wri
 uses an explicit model ID; Fast sends `service_tier: priority`, while plan Fast is
 catalog-controlled. See the [API Fast guide](https://developers.openai.com/api/docs/guides/fast-mode).
 Text-only Draw sends one `POST /v1/images/generations`; its default is GPT Image
-2.5 Flare, low quality, 1024×1024 PNG. The compiled template is the exact prompt;
-image options belong to the preset. Key Save/Reload and inspection never generate.
+2.6 Flare, low quality, 1024×1024 PNG. The compiled template is the exact prompt;
+image options belong to the preset. The Draw composer can override output format
+for one draft; Run freezes it in the preset snapshot. GIF uses `output_format: "gif"`
+and API animation defaults. It is generation-only and requires a 2.6 model; input
+images with GIF output fail before send. Exact GIF bytes remain in SQLite and
+Download preserves `.gif`. Native previews animate unless reduced motion is enabled.
+Key Save/Reload and inspection never generate.
 
 Run freezes action, inputs, preset and provider snapshots. Stop cancels locally
 and rejects late output; it cannot promise server cancellation or avoided billing.
@@ -61,7 +66,7 @@ reject redirects, bound bytes/dimensions and report safe status-specific errors.
 Action-only `webSearch` (default false) and optional named, required `imageInput`
 never enter shared presets or Saul actions. Versioned migrations seed Illustration,
 Research and Make meme once, preserving IDs, edits and removals. Research defaults
-to API Write / GPT-6.1 Sol; Make meme to API Draw / GPT Image 2.5 Flare.
+to API Write / GPT-6.1 Sol; Make meme to API Draw / GPT Image 2.6 Flare.
 
 Search requires the API provider and Responses
 `tools: [{type: "web_search"}]`, `tool_choice: "required"`. A completed text answer
@@ -76,7 +81,7 @@ See [web search](https://developers.openai.com/api/docs/guides/tools-web-search)
 40 megapixels and 8,192 pixels per edge. Choose/Paste/Drop prepare only a draft;
 invalid replacement keeps the prior source. Run freezes and saves exact input
 bytes before transmission. An image input selects one multipart
-`POST /v1/images/edits` with the same output contract as generation, without a
+`POST /v1/images/edits` with PNG output, without a
 hidden analysis or second request. See [image edits](https://developers.openai.com/api/docs/guides/image-generation#edit-images).
 Reuse validates the saved source; missing/invalid bytes require reattachment.
 Deletion removes saved blobs, never the original file or external exports.

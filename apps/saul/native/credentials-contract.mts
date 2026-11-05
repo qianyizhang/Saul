@@ -26,7 +26,15 @@ export type CredentialRequest =
       temperature?: number;
       maxTokens?: number;
     }
-  | { action: 'api-realtime'; model: string; voice: string };
+  | { action: 'api-realtime'; model: string; voice: string }
+  | {
+      action: 'api-image';
+      prompt: string;
+      model: string;
+      size: string;
+      quality: string;
+      outputFormat: 'png' | 'gif';
+    };
 export type CredentialEvent =
   | { type: 'delta'; text: string }
   | { type: 'activity'; phase: 'waiting' | 'thinking' }
@@ -56,11 +64,27 @@ export function validateCredentialRequest(value: unknown): asserts value is Cred
     'api-key-import': ['key', 'selectedAccountId'],
     'api-chat': ['model', 'systemPrompt', 'userPrompt', 'temperature', 'maxTokens'],
     'api-realtime': ['model', 'voice'],
+    'api-image': ['prompt', 'model', 'size', 'quality', 'outputFormat'],
     'migration-verified': [],
   };
   const fields = operations[value.action];
   if (!fields || Object.keys(value).some((key) => key !== 'action' && !fields.includes(key)))
     throw new Error('Unsupported Saul credential operation.');
+  if (
+    value.action === 'api-image' &&
+    (!text(value.prompt, 32_000) ||
+      ![
+        'gpt-image-2.6-flare',
+        'gpt-image-2.6-sunburst',
+        'gpt-image-2.5-flare',
+        'gpt-image-2.5-sunburst',
+      ].includes(String(value.model)) ||
+      !['1024x1024', '1536x1024', '1024x1536'].includes(String(value.size)) ||
+      !['low', 'medium', 'high'].includes(String(value.quality)) ||
+      !['png', 'gif'].includes(String(value.outputFormat)) ||
+      (value.outputFormat === 'gif' && !String(value.model).startsWith('gpt-image-2.6-')))
+  )
+    throw new Error('Choose a supported Draw model and image options. GIF requires GPT Image 2.6.');
   if (value.action === 'select' && !text(value.accountId, 256))
     throw new Error('Choose a Saul account.');
   if (value.action === 'api-key-save' || value.action === 'api-key-import') {
@@ -125,6 +149,7 @@ export function validateCredentialEvent(value: unknown): asserts value is Creden
             'warning',
             'retired',
             'clientSecret',
+            'imageBase64',
           ].includes(key),
       )
     )
@@ -162,6 +187,11 @@ export function validateCredentialEvent(value: unknown): asserts value is Creden
           text(e.effort, 64) &&
           text(e.description, 4000, true),
       );
+    if (
+      value.imageBase64 !== undefined &&
+      (!text(value.imageBase64, 28_000_000) || !/^[A-Za-z0-9+/]+={0,2}$/.test(value.imageBase64))
+    )
+      throw new Error('Invalid image result.');
     if (
       (value.accounts !== undefined &&
         (!Array.isArray(value.accounts) ||

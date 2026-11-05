@@ -30,6 +30,7 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
   const [recipes, setRecipes] = useState<ReadingOperations['policy']['result']['recipes']>([]);
   const [defaultRecipeId, setDefaultRecipeId] = useState(EXPLAIN_RECIPE_ID);
   const [recipeChoice, setRecipeChoice] = useState<string | null>(null);
+  const [outputFormat, setOutputFormat] = useState<'png' | 'gif' | undefined>();
   const [muting, setMuting] = useState(false);
   async function muteErrors() {
     if (muting) return;
@@ -308,6 +309,12 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
         snapshot: selection.snapshot,
         context,
         recipeId,
+        ...(recipes.find((r) => r.id === recipeId)?.capability === 'draw'
+          ? {
+              outputFormat:
+                outputFormat ?? recipes.find((r) => r.id === recipeId)?.outputFormat ?? 'png',
+            }
+          : {}),
         ...(regenerate ? { regenerate: true } : {}),
       });
       if (location.href !== selection.snapshot.page.url) return;
@@ -420,7 +427,16 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
           onTrigger={() => void explain()}
           recipes={recipes}
           recipeId={recipeChoice || defaultRecipeId}
-          onRecipe={setRecipeChoice}
+          onRecipe={(id) => {
+            setRecipeChoice(id);
+            setOutputFormat(undefined);
+          }}
+          outputFormat={
+            outputFormat ??
+            recipes.find((r) => r.id === (recipeChoice || defaultRecipeId))?.outputFormat ??
+            'png'
+          }
+          onOutputFormat={setOutputFormat}
         />
       )}
       {active && (

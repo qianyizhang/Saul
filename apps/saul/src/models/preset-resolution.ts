@@ -18,16 +18,16 @@ export function projectPresetForEditing(settings: UserSettings, preset: ModelPre
 export function preparePreset(
   settings: UserSettings,
   preset: ModelPreset,
-  capability: 'write' | 'speak' = 'write',
+  capability: 'write' | 'draw' | 'speak' = 'write',
   inspectOnly = false,
 ): { choices: Choices; credential: string } {
   if ((preset.capability ?? 'write') !== capability) {
     throw new Error(
-      `Preset “${preset.name}” uses ${preset.capability}. Choose a ${capability === 'write' ? 'Write' : 'Speak'} preset.`,
+      `Preset “${preset.name}” uses ${preset.capability}. Choose a ${capability[0]!.toUpperCase() + capability.slice(1)} preset.`,
     );
   }
   const selected =
-    capability === 'speak' ? speechSettings(settings, preset) : projectPreset(settings, preset);
+    capability !== 'write' ? mediaSettings(settings, preset) : projectPreset(settings, preset);
   if (!inspectOnly) validateProviderSettings(selected);
   const remote: Choices['remote'] = {
     baseUrl: selected.openaiCompatible.baseUrl,
@@ -97,8 +97,8 @@ function credentialForChoices(settings: UserSettings, input: Choices): string {
         }
       : settings;
   const selected =
-    input.preset.capability === 'speak'
-      ? speechSettings(frozenSettings, input.preset)
+    input.preset.capability === 'speak' || input.preset.capability === 'draw'
+      ? mediaSettings(frozenSettings, input.preset)
       : projectPreset(frozenSettings, input.preset);
   const currentEndpoint = validateProviderSettings(selected)!;
   if (currentEndpoint.href !== endpoint.href) throw new Error(SELECT_NEW_PRESET);
@@ -112,14 +112,15 @@ function credentialForChoices(settings: UserSettings, input: Choices): string {
   return key;
 }
 
-function speechSettings(settings: UserSettings, preset: ModelPreset): UserSettings {
+function mediaSettings(settings: UserSettings, preset: ModelPreset): UserSettings {
+  const capability = preset.capability === 'draw' ? 'Draw' : 'Speak';
   const provider = settings.providers.find((p) => p.key === preset.providerKey);
   if (preset.provider !== 'openai-compatible' || provider?.kind !== 'openai-api')
-    throw new Error('Speak requires an OpenAI API provider. Open Providers.');
-  const source = connectionForPreset(settings, preset, false, false);
+    throw new Error(`${capability} requires an OpenAI API provider. Open Providers.`);
+  const source = connectionForPreset(settings, preset, false, preset.capability === 'draw');
   if (source.config.baseUrl.replace(/\/+$/, '') !== 'https://api.openai.com/v1')
     throw new Error(
-      'Speak requires a connection to https://api.openai.com/v1. Choose it in Providers.',
+      `${capability} requires a connection to https://api.openai.com/v1. Choose it in Providers.`,
     );
   return {
     ...settings,
@@ -162,9 +163,7 @@ function projectPreset(settings: UserSettings, preset: ModelPreset, editing = fa
       `Preset “${preset.name}” uses Speak. Open its speech preview in Presets; choose a Write preset for reading actions.`,
     );
   if (preset.capability === 'draw' && !editing)
-    throw new Error(
-      `Preset “${preset.name}” uses Draw. Image actions are available in EZ; choose a Write preset in Saul.`,
-    );
+    throw new Error(`Preset “${preset.name}” uses Draw. Choose it for an Illustrate action.`);
   if (preset.providerKey && settings.providers) {
     const provider = settings.providers.find((item) => item.key === preset.providerKey);
     if (!provider && !editing)

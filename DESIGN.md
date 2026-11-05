@@ -301,10 +301,10 @@ storage contracts, not another visible settings concept. Chaining is out of scop
 
 The shared settings store owns Provider definitions and Presets, including stable
 keys, display names, kinds, capabilities and model options. Both apps use that same
-configuration and revision; a provider rename preserves preset bindings. Credentials,
-local connection bindings, Action inputs and history stay app-owned. Saul preserves
-Draw presets but does not execute or edit their image settings yet; make that limit
-visible rather than routing them to a text endpoint. Speak presets can be edited
+configuration and revision; a provider rename preserves preset bindings. Local
+connection bindings and Action inputs stay app-owned. History and credential
+ownership follow the architecture's [data ownership](docs/architecture.md#data-ownership).
+Both apps edit Draw presets and execute image actions. Speak presets can be edited
 in both apps; preview playback currently runs only in Saul. Speech previews require
 a saved preset and connection. Stop or leaving the preview cancels generation and
 releases audio; audio and input are never saved to history. Realtime speech is
@@ -326,14 +326,23 @@ There is no separate image window or duplicate connection editor. Keep the API
 billing route visible at Run in both display modes. Draw launcher input prepares
 a draft and waits for explicit Run, including single-field actions.
 
-Run freezes inputs, preset and provider and requests one PNG. Stop cancels locally;
-it cannot promise server cancellation or prevent billing. There are no automatic
-retries. A completed PNG is saved under History's images directory before its
-terminal record. Download exports the original bytes; Details shows frozen choices.
-Storage failures retain the exact PNG with Unsaved and Save again, without another
-request. Historical results remain separate runs and are not replaced by a new run.
-Images do not offer text follow-ups; Reuse restores a draft for an explicit new Run.
-Deleting a run removes its PNG; external downloads remain outside EZ's ownership.
+Run freezes inputs, preset, provider and the selected output format. Offer **PNG**
+and **GIF · animated** in the Draw composer; the preset supplies the default.
+GIF requires GPT Image 2.6 and an action without an input image. Keep an invalid
+choice visible with its correction; never silently change format or model.
+Stop cancels locally; it cannot promise server cancellation or prevent billing.
+There are no automatic generation retries. Save exact result bytes in shared
+SQLite history. Download exports the original PNG or GIF. Details shows frozen
+choices. Storage failures retain the result for Download and save-only recovery.
+History deletion removes owned output; external downloads remain user-owned.
+Images do not offer text follow-ups. Reuse prepares an explicit new run.
+
+Saul offers **Illustrate** beside its reading actions. Selection → Illustrate →
+PNG/GIF → Illustrate starts one image generation using an API Draw preset.
+Existing installations can add the starter in Settings → Actions → Add Illustrate.
+Show generated images in the passage card and History, with original-byte Download.
+Earlier attempts retain their own image; image loading and recovery never generate.
+GIF preview offers Play/Pause and respects reduced motion.
 
 EZ Draw actions may declare one named, required image input. Choose, paste or drop
 shows its preview and a replace/remove action beside the instructions. Invalid

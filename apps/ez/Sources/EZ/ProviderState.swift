@@ -97,8 +97,9 @@ extension AppModel {
             return
         }
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.png]
-        panel.nameFieldStringValue = "EZ-\(entry.id.uuidString.prefix(8)).png"
+        let gif = data.starts(with: Array("GIF8".utf8))
+        panel.allowedContentTypes = gif ? [.gif] : [.png]
+        panel.nameFieldStringValue = "EZ-\(entry.id.uuidString.prefix(8)).\(gif ? "gif" : "png")"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do { try data.write(to: url, options: .atomic) } catch { self.error = error.localizedDescription }
     }

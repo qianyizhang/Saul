@@ -11,6 +11,16 @@
     {
       "size": "1024x1536",
       "quality": "high"
+    },
+    {
+      "size": "1024x1024",
+      "quality": "low",
+      "outputFormat": "png"
+    },
+    {
+      "size": "1024x1024",
+      "quality": "low",
+      "outputFormat": "gif"
     }
   ],
   "invalid": [
@@ -38,6 +48,21 @@
       "size": "1024x1024",
       "quality": "unknown"
     },
-    null
+    null,
+    {
+      "size": "1024x1024",
+      "quality": "low",
+      "outputFormat": null
+    },
+    {
+      "size": "1024x1024",
+      "quality": "low",
+      "outputFormat": ["gif"]
+    },
+    {
+      "size": "1024x1024",
+      "quality": "low",
+      "outputFormat": "svg"
+    }
   ]
 }

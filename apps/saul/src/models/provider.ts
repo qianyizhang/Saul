@@ -1,3 +1,4 @@
+import { generateImage } from './images';
 import type { RunInput } from '../types/storage';
 import { streamOpenAICompatible } from './openai-compatible';
 import { CHROME_AI_RETIRED_MESSAGE } from './retired-provider';
@@ -10,6 +11,12 @@ export async function* streamModel(
   signal?: AbortSignal,
   options: { maxTokens?: number } = {},
 ): AsyncGenerator<ModelEvent> {
+  if (input.preset?.capability === 'draw') {
+    yield { type: 'activity', phase: 'waiting' };
+    yield { type: 'image', image: await generateImage(input, credential, signal) };
+    yield { type: 'complete' };
+    return;
+  }
   switch (input.provider) {
     case 'openai-compatible':
       yield* streamOpenAICompatible(

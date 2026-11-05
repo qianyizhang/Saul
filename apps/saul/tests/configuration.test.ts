@@ -96,6 +96,7 @@ it('migrates the legacy system prompt, model and context assembly without writin
     'Explain',
     'Lookup',
     'Nudge',
+    'Illustrate',
   ]);
   expect(configuration.recipes[0]!.systemPrompt).toBe(legacy.customPromptTemplate);
   expect(configuration.presets[0]).toMatchObject({
@@ -142,7 +143,9 @@ it('preserves the authoritative legacy current endpoint and key when its saved p
 
 it('renders each named task as instructions instead of quoted source and adds no hidden Explain suffix', () => {
   const settings = configured();
-  for (const recipe of configurationFor(settings).recipes.slice(1)) {
+  for (const recipe of configurationFor(settings)
+    .recipes.slice(1)
+    .filter((r) => r.capability !== 'draw')) {
     const prompt = renderRecipePrompt(recipe, context);
     expect(prompt).toContain(
       recipe.name === 'Lookup' ? 'Define this word or phrase' : 'Improve this wording',

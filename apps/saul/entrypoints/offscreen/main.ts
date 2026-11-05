@@ -49,11 +49,18 @@ chrome.runtime.onMessage.addListener(
           return actions.request(message.message, message.prepared);
         case 'submit':
           return runner.submit(message.submission, message.credential);
+        case 'save-image':
+          return runner.saveImage(message.selectionId);
         case 'stop':
           return runner.stop(message.selectionId);
         case 'delete':
           return runner.remove(message.selectionId);
         case 'db': {
+          if (message.message.type === 'DB_IMAGE') {
+            const p = message.message.payload;
+            const image = p.runId ? runner.unsavedImage(p.selectionId, p.runId) : undefined;
+            if (image) return image;
+          }
           if (message.message.type === 'DB_GET_HISTORY')
             return (await db(message.message)).map((item) => ({
               ...item,

@@ -94,10 +94,13 @@ Legacy definitions in EZ’s app scope seed the shared list once; the shared lis
 then wins. [Provider fixtures](fixtures/providers.json) are validated in both runtimes.
 Preset saves preserve all other sections. Each preset has a UUID `id`,
 `name`, `model`, `effort` (empty means Default), and `fast`, plus optional
-`providerKey`, `capability` (`write` / `draw` / `speak`), `imageOptions` (`size`, `quality`) and
+`providerKey`, `capability` (`write` / `draw` / `speak`), `imageOptions` (`size`, `quality`, optional `outputFormat`) and
 `speechOptions` (`voice`).
 Absent typed fields decode as `gpt-plan` / Write. Image settings accept square,
-landscape or portrait PNG sizes and low/medium/high quality. Both clients preserve
+landscape or portrait sizes and low/medium/high quality. `outputFormat` accepts
+`png` or `gif`; absence means PNG. GIF generation requires GPT Image 2.6 and
+cannot be combined with an input image. Animation uses the API defaults (9 frames,
+200 ms per frame); callers preserve the returned bytes and media type. Both clients preserve
 these fields even when the capability is unavailable locally. Credentials stay behind the selected owner. Saves replace the file atomically; stale editor revisions require Reload and
 preserve the draft. Both native adapters serialize the read/check/replace through
 `settings.json.lock.sqlite3`: a SQLite `BEGIN IMMEDIATE` lease with a five-second
@@ -105,7 +108,10 @@ busy timeout and no settings data. The lease is released on process exit. Keep
 the lock file in place while either app may use it; deleting it would split the lock.
 
 Write presets show Model, Effort and Standard/Fast speed where supported.
-Draw presets hold image model and optional size/quality in the preset editor. Plan
+Draw presets hold image model, size, quality and default output format. New Draw
+starters use GPT Image 2.6 Flare. Both apps freeze a runtime PNG/GIF choice in the
+attempt preset snapshot. Saul supports selection-based Illustrate; EZ also supports
+image edits with PNG output. Existing saved model choices are retained until edited. Plan
 Fast is selectable only when the account catalog advertises it. Native API Write
 can explicitly request priority; Saul blocks API presets with reasoning/Fast options
 its transport cannot honor, while preserving those fields for EZ. Unsupported saved choices remain visible

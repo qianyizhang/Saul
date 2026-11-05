@@ -1,3 +1,5 @@
+import { sendReadingMessage } from '../storage/client';
+import { GeneratedImageView } from './GeneratedImageView';
 import { useRef, useState } from 'react';
 import { X, Copy, Check, RefreshCw, Pin, Bookmark, Square } from 'lucide-react';
 import type { Passage, RunResult, RunStatus } from '../types/storage';
@@ -53,6 +55,7 @@ export function ExplanationCard({
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const moreButton = useRef<HTMLButtonElement>(null);
+  const [savingImage, setSavingImage] = useState(false);
   const anchored = useAnchoredPosition(range, ref);
   const style = range
     ? anchored
@@ -184,13 +187,35 @@ export function ExplanationCard({
             {latest.error}
           </p>
         )}
+        {latest.reason === 'save-failed' && latest.hasImage && (
+          <div>
+            {answer.id !== latest.id && (
+              <GeneratedImageView selectionId={passage.snapshot.id} runId={latest.id} />
+            )}
+            <button
+              className="px-2 py-1.5 text-sm rounded-control border border-line hover:bg-wash"
+              disabled={savingImage}
+              onClick={() => {
+                setSavingImage(true);
+                setError('');
+                void sendReadingMessage({ action: 'save-image', selectionId: passage.snapshot.id })
+                  .catch((e) => setError(String(e)))
+                  .finally(() => setSavingImage(false));
+              }}
+            >
+              {savingImage ? 'Saving…' : 'Retry saving image'}
+            </button>
+          </div>
+        )}
         {answer.id !== latest.id && <p className="text-xs text-muted mb-2">Previous answer</p>}
         {answer.inspection?.followUpQuestion && (
           <p className="text-sm font-medium mb-3 whitespace-pre-wrap">
             {answer.inspection.followUpQuestion}
           </p>
         )}
-        {segments.length ? (
+        {answer.hasImage ? (
+          <GeneratedImageView selectionId={passage.snapshot.id} runId={answer.id} />
+        ) : segments.length ? (
           <AnnotatedTextView segments={segments} isStreaming={answer.status === 'running'} />
         ) : (
           <p className="text-sm text-muted">
@@ -203,7 +228,11 @@ export function ExplanationCard({
             {latest.inspection?.followUpQuestion && (
               <p className="whitespace-pre-wrap">{latest.inspection.followUpQuestion}</p>
             )}
-            <AnnotatedTextView segments={new TagStreamParser().feed(latest.responseRaw)} />
+            {latest.hasImage ? (
+              <GeneratedImageView selectionId={passage.snapshot.id} runId={latest.id} />
+            ) : (
+              <AnnotatedTextView segments={new TagStreamParser().feed(latest.responseRaw)} />
+            )}
             <RunDetails run={latest} />
             <InputOutputInspector key={latest.id} run={latest} />
           </details>
@@ -219,7 +248,7 @@ export function ExplanationCard({
         )}
         {(!minimum || more) && (
           <div className="mt-4 text-sm saul-more">
-            {!active && passage.completed && (
+            {!active && passage.completed && answer.capability !== 'draw' && (
               <div className="flex flex-wrap gap-2 mb-3" aria-label="Follow-up explanations">
                 {['Simpler', 'Give an example', 'Go deeper'].map((label) => (
                   <button
@@ -270,7 +299,11 @@ export function ExplanationCard({
                 {run.inspection?.followUpQuestion && (
                   <p className="whitespace-pre-wrap">{run.inspection.followUpQuestion}</p>
                 )}
-                <AnnotatedTextView segments={new TagStreamParser().feed(run.responseRaw)} />
+                {run.hasImage ? (
+                  <GeneratedImageView selectionId={passage.snapshot.id} runId={run.id} />
+                ) : (
+                  <AnnotatedTextView segments={new TagStreamParser().feed(run.responseRaw)} />
+                )}
                 <RunDetails run={run} />
                 <InputOutputInspector run={run} />
               </details>
@@ -278,7 +311,7 @@ export function ExplanationCard({
           </div>
         )}
       </div>
-      {passage.completed && (
+      {passage.completed && answer.capability !== 'draw' && (
         <form
           className="px-4 pb-2 flex items-end gap-2"
           aria-label="Ask a follow-up"

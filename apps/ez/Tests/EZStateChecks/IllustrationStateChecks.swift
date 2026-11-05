@@ -80,6 +80,32 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
             await model.removeAPIKey()
             try expect(!model.apiConnected && model.entries.isEmpty, "Provider editing generated work")
         },
+        CheckCase("action: runtime GIF format freezes in history and reuse without changing preset defaults")
+        { directory in
+            var seen: HistoryEntry?
+            let model = try imageModel(
+                directory,
+                generate: { entry, _ in
+                    seen = entry
+                    return .image(fixturePNG)
+                })
+            defer { model.shutdown() }
+            let id = model.currentPreset!.id
+            model.outputFormatOverride = "gif"
+            let (done, observer) = completionSignal(model)
+            defer { observer.cancel() }
+            model.send()
+            try await done.wait()
+            try expectEqual(
+                seen?.presetSnapshot?.imageOptions?.outputFormat, "gif", "Runtime format was not frozen")
+            try expectEqual(
+                model.configuration.presets.first { $0.id == id }?.imageOptions?.outputFormat, "png",
+                "Runtime override mutated the preset")
+            model.reuse(model.selectedEntry!)
+            try expectEqual(model.outputFormat, "gif", "Reuse lost the frozen output format")
+            model.newQuery()
+            try expectEqual(model.outputFormatOverride, nil, "New run retained an old override")
+        },
         CheckCase("action: Draw shares frozen inputs history and one active request") { directory in
             let held = HeldImage()
             var calls = 0

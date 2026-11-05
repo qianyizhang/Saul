@@ -120,7 +120,9 @@ it('shares edits, migrates once, keeps accounts outside presets, and refuses a s
     );
     const first = await owner({ action: 'read' });
     if (first.state !== 'ready') throw new Error('Settings unavailable');
-    const migrated = first.settings.configuration!.presets[0]!;
+    const migrated = first.settings.configuration!.presets.find(
+      (p) => p.provider === 'chatgpt-plan',
+    )!;
     expect(migrated.id).not.toBe('preset-current');
     expect(first.settings.configuration!.recipes[0]!.presetId).toBe(migrated.id);
     expect(store.read().presets[0]).not.toHaveProperty('accountId');
@@ -154,11 +156,11 @@ it('shares edits, migrates once, keeps accounts outside presets, and refuses a s
     ).toBe('conflict');
     const second = await owner({ action: 'read' });
     if (second.state !== 'ready') throw new Error('Settings unavailable');
-    expect(second.settings.configuration!.presets[0]).toMatchObject({
+    expect(second.settings.configuration!.presets.find((p) => p.id === migrated.id)).toMatchObject({
       name: 'Changed in EZ',
       fast: false,
     });
-    second.settings.configuration!.presets[0]!.effort = 'high';
+    second.settings.configuration!.presets.find((p) => p.id === migrated.id)!.effort = 'high';
     expect(
       (await owner({ action: 'commit', baseline: second.revision, settings: second.settings }))
         .state,
@@ -168,7 +170,11 @@ it('shares edits, migrates once, keeps accounts outside presets, and refuses a s
     expect(JSON.parse(readFileSync(store.path, 'utf8')).appearance).toEqual({ theme: 'dark' });
     const current = store.read();
     store.save(current.revision, []);
-    expect((await sharedPresets.load(stored)).configuration!.presets).toEqual([]);
+    expect(
+      (await sharedPresets.load(stored)).configuration!.presets.filter(
+        (p) => p.shared || p.provider === 'chatgpt-plan',
+      ),
+    ).toEqual([]);
     stored = structuredClone(source);
     Object.assign(stored.configuration!, { schemaVersion: 999 });
     const invalid = await owner({ action: 'read' });

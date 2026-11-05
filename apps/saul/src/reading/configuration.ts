@@ -15,7 +15,7 @@ export function prepareRecipeRun(
   const preset = configuration.presets.find((item) => item.id === recipe.presetId);
   if (!preset)
     throw new Error(`Action “${recipe.name}” needs its default preset. Choose one in Settings.`);
-  const prepared = preparePreset(settings, preset, 'write', inspectOnly);
+  const prepared = preparePreset(settings, preset, recipe.capability ?? 'write', inspectOnly);
   const language = settings.responseLanguage
     ? `Respond in ${settings.responseLanguage}.`
     : 'Respond in the language of the selected text.';
@@ -25,7 +25,7 @@ export function prepareRecipeRun(
     systemPrompt: recipe.systemPrompt,
     userPrompt: renderRecipePrompt(recipe, context, language),
     recipe: structuredClone(recipe),
-    preset: structuredClone(preset),
+    preset: structuredClone(prepared.choices.preset!),
   };
   return { input, credential: prepared.credential };
 }
@@ -43,6 +43,8 @@ export function prepareFollowUpRun(
   answer: string,
   question: string,
 ): { input: RunInput; credential: string } {
+  if (original.preset?.capability === 'draw')
+    throw new Error('Select the passage and Illustrate to create another image.');
   if (!question.trim() || question.length > 2000)
     throw new Error('Enter a follow-up question of up to 2,000 characters.');
   if (!answer.trim()) throw new Error('Wait for a completed answer before asking a follow-up.');

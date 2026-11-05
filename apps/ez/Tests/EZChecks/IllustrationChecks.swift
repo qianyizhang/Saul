@@ -50,6 +50,60 @@ import Foundation
             try expectEqual(output, fixturePNG, "PNG changed")
             try expectEqual(fixture.requests.count, 1, "Image request retried")
         },
+        CheckCase("illustration: GIF output preserves animation bytes and rejects edits before HTTP") {
+            directory in
+            let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+                .appendingPathComponent("../../../../contracts/fixtures/animation.gif")
+            let gif = try Data(contentsOf: url)
+            let fixture = HTTPFixture { request in
+                var data = request.httpBody ?? Data()
+                if data.isEmpty, let stream = request.httpBodyStream {
+                    stream.open()
+                    defer { stream.close() }
+                    var buffer = [UInt8](repeating: 0, count: 4096)
+                    while stream.hasBytesAvailable {
+                        let count = stream.read(&buffer, maxLength: buffer.count)
+                        guard count > 0 else { break }
+                        data.append(contentsOf: buffer.prefix(count))
+                    }
+                }
+                guard let body = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                    throw CheckFailure("Missing GIF request body")
+                }
+                try expectEqual(body["model"] as? String, "gpt-image-2.6-flare", "Wrong default model")
+                try expectEqual(body["output_format"] as? String, "gif", "GIF format not sent")
+                try expect(body["stream"] == nil, "GIF cannot stream")
+                return HTTPReply("{\"data\":[{\"b64_json\":\"\(gif.base64EncodedString())\"}]}")
+            }
+            defer { fixture.close() }
+            let client = ImagesClient(session: fixture.session)
+            let output = try await client.generate(
+                ImageGenerationRequest(prompt: "A waving tree, looping", outputFormat: "gif"),
+                apiKey: "sk-fixture")
+            try expectEqual(output, gif, "Animation bytes changed")
+            let store = try HistoryStore(directory: directory)
+            var entry = HistoryEntry(
+                mode: .ask, query: "Tree", model: "gpt-image-2.6-flare", effort: "", requestedServiceTier: nil
+            )
+            entry.imageData = output
+            try store.append(entry)
+            try expectEqual(try store.image(for: store.load()[0]), gif, "Saved GIF changed")
+            for input in [
+                ImageGenerationRequest(prompt: "Tree", model: "gpt-image-2.5-flare", outputFormat: "gif"),
+                ImageGenerationRequest(
+                    prompt: "Tree", outputFormat: "gif",
+                    image: try ImageAttachment(data: fixturePNG, name: "source.png")),
+            ] {
+                try await expectAsyncThrows(EZError.self) {
+                    _ = try await client.generate(input, apiKey: "sk-fixture")
+                }
+            }
+            let malformed = try JSONSerialization.data(withJSONObject: [
+                "data": [["b64_json": fixturePNG.base64EncodedString()]]
+            ])
+            try expectThrows(EZError.self) { _ = try ImagesClient.decodeImage(malformed, format: "gif") }
+            try expectEqual(fixture.requests.count, 1, "Invalid GIF request reached HTTP or retried")
+        },
         CheckCase("illustration: invalid context options and credentials block before HTTP") { _ in
             let fixture = HTTPFixture { _ in throw CheckFailure("Invalid request reached HTTP") }
             defer { fixture.close() }

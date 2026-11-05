@@ -2,7 +2,7 @@
   "name": "saul",
   "description": "Local-first reading explanations and tab organization for Chrome.",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "packageManager": "pnpm@11.0.3",
   "engines": {

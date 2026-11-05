@@ -149,8 +149,8 @@ history, bookmarks and saved summaries. Native records retain frozen JSON metada
 and input/output image blobs in the same database. Both History views project
 reading passages and EZ lookups. Cross-app entries are readable, searchable,
 copyable and deletable; browser-specific execution stays in Saul. Saved summaries
-retain their existing dedicated Saul surfaces. Drafts, credentials and active
-execution stay app-owned. Browser recovery is scoped to the originating profile.
+retain their existing dedicated Saul surfaces. Drafts and active request state
+stay app-owned. Browser recovery is scoped to the originating profile.
 History reloads on activation/focus rather than a recurring background timer.
 The [History operation contract](../contracts/README.md#history-operations) shares
 recovery/deletion meanings and real-store fixtures across Swift and Node. Saul's

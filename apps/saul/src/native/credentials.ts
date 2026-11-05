@@ -81,7 +81,7 @@ export async function credentialCall(
 export async function nativeCredentialCall(
   request: Exclude<
     CredentialRequest,
-    { action: 'login' | 'generate' | 'api-chat' | 'api-realtime' }
+    { action: 'login' | 'generate' | 'api-chat' | 'api-realtime' | 'api-image' }
   >,
 ): Promise<Record<string, unknown>> {
   validateCredentialRequest(request);
@@ -186,8 +186,8 @@ export function initCredentialBridge() {
       started = true;
       try {
         validateCredentialRequest(message);
-        if (offscreen && !['generate', 'api-chat'].includes(message.action))
-          throw new Error('The runner may only generate text.');
+        if (offscreen && !['generate', 'api-chat', 'api-image'].includes(message.action))
+          throw new Error('The runner may only generate text or images.');
         login = message.action === 'login';
         id = crypto.randomUUID();
         native = chrome.runtime.connectNative(CREDENTIALS_HOST);

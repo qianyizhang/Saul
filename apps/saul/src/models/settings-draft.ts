@@ -5,6 +5,8 @@ import type { ModelPreset, ProviderType, Recipe, UserSettings } from '../types';
 import { DEFAULT_SETTINGS, validateSettingsConnections } from '../storage/settings';
 import {
   configurationFor,
+  illustrationPreset,
+  illustrationRecipe,
   DEFAULT_RECIPE_SYSTEM_PROMPT,
   presetFromSettings,
   validateConfiguration,
@@ -29,7 +31,13 @@ export type SettingsEdit =
       patch: Partial<
         Pick<
           ModelPreset,
-          'model' | 'capability' | 'effort' | 'fast' | 'temperature' | 'speechOptions'
+          | 'model'
+          | 'capability'
+          | 'effort'
+          | 'fast'
+          | 'temperature'
+          | 'speechOptions'
+          | 'imageOptions'
         >
       >;
     }
@@ -46,6 +54,7 @@ export type SettingsEdit =
   | { type: 'remove-preset' }
   | { type: 'select-recipe'; id: string }
   | { type: 'add-recipe'; id: string }
+  | { type: 'add-illustrate' }
   | { type: 'recipe'; patch: Partial<Recipe> }
   | { type: 'default-recipe'; id: string }
   | { type: 'remove-recipe' };
@@ -189,6 +198,13 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
       const preset = configuration.presets.find((p) => p.id === draft.presetId);
       if (!preset) throw new Error('Choose an existing preset.');
       const updated = { ...preset, ...edit.patch };
+      if (edit.patch.capability === 'draw' && preset.capability !== 'draw')
+        Object.assign(updated, {
+          model: illustrationPreset(settings).model,
+          effort: '',
+          fast: false,
+          imageOptions: { size: '1024x1024', quality: 'low', outputFormat: 'png' },
+        });
       if (edit.patch.capability === 'speak' && preset.capability !== 'speak')
         Object.assign(updated, {
           model: SPEECH_MODEL,
@@ -343,6 +359,37 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
       if (!configuration.recipes.some((recipe) => recipe.id === edit.id))
         throw new Error('Choose an existing action.');
       return { ...draft, recipeId: edit.id };
+    case 'add-illustrate': {
+      if (configuration.recipes.some((r) => r.id === 'recipe-illustrate')) return draft;
+      if (configuration.recipes.length >= 32 || configuration.presets.length >= 128)
+        throw new Error('Remove an action or preset before adding Illustrate.');
+      const draw = configuration.presets.find((p) => p.capability === 'draw');
+      const preset = draw ?? illustrationPreset(settings);
+      return {
+        ...draft,
+        recipeId: 'recipe-illustrate',
+        settings: {
+          ...settings,
+          configuration: {
+            ...configuration,
+            presets: draw
+              ? configuration.presets
+              : [
+                  ...configuration.presets,
+                  { ...preset, name: nextName(preset.name, configuration.presets) },
+                ],
+            recipes: [
+              ...configuration.recipes,
+              {
+                ...illustrationRecipe(),
+                name: nextName('Illustrate', configuration.recipes),
+                presetId: preset.id,
+              },
+            ],
+          },
+        },
+      };
+    }
     case 'add-recipe': {
       const writing =
         configuration.presets.find(

@@ -8,6 +8,8 @@ struct LookupAnswerText: View {
     var compact = false
     var imageData: Data?
     var imageLoading = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var playing: Bool?
 
     var body: some View {
         if entry.capability == .draw {
@@ -16,10 +18,16 @@ struct LookupAnswerText: View {
                     Text(entry.displayQuery).font(AppStyle.body).textSelection(.enabled)
                 }
                 if let data = imageData, let image = NSImage(data: data) {
-                    Image(nsImage: image).resizable().scaledToFit().frame(
-                        maxWidth: .infinity, maxHeight: compact ? 360 : 640
-                    )
-                    .accessibilityLabel("Generated image")
+                    AnimatedOutputImage(image: image, playing: playing ?? !reduceMotion)
+                        .aspectRatio(image.size.width / max(1, image.size.height), contentMode: .fit).frame(
+                            maxWidth: .infinity, maxHeight: compact ? 360 : 640
+                        )
+                        .accessibilityLabel("Generated image")
+                    if data.starts(with: Array("GIF8".utf8)) {
+                        Button((playing ?? !reduceMotion) ? "Pause animation" : "Play animation") {
+                            playing = !(playing ?? !reduceMotion)
+                        }.buttonStyle(.borderless)
+                    }
                 } else if entry.status == "pending" {
                     Text("Drawing…").foregroundStyle(.secondary)
                 } else if imageLoading {
@@ -54,6 +62,22 @@ struct LookupAnswerText: View {
                 }
             }
         }
+    }
+}
+
+private struct AnimatedOutputImage: NSViewRepresentable {
+    let image: NSImage
+    let playing: Bool
+    func makeNSView(context: Context) -> NSImageView {
+        let view = NSImageView()
+        view.imageScaling = .scaleProportionallyUpOrDown
+        view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        view.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        return view
+    }
+    func updateNSView(_ view: NSImageView, context: Context) {
+        if view.image !== image { view.image = image }
+        view.animates = playing
     }
 }
 

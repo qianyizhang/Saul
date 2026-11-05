@@ -24,18 +24,30 @@ export function validSpeechOptions(value: unknown): value is SharedSpeechOptions
     SPEECH_VOICES.some((voice) => voice === value.voice)
   );
 }
+export const IMAGE_MODEL = 'gpt-image-2.6-flare';
+export const IMAGE_MODELS = [
+  'gpt-image-2.6-flare',
+  'gpt-image-2.6-sunburst',
+  'gpt-image-2.5-flare',
+  'gpt-image-2.5-sunburst',
+] as const;
+export type ImageFormat = 'png' | 'gif';
 export interface SharedImageOptions {
   size: string;
   quality: string;
+  outputFormat?: ImageFormat;
 }
 export function validImageOptions(value: unknown): value is SharedImageOptions {
   return (
     isRecord(value) &&
-    Object.keys(value).every((key) => ['size', 'quality'].includes(key)) &&
+    Object.keys(value).every((key) => ['size', 'quality', 'outputFormat'].includes(key)) &&
     typeof value.size === 'string' &&
     ['1024x1024', '1536x1024', '1024x1536'].includes(value.size) &&
     typeof value.quality === 'string' &&
-    ['low', 'medium', 'high'].includes(value.quality)
+    ['low', 'medium', 'high'].includes(value.quality) &&
+    (value.outputFormat === undefined ||
+      value.outputFormat === 'png' ||
+      value.outputFormat === 'gif')
   );
 }
 export interface SharedPreset {

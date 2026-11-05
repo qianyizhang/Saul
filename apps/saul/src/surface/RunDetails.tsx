@@ -16,6 +16,13 @@ export function RunDetails({ run, children }: { run: RunResult; children?: React
     ...(run.preset ? [['Preset', run.preset.name]] : []),
     ['Provider', provider],
     ['Model', run.model],
+    ...(run.capability === 'draw'
+      ? [
+          ['Output format', (run.imageOptions?.outputFormat ?? 'png').toUpperCase()],
+          ['Size', run.imageOptions?.size ?? '1024x1024'],
+          ['Quality', run.imageOptions?.quality ?? 'low'],
+        ]
+      : []),
     [
       'Total time',
       run.latencyMs === undefined ? 'Not recorded' : `${(run.latencyMs / 1000).toFixed(1)} s`,

@@ -68,6 +68,7 @@ async function submit(
   regenerate: boolean,
   recipeId?: string,
   runId?: string,
+  outputFormat?: 'png' | 'gif',
 ) {
   const settings = await currentSettings();
   let prepared: { input: RunInput; credential: string };
@@ -84,6 +85,16 @@ async function submit(
       context,
       recipeId || configurationFor(settings).selectedRecipeId,
     );
+  if (outputFormat !== undefined) {
+    if (prepared.input.preset?.capability !== 'draw')
+      throw new Error('Output format requires a Draw action.');
+    prepared.input.preset.imageOptions = {
+      size: '1024x1024',
+      quality: 'low',
+      ...prepared.input.preset.imageOptions,
+      outputFormat,
+    };
+  }
   return runnerRequest<{ passageId: string; reused: boolean }>({
     operation: 'submit',
     submission: { snapshot, input: prepared.input, submissionId, regenerate },
@@ -108,6 +119,9 @@ async function reading(
         recipes: configuration.recipes.map((recipe) => ({
           id: recipe.id,
           name: recipe.name,
+          capability: recipe.capability,
+          outputFormat: configuration.presets.find((p) => p.id === recipe.presetId)?.imageOptions
+            ?.outputFormat,
           presetName:
             configuration.presets.find((preset) => preset.id === recipe.presetId)?.name ||
             'Unavailable preset',
@@ -142,11 +156,18 @@ async function reading(
         request.submissionId,
         request.regenerate === true,
         request.recipeId,
+        undefined,
+        request.outputFormat,
       );
     }
     default: {
       const passage = await owned(request.selectionId, url);
       switch (request.action) {
+        case 'image':
+          return db({
+            type: 'DB_IMAGE',
+            payload: { selectionId: request.selectionId, runId: request.runId },
+          });
         case 'review': {
           const before = await db({
             type: 'DB_INPUT',
@@ -212,6 +233,9 @@ async function reading(
             passage.latest.id,
           );
         }
+        case 'save-image':
+          await runnerRequest({ operation: 'save-image', selectionId: request.selectionId });
+          break;
         case 'stop':
           await runnerRequest({ operation: 'stop', selectionId: request.selectionId });
           break;

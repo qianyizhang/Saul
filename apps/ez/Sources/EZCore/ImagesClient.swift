@@ -6,20 +6,36 @@ public struct ImageGenerationRequest: Equatable, Sendable {
     public var model: String
     public var size: String
     public var quality: String
+    public var outputFormat: String
     public var image: ImageAttachment?
 
     public init(
-        prompt: String, model: String = "gpt-image-2.5-flare",
-        size: String = "1024x1024", quality: String = "low", image: ImageAttachment? = nil
+        prompt: String, model: String = "gpt-image-2.6-flare",
+        size: String = "1024x1024", quality: String = "low", outputFormat: String = "png",
+        image: ImageAttachment? = nil
     ) {
         self.prompt = prompt
         self.model = model
         self.size = size
         self.quality = quality
+        self.outputFormat = outputFormat
         self.image = image
     }
 
     public func validate() throws {
+        guard ImageModelOption.formats.contains(outputFormat) else {
+            throw EZError("Choose PNG or GIF output.")
+        }
+        if outputFormat == "gif" {
+            guard model.hasPrefix("gpt-image-2.6-") else {
+                throw EZError("GIF output requires GPT Image 2.6.")
+            }
+            guard image == nil else {
+                throw EZError(
+                    "GIF output is unavailable for image edits. Choose PNG or an action without an input image."
+                )
+            }
+        }
         if let image { _ = try image.validatedData() }
         guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw EZError("Enter some context to illustrate.")
@@ -63,7 +79,7 @@ public struct ImagesClient: Sendable {
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         let fields = [
             "model": input.model, "prompt": input.prompt, "n": "1",
-            "size": input.size, "quality": input.quality, "output_format": "png",
+            "size": input.size, "quality": input.quality, "output_format": input.outputFormat,
         ]
         if let image = input.image {
             let boundary = "EZ-" + UUID().uuidString
@@ -107,7 +123,7 @@ public struct ImagesClient: Sendable {
         guard (200..<300).contains(response.statusCode) else {
             throw Self.rejection(data: data, status: response.statusCode)
         }
-        return try Self.decodePNG(data)
+        return try Self.decodeImage(data, format: input.outputFormat)
     }
 
     private static func rejection(data: Data, status: Int) -> EZError {
@@ -142,21 +158,37 @@ public struct ImagesClient: Sendable {
         }
     }
 
-    public static func decodePNG(_ data: Data) throws -> Data {
+    public static func decodePNG(_ data: Data) throws -> Data { try decodeImage(data, format: "png") }
+
+    public static func decodeImage(_ data: Data, format: String) throws -> Data {
         guard data.count <= responseLimit,
             let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
             let images = object["data"] as? [[String: Any]], images.count == 1,
             let encoded = images.first?["b64_json"] as? String,
             let png = Data(base64Encoded: encoded), !png.isEmpty, png.count <= 20 * 1024 * 1024,
-            png.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]),
+            format == "png"
+                ? png.starts(with: [137, 80, 78, 71, 13, 10, 26, 10])
+                : format == "gif"
+                    && (png.starts(with: Array("GIF89a".utf8)) || png.starts(with: Array("GIF87a".utf8))),
             let source = CGImageSourceCreateWithData(png as CFData, nil),
-            CGImageSourceGetCount(source) == 1,
+            format == "png"
+                ? CGImageSourceGetCount(source) == 1 : (2...64).contains(CGImageSourceGetCount(source)),
             let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
             let width = properties[kCGImagePropertyPixelWidth] as? Int,
             let height = properties[kCGImagePropertyPixelHeight] as? Int,
             width > 0, height > 0, width <= 4096, height <= 4096,
             CGImageSourceCreateImageAtIndex(source, 0, nil) != nil
-        else { throw EZError("OpenAI returned no valid PNG image. The previous image has been kept.") }
+        else {
+            throw EZError(
+                "OpenAI returned no valid \(format.uppercased()) image. The previous image has been kept.")
+        }
+        if let source = CGImageSourceCreateWithData(png as CFData, nil), format == "gif" {
+            for index in 0..<CGImageSourceGetCount(source) {
+                guard CGImageSourceCreateImageAtIndex(source, index, nil) != nil else {
+                    throw EZError("OpenAI returned an invalid GIF frame.")
+                }
+            }
+        }
         return png
     }
 }

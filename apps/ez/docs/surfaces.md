@@ -51,7 +51,8 @@ and panel hiding stay fixed. [Architecture](architecture.md#selector-scrolling-a
 owns input routing and conflict handling.
 
 Illustration is a Draw action in this workspace. Providers owns credentials,
-Presets image options and History saved PNGs. Launcher input always waits for Run;
+Presets image defaults, the Draw composer its runtime PNG/GIF choice, and History
+saved image bytes in SQLite. Launcher input always waits for Run;
 unsaved image recovery never generates again.
 
 Future features must name their owning surface and preserve these boundaries.

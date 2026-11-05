@@ -52,10 +52,11 @@ struct LookupDetails: View {
                 }
                 if let image = entry.inputImage { MetadataRow("Input image", value: image.name) }
                 if entry.capability == .draw {
-                    MetadataRow("Size", value: (entry.presetSnapshot?.imageOptions ?? ImageOptions()).size)
+                    MetadataRow("Output format", value: entry.imageOptions.outputFormat.uppercased())
+                    MetadataRow("Size", value: entry.imageOptions.size)
                     MetadataRow(
                         "Quality",
-                        value: (entry.presetSnapshot?.imageOptions ?? ImageOptions()).quality.capitalized)
+                        value: entry.imageOptions.quality.capitalized)
                 } else {
                     MetadataRow("Effort", value: entry.effort.isEmpty ? "Default" : entry.effort.capitalized)
                     MetadataRow(

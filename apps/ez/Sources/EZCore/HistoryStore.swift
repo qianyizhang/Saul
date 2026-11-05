@@ -111,7 +111,7 @@ public final class HistoryStore {
                 entries.append(entry)
             }
             for row in try rows(
-                "SELECT s.id,s.text,p.url,p.title,r.input_json,r.prompt_raw,r.response_raw,r.model,r.status,r.error_message,r.created_at,r.latency_ms FROM selection s JOIN page p ON p.id=s.page_id JOIN llm_run r ON r.rowid=(SELECT rowid FROM llm_run WHERE selection_id=s.id AND status NOT IN ('queued','running','saving') ORDER BY created_at DESC,rowid DESC LIMIT 1)"
+                "SELECT s.id,s.text,p.url,p.title,r.id AS run_id,r.response_structured IS NOT NULL AS has_image,r.input_json,r.prompt_raw,r.response_raw,r.model,r.status,r.error_message,r.created_at,r.latency_ms FROM selection s JOIN page p ON p.id=s.page_id JOIN llm_run r ON r.rowid=(SELECT rowid FROM llm_run WHERE selection_id=s.id AND status NOT IN ('queued','running','saving') ORDER BY created_at DESC,rowid DESC LIMIT 1)"
             ) {
                 let source = row["id"] as? String ?? ""
                 let input = (row["input_json"] as? String).flatMap {
@@ -122,6 +122,21 @@ public final class HistoryStore {
                     model: row["model"] as? String ?? "", effort: "", requestedServiceTier: nil)
                 entry.id = Self.browserID(source)
                 entry.sourceID = source
+                entry.sourceRunID = row["run_id"] as? String
+                if let preset = input?["preset"] as? [String: Any],
+                    let capability = preset["capability"] as? String
+                {
+                    entry.sourceCapability = ActionCapability(rawValue: capability)
+                    if let options = preset["imageOptions"] {
+                        entry.sourceImageOptions = try? JSONDecoder().decode(
+                            ImageOptions.self, from: JSONSerialization.data(withJSONObject: options))
+                    }
+                    if entry.sourceCapability == .draw {
+                        entry.providerSnapshot = ProviderDefinition(
+                            key: "openai-api", name: "OpenAI API", kind: .openAIAPI)
+                    }
+                }
+                entry.storedImage = row["has_image"] as? Int64 == 1 && row["status"] as? String == "completed"
                 entry.sourceText = row["text"] as? String
                 entry.sourceURL = row["url"] as? String
                 entry.sourceTitle = row["title"] as? String
@@ -141,6 +156,20 @@ public final class HistoryStore {
     }
     public func image(for entry: HistoryEntry) throws -> Data? {
         if let data = entry.imageData { return data }
+        if let source = entry.sourceID, let run = entry.sourceRunID {
+            guard
+                let json = try rows(
+                    "SELECT response_structured FROM llm_run WHERE selection_id=? AND id=? AND status='completed'",
+                    [source, run]
+                ).first?["response_structured"] as? String,
+                let image = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
+                image["complete"] as? Bool == true,
+                ["image/png", "image/gif"].contains(image["mediaType"] as? String ?? ""),
+                let encoded = image["data"] as? String, encoded.utf8.count <= 28_000_000,
+                let data = Data(base64Encoded: encoded), !data.isEmpty, data.count <= 20 * 1024 * 1024
+            else { return nil }
+            return data
+        }
         return try rows("SELECT image FROM ez_entry WHERE id=?", [entry.id.uuidString.lowercased()]).first?[
             "image"] as? Data
     }

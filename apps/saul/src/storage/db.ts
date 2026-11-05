@@ -1,3 +1,4 @@
+import { validateGeneratedImage, type GeneratedImage } from '../models/images';
 import { digestStore } from '../digest/store';
 import type { SqlDatabase, SqlValue } from './sql';
 import { nanoid } from 'nanoid';
@@ -21,8 +22,8 @@ type Row = Record<string, SqlValue>;
 const latest = `(SELECT rowid FROM llm_run WHERE selection_id = s.id ORDER BY created_at DESC, rowid DESC LIMIT 1)`;
 const success = `(SELECT rowid FROM llm_run WHERE selection_id = s.id AND status = 'completed' ORDER BY created_at DESC, rowid DESC LIMIT 1)`;
 const passageSelect = `SELECT s.*, p.url, p.title, p.canonical_url, b.selection_id IS NOT NULL AS bookmarked,
- r.id AS run_id, r.status, r.response_raw, r.error_message, r.reason, r.model, r.provider, r.latency_ms, r.created_at AS run_created_at, r.viewed_at, r.input_json,
- c.id AS completed_id, c.response_raw AS completed_raw, c.model AS completed_model, c.provider AS completed_provider, c.latency_ms AS completed_latency, c.created_at AS completed_at, c.viewed_at AS completed_viewed, c.input_json AS completed_input
+ r.id AS run_id, r.status, r.response_structured IS NOT NULL AS has_image, r.response_raw, r.error_message, r.reason, r.model, r.provider, r.latency_ms, r.created_at AS run_created_at, r.viewed_at, r.input_json,
+ c.id AS completed_id, c.response_structured IS NOT NULL AS completed_image, c.response_raw AS completed_raw, c.model AS completed_model, c.provider AS completed_provider, c.latency_ms AS completed_latency, c.created_at AS completed_at, c.viewed_at AS completed_viewed, c.input_json AS completed_input
  FROM selection s JOIN page p ON p.id = s.page_id
  LEFT JOIN bookmark b ON b.selection_id = s.id
  JOIN llm_run r ON r.rowid = ${latest}
@@ -48,6 +49,9 @@ export class SaulDatabase {
     return {
       id: String(row.id),
       status: row.status as RunResult['status'],
+      hasImage: row.status === 'completed' && Boolean(row.has_image ?? row.response_structured),
+      capability: input?.preset?.capability,
+      imageOptions: input?.preset?.imageOptions,
       responseRaw: String(row.response_raw || ''),
       model: String(row.model),
       provider: String(row.provider),
@@ -69,6 +73,9 @@ export class SaulDatabase {
       ? {
           id: String(row.completed_id),
           status: 'completed',
+          hasImage: Boolean(row.completed_image),
+          capability: completedInput?.preset?.capability,
+          imageOptions: completedInput?.preset?.imageOptions,
           responseRaw: String(row.completed_raw || ''),
           model: String(row.completed_model),
           provider: String(row.completed_provider),
@@ -318,7 +325,7 @@ export class SaulDatabase {
         return this.submit(message.payload, operationId);
       case 'DB_RECOVER':
         this.write(
-          "UPDATE llm_run SET status='interrupted', reason='runner-lost', error_message='Generation was interrupted. Retry to send a new request.' WHERE status IN ('queued','running','saving') AND (owner=? OR owner='')",
+          "UPDATE llm_run SET response_structured=NULL, status='interrupted', reason='runner-lost', error_message='Generation was interrupted. Retry to send a new request.' WHERE status IN ('queued','running','saving') AND (owner=? OR owner='')",
           [this.owner],
         );
         return;
@@ -340,15 +347,72 @@ export class SaulDatabase {
           message.payload.runId,
         ]);
         return;
+      case 'DB_IMAGE_CHUNK': {
+        const p = message.payload;
+        if (
+          !Number.isSafeInteger(p.offset) ||
+          p.offset < 0 ||
+          typeof p.data !== 'string' ||
+          !p.data.length ||
+          p.data.length > 200_000 ||
+          p.offset + p.data.length > 28_000_000 ||
+          !['image/png', 'image/gif'].includes(p.mediaType) ||
+          typeof p.last !== 'boolean' ||
+          !/^[A-Za-z0-9+/]+={0,2}$/.test(p.data)
+        )
+          throw new Error('Invalid image chunk.');
+        this.db.transaction(() => {
+          const row = this.rows(
+            "SELECT response_structured FROM llm_run WHERE id=? AND owner=? AND status IN ('running','saving')",
+            [p.runId, this.owner],
+          )[0];
+          if (!row) throw new Error('The image attempt is no longer active.');
+          const image = row.response_structured
+            ? (JSON.parse(String(row.response_structured)) as GeneratedImage & {
+                complete: boolean;
+              })
+            : { data: '', mediaType: p.mediaType, complete: false };
+          if (image.mediaType !== p.mediaType) throw new Error('Image format changed during save.');
+          // Reconnect may replay the acknowledged chunk, but never append it twice.
+          if (
+            p.offset < image.data.length &&
+            image.data.slice(p.offset, p.offset + p.data.length) === p.data
+          )
+            return;
+          if (image.complete || p.offset !== image.data.length)
+            throw new Error('Invalid image save offset.');
+          image.data += p.data;
+          image.complete = p.last;
+          if (p.last) validateGeneratedImage(image);
+          this.write('UPDATE llm_run SET response_structured=? WHERE id=?', [
+            JSON.stringify(image),
+            p.runId,
+          ]);
+        });
+        return;
+      }
       case 'DB_FINISH': {
         const p = message.payload;
         let changed = false;
         this.db.transaction(() => {
+          if (p.status === 'completed') {
+            const row = this.rows('SELECT input_json,response_structured FROM llm_run WHERE id=?', [
+              p.runId,
+            ])[0];
+            if (
+              row &&
+              JSON.parse(String(row.input_json || '{}')).preset?.capability === 'draw' &&
+              (!row.response_structured || !JSON.parse(String(row.response_structured)).complete)
+            )
+              throw new Error('The generated image has not finished saving.');
+          }
           this.write(
             `UPDATE llm_run SET response_raw=?,status=?,error_message=?,reason=?,latency_ms=? WHERE id=? AND status IN (${p.status === 'completed' ? "'saving'" : "'queued','running','saving'"})`,
             [p.raw, p.status, p.error || null, p.reason || null, p.latencyMs, p.runId],
           );
           changed = this.db.changes() === 1;
+          if (changed && p.status !== 'completed')
+            this.write('UPDATE llm_run SET response_structured=NULL WHERE id=?', [p.runId]);
           if (changed)
             this.write(
               'INSERT OR REPLACE INTO explanation_fts(rowid,body) SELECT rowid,? FROM llm_run WHERE id=?',
@@ -386,13 +450,30 @@ export class SaulDatabase {
         return row.input_json ? JSON.parse(String(row.input_json)) : undefined;
       }
       case 'DB_IMAGE': {
+        if (!message.payload.selectionId.startsWith('ez:')) {
+          const row = this.rows(
+            "SELECT response_structured FROM llm_run WHERE selection_id=? AND status='completed'" +
+              (message.payload.runId ? ' AND id=?' : '') +
+              ' ORDER BY created_at DESC,rowid DESC LIMIT 1',
+            message.payload.runId
+              ? [message.payload.selectionId, message.payload.runId]
+              : [message.payload.selectionId],
+          )[0];
+          if (!row?.response_structured) return;
+          const image = JSON.parse(String(row.response_structured)) as GeneratedImage;
+          validateGeneratedImage(image);
+          return { data: image.data, mediaType: image.mediaType };
+        }
         const row = this.rows('SELECT image FROM ez_entry WHERE id=?', [
           message.payload.selectionId.slice(3),
         ])[0];
         if (!(row?.image instanceof Uint8Array)) return;
         let binary = '';
         for (const byte of row.image) binary += String.fromCharCode(byte);
-        return { data: btoa(binary), mediaType: 'image/png' };
+        return {
+          data: btoa(binary),
+          mediaType: binary.startsWith('GIF8') ? 'image/gif' : 'image/png',
+        };
       }
       case 'DB_RUNS':
         if (message.payload.selectionId.startsWith('ez:')) {
@@ -400,7 +481,7 @@ export class SaulDatabase {
           return item ? [item.latest] : [];
         }
         return this.rows(
-          'SELECT * FROM llm_run WHERE selection_id=? ORDER BY created_at DESC,rowid DESC',
+          'SELECT id,status,response_raw,model,provider,created_at,latency_ms,error_message,reason,viewed_at,input_json,response_structured IS NOT NULL AS has_image FROM llm_run WHERE selection_id=? ORDER BY created_at DESC,rowid DESC',
           [message.payload.selectionId],
         ).map((row) => this.run(row));
       case 'DB_VIEW':
@@ -536,6 +617,7 @@ export class SaulDatabase {
         pageTitle: p.snapshot.page.title,
         pageUrl: p.snapshot.page.url,
         responseRaw: shown.responseRaw,
+        hasImage: shown.hasImage,
         model: shown.model,
         provider: shown.provider,
         latencyMs: shown.latencyMs,
@@ -563,13 +645,21 @@ export class SaulDatabase {
       durationSeconds?: number;
       followUpQuestion?: string;
       recipeSnapshot?: { id: string; name: string };
-      presetSnapshot?: { id: string; name: string };
+      presetSnapshot?: {
+        id: string;
+        name: string;
+        capability?: RunResult['capability'];
+        imageOptions?: RunResult['imageOptions'];
+      };
       providerSnapshot?: { kind: string };
       inputValues?: Record<string, string>;
       citations?: { url: string; title?: string }[];
     };
     const run: RunResult = {
       id: 'ez:' + id,
+      hasImage: !!row.has_image,
+      capability: entry.presetSnapshot?.capability,
+      imageOptions: entry.presetSnapshot?.imageOptions,
       status: entry.status === 'pending' ? 'interrupted' : (entry.status as RunResult['status']),
       responseRaw: entry.response,
       model: entry.model,
@@ -619,11 +709,11 @@ export class SaulDatabase {
         );
         if (item.selectionId.startsWith('ez:')) {
           lines.push(item.responseRaw);
-          if (item.hasImage) lines.push('[Saved PNG image in shared history]');
+          if (item.hasImage) lines.push('[Saved image in shared history]');
           continue;
         }
         const runs = this.rows(
-          'SELECT * FROM llm_run WHERE selection_id=? ORDER BY created_at DESC,rowid DESC',
+          'SELECT id,status,response_raw,model,provider,created_at,latency_ms,error_message,reason,viewed_at,input_json,response_structured IS NOT NULL AS has_image FROM llm_run WHERE selection_id=? ORDER BY created_at DESC,rowid DESC',
           [item.selectionId],
         );
         for (const run of runs) {

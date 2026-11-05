@@ -33,6 +33,11 @@ export function RecipeSettings({
           Actions tell Saul what to do with your selection.
         </p>
         <div className="row between">
+          {!configuration.recipes.some((r) => r.id === 'recipe-illustrate') && (
+            <button className="btn" onClick={() => onEdit({ type: 'add-illustrate' })}>
+              Add Illustrate
+            </button>
+          )}
           <button
             className="btn"
             disabled={configuration.recipes.length >= 32}
@@ -68,6 +73,17 @@ export function RecipeSettings({
           />
         </label>
         <label className="field">
+          Capability
+          <select
+            aria-label="Action capability"
+            value={recipe.capability ?? 'write'}
+            onChange={(e) => update({ capability: e.target.value as 'write' | 'draw' })}
+          >
+            <option value="write">Write</option>
+            <option value="draw">Draw</option>
+          </select>
+        </label>
+        <label className="field">
           Default preset
           <select
             aria-label="Default preset"
@@ -81,10 +97,10 @@ export function RecipeSettings({
               <option
                 key={preset.id}
                 value={preset.id}
-                disabled={!!preset.capability && preset.capability !== 'write'}
+                disabled={(preset.capability ?? 'write') !== (recipe.capability ?? 'write')}
               >
                 {preset.name}
-                {preset.capability === 'draw' ? ' · Draw unavailable in Saul' : ''}
+                {preset.capability === 'draw' ? ' · Draw' : ''}
                 {preset.capability === 'speak' ? ' · Speak preview only' : ''}
               </option>
             ))}

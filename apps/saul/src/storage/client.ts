@@ -58,6 +58,7 @@ export type RunnerRequest =
   | { operation: 'db'; message: DbRequest }
   | { operation: 'submit'; submission: Submission; credential: string }
   | { operation: 'stop'; selectionId: string }
+  | { operation: 'save-image'; selectionId: string }
   | { operation: 'delete'; selectionId?: string };
 export async function runnerRequest<T>(message: RunnerRequest): Promise<T> {
   await ensureOffscreenDocument();

@@ -83,6 +83,30 @@ import Foundation
                 try FileManager.default.contentsOfDirectory(atPath: legacy.path).isEmpty,
                 "Migration left sidecars or backups")
         },
+        CheckCase("history: Saul Draw images retain exact bytes and the displayed attempt") { directory in
+            let store = try HistoryStore(directory: directory)
+            let path = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent(
+                "../../../../contracts/fixtures/animation.gif")
+            let gif = try Data(contentsOf: path)
+            let encoded = gif.base64EncodedString()
+            let output = "{\"data\":\"\(encoded)\",\"mediaType\":\"image/gif\",\"complete\":true}"
+            let statements =
+                "INSERT INTO page(id,url,title,first_seen_at,last_seen_at) VALUES ('p','https://example.test','Tree',1,1); INSERT INTO selection(id,page_id,text,created_at) VALUES ('s','p','Tree',1); INSERT INTO llm_run(id,selection_id,widget_id,provider,model,prompt_version,prompt_raw,context_json,input_json,response_raw,response_structured,status,created_at) VALUES ('run','s','illustrate','openai-compatible','gpt-image-2.6-flare','2','','{}','{\"preset\":{\"capability\":\"draw\",\"imageOptions\":{\"size\":\"1024x1024\",\"quality\":\"low\",\"outputFormat\":\"gif\"}}}','','\(output)','completed',1);"
+            for statement in statements.split(separator: ";") {
+                _ = try historySQL(store.url, String(statement))
+            }
+            guard let entry = try store.load().first else {
+                throw CheckFailure("Browser image fixture was not saved")
+            }
+            try expectEqual(entry.capability, .draw, "Browser Draw became text")
+            try expectEqual(entry.imageOptions.outputFormat, "gif", "Browser format lost")
+            try expect(entry.hasImage, "Browser image metadata lost")
+            try expectEqual(try store.image(for: entry), gif, "Browser output bytes changed")
+            _ = try historySQL(store.url, "UPDATE llm_run SET id='new-run'")
+            try expect(try store.image(for: entry) == nil, "Old answer loaded another attempt's image")
+            try store.delete(id: entry.id)
+            try expect(try store.load().isEmpty, "Deleting browser image kept its history")
+        },
         CheckCase("history: damaged original blocks migration without dropping records") { directory in
             let legacy = directory.appendingPathComponent("old")
             try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)

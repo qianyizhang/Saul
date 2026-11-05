@@ -1,3 +1,4 @@
+import { GeneratedImageView } from '../surface/GeneratedImageView';
 import { ActionLabel } from '../surface/ActionLabel';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bookmark, ExternalLink, Trash2, Download, ChevronDown } from 'lucide-react';
@@ -34,7 +35,6 @@ export function Library({
   const [page, setPage] = useState(0);
   const [more, setMore] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [image, setImage] = useState<string>();
   const [runs, setRuns] = useState<RunResult[]>([]);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
@@ -82,7 +82,6 @@ export function Library({
     }
     setExpanded(item.selectionId);
     setRuns([]);
-    setImage(undefined);
     try {
       if (item.completed)
         await sendDbMessage({
@@ -95,14 +94,6 @@ export function Library({
       });
       if (revision !== expandedRequest.current) return;
       setRuns(runs);
-      if (item.hasImage) {
-        const image = await sendDbMessage({
-          type: 'DB_IMAGE',
-          payload: { selectionId: item.selectionId },
-        });
-        if (revision === expandedRequest.current && image)
-          setImage(`data:${image.mediaType};base64,${image.data}`);
-      }
       setItems((rows) =>
         rows.map((row) => (row.selectionId === item.selectionId ? { ...row, unread: false } : row)),
       );
@@ -258,11 +249,12 @@ export function Library({
                         {(item.completed || item.latest).inspection?.followUpQuestion}
                       </p>
                     )}
-                    {item.hasImage && image && (
-                      <img
-                        src={image}
-                        alt="Saved image from EZ"
-                        style={{ maxWidth: '100%', height: 'auto' }}
+                    {item.hasImage && (
+                      <GeneratedImageView
+                        key={(item.completed || item.latest).id}
+                        selectionId={item.selectionId}
+                        runId={(item.completed || item.latest).id}
+                        workspace
                       />
                     )}
                     <AnnotatedTextView segments={new TagStreamParser().feed(item.responseRaw)} />
@@ -298,9 +290,17 @@ export function Library({
                                 {run.inspection.followUpQuestion}
                               </p>
                             )}
-                            <AnnotatedTextView
-                              segments={new TagStreamParser().feed(run.responseRaw)}
-                            />
+                            {run.hasImage ? (
+                              <GeneratedImageView
+                                selectionId={item.selectionId}
+                                runId={run.id}
+                                workspace
+                              />
+                            ) : (
+                              <AnnotatedTextView
+                                segments={new TagStreamParser().feed(run.responseRaw)}
+                              />
+                            )}
                             <RunDetails run={run} />
                             <InputOutputInspector run={run} />
                           </details>

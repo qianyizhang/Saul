@@ -1,4 +1,8 @@
-import { validImageOptions, validSpeechOptions } from '../../native/shared-presets-contract.mts';
+import {
+  IMAGE_MODEL,
+  validImageOptions,
+  validSpeechOptions,
+} from '../../native/shared-presets-contract.mts';
 import type {
   ModelPreset,
   ReadingConfiguration,
@@ -129,7 +133,7 @@ export function starterConfiguration(settings: UserSettings): ReadingConfigurati
   return {
     schemaVersion: 1,
     selectedRecipeId: EXPLAIN_RECIPE_ID,
-    presets: [preset],
+    presets: [preset, illustrationPreset(settings)],
     recipes: [
       {
         id: EXPLAIN_RECIPE_ID,
@@ -154,10 +158,34 @@ export function starterConfiguration(settings: UserSettings): ReadingConfigurati
           'Improve this wording while preserving its meaning and voice. Put the revised text first, then briefly explain any changes.\n\n{{text}}',
         systemPrompt: DEFAULT_RECIPE_SYSTEM_PROMPT,
       },
+      illustrationRecipe(),
     ],
   };
 }
 
+export function illustrationPreset(settings: UserSettings): ModelPreset {
+  return {
+    id: 'preset-illustration',
+    name: 'Saul illustration',
+    provider: 'openai-compatible',
+    providerKey: 'openai-api',
+    capability: 'draw',
+    model: IMAGE_MODEL,
+    profileId:
+      settings.providerConnections?.['openai-api'] || settings.activeProfileId || 'default',
+    imageOptions: { size: '1024x1024', quality: 'low', outputFormat: 'png' },
+  };
+}
+export function illustrationRecipe(): Recipe {
+  return {
+    id: 'recipe-illustrate',
+    name: 'Illustrate',
+    presetId: 'preset-illustration',
+    capability: 'draw',
+    template: 'Create a clear illustration of the following context:\n\n{{text}}',
+    systemPrompt: '',
+  };
+}
 export function configurationFor(settings: UserSettings): ReadingConfiguration {
   return settings.configuration || starterConfiguration(settings);
 }
@@ -236,7 +264,12 @@ export function normalizeConfiguration(
     }),
     recipes: stored.recipes.map((entry) => {
       const recipe = record(entry, 'Action');
+      if (recipe.capability !== undefined && !['write', 'draw'].includes(String(recipe.capability)))
+        throw new Error('Invalid action capability.');
       return {
+        ...(recipe.capability === undefined
+          ? {}
+          : { capability: recipe.capability as 'write' | 'draw' }),
         id: string(recipe.id, 'Action ID', 128),
         name: string(recipe.name, 'Action name', 80),
         presetId: string(recipe.presetId, 'Default preset ID', 128),

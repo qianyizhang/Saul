@@ -162,6 +162,11 @@ struct ConfigurationView: View {
                 DisclosureGroup("Image settings") {
                     VStack(spacing: 12) {
                         SelectorPicker(
+                            "Output format",
+                            options: ImageModelOption.formats.map {
+                                .init(value: $0, title: $0.uppercased())
+                            }, selection: imageOptionBinding(\.outputFormat))
+                        SelectorPicker(
                             "Size",
                             options: ImageModelOption.sizes.map {
                                 .init(value: $0, title: $0.replacingOccurrences(of: "x", with: " × "))

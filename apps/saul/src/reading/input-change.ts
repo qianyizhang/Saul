@@ -22,6 +22,7 @@ export function compareRunInput(
     JSON.stringify([
       input.provider,
       input.credentialOwner ?? input.remote.credentialOwner ?? 'local',
+      input.preset?.imageOptions,
       input.provider === 'chatgpt-plan'
         ? input.plan
         : input.provider === 'chrome-ai'

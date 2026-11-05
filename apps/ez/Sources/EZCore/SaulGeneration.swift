@@ -61,7 +61,7 @@ extension GenerationProvider {
         try input.validate()
         var request: [String: Any] = [
             "action": "native-image", "prompt": input.prompt, "model": input.model,
-            "size": input.size, "quality": input.quality,
+            "size": input.size, "quality": input.quality, "outputFormat": input.outputFormat,
         ]
         if let image = input.image {
             request["imageBase64"] = try image.validatedData().base64EncodedString()

@@ -123,12 +123,10 @@ error and retains your query for manual retry. It does not send later on sign-in
 Escape hides the panel. The command pins the installed app, so an indexed build
 in `dist` cannot steal the submission. See [Raycast integration](docs/raycast.md).
 
-macOS may ask whether **EZ** can access its Keychain item to save or restore your
-sign-in. EZ queries only its own credential records. Locally signed development
-rebuilds can trigger another prompt; refusing access keeps history available but
-prevents the saved sign-in from loading.
-See [Keychain access](docs/keychain.md) for the stored data, permission choices,
-and why a rebuild can ask again. The same explanation is available in Settings.
+The signed Saul credential owner accesses shared sign-ins and the API key.
+Keychain denial blocks affected requests while keeping history and drafts available.
+See the [credential ownership contract](../../contracts/credentials.md) for migration,
+signing continuity and removal behavior.
 
 ChatGPT plan access depends on account eligibility and rollout. The integration
 uses OAuth with explicit `chatgpt.tokens.use.direct` permission, then
@@ -165,31 +163,34 @@ A cold start may also show EZ's main window.
 Choose **Illustration** in the Action picker. Save your OpenAI API key in
 **Settings → Providers → OpenAI API**, fill Context and click **Run** (⌘Return).
 Key Save/Reload do not test the key or send a request. API usage is billed
-separately from ChatGPT plan usage. Each Run requests one PNG.
+separately from ChatGPT plan usage. Each Run requests one image. Choose **PNG** or **GIF · animated** in the Draw composer.
 
 **Settings → Presets → Illustration** owns the image model and optional size/quality.
-The default is GPT Image 2.5 Flare, low, 1024×1024. Access depends on your API project
+New starters default to GPT Image 2.6 Flare, low, 1024×1024. Existing presets retain
+their saved model; choose a 2.6 model in Presets for GIF output. Access depends on your API project
 and organization. **Stop** (⌘.) cancels locally; OpenAI may still finish and bill an
 accepted request. There are no automatic retries.
 
 The result appears in the same History and Quick Lookup as text. **Download**
-exports its original PNG; **Details** shows frozen inputs and settings. **Reuse**
+exports its original PNG or GIF; **Details** shows frozen inputs and settings. **Reuse**
 restores a draft without sending. Draw actions always wait for Run after launcher
-input. Images are saved in `EZ/images/<run-id>.png`; deleting a run removes its PNG.
+input. Images are saved as blobs in shared SQLite history; deleting a run removes its owned
+image bytes. GIF is generation-only; image edits require PNG.
 If saving fails, **Unsaved → Save again** retries the exact result without generation.
 Save or download unsaved results before quitting.
 
 ## Configure providers, presets and actions
 
 **Providers** names the connection and displays its stable key and capabilities.
-`gpt-plan` supports Write; `openai-api` supports Write and Draw. Renaming a provider
-preserves preset bindings. Plan sign-ins and the API key remain separate, app-local
-Keychain records. Presets never select a different plan account implicitly.
+`gpt-plan` supports Write; `openai-api` supports Write, Draw and Speak. Renaming a provider
+preserves preset bindings. Plan sign-ins and the API key remain separate records behind the shared Saul
+credential owner. Presets never select a different plan account implicitly.
 
 **Presets** binds provider key, Write/Draw, model and supported options. Existing
 presets default to `gpt-plan` / Write, retaining their IDs and behavior. Provider definitions and Presets
 share the local store and stale-save revision with Saul; both apps must use a compatible build to preserve
-the typed fields. Saul retains Draw presets but currently executes Write only.
+the typed fields. Saul supports Draw through its selection-based Illustrate action; Speak has its
+preview in Saul.
 API Write uses an explicit model ID. Unavailable choices block rather than falling back.
 
 **Actions** owns instructions, type and a compatible default preset. Use
@@ -250,21 +251,18 @@ Numbered and last-item navigation follow [Chrome’s shortcuts](https://support.
 ## Local data
 
 - Shared history and input/output images: `~/Library/Application Support/Little Clarity/history.sqlite3`, owner-only. Saul and EZ browse the same saved records. The old JSONL/images are removed after verified migration.
-- OpenAI API key: macOS Keychain (`local.ez.app.openai`), separate from plan sign-ins.
-- Credentials, issued client IDs, and host ID: macOS Keychain (`local.ez.app.chatgpt`).
+- API key and ChatGPT registrations: separate shared Keychain records accessed only by the signed Saul credential owner. Former EZ-owned records are migration sources; see the [credential contract](../../contracts/credentials.md).
 - Shared model presets: owner-only `~/Library/Application Support/Little Clarity/settings.json` → `modelPresets`.
 - EZ actions/configuration: the same file → `apps.ez.configuration`; the old `EZ/configuration.json` remains a migration recovery copy.
 - Keyboard bindings: owner-only `~/Library/Application Support/EZ/shortcuts.json`.
 - Previous model/effort/Fast preferences seed the initial Current preset.
 - Build products: ignored `.build/` and `dist/`; regenerate them with `make app`.
 
-History uses append-only snapshots during requests: a query is saved before
-sending, followed by a terminal snapshot with the same ID. The latest valid
-snapshot wins; abandoned pending requests appear interrupted on restart.
-Explicit deletion atomically rewrites the
-file to remove all snapshots with the selected ID. Unrelated bytes, including
-damaged lines with no identifiable ID, are preserved. Queries are sent to OpenAI;
-previous lookups are not sent. Local history is plaintext; it is not encrypted by EZ.
+History stores one SQLite row per lookup. A pending request is saved before sending;
+the terminal snapshot updates that row. Abandoned pending requests appear interrupted
+on restart. Deletion removes the owned row and image blobs in a transaction. New runs
+send their current inputs; explicit follow-ups also include their saved conversation
+context. Local history is plaintext and is not encrypted by EZ.
 
 ## Development
 

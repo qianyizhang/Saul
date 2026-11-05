@@ -227,7 +227,7 @@ import SaulCredentialStorage
                 }
             }
             try await streamResponses(body, token: credential, accountID: plan ? id : nil, native: true)
-        case "native-image":
+        case "native-image", "api-image":
             let key = try await apiKey()
             var image: ImageAttachment?
             if let encoded = value["imageBase64"] as? String {
@@ -240,7 +240,8 @@ import SaulCredentialStorage
                 ImageGenerationRequest(
                     prompt: (value["prompt"] as? String ?? ""),
                     model: (value["model"] as? String ?? ""), size: (value["size"] as? String ?? ""),
-                    quality: (value["quality"] as? String ?? ""), image: image), apiKey: key)
+                    quality: (value["quality"] as? String ?? ""),
+                    outputFormat: (value["outputFormat"] as? String ?? "png"), image: image), apiKey: key)
             result(["imageBase64": data.base64EncodedString()])
         case "migration-verified":
             if try storage.migrationCompleted() {

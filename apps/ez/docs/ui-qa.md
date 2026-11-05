@@ -44,7 +44,7 @@ main window after a hide/close capture error; never reuse stale AX indices.
 
 ## Draw, search and source images
 
-Use Draw / Draw result / Draw waiting / Draw error. Run, inspect the PNG in both
+Use Draw / Draw result / Draw waiting / Draw error. Run, inspect PNG and animated GIF output in both
 surfaces, Download/Cancel and Stop; late output must not replace another run.
 Providers owns credentials; Presets owns model/image options; Actions owns type,
 template and default preset. Draw launcher drafts always wait for Run.

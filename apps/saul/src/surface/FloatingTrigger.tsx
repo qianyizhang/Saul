@@ -1,3 +1,4 @@
+import type { ReadingOperations } from '../contracts/reading';
 import React, { useRef } from 'react';
 import { useAnchoredPosition } from './useAnchoredPosition';
 import { Sparkles } from 'lucide-react';
@@ -5,7 +6,9 @@ import { Sparkles } from 'lucide-react';
 interface FloatingTriggerProps {
   range: Range;
   onTrigger: () => void;
-  recipes: { id: string; name: string; presetName: string; fast: boolean }[];
+  recipes: ReadingOperations['policy']['result']['recipes'];
+  outputFormat: 'png' | 'gif';
+  onOutputFormat: (value: 'png' | 'gif') => void;
   recipeId: string;
   onRecipe: (id: string) => void;
 }
@@ -16,6 +19,8 @@ export const FloatingTrigger: React.FC<FloatingTriggerProps> = ({
   recipes,
   recipeId,
   onRecipe,
+  outputFormat,
+  onOutputFormat,
 }) => {
   const triggerRef = useRef<HTMLDivElement>(null);
   const style = useAnchoredPosition(range, triggerRef, 'bottom-end');
@@ -28,6 +33,7 @@ export const FloatingTrigger: React.FC<FloatingTriggerProps> = ({
     >
       <select
         aria-label="Action"
+        style={{ fieldSizing: 'content' }}
         value={recipeId}
         onChange={(event) => onRecipe(event.target.value)}
         className="max-w-52 min-w-0 bg-transparent text-inherit rounded-l-control px-2 py-1.5"
@@ -42,6 +48,17 @@ export const FloatingTrigger: React.FC<FloatingTriggerProps> = ({
           </option>
         ))}
       </select>
+      {recipes.find((r) => r.id === recipeId)?.capability === 'draw' && (
+        <select
+          aria-label="Output format"
+          value={outputFormat}
+          onChange={(e) => onOutputFormat(e.target.value as 'png' | 'gif')}
+          className="bg-transparent text-inherit px-2 py-1.5 min-w-0"
+        >
+          <option value="png">PNG</option>
+          <option value="gif">GIF · animated</option>
+        </select>
+      )}
       <button
         onClick={(event) => {
           event.stopPropagation();
@@ -50,7 +67,9 @@ export const FloatingTrigger: React.FC<FloatingTriggerProps> = ({
         className="flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 rounded-r-control hover:bg-accent-hover"
       >
         <Sparkles className="w-3.5 h-3.5" />
-        <span>Explain</span>
+        <span>
+          {recipes.find((r) => r.id === recipeId)?.capability === 'draw' ? 'Illustrate' : 'Explain'}
+        </span>
       </button>
     </div>
   );

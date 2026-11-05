@@ -14,6 +14,9 @@ export interface RunResult {
   id: string;
   status: RunStatus;
   responseRaw: string;
+  hasImage?: boolean;
+  capability?: 'write' | 'draw' | 'speak';
+  imageOptions?: import('../../native/shared-presets-contract.mts').SharedImageOptions;
   /** Live runner state only; never inferred from elapsed time or persisted. */
   activity?: ModelActivity;
   error?: string;
@@ -79,8 +82,18 @@ export interface HistoryItem {
 
 export interface DbOperations extends DigestDbOperations {
   DB_IMAGE: {
-    payload: { selectionId: string };
-    result: { data: string; mediaType: string } | undefined;
+    payload: { selectionId: string; runId?: string };
+    result: import('../models/images').GeneratedImage | undefined;
+  };
+  DB_IMAGE_CHUNK: {
+    payload: {
+      runId: string;
+      offset: number;
+      data: string;
+      mediaType: 'image/png' | 'image/gif';
+      last: boolean;
+    };
+    result: void;
   };
   DB_READING_RESOLVE: {
     payload: { snapshot: SelectionSnapshot; submissionId: string; recipeId: string };

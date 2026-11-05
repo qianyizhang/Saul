@@ -25,6 +25,8 @@ import SaulCredentialStorage
     var imageImportID = UUID()
     @Published var inputImage: ImageAttachment? { didSet { imageImportID = UUID() } }
     @Published var inputImageError: String?
+    @Published var outputFormatOverride: String?
+    var outputFormat: String { outputFormatOverride ?? currentPreset?.imageOptions?.outputFormat ?? "png" }
     @Published private(set) var draftRevision = 0
     @Published private(set) var replayEntry: HistoryEntry?
     @Published var configurationError: String?
@@ -115,6 +117,7 @@ import SaulCredentialStorage
                                 ImageGenerationRequest(
                                     prompt: entry.query,
                                     model: preset.model, size: options.size, quality: options.quality,
+                                    outputFormat: options.outputFormat,
                                     image: entry.inputImage))
                             return .image(output)
                         }
@@ -275,6 +278,10 @@ import SaulCredentialStorage
         if action.webSearch && currentProvider?.kind != .openAIAPI {
             return "Web search needs an OpenAI API Write preset."
         }
+        if preset.capability == .draw && outputFormat == "gif" {
+            if !preset.model.hasPrefix("gpt-image-2.6-") { return "GIF output requires GPT Image 2.6." }
+            if action.imageInput != nil { return "GIF output is unavailable for image edits. Choose PNG." }
+        }
         if action.imageInput != nil && inputImage == nil { return "Attach an image before running." }
         do {
             try action.validateInputs()
@@ -398,6 +405,7 @@ import SaulCredentialStorage
         selectedActionID = id
         replayEntry = nil
         overridePresetID = nil
+        outputFormatOverride = nil
         inputValues = [:]
         inputImage = nil
         inputImageError = nil
@@ -408,6 +416,7 @@ import SaulCredentialStorage
     func choosePreset(_ id: UUID?) {
         guard !busy, !launcherPending, !connecting, !signingIn else { return }
         overridePresetID = id
+        outputFormatOverride = nil
     }
     func saveConfiguration(_ updated: Configuration) throws {
         guard !configurationLocked, let store = configurationStore else {
@@ -549,10 +558,15 @@ import SaulCredentialStorage
     }
     func send() {
         refreshConfiguration()
-        guard canSend, let action = currentAction, let preset = currentPreset, let attemptExecution else {
+        guard canSend, let action = currentAction, var preset = currentPreset, let attemptExecution else {
             return
         }
         error = nil
+        if preset.capability == .draw {
+            var options = preset.imageOptions ?? ImageOptions()
+            options.outputFormat = outputFormat
+            preset.imageOptions = options
+        }
         var entry: HistoryEntry
         do {
             entry = try action.prepare(values: inputValues, preset: preset, models: models, image: inputImage)
@@ -609,6 +623,7 @@ import SaulCredentialStorage
         inputImage = nil
         inputImageError = nil
         overridePresetID = nil
+        outputFormatOverride = nil
         replayEntry = nil
         if !configuration.actions.contains(where: { $0.id == selectedActionID }) {
             selectedActionID = configuration.actions.first?.id
@@ -643,6 +658,7 @@ import SaulCredentialStorage
         replayEntry = saved
         inputValues = saved.inputValues ?? [:]
         overridePresetID = nil
+        outputFormatOverride = nil
         selection = nil
         draftRevision += 1
     }

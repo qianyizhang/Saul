@@ -99,6 +99,9 @@ public struct ModelOption: Identifiable {
 
 public struct HistoryEntry: Codable, Identifiable, Equatable, Sendable {
     public var sourceID: String?
+    public var sourceRunID: String?
+    public var sourceCapability: ActionCapability?
+    public var sourceImageOptions: ImageOptions?
     public var sourceText: String?
     public var sourceURL: String?
     public var sourceTitle: String?
@@ -139,7 +142,10 @@ public struct HistoryEntry: Codable, Identifiable, Equatable, Sendable {
             providerSnapshot, inputImage, citations, webSearchCompleted
     }
     public var capability: ActionCapability {
-        actionSnapshot?.capability ?? presetSnapshot?.capability ?? .write
+        sourceCapability ?? actionSnapshot?.capability ?? presetSnapshot?.capability ?? .write
+    }
+    public var imageOptions: ImageOptions {
+        presetSnapshot?.imageOptions ?? sourceImageOptions ?? ImageOptions()
     }
     public var hasImage: Bool { capability == .draw && (storedImage || imageData != nil) }
     public init(mode: QueryMode, query: String, model: String, effort: String, requestedServiceTier: String?)

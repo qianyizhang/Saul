@@ -28,7 +28,8 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-mkdir -p "$staged_app/Contents/MacOS"
+mkdir -p "$staged_app/Contents/MacOS" "$staged_app/Contents/Resources"
+cp -R "$ez_bin_dir/EZ_EZCore.bundle" "$staged_app/Contents/Resources/"
 ez_compile_library "Tests/Previews/$kind.swift" "${ez_app_sources[@]}" "${ez_objects[@]}" \
     -o "$staged_app/Contents/MacOS/$executable"
 cat > "$staged_app/Contents/Info.plist" <<PLIST

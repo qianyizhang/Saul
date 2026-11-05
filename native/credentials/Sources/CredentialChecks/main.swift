@@ -119,6 +119,17 @@ func rejects(_ operation: () throws -> Void) throws {
         ]), caller: caller)
     }
     try request(["action": "status"])
+    let imageRequest: [String: Any] = [
+      "action": "api-image", "prompt": "Looping tree", "model": "gpt-image-2.6-flare",
+      "size": "1024x1024", "quality": "low", "outputFormat": "gif",
+    ]
+    try request(imageRequest)
+    var invalidImage = imageRequest
+    invalidImage["imageBase64"] = "unexpected"
+    try rejects { try request(invalidImage) }
+    invalidImage = imageRequest
+    invalidImage["outputFormat"] = "svg"
+    try rejects { try request(invalidImage) }
     try rejects { try request(["action": "status"], version: true) }
     try rejects {
       try request([
