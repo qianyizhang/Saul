@@ -1,146 +1,94 @@
-# Shared design adoption
+# Native design
 
-EZ and Saul use **Little Clarity**, a portable Google Labs DESIGN.md contract.
-EZ supplied its visual baseline: a green accent, serif subjects, system controls,
-quiet surfaces, and a spacious reading area. Native system surfaces remain native.
+[DESIGN.md](../../../DESIGN.md) owns Little Clarity: green accent, serif subjects,
+system controls, quiet surfaces and reading space. Native system surfaces stay
+native. `AppStyle.swift` connects generated `DesignTokens.swift` roles to EZ;
+never hand-edit tokens. The generated file records its source SHA-256.
 
-The single authoring source is [DESIGN.md](../../../DESIGN.md); the application
-workflow is [feature UI review](../../../design/SKILL.md#feature-ui-review).
-`Sources/EZ/DesignTokens.swift` records the exact source SHA-256 and is generated;
-`AppStyle.swift` connects its roles to the app. Do not hand-edit generated tokens.
-The compiled app and ordinary Swift checks require no JavaScript runtime or sibling checkout.
+## Feature UI review
 
-From the monorepo root (Node 24 and installed pinned dependencies):
+Follow the shared [feature UI review](../../../design/SKILL.md#feature-ui-review).
+Map the task and information hierarchy before editing; use [surfaces](surfaces.md)
+for placement and [UI journeys](ui-qa.md) for acceptance. Review affected main,
+Quick Lookup and Settings states, including long/missing values, errors,
+Min/Standard and light/dark. Shared token changes need rendered review in both apps.
+
+From the monorepo root, with Node 24 and pinned dependencies:
 
 ```sh
 pnpm design:generate
 pnpm design:check
 ```
 
-After regeneration, run EZ's `make format` and `make check`, then inspect the built
-native app. `make design-preview` builds a separate offline app from the production
-view sources, with temporary fixture history and no authentication connection or
-global shortcut registration. Open `dist/EZ Design Preview.app`; its outer controls
-switch between main/settings and light/dark appearance. The production controls
-are disabled in this visual fixture. Shared token changes need rendered review in
-both products. Native controls and task density may differ; preserve the contract's
-content/action roles.
-The generator and contract travel together when the design kit is moved or versioned.
-
-## Feature UI review
-
-Follow the shared [feature UI review](../../../design/SKILL.md#feature-ui-review)
-for new features and changes to forms, metadata, actions or disclosures. Map the
-user’s task and information hierarchy before editing. Verify the affected main
-window, Quick Lookup and Settings states through [native UI journeys](ui-qa.md),
-including filled fields, long/missing values, errors and both presentation modes.
-Keep screenshots outside Git and record evidence limits in [verification](verification.md).
-
-## Min Mode
-
-Min Mode follows the shared [expert everyday policy](../../../DESIGN.md#min-mode).
-It is local to EZ, shared by the main window and Quick Lookup, and defaults on.
-Settings → Preferences and Quick Lookup’s menu expose the same preference.
-Routine subtext and redundant icon/text pairs disappear. Short action words retain
-complete accessible names and help. Errors, blocked choices, unsaved answers and
-recovery actions remain visible. Help-only disclosures, documentation links and gray
-explanatory paragraphs are absent in Min Mode. The plan provider uses one aligned account action row;
-History places its title and Reveal action on the same row.
-
-Settings uses native sidebar sections: Overview, Presets, Actions, Preferences,
-Providers and Shortcuts. Presets and Actions share one mounted draft owner but show
-one editor at a time; navigating sections preserves both drafts. Switching the
-selected item still requires saving or explicitly discarding its edits. Overview
-shows current action/preset/account state and routes to the relevant editor.
-
-A saved answer prioritizes Copy. Min Mode puts Reuse, Export and Delete in More,
-and input/output inspection inside Details. Edit reveals the retained draft; Hide
-returns to reading. Standard view retains the longer action names and guidance.
-The compact preset selector omits the routine Standard suffix; requested Fast
-remains explicit, and complete recorded choices remain in Details.
+Then run EZ's `make format`, `make check` and native review. Ordinary Swift builds
+need no JavaScript runtime or sibling checkout. Move/version the generator with
+the contract. Keep captures outside Git under root `.artifacts/ez/`; record material
+acceptance limits in [verification](verification.md).
 
 ## Offline previews
 
-`make surface-preview` builds `dist/EZ Surface Preview.app` from production views.
-It uses disposable storage, an in-memory API key store and synthetic Write/Draw
-providers. It cannot access Keychain, accounts or the network and does not register
-the global shortcut. Fixtures cover empty/multi-input, saved text, Draw draft/result,
-Draw waiting/error, unavailable choices and no actions. Draw waiting allows Stop;
-Run produces a synthetic tree PNG. Verify the shared main/Quick Lookup flow,
-Providers/Presets/Actions, Min Mode, light/dark and minimum panel size.
+Run these from `apps/ez`; each builds a separate app under `dist/` from production
+views and stages/verifies its bundle before replacement.
 
-`--unsaved-attempt` rejects the first terminal save. Save again writes the frozen
-result without generation. Inspect Unsaved, recovery, navigation and export with
-both capabilities. Preview targets stage and verify bundles before replacement.
-The [surface contract](surfaces.md) owns feature placement. Synthetic providers do
-not prove API model access, real latency, billed requests or installed shortcuts.
+| Command                | Use                                                                                                                |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `make design-preview`  | **EZ Design Preview.app**: disabled production controls, main/Settings and appearance comparison                   |
+| `make surface-preview` | **EZ Surface Preview.app**: interactive fixtures, synthetic Write/Draw providers, main/panel and Settings journeys |
 
-The initial adoption also makes answer metadata and composer hints readable at the
-shared caption size. Quick Lookup uses the shared accent and a compact action-first
-layout. The answer boundary shows a yellow light while waiting and transitions to
-green on a reasoning-item event: a smooth 3.2-second round trip, at most 84 points wide, with a 2-point core and 3-point glow.
-Reduce Motion replaces travel with a stationary light. The effect occupies the
-existing divider and stops permanently once answer/refusal text arrives, or when
-the lookup terminates; generation spinners are omitted. Hidden Quick Lookup panels remove the animated view. These are EZ-specific motion values,
-implemented in `ThinkingDivider`, using the shared accent role.
+Previews use disposable history, no real accounts/Keychain/network, and no global
+shortcut. `surface-preview` uses an in-memory API key store; `--unsaved-attempt`
+fails its first terminal save for recovery checks. It starts in Min Mode without
+reading/writing the personal preference. Fixture names and actions live in
+[UI QA](ui-qa.md); previews do not prove installed or live-service behavior.
 
-Lookup dropdowns use stable-width native popup buttons with the entire control
-available for click and hover scrolling, independent of title length. The compact
-header action control fills its available space; the footer preset control stays
-250 points wide and has an adjacent information button for request details.
-Settings sections use a native sidebar. The offline surface preview
-includes **Selector hitboxes** with long names and one-character alternatives.
+## Min Mode and Settings
 
-## Native regression review
+Follow the shared [Min Mode policy](../../../DESIGN.md#min-mode). The local
+preference defaults on and is shared by both lookup surfaces. Short labels retain
+full accessible names/help. Hide routine hints, help-only disclosures, documentation
+links and pinned metric strips; retain errors, blocked choices, unsaved work and
+recovery. Omit the routine Standard preset suffix; Fast stays explicit.
 
-Use the [fixed UI journeys](ui-qa.md) for first-run, composition, history, settings,
-long forms, recovery, and light/dark review. The main window gives selected answers
-reading space and reveals the current draft through **Edit**; **Hide**
-returns to reading. Preset/request details are progressive disclosures. Form hints
-reserve a stable line, and Tab navigation scrolls the focused field into view.
-The surface preview includes a **Signed out** fixture and resets search with each
-fixture so one scenario cannot hide the next scenario's history.
+Settings has Overview, Presets, Actions, Preferences, Providers and Shortcuts.
+Show one editor at a time, preserving drafts across sections and guarding item
+changes/dismissal. Overview routes current choices to their editor. Align the plan
+account actions in one row; put History's title and Reveal action together.
+[Surfaces](surfaces.md) owns reading/editing and action placement.
 
-## Prose corrections
+## Controls and metadata
 
-Long passages use body typography, never a full-page subject heading. Completed
-Spell Check answers with an explicit corrected-text or changes heading offer an
-Original / Corrected comparison. Removed text uses a warm tint and strikethrough;
-added text uses the shared green and underline. Labels make color nonessential.
-Two readable columns share one scroll area at wider widths. Corresponding paragraphs
-and list items occupy shared, top-aligned rows whose height follows the taller side;
-paragraph splits and merges stay together, and unmatched paragraphs leave an empty
-opposite cell. Narrow windows and Quick Lookup show Corrected first with Original
-in a disclosure. Explanatory notes sit under Why these changes. Unrecognized responses keep the ordinary answer view
-with long original text collapsed. In Min Mode, the literal full response remains in Details → Inspect on both lookup surfaces. Standard Mode also exposes the main-window inspector directly.
+- Dropdowns keep a full-width click/scroll target regardless of label length.
+  Quick Lookup's footer preset selector is 250 points wide, with adjacent Details.
+- Disclosure headers use a full-width button at least 32 points high. Chevron,
+  label and whitespace toggle once; expanded content remains interactive.
+  Keyboard activation and an accessible Expanded/Collapsed value are required.
+- Details uses stable label/value columns, primary-text values and three-column
+  token/timing groups. Wrap long IDs; show unknown metrics as a dash and missing
+  actual tier as Not reported. Standard footer shows first-text and total time.
+- Main composer information describes Next lookup. Quick Lookup shows Answer
+  details when selected, with Next lookup collapsed in both modes.
+- Multi-input fields keep labels after typing; single-input fields use a compact
+  placeholder. Reserve hint space and scroll keyboard-focused fields into view.
+  Fixed shortcut references also use aligned label/value rows.
 
-Disclosure headers use a shared full-width button with a minimum 32-point height.
-The chevron, label, and remaining header space all toggle expansion; the expanded
-content remains independently selectable and interactive. Native button keyboard
-activation and an accessible Expanded/Collapsed value accompany the visual state.
+## Activity and answer presentation
 
-## Metadata readability
+`ThinkingDivider` uses yellow while waiting and green after a reasoning-item event.
+Its 3.2-second round trip spans at most 84 points, with a 2-point core and 3-point
+glow. Reduce Motion uses a stationary light. The light stops permanently at first
+answer/refusal text or termination; hidden panels remove it. Do not add a second spinner.
 
-Answer Details uses a stable label/value column, primary-text values, and compact
-three-column token and timing groups. Unknown metrics use a dash; unreported
-service tiers say Not reported. Long identifiers wrap. The main composer’s information
-button describes Next lookup only; Quick Lookup opens Answer details whenever an
-answer is selected, with Next lookup collapsed in both presentation modes. Standard view's footer keeps first-text and total time in
-plain language; full token counts and throughput remain in Details. Both native
-surfaces share the same layout and full-row disclosures.
+Long passages use body typography. Recognized completed Spell Check answers show
+Original/Corrected: removed text has warm tint/strikethrough; additions green/underline.
+Labels make color nonessential. Wide layouts align paragraph rows in one scroll
+area; narrow layouts show Corrected first and disclose Original. Notes sit under
+Why these changes. Unrecognized formats keep ordinary reading with long original
+text collapsed. Literal output remains in Details → Inspect; Standard also exposes
+the main inspector directly. [Architecture](architecture.md#spelling-comparison-presentation)
+owns parsing and bounds.
 
-Multi-input actions retain a label above each field after typing; single-input
-actions keep the compact placeholder. Fixed shortcut references use aligned
-label/value rows too. The offline preview includes Long metadata and Legacy
-answer fixtures for wrapping and unavailable-data review.
-
-## Search and source images
-
-Research and Make meme use the existing Action picker and shared composer. A named
-image field shows preview, Choose/Replace, Paste and Remove above the instructions;
-its error stays beside the image and an invalid replacement keeps the prior draft.
-Quick Lookup reserves height for the attachment and keeps Run reachable. Search
-policy and image-input naming live in the Action editor. API/search charges remain
-visible in both modes. Both answer readers show clickable inline citations;
-Details records required/completed search and source image name. Reuse prepares
-an editable draft, including the saved source, and never submits it.
+Search citations are clickable in both readers. Image fields show preview,
+Choose/Replace, Paste and Remove above instructions; errors stay beside the image.
+Quick Lookup reserves attachment space and keeps Run reachable. API/search charges
+remain visible in both modes. Details records search required/completed and source
+name. Reuse prepares a draft without sending.

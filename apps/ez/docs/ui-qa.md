@@ -1,138 +1,104 @@
 # Native UI regression journeys
 
-Use the built **EZ Surface Preview.app** for repeatable manual UI checks. It compiles
-production views against disposable offline storage, blocks account/inference
-operations, and does not register the global shortcut. Playwright can test a web
-review page, but cannot operate EZ's native SwiftUI/AppKit controls. Use native
-Computer Use and its accessibility tree for the journeys below.
+Use production views in **EZ Surface Preview.app**, with disposable history,
+synthetic providers and no accounts, Keychain, network or global shortcut:
 
 ```sh
-EZ_SWIFTPM_DISABLE_SANDBOX=1 make surface-preview
+# From apps/ez; set EZ_SWIFTPM_DISABLE_SANDBOX=1 only if nested sandboxing fails.
+make surface-preview
 open 'dist/EZ Surface Preview.app'
 ```
 
-Run at the initial 780 × 640 preview window, then in dark appearance. The preview
-control strip is test-only; it is not part of the shipped UI. Use **Minimum panel**
-for compact checks. Fixture selection resets draft, search, configuration, and
-visible history. Quit the preview to remove this run's temporary directory.
-Never substitute personal account/history data for these fixtures.
+Start at 780 × 640, then repeat affected states in dark, Min/Standard and
+**Minimum panel**. Fixture changes reset draft, search, configuration and history;
+quitting removes temporary storage. Never use personal data. The control strip is
+test-only. Use native Computer Use/accessibility; Playwright cannot operate these
+SwiftUI/AppKit controls.
 
 ## Fixed journey
 
-| Step | Fixture and actions | Regression expectation |
-| --- | --- | --- |
-| 1. First run | Signed out → Continue with ChatGPT → Account & history → expand Keychain explanation → Done | The sign-in route is clear; help is readable. Account mutations remain disabled in the offline preview. No automatic sign-in or inference. |
-| 2. Compose | Empty → type a word → clear it; choose Two inputs → fill first field → Tab → fill second | One recipe selector. Completing the last required input changes the hint without moving the composer. Tab follows the field order. |
-| 3. Long form | Many inputs → focus Input 1 → Tab seven times → type → Shift-Tab back | The focused field scrolls into view, including Input 8. Send remains outside the scrolling form. Repeat in Minimum panel. |
-| 4. Surface handoff | Fill Two inputs → Show Quick Lookup → change preset → information button → dismiss popover → Open EZ & history → reopen panel → Esc | Inputs and override survive the handoff; details contain no second preset selector. Esc hides without clearing. New resets the override and draft. |
-| 5. Read and reuse | Answer → Details → collapse → Edit → Hide → More → Reuse | Answer and actions are readable without the composer dominating the window. Requested/served tier and clearly labeled token/timing metrics remain available. Edit draft preserves current inputs; Use again restores saved recipe, inputs, and preset without sending. Repeat reading/editing in Quick Lookup. |
-| 6. Find and export | Answer → search for absent text → Clear search → More → Export → Cancel; More → Delete lookup → Cancel | Explicit no-results state; clearing search restores the row. Cancel leaves the lookup intact. Export opens the native save dialog. |
-| 7. Configure | Settings → Models → edit preset name → select another preset → Keep → visit Recipes/Accounts/Shortcuts → return → Done → Keep → Save | Unsaved text survives section changes. Switching items, Add, and closing cannot silently discard edits. Save becomes disabled after success. Repeat for a recipe, including invalid template and save failure checks when changing their handling. |
-| 8. Shortcuts | Settings → Shortcuts → record New lookup → Esc | Escape cancels recording and returns to Settings; it must not execute lookup navigation. Existing bindings remain unchanged. |
-| 9. Recovery | Blocked; then No recipes → Configure recipes | Saved/partial answer remains readable with storage/error notices. No recipes gives one clear configuration action rather than unusable model controls. |
-| 10. Appearance and activity | Answer and Thinking in light/dark; Waiting/Streaming; Reduce motion; minimum/wide panel | Text/actions remain visible. Waiting and thinking are distinguishable; Stop stays reachable. No spinner duplication; reduced motion removes travel. Simulated fixture state is not live streaming evidence. |
-| 11. Min Mode | Empty → toggle Min Mode off/on; Answer → Quick Lookup → actions → Min Mode; Settings → Preferences → Min Mode | Both surfaces share the mode without losing draft, preset override, or selected answer. Min Mode hides routine hints and metric strips; Details retains metrics and exact request metadata. Blocked and Signed out retain their notices and recovery controls. |
-| 12. Menu priority | Quick Lookup → actions menu → physical Esc → physical Esc | Verify that the first Escape closes the menu and keeps the panel visible; the second hides the panel. This remains a direct-keyboard acceptance check. |
-| 13. Fresh invocation | Answer → Invoke Quick Lookup; type a draft → Esc → Invoke Quick Lookup; repeat in Standard view and with Streaming | Idle invocation clears old inputs/answer, focuses the first input and retains history/recipe. Streaming preserves the active request. Show Quick Lookup remains a preserving fixture action. |
+| Fixture / action                                                                                             | Expected result                                                                                                                                                                               |
+| ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Signed out → Settings → Providers                                                                            | Clear connection route and readable blockers; offline account mutations disabled.                                                                                                             |
+| Empty → type/clear; Two inputs → fill using Tab                                                              | One action selector; stable hint space; ordered field focus.                                                                                                                                  |
+| Many inputs → Tab through all eight, then Shift-Tab                                                          | Focused input scrolls into view; Run remains outside the scrolling form.                                                                                                                      |
+| Two inputs → Show Quick Lookup → change preset → Details → main window → reopen → Esc                        | Draft/override survive; Details adds no duplicate selector. New resets draft/override.                                                                                                        |
+| Answer → Details → Edit → Hide → More → Reuse                                                                | Reading has space; metadata/metrics remain available. Edit preserves current draft; Reuse restores saved action/inputs/preset without sending. Repeat in panel.                               |
+| Answer → absent search → clear → Export/Cancel → Delete/Cancel                                               | Explicit no-results; clear restores rows; native save dialog; Cancel preserves history.                                                                                                       |
+| Settings → Presets → edit → switch item/Add → Keep → Actions/Providers/Shortcuts → return → Done/Keep → Save | Section changes preserve drafts; item changes/dismissal cannot discard silently. Save disables on success. Repeat for Actions; check invalid template/save failure when changing those paths. |
+| Settings → Shortcuts → record New → Esc                                                                      | Recording cancels; no lookup action or binding change.                                                                                                                                        |
+| Blocked; No actions → configuration                                                                          | Answer remains readable beside errors; one useful route from empty configuration.                                                                                                             |
+| Waiting/Thinking/Streaming → Stop; light/dark, Reduce Motion, narrow/wide                                    | Distinct waiting/thinking, reachable Stop, no duplicate spinner; stationary reduced-motion light. Fixtures do not prove live streaming/system motion settings.                                |
+| Empty/Answer → toggle Min Mode in Settings and panel                                                         | Shared mode preserves draft/override/selection; routine hints/metrics hide, Details and blockers remain.                                                                                      |
+| Answer → Invoke Quick Lookup; repeat after typing/hiding and during Streaming                                | Idle invocation clears inputs/selection, focuses first field and retains action/history. Streaming preserves work. Show Quick Lookup is the preserving fixture action.                        |
+| Long metadata / Legacy answer                                                                                | Wrapped IDs; missing metrics/tier explicit; no fabricated historical values.                                                                                                                  |
+| Prose corrections                                                                                            | Aligned paragraphs at wide width; Corrected-first disclosure at narrow width; literal response remains inspectable.                                                                           |
 
-Installed selection autofill requires separate acceptance: grant EZ Accessibility
-access from Settings → Shortcuts, select text in another app, and press ⌃⌥Space.
-Verify exact first-field text and explicit Send; repeat without a selection and
-without permission (empty lookup), with unsupported source apps, and while typing
-or hiding during capture (no late overwrite/reappearance). The offline preview
-never reads another app's selection or requests permission.
+**Menu priority:** with the panel actions menu open, press physical Esc twice
+without refocusing. First closes the menu; second hides the panel. A tool that
+clicks to focus before sending Esc invalidates this check.
 
-For menu-priority checks, send keys without refocusing the window. Computer Use
-can click to focus before sending Escape, which dismisses the menu first and
-invalidates that sequence. The automated pass does not establish native menu-first
-Escape behavior.
+Capture the native window and fresh accessibility tree after relevant actions.
+Record fixture, appearance and size under root `.artifacts/ez/`. Rebind the visible
+main window after a hide/close capture error; never reuse stale AX indices.
 
-Capture the native window and accessibility state after the relevant action. Save
-screenshots outside Git and record appearance, fixture, and window size. On a
-capture error after a window closes/hides, rebind the visible main window; do not
-assume the action failed or repeatedly capture a stale window. Use current element
-indices from each fresh accessibility tree, never a checked-in list of AX indices.
+## Draw, search and source images
 
-## Illustration action
+Use Draw / Draw result / Draw waiting / Draw error. Run, inspect the PNG in both
+surfaces, Download/Cancel and Stop; late output must not replace another run.
+Providers owns credentials; Presets owns model/image options; Actions owns type,
+template and default preset. Draw launcher drafts always wait for Run.
 
-Use `make surface-preview`, then open **EZ Surface Preview.app**. Choose Draw,
-fill Context and Run. Verify the PNG in History and Quick Lookup. Download must
-open a PNG save dialog; Cancel preserves the result. Draw error reports the error
-on that run; previous History entries remain available. Draw waiting supports Stop,
-without promising server cancellation. Verify Presets → Image settings and
-Providers → API key; no duplicate settings belong in the run composer. Repeat at
-minimum panel size, light/dark and Min/Standard. All requests are synthetic.
-Installed Keychain, live generation and actual launcher delivery require separate checks.
+Research / Research result / Research waiting / Research error cover search status,
+inline citations and failures. Meme / Meme result / Meme invalid cover required
+image input, invalid replacement preserving the source, result and Reuse.
+Check both surfaces, modes, appearances and minimum size. All requests are synthetic;
+installed Keychain, model access, billing and launcher delivery need separate acceptance.
 
 ## Row click targets
 
-Run `make test-ui` for the automated production row-button regression. Then use
-the surface preview in Min Mode and Standard view, light and dark:
+Run `make test-ui`, then check both modes and appearances:
 
-- Settings → Actions: select Lookup, then click the blank trailing area of Ask.
-  Ask must become the edited action. Repeat at the top/bottom padding and corners;
-  selected and unselected rows must have the same target size.
-- Repeat with model preset rows and every Settings sidebar section. Click outside
-  the row and in the gap between rows; selection must not change.
-- In the main window, click the blank middle/right portion of Settings/Connect.
-  It must open Settings. Also check History row whitespace and New.
-- Click the far-right area of Overview routes and disclosure headers. Disclosures
-  must toggle once; clicking expanded content must not collapse the header.
-- Check dropdowns at their far edge and verify disabled actions stay disabled.
-  Follow keyboard focus through the changed controls and activate with the keyboard.
+- Click blank trailing space, padding and corners of Settings action/preset rows
+  and sidebar sections. Selected/unselected hit areas must match; gaps do nothing.
+- Check main Settings/Connect, History and New whitespace, plus Overview routes.
+- Click disclosure chevron, label and far edge: one toggle. Expanded content must
+  remain interactive without collapsing the header.
+- Check dropdown far edges, disabled controls and keyboard focus/activation.
 
 ## Unsaved answer recovery
 
-Quit any existing surface preview, then launch its built bundle with
-`open 'dist/EZ Surface Preview.app' --args --unsaved-attempt`. This explicit mode
-uses a synthetic request and disposable history; ordinary preview mode also uses synthetic Write/Draw providers. Its first terminal save fails and Save again succeeds.
+Quit the preview, then run:
 
-1. Confirm the main answer and History row say Unsaved. Expand Save error and
-   Inspect input/output; neither should claim the answer was saved.
-2. Open Quick Lookup and use Minimum panel. Confirm Unsaved, Save again, Copy and
-   Export are reachable in both Min Mode settings and light/dark appearance.
-3. Choose New, type a different draft, and select the Unsaved history row again.
-   The answer and save recovery remain available; the draft stays unchanged.
-4. Select Save again. Unsaved disappears only after the local append succeeds;
-   the answer and current draft do not change. Cancel an Export dialog without
-   affecting the attempt.
+```sh
+open 'dist/EZ Surface Preview.app' --args --unsaved-attempt
+```
+
+The first synthetic terminal save fails; Save again succeeds. Check text and Draw:
+
+1. Answer and History say Unsaved; Save error and Inspect do not claim persistence.
+2. Both surfaces expose Save, Copy/Export (Download for images where applicable),
+   including Minimum panel and both modes/appearances.
+3. New → type another draft → select Unsaved: result/recovery survive, draft unchanged.
+4. Save again clears Unsaved only after storage succeeds, preserving result/draft.
+   Cancelled export leaves the attempt intact; no generation is repeated.
 
 ## Installed selected-text journey
 
-Use the installed `~/Applications/EZ.app`, after quitting any other EZ build.
-In TextEdit, create an unsaved document containing synthetic Unicode/multiline
-text. Select it and choose **TextEdit → Services → Look Up in EZ**. If hidden,
-enable the service in System Settings → Keyboard → Keyboard Shortcuts → Services.
+Quit other EZ builds; use `~/Applications/EZ.app` and synthetic multiline/Unicode
+text in TextEdit. Run these separate entry-point checks:
 
-- With an empty EZ draft, verify Quick Lookup contains the exact selection in the
-  recipe's first field and does not send. Check both single- and multi-field recipes.
-- Verify the source selection and clipboard remain unchanged. Use only a synthetic
-  clipboard sentinel for this manual journey. Escape should return focus to the source app.
-- Invoke again with the populated draft, during generation, and while EZ Settings
-  has an unsaved configuration edit. Each rejection must preserve that work.
-- Repeat with EZ stopped to check cold delivery; the main window may also appear.
-  Check signed-out delivery separately: the draft must never send after sign-in.
-- Press Send explicitly on a synthetic selection, check terminal completion and
-  saved metrics, then restart to check history/account restoration.
+| Entry                               | Acceptance                                                                                                                                                                                                                                                |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ⌃⌥Space with Accessibility access   | Exact selection fills first input, without sending. Repeat without permission/selection, with unsupported apps (empty draft), and while typing/hiding during capture (no late overwrite/reappearance). Preview never requests access or reads other apps. |
+| TextEdit → Services → Look Up in EZ | Exact selection fills single-/multi-field actions without sending. If hidden, enable under System Settings → Keyboard → Keyboard Shortcuts → Services. Clipboard sentinel and source selection remain unchanged; Esc returns focus.                       |
 
-`make test-services` exercises the callback with disposable pasteboards; it does
-not substitute for the installed cross-app journey above.
+Service rejection must preserve populated drafts, active generation and unsaved
+Settings. Check cold launch (main window may appear) and signed-out delivery
+(no send after sign-in). Send one synthetic draft explicitly, confirm terminal
+completion/metrics, then restart for account/history restoration.
+`make test-services` uses disposable pasteboards; it does not prove cross-app delivery.
 
-## Evidence
-
-Dated results and remaining gaps live in [verification](verification.md). Keep
-screenshots local and outside Git; identify each capture's fixture and appearance.
-
-These are repeatable acceptance journeys, not an unattended GUI test suite. Run
-`make check` for deterministic offline regression checks, then replay the affected
-native journeys for layout, focus, and interaction changes.
-
-## Typed action integration
-
-Use Draw, Draw result, Draw waiting and Draw error in the disposable surface preview.
-Run Illustration, verify History and Quick Lookup show its PNG, open/cancel Download,
-and inspect Details. Verify Stop leaves a stopped run and a late response cannot
-replace another run. Providers holds the API key and stable key; Presets holds
-provider/capability/model and Image settings; Actions holds template/type/default preset.
-Rename drafts must survive section changes and Keep on the close guard. Check both
-Min Mode settings, light/dark and Minimum panel. Draw launcher input must wait for Run.
+[Verification](verification.md) owns dated results and remaining acceptance gaps.
+Run `make check` for offline regression, then only affected native journeys for
+layout/focus/interaction changes. These journeys are manual, not an unattended suite.

@@ -1,40 +1,59 @@
 # EZ surface contract
 
-Canonical responsibilities for the two lookup surfaces. Names are defined in
-[the glossary](../GLOSSARY.md); action behavior is defined in [ADR 0002](adr/0002-model-presets-and-recipes.md).
+[Glossary](../GLOSSARY.md) owns names; [architecture](architecture.md) owns execution
+and persistence; [design](design.md) owns presentation.
 
-| Surface | Core function | Boundary |
-| --- | --- | --- |
-| **Quick Lookup panel** | Choose an action, fill its generated inputs, Run/Stop, read/copy or download the result. | Keep compact. Reveal preset overrides and request details on demand; open the main window for history, authoring, and providers. |
-| **Main window** | Run lookups, search/review/reuse/export/delete history, manage actions, presets, and providers. | Own feature growth and configuration; avoid adding management UI to the panel. |
+| Surface                | Responsibility                                                                                                                                 |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Quick Lookup panel** | Compact action/input selection, Run/Stop, reading, Copy/Download; disclose presets and Details on demand. Open the main window for management. |
+| **Main window**        | Lookups plus history search, reuse, export, deletion and Settings. Own feature growth, configuration and providers.                            |
 
-- **One workspace:** Both share the draft inputs, action, preset override, selected answer, history, account, and one active request. Switching surfaces preserves work.
-- **Action-driven:** Editable/removable starters and custom actions use the same inputs. Selecting an action or New lookup restores its default preset. Unavailable preset choices block sending; never silently substitute.
-- **Compact presentation:** Grow for inputs/results/notices; scroll long content and keep Run/Stop reachable. Show the preset and requested speed; reveal exact choices and the answer's actual tier on demand.
-- **Min Mode:** On by default, reversible in Settings and Quick Lookup actions. Follow the expert everyday policy in DESIGN.md. Omit routine subtext and use short action labels; keep errors, account blockers, unsaved changes, and current model/speed choices visible or explicitly available. Main-window Details and the panel's information button retain exact metadata and clearly labeled metrics. The preference is local to EZ and does not synchronize with Saul.
-- **Reading and editing:** A new main-window lookup puts the composer below the heading. Saved answers prioritize Copy. Min Mode puts Reuse/Export/Delete in More and inspection in Details; Standard view also shows Use again. In Min Mode, Quick Lookup hides inputs while reading; Edit/Hide changes presentation only. New, Stop, and Copy remain reachable. Use again explicitly restores a saved request.
-- **Lifecycle:** Shortcut/menu invocation starts an empty lookup when idle, clearing previous inputs and answer selection while keeping the action and restoring its default preset. Running requests and pending launcher submissions are preserved; history is retained. The shortcut hides an already focused panel. Opening never submits. Esc/⌘ W hide without cancelling; ⌘ . stops; ⌘ N starts fresh when idle. Closing the main window leaves menu-bar access; Quit exits.
-- **Unsaved answers:** Both surfaces retain an attempt-level Unsaved notice with Save (Save again in Standard view) and Export. Copy remains available. New lookup and History preserve the answer in memory; Save again writes its frozen result without generating again. Save or export before quitting. The [persistence contract](architecture.md#persistence-contract) owns recovery semantics.
-- **Keyboard and wheel:** Both lookup surfaces share configurable New/Run/Stop and action navigation in Settings → Shortcuts. Wheel changes native selectors without opening them; compact preset selectors also scroll. Defaults above remain the initial bindings.
-- **Entry points:** Shortcut/menu invocation optionally fills the fresh lookup's first input from the active app's selected text, with Accessibility access and source-app support; absent or unavailable selection leaves it empty. It never submits. Raycast fills the first input: one-field Write actions submit; Draw and multi-field actions wait for completion and explicit Run. **Look Up in EZ** fills the first input from the Services pasteboard and always waits for Run; existing drafts, active work, and open Settings reject the incoming selection without mutation.
+## Shared workspace
 
-Both surfaces own **Ask a follow-up** below completed answers, sharing one per-answer
-draft and the active request. Each Send keeps the saved request and earlier exchanges,
-uses its model choices and the selected local account, and saves a linked history
-entry. Previous answer navigates to the retained parent. Opening, hiding and switching
-surfaces never submits. Unsaved/partial answers must recover or finish before they
-can supply follow-up context.
+- Both surfaces share inputs, image, action, preset override, selected answer,
+  history, account, per-answer follow-up draft and one active request. Handoff
+  preserves work. Switching surfaces never sends.
+- Selecting another action or New restores its default preset. Unavailable choices
+  block; never substitute account, model, billing or tier.
+- New main-window lookups put the composer below the heading. Edit/Hide reveals or
+  hides the retained draft; Reuse explicitly restores the saved request.
+- Answers prioritize Copy (Download for images). Min Mode puts Reuse/Export/Delete
+  in More and inspection in Details; Standard also shows Use again. Quick Lookup
+  hides inputs while reading in Min Mode. New/Stop remain reachable.
+- Min Mode defaults on and is local to EZ. Settings → Preferences and the panel
+  menu change the same preference. Exact model, requested/actual tier and metrics
+  remain available in Details; errors, blockers and unsaved recovery stay visible.
+- Compact layout grows for forms/results/notices; long content scrolls while
+  Run/Stop stay reachable. Preset and requested speed remain identifiable.
+- Both surfaces offer follow-ups for saved completed native Write answers and
+  Previous answer navigation. Draw has no text follow-up. Follow-up context and
+  limits belong to [architecture](architecture.md#follow-ups).
+- Unsaved answers retain Save (Save again in Standard), Copy/Export and in-memory
+  recovery across navigation. Retry saves only; save/export before quitting.
+  See [persistence](architecture.md#persistence-contract).
 
-Future features must declare which surface owns them and preserve these shared-state and request boundaries.
+## Invocation and lifecycle
 
-**Illustration** is a Draw action in the same workspace, not a third surface.
-Both surfaces show its inputs, Run/Stop and image result. Presets owns image
-options; Providers owns credentials. History owns PNG retention and deletion.
-Draw always waits for explicit Run after launcher input. Image results prioritize
-Download, retain Reuse and Details, and omit text follow-ups. Unsaved image recovery
-retries storage without another request. See [Providers and Illustration](architecture.md#providers-and-illustration).
+| Entry point           | Idle behavior                                                                                                                                  |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shortcut/menu         | Start empty, keep action, reset preset; optionally fill first input from selected text with Accessibility access. Never submit.                |
+| Raycast               | Fill first input; single-field Write submits, Draw/multi-field waits for explicit Run. See [Raycast](raycast.md).                              |
+| Look Up in EZ Service | Fill first input from the dedicated Services pasteboard; always wait for Run. Reject existing drafts, active work and open Settings unchanged. |
 
-Future mobile surfaces should reuse the action vocabulary, reading/editing
-separation, and progressive disclosure in the shared design contract. Mobile is
-not implemented; touch layouts, platform keyboard behavior, account access, and
-cross-device persistence still need an explicit product decision.
+Shortcut/menu invocation preserves running requests and pending launcher work;
+the shortcut hides an already focused panel. Esc/⌘W hide without cancellation,
+⌘. stops and ⌘N starts fresh when idle. Hiding preserves history and clipboard.
+Closing the main window leaves menu-bar access; Quit exits.
+
+Both surfaces share configurable lookup/action shortcuts and wheel selectors;
+Settings → Shortcuts owns bindings. Global Quick Lookup (⌃⌥Space), Settings (⌘,)
+and panel hiding stay fixed. [Architecture](architecture.md#selector-scrolling-and-keyboard-commands)
+owns input routing and conflict handling.
+
+Illustration is a Draw action in this workspace. Providers owns credentials,
+Presets image options and History saved PNGs. Launcher input always waits for Run;
+unsaved image recovery never generates again.
+
+Future features must name their owning surface and preserve these boundaries.
+Mobile is not implemented; touch layout, platform keys, account access and
+cross-device persistence need explicit decisions.

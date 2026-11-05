@@ -1,449 +1,289 @@
 # Architecture and decisions
 
-## Design review
+EZ is native SwiftUI/AppKit. UI lives in `Sources/EZ`; reusable protocol, storage
+and request logic lives in `Sources/EZCore`. The installed app needs no Codex,
+Node, Python, Electron or webview runtime.
 
-The user-scope `gui-review` skill
-owns the annotation workflow for GUI refinement.
-[ADR 0001](adr/0001-screenshot-first-design-review.md) retains the historical rationale.
+## Owners
 
-[ADR 0002: Model presets and editable actions](adr/0002-model-presets-and-recipes.md)
-defines configuration, template inputs, preset overrides, and historical snapshots.
+| Owner                                                        | Responsibility                                                                 |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| `EZApp` / `QuickLookupController`                            | Windows, menu bar, Services, launcher and keyboard lifecycle                   |
+| `AppModel` / `ProviderState`                                 | User actions, selected configuration, draft, history and visible errors        |
+| `AttemptExecution`                                           | Frozen attempt, generation, cancellation, terminal save and save-only recovery |
+| `GenerationProvider` / `SaulGeneration`                      | Supported operations and requests to the signed credential owner               |
+| `ChatGPTAuth` / `LoopbackListener` / `OIDC`                  | Owner-side OAuth, bounded loopback callback and verified identity              |
+| `ResponsesRequest` / `ResponseAccumulator` / `CredentialSSE` | Request serialization, stream parsing and completion                           |
+| `ImagesClient` / `ImageAttachment`                           | Bounded image requests and validated source images                             |
+| `HistoryStore`                                               | Shared SQLite snapshots, image blobs, migration and deletion                   |
+| `ConfigurationStore` / `SharedPresetsStore`                  | Scoped configuration, shared presets, migration and stale-save checks          |
 
-## Components
-
-| Component | Responsibility |
-| --- | --- |
-| `Sources/EZ/EZApp.swift` | Native window and app commands |
-| `ContentView` / `SettingsView` / `AppStyle` | Lookup interface, account settings, shared appearance |
-| `Sources/EZ/AppModel.swift` | User actions, selected account/model, attempt projection, visible errors |
-| `AttemptExecution` | Frozen attempt, provider task, cancellation, durable outcome, save-only recovery |
-| `ChatGPTAuth` | OAuth registration, validated identity, consent, refresh, logout |
-| `LoopbackListener` | Bounded HTTP callback listener bound only to 127.0.0.1 |
-| `OIDC` | PKCE and RS256/ES256 identity verification using CryptoKit/Security |
-| `AuthStorage` | OAuth data models and exclusive app runtime lock |
-| `ResponsesRequest` / `SaulGeneration` | Frozen request serialization and shared-owner operations |
-| `GenerationProvider` | Provider identity and supported operations; no secret access |
-| `ImagesClient` / `ProviderState` | Owner-side bounded PNG requests, shared API connection metadata, selected image loading and download |
-| `ResponseAccumulator` / `CredentialSSE` | Wire-event parsing and terminal completion checks |
-| `HistoryStore` | Shared SQLite snapshots/image blobs, migration, deletion, and recovery |
-| `SharedPresetsStore` | Unified JSON model presets and EZ configuration scope; one-time import and stale-save detection |
+[Surfaces](surfaces.md) owns feature placement; [design](design.md) owns native
+presentation. [ADR 0001](adr/0001-screenshot-first-design-review.md) records review
+rationale; [ADR 0002](adr/0002-model-presets-and-recipes.md) records the template
+and preset decision.
 
 ## Direct plan-backed requests
 
-Decision: use the documented Sign in with ChatGPT direct flow. EZ does not run an
-agent, Codex app-server, CLI, or tool executor. Native `URLSession` avoids bundling
-a second runtime; it sends the same public HTTP requests an OpenAI SDK sends.
-There are no model tools in the request. Account/model choices come from the live
-`/v1/models` catalog. Unavailable preset choices block sending rather than silently changing them.
+Use the documented Sign in with ChatGPT direct flow through native `URLSession`.
+No agent, CLI, app-server or tool executor runs in EZ. Plan model choices come
+from `/v1/models`; unavailable model, effort or Fast choices block sending.
 
-Inference sends one user message containing the compiled action template. Starter
-mode instructions are editable template text; new actions have no hidden mode
-instructions. Legacy history retains its earlier instruction semantics. Every request explicitly
-sets `store: false`, `stream: true`, and the chosen/default service tier. Effort
-is sent only when available. No temperature, max-output-tokens, saved response ID,
-or unsupported preview fields are added. Completion requires a terminal
-`response.completed`; a partial stream is not a successful answer.
+Write sends its compiled template as one user message; starter instructions
+are editable template text, with no hidden mode instructions. Legacy history keeps
+its saved instruction semantics. Requests set `store: false`, `stream: true` and
+an explicit chosen/default tier; effort is included only when supported. They add
+no temperature, max-output-tokens, saved response ID or unsupported preview fields.
+Plan requests contain no tools. Text success requires `response.completed`;
+partial streams remain incomplete.
 
 ## Providers and Illustration
 
-`ProviderDefinition` owns stable unique keys, display names and transport kind.
-Defaults are `gpt-plan` (Write) and `openai-api` (Write/Draw/Speak). Presets bind the key,
-capability, model and options, not a particular plan account. `GenerationProvider`
-requests operations from the signed Saul owner and derives supported operations from its handlers.
-No credential reaches an action or shared preset. Unknown/incompatible providers
-block before generation; no automatic model, account or billing fallback exists.
+`ProviderDefinition` owns stable keys, names and transports. Defaults are `gpt-plan`
+(Write) and `openai-api` (Write/Draw/Speak). Presets bind provider, capability, model
+and options, never a plan account or secret. Unknown/incompatible choices block
+before generation. Never silently change account, model, billing or service tier.
 
-Legacy presets decode as `gpt-plan` / Write. Legacy action/history JSON keys
-`recipes` and `recipeSnapshot` remain stable. Provider definitions and presets share the `modelPresets` section and its revision
-with Saul. Reads adopt legacy EZ-scoped definitions only when the shared list is
-absent. Subsequent native scope writes omit providers; shared definitions win on
-reload. Credentials stay in the Saul owner; Action inputs and runtime bindings stay app-owned. `actionTypesVersion` seeds Illustration once;
-IDs and existing behavior survive, and deletion is respected after migration.
+Illustration uses the same workspace and single active attempt as Write. API Write
+uses an explicit model ID; Fast sends `service_tier: priority`, while plan Fast is
+catalog-controlled. See the [API Fast guide](https://developers.openai.com/api/docs/guides/fast-mode).
+Text-only Draw sends one `POST /v1/images/generations`; its default is GPT Image
+2.5 Flare, low quality, 1024×1024 PNG. The compiled template is the exact prompt;
+image options belong to the preset. Key Save/Reload and inspection never generate.
 
-Illustration is a Draw action using `AppModel` and `AttemptExecution`, the same
-workspace, composer and single active request as Write. API Write presets use
-an explicit model ID. Its explicit Fast choice sends `service_tier: priority`;
-plan Fast remains catalog-controlled. The [official Fast mode guide](https://developers.openai.com/api/docs/guides/fast-mode)
-owns API tier semantics. Text-only Draw sends one `POST /v1/images/generations`, defaulting to
-GPT Image 2.5 Flare, low quality, 1024×1024 PNG. Its action template is the exact
-compiled prompt. Image options belong to its preset. Key Save/Reload and inspection
-never generate. The old EZ Keychain services are retired only after verified migration to the Saul owner.
-
-Run freezes action, input values, preset and provider snapshots. Stop invalidates
-late output and cancels the local task without claiming the server stopped or
-billing was prevented. No automatic retries. Image requests time out after 180s,
-reject redirects, bound response bytes/dimensions and use safe status-specific errors.
-
-History stores input and output image bytes as SQLite blobs beside the frozen
-entry JSON, atomically in the same row. It creates no image sidecar directory.
-The initial pending snapshot precedes generation. A failed terminal save retains
-both images in memory for save-only recovery. Deletion removes the record and
-its blobs together. The [shared history contract](../../../docs/architecture.md#shared-history)
-owns location, migration and cross-app behavior.
+Run freezes action, inputs, preset and provider snapshots. Stop cancels locally
+and rejects late output; it cannot promise server cancellation or avoided billing.
+There are no automatic generation retries. Image requests time out after 180s,
+reject redirects, bound bytes/dimensions and report safe status-specific errors.
 
 ## Web search and image inputs
 
-EZ-local Action fields `webSearch` (default false) and `imageInput` (a named required
-image, absent by default) extend existing text-template fields. They never enter
-shared Presets or Saul actions. `actionTypesVersion = 2` seeds editable Research
-and Make meme actions/presets once, preserving existing IDs, names, bindings and
-user removals. Research defaults to API Write / GPT-6.1 Sol; Make meme defaults
-to API Draw / GPT Image 2.5 Flare. Saved incompatible choices remain blocked.
+Action-only `webSearch` (default false) and optional named, required `imageInput`
+never enter shared presets or Saul actions. Versioned migrations seed Illustration,
+Research and Make meme once, preserving IDs, edits and removals. Research defaults
+to API Write / GPT-6.1 Sol; Make meme to API Draw / GPT Image 2.5 Flare.
 
-Search requests use Responses `tools: [{type: "web_search"}]` and
-`tool_choice: "required"`. Only the API provider can execute them. A completed
-text answer without a completed `web_search_call` search action fails the attempt;
-no fallback request or retry occurs. The accumulator records observed searching
-activity, completed search and validated HTTP(S) URL annotations. History retains
-citation offsets and URLs independently of raw answer text. Both readers and
-Markdown export render inline source links; raw inspection retains exact model
-text. Explicit follow-ups inherit the saved search policy and API preset. No
-background research, custom search engine, domain controls or automatic search
-is introduced. See [OpenAI web search](https://developers.openai.com/api/docs/guides/tools-web-search).
+Search requires the API provider and Responses
+`tools: [{type: "web_search"}]`, `tool_choice: "required"`. A completed text answer
+without a completed search action fails; it never triggers a fallback or retry.
+History retains validated HTTP(S) citations and offsets separately from raw text.
+Readers and Markdown export render source links; inspection preserves literal
+output. Follow-ups inherit search policy and search again. No background research,
+custom engine, domain controls or automatic search is added.
+See [web search](https://developers.openai.com/api/docs/guides/tools-web-search).
 
-ImageAttachment validates detected PNG/JPEG/WebP content, one frame, at most 20 MB,
-40 megapixels and 8,192 pixels per edge. Choose, Paste and Drop prepare a draft
-only. Invalid replacement preserves the previous source. Run freezes exact bytes;
-History atomically saves them as input image BLOBs with the pending entry in the
-shared SQLite database before transmission. Entry metadata contains source
-name/format. An image input selects one multipart `POST /v1/images/edits` with the same
-model/size/quality/output contract as generation; there is no hidden text analysis
-or second image request. See [OpenAI image edits](https://developers.openai.com/api/docs/guides/image-generation#edit-images).
-
-Reuse loads and validates the saved source; missing or invalid bytes require
-reattachment. Save again retains exact source/result bytes and retries storage
-only. Deletion removes the entry and its input/output BLOBs without touching the
-original user's file or external exports. Both native surfaces share the same
-draft and operations.
+`ImageAttachment` accepts detected single-frame PNG/JPEG/WebP, at most 20 MB,
+40 megapixels and 8,192 pixels per edge. Choose/Paste/Drop prepare only a draft;
+invalid replacement keeps the prior source. Run freezes and saves exact input
+bytes before transmission. An image input selects one multipart
+`POST /v1/images/edits` with the same output contract as generation, without a
+hidden analysis or second request. See [image edits](https://developers.openai.com/api/docs/guides/image-generation#edit-images).
+Reuse validates the saved source; missing/invalid bytes require reattachment.
+Deletion removes saved blobs, never the original file or external exports.
 
 ## Authentication invariants
 
-- The installation host ID is stable. Each issued client ID has its own identity
-  and credentials, even when email addresses match.
-- New registration uses `dynamic_agent_client`; save the issued ID before code
-  exchange. Reauthentication uses the saved ID and fresh state, nonce, and PKCE.
-- Listen on `127.0.0.1`, use `/auth/callback`, and preserve the exact redirect URI
-  across authorization and exchange. Validate state, callback parameters, and client ID.
-- Verify RS256 or ES256 signatures against OpenAI's discovered JWKS, plus issuer, audience,
-  expiry, subject, and nonce. Reject unsupported algorithms. Do not trust decoded JWTs.
-- Identity sign-in and plan permission are distinct. Require granted
-  `chatgpt.tokens.use.direct` before model discovery/inference.
-- Credentials stay in Keychain. Persist rotations together; serialize refresh in
-  the signed Saul owner using a kernel lease to prevent cross-process races.
-- Restore credentials asynchronously off the UI actor. Publish a complete read
-  only after success and a cancellation check; do not freeze history access while
-  Keychain authorization waits.
-  `CredentialStore.read()` starts on the main actor, matching its authentication
-  caller; the Sendable shared owner storage explicitly performs blocking reads in a
-  detached task. Complete compiler concurrency checking enforces this boundary.
-- Clear tokens on terminal refresh failure, not on network/5xx errors. Logout
-  attempts revocation; an unconfirmed remote revocation is shown explicitly.
-- OAuth URLs, codes, tokens, and raw auth diagnostics never enter chat history.
+The [shared credential contract](../../../contracts/credentials.md) owns caller
+validation, migration, refresh, disconnect and sign-out. Owner-side OAuth must:
 
-See [Keychain access](keychain.md) for the exact stored item and development
-signing limitations. Presets and actions persist on explicit Save in Configuration;
-they contain no credentials and remain separate from lookup history. Configuration
-editing preserves a draft's preset override and any action restored from history.
+- Preserve the host ID and each issued client ID's identity, even for equal emails.
+- Register with `dynamic_agent_client`, save the issued ID before exchange, and
+  reauthenticate with that ID plus fresh state, nonce and PKCE.
+- Bind only `127.0.0.1`, use `/auth/callback`, preserve the exact redirect URI and
+  validate state, callback parameters and client ID.
+- Verify RS256/ES256 signatures against discovered JWKS plus issuer, audience,
+  expiry, subject and nonce; reject unsupported algorithms and unverified JWTs.
+- Separate identity from granted `chatgpt.tokens.use.direct` usage permission.
+- Keep secrets in Keychain, persist rotations together and serialize refresh with
+  a cross-process kernel lease. Blocking reads run off the UI actor; cancellation
+  must not publish a partial restore or prevent history access.
+- Clear tokens on terminal refresh failure, retain them on network/5xx errors,
+  and report unconfirmed logout revocation.
+- Exclude OAuth URLs, codes, tokens and raw auth diagnostics from history.
 
-## Lookup workspace
-
-Configuration editors stay mounted while changing Settings sections so unsaved text
-and scroll position survive. Item selection/Add and Settings dismissal guard dirty
-edits; Save remains explicit. A failed save keeps the edit and dirty state.
-
-The main window separates composing from reading. A new lookup places its composer
-directly below the heading. Selecting an answer collapses the composer; Edit
-draft/Hide draft reveal or hide the existing draft without replacing it. Use again
-explicitly restores the saved request. Running requests keep Stop reachable in
-the reading footer. Copy and Use again are the primary answer actions; export and
-delete live in More. Exact request metadata and metrics are available in Details.
-**Inspect input/output** shows the selected lookup's saved instructions, input
-fields, compiled prompt and literal response, with per-block copy. The main window
-and Quick Lookup's Details popover share this native view. It reads history only;
-it does not regenerate prompts, send requests or retain HTTP/SSE logs. Legacy
-instructions that were not saved are labelled unavailable rather than reconstructed
-from current mode defaults. Incomplete output retains its lookup status and error.
-Input validation keeps actionable blockers visible and omits routine hints in Min Mode.
-Both surfaces scroll keyboard-focused inputs into view.
-
-Min Mode is enabled by default and shared by both native lookup surfaces
-through `AppModel.minimumMode`. It hides repeated guidance, shortcut reminders,
-decorative copy, and persistent response metrics. It never hides actionable
-errors, sign-in/storage blockers, generation state, or unsaved-edit guards. The
-Settings toggle and Quick Lookup actions menu change the same UserDefaults
-preference. Offline previews always start with Min Mode on and never read or
-write this personal preference. The preference is local to EZ; there is no
-cross-product or device synchronization. Switching modes changes presentation
-only and preserves the shared draft, preset override, and selected answer.
-See [native regression journeys](ui-qa.md) for UI acceptance boundaries.
-
-## Selected-text Services
-
-`NSServices` advertises **Look Up in EZ** as a plain-text input service with no
-return types. `EZAppDelegate` retains a `SelectedTextService` and registers it as
-`NSApp.servicesProvider` after the lookup controller is ready. The Objective-C
-`lookupSelectedText:userData:error:` callback reads only the supplied Services
-pasteboard and synchronously prepares a draft before showing Quick Lookup. It
-does not access the general clipboard, modify the source selection, send, await
-authentication, or queue a submission. Callback failures use the Services error
-pointer so the source app can report rejection.
-
-`AppModel.prepareSelectedText` validates nonblank input and the 16,384 UTF-8-byte
-limit before mutating the workspace. A running request, pending launcher, sign-in,
-open Settings, or any nonempty draft input rejects the selection without mutation.
-Unavailable configuration reports its load/storage error; an empty configuration
-asks the user to add an action.
-Otherwise it starts a new lookup using the selected configured action (or the first
-remaining action after a historical action was removed), resets preset overrides,
-and fills only the first field. Sending remains explicit for every action. No
-history is written until Send. Signed-out and catalog-loading states can hold the
-draft; ordinary send checks still apply. Cold Services launch may show the main
-window as well as Quick Lookup; the Raycast-only presentation flag is unchanged.
-
-This follows Apple's [Services provider contract](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/SysServices/Articles/providing.html).
-Registration and a direct callback check do not establish cross-app menu delivery.
-
-## Local packaging identity
-
-Local signing setup pins an existing code-signing certificate fingerprint in
-ignored `.local/signing-identity`; the private key remains in macOS Keychain.
-Configured packaging reuses that identity and fails if it is unavailable.
-Unconfigured `make app` remains ad-hoc for offline development/CI. An explicit
-development signing override is allowed, but `make install` requires the pin and
-rejects a different override. Installation requires EZ to be stopped, verifies
-the staged bundle's certificate/identifier and the previous same-certificate
-build's identity requirement, then replaces `~/Applications/EZ.app` while retaining
-the old bundle for rollback. It does not alter authentication or local app data.
-Self-signing establishes update identity, not prompt-free Keychain upgrades,
-Developer ID, or notarization. The credential item's separate partition policy
-uses `cdhash:` for this signing class and can prompt again when the code changes;
-see the [Keychain diagnosis](keychain.md#why-a-rebuild-can-ask-again).
-See [local signing and installation](releasing.md#local-signing-and-installation).
+[Keychain access](keychain.md) explains stored items and signing limits.
 
 ## Persistence contract
 
-History entries carry `schemaVersion: 1` and UUID identity. `AttemptExecution`
-appends before requesting credentials or sending, then appends the terminal snapshot
-before publishing a saved outcome. It owns cancellation and rejects callbacks from
-older attempts. AppModel and both lookup surfaces project that same lifecycle.
-Record requested and, when returned, actual service tier separately.
+[Shared history](../../../docs/architecture.md#shared-history) owns database
+location, schema, cross-app behavior and one-time migration. Native entries retain
+`schemaVersion: 1` and UUID identity; SQLite upserts one current snapshot per UUID.
+Input/output image blobs and frozen JSON save atomically in that row, without
+sidecar files. Startup under EZ's session lock marks its abandoned pending entries
+interrupted; activation reloads history without changing Saul's execution state.
 
-A failed terminal append retains the exact completed, interrupted, or failed snapshot
-in memory by UUID and presents **Unsaved** with its own save error. The response,
-provider error, frozen input, metrics and tier stay attached to that attempt. New
-lookup, History selection and hiding a surface preserve it. **Save again** only
-repeats that snapshot's history append, without authentication, prompt preparation,
-or another provider request. It is unavailable during an active request or pending
-launcher submission. Successful persistence restores the original terminal outcome;
-a failed retry preserves Unsaved. Copy and Export remain available. Successful
-lookup deletion also removes its recovery snapshot; failed deletion preserves it.
+`AttemptExecution` saves pending input before credentials or transmission, then
+saves the terminal snapshot before publishing a saved outcome. An initial save
+failure blocks the request. Cancellation invalidates callbacks from older attempts.
+Requested and returned service tiers remain separate.
 
-Unsaved is a transient projection, not a new on-disk status or recovery store.
-Latest-snapshot-per-UUID loading makes save-only retries safe after an uncertain
-write/flush failure. Bytes never persisted cannot survive quitting EZ; startup
-retains the existing pending-to-interrupted classification and never resubmits.
-Global storage warnings describe startup/history-load problems, not attempt durability.
-Optional response metrics retain server-reported input/output/reasoning counts and
-client-observed stream timing; older history remains readable with unknown metrics.
-Both surfaces expose token counts and timing in Details; disabling Min Mode
-also pins a compact status line below the composer/actions. Response tokens mean
-output minus reasoning and can include non-visible formatting tokens. Missing
-reasoning is unknown, not zero. TTFT uses a monotonic
-clock from HTTP request start (after auth) to the first nonempty answer/refusal text delta;
-metadata/empty events and a terminal-only answer do not establish TTFT. Tokens/s
-is non-reasoning response tokens divided by (HTTP stream duration through the
-terminal event minus TTFT). The interval begins with first visible answer/refusal
-text, excluding initial waiting/thinking. Missing usage/TTFT or an invalid interval
-leaves speed unknown. Partial/failing streams retain observed timing and any
-terminal usage without becoming successful.
-Cost is omitted. Official direct-flow guidance points to ChatGPT Settings → Usage
-for allowance/credits; it does not document a quota percentage in each response.
-API rate-limit token headers are not treated as ChatGPT plan allowance. The existing
-Settings Manage usage link is the supported path; no extra request is added.
-See [official usage guidance](https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions#tracking-usage).
-A transient response activity follows the first reasoning `response.output_item.added`
-event and nonempty answer/refusal text deltas. The divider starts yellow while
-waiting, becomes green on a reasoning-item event, and stays green until text arrives.
-The light stops permanently for that lookup when visible text starts, even if later
-reasoning items arrive. Terminal events/cancellation/failure also stop it. No
-reasoning payload is requested, retained, or added to history. Before a reasoning
-event, the UI labels activity as waiting rather than confirmed thinking. Reduce
-Motion uses a stationary light; hidden panels remove the timeline. Generation uses
-text status and the divider light without a second spinner.
-See [Responses usage](https://developers.openai.com/api/reference/resources/responses)
+A terminal save failure retains the exact completed/interrupted/failed snapshot,
+images, provider error and metrics in memory by UUID, projected as **Unsaved**
+with a separate save error. New lookup, selection and hiding preserve it.
+**Save again** retries only that snapshot's upsert, without auth, prompt preparation
+or generation. It is blocked during an active request/pending launcher. Success
+restores the original outcome; failure retains Unsaved. Copy/Export remain usable.
+Bytes never saved cannot survive quitting; startup never resubmits.
+
+Main-window deletion confirms its scope across EZ and Saul. It removes a native
+record and blobs, or a browser passage and its runs. Only successful deletion
+clears in-memory recovery. Migration alone reads retired JSONL/lock/image files;
+verified import precedes removal, while malformed sources remain with a blocking
+error. No fallback writer or permanent migration backup is created.
+
+## Follow-ups
+
+A saved, completed native Write answer can supply explicit follow-up context.
+`HistoryEntry.prepareFollowUp` keeps the saved request, instructions, earlier
+exchanges, model/effort/speed and search policy, using the selected local account.
+Each Send creates a linked history entry; no context is silently dropped.
+Questions are limited to 2,000 UTF-16 units and compiled conversations to 120,000.
+Unsaved/partial answers must finish or recover first. Draw and browser entries
+cannot run follow-ups in EZ. AppModel holds per-answer question drafts in memory;
+deletion or successful Send clears them. Stop and recovery use `AttemptExecution`.
+
+## Metrics and activity
+
+Metrics are optional; older history stays readable. Record server usage and
+client-observed timing. Response tokens = output minus reasoning, including any
+non-visible formatting tokens; missing reasoning is unknown, not zero.
+
+TTFT runs on a monotonic clock from HTTP start after auth to the first nonempty
+answer/refusal delta. Empty/metadata events or terminal-only text do not establish
+TTFT. Tokens/s = response tokens / (stream duration through terminal event − TTFT).
+Missing usage, TTFT or a valid interval leaves speed unknown. Failure/partial output
+retains observations without claiming completion. See [Responses usage](https://developers.openai.com/api/reference/resources/responses)
 and [output counting](https://developers.openai.com/api/docs/guides/token-counting).
 
-SQLite upserts retain the current snapshot for each UUID. Writes are transactional
-and owner-only. Never silently submit an unrecorded query. Startup under EZ's
-session lock marks its abandoned pending records interrupted; refreshing history
-never alters another app's execution state. Shared history is read again on activation.
-
-Individual deletion belongs to the main window and confirms deletion from EZ and
-Saul. It removes the selected native record and blobs, or the selected browser
-passage with its runs. Failure preserves unsaved recovery. Retired JSONL, lock and
-image files are read only by one-time migration, verified, then removed; malformed
-sources remain intact with a blocking error. There are no permanent backups or
-fallback writers. The shared database preserves browser anchors and native metadata.
-
-## Extension points
-
-Add a new text workflow as an action in Configuration. `QueryMode` remains the
-legacy history discriminator and starter icon mapping. Features requiring
-conversation context need an explicit conversation model and retention decisions.
-API-key billing is explicit in API presets, with separate credentials;
-never silently use it after a plan-usage failure. Global shortcuts and menu-bar
-access should call the same app actions. See the roadmap for deferred work.
+Cost and plan quota percentages are omitted. API rate-limit headers are not plan
+allowance; Settings → Manage usage is the supported path, with no extra request.
+See [usage guidance](https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions#tracking-usage).
+Activity follows reasoning-item events and nonempty text deltas; no reasoning
+payload is requested or saved. [Design](design.md#activity-and-answer-presentation)
+owns the divider treatment.
 
 ## Quick Lookup
 
-The [surface contract](surfaces.md) is the canonical product boundary; the
-[glossary](../GLOSSARY.md) defines names. Main-window management grows separately
-from the compact execution panel.
+A nonactivating `NSPanel` hosts SwiftUI and shares one `AppModel` with the main
+window. Carbon registers ⌃⌥Space while EZ runs, without global keystroke monitoring
+or Accessibility permission for opening. Registration errors remain visible;
+the menu bar is the fallback. The panel opens on the pointer's display, supports
+full-screen Spaces and returns focus when hidden.
 
-Quick Lookup is a native, nonactivating `NSPanel` hosting SwiftUI. **Control–Option–Space**
-is registered with Carbon's hotkey API while EZ is running; it does not monitor global
-keystrokes or require Accessibility permission for opening. Registration failures are visible in
-both the panel and menu-bar menu, which remains an alternate entry point. The panel
-appears on the pointer's display and can accompany other apps and full-screen Spaces.
-It takes keyboard focus without activating EZ; hiding it releases that focus.
+`showFreshLookup` resets idle work; plain `show` preserves Services/Raycast drafts.
+With Accessibility access, `SelectedTextCapture` reads the external focused
+element's selection once per idle invocation, off the UI actor with a 150 ms
+per-call timeout. It never reads the clipboard or falls back to document text.
+Missing permission, unsupported/empty selection or more than 16,384 UTF-8 bytes
+leaves the lookup empty. Invocation never prompts for permission or submits.
+Dismissal/new invocation cancels capture; changed drafts, active work and Settings
+reject late results. Shutdown cancels work and unregisters event handlers.
 
-The panel and main window share one `AppModel`: action, draft inputs, preset override,
-selection, account, request lifecycle, and history. Shortcut/menu invocation uses
-`showFreshLookup`, which starts a new lookup when idle. Plain `show` preserves
-prepared Services/Raycast inputs. The surface contract owns the invocation behavior.
-With Accessibility access, `SelectedTextCapture` reads only the frontmost external
-app's focused element's selected text, once per idle invocation. Reads run off the
-UI actor with a 150 ms messaging timeout per AX call. No clipboard or document-body
-fallback is used. Missing permission, unsupported/empty selections, and text above
-16,384 UTF-8 bytes leave the lookup empty. Settings → Shortcuts provides an explicit
-Accessibility settings action; invocation never prompts for permission. Autofill
-only prepares the first field and never submits. Dismissal or a new invocation
-cancels the pending fill; changed drafts, active work and Settings reject late results.
-There is only one request at a time. Escape, Command–W, and toggling the hotkey hide
-the panel without cancelling or discarding work; Command–period stops generation.
-Command–Return sends, and Command–N starts a new lookup. Shutdown cancels the request
-and unregisters the hotkey/event handlers, even if the main window has been closed.
+The panel starts 460 points wide (420 minimum), with minimum content height starting
+at 200. It grows for inputs, notices and reading space, preserving its top edge
+within the display. Forms/answers scroll independently of actions. Configuration
+and history open the main window. [Surfaces](surfaces.md) owns reading/editing,
+shortcuts, Min Mode and shared-state behavior.
 
-The panel starts at 460 points wide, with a 420-point minimum width. The minimum
-content height starts at 200 points and grows to retain its inputs, notices, actions,
-and a usable answer area. Preferred height adds reading space for answers while
-keeping the top edge stable and fitting the current display. Long inputs and
-answers scroll independently of the actions. Its preset selector changes overrides
-directly; the adjacent information button opens the shared `RequestDetails` popover.
-The main-window `RequestControls` uses that same details view without duplicating
-selectors. The popover separates next-request choices from the displayed answer's recorded choices and actual service tier.
-In Min Mode, selecting an answer hides the panel's input fields and replaces
-the action picker with the answer's saved action name, and the preset selector
-with its saved preset name and requested speed. Exact
-model and service tier information remains in Details. Edit
-draft restores the current inputs and preset selector without changing them;
-Hide draft returns to reading. New/Stop and Copy remain reachable. Field visibility
-participates in panel sizing, so the reading layout does not reserve blank form space.
-Configuration/account actions and history open the main window. Text enters through
-typing, explicit paste, the selected-text Service above, or the explicit launcher
-submission below. The Service reads only its supplied pasteboard when invoked;
-EZ does not monitor selections or poll the clipboard. Ordinary
-panel opening never sends a query. Hiding the panel does not clear the system
-clipboard. No new history format or inference service is added.
+## Selected-text Services
+
+`NSServices` advertises **Look Up in EZ**, plain-text input with no return types.
+`EZAppDelegate` retains/registers `SelectedTextService` after the panel is ready.
+Its `lookupSelectedText:userData:error:` callback reads only the supplied Services
+pasteboard and synchronously prepares a draft. It never changes the clipboard or
+source selection, sends, awaits auth or queues work; errors use the Services pointer.
+
+`AppModel.prepareSelectedText` validates nonblank text and the 16,384-byte limit
+before mutation. Active work, sign-in, Settings, nonempty inputs or an image reject
+it unchanged. Unavailable configuration reports its error; empty configuration
+asks for an action. Otherwise it uses the selected configured action (first remaining
+if a historical action was removed), resets the override and fills the first field.
+Signed-out/catalog-loading states may hold the draft; Send remains explicit and
+no history is written before it. Cold launch may also show the main window.
+See [Apple's contract](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/SysServices/Articles/providing.html);
+a direct callback check does not prove installed cross-app delivery.
 
 ## Launcher submissions
 
-Raycast's Bash script command passes one percent-encoded argument through
-`ez://lookup?query=...`, explicitly targeting `~/Applications/EZ.app`. `LauncherQuery`
-in EZCore validates the route, a single query parameter, nonblank text, and a
-16,384-byte UTF-8 ceiling. Decode once; URL input cannot override account, model,
-mode, effort, billing, or service tier. The URL scheme is callable by other local
-apps and can consume plan allowance; it provides no tools or executable actions.
-
-The application delegate starts connection and hotkey registration independently
-of the main window. One startup connection task is shared with launcher handling.
-A pending submission disables sending and query/account/preference edits while
-initial connection completes. It then calls the same `AppModel.send()` used by
-both views. Busy/signing-in/duplicate submissions are refused without replacing
-the current draft or cancelling generation. Missing permission/model, connection,
-and storage errors leave the query visible for manual retry, with no automatic
-send after later sign-in. Shutdown cancels startup and pending launcher tasks.
-
-The `--ez-launcher` argument suppresses default main-window presentation on macOS
-15+; the compact panel supplies the SwiftUI open-window action for history/settings.
-SceneBuilder's limited-availability wrapper retains macOS 14 support, where a cold
-launch may also show the main window. Normal app launch still opens the main window.
-The app remains a native Swift executable, with no launcher runtime dependency.
+[Raycast](raycast.md) owns setup and URL behavior. The delegate shares its initial
+connection task with launcher handling. Pending submission locks sending and
+query/account/preference edits until startup completes, then calls normal Send.
+Busy/signing-in/duplicate submissions preserve active work. Connection, permission,
+model or storage errors retain the draft for manual retry, never later auto-send.
+Shutdown cancels startup and launcher tasks. `--ez-launcher` suppresses the main
+window on macOS 15+; macOS 14 cold launch may show it.
 
 ## Selector scrolling and keyboard commands
 
-All production dropdowns use a width-filling native `NSPopUpButton` through
-`SelectorPicker`. The label is separate from the control’s stable full-width hitbox;
-changing from a long title to a short one never shrinks the click/scroll area.
-Settings sections, model/action editor rows, and the main Settings entry use
-`FullRowButton`, a plain native button with an explicit rectangular content shape
-around the complete padded label. Selection changes its background, not its hit area.
-Dropdowns receive wheel events through AppKit’s normal hit-testing, so only the
-hovered control changes; there are no app-wide scroll monitors. Discrete wheel steps and accumulated
-precise deltas use the existing selection bindings. Choices clamp at the ends;
-momentum is ignored and steps are throttled. Quick Lookup’s fixed-width preset
-selector changes overrides; its adjacent information button opens request details.
+`SelectorPicker` wraps width-filling `NSPopUpButton`; label length never changes
+its hitbox. AppKit routes wheel events only to the hovered control. Selection clamps
+at the ends, ignores momentum and throttles steps. `FullRowButton` gives Settings
+sections/editor rows and the main Settings entry a rectangular padded hit area;
+selection changes background only.
 
-`LookupCommand` names lookup actions and ordered action positions. `AppModel`
-executes them through existing New/Send/Stop/chooseRecipe actions and request guards.
-Next/Previous wraps; positions 1–8 and Last follow Configuration order. A repeated
-selection is a no-op; leaving historical replay selects a live action. Action
-selection retains its existing draft-reset/default-preset contract.
+`LookupCommand` calls existing AppModel actions and guards. Previous/Next wraps;
+positions 1–8 and Last follow configuration order. Reselecting the current action
+is a no-op; choosing another resets inputs/default preset and exits historical replay.
+One app-local key monitor serves both surfaces, including focused text fields.
+Settings, sheets and dialogs take priority; key repeats do not repeat actions.
+Global panel and lifecycle keys stay fixed.
 
-`QuickLookupController` installs one app-local key monitor independently of global
-hotkey registration. Both lookup surfaces use the same persisted bindings, including
-while text fields have focus. Settings, sheets, and modal dialogs take priority;
-key repeats are consumed without repeated actions. Native Lookup menu items expose
-the bindings. The global panel shortcut and app/window lifecycle keys remain fixed.
-
-`LookupShortcutsStore` owns a separate versioned, owner-only `shortcuts.json` with
-explicit overrides, including cleared bindings. Load validates supported keys,
-modifier bits, reserved editing/app shortcuts, and collisions against defaults.
-Unsupported or corrupt files are preserved and reported in Settings; runtime uses
-defaults until the user explicitly restores the file. Changes validate and flush
-an owner-only sibling before atomic replacement; in-memory bindings publish only
-after persistence succeeds. Chrome navigation changes both bindings atomically.
+`LookupShortcutsStore` validates version, keys, modifiers, reserved shortcuts and
+collisions in owner-only `shortcuts.json`, including cleared bindings. Corrupt or
+unsupported files remain intact with a Settings error; defaults run until explicit
+restore. Writes atomically replace a flushed owner-only sibling before publishing
+bindings. Chrome navigation updates both bindings together.
 
 ## Spelling comparison presentation
 
-`SpellingComparison` derives a local word/punctuation diff from completed spelling
-history with a single input. It recognizes explicit corrected-text / changes
-labels, either standalone or followed by same-line content, including Markdown
-emphasis and supported Chinese equivalents; ambiguous unlabelled responses
-retain the ordinary answer renderer. It does not alter prompts, saved history,
-copy/export contents, or make a second request. Markdown inline decoration is
-removed from the corrected comparison text; original input is preserved literally.
-Notes are separated only at a recognized heading. The complete literal response stays in
-Inspect input/output on both lookup surfaces. Failed, interrupted, and streaming answers never claim to be
-completed corrections. Diff work is bounded at 4,000 tokens per side and 2,000,000
-token pairs; larger passages still compare without highlights and disclose that limit.
+`SpellingComparison` locally diffs completed, single-input spelling entries with
+recognized corrected-text/changes headings, including Markdown and supported
+Chinese labels. Ambiguous/partial/failed responses keep ordinary rendering.
+Inline Markdown decoration is removed only in comparison text; saved response,
+Copy and Export stay literal. Notes split only at recognized headings. No request
+or prompt change occurs.
 
-Wide spelling comparisons use shared paragraph rows. Unchanged word positions from
-the existing diff anchor corresponding blocks; blank lines and list-item starts
-form block boundaries. One-to-many and many-to-one anchors group paragraph splits
-and merges. Unanchored blocks occupy their own side with the opposite cell empty,
-so insertions/deletions do not shift later matches. Each row grows to its taller
-cell without fixed heights or independent scrolling. Narrow presentation retains
-the full text; the existing long-input limit also bounds alignment work and falls
-back to a single unhighlighted pair.
+Diffs are bounded at 4,000 tokens per side and 2,000,000 token pairs; larger inputs
+show unhighlighted text and disclose the limit. Unchanged-word anchors align
+paragraph/list blocks, group splits/merges and leave opposite cells empty for
+unmatched blocks. Rows grow to the taller side in one scroll area. Alignment uses
+the same long-input bound and falls back to one unhighlighted pair.
 
 ## Unified configuration
 
-`ConfigurationStore` imports the local configuration into
-`Little Clarity/settings.json` → `apps.ez.configuration` once, retaining the old
-file for recovery. Subsequent loads and saves use the scoped JSON section; shared
-model definitions remain in `modelPresets`. Section revisions reject stale saves.
-Account selection and credentials never belong to a model preset. Native shortcuts,
-Min Mode and window placement retain their existing local stores.
+`Little Clarity/settings.json` holds shared providers/presets in `modelPresets`
+and EZ actions in `apps.ez.configuration`. Section revisions reject stale saves;
+`ConfigurationStore` imports old `EZ/configuration.json` once and retains it for
+recovery. Shared provider definitions win; legacy EZ definitions are adopted only
+when the shared list is absent and omitted on later scope writes. Legacy presets
+decode as `gpt-plan`/Write; persisted `recipes`/`recipeSnapshot` keys remain stable.
+Account choice/secrets never belong to a preset. Shortcuts, Min Mode and window
+placement keep their local stores.
 
-Speak presets preserve a Realtime model and strict `speechOptions.voice` in the
-shared store. The native preset editor can change those choices. Playback currently
-runs only in Saul. Native availability/preparation and the final execution boundary
-block Speak before credential resolution; native actions expose Write and Draw.
+Save is explicit. Preset/Action editors stay mounted across Settings sections;
+item changes, Add and dismissal guard dirty edits. Save failure keeps the draft.
+Configuration editing preserves lookup overrides and restored historical actions.
+Speak presets retain Realtime model and strict `speechOptions.voice`; EZ can edit
+them but blocks execution before credentials. Playback runs only in Saul.
+
+## Local packaging identity
+
+[Releasing](releasing.md#local-signing-and-installation) owns signing, installation
+and rollback. Stable bundle/credential identities are migration contracts;
+packaging must not relocate app data. A stable signature alone does not prove
+prompt-free Keychain upgrades; see [Keychain diagnosis](keychain.md#why-a-rebuild-can-ask-again).
 
 ## Shared credential owner
 
-EZ uses the independently installed signed Saul owner for official OpenAI operations.
-See the [shared credential contract](../../../contracts/credentials.md) for caller
-validation, migration, disconnect, sign-out and failure behavior. The app has no
-production secret-reading adapter. Offline suites inject disposable credentials.
+EZ requests official OpenAI operations from the independently installed signed
+Saul owner. Production has no app-local secret-reading adapter or fallback;
+offline suites inject disposable credentials. The [shared contract](../../../contracts/credentials.md)
+owns the protocol and lifecycle; [verification](verification.md) separates offline,
+installed and live-service evidence.
+
+## Extension points
+
+Add text workflows as actions. `QueryMode` remains a legacy history discriminator
+and starter icon mapping. Reuse app actions for shortcuts/menu entry points and
+explicit API presets for API billing. Further conversation or provider features
+need explicit context, retention and billing decisions; see [roadmap](roadmap.md).

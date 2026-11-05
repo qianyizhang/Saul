@@ -1,101 +1,84 @@
 # Building and releasing
 
-`make app` generates `dist/EZ.app` from the Swift package and `Resources/Info.plist`.
-Without local configuration the signature is ad-hoc. Configured builds reuse the
-pinned certificate below. macOS may request Keychain access again after an ad-hoc rebuild.
-See [Keychain access](keychain.md) for the reason and permission choices.
-
-Packaging creates, signs, and verifies a temporary bundle before replacing
-`dist/EZ.app`. A failure before replacement leaves the previous app intact;
-interrupted replacement attempts to restore it. Quit EZ before opening the new
-build so the existing process does not continue running an older version.
+`make app` builds `dist/EZ.app` from the Swift package and `Resources/Info.plist`.
+It stages, signs and verifies before replacement; failures preserve the previous
+bundle or attempt restoration after interruption. Quit older EZ before opening it.
+Without a signing pin, builds are ad-hoc for offline development/CI.
 
 ## Local signing and installation
 
-Use Xcode → Settings → Accounts with your Apple Account and free Personal Team.
-Create an **Apple Development** signing certificate. The shared Saul owner requires
-an Apple-issued certificate and Team ID. It does not need a provisioning profile
-for this plain macOS executable. Do not export a private key into the repository.
+In Xcode → Settings → Accounts, use your Apple Account/Personal Team to create an
+**Apple Development** certificate. The shared Saul owner requires an Apple-issued
+certificate and Team ID, but no provisioning profile for this plain macOS executable.
+Keep private keys in Keychain, never the repository.
+
+From `apps/ez`:
 
 ```sh
 EZ_SIGNING_IDENTITY="APPLE_DEVELOPMENT_SHA1" make signing-setup
-make credentials-install
 # Quit EZ before installation.
 make install
 ```
 
-The certificate fingerprint is pinned in ignored `.local/signing-identity`.
-Initial setup accepts a certificate name or fingerprint; later setup preserves the
-pin. An intentional transition requires the exact old fingerprint:
+Setup pins the certificate fingerprint in ignored `.local/signing-identity`;
+initial setup accepts a name or fingerprint. Later setup preserves the pin.
+Intentional replacement requires its exact old fingerprint:
 
 ```sh
 EZ_SIGNING_IDENTITY="NEW_SHA1" bash scripts/configure-signing.sh --replace-pinned OLD_SHA1
 ```
 
-The old pin is retained in `.local/signing-identity.previous-OLD_SHA1`. This does
-not rotate or export private keys. Certificate renewal is another explicit
-transition; a free development certificate is not Developer ID or notarization.
+The old pin remains in `.local/signing-identity.previous-OLD_SHA1`. This does not
+rotate/export keys. Renewal is another explicit transition; Personal Team signing
+is not Developer ID or notarization.
 
-`make credentials-install` stages the independently signed owner at
-`~/Library/Application Support/Little Clarity/Credentials/Saul.app` and registers
-`com.saul.credentials` for the exact installed extension ID. Supply
-`SAUL_EXTENSION_ID` if no existing ChatGPT host manifest identifies it. It verifies
-the signature before replacement and restores the prior app and manifest on
-activation failure. Once installed, `make install` updates the owner with EZ.
-`make install` installs the owner on a fresh Mac as well as updating it on upgrades.
-Connecting Chrome to Saul credentials is an explicit Providers action. EZ uses the
-owner by default and offers Disconnect app. Neither app's UI must keep running.
+`make app`, `make run` and `make install` reuse the pin; unavailable identity stops
+the build, never falls back. `make clean` preserves it and Keychain state.
+Development `EZ_SIGNING_IDENTITY` overrides are allowed, but installation rejects
+a fingerprint different from the pin.
 
-`make app`, `make run`, and `make install` reuse the pin. If the configured identity
-is unavailable, the command stops rather than reverting to ad-hoc signing.
-`make clean` preserves the pin and Keychain identity. An explicit
-`EZ_SIGNING_IDENTITY` overrides signing for development builds; installation
-requires the pinned fingerprint and rejects an override to a different identity.
+`make install`:
 
-`make install` builds a release bundle and stages a verified copy beside
-`~/Applications/EZ.app`. It checks the expected certificate and bundle identifier.
-For an installed build using that certificate, it also checks the new build against
-the installed build's identity requirement. It refuses replacement while EZ is
-running. Replacement retains the old bundle under
-`~/Applications/.ez-upgrade.XXXXXX/previous.app`; an interrupted replacement attempts
-to restore it. Keep or remove that backup after verifying the upgrade. To roll
-back, quit EZ and move `previous.app` back to `~/Applications/EZ.app`, retaining the
-newer bundle elsewhere if desired. Rolling back a bundle does not undo credential
-migration; an old app may require fresh sign-in. Installation does not launch EZ or change
-credentials, history, or other app data.
+- Requires EZ stopped; stages a release copy beside `~/Applications/EZ.app` and
+  verifies certificate/bundle ID. Same-certificate upgrades must also satisfy the
+  installed build's designated requirement.
+- Installs/updates the signed owner at
+  `~/Library/Application Support/Little Clarity/Credentials/Saul.app`, registering
+  `com.saul.credentials` for the installed extension. Set `SAUL_EXTENSION_ID` if no
+  existing ChatGPT host manifest supplies it. `make credentials-install` installs
+  only that owner. Owner activation failure restores its prior bundle/manifest.
+- Replaces EZ and retains `~/Applications/.ez-upgrade.XXXXXX/previous.app` for
+  rollback; interrupted replacement attempts restoration. It does not launch EZ
+  or change credentials/history. Verify normal use before removing the backup.
 
-Certificate continuity does not establish prompt-free Keychain access. The Oct 16
-upgrade preserved the exact designated requirement but still prompted: the
-credential item's additional partition policy was tied to the executable's code
-hash. **Always Allow** can remember current access without authorizing a future
-changed hash. See the [diagnosis](keychain.md#why-a-rebuild-can-ask-again).
-Apple-issued developer signing with a stable Team ID is a separate setup and must
-be tested with a changed-build upgrade before claiming prompt-free continuity.
+To roll back, quit EZ and move `previous.app` to `~/Applications/EZ.app`, preserving
+the newer bundle if needed. Bundle rollback does not undo credential migration;
+old builds may need fresh sign-in. Chrome connects explicitly in Providers; EZ
+uses the owner by default and offers Disconnect app. Neither UI must stay running.
 
-Self-signing supports personal use and app identity continuity. It does not provide
-Developer ID, notarization, or App Store approval. Another Mac may need manual
-Gatekeeper approval. See Apple's [code-signing policies](https://developer.apple.com/library/archive/technotes/tn2206/).
+Stable signing alone does not guarantee prompt-free Keychain upgrades.
+[Keychain diagnosis](keychain.md#why-a-rebuild-can-ask-again) owns the old self-signed
+failure and Team ID distinction; [verification](verification.md) records changed-build
+acceptance. Never work around prompts by allowing all applications.
 
 ## CI artifact
 
-The native workflow runs on the pinned macOS/Xcode runner, verifies the app, and
-retains `EZ-macos.zip` for 14 days. The archive preserves the app bundle and targets
-the runner's architecture. CI uses an ad-hoc signature; this is a development
-artifact, not a notarized public release. The source-only publication hold also
-means no new hosted workflow has run for the local monorepo yet.
+[Native CI](../../../.github/workflows/native.yml) owns runner/toolchain pins and
+packages `EZ-macos.zip` for 14 days. It preserves the bundle and targets the runner's
+architecture. The ad-hoc artifact is for development, not a notarized release.
 
 ## Distribution
 
-For distribution:
+Public distribution needs explicit user direction and these separate steps:
 
-1. Choose a distribution license and a stable owned bundle identifier.
-2. Confirm the current Sign in with ChatGPT integration eligibility and terms.
-3. Use a stable Developer ID signing identity; configure hardened runtime,
-   appropriate entitlements, notarization, and stapling as part of that release work.
-4. Test first launch, Keychain upgrades, OAuth callback, real inference, logout,
-   history recovery, and accessibility on a clean account/machine.
-5. Update bundle version and changelog. Publish only the verified artifact and its hash.
+1. Choose a license and stable owned bundle identifier; treat existing identities
+   as migration contracts under [root setup](../../../docs/setup.md).
+2. Confirm current Sign in with ChatGPT eligibility/terms.
+3. Configure Developer ID, hardened runtime, entitlements, notarization and stapling.
+4. Test clean-machine launch, changed-build Keychain access, OAuth, live inference,
+   logout, history recovery and accessibility.
+5. Update version/changelog; publish only the verified artifact and hash.
 
-`EZ_SIGNING_IDENTITY` changes the identity passed to the build script. That alone
-does not implement notarization or make this project distribution-ready. No
-auto-update endpoint, analytics, or telemetry service is configured.
+`EZ_SIGNING_IDENTITY` alone supplies none of those release guarantees. Another Mac
+may need Gatekeeper approval; see [Apple's signing policies](https://developer.apple.com/library/archive/technotes/tn2206/).
+No auto-update endpoint, analytics or telemetry service is configured.

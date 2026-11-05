@@ -2,80 +2,51 @@
 
 ## Installed baseline — 2026-11-04
 
-The prior credential rollout installed the shared Saul owner in both apps and
-verified live model discovery across two changed signed builds. Both clients
-completed credential retirement. No live inference, image or speech request was
-made; API-key continuity used synthetic Keychain items. This evidence applies to
-that installed baseline, not later source changes.
-
-The Personal Team development certificate expires 2027-11-04. This is not Developer
-ID signing or notarization. Certificate, Team ID, ACL, OS or installation changes
-require renewed acceptance. Keep recovery bundles and the previous signing pin
-until normal use is confirmed; review by 2026-12-04.
-
-The history rollout verified imports of 74 EZ entries (three images), 16 Saul
-passages, 18 attempts and 17 summary batches. SQLite integrity and foreign keys
-passed, and retired stores were removed after import. No provider request was sent.
+- **Credentials:** Shared Saul owner installed in both apps; live model discovery
+  passed across two changed signed builds and both clients retired old credentials.
+  No live inference/image/speech request was made. API-key continuity used synthetic
+  Keychain items. These results apply to that baseline, not later source.
+- **Signing:** Personal Team certificate expires 2027-11-04; not Developer ID or
+  notarization. Certificate, Team ID, ACL, OS or installation changes need renewed
+  acceptance. Retain recovery bundles/previous pin until normal use is confirmed;
+  review by 2026-12-04.
+- **History:** Imported 74 EZ entries (three images), 16 Saul passages, 18 attempts
+  and 17 summary batches. SQLite integrity/foreign keys passed; retired stores were
+  removed after import. No provider request was sent.
 
 ## Repeatable offline gate
 
-From `apps/ez`, run `make tools` once, then `make check`. This checks Swift formatting and correctness,
-ShellCheck plus shell syntax, GitHub Actions with actionlint, and plist syntax.
-Compilation rejects warnings and enables complete Swift concurrency checking in
-the existing Swift 5 language mode. The gate also typechecks the icon and all
-native preview entry points without opening windows. It compiles the app
-and runs both offline executable suites. The selected Apple Command Line Tools
-provide neither XCTest nor Swift Testing, so the harness keeps the checks runnable
-locally and in CI without requiring the full Xcode app or third-party test frameworks.
-The linters are development binaries; they add no app dependencies. See
-[development setup](../CONTRIBUTING.md#development-setup-and-gates) for pinned tools,
-commit/push hooks, and the hosted toolchain.
+From `apps/ez`, run `make tools` once, then `make check`. The [Makefile](../Makefile)
+owns gate membership; [CONTRIBUTING](../CONTRIBUTING.md#development-setup-and-gates)
+owns tool pins, hooks and hosted setup. The gate covers formatting/lint, shell,
+workflow/plist checks, warnings-as-errors and complete Swift concurrency in Swift 5
+mode, offline suites, installation/tooling, credential owner and preview typechecks.
+It does not open preview windows or establish live-service behavior.
 
-Core cases live by behavior in `Tests/EZChecks`; app-state cases live in
-`Tests/EZStateChecks`. Both use the check-only `EZCheckSupport` module, named
-cases, file/line diagnostics, expected error types, independent disposable storage,
-and failure aggregation. HTTP sessions own their handlers and request logs;
-AppModel fixtures are fresh and seeded before initialization. See
-[the testing guide](../Tests/README.md) for filtering, listing, order checks, and
-fixture ownership. `make test` runs both suites even when one reports failures.
+[Tests/README.md](../Tests/README.md) owns cases, filtering and fixture rules.
+`make test` runs core and app-state suites even if one fails; executable harnesses
+work with Command Line Tools without XCTest/Swift Testing or third-party frameworks.
+App suites use disposable storage, isolated HTTP handlers and synthetic credentials,
+not live accounts, network or personal Keychain. Identity checks use generated RSA
+keys and a fixed clock. Separate credential acceptance uses isolated test storage.
 
-Coverage includes templates, presets, configuration storage, immutable recipe
-history, launcher validation, history snapshots/permissions/deletion/recovery,
-failed writes, exclusive session ownership, PKCE/form encoding, callback validation,
-signed OIDC verification and invalid claims, model capabilities, request-body
-constraints, SSE parsing/completion/errors, fragmented Unicode through URLSession,
-and credential restore/refresh. Refresh checks assert one request for overlapping
-callers, persisted rotation, retained scopes, reload behavior, failure-state
-preservation, and missing permission. RSA keys are generated in memory with system
-OpenSSL; identity checks use a fixed clock. No private fixture is committed.
-The suites do not use the network, Keychain, or a real ChatGPT account.
+If nested SwiftPM sandboxing fails, use `EZ_SWIFTPM_DISABLE_SANDBOX=1 make check`;
+the outer sandbox stays active and caches stay in `.build/`. After `make clean`,
+restore tools with `make tools`. Duplicate modules from differently capitalized
+checkout paths require clearing generated state. Icon dimensions alone do not
+prove `iconutil` packaging; report sandbox restrictions separately.
 
-For restricted agent execution use `EZ_SWIFTPM_DISABLE_SANDBOX=1 make check`.
-This keeps the outer sandbox active and places compiler caches in `.build/`.
-After `make clean`, run `make tools` again to restore the development linters.
-If Swift reports duplicate modules under differently capitalized checkout paths,
-clear generated build state with `make clean` before rebuilding.
+## Native and live acceptance
 
-macOS `iconutil` may need specifically approved execution outside that sandbox;
-valid image dimensions alone do not prove icon packaging succeeded.
-
-## Native acceptance checks
-
-1. `make app`, open `dist/EZ.app`, inspect both window and settings.
-2. Complete **Continue with ChatGPT** yourself. Verify the account and model picker.
-3. Send a short Dictionary lookup with standard service. Confirm streamed text,
-   terminal completion, and pending/completed SQLite entry states with the same UUID.
-4. Send a spelling query with Fast where supported. Verify the actual returned
-   service tier separately from the selected toggle.
-5. Restart the app. Confirm the saved account and history reload.
-6. For related changes, check cancellation, search, copy, export, and keyboard
-   shortcuts. Test live logout only when willing to end that app session.
-7. For Quick Lookup, check focus return after Esc, fresh shortcut/menu invocation,
-   main-window handoff, minimum size, full-screen Spaces, and multiple displays.
-   Check conflicts with the global shortcut and the menu-bar fallback.
-8. Use `make surface-preview` for disposable native fixtures, including selector
-   hitboxes, waiting/thinking/streaming, and narrow layouts. Preview fixtures cannot
-   establish live account, inference, hardware scrolling, or system Reduce Motion behavior.
-
-Follow the [fixed native UI journeys](ui-qa.md) for composition, reading, Settings,
-long-form keyboard navigation, and recovery.
+1. `make app`; quit older EZ, open `dist/EZ.app`, inspect main/panel/Settings.
+2. Complete ChatGPT sign-in yourself; verify account, permission and model catalog.
+3. Send a short Dictionary lookup on Standard: streamed text, terminal completion,
+   and pending/completed SQLite snapshots under one UUID.
+4. Send Spell Check with supported Fast; distinguish requested from returned tier.
+5. Restart for account/history restoration. Check affected cancellation, search,
+   Copy/Export and shortcuts. Logout explicitly ends the shared account session.
+6. For Quick Lookup, check Esc focus return, fresh invocation, main handoff,
+   minimum size, full-screen Spaces, multiple displays and shortcut-conflict fallback.
+7. Replay affected [UI journeys](ui-qa.md). Offline previews do not establish
+   installed selection/Services/Raycast delivery, hardware scrolling, system Reduce
+   Motion, Keychain continuity, API access, real latency or billing.
