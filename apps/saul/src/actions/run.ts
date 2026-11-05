@@ -56,6 +56,7 @@ export async function runCustomAction(
                     attachments: [source.attachment],
                   },
                   callSignal,
+                  input.credentialOwner ?? 'local',
                 );
               })()
             : streamModel(

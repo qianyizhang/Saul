@@ -6,6 +6,36 @@ import { getFirstHistory, getHistory, openFirstPageExplanation, sendDb } from '.
 import type { Page } from '@playwright/test';
 import type { UserSettings } from '../../src/types';
 
+test('a saved attempt with a changed credential owner shows a preset-selection hint without sending', async ({
+  sandbox,
+  fixtureServer,
+}, info) => {
+  const { popup, context } = await sandbox.launch();
+  await configureFixtureProvider(popup, fixtureServer.origin);
+  const article = await context.newPage();
+  await article.goto(fixtureServer.origin + '/article');
+  await selectRecipe(article, 'recipe-explain');
+  await expect.poll(async () => (await getHistory(popup))[0]?.latest.status).toBe('completed');
+  const saved = await getFirstHistory(popup);
+  const calls = fixtureServer.requests.length;
+  await popup.evaluate(async () => {
+    const stored = await chrome.storage.local.get('saul_user_settings');
+    const settings = stored.saul_user_settings as UserSettings;
+    settings.sharedCredentials = 'saul';
+    settings.openaiCompatible.credentialOwner = 'saul';
+    for (const profile of settings.profiles ?? []) profile.config.credentialOwner = 'saul';
+    await chrome.storage.local.set({ saul_user_settings: settings });
+  });
+  await openFirstPageExplanation(article);
+  const card = article.getByRole('region', { name: 'Saul explanation' });
+  await card.getByRole('button', { name: 'More', exact: true }).click();
+  await card.getByRole('button', { name: 'Simpler', exact: true }).click();
+  await expect(article.getByRole('alert')).toContainText('Select a new preset in Settings');
+  expect(fixtureServer.requests).toHaveLength(calls);
+  expect((await getFirstHistory(popup)).latest.id).toBe(saved.latest.id);
+  await article.screenshot({ path: info.outputPath('changed-route-hint.png') });
+});
+
 async function selectRecipe(page: Page, recipeId: string) {
   await page.locator('#concept').click({ clickCount: 3 });
   await expect(page.getByRole('combobox', { name: 'Action', exact: true })).toBeVisible();

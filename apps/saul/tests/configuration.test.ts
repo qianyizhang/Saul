@@ -1,10 +1,10 @@
+import { preparePreset, projectPresetForEditing } from '../src/models/preset-resolution';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { ResolvedContext, UserSettings } from '../src/types';
 import { DEFAULT_SETTINGS, getSettings } from '../src/storage/settings';
 import { DEFAULT_SYSTEM_PROMPT, renderExplainPrompt } from '../src/models/prompts';
 import {
   configurationFor,
-  settingsForPreset,
   normalizeConfiguration,
   parseTemplate,
   renderRecipePrompt,
@@ -254,7 +254,7 @@ it('does not send a frozen request with credentials for an edited endpoint or re
     configurationFor(settings).selectedRecipeId,
   ).input;
   settings.profiles![0]!.config.baseUrl = 'https://different.test/v1';
-  expect(() => prepareFrozenRun(settings, original)).toThrow('endpoint has changed');
+  expect(() => prepareFrozenRun(settings, original)).toThrow('Select a new preset');
   settings.profiles = [];
   expect(() => prepareFrozenRun(settings, original)).toThrow('saved connection');
 });
@@ -307,7 +307,7 @@ it('blocks shared API options before transport rather than silently discarding t
   const preset = configurationFor(settings).presets[0]!;
   for (const options of [{ effort: 'low' }, { fast: true }]) {
     const request = { ...preset, ...options, providerKey: 'openai-api', shared: true };
-    expect(() => settingsForPreset(settings, request)).toThrow('Run it in EZ');
-    expect(settingsForPreset(settings, request, true).activeProvider).toBe('openai-compatible');
+    expect(() => preparePreset(settings, request)).toThrow('Run it in EZ');
+    expect(projectPresetForEditing(settings, request).activeProvider).toBe('openai-compatible');
   }
 });

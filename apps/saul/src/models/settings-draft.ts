@@ -1,3 +1,4 @@
+import { projectPresetForEditing as settingsForPreset } from './preset-resolution';
 import { SPEECH_MODEL, validateSharedProviders } from '../../native/shared-presets-contract.mts';
 import { officialOpenAI } from '../../native/credentials-contract.mts';
 import type { ModelPreset, ProviderType, Recipe, UserSettings } from '../types';
@@ -6,7 +7,6 @@ import {
   configurationFor,
   DEFAULT_RECIPE_SYSTEM_PROMPT,
   presetFromSettings,
-  settingsForPreset,
   validateConfiguration,
 } from './configuration';
 
@@ -86,7 +86,7 @@ export function createSettingsDraft(source: UserSettings): SettingsDraft {
     configuration,
   };
   return {
-    settings: preset ? settingsForPreset(normalized, preset, true) : normalized,
+    settings: preset ? settingsForPreset(normalized, preset) : normalized,
     presetId: preset?.id ?? '',
     recipeId: recipe.id,
   };
@@ -132,7 +132,6 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
         settings: settingsForPreset(
           next,
           next.configuration.presets.find((p) => p.id === draft.presetId)!,
-          true,
         ),
       };
     }
@@ -204,7 +203,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
           presets: configuration.presets.map((p) => (p.id === preset.id ? updated : p)),
         },
       };
-      return { ...draft, settings: settingsForPreset(next, updated, true) };
+      return { ...draft, settings: settingsForPreset(next, updated) };
     }
     case 'provider-name':
       return {
@@ -254,7 +253,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
           presets: configuration.presets.map((item) => (item.id === preset.id ? updated : item)),
         },
       };
-      return { ...draft, settings: settingsForPreset(configured, updated, true) };
+      return { ...draft, settings: settingsForPreset(configured, updated) };
     }
     case 'settings':
       return { ...draft, settings: { ...settings, ...edit.patch } };
@@ -283,14 +282,14 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
           presets: configuration.presets.map((p) => (p.id === preset.id ? updated : p)),
         },
       };
-      return { ...draft, settings: settingsForPreset(next, updated, true) };
+      return { ...draft, settings: settingsForPreset(next, updated) };
     }
     case 'select-preset': {
       const preset = configuration.presets.find((item) => item.id === edit.id);
       if (!preset) throw new Error('Choose an existing preset.');
       return {
         ...draft,
-        settings: settingsForPreset(settings, preset, true),
+        settings: settingsForPreset(settings, preset),
         presetId: preset.id,
       };
     }
@@ -337,7 +336,6 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
         settings: settingsForPreset(
           { ...settings, configuration: { ...configuration, presets } },
           presets[0]!,
-          true,
         ),
       };
     }

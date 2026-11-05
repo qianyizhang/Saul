@@ -87,7 +87,9 @@ After migration the shared store owns these presets. Deleted presets stay delete
 actions referencing them need another explicit choice. Presets bind a stable provider key and capability, not a plan account.
 `gpt-plan` uses the explicitly selected local plan account when preparing a run;
 `openai-api` resolves its selected credential owner. Freeze that route for execution
-and retry. Provider display-name edits do not change keys or preset bindings. Legacy Saul
+and retry. A changed credential owner or endpoint blocks the saved attempt with a
+hint to select a new preset and start a new attempt. There is no legacy route
+promotion during retry; saved output stays readable. Provider display-name edits do not change keys or preset bindings. Legacy Saul
 preset account fields are ignored; selecting a preset cannot switch accounts.
 Existing Saul-only API/on-device presets remain Saul-scoped. Typed shared API
 presets remain in the library; an unavailable local provider blocks execution.

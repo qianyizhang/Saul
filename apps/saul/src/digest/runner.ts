@@ -341,6 +341,7 @@ export class DigestRunner {
           ...summaryRequestInput(item, source),
         },
         signal,
+        batch.credentialOwner ?? 'local',
       )) {
         if (event.type === 'delta') {
           item.raw += event.text;

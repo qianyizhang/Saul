@@ -88,6 +88,12 @@ the page card and History, including partial output; it does not reconstruct pro
 from current settings or claim to retain raw HTTP/SSE traffic.
 
 `src/models/configuration.ts` owns named recipes and model presets in settings.
+`src/models/preset-resolution.ts` owns execution-time Capability checks, explicit
+Connection selection and frozen credential routes for Reading, custom Summarize,
+provider tests and Speak. Editor projection retains unavailable choices separately.
+Retries never promote a local credential route to Saul: a changed owner or endpoint
+shows a preset-selection hint and requires a new attempt. Plan execution checks
+the frozen owner again immediately before opening its transport.
 Legacy settings migrate to an Explain recipe and a Current preset; prompt roles,
 the active connection, and the selected model are preserved. Recipes contain
 literal prompt templates and reference a default preset. Presets identify a

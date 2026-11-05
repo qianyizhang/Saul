@@ -281,7 +281,7 @@ it('freezes preset choices, excludes credentials from saved input and blocks cha
   settings.configuration.presets[0]!.model = 'new-model';
   expect(prepareFrozenRun(settings, prepared.input).input.remote.model).toBe('chosen');
   settings.openaiCompatible.baseUrl = 'https://other.example/v1';
-  expect(() => prepareFrozenRun(settings, prepared.input)).toThrow('endpoint has changed');
+  expect(() => prepareFrozenRun(settings, prepared.input)).toThrow('Select a new preset');
   expect(() => prepareActionPreset(settings, 'missing')).toThrow('existing saved preset');
 });
 

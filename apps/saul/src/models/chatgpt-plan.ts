@@ -10,12 +10,14 @@ import { IncompleteGeneration } from './events';
 import { isCredentialPlan } from '../../native/credentials-contract.mts';
 import { credentialEvents } from '../native/credentials';
 import { getSettings } from '../storage/settings';
+import { SELECT_NEW_PRESET } from './preset-resolution';
 
 export class HistoryDisconnected extends Error {}
 
 export async function* planEvents(
   request: PlanRequest,
   signal?: AbortSignal,
+  expectedOwner?: 'local' | 'saul',
 ): AsyncGenerator<PlanEvent> {
   signal?.throwIfAborted();
   if (isCredentialPlan(request)) {
@@ -39,6 +41,8 @@ export async function* planEvents(
     }
     if (mode === 'disconnected')
       throw new Error('Connect this app to Saul credentials in Providers.');
+    if (expectedOwner !== undefined && expectedOwner !== (mode === 'saul' ? 'saul' : 'local'))
+      throw new Error(SELECT_NEW_PRESET);
     if (mode === 'saul') {
       for await (const event of credentialEvents(request, signal)) {
         if (event.type === 'authorize') continue;

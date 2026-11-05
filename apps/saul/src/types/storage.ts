@@ -35,6 +35,8 @@ export interface Passage {
   unread: boolean;
 }
 export interface RunInput {
+  /** Plan route; API requests retain their owner in remote. Missing legacy routes are local. */
+  credentialOwner?: 'local' | 'saul';
   provider: UserSettings['activeProvider'];
   remote: Omit<UserSettings['openaiCompatible'], 'apiKey'>;
   local: UserSettings['chromeAi'];

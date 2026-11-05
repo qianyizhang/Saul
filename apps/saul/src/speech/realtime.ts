@@ -1,6 +1,7 @@
 import { validSpeechOptions } from '../../native/shared-presets-contract.mts';
 import type { UserSettings } from '../types';
 import { configurationFor } from '../models/configuration';
+import { preparePreset } from '../models/preset-resolution';
 
 export const SPEECH_PORT = 'saul-speech';
 const MAX_AUDIO_BYTES = 6_000_000;
@@ -55,27 +56,8 @@ export function speechCredential(
     (preset.speechOptions?.voice ?? 'marin') !== request.voice
   )
     throw new Error('The Speak preset changed. Save or reload Presets before generating speech.');
-  const provider = settings.providers.find((p) => p.key === preset.providerKey);
-  if (
-    (settings.providers && provider?.kind !== 'openai-api') ||
-    (!settings.providers && preset.providerKey !== 'openai-api')
-  )
-    throw new Error('Speak requires an OpenAI API provider. Open Providers.');
-  const connectionId = settings.providerConnections?.[request.providerKey] || preset.profileId;
-  const profile = settings.profiles?.find((p) => p.id === connectionId);
-  const connection = profile?.config;
-  if (!connection || connection.baseUrl.replace(/\/+$/, '') !== 'https://api.openai.com/v1')
-    throw new Error(
-      'Speak requires a connection to https://api.openai.com/v1. Choose it in Providers.',
-    );
-  if (connection.credentialOwner === 'saul') {
-    if (settings.sharedCredentials !== 'saul')
-      throw new Error('Connect this app to Saul credentials in Providers.');
-    return undefined;
-  }
-  if (!connection.apiKey.trim())
-    throw new Error('Save an OpenAI API key in Providers before generating speech.');
-  return connection.apiKey;
+  const resolved = preparePreset(settings, preset, 'speak');
+  return resolved.choices.remote.credentialOwner === 'saul' ? undefined : resolved.credential;
 }
 
 export function encodeAudio(bytes: Uint8Array): string {

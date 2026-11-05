@@ -458,6 +458,11 @@ export default defineBackground(() => {
             preference?.state === 'ready' ? preference.settings.summaryPdfProcessing : undefined,
           );
           if (preference?.state !== 'ready') delete snapshot.pdfProcessing;
+          if (r.action === 'start')
+            snapshot.credentialOwner =
+              preference?.state === 'ready' && preference.settings.sharedCredentials === 'saul'
+                ? 'saul'
+                : 'local';
           const selected = (await actionState()).selected;
           if (selected) {
             snapshot.action = structuredClone(selected);

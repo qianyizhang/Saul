@@ -58,6 +58,7 @@ export interface DigestItem {
   sourceKind?: 'pdf-url';
 }
 export interface DigestMeta {
+  credentialOwner?: 'local' | 'saul';
   action?: import('../actions/contract').FrozenAction;
   pdfProcessing?: PdfProcessing; // Missing on old batches means local parsing.
   id: string;

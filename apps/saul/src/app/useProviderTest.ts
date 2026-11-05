@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { UserSettings } from '../types';
 import { streamModel } from '../models/provider';
-import { validateProviderSettings } from '../storage/settings';
-import { configurationFor, settingsForPreset } from '../models/configuration';
+import { preparePreset } from '../models/preset-resolution';
+import { configurationFor, presetFromSettings } from '../models/configuration';
 export function useProviderTest() {
   const [testing, setTesting] = useState(false),
     [notice, setNotice] = useState(''),
@@ -18,7 +18,7 @@ export function useProviderTest() {
   }, []);
   async function test(mode: 'endpoint' | 'generation', draft: UserSettings, presetId?: string) {
     if (controller.current) return;
-    let settings = structuredClone(draft);
+    const settings = structuredClone(draft);
     const ac = new AbortController();
     controller.current = ac;
     setError('');
@@ -29,21 +29,18 @@ export function useProviderTest() {
       settings.activeProvider === 'openai-compatible' ? 20000 : 120000,
     );
     try {
-      if (presetId) {
-        const preset = configurationFor(settings).presets.find((p) => p.id === presetId);
-        if (!preset) throw new Error('Choose an existing preset.');
-        settings = settingsForPreset(settings, preset);
-      }
-      validateProviderSettings(settings);
-      if (mode === 'endpoint' && settings.activeProvider === 'openai-compatible') {
-        const base = settings.openaiCompatible.baseUrl
+      const preset = presetId
+        ? configurationFor(settings).presets.find((p) => p.id === presetId)
+        : presetFromSettings(settings, 'test-current', 'Current');
+      if (!preset) throw new Error('Choose an existing preset.');
+      const prepared = preparePreset(settings, preset);
+      if (mode === 'endpoint' && prepared.choices.provider === 'openai-compatible') {
+        const base = prepared.choices.remote.baseUrl
           .replace(/\/+$/, '')
           .replace(/\/chat\/completions$/, '');
         const res = await fetch(`${base}/models`, {
           signal: ac.signal,
-          headers: settings.openaiCompatible.apiKey
-            ? { Authorization: `Bearer ${settings.openaiCompatible.apiKey}` }
-            : {},
+          headers: prepared.credential ? { Authorization: `Bearer ${prepared.credential}` } : {},
         });
         if (!res.ok)
           throw new Error(
@@ -55,15 +52,12 @@ export function useProviderTest() {
         let answer = '';
         for await (const event of streamModel(
           {
-            provider: settings.activeProvider,
-            remote: settings.openaiCompatible,
-            local: settings.chromeAi,
-            plan: settings.chatgptPlan,
+            ...prepared.choices,
             systemPrompt: 'Reply briefly.',
             userPrompt: 'Say hello.',
             context: { selection: '', pageTitle: '', pageUrl: '' },
           },
-          settings.activeProvider === 'openai-compatible' ? settings.openaiCompatible.apiKey : '',
+          prepared.credential,
           ac.signal,
           { maxTokens: 32 },
         ))

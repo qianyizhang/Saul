@@ -21,6 +21,7 @@ export function compareRunInput(
   const profile = (input: import('../types/storage').RunInput) =>
     JSON.stringify([
       input.provider,
+      input.credentialOwner ?? input.remote.credentialOwner ?? 'local',
       input.provider === 'chatgpt-plan'
         ? input.plan
         : input.provider === 'chrome-ai'

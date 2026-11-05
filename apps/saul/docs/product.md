@@ -85,6 +85,9 @@ across sections; preferences and access retain their independent immediate-save 
 - Missing/stale profile selection preserves the current configuration in a recovered profile.
 - Invalid saved settings show the affected field and offer an explicit backup-and-reset action.
 - Save, connection test, and generation test use the current draft without overwriting unreadable stored settings.
+- A saved attempt whose credential owner or endpoint changed keeps its output and
+  shows “Select a new preset in Settings, then start a new attempt.” Retry never
+  silently adopts the new route.
 - Model setup appears first. Save and validation feedback stay visible while scrolling; leaving a changed draft asks before discarding it.
 - Response language and context controls apply to new submissions.
 - Chrome on-device AI is retired. Saved selections remain readable and prompt an explicit switch to ChatGPT plan or OpenAI compatible. New local requests are blocked; Saul does not switch providers automatically.

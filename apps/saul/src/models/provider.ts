@@ -32,6 +32,7 @@ export async function* streamModel(
           userPrompt: input.userPrompt,
         },
         signal,
+        input.credentialOwner ?? 'local',
       ))
         if (event.type === 'delta' || event.type === 'complete' || event.type === 'activity')
           yield event;
