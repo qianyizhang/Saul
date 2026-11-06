@@ -77,7 +77,7 @@ preset beside its fields, with a compact selector at narrow widths. Section chan
 preserve the mounted configuration draft. Save and conflict recovery remain reachable
 across sections; preferences and access retain their independent immediate-save behavior.
 
-- Named actions pair editable prompts with a default model preset. Explain, Lookup, and Nudge are editable starters. A preset names the provider, API connection where applicable, model, and supported options. ChatGPT plan presets use the app-selected account; they do not bind one.
+- Named actions pair editable prompts with a default model preset. Explain, Lookup, and Nudge are editable starters. A preset names the provider, API connection where applicable, model, and supported options. Managed ChatGPT plan presets use their connection’s bound account; standalone presets retain the locally selected account.
 - The existing prompt and model migrate into Explain and Current. Choosing another action for the same passage creates a new attempt; retry keeps the original request choices even after Settings changes.
 - Templates substitute `{{text}}`, `{{context}}`, `{{page title}}`, `{{page url}}`, `{{heading}}`, and `{{paragraph}}` once. `{{text}}` is required; unavailable referenced context blocks submission. Enabled context is included once, and template expressions are unsupported.
 - OpenAI-compatible profiles keep separate endpoint, model, temperature, and key values.
@@ -91,7 +91,7 @@ across sections; preferences and access retain their independent immediate-save 
 - Model setup appears first. Save and validation feedback stay visible while scrolling; leaving a changed draft asks before discarding it.
 - Response language and context controls apply to new submissions.
 - Chrome on-device AI is retired. Saved selections remain readable and prompt an explicit switch to ChatGPT plan or OpenAI compatible. New local requests are blocked; Saul does not switch providers automatically.
-- [ChatGPT plan](chatgpt-plan.md) uses the same sign-in flow and control labels as EZ, with separate saved sign-ins. Its account catalog supplies model names, reasoning effort, and Fast/Standard choices. Saved unavailable choices block requests rather than changing silently. It requires the local helper, omits unsupported temperature and output-token options, and never switches billing providers after a failure.
+- [ChatGPT plan](chatgpt-plan.md) uses the same sign-in flow and control labels as EZ, with shared saved sign-ins when connected to the macOS Saul credential owner; standalone browser installations retain local sign-ins. Its account catalog supplies model names, reasoning effort, and Fast/Standard choices. Saved unavailable choices block requests rather than changing silently. It requires the local helper, omits unsupported temperature and output-token options, and never switches billing providers after a failure.
 
 Local tests cover the provider boundary with deterministic fixtures. They do not establish external-provider authentication, model quality, or device performance.
 
@@ -157,8 +157,11 @@ only those tabs. A selection across windows produces one saved summary in
 display order with source-window labels.
 
 Summarize immediately opens a reader in Chrome. It first checks for a saved
-selection. For new work, it uses the configured eligible ChatGPT account, or asks
-for an account when the choice is ambiguous.
+selection. For new work, managed mode uses the saved Summary connection in Settings
+→ Summaries. First use adopts the configured `gpt-plan` connection or a sole plan
+connection; otherwise it asks once and persists the chosen connection across
+browser restarts. A removed, signed-out or permission-disabled saved choice blocks
+until repaired or explicitly changed. Standalone mode remembers its local account.
 The profile remains GPT-6 Luna, medium effort, concise English followed by
 equivalent Simplified Chinese. Missing capability blocks explicitly; no
 provider or billing fallback is chosen.

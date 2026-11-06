@@ -250,16 +250,18 @@ export function ConnectionSettings({
       setBusy(false);
     }
   };
-  const signIn = async () => {
+  const signIn = async (addingAccount = false) => {
     setBusy(true);
     setError('');
     const ac = new AbortController();
     loginController.current = ac;
     try {
+      const selected = target?.accountId ?? accountId;
+      if (!addingAccount && !selected) throw new Error('Choose an account to sign in again.');
       const result = await credentialCall(
         {
           action: 'login',
-          ...(target?.accountId ? { accountId: target.accountId } : {}),
+          ...(!addingAccount ? { accountId: selected } : {}),
           consent: true,
         },
         AbortSignal.any([ac.signal, AbortSignal.timeout(320_000)]),
@@ -371,9 +373,19 @@ export function ConnectionSettings({
                   ))}
                 </select>
               </label>
-              <button type="button" className="btn" onClick={() => void signIn()}>
+              <button
+                type="button"
+                className="btn"
+                disabled={!accountId}
+                onClick={() => void signIn()}
+              >
                 Sign in and allow plan use
               </button>
+              {!target?.accountId && (
+                <button type="button" className="btn" onClick={() => void signIn(true)}>
+                  Add another account
+                </button>
+              )}
             </>
           ) : (
             <>

@@ -1,4 +1,4 @@
-// Generated from DESIGN.md · SHA-256 df0bbe40d1dd9b669ae835f57a5d5e92db7fca0943ed08f69a1dc1980b8a256f. Do not edit.
+// Generated from DESIGN.md · SHA-256 b71b42b183d5a1ee3d40280daa9ea6ddd280bdef0c7aa091a824a522d0286a57. Do not edit.
 import SwiftUI
 
 enum DesignTokens {

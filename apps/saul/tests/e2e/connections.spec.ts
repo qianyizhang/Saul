@@ -94,7 +94,23 @@ test('managed connections preserve setup after failure and report removed models
                     signedIn: true,
                     planEnabled: true,
                   },
+                  {
+                    id: 'fixture-spare',
+                    label: 'alex@example.com · spare',
+                    signedIn: true,
+                    planEnabled: true,
+                  },
                 ],
+              };
+            else if (r.action === 'login')
+              event = {
+                type: 'result',
+                account: {
+                  id: r.accountId ?? 'fixture-new',
+                  label: 'alex@example.com',
+                  signedIn: true,
+                  planEnabled: true,
+                },
               };
             else if (r.action === 'connection-status') {
               const provider = state.library.connections?.find((p) => p.key === r.connectionKey);
@@ -155,6 +171,50 @@ test('managed connections preserve setup after failure and report removed models
   await expect(popup.getByRole('combobox', { name: 'Account', exact: true })).toHaveValue(
     'fixture-account',
   );
+  await expect(popup.getByRole('button', { name: 'Add another account', exact: true })).toHaveCount(
+    0,
+  );
+  await popup.getByRole('button', { name: 'Sign in and allow plan use', exact: true }).click();
+  await expect
+    .poll(() =>
+      worker.evaluate(() =>
+        (
+          globalThis as unknown as { connectionFixture: { requests: CredentialRequest[] } }
+        ).connectionFixture.requests.filter((r) => r.action === 'login'),
+      ),
+    )
+    .toEqual([{ action: 'login', accountId: 'fixture-account', consent: true }]);
+  await popup.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await popup.getByRole('button', { name: '＋ Add', exact: true }).click();
+  await expect(
+    popup.getByRole('button', { name: 'Sign in and allow plan use', exact: true }),
+  ).toBeDisabled();
+  await popup.getByRole('combobox', { name: 'Account', exact: true }).selectOption('fixture-spare');
+  await popup.getByRole('button', { name: 'Sign in and allow plan use', exact: true }).click();
+  await expect
+    .poll(() =>
+      worker.evaluate(() =>
+        (
+          globalThis as unknown as { connectionFixture: { requests: CredentialRequest[] } }
+        ).connectionFixture.requests
+          .filter((r) => r.action === 'login')
+          .at(-1),
+      ),
+    )
+    .toEqual({ action: 'login', accountId: 'fixture-spare', consent: true });
+  await popup.screenshot({ path: info.outputPath('reuse-account.png') });
+  await popup.getByRole('button', { name: 'Add another account', exact: true }).click();
+  await expect
+    .poll(() =>
+      worker.evaluate(() =>
+        (
+          globalThis as unknown as { connectionFixture: { requests: CredentialRequest[] } }
+        ).connectionFixture.requests
+          .filter((r) => r.action === 'login')
+          .at(-1),
+      ),
+    )
+    .toEqual({ action: 'login', consent: true });
   await popup.getByRole('button', { name: 'Cancel', exact: true }).click();
   await popup.getByRole('button', { name: '＋ Add', exact: true }).click();
   await popup.getByRole('combobox', { name: 'Type', exact: true }).selectOption('custom');

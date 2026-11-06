@@ -332,7 +332,7 @@ and the historical OAuth endpoint probe below it.
 
 ## Shared macOS credentials
 
-Providers can explicitly connect to the [Saul credential owner](../../../contracts/credentials.md)
+Preferences → Integrations can explicitly connect this app to the [Saul credential owner](../../../contracts/credentials.md)
 using `com.saul.credentials`. Long-lived keys and tokens stay in Keychain; the
 browser receives account/model summaries and results. Realtime receives only a
 short-lived client secret. A missing owner blocks without fallback. Per-install
@@ -340,3 +340,12 @@ short-lived client secret. A missing owner blocks without fallback. Per-install
 portable configuration. Disconnect app preserves the shared connection; Sign out
 and Remove key confirm their both-app scope. Custom endpoints and standalone
 browser installations retain their existing route.
+
+Built-in Summarize resolves configured plan connections through `src/digest/connection.ts`,
+not the raw registration list. `summaryConnectionKey` is a non-secret Saul preference
+in the scoped settings document. The settings owner persists it with revision checks;
+new-run admission revalidates its connection/account binding before freezing the
+account, connection key and credential owner in the batch. Missing or disconnected
+choices block; Retry keeps the batch's frozen route. Standalone summaries retain a
+local account preference. Reauthorization uses the selected registration in both
+apps; only an explicit Add another account requests a new registration.

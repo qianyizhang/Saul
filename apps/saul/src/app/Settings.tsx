@@ -723,6 +723,34 @@ export function Settings({
       </section>
       <section hidden={section !== 'summaries'} className="settings-section" aria-label="Summaries">
         <h3>Summaries</h3>
+        {settings.sharedCredentials === 'saul' && (
+          <label className="field">
+            Summary connection
+            <select
+              value={settings.summaryConnectionKey ?? ''}
+              onChange={(event) =>
+                update({ summaryConnectionKey: event.target.value || undefined })
+              }
+            >
+              <option value="">Use default connection</option>
+              {settings.summaryConnectionKey &&
+                !settings.connections.some(
+                  (c) => c.kind === 'chatgpt-plan' && c.key === settings.summaryConnectionKey,
+                ) && (
+                  <option value={settings.summaryConnectionKey} disabled>
+                    Unavailable connection
+                  </option>
+                )}
+              {settings.connections
+                .filter((c) => c.kind === 'chatgpt-plan')
+                .map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {c.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+        )}
         <label className="field">
           PDF processing
           <select

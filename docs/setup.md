@@ -184,6 +184,6 @@ command silently erases user records, accounts, shared runtimes or registrations
 ## Shared Saul credentials on macOS
 
 Follow [Apple signing and owner installation](../apps/ez/docs/releasing.md#local-signing-and-installation),
-then Connect to Saul in Chrome’s Providers settings. This optional installation
+then Connect to Saul in Chrome’s Settings → Preferences → Integrations. This optional installation
 uses the existing extension ID. It does not require the other app UI to run.
 EZ uses the same owner. Custom browser endpoints retain separate keys.

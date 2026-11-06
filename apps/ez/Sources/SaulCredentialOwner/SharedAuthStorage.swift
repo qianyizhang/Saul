@@ -56,7 +56,7 @@ package final class SharedAuthStorage: CredentialStore, Sendable {
     }
     package func apiKey() throws -> String {
         guard let data = try records.read(.openAI), let value = String(data: data, encoding: .utf8) else {
-            throw CredentialStorageError("Save an OpenAI API key in Saul Providers before running.")
+            throw CredentialStorageError("Save an OpenAI API key in Connections before running.")
         }
         return try validatedOpenAIKey(value)
     }

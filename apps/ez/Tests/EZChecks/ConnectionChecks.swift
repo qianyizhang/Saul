@@ -5,6 +5,38 @@ import SaulCredentialStorage
 
 @MainActor func connectionChecks() -> [CheckCase] {
     [
+        CheckCase("connections: sign-in reuses the selected registration and adding an account is explicit") {
+            _ in
+            var requests: [[String: Any]] = []
+            let client = SaulConnection(transport: { frame in
+                var frames = NativeFrames()
+                guard let data = try frames.append(frame).first,
+                    let packet = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                    let id = packet["id"] as? String, let request = packet["request"] as? [String: Any]
+                else { throw CheckFailure("Invalid sign-in request frame") }
+                requests.append(request)
+                let reply = try JSONSerialization.data(withJSONObject: [
+                    "id": id, "event": ["type": "result"],
+                ])
+                return NativeCredentialReplies(
+                    stream: AsyncThrowingStream { continuation in
+                        continuation.yield(reply)
+                        continuation.finish()
+                    }, close: {})
+            })
+            _ = try await client.signIn(accountID: "chosen-registration", authorize: { _ in false })
+            try expectEqual(
+                requests[0]["accountId"] as? String, "chosen-registration",
+                "Reauthorization created a registration")
+            try expectEqual(requests[0]["consent"] as? Bool, true, "Plan permission was not requested")
+            try await expectAsyncThrows(CredentialStorageError.self) {
+                _ = try await client.signIn(accountID: "", authorize: { _ in false })
+            }
+            try expectEqual(requests.count, 1, "Empty selection reached the owner")
+            _ = try await client.signIn(
+                accountID: "chosen-registration", addingAccount: true, authorize: { _ in false })
+            try expect(requests[1]["accountId"] == nil, "Explicit Add reused an existing registration")
+        },
         CheckCase("connections: stored names upgrade once without losing identity or conflicting originals") {
             directory in
             let url = directory.appendingPathComponent("settings.json")

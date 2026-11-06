@@ -1,10 +1,18 @@
 import { expect, type Worker, type BrowserContext, type Page } from '@playwright/test';
-import type { PlanRequest, PlanEvent } from '../../native/plan-protocol.mts';
-export async function installDigestProvider(worker: Worker, hold = false, failure?: string) {
+import type { PlanRequest, PlanEvent, PlanAccount } from '../../native/plan-protocol.mts';
+export async function installDigestProvider(
+  worker: Worker,
+  hold = false,
+  failure?: string,
+  accounts: PlanAccount[] = [
+    { id: 'fixture', label: 'Fixture', signedIn: true, planEnabled: true },
+  ],
+) {
   await worker.evaluate(
-    ({ hold, failure }) => {
+    ({ hold, failure, accounts }) => {
       const state = {
         requests: [] as PlanRequest[],
+        accounts,
         hold,
         active: 0,
         maxActive: 0,
@@ -31,9 +39,7 @@ export async function installDigestProvider(worker: Worker, hold = false, failur
               if (message.request.action === 'accounts')
                 emit({
                   type: 'result',
-                  accounts: [
-                    { id: 'fixture', label: 'Fixture', signedIn: true, planEnabled: true },
-                  ],
+                  accounts: state.accounts,
                 });
               else if (message.request.action === 'models')
                 emit({
@@ -80,7 +86,7 @@ export async function installDigestProvider(worker: Worker, hold = false, failur
         } as unknown as chrome.runtime.Port;
       }) as typeof chrome.runtime.connectNative;
     },
-    { hold, failure },
+    { hold, failure, accounts },
   );
 }
 

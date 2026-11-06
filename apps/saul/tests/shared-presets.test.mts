@@ -149,11 +149,16 @@ it('shares edits, migrates once, keeps accounts outside presets, and refuses a s
       fast: false,
     });
     second.settings.configuration!.presets.find((p) => p.id === migrated.id)!.effort = 'high';
+    second.settings.summaryConnectionKey = 'gpt-plan';
     expect(
       (await owner({ action: 'commit', baseline: second.revision, settings: second.settings }))
         .state,
     ).toBe('ready');
     expect(store.read().presets[0]!.effort).toBe('high');
+    expect(
+      new SharedPresetsStore(store.path).readScope('settings').value?.summaryConnectionKey,
+    ).toBe('gpt-plan');
+    expect((await sharedPresets.load(stored)).summaryConnectionKey).toBe('gpt-plan');
     expect(store.read().presets.find((p) => p.id === draw.id)).toEqual(draw);
     expect(JSON.parse(readFileSync(store.path, 'utf8')).appearance).toEqual({ theme: 'dark' });
     const current = store.read();

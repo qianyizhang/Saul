@@ -1,9 +1,9 @@
 import { ActionLabel } from '../surface/ActionLabel';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { PlanAccount } from '../../native/plan-protocol.mts';
 import type { SummaryProgress } from '../../native/protocol.mts';
 import { planCall } from '../models/chatgpt-plan';
-import { getSettings } from '../storage/settings';
+import { requestSettings } from '../storage/settings-client';
+import { summaryConnections, type SummaryConnection } from '../digest/connection';
 import { sendActionMessage, sendDigestMessage, sendWorkspaceMessage } from '../storage/client';
 import { activeItem, type DigestBatch, type DigestOverview, type Pair } from '../digest/types';
 import { digestHtml, sourceUrl } from '../digest/html';
@@ -13,12 +13,12 @@ import { ComparisonNote, SummaryInspection } from './SummaryInspection';
 import { ActionText } from './ActionText';
 
 async function summaryAccounts() {
-  const [result, settings] = await Promise.all([planCall({ action: 'accounts' }), getSettings()]);
-  const accounts = result.accounts.filter((a) => a.signedIn && a.planEnabled);
-  const chosen =
-    accounts.find((a) => a.id === settings.chatgptPlan?.accountId)?.id ||
-    (accounts.length === 1 ? accounts[0]!.id : '');
-  return { accounts, chosen };
+  const saved = await requestSettings({ action: 'read' });
+  if (saved.state !== 'ready') throw new Error(saved.error);
+  if (saved.settings.sharedCredentials === 'disconnected')
+    throw new Error('Connect this app in Settings → Preferences → Integrations.');
+  const result = await planCall({ action: 'accounts' });
+  return { ...summaryConnections(saved.settings, result.accounts), saved };
 }
 
 export function openSummary(tabIds: number[], windowId: number) {
@@ -162,7 +162,8 @@ export function SummaryReader({
   const [reused, setReused] = useState(false);
   const [comparisons, setComparisons] = useState<DigestComparison[]>([]);
   const [source, setSource] = useState<{ title: string; url: string }>();
-  const [accounts, setAccounts] = useState<PlanAccount[]>([]);
+  const [accounts, setAccounts] = useState<SummaryConnection[]>([]);
+  const [managed, setManaged] = useState(false);
   const [account, setAccount] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -175,19 +176,53 @@ export function SummaryReader({
     };
   }, []);
   const start = useCallback(
-    async (accountId: string, regenerate = false) => {
+    async (choiceKey: string, regenerate = false) => {
       setBusy(true);
       setError('');
       try {
         const custom = (await sendActionMessage({ action: 'status' })).selected;
-        let runAccountId = accountId;
+        let runAccountId = choiceKey;
+        let connectionKey: string | undefined;
         if (!custom) {
-          if (regenerate && batch?.action) {
-            runAccountId = (await summaryAccounts()).chosen;
-            if (!runAccountId)
-              throw new Error(
-                'Choose an eligible ChatGPT account in Settings before running the built-in summary.',
-              );
+          if (regenerate && batch && !batch.action) {
+            runAccountId = batch.accountId;
+            connectionKey = batch.connectionKey;
+            if (!connectionKey) {
+              const state = await requestSettings({ action: 'read' });
+              if (state.state !== 'ready') throw new Error(state.error);
+              if (state.settings.sharedCredentials === 'saul')
+                connectionKey = state.settings.connections.find(
+                  (c) => c.kind === 'chatgpt-plan' && c.accountId === runAccountId,
+                )?.key;
+            }
+          } else {
+            const resolved = await summaryAccounts();
+            const key = regenerate ? resolved.chosen : choiceKey;
+            const choice = resolved.choices.find((c) => c.key === key && c.available);
+            if (!choice?.accountId)
+              throw new Error(resolved.error || 'Choose an available summary connection.');
+            runAccountId = choice.accountId;
+            connectionKey = resolved.managed ? choice.key : undefined;
+            const { settings, revision } = resolved.saved;
+            const changed = resolved.managed
+              ? settings.summaryConnectionKey !== choice.key
+              : settings.chatgptPlan?.accountId !== choice.accountId;
+            if (changed) {
+              const saved = await requestSettings({
+                action: 'commit',
+                baseline: revision,
+                settings: resolved.managed
+                  ? { ...settings, summaryConnectionKey: choice.key }
+                  : {
+                      ...settings,
+                      chatgptPlan: {
+                        ...(settings.chatgptPlan ?? { model: '' }),
+                        accountId: choice.accountId,
+                      },
+                    },
+              });
+              if (saved.state !== 'ready') throw new Error(saved.error);
+            }
           }
           const catalog = await planCall({ action: 'models', accountId: runAccountId });
           if (
@@ -218,6 +253,7 @@ export function SummaryReader({
           id: targetId,
           tabIds: selected,
           accountId: runAccountId,
+          ...(connectionKey ? { connectionKey } : {}),
           ...(regenerate ? { regenerate: true } : {}),
         });
         if (!live.current) return;
@@ -272,13 +308,13 @@ export function SummaryReader({
           await start('custom-action');
           return;
         }
-        const { accounts: eligible, chosen } = await summaryAccounts();
+        const { choices: eligible, chosen, managed, error } = await summaryAccounts();
         if (!live.current) return;
         setAccounts(eligible);
+        setManaged(managed);
         setAccount(chosen);
         if (chosen) await start(chosen);
-        else if (!eligible.length)
-          setError('Sign in with ChatGPT and enable plan usage in Settings to summarize tabs.');
+        else if (error) setError(error);
       } catch (e) {
         setError((e as Error).message);
         setBusy(false);
@@ -429,14 +465,15 @@ export function SummaryReader({
             Summarizes selected tabs with your ChatGPT account. Web pages use loaded text; PDFs use
             the PDF processing choice saved in Settings.
           </p>
-          {accounts.length > 1 && (
+          {accounts.length > 0 && (
             <label className="field">
-              Summary account
+              {managed ? 'Summary connection' : 'Summary account'}
               <select value={account} onChange={(e) => setAccount(e.target.value)}>
-                <option value="">Choose account…</option>
+                <option value="">{managed ? 'Choose connection…' : 'Choose account…'}</option>
                 {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.label}
+                  <option key={a.key} value={a.key} disabled={!a.available}>
+                    {a.name}
+                    {!a.available ? ' · setup required' : ''}
                   </option>
                 ))}
               </select>
@@ -453,7 +490,7 @@ export function SummaryReader({
               <ActionLabel short="Summarize" full="Start summary" />
             </button>
           )}
-          {!accounts.length && error && (
+          {error && (
             <a
               href={sidePanel ? chrome.runtime.getURL('/library.html#settings') : '#settings'}
               target={sidePanel ? '_blank' : undefined}

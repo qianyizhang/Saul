@@ -65,6 +65,7 @@ export interface DigestMeta {
   windowTitle: string;
   windowId: number;
   accountId: string;
+  connectionKey?: string;
   createdAt: number;
   prompt: string;
   model: 'gpt-6-luna';
@@ -107,6 +108,7 @@ export interface DigestOperations {
       id: string;
       tabIds: number[];
       accountId: string;
+      connectionKey?: string;
       regenerate?: boolean;
     };
     result: DigestBatch;

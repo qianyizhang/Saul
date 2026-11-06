@@ -75,7 +75,10 @@ retired binding so the same ID cannot later send another key to another origin.
 Plan definitions pin their account registration; an unbound migrated entry asks
 for an explicit selection. Setup writes credentials before the public definition;
 a failed definition save keeps the setup draft and same ID for an explicit retry.
-It does not silently switch or delete another connection.
+It does not silently switch or delete another connection. Both setup forms reauthorize
+the selected registration, including on a new or unbound connection. Only the explicit
+Add another account action omits the account ID to create a registration. Equal email
+labels never justify merging registrations or their tokens.
 
 `connection-status` returns identity, endpoint, masked key suffix and availability.
 `connection-catalog` returns current models, last successful fetch time and a

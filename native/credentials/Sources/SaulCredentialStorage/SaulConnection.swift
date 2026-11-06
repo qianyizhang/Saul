@@ -44,6 +44,18 @@ public struct SaulAccount: Codable, Equatable, Sendable, Identifiable {
     apiConnected = connected
     return connected
   }
+  /// Reauthorize an existing registration unless the user explicitly adds an account.
+  public func signIn(
+    accountID: String, addingAccount: Bool = false,
+    authorize: @escaping @MainActor (URL) -> Bool
+  ) async throws -> [String: Any] {
+    guard addingAccount || !accountID.isEmpty else {
+      throw CredentialStorageError("Choose an account to sign in again.")
+    }
+    var request: [String: Any] = ["action": "login", "consent": true]
+    if !addingAccount { request["accountId"] = accountID }
+    return try await call(request, authorize: authorize)
+  }
   public func call(
     _ request: [String: Any],
     authorize: (@MainActor (URL) -> Bool)? = nil,

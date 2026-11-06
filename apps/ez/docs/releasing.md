@@ -53,7 +53,7 @@ a fingerprint different from the pin.
 
 To roll back, quit EZ and move `previous.app` to `~/Applications/EZ.app`, preserving
 the newer bundle if needed. Bundle rollback does not undo credential migration;
-old builds may need fresh sign-in. Chrome connects explicitly in Providers; EZ
+old builds may need fresh sign-in. Chrome connects explicitly in Settings → Preferences → Integrations; EZ
 uses the owner by default and offers Disconnect app. Neither UI must stay running.
 
 Stable signing alone does not guarantee prompt-free Keychain upgrades.

@@ -4,26 +4,38 @@ Saul supports the direct **Sign in with ChatGPT** preview for local and open-sou
 
 ## Setup
 
-1. Install dependencies and build Saul using Node 24 and the pinned pnpm version: `pnpm install --frozen-lockfile`, then `pnpm build`.
-2. Load or reload `.output/chrome-mv3` in Chrome. Open Saul Settings and select **ChatGPT plan**.
-3. Expand **ChatGPT helper setup** and run its command from the checkout:
+1. Build and install the selected apps and helpers using the [setup guide](../../../docs/setup.md).
+2. For shared macOS credentials, open **Settings → Preferences → Integrations → Connect to Saul** in Chrome. EZ uses the same signed owner by default; reconnect it in Preferences → Integrations if disconnected.
+3. Open **Settings → Connections → ChatGPT plan → Set up** in either app. Choose an existing account and Save to reuse its sign-in. **Sign in and allow plan use** reauthorizes the selected registration. **Add another account** explicitly creates a registration and opens browser consent.
+4. In **Presets**, choose the saved connection, an available model, effort and speed, then Save. Catalog checks do not generate; **Test generation** consumes plan allowance. Unavailable saved model options block until explicitly changed.
 
-   ```sh
-   pnpm native:install --chatgpt --extension-id YOUR_32_LETTER_EXTENSION_ID
-   ```
+A connection saved in either app is available to both. Managed connections pin the
+registration, and the signed Saul owner serializes refresh. Signing out affects both
+apps; Disconnect app only removes that app's binding. Account registrations remain
+distinct even when their email labels match. Never merge tokens or change a saved
+connection's account to resolve duplicate labels.
 
-   This registers `com.saul.chatgpt` for the exact extension ID and stages the helper and its JWT verifier dependency in a complete versioned runtime. The stable `~/.saul/bridge` entry selects the generation for new connections; running helpers retain their original payload. The first upgrade from the flat layout requires the explicit [disconnected maintenance window](../../../docs/setup.md#one-time-helper-migration). The launcher records the current Node path and any HTTP/HTTPS proxy and bypass settings from the installing shell, then enables Node's environment proxy support. This keeps auth, signing-key retrieval, and inference on the same route when Chrome launches the helper without your shell environment. Rerun after updating Saul, moving Node, or changing your proxy. The launcher is private (`0700`); do not share it if your proxy URL contains credentials. The existing installer's `--browser`, `--install-dir`, `--manifest-dir`, and `--dry-run` options also apply.
+Built-in **Call Saul → Summarize** uses the saved **Summary connection** in Settings
+→ Summaries. On first use it adopts the configured `gpt-plan` connection, or a sole
+configured plan connection. Multiple connections without a default require one
+choice, saved when starting the summary and retained across browser restarts.
+Other auth registrations do not appear as extra managed connections. A removed,
+signed-out or permission-disabled saved choice blocks until repaired or explicitly
+changed. Custom call presets continue to use their own preset's connection.
 
-4. Choose **Continue with ChatGPT** and complete consent in the opened browser tab. The helper listens only on `127.0.0.1`, with a temporary port and `/auth/callback` path. Sign-in survives the popup closing; reopen Settings to choose the saved account afterward.
-5. Return to Settings. A sole saved account is selected automatically, and eligible accounts load their models automatically. Name the preset, choose an available model, effort and speed, then **Save**. **Refresh models** retries catalog loading. **Test generation** sends a small prompt and consumes plan quota. A model catalog entry alone does not prove inference access.
+Standalone browser installations retain the `com.saul.chatgpt` helper and local
+credential store. Install it with Node 24 and the pinned pnpm version:
 
-Use the full Saul workspace for a sign-in flow that stays visible while the authorization tab is open. Saved accounts use distinct registration labels even when their email addresses match. Adding another account or workspace creates a separate registration; returning sign-in reuses the existing client and host IDs.
+```sh
+pnpm native:install --chatgpt --extension-id YOUR_32_LETTER_EXTENSION_ID
+```
 
-EZ uses the same direct ChatGPT flow and account-control vocabulary. Its saved
-sign-ins remain separate from Saul's; signing out of one app does not sign out of
-the other. A recipe selects a named preset; unavailable saved models, effort, or
-Fast choices block the request until explicitly changed. Catalog refresh never
-silently replaces a saved choice.
+Reload the extension after building, then use the standalone account controls in
+Settings. The helper listens only on `127.0.0.1` with a temporary `/auth/callback`
+route. Its versioned runtime and private launcher preserve the installation-time
+Node and proxy configuration; rerun installation after changing them. See the
+[helper migration](../../../docs/setup.md#one-time-helper-migration). Standalone
+Summarize remembers its local account choice without changing the shared library.
 
 ## Supported request surface
 
@@ -62,16 +74,16 @@ text or an exact page-coverage record.
 
 ## Credentials and sign-out
 
-- Tokens stay in the helper's `~/.saul/chatgpt/accounts.json`, with directory permissions `0700` and file permissions `0600`. They are excluded from browser storage, page messages and reading exports. Treat the credential directory as private; do not sync or commit it.
-- The native helper owns OAuth state, nonce, PKCE, token exchange and signature validation using `jose`. A stable opaque host ID is written before authorization. Access/refresh/ID tokens and scopes rotate together in an atomic file replacement.
-- A new issued client ID is retained before token exchange. If exchange fails, select that signed-out registration and choose **Continue with ChatGPT** to get a fresh code without creating another app registration. Pending registrations cannot authorize inference until identity validation succeeds.
+- In shared macOS mode, tokens stay in Keychain behind the signed Saul owner. Standalone mode keeps `~/.saul/chatgpt/accounts.json` with directory permissions `0700` and file permissions `0600`. Neither mode exposes tokens to browser storage, page messages or reading exports.
+- The selected credential owner owns OAuth state, nonce, PKCE, token exchange and signature validation. The standalone Node helper uses `jose`; the shared signed owner uses native Swift verification. A stable opaque host ID is written before authorization. Access/refresh/ID tokens and scopes rotate together through the owner's verified storage write.
+- A new issued client ID is retained before token exchange. If exchange fails, select that signed-out registration and reauthorize it to get a fresh code without creating another app registration. Managed setup uses **Sign in and allow plan use**; standalone setup uses **Continue with ChatGPT**. Pending registrations cannot authorize inference until identity validation succeeds.
 - Refresh operations use a cross-process lock. Temporary network errors preserve credentials; terminal refresh errors clear unusable tokens while retaining the account registration.
-- **Sign out** cancels that account's requests in the connected helper and attempts refresh-token revocation using OpenAI's discovery document. Local tokens are cleared even if remote revocation fails; the UI reports that case and directs you to disconnect Saul in ChatGPT settings. Sign-out retains the registration and host ID for reauthorization.
+- **Sign out** attempts refresh-token revocation using OpenAI's discovery document. Local tokens are cleared even if remote revocation fails; the UI reports that case and directs you to disconnect Saul in ChatGPT settings. Managed sign-out affects both apps. Sign-out retains the registration and host ID for reauthorization.
 - Browser profiles using the same helper installation share its saved accounts. Each reading job freezes the selected account and model; changing Settings never reroutes an existing job to a different account.
 
 The plan helper does not expose a general HTTP proxy, shell tool, MCP server, or tab operations. Replies are validated against the requested operation. Its extension port accepts account controls only from Saul's settings/workspace pages and generation from those pages or the trusted offscreen runner. Codex tab access remains separately opt-in.
 
-To remove this integration, sign out, disconnect its native connection, and remove `com.saul.chatgpt.json` from the browser's `NativeMessagingHosts` directory. Retain its versioned payload; do not delete individual files through `bin` or `bridge`. Remove `~/.saul/chatgpt` only if you also want to discard the saved host/account mappings. Full runtime cleanup requires all installed helpers and MCP to be disconnected; see the [helper lifecycle](native-messaging.md).
+For shared mode, disconnect the app in Preferences → Integrations; sign out first only if you intend to disconnect the shared account in both apps. For standalone mode, sign out, disconnect its native connection, and remove `com.saul.chatgpt.json` from the browser's `NativeMessagingHosts` directory. Retain its versioned payload; do not delete individual files through `bin` or `bridge`. Remove `~/.saul/chatgpt` only if you also want to discard the saved host/account mappings. Full runtime cleanup requires all installed helpers and MCP to be disconnected; see the [helper lifecycle](native-messaging.md).
 
 ## Verification and limits
 
@@ -88,11 +100,11 @@ Protocol sources (sign-in, sessions, and model guidance rechecked 2026-10-18):
 ## Speech preview
 
 Settings → Presets supports Speak presets with an OpenAI Realtime model and voice.
-Settings → Providers owns the separate API connection and key. The preview generates
+Settings → Connections owns the separate API connection and key. The preview generates
 up to 512 characters, offers Stop and an audio player, and discards input/audio when
 you leave. It requires saved choices, does not use ChatGPT sign-in, and never saves
-audio or text to reading history. Both apps preserve/edit Speak presets; only Saul
-executes the preview.
+audio or text to reading history. Both apps preserve/edit Speak presets and execute the preview through the shared
+credential owner in managed macOS mode.
 
 The [Speech API guide](https://developers.openai.com/api/docs/guides/text-to-speech)
 schedules `gpt-4o-mini-tts` shutdown for January 6, 2027 and directs integrations to

@@ -289,7 +289,8 @@ keys during migration. An unbound legacy connection asks the user to choose its
 account; do not resolve conflicting account choices automatically. Setup is specific
 to plan sign-in, official API key, or a custom endpoint. Keep credentials behind
 the selected owner, and serialize refresh there. Replace key and Sign in again
-repair the same identity. Sign out and Remove key state their effect on both apps.
+repair the same identity. In plan setup, choose a saved account before reauthorizing;
+Add another account is the explicit registration action. Sign out and Remove key state their effect on both apps.
 
 Check is an explicit bounded protocol check, not generation. Show failures with a
 recovery action and distinguish authentication, helper availability and catalog
@@ -529,7 +530,12 @@ a page run. Local file checking and rollback belong in a named disclosure.
 Preserve unsubmitted editor fields within the tab through navigation and reload.
 In the reader, keep saved action/preset in Details, progress and Stop visible,
 and intermediate model output in inspection. Built-in bilingual summaries keep
-their existing layout.
+their existing layout. Settings → Summaries owns the built-in Summary connection.
+Use saved connection names in its selector, and retain unavailable saved choices for
+repair. First use adopts the configured `gpt-plan` connection or a sole configured
+plan connection; otherwise ask once and save the choice when starting. Later calls
+reuse it across browser restarts. A saved unavailable connection blocks rather than
+switching accounts. Raw auth registrations remain in connection setup only.
 
 The page context menu offers **Call Saul** for the clicked HTTP(S) tab.
 Chrome reading actions open the summary in the browser's side panel and keep

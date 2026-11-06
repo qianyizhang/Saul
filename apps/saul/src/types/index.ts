@@ -111,6 +111,8 @@ export interface UserSettings {
   /** Per-installation choice; never portable to another machine's settings. */
   sharedCredentials?: 'saul' | 'disconnected';
   summaryPdfProcessing?: 'attachment' | 'local';
+  /** Built-in Summarize's saved managed connection; never an auth registration ID. */
+  summaryConnectionKey?: string;
   sharedPresetRevision?: number;
   connections: ConnectionDefinition[];
   /** App-local connection key → API profile ID; contains no credential. */

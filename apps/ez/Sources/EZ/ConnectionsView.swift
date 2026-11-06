@@ -187,7 +187,10 @@ struct ConnectionsView: View {
                     Text("Choose an account").tag("")
                     ForEach(model.profiles) { profile in Text(profile.label).tag(profile.id) }
                 }.disabled(target?.accountId != nil)
-                Button("Sign in and allow plan use") { signIn() }.disabled(model.offline)
+                Button("Sign in and allow plan use") { signIn() }.disabled(model.offline || account.isEmpty)
+                if target?.accountId == nil {
+                    Button("Add another account") { signIn(addingAccount: true) }.disabled(model.offline)
+                }
             } else {
                 if kind == "custom" {
                     Text("Endpoint").font(AppStyle.caption)
@@ -215,7 +218,7 @@ struct ConnectionsView: View {
             }
         }.disabled(busy || model.configurationLocked)
     }
-    private func signIn() {
+    private func signIn(addingAccount: Bool = false) {
         model.signingIn = true
         busy = true
         error = nil
@@ -226,9 +229,9 @@ struct ConnectionsView: View {
                 loginTask = nil
             }
             do {
-                var request: [String: Any] = ["action": "login", "consent": true]
-                if let existing = target?.accountId { request["accountId"] = existing }
-                let reply = try await model.auth.call(request, authorize: { NSWorkspace.shared.open($0) })
+                let reply = try await model.auth.signIn(
+                    accountID: target?.accountId ?? account, addingAccount: addingAccount,
+                    authorize: { NSWorkspace.shared.open($0) })
                 try await model.auth.load()
                 model.profiles = model.auth.accounts
                 if let profile = reply["account"] as? [String: Any], let id = profile["id"] as? String {

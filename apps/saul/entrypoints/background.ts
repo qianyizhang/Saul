@@ -2,6 +2,7 @@ import { callPresetStorage } from '../src/storage/call-presets';
 import { snapshotSelection, captureTab, verifyCaptureTab } from '../src/digest/capture';
 import { compareRunInput } from '../src/reading/input-change';
 import { validateDigest } from '../src/digest/contracts';
+import { validateSummaryConnection } from '../src/digest/connection';
 import { initSummaryActions } from '../src/digest/actions';
 import { initPlanBridge } from '../src/native/plan';
 import { initCredentialBridge } from '../src/native/credentials';
@@ -488,6 +489,10 @@ export default defineBackground(() => {
                 ? 'saul'
                 : 'local';
           const selected = (await actionState()).selected;
+          if (r.action === 'start' && !selected && preference?.state === 'ready') {
+            validateSummaryConnection(preference.settings, r.accountId, r.connectionKey);
+            if (r.connectionKey) snapshot.connectionKey = r.connectionKey;
+          }
           if (selected) {
             snapshot.action = structuredClone(selected);
             snapshot.prompt = selected.revision.source;

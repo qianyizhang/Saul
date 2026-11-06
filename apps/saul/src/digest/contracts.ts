@@ -5,7 +5,7 @@ export function validateDigest(v: unknown): asserts v is DigestRequest {
   const keys: Record<string, string[]> = {
     list: [],
     active: [],
-    start: ['id', 'tabIds', 'accountId', 'regenerate'],
+    start: ['id', 'tabIds', 'accountId', 'connectionKey', 'regenerate'],
     resolve: ['id', 'tabIds'],
     inspect: ['id', 'index', 'tabId'],
     get: ['id'],
@@ -28,6 +28,9 @@ export function validateDigest(v: unknown): asserts v is DigestRequest {
       (typeof v.accountId !== 'string' ||
         !v.accountId ||
         v.accountId.length > 256 ||
+        (v.connectionKey !== undefined &&
+          (typeof v.connectionKey !== 'string' ||
+            !/^[a-z][a-z0-9-]{0,63}$/.test(v.connectionKey))) ||
         (v.regenerate !== undefined && typeof v.regenerate !== 'boolean'))) ||
     (v.action === 'inspect' &&
       (!Number.isSafeInteger(v.index) ||
