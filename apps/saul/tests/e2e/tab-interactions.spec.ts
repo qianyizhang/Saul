@@ -33,7 +33,7 @@ test('both tab surfaces show readable titles while retaining original browser da
     await article.evaluate((title) => {
       document.title = title;
     }, original);
-    await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await ui.getByRole('button', { name: 'Refresh tabs', exact: true }).click();
     const windowRow = popup.locator('.tab-row').filter({
       has: popup.getByRole('checkbox', { name: 'Select ' + label, exact: true }),
     });
@@ -61,7 +61,7 @@ test('both tab surfaces show readable titles while retaining original browser da
   await article.evaluate(() => {
     document.title = '<img src=x onerror=alert(1)> Research';
   });
-  await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await ui.getByRole('button', { name: 'Refresh tabs', exact: true }).click();
   await expect(boardRow.locator('.tab-title')).toHaveText('Research');
   await host.setViewportSize({ width: 390, height: 850 });
   await host.evaluate(() => window.fixtureHost.theme('dark'));
@@ -205,7 +205,7 @@ test('Tab board groups across windows, moves directly without deduplication, and
     },
     { url: article.url(), destination },
   );
-  await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await ui.getByRole('button', { name: 'Refresh tabs', exact: true }).click();
   await ui.locator('.tab[data-tab-id="' + articleId + '"] input').check();
   await ui.getByRole('button', { name: 'Group', exact: true }).click();
   await expect(ui.locator('#existing-group')).toBeHidden();
@@ -281,7 +281,7 @@ test('group drags preserve metadata and individual tab drops join and leave grou
     { a, b, origin: fixtureServer.origin },
   );
   await matchWorkspaceWindow(host);
-  await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await ui.getByRole('button', { name: 'Refresh tabs', exact: true }).click();
   const target = ui.locator('.window[data-window-id="' + setup.destination + '"]');
   await ui.locator('[data-group-id="' + setup.groupId + '"]').dragTo(target.locator('.window-end'));
   await expect
@@ -300,7 +300,7 @@ test('group drags preserve metadata and individual tab drops join and leave grou
     fixtureServer.origin + '/article#unrelated',
   );
   await matchWorkspaceWindow(host);
-  await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await ui.getByRole('button', { name: 'Refresh tabs', exact: true }).click();
   await expect(ui.getByRole('button', { name: 'Undo', exact: true })).toBeVisible();
   await ui.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect
@@ -337,7 +337,7 @@ test('group drags preserve metadata and individual tab drops join and leave grou
     ((await call('saul_tabs_list')) as TabSnapshot).tabs.find((t) => t.id === a.id)!.groupId,
   ).toBe(groupId);
   await worker.evaluate((id) => chrome.tabGroups.update(id, { collapsed: true }), groupId);
-  await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await ui.getByRole('button', { name: 'Refresh tabs', exact: true }).click();
   const priorMove = (await call('saul_tabs_list')) as TabSnapshot;
   await ui.locator('[data-group-id="' + groupId + '"]').dragTo(ui.locator('.new-window'));
   await expect

@@ -18,7 +18,7 @@ _Avoid_: Lite app, quick app, Quick Look
 
 
 **Lookup**:
-One independent request and its answer, using a action, input values, and a preset.
+One independent request and its answer, using an action, input values, and a preset.
 
 
 **Preset override**:

@@ -2,7 +2,7 @@
   "name": "saul",
   "description": "Local-first reading explanations and tab organization for Chrome.",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "packageManager": "pnpm@11.0.3",
   "engines": {
@@ -10,7 +10,7 @@
   },
   "scripts": {
     "design:generate": "node ../../design/generate.mts --css assets/design-tokens.css --css native/ui/design-tokens.css --typescript src/design/tokens.ts",
-    "design:check": "pnpm design:generate --check",
+    "design:check": "node ../../design/generate-symbols.mts --web-only --check && pnpm design:generate --check",
     "dev": "wxt",
     "build": "pnpm build:native && wxt build",
     "zip": "pnpm build:native && wxt zip",

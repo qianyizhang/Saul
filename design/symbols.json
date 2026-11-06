@@ -1,0 +1,114 @@
+[
+  {
+    "id": "copy",
+    "label": "Copy",
+    "meaning": "Copy the identified text to the clipboard.",
+    "web": "Copy",
+    "native": "doc.on.doc"
+  },
+  {
+    "id": "copied",
+    "label": "Copied",
+    "meaning": "The clipboard write succeeded.",
+    "web": "Check",
+    "native": "checkmark"
+  },
+  {
+    "id": "send",
+    "label": "Send",
+    "meaning": "Submit the current follow-up or message.",
+    "web": "Send",
+    "native": "paperplane"
+  },
+  {
+    "id": "refresh",
+    "label": "Refresh",
+    "meaning": "Read current tabs, accounts or models; never generate.",
+    "web": "RefreshCw",
+    "native": "arrow.triangle.2.circlepath"
+  },
+  {
+    "id": "reload",
+    "label": "Reload",
+    "meaning": "Reload saved settings, confirming discard of a dirty draft.",
+    "web": "RotateCw",
+    "native": "arrow.clockwise"
+  },
+  {
+    "id": "hideSidebar",
+    "label": "Hide sidebar",
+    "meaning": "Hide navigation while retaining the current content and draft.",
+    "web": "PanelLeftClose",
+    "native": "sidebar.left"
+  },
+  {
+    "id": "showSidebar",
+    "label": "Show sidebar",
+    "meaning": "Reveal navigation without changing the current content or draft.",
+    "web": "PanelLeftOpen",
+    "native": "sidebar.left"
+  },
+  {
+    "id": "openWorkspace",
+    "label": "Open main window",
+    "meaning": "Open the full workspace from a compact surface.",
+    "web": "AppWindow",
+    "native": "macwindow"
+  },
+  {
+    "id": "run",
+    "label": "Run",
+    "meaning": "Execute the selected action with the current inputs.",
+    "web": "Play",
+    "native": "play.fill"
+  },
+  {
+    "id": "stop",
+    "label": "Stop",
+    "meaning": "Stop active work; retained output remains available.",
+    "web": "Square",
+    "native": "stop.fill"
+  },
+  {
+    "id": "reuse",
+    "label": "Reuse",
+    "meaning": "Restore a saved request as an editable draft without sending.",
+    "web": "Undo2",
+    "native": "arrow.uturn.backward"
+  },
+  {
+    "id": "regenerate",
+    "label": "Regenerate",
+    "meaning": "Start a new generation from the saved request; allowance or charges apply.",
+    "web": "Sparkles",
+    "native": "sparkles"
+  },
+  {
+    "id": "more",
+    "label": "More",
+    "meaning": "Reveal additional actions for the current item.",
+    "web": "Ellipsis",
+    "native": "ellipsis"
+  },
+  {
+    "id": "details",
+    "label": "Details",
+    "meaning": "Inspect saved inputs, output and recorded choices.",
+    "web": "Info",
+    "native": "info.circle"
+  },
+  {
+    "id": "close",
+    "label": "Close",
+    "meaning": "Dismiss this surface without stopping active work.",
+    "web": "X",
+    "native": "xmark"
+  },
+  {
+    "id": "download",
+    "label": "Download",
+    "meaning": "Save the generated image in its original format.",
+    "web": "Download",
+    "native": "arrow.down.to.line"
+  }
+]

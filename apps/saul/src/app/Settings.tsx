@@ -168,7 +168,7 @@ export function Settings({
           aria-label="Reload saved settings"
           title="Reload saved settings"
         >
-          <ActionLabel short="Reload" full="Reload saved settings" />
+          <ActionLabel short="Reload" full="Reload saved settings" symbol="reload" />
         </button>
       </div>
     ) : (
@@ -1041,7 +1041,7 @@ export function Settings({
                 aria-label="Reload saved settings"
                 title="Reload saved settings"
               >
-                <ActionLabel short="Reload" full="Reload saved settings" />
+                <ActionLabel short="Reload" full="Reload saved settings" symbol="reload" />
               </button>
             )}
             <button

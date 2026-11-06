@@ -196,7 +196,7 @@ test('macOS native Chrome names import initially and apply through the reviewed 
       approvalToken: plan._meta.approvalToken!,
     }),
   ).rejects.toThrow('stale');
-  await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await ui.getByRole('button', { name: 'Refresh tabs', exact: true }).click();
   await expect(
     ui.getByRole('heading', { name: 'Changed outside Saul', exact: true }),
   ).toBeVisible();
@@ -274,7 +274,7 @@ test('MCP App renders real tabs, sends a Codex request and applies only after it
   await ui.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(ui.locator('.proposal-summary')).toContainText('Applied');
   await expect(ui.getByRole('heading', { name: 'Reading library', exact: true })).toBeVisible();
-  await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await ui.getByRole('button', { name: 'Refresh tabs', exact: true }).click();
   await expect(ui.getByRole('heading', { name: 'Reading library', exact: true })).toBeVisible();
   await expect(ui.getByRole('button', { name: 'Apply', exact: true })).toHaveCount(0);
   await captureWorkspace(host, ui, info.outputPath('workspace-applied.png'));
@@ -311,7 +311,7 @@ test('shared window labels load initially and duplicate removals stay editable u
     dryRun: false,
   });
   await expect(popup.getByRole('heading', { level: 2 })).toContainText('Existing reading');
-  await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await ui.getByRole('button', { name: 'Refresh tabs', exact: true }).click();
   await expect(ui.getByRole('heading', { name: 'Existing reading', exact: true })).toBeVisible();
   before = (await call('saul_tabs_list')) as TabSnapshot;
   const copies = before.tabs.filter((t) => t.url === article.url()).map((t) => t.id);
@@ -331,7 +331,7 @@ test('shared window labels load initially and duplicate removals stay editable u
       { title: 'Duplicate copy', tabIds: [copies[1]!] },
     ],
   });
-  await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await ui.getByRole('button', { name: 'Refresh tabs', exact: true }).click();
   await expect(ui.locator('#proposal')).toContainText('1 duplicate will close');
   expect(((await call('saul_tabs_list')) as TabSnapshot).tabs).toHaveLength(before.tabs.length);
   await ui.locator('#proposal > details > summary').click();
@@ -414,7 +414,7 @@ test('drag feedback follows the pointer, scrolls while held and commits manual m
       .id!;
   }, fixtureServer.origin);
   await matchWorkspaceWindow(host);
-  await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await ui.getByRole('button', { name: 'Refresh tabs', exact: true }).click();
   await expect(ui.locator(`.window[data-window-id="${destinationId}"]`)).toBeVisible();
   const before = (await call('saul_tabs_list')) as TabSnapshot;
   const articleId = before.tabs.find((tab) => tab.url === article.url())!.id;
@@ -491,7 +491,7 @@ test('compact board keeps tab controls discoverable and cancels rename and move 
     }
     return ids;
   }, fixtureServer.origin);
-  await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await ui.getByRole('button', { name: 'Refresh tabs', exact: true }).click();
   await expect(ui.locator('.window')).toHaveCount(3);
   await expect(ui.getByRole('combobox', { name: 'Browser session' })).toBeHidden();
   await expect(ui.getByRole('textbox', { name: 'How would you like' })).toBeHidden();
@@ -571,7 +571,7 @@ test('window cards fold, reorder locally and accept direct drops while folded', 
       (await chrome.windows.create({ url: origin + '/article#destination', focused: false }))!.id!,
     fixtureServer.origin,
   );
-  await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await ui.getByRole('button', { name: 'Refresh tabs', exact: true }).click();
   const before = (await call('saul_tabs_list')) as TabSnapshot;
   const tab = before.tabs.find((t) => t.url === article.url())!;
   const source = ui.locator('.window[data-window-id="' + tab.windowId + '"]');

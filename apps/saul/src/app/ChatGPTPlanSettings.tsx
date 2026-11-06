@@ -1,3 +1,4 @@
+import { ControlIcon } from '../surface/ControlIcon';
 import { useEffect, useRef } from 'react';
 import { ActionLabel } from '../surface/ActionLabel';
 import { planCall } from '../models/chatgpt-plan';
@@ -139,8 +140,9 @@ export function ChatGPTPlanSettings({
                   )
                 }
                 aria-label="Refresh models"
+                title="Refresh models"
               >
-                <ActionLabel short="Refresh" full="Refresh models" />
+                <ControlIcon symbol="refresh" />
               </button>
               <button
                 className="btn"
@@ -246,11 +248,12 @@ export function ChatGPTPlanSettings({
               className="btn"
               disabled={locked || !active?.planEnabled}
               aria-label="Refresh models"
+              title="Refresh models"
               onClick={() =>
                 void plan.operation('models', (signal) => plan.loadModels(value.accountId, signal))
               }
             >
-              <ActionLabel short="Refresh" full="Refresh models" />
+              <ControlIcon symbol="refresh" />
             </button>
           </div>
           <details>
@@ -261,6 +264,7 @@ export function ChatGPTPlanSettings({
               className="btn"
               disabled={locked}
               aria-label="Refresh accounts"
+              title="Refresh accounts"
               onClick={() =>
                 void plan.operation('accounts', async (signal) => {
                   const result = await planCall({ action: 'accounts' }, signal);
@@ -271,7 +275,7 @@ export function ChatGPTPlanSettings({
                 })
               }
             >
-              <ActionLabel short="Refresh" full="Refresh accounts" />
+              <ControlIcon symbol="refresh" />
             </button>
           </details>
           <p className="small muted standard-only">
@@ -285,7 +289,7 @@ export function ChatGPTPlanSettings({
               onCancel={() => plan.setWelcome(false)}
             >
               <strong>You're using your ChatGPT plan</strong>
-              <p>Eligible Saul requests use your plan after you save this provider.</p>
+              <p>Eligible Saul requests use your plan after you save this connection.</p>
               <button
                 className="btn primary"
                 aria-label="Got it"

@@ -1,3 +1,4 @@
+import { controlSymbols } from './control-symbols';
 import { createBoardDrag } from './board-drag';
 import type { CallToolResult } from '@modelcontextprotocol/client';
 import type { McpUiHostCapabilities } from '@modelcontextprotocol/ext-apps';
@@ -68,6 +69,10 @@ function $<K extends keyof typeof tags>(id: K): HTMLElementTagNameMap[(typeof ta
     throw new Error(`Missing board element: ${id}`);
   return node as HTMLElementTagNameMap[(typeof tags)[K]];
 }
+
+$('refresh').innerHTML = controlSymbols.refresh.svg;
+$('refresh').setAttribute('aria-label', 'Refresh tabs');
+$('refresh').title = 'Refresh tabs';
 
 const minimumModeKey = 'saul-board-minimum-mode';
 function setMinimumMode(value: boolean) {
@@ -809,7 +814,10 @@ function render() {
   $('refresh').disabled = !ready || busy || staging || refreshing;
   $('ask').disabled =
     busy || staging || refreshing || (standalone ? false : !ready || !capabilities.message);
-  $('ask').textContent = standalone ? 'Copy message' : 'Send';
+  const messageLabel = standalone ? 'Copy message' : 'Send';
+  $('ask').innerHTML = controlSymbols[standalone ? 'copy' : 'send'].svg;
+  $('ask').setAttribute('aria-label', messageLabel);
+  $('ask').title = messageLabel;
   $('session').disabled = busy || staging || refreshing || !data?.sessions?.length;
   $('session').replaceChildren(
     ...(data?.sessions ?? []).map((s) => {

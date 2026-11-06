@@ -1,3 +1,4 @@
+import { ControlIcon } from '../surface/ControlIcon';
 import { ActionLabel } from '../surface/ActionLabel';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MoreHorizontal } from 'lucide-react';
@@ -228,9 +229,11 @@ export function Tabs() {
         <button
           className="btn quiet"
           disabled={busy}
+          aria-label="Refresh tabs"
+          title="Refresh tabs"
           onClick={() => void refresh().catch((e: Error) => setError(e.message))}
         >
-          Refresh
+          <ControlIcon symbol="refresh" />
         </button>
       </div>
       <ActiveSummary />

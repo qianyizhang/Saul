@@ -358,7 +358,7 @@ test('workspace navigation protects drafts and offers only available connections
   await popup.evaluate(() => {
     location.hash = 'tabs';
   });
-  await expect(popup.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
+  await expect(popup.getByRole('button', { name: 'Refresh tabs', exact: true })).toBeVisible();
   await popup.goBack();
   await expect(popup.getByLabel('Model name', { exact: true })).not.toHaveValue('unsaved-model');
 

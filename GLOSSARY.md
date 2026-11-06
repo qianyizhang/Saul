@@ -19,5 +19,8 @@ These meanings apply across applications; surface-specific names live in the
 Existing JSON keys such as `recipes` and `recipeSnapshot` remain migration contracts.
 
 Use Settings, History, Details, More, Save, Cancel, Copy and Stop consistently.
-Explain submits a captured passage; Run executes an EZ action; Send submits a follow-up. Use again restores a
+Explain submits a captured passage; Run executes an EZ action; Send submits a message or follow-up. Reuse restores a
 draft; Regenerate starts another attempt. Shared words do not imply shared storage.
+
+**Min Mode** is the compact everyday presentation with routine guidance omitted.
+**Refresh** reads current state; **Reload** reads saved settings. Neither generates.

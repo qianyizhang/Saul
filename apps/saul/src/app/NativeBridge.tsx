@@ -1,3 +1,4 @@
+import { ControlIcon } from '../surface/ControlIcon';
 import { ActionLabel } from '../surface/ActionLabel';
 import { PAGE_ACCESS_KEY } from '../native/pages';
 import { useEffect, useState } from 'react';
@@ -144,10 +145,7 @@ export function NativeBridge() {
             aria-label={copied === 'install' ? 'Copied setup command' : 'Copy setup command'}
             title="Copy setup command"
           >
-            <ActionLabel
-              short={copied === 'install' ? 'Copied' : 'Copy'}
-              full={copied === 'install' ? 'Copied setup command' : 'Copy setup command'}
-            />
+            <ControlIcon symbol={copied === 'install' ? 'copied' : 'copy'} />
           </button>
           <p className="small muted standard-only">
             2. Enable access above and choose Reconnect. From the monorepo root, run pnpm --dir

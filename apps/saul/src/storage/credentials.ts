@@ -100,7 +100,7 @@ export const nativeCredentialAccess: CredentialAccess = {
       try {
         await nativeCredentialCall({ action: 'migration-verified' });
       } catch {
-        // The binding is already durable. Providers reads the owner's retirement
+        // The binding is already durable. Connections reads the owner's retirement
         // state and offers an explicit retry without reporting this save as failed.
       }
     }

@@ -76,15 +76,17 @@ private struct InspectionTextBlock: View {
             HStack {
                 Text(label).font(AppStyle.caption.weight(.semibold))
                 Spacer()
-                Button("Copy") {
+                Button {
                     copiedText = text
                     NSPasteboard.general.clearContents()
                     notice =
                         NSPasteboard.general.setString(text, forType: .string)
                         ? "Copied" : "Could not copy. Select the text and copy it manually."
+                } label: {
+                    ControlLabel(symbol: .copy, title: "Copy \(label)")
                 }
                 .buttonStyle(.borderless).disabled(text.isEmpty)
-                .accessibilityLabel("Copy \(label)")
+                .help("Copy \(label)").accessibilityLabel("Copy \(label)")
             }
             if copiedText == text && !notice.isEmpty {
                 Text(notice).font(AppStyle.caption).foregroundStyle(.secondary)

@@ -174,7 +174,7 @@ an app can opt into it. The [macOS Saul credential owner](credentials.md) implem
 ## Presentation
 
 [DESIGN.md](../DESIGN.md) owns visual roles and interaction semantics, including
-Minimum Mode, action placement, focus, error disclosure and input/output inspection.
+Min Mode, action placement, focus, error disclosure and input/output inspection.
 Platform controls and density remain bespoke. Build/fixture checks do not establish
 native visual or live-provider acceptance.
 
@@ -213,7 +213,7 @@ changing configuration owners.
 
 Further sharing candidates are literal action preparation and presentation
 preferences. Action input contracts differ between apps; browser Call actions
-and native template actions retain their runtime contracts. They remain app-scoped. Minimum Mode, EZ shortcuts,
+and native template actions retain their runtime contracts. They remain app-scoped. Min Mode, EZ shortcuts,
 window placement and board layout still use app-local stores. Credentials, history and active execution are outside the unified config. Saved history uses the [shared SQLite store](../docs/architecture.md#shared-history).
 
 ### Example configurations

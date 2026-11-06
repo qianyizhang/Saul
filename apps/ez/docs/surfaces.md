@@ -6,7 +6,7 @@ and persistence; [design](design.md) owns presentation.
 | Surface                | Responsibility                                                                                                                                 |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Quick Lookup panel** | Compact action/input selection, Run/Stop, reading, Copy/Download; disclose presets and Details on demand. Open the main window for management. |
-| **Main window**        | Lookups plus history search, reuse, export, deletion and Settings. Own feature growth, configuration and providers.                            |
+| **Main window**        | Lookups plus history search, reuse, export, deletion and Settings. Own feature growth, configuration and connections.                            |
 
 ## Shared workspace
 
@@ -18,7 +18,7 @@ and persistence; [design](design.md) owns presentation.
 - New main-window lookups put the composer below the heading. Edit/Hide reveals or
   hides the retained draft; Reuse explicitly restores the saved request.
 - Answers prioritize Copy (Download for images). Min Mode puts Reuse/Export/Delete
-  in More and inspection in Details; Standard also shows Use again. Quick Lookup
+  in More and inspection in Details; Standard also shows Reuse. Quick Lookup
   hides inputs while reading in Min Mode. New/Stop remain reachable.
 - Min Mode defaults on and is local to EZ. Settings → Preferences and the panel
   menu change the same preference. Exact model, requested/actual tier and metrics
@@ -50,7 +50,7 @@ Settings → Shortcuts owns bindings. Global Quick Lookup (⌃⌥Space), Setting
 and panel hiding stay fixed. [Architecture](architecture.md#selector-scrolling-and-keyboard-commands)
 owns input routing and conflict handling.
 
-Illustration is a Draw action in this workspace. Providers owns credentials,
+Illustration is a Draw action in this workspace. Connections owns credentials,
 Presets image defaults, the Draw composer its runtime PNG/GIF choice, and History
 saved image bytes in SQLite. Launcher input always waits for Run;
 unsaved image recovery never generates again.

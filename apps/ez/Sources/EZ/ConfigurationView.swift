@@ -28,7 +28,7 @@ struct ConfigurationView: View {
                             .font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
                     }
                     Spacer()
-                    Button(model.minimumMode ? "Reload" : "Reload saved settings") {
+                    Button {
                         let reload = {
                             model.refreshConfiguration()
                             preset = model.configuration.presets.first
@@ -39,6 +39,12 @@ struct ConfigurationView: View {
                             confirmSelection = true
                         } else {
                             reload()
+                        }
+                    } label: {
+                        if model.minimumMode {
+                            ControlLabel(symbol: .reload, title: "Reload saved settings")
+                        } else {
+                            Text("Reload saved settings")
                         }
                     }.help("Reload saved settings").accessibilityLabel("Reload saved settings")
                 }

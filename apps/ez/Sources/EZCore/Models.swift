@@ -174,7 +174,7 @@ public struct HistoryEntry: Codable, Identifiable, Equatable, Sendable {
         throws -> HistoryEntry
     {
         guard sourceID == nil else { throw EZError("Open this saved request in Saul to ask a follow-up.") }
-        guard capability == .write else { throw EZError("Use again to prepare another image action.") }
+        guard capability == .write else { throw EZError("Reuse to prepare another image action.") }
         guard status == "completed", !response.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw EZError("Wait for a saved, completed answer before asking a follow-up.")
         }

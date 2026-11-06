@@ -4,7 +4,7 @@ See the [glossary](../GLOSSARY.md) for shared domain and surface names.
 
 ## Reading
 
-1. Select a term or short passage, choose a recipe, and select **Explain**. **Alt+Shift+E** uses the selected or default recipe.
+1. Select a term or short passage, choose an action, and select **Explain**. **Alt+Shift+E** uses the selected or default action.
 2. Saul saves the request, adds a quiet underline, and confirms that the job is queued. It does not open a card automatically.
 3. Keep reading. A completion notification offers **View**; the badge and page list retain unread state.
 4. Click a marker or open the page list with **Alt+Shift+L** to inspect progress or the saved answer.
@@ -40,7 +40,7 @@ Opening a completed answer marks it read. Dismissing a notification does not. Er
 The popup opens directly to History. Search and bookmarks stay visible; export and deletion of the entire library are under **Export and manage history**. The full workspace uses the same views with a wider reading area.
 
 **Min Mode** is the default expert everyday view, following [DESIGN.md](../../../DESIGN.md#min-mode).
-It shows the current input/answer, recipe or preset choice, essential state and primary
+It shows the current input/answer, action or preset choice, essential state and primary
 actions. Routine subtext is omitted; buttons use one clear word or a familiar symbol,
 with complete accessible names and tooltips. More/Details retain uncommon operations,
 regeneration, inspection and history management. Errors, unsaved work, unavailable
@@ -77,7 +77,7 @@ preset beside its fields, with a compact selector at narrow widths. Section chan
 preserve the mounted configuration draft. Save and conflict recovery remain reachable
 across sections; preferences and access retain their independent immediate-save behavior.
 
-- Named actions pair editable prompts with a default model preset. Explain, Lookup, and Nudge are editable starters. A preset names the provider, API connection where applicable, model, and supported options. Managed ChatGPT plan presets use their connection’s bound account; standalone presets retain the locally selected account.
+- Named actions pair editable prompts with a default model preset. Explain, Lookup, and Nudge are editable starters. A preset binds a connection, capability, model, and supported options. Managed ChatGPT plan presets use their connection’s bound account; standalone presets retain the locally selected account.
 - The existing prompt and model migrate into Explain and Current. Choosing another action for the same passage creates a new attempt; retry keeps the original request choices even after Settings changes.
 - Templates substitute `{{text}}`, `{{context}}`, `{{page title}}`, `{{page url}}`, `{{heading}}`, and `{{paragraph}}` once. `{{text}}` is required; unavailable referenced context blocks submission. Enabled context is included once, and template expressions are unsupported.
 - OpenAI-compatible profiles keep separate endpoint, model, temperature, and key values.
@@ -270,3 +270,7 @@ sends at most 512 characters using the saved configuration and separate API bill
 Stop, navigation or closing cancels generation and clears audio. Text/audio are
 never added to reading history. Speak is a preview capability; reading actions
 use compatible Write or Draw presets.
+
+[Shared control symbols](../../../design/symbols.html) defines the glyphs and
+meanings used by both apps. Symbol-only controls retain full accessible names and
+tooltips in Min Mode and Standard view.

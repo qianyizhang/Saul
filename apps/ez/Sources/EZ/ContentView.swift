@@ -43,7 +43,11 @@ struct ContentView: View {
                         }
                         Spacer()
                         if model.busy {
-                            Button("Stop", systemImage: "stop.fill") { model.stop() }
+                            Button {
+                                model.stop()
+                            } label: {
+                                ControlLabel(symbol: .stop, iconOnly: model.minimumMode)
+                            }.help("Stop generating").accessibilityLabel("Stop generating")
                         } else {
                             Button(
                                 model.minimumMode ? "Edit" : "Edit draft", systemImage: "square.and.pencil"
@@ -228,11 +232,12 @@ struct ContentView: View {
                         Button {
                             model.copy(entry.citedResponse)
                         } label: {
-                            Label("Copy", systemImage: "doc.on.doc")
-                        }.disabled(entry.response.isEmpty)
+                            ControlLabel(symbol: .copy)
+                        }.disabled(entry.response.isEmpty).help("Copy answer").accessibilityLabel(
+                            "Copy answer")
                     }
                     if !model.minimumMode && entry.sourceID == nil {
-                        Button("Use again", systemImage: "arrow.counterclockwise") { model.reuse(entry) }
+                        Button("Reuse", systemImage: ControlSymbol.reuse.systemImage) { model.reuse(entry) }
                             .disabled(model.busy || model.launcherPending)
                     }
                     Menu {
@@ -240,15 +245,15 @@ struct ContentView: View {
                             Button("Reuse") { model.reuse(entry) }.disabled(
                                 model.busy || model.launcherPending
                             )
-                            .help("Restore this saved request as a draft").accessibilityLabel("Use again")
+                            .help("Restore this saved request as a draft").accessibilityLabel("Reuse")
                         }
                         if entry.capability == .write {
                             Button("Export…", systemImage: "square.and.arrow.up") { model.export(entry) }
                         }
                         deleteButton(entry)
                     } label: {
-                        Label("More", systemImage: "ellipsis")
-                    }.menuStyle(.borderlessButton).fixedSize()
+                        ControlLabel(symbol: .more, iconOnly: model.minimumMode)
+                    }.menuStyle(.borderlessButton).fixedSize().help("More").accessibilityLabel("More")
                     Spacer()
                     if entry.status != "completed" && entry.status != "unsaved" {
                         Text(entry.status.capitalized).font(.caption).foregroundStyle(.orange)
@@ -303,15 +308,19 @@ struct ContentView: View {
                         Button {
                             model.stop()
                         } label: {
-                            Image(systemName: "stop.fill")
+                            ControlLabel(symbol: .stop, iconOnly: model.minimumMode)
                         }.accessibilityLabel("Stop generating").help(
                             "Stop generating · \(model.shortcuts.binding(for: .stop).display)")
                     } else {
-                        Button("Run") { model.send() }
-                            .accessibilityLabel("Run action").buttonStyle(.borderedProminent).disabled(
-                                !model.canSend
-                            )
-                            .help("Run · \(model.shortcuts.binding(for: .send).display)")
+                        Button {
+                            model.send()
+                        } label: {
+                            ControlLabel(symbol: .run, iconOnly: model.minimumMode)
+                        }
+                        .accessibilityLabel("Run action").buttonStyle(.borderedProminent).disabled(
+                            !model.canSend
+                        )
+                        .help("Run · \(model.shortcuts.binding(for: .send).display)")
                     }
                 }.controlSize(.small).disabled(model.needsPlan && model.connecting)
                 if model.currentConnection?.kind == .openAIAPI {

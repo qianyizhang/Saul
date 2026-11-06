@@ -74,7 +74,7 @@ import SwiftUI
                     model.error =
                         model.storageWarning
                         ?? model.requestIssue
-                        ?? "Query not sent: connect ChatGPT, enable plan access, and choose an available model. Your query is ready to submit with Send."
+                        ?? "Query not sent: connect ChatGPT, enable plan access, and choose an available model. Your query is ready to submit with Run."
                 }
             }
         } catch { quickLookup.launcherError = error.localizedDescription }

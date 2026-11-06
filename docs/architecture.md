@@ -126,11 +126,11 @@ and Chrome Native Messaging. It starts on demand and has no daemon.
 ChatGPT model presets share one local JSON document through native Swift and
 Node adapters; [the shared contract](../contracts/README.md#connections-and-presets)
 defines migration, revisions and presets bound to stable connections. App-specific
-preferences and recipes use `apps.saul` and `apps.ez` scopes in that document.
+preferences and actions use `apps.saul` and `apps.ez` scopes in that document.
 Runtime state remains app-owned. In opted-in macOS installations, managed connection
 credentials use the [Saul owner](../contracts/credentials.md); standalone browser
 connections keep their existing local owner. Saved history uses one shared SQLite database. There is no
-cross-app recipe import, sync queue, remote library or
+cross-app action import, sync queue, remote library or
 Git sync. Multi-device sync remains separate work.
 
 ## Shared history

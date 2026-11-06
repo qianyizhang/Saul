@@ -209,7 +209,8 @@ recorded data and actionable recovery.
 Keep uncommon operations in named More, Details or Settings destinations. Revealing
 one task must not expand unrelated editors into the same page.
 
-Buttons show one clear word or a familiar symbol alone, not both. Keep complete
+Buttons show one clear word or a familiar symbol alone, not both.
+Copy, Send, Refresh and sidebar toggles use symbols in both modes. Keep complete
 accessible names and tooltips. Prefer Send, Stop, Copy, Save, Reuse, Edit, Add,
 Remove, Reload and Connect. Dynamic user-authored names, selected values and
 keyboard bindings are not action wording. Destructive confirmations retain their
@@ -248,7 +249,7 @@ or **Incomplete** only when that state is known. Do not repeat “saved on this
 device” on every answer. Place storage explanations in Settings.
 
 Keep meaningful differences explicit. **Explain** starts a reading request from
-selected text; **Send** submits a draft. **Use again** restores an editable draft;
+selected text; **Send** submits a draft. **Reuse** restores an editable draft;
 **Regenerate** starts another attempt. An **action** declares inputs, capability,
 instructions and a result; a **preset** binds connection key, capability, model and
 options; a **connection** is a saved account or endpoint with a stable key. Do not call
@@ -262,6 +263,21 @@ An unavailable action keeps its reason nearby; it does not silently select an
 alternative account, model, service tier, or billing path. Fast is a request,
 not a promise of latency. Details identifies the requested speed; show the actual
 service tier only when it was returned and recorded, never inferred from Fast.
+
+## Shared control symbols
+
+[The symbol sheet](design/symbols.html) shows shared meanings, web glyphs and
+native SF Symbol names. [The registry](design/symbols.json) owns these mappings;
+`pnpm design:generate` emits both runtime mappings and the sheet. Do not edit the
+generated copies. Copy, Send, Refresh and sidebar toggles are symbol-only in
+both modes, with full accessible names and tooltips. Other familiar controls may
+use symbols in Min Mode; menus, named disclosures and consequential actions retain
+text where it explains scope. Use native sidebar controls on macOS.
+
+Refresh reads current state. Reload reads saved settings and guards dirty drafts.
+Reuse restores a draft without sending. Regenerate starts generation and must not
+use the refresh glyph. Opening the main window uses a window glyph, not the
+sidebar toggle. Close dismisses a surface; Stop cancels active work.
 
 ## Connections, presets, and actions
 
@@ -326,7 +342,7 @@ storage contracts, not another visible settings concept. Chaining is out of scop
 
 The shared settings store owns Connection definitions and Presets, including stable
 keys, display names, kinds, capabilities and model options. Both apps use that same
-configuration and revision; a provider rename preserves preset bindings. Legacy standalone browser bindings and Action inputs stay app-owned. History and credential
+configuration and revision; a connection rename preserves preset bindings. Legacy standalone browser bindings and Action inputs stay app-owned. History and credential
 ownership follow the architecture's [data ownership](docs/architecture.md#data-ownership).
 Both apps edit Draw presets and execute image actions. Speak presets can be edited
 and previewed in both apps. Speech previews require

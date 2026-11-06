@@ -273,6 +273,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
         css: { type: 'string', multiple: true },
         swift: { type: 'string' },
         typescript: { type: 'string' },
+        symbols: { type: 'boolean', default: false },
         check: { type: 'boolean', default: false },
       },
     });
@@ -282,6 +283,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       ...(values.typescript ? [{ type: 'typescript' as const, path: values.typescript }] : []),
     ];
     const result = await generate({ source: values.source, outputs, check: values.check });
+    if (values.symbols) await import('./generate-symbols.mts');
     console.log(
       `${values.check ? 'Verified' : 'Generated'} ${outputs.length} design outputs · ${result.hash.slice(0, 12)}`,
     );

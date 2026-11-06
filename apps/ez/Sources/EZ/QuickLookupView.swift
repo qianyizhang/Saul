@@ -100,7 +100,7 @@ struct QuickLookupView: View {
             Button {
                 controller.showMain()
             } label: {
-                Image(systemName: "sidebar.left")
+                ControlLabel(symbol: .openWorkspace)
             }.help("Open EZ & history").accessibilityLabel("Open EZ & history")
             Menu {
                 if let entry = model.selectedEntry, entry.status != "pending" {
@@ -112,13 +112,14 @@ struct QuickLookupView: View {
                 Button("Settings…") { controller.showMain(settings: true) }
                 Button("Connections…") { controller.showMain(settings: true, section: .connections) }
             } label: {
-                Image(systemName: "ellipsis")
+                ControlLabel(symbol: .more)
             }.menuStyle(.borderlessButton).fixedSize()
+                .help("More")
                 .accessibilityLabel("Quick Lookup actions")
             Button {
                 controller.hide()
             } label: {
-                Image(systemName: "xmark")
+                ControlLabel(symbol: .close)
             }.help("Hide · Esc").accessibilityLabel("Hide Quick Lookup")
         }.buttonStyle(.borderless).controlSize(.small)
     }
@@ -143,10 +144,18 @@ struct QuickLookupView: View {
             if model.launcherPending {
                 Text("Preparing…").font(AppStyle.caption).foregroundStyle(.secondary)
             } else if model.busy {
-                Button("Stop") { model.stop() }.help(
+                Button {
+                    model.stop()
+                } label: {
+                    ControlLabel(symbol: .stop, iconOnly: model.minimumMode)
+                }.help(
                     "Stop generating · \(model.shortcuts.binding(for: .stop).display)")
             } else if showsInputs {
-                Button("Run") { model.send() }.buttonStyle(.borderedProminent)
+                Button {
+                    model.send()
+                } label: {
+                    ControlLabel(symbol: .run, iconOnly: model.minimumMode)
+                }.buttonStyle(.borderedProminent)
                     .disabled(!model.canSend).help(
                         "Run action · \(model.shortcuts.binding(for: .send).display)")
             }
@@ -183,8 +192,12 @@ struct QuickLookupView: View {
                 Button("Download") { model.downloadImage(entry) }.buttonStyle(.borderless)
                     .disabled(model.imageLoading)
             } else if let entry = model.selectedEntry, !entry.response.isEmpty {
-                Button("Copy") { model.copy(entry.citedResponse) }.buttonStyle(.borderless)
-                    .help("Copy answer")
+                Button {
+                    model.copy(entry.citedResponse)
+                } label: {
+                    ControlLabel(symbol: .copy)
+                }.buttonStyle(.borderless)
+                    .help("Copy answer").accessibilityLabel("Copy answer")
             }
         }.font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
     }

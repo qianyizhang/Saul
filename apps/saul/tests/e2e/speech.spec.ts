@@ -152,7 +152,7 @@ test('Speak preview uses its saved API preset, stops on navigation and retains n
   expect(await getHistory(popup)).toHaveLength(0);
 });
 
-test('creates a Speak preset through its editor and keeps API setup in Providers', async ({
+test('creates a Speak preset through its editor and keeps API setup in Connections', async ({
   sandbox,
 }, info) => {
   const { popup } = await sandbox.launch();

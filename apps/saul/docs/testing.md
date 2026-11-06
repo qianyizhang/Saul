@@ -186,7 +186,7 @@ and five optional/disabled cases skipped: the initial broad run passed 70, then 
 two test assumptions. The final rerun checked labelled value-column alignment,
 long model/preset wrapping, keyboard disclosure activation and overflow at 360,
 440 and 1000 px in light/dark appearances. Inspected screenshots also covered
-settings, recipes, summary reading, tab boards and error states. All browser data
+settings, actions, summary reading, tab boards and error states. All browser data
 came from disposable local fixtures; the installed extension was not reloaded.
 
 The harness uses the production native SQLite owner in a disposable directory and

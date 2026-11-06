@@ -1,4 +1,4 @@
-# ADR 0002: Model presets and editable recipes
+# ADR 0002: Model presets and editable actions
 
 - **Status:** Accepted; storage and capabilities evolved as linked below
 - **Date:** 2026-10-14
@@ -34,7 +34,7 @@ since evolved:
 - [Unified configuration](../architecture.md#unified-configuration) owns shared
   presets, scoped actions, revision checks and one-time imports. Persisted
   `recipes`/`recipeSnapshot` keys remain compatibility contracts.
-- [Providers and Illustration](../architecture.md#providers-and-illustration)
+- [Connections and Illustration](../architecture.md#connections-and-illustration)
   adds typed providers/Draw; [Raycast](../raycast.md) submits only single-field Write.
 - [Follow-ups](../architecture.md#follow-ups) explicitly retain conversation context.
   Text success still requires `response.completed`; opening an answer never sends.

@@ -19,13 +19,13 @@ SwiftUI/AppKit controls.
 
 | Fixture / action                                                                                             | Expected result                                                                                                                                                                               |
 | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Signed out → Settings → Providers                                                                            | Clear connection route and readable blockers; offline account mutations disabled.                                                                                                             |
+| Signed out → Settings → Connections                                                                            | Clear connection route and readable blockers; offline account mutations disabled.                                                                                                             |
 | Empty → type/clear; Two inputs → fill using Tab                                                              | One action selector; stable hint space; ordered field focus.                                                                                                                                  |
 | Many inputs → Tab through all eight, then Shift-Tab                                                          | Focused input scrolls into view; Run remains outside the scrolling form.                                                                                                                      |
 | Two inputs → Show Quick Lookup → change preset → Details → main window → reopen → Esc                        | Draft/override survive; Details adds no duplicate selector. New resets draft/override.                                                                                                        |
 | Answer → Details → Edit → Hide → More → Reuse                                                                | Reading has space; metadata/metrics remain available. Edit preserves current draft; Reuse restores saved action/inputs/preset without sending. Repeat in panel.                               |
 | Answer → absent search → clear → Export/Cancel → Delete/Cancel                                               | Explicit no-results; clear restores rows; native save dialog; Cancel preserves history.                                                                                                       |
-| Settings → Presets → edit → switch item/Add → Keep → Actions/Providers/Shortcuts → return → Done/Keep → Save | Section changes preserve drafts; item changes/dismissal cannot discard silently. Save disables on success. Repeat for Actions; check invalid template/save failure when changing those paths. |
+| Settings → Presets → edit → switch item/Add → Keep → Actions/Connections/Shortcuts → return → Done/Keep → Save | Section changes preserve drafts; item changes/dismissal cannot discard silently. Save disables on success. Repeat for Actions; check invalid template/save failure when changing those paths. |
 | Settings → Shortcuts → record New → Esc                                                                      | Recording cancels; no lookup action or binding change.                                                                                                                                        |
 | Blocked; No actions → configuration                                                                          | Answer remains readable beside errors; one useful route from empty configuration.                                                                                                             |
 | Waiting/Thinking/Streaming → Stop; light/dark, Reduce Motion, narrow/wide                                    | Distinct waiting/thinking, reachable Stop, no duplicate spinner; stationary reduced-motion light. Fixtures do not prove live streaming/system motion settings.                                |
@@ -46,7 +46,7 @@ main window after a hide/close capture error; never reuse stale AX indices.
 
 Use Draw / Draw result / Draw waiting / Draw error. Run, inspect PNG and animated GIF output in both
 surfaces, Download/Cancel and Stop; late output must not replace another run.
-Providers owns credentials; Presets owns model/image options; Actions owns type,
+Connections owns credentials; Presets owns model/image options; Actions owns type,
 template and default preset. Draw launcher drafts always wait for Run.
 
 Research / Research result / Research waiting / Research error cover search status,

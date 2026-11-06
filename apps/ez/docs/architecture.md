@@ -37,7 +37,7 @@ no temperature, max-output-tokens, saved response ID or unsupported preview fiel
 Plan requests contain no tools. Text success requires `response.completed`;
 partial streams remain incomplete.
 
-## Providers and Illustration
+## Connections and Illustration
 
 `ConnectionDefinition` owns stable keys, names and transports. Defaults are `gpt-plan`
 (Write) and `openai-api` (Write/Draw/Speak). Presets bind connection, capability, model

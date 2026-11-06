@@ -107,15 +107,15 @@ shared input/output inspector renders literal text from the selected attempt in
 the page card and History, including partial output; it does not reconstruct prompts
 from current settings or claim to retain raw HTTP/SSE traffic.
 
-`src/models/configuration.ts` owns named recipes and model presets in settings.
+`src/models/configuration.ts` owns named actions (stored as `recipes`) and model presets in settings.
 `src/models/preset-resolution.ts` owns execution-time Capability checks, explicit
 Connection selection and frozen credential routes for Reading, custom Summarize,
 provider tests and Speak. Editor projection retains unavailable choices separately.
 Retries never promote a local credential route to Saul: a changed owner or endpoint
 shows a preset-selection hint and requires a new attempt. Plan execution checks
 the frozen owner again immediately before opening its transport.
-Legacy settings migrate to an Explain recipe and a Current preset; prompt roles,
-the active connection, and the selected model are preserved. Recipes contain
+Legacy settings migrate to an Explain action and a Current preset; prompt roles,
+the active connection, and the selected model are preserved. Actions contain
 literal prompt templates and reference a default preset. Presets identify a
 connection, capability, model and options; they contain no keys. Managed ChatGPT
 connections pin one account. Standalone installations retain an app-owned account
@@ -123,7 +123,7 @@ and API profile binding until explicitly connected to the shared credential owne
 The existing model controls edit the selected preset, so there is one authority
 for each model choice.
 
-`src/models/settings-draft.ts` owns recipe, preset and profile editing transitions,
+`src/models/settings-draft.ts` owns action, preset and profile editing transitions,
 including connection-key clearing and the persisted projections. Settings views
 hold independent drafts and submit through `saul-settings`; the trusted background
 owns one serialized read/commit/recovery lane in `src/storage/settings.ts`.
@@ -142,13 +142,13 @@ An uncertain response also preserves the draft without replaying the write.
 Presentation and notification preferences use separate keys and do not cause
 configuration conflicts. Invalid-record backup/reset uses the same commit lane.
 
-Content scripts receive recipe names and safe choice summaries, then submit only
-the recipe ID with captured context. `src/reading/configuration.ts` resolves the
-saved recipe/preset in the background and freezes both with the rendered prompts
+Content scripts receive action names and safe choice summaries, then submit only
+the action ID with captured context. `src/reading/configuration.ts` resolves the
+saved action/preset in the background and freezes both with the rendered prompts
 in `input_json`. Retry uses the frozen request, resolving credentials only for its
 original connection; missing connections and changed endpoints block explicitly.
-Choosing another recipe for the same passage creates a new attempt. It cannot
-replace an active attempt. Historic rows remain readable without recipe snapshots.
+Choosing another action for the same passage creates a new attempt. It cannot
+replace an active attempt. Historic rows remain readable without action snapshots.
 
 The [ChatGPT plan helper](chatgpt-plan.md) uses a separate native host, `com.saul.chatgpt`, and a shared allowlisted protocol. The background validates extension-port senders and brokers requests from Settings and the offscreen runner. The native helper owns loopback OAuth, JWT verification, private credential persistence, serialized refresh, and the constrained Responses/SSE transport. It is independent of the tab bridge.
 

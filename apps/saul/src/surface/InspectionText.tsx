@@ -1,3 +1,4 @@
+import { ControlIcon } from './ControlIcon';
 import { useMemo, useState } from 'react';
 
 // Keep only one bounded page of source text in the DOM, even for very large prompts.
@@ -73,6 +74,7 @@ export function InspectionText({
           type="button"
           disabled={!text}
           aria-label={`Copy ${label}`}
+          title={`Copy ${label}`}
           onClick={async () => {
             try {
               await navigator.clipboard.writeText(text);
@@ -82,7 +84,7 @@ export function InspectionText({
             }
           }}
         >
-          Copy
+          <ControlIcon symbol="copy" />
         </button>
       </div>
       {copied?.text === text && <p role="status">{copied.notice}</p>}

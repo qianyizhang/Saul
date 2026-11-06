@@ -124,7 +124,7 @@ export async function generateSpeech(
   let secret: unknown;
   if (dependencies.authorize) secret = { value: await dependencies.authorize() };
   else {
-    if (!apiKey) throw new Error('Save an OpenAI API key in Providers before generating speech.');
+    if (!apiKey) throw new Error('Save an OpenAI API key in Connections before generating speech.');
     const response = await (dependencies.fetcher ?? fetch)(
       'https://api.openai.com/v1/realtime/client_secrets',
       {

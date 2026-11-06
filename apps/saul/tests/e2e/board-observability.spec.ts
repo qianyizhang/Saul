@@ -22,13 +22,19 @@ test('live board exposes exact send, catalog, metadata health and a scoped captu
   await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await ui.locator('#composer > summary').click();
   await ui.locator('#request').fill('hi — scoped Saul diagnostic fixture');
-  await ui.getByRole('button', { name: 'Send', exact: true }).click();
+  const send = ui.getByRole('button', { name: 'Send', exact: true });
+  await expect(send).toHaveText('');
+  await expect(send).toHaveAttribute('title', 'Send');
+  await send.click();
   await expect(ui.locator('#send-status')).toContainText('Accepted by host');
   expect(messages).toEqual([
     { role: 'user', content: [{ type: 'text', text: 'hi — scoped Saul diagnostic fixture' }] },
   ]);
   // Inventory refresh must not erase message delivery evidence.
-  await ui.getByRole('button', { name: 'Refresh', exact: true }).click();
+  const refresh = ui.getByRole('button', { name: 'Refresh tabs', exact: true });
+  await expect(refresh).toHaveText('');
+  await expect(refresh).toHaveAttribute('title', 'Refresh tabs');
+  await refresh.click();
   await expect(ui.locator('#send-status')).toContainText('Accepted by host');
   await ui.locator('#composer > summary').click();
   await ui.getByRole('button', { name: 'Inspect send', exact: true }).click();

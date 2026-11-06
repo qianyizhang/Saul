@@ -1,9 +1,15 @@
 # Changelog
 
-## 0.1.0 — Unreleased
+## 0.2.1 — 2026-11-06
+
+- Shared symbol sheet and generated native/web mappings. Copy and Send use familiar
+  symbols; Min Mode controls match across the main window and Quick Lookup.
+- Consistent Connections, Action, Reuse and Min Mode wording across both apps.
+
+## Earlier development
 
 - Typed Write/Draw actions in the shared composer, Quick Lookup and History.
-  Providers have stable keys; presets bind provider/capability/model/options.
+  Connections have stable keys; presets bind connection/capability/model/options.
   Illustration saves PNGs with save-only recovery, Download and frozen inspection.
   Separate API Keychain credentials and billing; no automatic provider fallback.
 
@@ -24,7 +30,7 @@
 
 - Persistent local code-signing identity and `make install` upgrades with signature
   validation, running-app checks, and a retained previous bundle for rollback.
-- Scroll selectors directly, shared lookup/recipe keyboard commands, and a Shortcuts
+- Scroll selectors directly, shared lookup/action keyboard commands, and a Shortcuts
   settings tab with recording, conflict checks, saved overrides, and Chrome navigation.
 - Bottom lookup status line with saved token usage, first-text latency, and average
   response throughput after TTFT; unknown metrics remain unavailable.
@@ -43,7 +49,7 @@
 - In-app Keychain explanation and detailed credential/signing documentation.
 - Staged bundle packaging that preserves the previous app on signing failure.
 - Compact Quick Lookup panel, global shortcut, menu-bar access, and Raycast query entry.
-- Editable recipes with generated inputs, named model presets, temporary overrides,
+- Editable actions with generated inputs, named model presets, temporary overrides,
   and original request snapshots retained in history.
 - Canonical surface responsibilities and shared, offline native preview tooling.
 - Nonblocking credential restoration keeps the window responsive during Keychain access.

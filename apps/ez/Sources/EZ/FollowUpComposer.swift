@@ -33,12 +33,16 @@ struct FollowUpComposer: View {
                         if model.followUpTargetID == entry.id { model.followUpTargetID = nil }
                     }
                     .disabled(model.busy)
-                    Button("Send") { model.followUp(entry.id) }
-                        .accessibilityLabel("Send follow-up")
-                        .disabled(
-                            !model.canFollowUp
-                                || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                || draft.utf16.count > 2_000)
+                    Button {
+                        model.followUp(entry.id)
+                    } label: {
+                        ControlLabel(symbol: .send)
+                    }
+                    .help("Send follow-up").accessibilityLabel("Send follow-up")
+                    .disabled(
+                        !model.canFollowUp
+                            || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            || draft.utf16.count > 2_000)
                 }
                 if draft.utf16.count > 2_000 {
                     Text("Use up to 2,000 characters.").font(AppStyle.caption).foregroundStyle(.red)

@@ -91,3 +91,7 @@ Choose/Replace, Paste and Remove above instructions; errors stay beside the imag
 Quick Lookup reserves attachment space and keeps Run reachable. API/search charges
 remain visible in both modes. Details records search required/completed and source
 name. Reuse prepares a draft without sending.
+
+[Shared control symbols](../../../design/symbols.html) defines the glyphs and
+meanings used by both apps. Symbol-only controls retain full accessible names and
+tooltips in Min Mode and Standard view.

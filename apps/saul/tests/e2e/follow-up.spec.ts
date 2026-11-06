@@ -26,6 +26,19 @@ test('widget follow-ups preserve drafts, context, failures and saved history', a
     const question = card.getByRole('textbox', { name: 'Ask a follow-up' });
     const send = card.getByRole('button', { name: 'Send follow-up' });
     await expect(send).toBeDisabled();
+    await expect(send).toHaveText('');
+    await expect(send).toHaveAttribute('title', 'Send follow-up');
+    await browser.context.grantPermissions(['clipboard-read', 'clipboard-write'], {
+      origin: fixtureServer.origin,
+    });
+    const copy = card.getByRole('button', { name: 'Copy explanation', exact: true });
+    await expect(copy).toHaveText('');
+    await copy.click();
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toContain('steepest increase');
+    await expect(copy).toHaveAttribute('title', 'Copied explanation');
+    expect(fixtureServer.requests).toHaveLength(1);
     await question.fill('Why does that happen?');
     await card.getByRole('button', { name: 'Close explanation' }).click();
     await openFirstPageExplanation(page);
@@ -55,6 +68,8 @@ test('widget follow-ups preserve drafts, context, failures and saved history', a
         await chrome.storage.local.set({ saul_minimum_mode: minimum });
       }, minimum);
       await expect(card).toHaveAttribute('data-minimum', String(minimum));
+      await expect(send).toHaveText('');
+      await expect(copy).toHaveText('');
       for (const colorScheme of ['light', 'dark'] as const) {
         await page.emulateMedia({ colorScheme });
         for (const width of [360, 1000]) {

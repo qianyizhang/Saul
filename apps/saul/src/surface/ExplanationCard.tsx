@@ -1,7 +1,8 @@
+import { ControlIcon } from './ControlIcon';
 import { sendReadingMessage } from '../storage/client';
 import { GeneratedImageView } from './GeneratedImageView';
 import { useRef, useState } from 'react';
-import { X, Copy, Check, RefreshCw, Pin, Bookmark, Square } from 'lucide-react';
+import { X, Pin, Bookmark, Square } from 'lucide-react';
 import type { Passage, RunResult, RunStatus } from '../types/storage';
 import { TagStreamParser } from '../parser/tag-stream-parser';
 import { AnnotatedTextView } from './AnnotatedTextView';
@@ -94,10 +95,10 @@ export function ExplanationCard({
     <button
       className={`${iconClass} flex items-center gap-1 text-sm`}
       aria-label="Copy explanation"
+      title={copied ? 'Copied explanation' : 'Copy explanation'}
       onClick={copy}
     >
-      {!minimum && (copied ? <Check size={16} /> : <Copy size={16} />)}
-      {copied ? 'Copied' : 'Copy'}
+      <ControlIcon symbol={copied ? 'copied' : 'copy'} />
     </button>
   );
   return (
@@ -351,9 +352,10 @@ export function ExplanationCard({
             className={iconClass}
             type="submit"
             aria-label="Send follow-up"
+            title="Send follow-up"
             disabled={active || busy || !followUpDraft.trim()}
           >
-            Send
+            <ControlIcon symbol="send" />
           </button>
         </form>
       )}
@@ -379,7 +381,7 @@ export function ExplanationCard({
                 void onRetry();
               }}
             >
-              {!minimum && <RefreshCw size={16} />}
+              {!minimum && <ControlIcon symbol="regenerate" />}
               {latest.status === 'completed' ? 'Regenerate' : 'Retry'}
             </button>
           )
@@ -401,9 +403,11 @@ export function ExplanationCard({
             ref={moreButton}
             className={`${iconClass} ml-auto flex items-center gap-1 text-xs`}
             aria-expanded={more}
+            aria-label="More"
+            title="More"
             onClick={() => setMore(!more)}
           >
-            More
+            <ControlIcon symbol="more" />
           </button>
         )}
       </div>

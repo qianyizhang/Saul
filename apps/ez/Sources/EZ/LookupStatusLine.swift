@@ -42,7 +42,7 @@ struct LookupDetails: View {
                 }
                 MetadataRow("Model", value: entry.model)
                 MetadataRow(
-                    "Provider",
+                    "Connection",
                     value: entry.connectionSnapshot?.key ?? entry.presetSnapshot?.connectionKey ?? "gpt-plan")
                 MetadataRow("Capability", value: entry.capability.name)
                 if entry.usesWebSearch {
