@@ -7,8 +7,10 @@ struct ContentView: View {
     @State private var lookupToDelete: HistoryEntry?
     @State private var showsComposer = false
     var body: some View {
+        // Keep the system sidebar toolbar's own icon-only style outside the columns.
         NavigationSplitView {
             sidebar
+                .labelStyle(EverydayLabelStyle(minimum: model.minimumMode))
                 .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 300)
         } detail: {
             VStack(spacing: 0) {
@@ -62,9 +64,9 @@ struct ContentView: View {
                 }
             }
             .background(Color(nsColor: .textBackgroundColor))
+            .labelStyle(EverydayLabelStyle(minimum: model.minimumMode))
         }
         .tint(AppStyle.accent)
-        .labelStyle(EverydayLabelStyle(minimum: model.minimumMode))
         .disclosureGroupStyle(FullRowDisclosureStyle())
         .onChange(of: model.selection) { _, _ in showsComposer = false }
         .alert(

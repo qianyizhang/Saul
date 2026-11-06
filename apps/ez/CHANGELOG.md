@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2 — 2026-11-06
+
+- Keep the native sidebar toggle symbol-only in both display modes by applying
+  everyday label styles inside the navigation columns.
+
 ## 0.2.1 — 2026-11-06
 
 - Shared symbol sheet and generated native/web mappings. Copy and Send use familiar
