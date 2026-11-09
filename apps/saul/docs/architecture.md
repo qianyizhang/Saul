@@ -240,12 +240,27 @@ must be updated to accept attachments. Source input and coverage use existing
 JSON source rows; PDF bytes are never persisted. See the
 [PDF capture contract](product.md#summaries) for triggers, bounds and limitations.
 
-The existing offscreen document hosts the digest runner alongside reading jobs. Both use the shared native history helper; built-in digest generation uses the native ChatGPT transport and calls the existing plan adapter with a frozen account, prompt, model and effort. Digest control actions serialize, generation uses two concurrent workers, and there is no automatic retry. All workers settle before a stop/delete/retry control can complete. The current shared history schema is version 4. The browser import schema version 3 is a one-time import format, including digest metadata and item/source rows. Restart reconciliation marks unfinished items interrupted. The UI polls saved/live state while mounted and renders built-in English before Chinese from validated pairs; raw model text is never interpreted as HTML.
+The offscreen document hosts the digest runner alongside reading jobs. Both use
+the shared native history helper. Built-in digest generation uses the native
+ChatGPT transport with a frozen account, prompt, model and effort.
+
+Starts and retries serialize their checks against active sources. Each batch
+then runs independently with up to two workers. A new batch or retry cannot
+process a URL already queued, capturing, or generating in another batch. Stop
+and Delete abort only the target batch and wait for its workers to settle.
+Stop releases the control queue after signaling cancellation, so other sources
+can start while that batch settles.
+
+The shared history schema is version 4. Browser import schema version 3 is a
+one-time import format for digest metadata and item/source rows. On restart,
+unfinished items become interrupted; Saul never retries them automatically.
+The UI polls saved/live state while mounted and renders built-in English before
+Chinese from validated pairs. Raw model text is never interpreted as HTML.
 
 `src/app/Summaries.tsx` owns saved-summary history and live reading under
 `library.html#summary/<id>`. A new reader checks saved input reuse before account
 choice and sends the exact selected tab IDs. Snapshot metadata records source-window labels per item;
-older saved summaries remain readable. Polling reads active progress or the
+older saved summaries remain readable. Polling reads the latest active batch or the
 open reader, never the entire summary history on a recurring timer.
 
 `src/digest/actions.ts` registers **Call Saul** on installation/update.

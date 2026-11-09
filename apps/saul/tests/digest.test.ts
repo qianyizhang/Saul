@@ -37,31 +37,38 @@ function batch(): DigestBatch {
   };
 }
 function fixture() {
-  let saved: DigestBatch;
-  const sources = new Map<number, DigestSource>();
+  const saved = new Map<string, DigestBatch>();
+  const sources = new Map<string, DigestSource>();
+  const get = (id = 'digest-test') => saved.get(id)!;
   const db = vi.fn(async (r: DbRequest) => {
     switch (r.type) {
-      case 'DB_DIGEST_FIND':
-        return saved?.action?.revision.revision === r.payload.actionRevision &&
-          saved?.action?.presetId === r.payload.actionPresetId &&
-          saved?.items.every(
-            (item, index) => item.status === 'completed' && item.url === r.payload.urls[index],
-          ) &&
-          saved.items.length === r.payload.urls.length
-          ? structuredClone(saved)
-          : undefined;
+      case 'DB_DIGEST_FIND': {
+        const { actionRevision, actionPresetId, urls } = r.payload;
+        return structuredClone(
+          [...saved.values()].find(
+            (batch) =>
+              batch.action?.revision.revision === actionRevision &&
+              batch.action?.presetId === actionPresetId &&
+              batch.items.length === urls.length &&
+              batch.items.every(
+                (item, index) => item.status === 'completed' && item.url === urls[index],
+              ),
+          ),
+        );
+      }
       case 'DB_DIGEST_RECOVER':
         return;
       case 'DB_DIGEST_CREATE':
-        saved ??= structuredClone(r.payload);
-        return structuredClone(saved);
+        if (!saved.has(r.payload.id)) saved.set(r.payload.id, structuredClone(r.payload));
+        return structuredClone(get(r.payload.id));
       case 'DB_DIGEST_GET':
-        return structuredClone(saved);
+        return structuredClone(get(r.payload.id));
       case 'DB_DIGEST_SOURCE':
-        return sources.get(r.payload.index);
+        return sources.get(r.payload.id + ':' + r.payload.index);
       case 'DB_DIGEST_ITEM':
-        saved.items[r.payload.item.index] = structuredClone(r.payload.item);
-        if (r.payload.source) sources.set(r.payload.item.index, r.payload.source);
+        get(r.payload.id).items[r.payload.item.index] = structuredClone(r.payload.item);
+        if (r.payload.source)
+          sources.set(r.payload.id + ':' + r.payload.item.index, r.payload.source);
         return;
       default:
         throw new Error('Unexpected request');
@@ -73,7 +80,7 @@ function fixture() {
     capturedAt: 1,
     truncated: false,
   }));
-  return { db: db as unknown as DbCall, mock: db, capture, get: () => saved };
+  return { db: db as unknown as DbCall, mock: db, capture, get };
 }
 async function* success(): AsyncGenerator<PlanEvent> {
   yield { type: 'delta', text: raw };
@@ -313,6 +320,45 @@ describe('window digests', () => {
       ((await r.request({ action: 'get', id: 'digest-test' })) as DigestBatch).error,
     ).toContain('disk full');
   });
+});
+
+it('starts a different source while a stopped summary is still settling', async () => {
+  const f = fixture();
+  const first = batch();
+  first.items = first.items.slice(0, 1);
+  const other = structuredClone(first);
+  other.id = 'other';
+  other.items[0]!.url = 'https://example.com/other';
+  const aborted = Promise.withResolvers<void>();
+  const settle = Promise.withResolvers<void>();
+  const generate = vi.fn(async function* (request: PlanRequest, signal?: AbortSignal) {
+    if (request.action === 'generate' && request.userPrompt.includes(first.items[0]!.url)) {
+      signal!.addEventListener('abort', () => aborted.resolve(), { once: true });
+      await settle.promise;
+      signal!.throwIfAborted();
+    }
+    yield* success();
+  });
+  const runner = new DigestRunner(f.db, f.capture, generate);
+  const start = (batch: DigestBatch) =>
+    runner.request(
+      { action: 'start', id: batch.id, tabIds: [0], accountId: batch.accountId },
+      batch,
+    );
+  await start(first);
+  await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(1));
+  const stopping = runner.request({ action: 'stop', id: first.id });
+  await aborted.promise;
+  try {
+    const starting = start(other);
+    await vi.waitFor(() => expect(f.get(other.id)?.items[0]?.status).toBe('completed'));
+    await starting;
+    expect(f.get(first.id).items[0]?.status).toBe('running');
+  } finally {
+    settle.resolve();
+    await stopping;
+  }
+  expect(f.get(first.id).items[0]?.status).toBe('cancelled');
 });
 
 it('bounds workers at two and retains source order when later items finish first', async () => {

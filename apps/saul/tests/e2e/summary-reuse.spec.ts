@@ -1,7 +1,7 @@
 import { summaryMore } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
-import { installDigestProvider } from './digest-fixture.ts';
+import { installDigestProvider, openDigestReader } from './digest-fixture.ts';
 import {
   configureFixtureProvider,
   explainSelection,
@@ -154,7 +154,7 @@ test('repeated reading actions disclose reuse and input drift, then explicitly r
   );
 });
 
-test('repeated actions reopen active and stopped attempts without automatic generation', async ({
+test('different pages summarize together while repeated actions reopen the matching attempt', async ({
   sandbox,
   fixtureServer,
 }) => {
@@ -166,47 +166,74 @@ test('repeated actions reopen active and stopped attempts without automatic gene
     async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url)!.id!,
     source.url(),
   );
-  async function openReader() {
-    const opened = context.waitForEvent('page');
-    await popup.evaluate(
-      (tabId) =>
-        chrome.runtime.sendMessage({
-          type: 'WORKSPACE_TABS',
-          action: 'command',
-          method: 'saul_summary_open',
-          args: { tabIds: [tabId] },
-        }),
-      tabId,
-    );
-    return opened;
-  }
+  const openReader = () => openDigestReader(context, popup, worker, source.url());
   const first = await openReader();
   await expect(first.getByRole('status')).toHaveText('Generating summary…');
   const id = new URL(first.url()).hash;
-  const initial = await worker.evaluate(
-    () =>
-      (globalThis as unknown as { digestFixture: { requests: unknown[] } }).digestFixture.requests
-        .length,
-  );
+  const otherSource = await context.newPage();
+  await otherSource.goto(fixtureServer.origin + '/anchors');
+  const other = await openDigestReader(context, popup, worker, otherSource.url());
+  await expect(other.getByRole('status')).toHaveText('Generating summary…');
+  expect(new URL(other.url()).hash).not.toBe(id);
+  const activeStreams = () =>
+    worker.evaluate(
+      () => (globalThis as unknown as { digestFixture: { active: number } }).digestFixture.active,
+    );
+  await expect.poll(activeStreams).toBe(2);
+  const planRequests = () =>
+    worker.evaluate(() =>
+      (
+        globalThis as unknown as { digestFixture: { requests: { action: string }[] } }
+      ).digestFixture.requests.map((request) => request.action),
+    );
+  const beforeReuse = await planRequests();
   const active = await openReader();
   await expect(active.getByRole('status')).toHaveText('Generating summary…');
   await expect(active.getByRole('complementary', { name: 'Saved summary reused' })).toContainText(
     'Existing summary reopened',
   );
   expect(new URL(active.url()).hash).toBe(id);
+  const conflict = await popup.evaluate(
+    (tabId) =>
+      chrome.runtime.sendMessage({
+        target: 'saul-digest',
+        message: {
+          action: 'start',
+          id: crypto.randomUUID(),
+          tabIds: [tabId],
+          accountId: 'fixture',
+          regenerate: true,
+        },
+      }),
+    tabId,
+  );
+  expect(conflict).toMatchObject({
+    success: false,
+    error: expect.stringContaining('A summary is already running for one of these pages.'),
+  });
   await active.getByRole('button', { name: 'Stop', exact: true }).click();
   await expect(active.getByRole('status')).toHaveText('Summary stopped');
+  await expect(first.getByRole('status')).toHaveText('Summary stopped');
+  await expect.poll(activeStreams).toBe(1);
+  await expect(other.getByRole('status')).toHaveText('Generating summary…');
   const stopped = await openReader();
   await expect(stopped.getByRole('status')).toHaveText('Summary stopped');
   await expect(stopped.getByRole('complementary', { name: 'Saved summary reused' })).toContainText(
     'Saved attempt reopened',
   );
   expect(new URL(stopped.url()).hash).toBe(id);
-  expect(
-    await worker.evaluate(
-      () =>
-        (globalThis as unknown as { digestFixture: { requests: unknown[] } }).digestFixture.requests
-          .length,
-    ),
-  ).toBe(initial);
+  expect(await planRequests()).toEqual(beforeReuse);
+  await stopped.getByRole('button', { name: 'Retry unfinished' }).click();
+  await expect.poll(activeStreams).toBe(2);
+  await worker.evaluate(() => {
+    const { finishes } = (
+      globalThis as unknown as {
+        digestFixture: { finishes: Map<string, () => void> };
+      }
+    ).digestFixture;
+    for (const finish of finishes.values()) finish();
+  });
+  await expect(stopped.getByRole('status')).toHaveText('Summary ready');
+  await expect(other.getByRole('status')).toHaveText('Summary ready');
+  expect((await planRequests()).filter((action) => action === 'generate')).toHaveLength(3);
 });

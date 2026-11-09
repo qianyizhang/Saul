@@ -166,12 +166,14 @@ The profile remains GPT-6 Luna, medium effort, concise English followed by
 equivalent Simplified Chinese. Missing capability blocks explicitly; no
 provider or billing fallback is chosen.
 
-Two items process concurrently within one summary. Results appear in original
-order as they finish. Other reading jobs retain their existing concurrency.
+Summaries for different page URLs can run at the same time, including pages on
+the same site. A new run or retry is blocked while one of its page URLs is already
+being processed. Two items process concurrently within one summary, and results
+appear in the original tab order. Other reading jobs retain their existing concurrency.
 Provider failures stop dequeuing new items while in-flight siblings settle;
 capture/format failures affect only their own item. **Stop** aborts all active
-summary streams and retains completed/partial results. A storage failure stops
-all workers before delete, retry, or another summary can proceed.
+streams for that summary and retains completed/partial results. If saving fails,
+Saul stops that summary's workers before releasing the run.
 
 Loaded HTTP(S) text is captured without focusing or reloading source tabs,
 bounded to 120,000 characters. Video, audio, images, frames, linked pages,
@@ -224,7 +226,8 @@ History separates **Passages** and **Summaries**. The reader contains progress,
 Stop, Retry unfinished, source coverage, **Export HTML**, and deletion under
 Details. Export creates a self-contained snapshot, including incomplete states.
 Completion does not open a second tab or steal focus. Tab surfaces retain only
-a compact link to active summary progress. Summary deletion remains separate
+a compact link to the most recently started active summary. Earlier runs are
+available in Saved summaries. Summary deletion remains separate
 from passage History's Clear all action.
 
 ### Saved input and reuse

@@ -19,11 +19,19 @@ type Capture = (
   signal?: AbortSignal,
   pdfProcessing?: PdfProcessing,
 ) => Promise<DigestSource>;
+interface DigestRun {
+  batch: DigestBatch;
+  controller: AbortController;
+  task: Promise<void>;
+}
+const sourceBusy =
+  'A summary is already running for one of these pages. Stop it or wait for it to finish.';
+
 export class DigestRunner {
   readonly ready: Promise<void>;
-  private batch?: DigestBatch;
-  private task?: Promise<void>;
-  private controller?: AbortController;
+  private runs = new Map<string, DigestRun>();
+  // A failed save cannot record its own interruption in SQLite.
+  private interrupted = new Map<string, DigestBatch>();
   private controls: Promise<unknown> = Promise.resolve();
   constructor(
     private db: DbCall,
@@ -38,17 +46,35 @@ export class DigestRunner {
     // Read-only page comparisons must not delay Stop or other generation controls.
     if (request.action === 'resolve' || request.action === 'inspect')
       return this.ready.then(() => this.handle(request, snapshot));
-    const action = this.controls.then(() => this.handle(request, snapshot, credential));
+    if (request.action === 'stop')
+      return this.enqueue(async () => {
+        await this.ready;
+        return this.abort(request.id);
+      }).then(async (run) => {
+        // Settling one run must not delay control actions on unrelated sources.
+        if (!run) return this.handle({ action: 'get', id: request.id });
+        await run.task;
+        return structuredClone(run.batch);
+      });
+    return this.enqueue(() => this.handle(request, snapshot, credential));
+  }
+  private enqueue<T>(control: () => Promise<T>): Promise<T> {
+    const action = this.controls.then(control);
     this.controls = action.catch(() => undefined);
     return action;
   }
+  private abort(id: string): DigestRun | undefined {
+    const run = this.runs.get(id);
+    run?.controller.abort();
+    return run;
+  }
   private async handle(
-    r: DigestRequest,
+    r: Exclude<DigestRequest, { action: 'stop' }>,
     snapshot?: DigestBatch,
     credential = '',
   ): Promise<unknown> {
     await this.ready;
-    if (r.action === 'active') return this.task ? structuredClone(this.batch) : undefined;
+    if (r.action === 'active') return structuredClone([...this.runs.values()].at(-1)?.batch);
     if (r.action === 'inspect') {
       const batch = await this.db({ type: 'DB_DIGEST_GET', payload: { id: r.id } });
       const item = batch.items[r.index];
@@ -80,57 +106,52 @@ export class DigestRunner {
     if (r.action === 'list') return this.db({ type: 'DB_DIGEST_LIST', payload: undefined });
     if (r.action === 'get')
       return structuredClone(
-        this.batch?.id === r.id
-          ? this.batch
-          : await this.db({ type: 'DB_DIGEST_GET', payload: { id: r.id } }),
+        this.runs.get(r.id)?.batch ??
+          this.interrupted.get(r.id) ??
+          (await this.db({ type: 'DB_DIGEST_GET', payload: { id: r.id } })),
       );
-    if (r.action === 'stop') {
-      if (this.batch?.id === r.id) {
-        this.controller?.abort();
-        await this.task;
-      }
-      return this.handle({ action: 'get', id: r.id });
-    }
     if (r.action === 'delete') {
-      await this.handle({ action: 'stop', id: r.id });
+      const run = this.abort(r.id);
+      if (run) await run.task;
+      else await this.handle({ action: 'get', id: r.id });
       await this.db({ type: 'DB_DIGEST_DELETE', payload: { id: r.id } });
-      if (this.batch?.id === r.id) this.batch = undefined;
+      this.interrupted.delete(r.id);
       return;
     }
     if (r.action === 'start' && !r.regenerate && snapshot) {
       const cached = await this.find(snapshot);
       if (cached) return structuredClone(cached);
     }
-    if (this.task)
-      throw new Error('A summary is already running. Stop it or wait for it to finish.');
     let batch: DigestBatch;
     if (r.action === 'start') {
       if (!snapshot) throw new Error('Missing selection snapshot.');
+      const existing = this.runs.get(r.id)?.batch ?? this.interrupted.get(r.id);
+      if (existing) return structuredClone(existing);
+      this.checkSources(snapshot.items.filter(activeItem));
       batch = await this.db({ type: 'DB_DIGEST_CREATE', payload: snapshot });
       // Duplicate start IDs never regenerate completed or interrupted work.
       if (!batch.items.some((i) => i.status === 'queued')) return batch;
     } else {
+      if (this.runs.has(r.id)) throw new Error(sourceBusy);
       batch = await this.db({ type: 'DB_DIGEST_GET', payload: { id: r.id } });
-      for (const item of batch.items)
-        if (
-          ['failed', 'interrupted', 'cancelled', 'queued', 'capturing', 'running'].includes(
-            item.status,
-          )
-        ) {
-          item.status = 'queued';
-          item.raw = '';
-          delete item.error;
-          delete item.summary;
-          delete item.finalText;
-          delete item.calls;
-          delete item.progress;
-          await this.save(batch, item);
-        }
+      const unfinished = batch.items.filter(
+        (item) => activeItem(item) || ['failed', 'interrupted', 'cancelled'].includes(item.status),
+      );
+      this.checkSources(unfinished);
+      for (const item of unfinished) {
+        item.status = 'queued';
+        item.raw = '';
+        delete item.error;
+        delete item.summary;
+        delete item.finalText;
+        delete item.calls;
+        delete item.progress;
+        await this.save(batch, item);
+      }
     }
-    this.batch = batch;
+    this.interrupted.delete(batch.id);
     const controller = new AbortController();
-    this.controller = controller;
-    this.task = this.run(batch, controller, credential)
+    const task = this.run(batch, controller, credential)
       .catch((error) => {
         batch.error =
           'Saving progress failed; processing stopped. ' +
@@ -142,23 +163,30 @@ export class DigestRunner {
             delete item.finalText;
             delete item.summary;
           }
+        this.interrupted.set(batch.id, batch);
       })
       .finally(() => {
-        this.task = undefined;
-        this.controller = undefined;
+        this.runs.delete(batch.id);
       });
+    this.runs.set(batch.id, { batch, controller, task });
     return structuredClone(batch);
+  }
+  private checkSources(items: DigestItem[]) {
+    const urls = new Set(items.map((item) => item.url));
+    for (const { batch } of this.runs.values())
+      if (batch.items.some((item) => activeItem(item) && urls.has(item.url)))
+        throw new Error(sourceBusy);
   }
   private async find(snapshot: DigestBatch): Promise<DigestBatch | undefined> {
     const urls = snapshot.items.map((item) => item.url);
-    if (
-      this.task &&
-      this.batch &&
-      this.batch.action?.revision.revision === snapshot.action?.revision.revision &&
-      this.batch.action?.presetId === snapshot.action?.presetId &&
-      JSON.stringify(this.batch.items.map((item) => item.url)) === JSON.stringify(urls)
-    )
-      return this.batch;
+    for (const { batch } of this.runs.values())
+      if (
+        batch.action?.revision.revision === snapshot.action?.revision.revision &&
+        batch.action?.presetId === snapshot.action?.presetId &&
+        batch.items.length === urls.length &&
+        batch.items.every((item, index) => item.url === urls[index])
+      )
+        return batch;
     return this.db({
       type: 'DB_DIGEST_FIND',
       payload: {
