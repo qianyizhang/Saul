@@ -104,7 +104,7 @@ export function validateActionState(value: unknown): asserts value is ActionStat
         ].includes(k),
     )
   )
-    throw new Error('Action settings are invalid. Use built-in summary to recover.');
+    throw new Error('Call settings are invalid. Choose Use Summarize to recover.');
   const revision = (v: unknown) => {
     if (
       !record(v) ||

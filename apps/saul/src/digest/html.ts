@@ -14,6 +14,19 @@ export function sourceUrl(url: string): string | undefined {
     return undefined;
   }
 }
+/** Report the frozen call and model in both the reader and its export. */
+export function callResultLabel(batch: DigestBatch): string {
+  const input = batch.action ? batch.action.input : batch.summaryInput;
+  const model = batch.action ? (input?.plan?.model ?? input?.preset?.model) : batch.model;
+  const effort = batch.action ? input?.plan?.effort : batch.effort;
+  return [
+    batch.action?.revision.name,
+    input?.preset?.name ?? (batch.action ? 'Saved preset' : undefined),
+    [model, effort].filter(Boolean).join(' '),
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
 export function digestHtml(batch: DigestBatch): string {
   const e = escapeHtml;
   const pair = (p: Pair) =>
@@ -28,5 +41,5 @@ export function digestHtml(batch: DigestBatch): string {
   const done = batch.items.filter((i) => i.status === 'completed').length;
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; base-uri 'none'; form-action 'none'"><title>${e(batch.windowTitle)} · Saul summary</title><style>
 :root{color-scheme:light dark;font-family:system-ui,sans-serif;line-height:1.6;background:light-dark(${designColors['canvas']},${designColors['canvas-dark']});color:light-dark(${designColors['ink']},${designColors['ink-dark']})}body{max-width:880px;margin:40px auto;padding:0 24px}a{color:light-dark(${designColors['primary']},${designColors['primary-dark']});overflow-wrap:anywhere}h1,h2{line-height:1.25}h2{font-size:1.4rem}h3{font-size:1rem;margin-bottom:6px}article{background:light-dark(${designColors.surface},${designColors['surface-dark']});border:1px solid light-dark(${designColors['line']},${designColors['line-dark']});border-radius:16px;padding:28px;margin:24px 0}p{margin:8px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere}.zh{color:light-dark(${designColors['muted']},${designColors['muted-dark']});margin-top:2px}li{margin:18px 0}.lead{font-weight:600;margin:20px 0}aside{border-left:3px solid ${designColors['primary']};padding-left:16px}.source,footer,.status{font-size:.8rem}footer{margin-top:24px;opacity:.75}details{margin:16px 0}summary{cursor:pointer}.status{text-transform:uppercase;letter-spacing:.06em}@media(max-width:520px){body{padding:0 12px;margin:20px auto}article{padding:18px}}@media print{article{break-inside:avoid}details{display:block}}
-</style><header><h1>${e(batch.windowTitle)}</h1><p>${done} of ${batch.items.length} summarized · ${batch.action ? e(batch.action.revision.name + ' · ' + (batch.action.input?.preset?.name || 'Saved preset')) : 'GPT-6 Luna · medium'} · ${e(new Date(batch.createdAt).toLocaleString())}</p><p>${batch.action ? 'Custom action result.' : 'English first, then 简体中文.'} Generated summaries; follow source links for full context.</p>${batch.error ? `<p>${e(batch.error)}</p>` : ''}<details><summary>Contents / 目录</summary><ol>${batch.items.map((i) => `<li><a href="#tab-${i.index}">${e(i.title)}</a> · ${e(i.status)}</li>`).join('')}</ol></details></header>${rows}</html>`;
+</style><header><h1>${e(batch.windowTitle)}</h1><p>${done} of ${batch.items.length} ${batch.action ? 'complete' : 'summarized'} · ${e(callResultLabel(batch))} · ${e(new Date(batch.createdAt).toLocaleString())}</p><p>${batch.action ? 'Custom call result.' : 'English first, then 简体中文.'} Generated summaries; follow source links for full context.</p>${batch.error ? `<p>${e(batch.error)}</p>` : ''}<details><summary>Contents / 目录</summary><ol>${batch.items.map((i) => `<li><a href="#tab-${i.index}">${e(i.title)}</a> · ${e(i.status)}</li>`).join('')}</ol></details></header>${rows}</html>`;
 }

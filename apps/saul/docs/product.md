@@ -71,7 +71,7 @@ History shares `~/Library/Application Support/Little Clarity/history.sqlite3` wi
 
 ## Settings and models
 
-Settings has focused sections: Overview, Presets, Actions, Summaries, Preferences
+Settings has focused sections: Overview, Presets, Actions, Calls, Preferences
 and Connections. Overview leads with reading defaults; Presets keeps the selected
 preset beside its fields, with a compact selector at narrow widths. Section changes
 preserve the mounted configuration draft. Save and conflict recovery remain reachable
@@ -132,10 +132,10 @@ See [native messaging](native-messaging.md).
 
 ### Summaries
 
-The built-in behavior below remains the default. **Settings → Summaries →
+The built-in behavior below remains the default. **Settings → Calls →
 Customize Call Saul** can save and select a custom Call preset while retaining earlier choices.
 Create/revise uses a chosen saved preset, then checks and previews a candidate
-without running it. Save and select call preset initializes trusted code; the next Summarize
+without running it. **Save and select** initializes trusted code; the next Call Saul
 invokes it once per page. Custom results use safe text/Markdown, their own frozen
 preset, and the existing reader/Stop/history controls. See
 [custom actions](custom-actions.md) for the versioned interface and recovery.
@@ -156,15 +156,17 @@ a direct browser gesture to open a side panel. Existing reader URLs remain valid
 only those tabs. A selection across windows produces one saved summary in
 display order with source-window labels.
 
-Summarize immediately opens a reader in Chrome. It first checks for a saved
-selection. For new work, managed mode uses the saved Summary connection in Settings
-→ Summaries. First use adopts the configured `gpt-plan` connection or a sole plan
-connection; otherwise it asks once and persists the chosen connection across
-browser restarts. A removed, signed-out or permission-disabled saved choice blocks
-until repaired or explicitly changed. Standalone mode remembers its local account.
-The profile remains GPT-6 Luna, medium effort, concise English followed by
-equivalent Simplified Chinese. Missing capability blocks explicitly; no
-provider or billing fallback is chosen.
+Call Saul immediately opens a reader in Chrome and checks for a saved selection.
+**Summarize (default)** produces concise English followed by equivalent Simplified
+Chinese. For new work, **Settings → Calls → Model preset** chooses a saved Write
+preset. Its connection supplies the account or endpoint. Save applies the choice
+to new runs and **Run again**; **Retry** keeps the saved model, connection and
+options. A missing preset, unavailable connection or missing capability blocks
+without a provider or billing fallback.
+
+**Original summary setup** preserves the previous GPT-6 Luna, medium-effort
+ChatGPT plan route, including the saved plan binding or standalone account.
+It is selected until a model preset is chosen.
 
 Summaries for different page URLs can run at the same time, including pages on
 the same site. A new run or retry is blocked while one of its page URLs is already
@@ -180,10 +182,10 @@ bounded to 120,000 characters. Video, audio, images, frames, linked pages,
 collapsed and unloaded content are not read. Source changes and unreadable
 pages report their limitations. Restricted pages are skipped.
 
-Settings → Summaries → **PDF processing** selects the default for new summaries
+Settings → Calls → **PDF processing** selects the default for new summaries
 and **Run again**. It is a Saul preference, independent of shared model presets.
 **PDF URL attachment (server)** is the default. Saul sends the PDF URL as a
-Responses `input_file` to the same selected ChatGPT account, without downloading,
+Responses `input_file` through the selected ChatGPT plan preset, without downloading,
 uploading or locally parsing PDF bytes. OpenAI is asked to read the whole document,
 including text and page images, subject to model and provider limits. Local page
 and text cutoffs do not apply. The URL must be reachable by OpenAI without the

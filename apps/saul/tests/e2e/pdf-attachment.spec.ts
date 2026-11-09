@@ -1,5 +1,4 @@
-import { summaryMore } from './driver.ts';
-import { settingsSection } from './driver.ts';
+import { configureFixtureProvider, settingsSection, summaryMore } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import type { Page, Worker } from '@playwright/test';
 import { test, expect } from './fixtures.ts';
@@ -7,6 +6,10 @@ import { installDigestProvider, openDigestReader } from './digest-fixture.ts';
 import { pdfFixture } from '../pdf-fixture.ts';
 import type { PlanRequest } from '../../native/plan-protocol.mts';
 import type { DigestInspection } from '../../src/digest/types';
+
+test.afterEach(({ fixtureServer }) => {
+  fixtureServer.clearHandlers();
+});
 
 const evidence = 'Source evidence in a PDF about incentives for innovation. '.repeat(8);
 function id(reader: Page) {
@@ -33,7 +36,7 @@ async function requests(worker: Worker) {
 }
 async function choosePdfProcessing(settings: Page, mode: 'local' | 'attachment') {
   await settings.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(settings, 'Summaries');
+  await settingsSection(settings, 'Calls');
   await settings.getByLabel('PDF processing', { exact: true }).selectOption(mode);
   await settings.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(settings.getByText('Saved', { exact: true })).toBeVisible();
@@ -120,14 +123,14 @@ test('PDF processing saves through Settings; changing it preserves old results a
   for (const colorScheme of ['light', 'dark'] as const) {
     await popup.emulateMedia({ colorScheme });
     await popup.setViewportSize({ width: 420, height: 850 });
-    await settingsSection(popup, 'Summaries');
+    await settingsSection(popup, 'Calls');
     await popup.getByLabel('PDF processing', { exact: true }).scrollIntoViewIfNeeded();
     if (reviewScreenshots)
       await popup.screenshot({ path: info.outputPath(`pdf-settings-${colorScheme}.png`) });
   }
   await popup.reload();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Presets');
+  await settingsSection(popup, 'Calls');
   await expect(popup.getByLabel('PDF processing', { exact: true })).toHaveValue('local');
   const reused = await openDigestReader(context, popup, worker, source.url());
   await expect(reused.getByRole('complementary', { name: 'Saved summary reused' })).toContainText(
@@ -160,6 +163,57 @@ test('PDF processing saves through Settings; changing it preserves old results a
   await recovered.getByRole('button', { name: 'Run again', exact: true }).click();
   await expect(recovered.getByRole('alert')).toContainText('Saved PDF processing');
   expect(await requests(worker)).toHaveLength(generations);
+});
+
+test('a saved API preset needs local PDF parsing and receives the extracted text after Run again', async ({
+  sandbox,
+  fixtureServer,
+}) => {
+  const { context, worker, popup } = await sandbox.launch();
+  await configureFixtureProvider(popup, fixtureServer.origin);
+  const calls: string[] = [];
+  const point = { en: 'PDF finding.', zh: 'PDF 结论。' };
+  const answer = JSON.stringify({
+    lead: point,
+    points: [point, point],
+    caution: null,
+    flow: [],
+    terms: [],
+    question: null,
+  });
+  fixtureServer.setHandler('/v1/chat/completions', (request, response) => {
+    let body = '';
+    request.on('data', (chunk) => (body += chunk.toString()));
+    request.on('end', () => {
+      calls.push(body);
+      response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      response.end(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: answer } }] })}\n\ndata: [DONE]\n\n`,
+      );
+    });
+  });
+  await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(popup, 'Calls');
+  await popup.getByLabel('Model preset', { exact: true }).selectOption('preset-current');
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
+
+  fixtureServer.setDocument('/api-preset.pdf', { body: pdfFixture([evidence]) });
+  const source = await context.newPage();
+  await source.goto(fixtureServer.origin + '/api-preset.pdf');
+  const reader = await openDigestReader(context, popup, worker, source.url());
+  await expect(
+    reader.getByText('PDF URL attachments need a ChatGPT plan preset', { exact: false }),
+  ).toBeVisible();
+  expect(calls).toHaveLength(0);
+
+  await choosePdfProcessing(popup, 'local');
+  await summaryMore(reader);
+  await reader.getByRole('button', { name: 'Run again', exact: true }).click();
+  await expect(reader.getByRole('status')).toHaveText('Summary ready');
+  expect(calls).toHaveLength(1);
+  expect(JSON.parse(calls[0]!)).toMatchObject({ model: 'test-model' });
+  expect(calls[0]).toContain('incentives for innovation');
 });
 
 test('server attachment failure remains explicit and never falls back to local downloading', async ({

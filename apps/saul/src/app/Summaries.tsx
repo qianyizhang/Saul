@@ -3,22 +3,21 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SummaryProgress } from '../../native/protocol.mts';
 import { planCall } from '../models/chatgpt-plan';
 import { requestSettings } from '../storage/settings-client';
+import type { UserSettings } from '../types';
 import { summaryConnections, type SummaryConnection } from '../digest/connection';
 import { sendActionMessage, sendDigestMessage, sendWorkspaceMessage } from '../storage/client';
 import { activeItem, type DigestBatch, type DigestOverview, type Pair } from '../digest/types';
-import { digestHtml, sourceUrl } from '../digest/html';
+import { callResultLabel, digestHtml, sourceUrl } from '../digest/html';
 import { openSummaryPanel } from '../digest/panel';
 import type { DigestComparison } from '../digest/types';
 import { ComparisonNote, SummaryInspection } from './SummaryInspection';
 import { ActionText } from './ActionText';
 
-async function summaryAccounts() {
-  const saved = await requestSettings({ action: 'read' });
-  if (saved.state !== 'ready') throw new Error(saved.error);
-  if (saved.settings.sharedCredentials === 'disconnected')
+async function summaryAccounts(settings: UserSettings) {
+  if (settings.sharedCredentials === 'disconnected')
     throw new Error('Connect this app in Settings → Preferences → Integrations.');
   const result = await planCall({ action: 'accounts' });
-  return { ...summaryConnections(saved.settings, result.accounts), saved };
+  return summaryConnections(settings, result.accounts);
 }
 
 export function openSummary(tabIds: number[], windowId: number) {
@@ -176,53 +175,50 @@ export function SummaryReader({
     };
   }, []);
   const start = useCallback(
-    async (choiceKey: string, regenerate = false) => {
+    async (choiceKey?: string, regenerate = false) => {
       setBusy(true);
       setError('');
       try {
-        const custom = (await sendActionMessage({ action: 'status' })).selected;
-        let runAccountId = choiceKey;
+        const [call, saved] = await Promise.all([
+          sendActionMessage({ action: 'status' }),
+          requestSettings({ action: 'read' }),
+        ]);
+        if (saved.state !== 'ready') throw new Error(saved.error);
+        let runAccountId: string | undefined;
         let connectionKey: string | undefined;
-        if (!custom) {
-          if (regenerate && batch && !batch.action) {
-            runAccountId = batch.accountId;
-            connectionKey = batch.connectionKey;
-            if (!connectionKey) {
-              const state = await requestSettings({ action: 'read' });
-              if (state.state !== 'ready') throw new Error(state.error);
-              if (state.settings.sharedCredentials === 'saul')
-                connectionKey = state.settings.connections.find(
-                  (c) => c.kind === 'chatgpt-plan' && c.accountId === runAccountId,
-                )?.key;
-            }
-          } else {
-            const resolved = await summaryAccounts();
-            const key = regenerate ? resolved.chosen : choiceKey;
-            const choice = resolved.choices.find((c) => c.key === key && c.available);
-            if (!choice?.accountId)
-              throw new Error(resolved.error || 'Choose an available summary connection.');
-            runAccountId = choice.accountId;
-            connectionKey = resolved.managed ? choice.key : undefined;
-            const { settings, revision } = resolved.saved;
-            const changed = resolved.managed
-              ? settings.summaryConnectionKey !== choice.key
-              : settings.chatgptPlan?.accountId !== choice.accountId;
-            if (changed) {
-              const saved = await requestSettings({
-                action: 'commit',
-                baseline: revision,
-                settings: resolved.managed
-                  ? { ...settings, summaryConnectionKey: choice.key }
-                  : {
-                      ...settings,
-                      chatgptPlan: {
-                        ...(settings.chatgptPlan ?? { model: '' }),
-                        accountId: choice.accountId,
-                      },
+        if (!call.selected && !saved.settings.summaryPresetId) {
+          const resolved = await summaryAccounts(saved.settings);
+          if (!live.current) return;
+          const key = choiceKey ?? resolved.chosen;
+          setAccounts(resolved.choices);
+          setManaged(resolved.managed);
+          setAccount(key);
+          const choice = resolved.choices.find((c) => c.key === key && c.available);
+          if (!choice?.accountId) {
+            if (!choiceKey && !regenerate && !resolved.error) return;
+            throw new Error(resolved.error || 'Choose a model preset in Settings → Calls.');
+          }
+          runAccountId = choice.accountId;
+          connectionKey = resolved.managed ? choice.key : undefined;
+          const { settings, revision } = saved;
+          const changed = resolved.managed
+            ? settings.summaryConnectionKey !== choice.key
+            : settings.chatgptPlan?.accountId !== choice.accountId;
+          if (changed) {
+            const committed = await requestSettings({
+              action: 'commit',
+              baseline: revision,
+              settings: resolved.managed
+                ? { ...settings, summaryConnectionKey: choice.key }
+                : {
+                    ...settings,
+                    chatgptPlan: {
+                      ...(settings.chatgptPlan ?? { model: '' }),
+                      accountId: choice.accountId,
                     },
-              });
-              if (saved.state !== 'ready') throw new Error(saved.error);
-            }
+                  },
+            });
+            if (committed.state !== 'ready') throw new Error(committed.error);
           }
           const catalog = await planCall({ action: 'models', accountId: runAccountId });
           if (
@@ -252,7 +248,7 @@ export function SummaryReader({
           action: 'start',
           id: targetId,
           tabIds: selected,
-          accountId: runAccountId,
+          ...(runAccountId ? { accountId: runAccountId } : {}),
           ...(connectionKey ? { connectionKey } : {}),
           ...(regenerate ? { regenerate: true } : {}),
         });
@@ -304,17 +300,7 @@ export function SummaryReader({
           const tab = await chrome.tabs.get(tabIds[0]!);
           setSource({ title: tab.title || 'Untitled page', url: tab.url || '' });
         }
-        if ((await sendActionMessage({ action: 'status' })).selected) {
-          await start('custom-action');
-          return;
-        }
-        const { choices: eligible, chosen, managed, error } = await summaryAccounts();
-        if (!live.current) return;
-        setAccounts(eligible);
-        setManaged(managed);
-        setAccount(chosen);
-        if (chosen) await start(chosen);
-        else if (error) setError(error);
+        await start();
       } catch (e) {
         setError((e as Error).message);
         setBusy(false);
@@ -375,18 +361,19 @@ export function SummaryReader({
   const single = batch ? Boolean(singleItem) : tabIds?.length === 1;
   const page = singleItem || source;
   const pageUrl = page && sourceUrl(page.url);
+  const custom = Boolean(batch?.action);
   const status = singleItem
     ? {
-        queued: 'Waiting to summarize…',
+        queued: custom ? 'Waiting to run…' : 'Waiting to summarize…',
         capturing: 'Reading page…',
-        running: 'Generating summary…',
-        completed: 'Summary ready',
-        cancelled: 'Summary stopped',
-        interrupted: 'Summary interrupted',
-        failed: 'Could not summarize page',
+        running: custom ? 'Running call…' : 'Generating summary…',
+        completed: custom ? 'Call complete' : 'Summary ready',
+        cancelled: custom ? 'Call stopped' : 'Summary stopped',
+        interrupted: custom ? 'Call interrupted' : 'Summary interrupted',
+        failed: custom ? 'Call failed' : 'Could not summarize page',
         skipped: 'Page unavailable',
       }[singleItem.status]
-    : `${done} of ${batch?.items.length || 0} summarized · ${settled} processed${running ? ' · Working…' : ''}`;
+    : `${done} of ${batch?.items.length || 0} ${custom ? 'complete' : 'summarized'} · ${settled} processed${running ? ' · Working…' : ''}`;
   return (
     <article className="summary-reader stack" aria-label="Summary reader">
       <div className="row between">
@@ -445,9 +432,9 @@ export function SummaryReader({
                   aria-label="Run again"
                   title="Run again with current settings"
                   disabled={busy}
-                  onClick={() => void start(batch.accountId, true)}
+                  onClick={() => void start(undefined, true)}
                 >
-                  Regenerate
+                  Run again
                 </button>
               )}
             </div>
@@ -461,13 +448,9 @@ export function SummaryReader({
       )}
       {!batch && tabIds && (
         <div className="stack">
-          <p className="small muted standard-only">
-            Summarizes selected tabs with your ChatGPT account. Web pages use loaded text; PDFs use
-            the PDF processing choice saved in Settings.
-          </p>
           {accounts.length > 0 && (
             <label className="field">
-              {managed ? 'Summary connection' : 'Summary account'}
+              {managed ? 'ChatGPT plan connection' : 'ChatGPT account'}
               <select value={account} onChange={(e) => setAccount(e.target.value)}>
                 <option value="">{managed ? 'Choose connection…' : 'Choose account…'}</option>
                 {accounts.map((a) => (
@@ -554,7 +537,7 @@ export function SummaryReader({
               <button
                 className="btn quiet standard-only"
                 disabled={busy}
-                onClick={() => void start(batch.accountId, true)}
+                onClick={() => void start(undefined, true)}
               >
                 {busy ? 'Starting…' : 'Run again'}
               </button>
@@ -572,8 +555,8 @@ export function SummaryReader({
             <summary>Details</summary>
             <p className="small muted">
               {batch.action
-                ? `${batch.action.revision.name} · ${batch.action.input?.preset?.name || 'Saved preset'} · revision ${batch.action.revision.revision.slice(0, 10)}.`
-                : 'English → 简体中文 · Luna medium.'}{' '}
+                ? `${callResultLabel(batch)} · revision ${batch.action.revision.revision.slice(0, 10)}.`
+                : `English → 简体中文 · ${callResultLabel(batch)}.`}{' '}
               <span className="standard-only">
                 Summaries and prepared input are saved locally. Closing this reader does not stop
                 work.

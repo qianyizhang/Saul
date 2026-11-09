@@ -282,7 +282,7 @@ sidebar toggle. Close dismisses a surface; Stop cancels active work.
 ## Connections, presets, and actions
 
 Settings uses focused sections: Overview, Presets, Actions, Preferences, Connections
-and Shortcuts (EZ), with Saul's Summaries and other app-specific destinations.
+and Shortcuts (EZ), with Saul's Calls and other app-specific destinations.
 Keep the selected item beside its editor, one task visible at a time. Preserve
 editor drafts across section changes; switching items or closing asks before
 unsaved work is discarded. Keep native controls, existing density and Min Mode.
@@ -532,26 +532,27 @@ including streaming indicators. Future VFX (particles, glow, distortion) are opt
 accent treatments, kept away from reading text and never required to understand status.
 Add concrete motion/effect tokens and platform mappings when an actual effect is adopted.
 
-### Summaries
+### Calls and summaries
 
-**Call Saul** is the page command (Control+S). **Call preset** selects the work;
-**Model preset** selects a connection, model and options. Managed connections pin the account.
-Settings → Summaries shows the Call preset selector before **Customize Call Saul**.
-**Summarize (default)** is always available. Saving a checked action with
-**Save and select call preset** retains older actions for later selection; switching
-to Summarize never deletes them. Keep the builder request and Builder preset together
-inside the customization disclosure. Show source and Model preset before saving.
-Checking never loads code; saving/selecting initializes trusted code without starting
-a page run. Local file checking and rollback belong in a named disclosure.
-Preserve unsubmitted editor fields within the tab through navigation and reload.
-In the reader, keep saved action/preset in Details, progress and Stop visible,
-and intermediate model output in inspection. Built-in bilingual summaries keep
-their existing layout. Settings → Summaries owns the built-in Summary connection.
-Use saved connection names in its selector, and retain unavailable saved choices for
-repair. First use adopts the configured `gpt-plan` connection or a sole configured
-plan connection; otherwise ask once and save the choice when starting. Later calls
-reuse it across browser restarts. A saved unavailable connection blocks rather than
-switching accounts. Raw auth registrations remain in connection setup only.
+**Call Saul** is the page command (Control+S). **Call preset** selects the work.
+**Model preset** supplies the connection, model and options. Settings → Calls
+shows the Call preset first. **Summarize (default)** has a Model preset selector
+that saves with Settings. Its **Original summary setup** preserves the previous
+ChatGPT plan route for existing installs. Unavailable saved presets remain
+visible for repair and never fall through to the original setup.
+
+**Customize Call Saul** keeps **Call request** and **Build with** together. Show
+**Candidate source** and **Run with** before **Save and select**. A custom Call preset retains the approved revision and its runtime
+model preset as a pair. The Call preset selector names both; switching to
+Summarize never deletes custom choices. Checking never loads code; saving or
+selecting initializes trusted code without starting a page run. Local file
+checking and rollback belong in a named disclosure. Preserve unsubmitted editor
+fields within the tab through navigation and reload.
+
+In the reader and HTML export, identify the saved preset and model. In the reader,
+keep progress and Stop visible, and
+intermediate model output in inspection. Built-in bilingual summaries keep their
+existing layout.
 
 The page context menu offers **Call Saul** for the clicked HTTP(S) tab.
 Chrome reading actions open the summary in the browser's side panel and keep
@@ -574,7 +575,7 @@ never steal focus or open another tab. Explain capture limitations for
 video/audio pages; page text is not the media itself.
 
 Online PDFs use the same reader, progress, failure and inspection surfaces. Keep
-**PDF processing** in Settings → Summaries, independent of model presets. Default
+**PDF processing** in Settings → Calls, independent of model presets. Default
 to **PDF URL attachment (server)**; offer **Local parsing · send text**. Saving
 changes the default for new summaries and Run again. Retry keeps the saved method.
 URL attachments send the link to OpenAI without a Saul download. Explain beside

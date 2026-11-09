@@ -2,7 +2,7 @@ export const SETTINGS_SECTIONS = [
   ['overview', 'Overview'],
   ['models', 'Presets'],
   ['reading', 'Actions'],
-  ['summaries', 'Summaries'],
+  ['calls', 'Calls'],
   ['preferences', 'Preferences'],
   ['connections', 'Connections'],
 ] as const;

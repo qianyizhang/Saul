@@ -176,6 +176,9 @@ export function normalizeSettings(value: unknown): UserSettings {
     throw new Error('Saved PDF processing must be attachment or local.');
 
   if (stored.connections !== undefined) validateConnections(stored.connections);
+  const summaryPresetId = optionalString(stored.summaryPresetId, 'summary model preset');
+  if (summaryPresetId !== undefined && (!summaryPresetId.trim() || summaryPresetId.length > 128))
+    throw new Error('Invalid saved summary model preset.');
   const summaryConnectionKey = optionalString(stored.summaryConnectionKey, 'summary connection');
   if (summaryConnectionKey !== undefined && !/^[a-z][a-z0-9-]{0,63}$/.test(summaryConnectionKey))
     throw new Error('Invalid saved summary connection key.');
@@ -201,6 +204,7 @@ export function normalizeSettings(value: unknown): UserSettings {
     ),
     ...(connectionProfiles === undefined ? {} : { connectionProfiles }),
     summaryPdfProcessing,
+    ...(summaryPresetId === undefined ? {} : { summaryPresetId }),
     ...(summaryConnectionKey === undefined ? {} : { summaryConnectionKey }),
     scopedConfigRevision: optionalNumber(stored.scopedConfigRevision, 'scoped config revision'),
     ...(stored.sharedPresetRevision === undefined

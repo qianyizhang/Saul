@@ -25,9 +25,8 @@ export function validateDigest(v: unknown): asserts v is DigestRequest {
         new Set(v.tabIds).size !== v.tabIds.length ||
         !v.tabIds.every((id) => Number.isSafeInteger(id) && id >= 0))) ||
     (v.action === 'start' &&
-      (typeof v.accountId !== 'string' ||
-        !v.accountId ||
-        v.accountId.length > 256 ||
+      ((v.accountId !== undefined &&
+        (typeof v.accountId !== 'string' || !v.accountId || v.accountId.length > 256)) ||
         (v.connectionKey !== undefined &&
           (typeof v.connectionKey !== 'string' ||
             !/^[a-z][a-z0-9-]{0,63}$/.test(v.connectionKey))) ||

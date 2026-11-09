@@ -60,6 +60,7 @@ export interface DigestItem {
 export interface DigestMeta {
   credentialOwner?: 'local' | 'saul';
   action?: import('../actions/contract').FrozenAction;
+  summaryInput?: import('../types/storage').RunInput;
   pdfProcessing?: PdfProcessing; // Missing on old batches means local parsing.
   id: string;
   windowTitle: string;
@@ -68,8 +69,8 @@ export interface DigestMeta {
   connectionKey?: string;
   createdAt: number;
   prompt: string;
-  model: 'gpt-6-luna';
-  effort: 'medium';
+  model: string;
+  effort?: string;
 }
 export interface DigestBatch extends DigestMeta {
   error?: string;
@@ -107,7 +108,7 @@ export interface DigestOperations {
       action: 'start';
       id: string;
       tabIds: number[];
-      accountId: string;
+      accountId?: string; // Only used by the original summary setup.
       connectionKey?: string;
       regenerate?: boolean;
     };

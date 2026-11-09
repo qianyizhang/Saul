@@ -20,22 +20,22 @@ test('unsubmitted action fields survive navigation and reload without a model ca
   const { popup } = await sandbox.launch();
   await configureFixtureProvider(popup, fixtureServer.origin);
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Summaries');
+  await settingsSection(popup, 'Calls');
   await popup.getByLabel('Customize Call Saul', { exact: true }).click();
-  await popup.getByLabel('Action request', { exact: true }).fill('Keep this unsent request 中文.');
+  await popup.getByLabel('Call request', { exact: true }).fill('Keep this unsent request 中文.');
   await popup.getByLabel('Local module and recovery', { exact: true }).click();
   await popup.getByLabel('Module file path', { exact: true }).fill('/tmp/my-summary.ts');
   await popup.getByRole('button', { name: 'History', exact: true }).click();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Summaries');
+  await settingsSection(popup, 'Calls');
   await popup.getByLabel('Customize Call Saul', { exact: true }).click();
-  await expect(popup.getByLabel('Action request', { exact: true })).toHaveValue(
+  await expect(popup.getByLabel('Call request', { exact: true })).toHaveValue(
     'Keep this unsent request 中文.',
   );
   await popup.reload();
-  await settingsSection(popup, 'Summaries');
+  await settingsSection(popup, 'Calls');
   await popup.getByLabel('Customize Call Saul', { exact: true }).click();
-  await expect(popup.getByLabel('Action request', { exact: true })).toHaveValue(
+  await expect(popup.getByLabel('Call request', { exact: true })).toHaveValue(
     'Keep this unsent request 中文.',
   );
   await popup.getByLabel('Local module and recovery', { exact: true }).click();
@@ -92,23 +92,26 @@ test('creates and explicitly loads a real local action, renders safely, isolates
     await helper.install(worker);
     await configureFixtureProvider(popup, fixtureServer.origin);
     await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-    await settingsSection(popup, 'Summaries');
+    await settingsSection(popup, 'Calls');
     await popup.getByLabel('Customize Call Saul', { exact: true }).click();
     await popup
-      .getByLabel('Action request', { exact: true })
+      .getByLabel('Call request', { exact: true })
       .fill('Explain the main claim and its weakest evidence.');
-    await popup.getByRole('button', { name: 'Create action', exact: true }).click();
+    await popup.getByRole('button', { name: 'Create call', exact: true }).click();
     await expect(popup.getByLabel('Checked candidate')).toBeVisible();
+    await expect(
+      popup.getByText('Saving loads local code with your OS permissions.'),
+    ).toBeVisible();
     expect(calls).toHaveLength(1);
     expect(
       helper.messages.some(
         (m) => (m as { request?: { action: string } }).request?.action === 'run',
       ),
     ).toBe(false);
-    await popup.getByRole('button', { name: 'Save and select call preset', exact: true }).click();
-    await expect(
-      popup.getByText('Current action: Evidence summary', { exact: true }),
-    ).toBeVisible();
+    await popup.getByRole('button', { name: 'Save and select', exact: true }).click();
+    await expect(popup.getByLabel('Call preset').locator('option:checked')).toHaveText(
+      'Evidence summary · Current',
+    );
     expect(calls).toHaveLength(1);
     const source = await context.newPage();
     await source.goto(fixtureServer.origin + '/article');
@@ -145,13 +148,13 @@ test('creates and explicitly loads a real local action, renders safely, isolates
       source:
         'export default async ctx => "# Revised answer\\n\\n" + await ctx.generate({instructions:"Make it shorter."});',
     };
-    await popup.getByLabel('Action request', { exact: true }).fill('Make it shorter.');
-    await popup.getByRole('button', { name: 'Revise action', exact: true }).click();
+    await popup.getByLabel('Call request', { exact: true }).fill('Make it shorter.');
+    await popup.getByRole('button', { name: 'Revise call', exact: true }).click();
     await expect
       .poll(async () => (await request(popup, { action: 'status' })).candidate?.source)
       .toBe(module.source);
     expect(calls).toHaveLength(3);
-    await popup.getByRole('button', { name: 'Save and select call preset', exact: true }).click();
+    await popup.getByRole('button', { name: 'Save and select', exact: true }).click();
     await expect
       .poll(async () => (await request(popup, { action: 'status' })).selected?.revision.source)
       .toBe(module.source);
@@ -251,7 +254,7 @@ test('retains incomplete model output on helper loss and Stop; no replay or comp
     await reader.getByRole('button', { name: 'Retry unfinished' }).click();
     await expect.poll(() => requests).toBe(2);
     await reader.getByRole('button', { name: 'Stop', exact: true }).click();
-    await expect(reader.getByRole('status').filter({ hasText: 'Summary stopped' })).toBeVisible();
+    await expect(reader.getByRole('status')).toHaveText('Call stopped');
     expect(requests).toBe(2);
     await expect(reader.locator('.action-answer')).toHaveCount(0);
   } finally {

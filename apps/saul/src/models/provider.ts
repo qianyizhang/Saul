@@ -6,13 +6,18 @@ import { planEvents } from './chatgpt-plan';
 import type { ModelEvent } from './events';
 import { credentialCall } from '../native/credentials';
 import { catalogIssue, validConnectionCatalog } from '../../native/connections-contract.mts';
+import type { PdfUrlAttachment } from '../../native/plan-protocol.mts';
 
 export async function* streamModel(
   input: RunInput,
   credential: string,
   signal?: AbortSignal,
-  options: { maxTokens?: number } = {},
+  options: { maxTokens?: number; attachments?: PdfUrlAttachment[] } = {},
 ): AsyncGenerator<ModelEvent> {
+  if (options.attachments?.length && input.provider !== 'chatgpt-plan')
+    throw new Error(
+      'PDF URL attachments need a ChatGPT plan preset. Choose Local parsing in Settings → Calls and Run again to send text.',
+    );
   if (
     input.preset?.connectionKey &&
     (input.credentialOwner === 'saul' || input.remote.credentialOwner === 'saul')
@@ -57,6 +62,7 @@ export async function* streamModel(
           ...input.plan,
           systemPrompt: input.systemPrompt,
           userPrompt: input.userPrompt,
+          ...(options.attachments ? { attachments: options.attachments } : {}),
         },
         signal,
         input.credentialOwner ?? 'local',

@@ -721,63 +721,37 @@ export function Settings({
           </div>
         </div>
       </section>
-      <section hidden={section !== 'summaries'} className="settings-section" aria-label="Summaries">
-        <h3>Summaries</h3>
-        {settings.sharedCredentials === 'saul' && (
-          <label className="field">
-            Summary connection
-            <select
-              value={settings.summaryConnectionKey ?? ''}
-              onChange={(event) =>
-                update({ summaryConnectionKey: event.target.value || undefined })
-              }
-            >
-              <option value="">Use default connection</option>
-              {settings.summaryConnectionKey &&
-                !settings.connections.some(
-                  (c) => c.kind === 'chatgpt-plan' && c.key === settings.summaryConnectionKey,
-                ) && (
-                  <option value={settings.summaryConnectionKey} disabled>
-                    Unavailable connection
-                  </option>
-                )}
-              {settings.connections
-                .filter((c) => c.kind === 'chatgpt-plan')
-                .map((c) => (
-                  <option key={c.key} value={c.key}>
-                    {c.name}
-                  </option>
-                ))}
-            </select>
-          </label>
-        )}
-        <label className="field">
-          PDF processing
-          <select
-            aria-label="PDF processing"
-            value={settings.summaryPdfProcessing ?? 'attachment'}
-            onChange={(event) =>
-              update({ summaryPdfProcessing: event.target.value as 'attachment' | 'local' })
-            }
-          >
-            <option value="attachment">PDF URL attachment (server)</option>
-            <option value="local">Local parsing · send text</option>
-          </select>
-        </label>
-        <details className="standard-only">
-          <summary>Details</summary>
-          <p className="small muted">
-            PDF URL attachment lets OpenAI read text and page images from the link, without a
-            download by Saul. The link must work without your browser sign-in. Local parsing sends
-            extracted text only. This setting applies to new summaries and Run again; Retry keeps
-            the saved method.
-          </p>
-        </details>
+      <section hidden={section !== 'calls'} className="settings-section" aria-label="Calls">
+        <h2 className="view-title">Calls</h2>
         <ActionSettings
           presets={configuration.presets}
+          summaryPresetId={settings.summaryPresetId ?? ''}
+          onSummaryPresetChange={(id) => update({ summaryPresetId: id || undefined })}
           settingsDirty={dirty}
           onBuildingChange={setActionBuilding}
-        />
+        >
+          <label className="field">
+            PDF processing
+            <select
+              aria-label="PDF processing"
+              value={settings.summaryPdfProcessing ?? 'attachment'}
+              onChange={(event) =>
+                update({ summaryPdfProcessing: event.target.value as 'attachment' | 'local' })
+              }
+            >
+              <option value="attachment">PDF URL attachment (server)</option>
+              <option value="local">Local parsing · send text</option>
+            </select>
+          </label>
+          <details className="standard-only">
+            <summary>About PDF processing</summary>
+            <p className="small muted">
+              PDF URL attachment requires a ChatGPT plan preset and a link OpenAI can open without
+              your browser sign-in. Local parsing sends extracted text only. This setting applies to
+              new calls and Run again; Retry keeps the saved method.
+            </p>
+          </details>
+        </ActionSettings>
       </section>
       <section
         hidden={section !== 'overview' && section !== 'reading'}
@@ -821,7 +795,7 @@ export function Settings({
         </div>
         <div hidden={section !== 'overview'} className="settings-overview">
           <AppVersion />
-          <button className="settings-link" onClick={() => onSectionChange('connections')}>
+          <button className="settings-link" onClick={() => onSectionChange('models')}>
             <span>Presets</span>
             <span>
               {configuration.presets.length}
@@ -835,8 +809,8 @@ export function Settings({
               <span aria-hidden="true"> ›</span>
             </span>
           </button>
-          <button className="settings-link" onClick={() => onSectionChange('summaries')}>
-            <span>Summaries</span>
+          <button className="settings-link" onClick={() => onSectionChange('calls')}>
+            <span>Calls</span>
             <span aria-hidden="true">›</span>
           </button>
         </div>
@@ -975,11 +949,11 @@ export function Settings({
             </button>
           </div>
         )}
-        {actionBuilding && section !== 'summaries' && (
+        {actionBuilding && section !== 'calls' && (
           <div className="row">
-            <span role="status">Creating action…</span>
-            <button className="btn" onClick={() => onSectionChange('summaries')}>
-              Summaries
+            <span role="status">Building call…</span>
+            <button className="btn" onClick={() => onSectionChange('calls')}>
+              Calls
             </button>
           </div>
         )}

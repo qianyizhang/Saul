@@ -458,7 +458,7 @@ export default defineBackground(() => {
           prepared = prepareActionPreset(await currentSettings(), r.presetId);
         if (r.action === 'restore') {
           const previous = (await actionState()).previous;
-          if (!previous) throw new Error('No previous working action.');
+          if (!previous) throw new Error('No previous call preset.');
           prepareActionPreset(await currentSettings(), previous.presetId);
         }
         return runnerRequest({ operation: 'action', message: r, prepared });
@@ -479,7 +479,7 @@ export default defineBackground(() => {
           snapshot = await snapshotSelection(
             r.id,
             r.tabIds,
-            r.action === 'start' ? r.accountId : '',
+            r.action === 'start' ? (r.accountId ?? '') : '',
             preference?.state === 'ready' ? preference.settings.summaryPdfProcessing : undefined,
           );
           if (preference?.state !== 'ready') delete snapshot.pdfProcessing;
@@ -490,14 +490,28 @@ export default defineBackground(() => {
                 : 'local';
           const selected = (await actionState()).selected;
           if (r.action === 'start' && !selected && preference?.state === 'ready') {
-            validateSummaryConnection(preference.settings, r.accountId, r.connectionKey);
-            if (r.connectionKey) snapshot.connectionKey = r.connectionKey;
+            const settings = preference.settings;
+            if (settings.summaryPresetId) {
+              const prepared = prepareActionPreset(settings, settings.summaryPresetId);
+              const { input } = prepared;
+              snapshot.summaryInput = input;
+              snapshot.accountId = input.plan?.accountId ?? '';
+              snapshot.connectionKey = input.preset?.connectionKey;
+              snapshot.model = input.plan?.model ?? input.remote.model;
+              snapshot.effort = input.plan?.effort;
+              credential = prepared.credential;
+            } else {
+              if (!r.accountId)
+                throw new Error('Choose a model preset in Settings → Calls and reopen Call Saul.');
+              validateSummaryConnection(settings, r.accountId, r.connectionKey);
+              if (r.connectionKey) snapshot.connectionKey = r.connectionKey;
+            }
           }
           if (selected) {
             snapshot.action = structuredClone(selected);
             snapshot.prompt = selected.revision.source;
-            if (r.action === 'start') {
-              const prepared = prepareActionPreset(await currentSettings(), selected.presetId);
+            if (r.action === 'start' && preference?.state === 'ready') {
+              const prepared = prepareActionPreset(preference.settings, selected.presetId);
               snapshot.action.input = prepared.input;
               credential = prepared.credential;
             }
@@ -508,6 +522,8 @@ export default defineBackground(() => {
           if (saved.action) {
             if (!saved.action.input) throw new Error('The saved action preset is unavailable.');
             credential = prepareFrozenRun(await currentSettings(), saved.action.input).credential;
+          } else if (saved.summaryInput) {
+            credential = prepareFrozenRun(await currentSettings(), saved.summaryInput).credential;
           }
         }
         return runnerRequest({ operation: 'digest', message: r, snapshot, credential });

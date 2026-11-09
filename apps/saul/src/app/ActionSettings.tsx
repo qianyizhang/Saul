@@ -1,5 +1,5 @@
 import { ActionLabel } from '../surface/ActionLabel';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ModelPreset } from '../types';
 import { ACTION_FORM_LIMITS, type ActionRequest, type ActionState } from '../actions/contract';
 import { sendActionMessage } from '../storage/client';
@@ -38,17 +38,26 @@ function PresetField({
   value,
   presets,
   onChange,
+  placeholder = 'Choose saved preset…',
+  disabled = false,
 }: {
   label: string;
   value: string;
   presets: ModelPreset[];
   onChange: (value: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
 }) {
   return (
     <label className="field">
       {label}
-      <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value="">Choose saved preset…</option>
+      <select
+        aria-label={label}
+        disabled={disabled}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">{placeholder}</option>
         {value && !presets.some((p) => p.id === value) && (
           <option value={value} disabled>
             Unavailable preset
@@ -66,13 +75,22 @@ function PresetField({
 
 export function ActionSettings({
   presets,
+  summaryPresetId,
+  onSummaryPresetChange,
   settingsDirty,
   onBuildingChange,
+  children,
 }: {
   presets: ModelPreset[];
+  summaryPresetId: string;
+  onSummaryPresetChange: (id: string) => void;
   settingsDirty: boolean;
   onBuildingChange?: (building: boolean) => void;
+  children: ReactNode;
 }) {
+  const writePresets = presets.filter(
+    (p) => (p.capability ?? 'write') === 'write' && p.provider !== 'chrome-ai',
+  );
   const [state, setState] = useState<ActionState>();
   const [form, setForm] = useState(readForm);
   const { prompt = '', builderPreset = '', actionPreset = '', path = '' } = form;
@@ -106,8 +124,8 @@ export function ActionSettings({
         if (message.action === 'status' && !state) {
           setForm((current) => ({
             prompt: next.prompt || '',
-            actionPreset: next.selected?.presetId || presets[0]?.id || '',
-            builderPreset: presets[0]?.id || '',
+            actionPreset: next.selected?.presetId || summaryPresetId || writePresets[0]?.id || '',
+            builderPreset: summaryPresetId || writePresets[0]?.id || '',
             ...current,
           }));
         }
@@ -146,6 +164,9 @@ export function ActionSettings({
   }, [building]);
   const disabled = busy || building || settingsDirty;
   const candidate = state?.candidate;
+  const canEditCall = state && !state.blocked && !disabled;
+  const revise = Boolean(candidate || state?.selected);
+  const buildLabel = revise ? 'Revise call' : 'Create call';
   const alreadyLoaded =
     candidate?.revision === state?.selected?.revision.revision &&
     actionPreset === state?.selected?.presetId;
@@ -156,7 +177,7 @@ export function ActionSettings({
           Call preset
           <select
             aria-label="Call preset"
-            disabled={disabled || !state || state.blocked}
+            disabled={!canEditCall}
             value={
               state.selected ? `${state.selected.revision.revision}:${state.selected.presetId}` : ''
             }
@@ -176,17 +197,36 @@ export function ActionSettings({
             }}
           >
             <option value="">Summarize (default)</option>
-            {(state.library || []).map((choice) => (
-              <option
-                key={`${choice.revision.revision}:${choice.presetId}`}
-                value={`${choice.revision.revision}:${choice.presetId}`}
-              >
-                {choice.revision.name} ·{' '}
-                {presets.find((p) => p.id === choice.presetId)?.name || 'Unavailable model preset'}
-              </option>
-            ))}
+            {(state.library || []).map((choice) => {
+              const model = writePresets.find((p) => p.id === choice.presetId);
+              const key = `${choice.revision.revision}:${choice.presetId}`;
+              return (
+                <option key={key} value={key} disabled={!model}>
+                  {choice.revision.name} · {model?.name ?? 'Unavailable preset'}
+                </option>
+              );
+            })}
           </select>
         </label>
+      )}
+      {state && !state.selected && (
+        <PresetField
+          label="Model preset"
+          value={summaryPresetId}
+          presets={writePresets}
+          onChange={onSummaryPresetChange}
+          placeholder="Original summary setup"
+          disabled={busy || building}
+        />
+      )}
+      {settingsDirty && (
+        <p className="small muted">Save or reload settings to switch call presets.</p>
+      )}
+      {children}
+      {(error || state?.error) && (
+        <p role="alert" className="notice error">
+          {error || state?.error}
+        </p>
       )}
       <details
         onToggle={(event) => {
@@ -196,30 +236,16 @@ export function ActionSettings({
         <summary aria-label="Customize Call Saul" title="Customize Call Saul">
           <ActionLabel short="Customize" full="Customize Call Saul" />
         </summary>
-        <div className="stack settings-disclosure" aria-label="Summary action">
-          <p role="status" className="small">
-            {state?.blocked
-              ? 'Action settings unavailable'
-              : state
-                ? `Current action: ${state.selected?.revision.name || 'Built-in bilingual summary'}`
-                : 'Loading action…'}
-          </p>
-          {state?.selected && (
-            <p className="small muted">
-              Preset:{' '}
-              {presets.find((p) => p.id === state.selected?.presetId)?.name || 'Unavailable preset'}{' '}
-              · revision {state.selected.revision.revision.slice(0, 10)}
-            </p>
-          )}
-          {settingsDirty && (
-            <p className="notice">
-              Save or reload model settings before creating or loading an action.
+        <div className="stack settings-disclosure" aria-label="Customize call">
+          {(!state || state.blocked) && (
+            <p role="status" className="small">
+              {state?.blocked ? 'Call settings unavailable' : 'Loading call settings…'}
             </p>
           )}
           <label className="field">
-            Action request
+            Call request
             <textarea
-              aria-label="Action request"
+              aria-label="Call request"
               disabled={!state}
               rows={3}
               maxLength={ACTION_FORM_LIMITS.prompt}
@@ -229,24 +255,24 @@ export function ActionSettings({
             />
           </label>
           <PresetField
-            label="Builder preset"
+            label="Build with"
             value={builderPreset}
-            presets={presets}
+            presets={writePresets}
+            disabled={!canEditCall}
             onChange={(value) => edit({ builderPreset: value })}
           />
           <div className="row">
             <button
               type="button"
               className="btn"
-              disabled={disabled || !prompt.trim() || !presets.some((p) => p.id === builderPreset)}
-              aria-label={candidate || state?.selected ? 'Revise action' : 'Create action'}
-              title={candidate || state?.selected ? 'Revise action' : 'Create action'}
+              disabled={
+                !canEditCall || !prompt.trim() || !writePresets.some((p) => p.id === builderPreset)
+              }
+              aria-label={buildLabel}
+              title={buildLabel}
               onClick={() => void request({ action: 'build', prompt, presetId: builderPreset })}
             >
-              <ActionLabel
-                short={candidate || state?.selected ? 'Revise' : 'Create'}
-                full={candidate || state?.selected ? 'Revise action' : 'Create action'}
-              />
+              <ActionLabel short={revise ? 'Revise' : 'Create'} full={buildLabel} />
             </button>
             {building && (
               <button
@@ -262,16 +288,9 @@ export function ActionSettings({
             )}
           </div>
           <p className="small muted standard-only">
-            Create/revise uses one model request. Review the checked code, then Save and select.
-            Saving keeps a Call preset you can select again. The next Call Saul runs the selected
-            preset.
+            Creating or revising uses one model request. Review the code before saving.
           </p>
-          {building && <p role="status">Creating and checking action…</p>}
-          {(error || state?.error) && (
-            <p role="alert" className="notice error">
-              {error || state?.error}
-            </p>
-          )}
+          {building && <p role="status">Building call…</p>}
           {candidate && (
             <div className="stack" aria-label="Checked candidate">
               <strong>{candidate.name}</strong>
@@ -279,28 +298,36 @@ export function ActionSettings({
               <InspectionText label="Candidate source" text={candidate.source} />
               {state?.selected && candidate.revision !== state.selected.revision.revision && (
                 <details>
-                  <summary aria-label="Current selected source" title="Current selected source">
-                    <ActionLabel short="Current" full="Current selected source" />
+                  <summary aria-label="View selected call source" title="View selected call source">
+                    <ActionLabel short="Current" full="View selected call source" />
                   </summary>
-                  <InspectionText label="Selected source" text={state.selected.revision.source} />
+                  <InspectionText
+                    label="Selected call source"
+                    text={state.selected.revision.source}
+                  />
                 </details>
               )}
               <PresetField
-                label="Model preset"
+                label="Run with"
                 value={actionPreset}
-                presets={presets}
+                presets={writePresets}
+                disabled={!canEditCall}
                 onChange={(value) => edit({ actionPreset: value })}
               />
               <p className="small muted standard-only">
-                One run per page · Up to three model calls · Five minutes. Load runs trusted local
-                code with your OS permissions. Initialization effects cannot be undone.
+                Per page: up to three model calls in five minutes.
               </p>
+              {!alreadyLoaded && (
+                <p className="small muted">Saving loads local code with your OS permissions.</p>
+              )}
               <button
                 type="button"
                 className="btn primary"
-                aria-label={alreadyLoaded ? 'Selected' : 'Save and select call preset'}
-                title="Save and select call preset"
-                disabled={disabled || !presets.some((p) => p.id === actionPreset) || alreadyLoaded}
+                aria-label={alreadyLoaded ? 'Selected' : 'Save and select'}
+                title="Save and select"
+                disabled={
+                  !canEditCall || !writePresets.some((p) => p.id === actionPreset) || alreadyLoaded
+                }
                 onClick={() =>
                   void request({
                     action: 'load',
@@ -310,8 +337,8 @@ export function ActionSettings({
                 }
               >
                 <ActionLabel
-                  short={alreadyLoaded ? 'Selected' : 'Select'}
-                  full={alreadyLoaded ? 'Selected' : 'Save and select call preset'}
+                  short={alreadyLoaded ? 'Selected' : 'Save & select'}
+                  full={alreadyLoaded ? 'Selected' : 'Save and select'}
                 />
               </button>
             </div>
@@ -328,13 +355,13 @@ export function ActionSettings({
                   value={path}
                   maxLength={ACTION_FORM_LIMITS.path}
                   onChange={(e) => edit({ path: e.target.value })}
-                  placeholder="/absolute/path/summarize.ts"
+                  placeholder="/absolute/path/call.ts"
                 />
               </label>
               <button
                 type="button"
                 className="btn"
-                disabled={disabled || !path.trim()}
+                disabled={!canEditCall || !path.trim()}
                 onClick={() => void request({ action: 'file', path })}
                 aria-label="Check file"
                 title="Check file"
@@ -342,8 +369,7 @@ export function ActionSettings({
                 <ActionLabel short="Check" full="Check file" />
               </button>
               <p className="small muted standard-only">
-                Check file only reads and checks code. Review its candidate, then Save and select to
-                reload an edit. No file watching.
+                Checking stages the file for review. Save and select loads it.
               </p>
               {state?.previous && (
                 <button
@@ -351,10 +377,10 @@ export function ActionSettings({
                   className="btn"
                   disabled={disabled}
                   onClick={() => void request({ action: 'restore' })}
-                  aria-label="Restore previous action"
-                  title="Restore previous action"
+                  aria-label="Restore previous call"
+                  title="Restore previous call"
                 >
-                  <ActionLabel short="Restore" full="Restore previous action" />
+                  <ActionLabel short="Restore" full="Restore previous call" />
                 </button>
               )}
               {(state?.selected || state?.blocked) && (
@@ -363,10 +389,10 @@ export function ActionSettings({
                   className="btn"
                   disabled={disabled}
                   onClick={() => void request({ action: 'builtin' })}
-                  aria-label="Use built-in summary"
-                  title="Use built-in summary"
+                  aria-label="Use Summarize"
+                  title="Use Summarize"
                 >
-                  <ActionLabel short="Reset" full="Use built-in summary" />
+                  <ActionLabel short="Summarize" full="Use Summarize" />
                 </button>
               )}
               {state?.raw && (

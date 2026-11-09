@@ -32,8 +32,7 @@ export class ActionManager {
       }
       if (this.state.building) {
         this.state.building = false;
-        this.state.error =
-          'Action creation was interrupted. Nothing was loaded or replayed. Revise explicitly.';
+        this.state.error = 'Call creation was interrupted. Revise the call to try again.';
         await this.save();
       }
     })().catch((error: unknown) => {
@@ -53,12 +52,12 @@ export class ActionManager {
       });
     const work = this.lane.then(async () => {
       await this.ready;
-      if (this.building) throw new Error('Stop action creation or wait for it to finish.');
+      if (this.building) throw new Error('Stop building the call or wait for it to finish.');
       if (this.state.blocked && request.action !== 'builtin')
-        throw new Error('Use built-in summary to recover invalid action settings.');
+        throw new Error('Choose Use Summarize to recover invalid call settings.');
       try {
         if (request.action === 'build') {
-          if (!prepared) throw new Error('Choose a saved builder preset.');
+          if (!prepared) throw new Error('Choose a model preset in Build with.');
           this.state.prompt = request.prompt;
           // Check the optional helper and retain referenced code before spending model quota.
           await this.prune();
@@ -107,9 +106,9 @@ export class ActionManager {
                 : undefined;
           const revision = request.action === 'load' ? request.revision : choice?.revision.revision;
           const presetId = request.action === 'load' ? request.presetId : choice?.presetId;
-          if (!revision || !presetId) throw new Error('No previous working action is available.');
+          if (!revision || !presetId) throw new Error('The saved call preset is unavailable.');
           if (request.action === 'load' && this.state.candidate?.revision !== revision)
-            throw new Error('The candidate changed. Preview and Load the checked candidate.');
+            throw new Error('The candidate changed. Review it before saving.');
           if (
             this.state.selected?.revision.revision === revision &&
             this.state.selected.presetId === presetId
@@ -198,7 +197,7 @@ export class ActionManager {
       this.state.candidate = result.revision;
     } catch (error) {
       this.state.error = signal.aborted
-        ? 'Action creation stopped or timed out. Available output is incomplete; nothing was loaded.'
+        ? 'Call creation stopped or timed out. Any output is incomplete.'
         : (error as Error).message;
     } finally {
       this.state.building = false;

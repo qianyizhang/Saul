@@ -356,11 +356,10 @@ portable configuration. Disconnect app preserves the shared connection; Sign out
 and Remove key confirm their both-app scope. Custom endpoints and standalone
 browser installations retain their existing route.
 
-Built-in Summarize resolves configured plan connections through `src/digest/connection.ts`,
-not the raw registration list. `summaryConnectionKey` is a non-secret Saul preference
-in the scoped settings document. The settings owner persists it with revision checks;
-new-run admission revalidates its connection/account binding before freezing the
-account, connection key and credential owner in the batch. Missing or disconnected
-choices block; Retry keeps the batch's frozen route. Standalone summaries retain a
-local account preference. Reauthorization uses the selected registration in both
+Built-in Summarize stores a model preset ID in Saul's scoped settings. New-run
+admission resolves the preset through the same path as custom calls and freezes
+its route and model options in the batch; credentials stay outside saved history.
+Retry uses the saved input. Without an explicit preset, the original summary
+setup still resolves its legacy plan binding through `src/digest/connection.ts`.
+Reauthorization uses the selected registration in both
 apps; only an explicit Add another account requests a new registration.

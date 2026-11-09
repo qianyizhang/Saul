@@ -5,8 +5,7 @@ import type { RunInput } from '../types/storage';
 
 export function prepareActionPreset(settings: UserSettings, presetId: string, inspectOnly = false) {
   const preset = configurationFor(settings).presets.find((p) => p.id === presetId);
-  if (!preset)
-    throw new Error('The action needs an existing saved preset. Choose one in Settings.');
+  if (!preset) throw new Error('Choose an existing saved preset in Settings → Calls.');
   const prepared = preparePreset(settings, preset, 'write', inspectOnly);
   const input: RunInput = {
     ...prepared.choices,

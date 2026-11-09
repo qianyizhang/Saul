@@ -1,16 +1,15 @@
 # Call Saul presets
 
-Call Saul runs the selected Call preset. Saved custom actions remain selectable in
-Settings → Summaries, alongside Summarize (default). Its default is the built-in bilingual
-summary and needs no action helper. Custom actions run once per selected page, in
-source order with two pages processed concurrently. There is no combined-tab
+Call Saul runs the call preset selected in Settings → Calls. **Summarize
+(default)** gives a bilingual summary without the optional action helper. Custom
+calls run once per selected page, with up to two pages running concurrently. There is no combined-tab
 workflow, agent loop, package installation, file watcher or custom executable UI.
 
 ## Create, check and load
 
-In **Settings → Summaries → Customize Call Saul**, choose a saved **Builder preset**
-and describe the action. **Create action** or **Revise action** sends one request
-using that preset. Revision includes the current candidate (or selected source)
+In **Settings → Calls → Customize Call Saul**, describe the call in **Call request** and
+choose a model preset in **Build with**. **Create call** or **Revise call** sends one
+request using that preset. Revision includes the current candidate (or selected source)
 and the previous error/response as context. There is no automatic repair or retry.
 Unsubmitted request, preset and file-path fields stay in the current tab's session
 through navigation and reload. This draft cache starts no model work and changes
@@ -33,17 +32,16 @@ source bytes. Checking does not import the module. Malformed, refused and
 incomplete output remains available for an explicit revision. Nothing is loaded
 automatically.
 
-Review **Candidate source**, choose an existing **Model preset**, then click
-**Save and select call preset**. That click authorizes initialization of
+Review **Candidate source**, choose a model preset in **Run with**, then click
+**Save and select**. That click authorizes initialization of
 trusted local code. Saul verifies the actual default export in a fresh Node worker
 before changing the selected revision. Loading does not call the action handler
 or start model inference. Initialization errors preserve the old selection;
 initialization side effects that already occurred cannot be undone.
 
-The next deliberate Call Saul uses the selected Call preset. Its model preset can
-differ from the builder preset. Saved model settings must be saved/reloaded before
-using either choice. Each page job freezes its provider, account/connection, model
-and options. The script cannot pass replacement model or billing choices to
+**Run with** can use a different model preset from **Build with**. Save or reload
+settings before changing either choice. Each page job freezes the connection,
+model and options. The script cannot pass replacement model or billing choices to
 `generate`. Missing capabilities block explicitly; there is no fallback.
 
 ## Action contract 1
@@ -81,10 +79,10 @@ choices; credentials are resolved only through their existing owner.
 ## Local files, reload and recovery
 
 **Local module and recovery → Check file** reads a regular local `.js`, `.mjs`,
-`.ts` or `.mts` file under 60 KB. Review the staged candidate, then Save and select call preset.
+`.ts` or `.mts` file under 60 KB. Review the staged candidate, then **Save and select**.
 Editing the file alone changes neither selected code nor active work. Active jobs
 remain pinned to their saved revision while future jobs can use a newly loaded one.
-Use **Restore previous action** or **Use built-in summary** explicitly to roll back.
+Use **Restore previous call** or **Use Summarize** explicitly to roll back.
 
 The helper starts on demand and exits after 60 seconds without requests, loading
 or active runs. Its next connection reloads the exact approved revision only when

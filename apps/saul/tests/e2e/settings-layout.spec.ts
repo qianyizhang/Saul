@@ -24,7 +24,10 @@ test('focused settings preserves drafts across sections and keeps Min Mode conci
     `Version ${identity.version} · Build ${identity.build}`,
   );
   await expect(popup.getByLabel('Model name', { exact: true })).toBeHidden();
-  await settingsSection(popup, 'Presets');
+  await popup
+    .getByRole('region', { name: 'Overview' })
+    .getByRole('button', { name: /^Presets/ })
+    .click();
   await popup.getByLabel('Model name', { exact: true }).fill('draft-model');
   await expect(popup.getByRole('button', { name: 'Add preset', exact: true })).toHaveText('+');
   await settingsSection(popup, 'Actions');
@@ -55,7 +58,7 @@ test('focused settings preserves drafts across sections and keeps Min Mode conci
     'Overview',
     'Presets',
     'Actions',
-    'Summaries',
+    'Calls',
     'Preferences',
     'Connections',
   ] as const) {

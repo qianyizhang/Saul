@@ -15,13 +15,11 @@ apps; Disconnect app only removes that app's binding. Account registrations rema
 distinct even when their email labels match. Never merge tokens or change a saved
 connection's account to resolve duplicate labels.
 
-Built-in **Call Saul → Summarize** uses the saved **Summary connection** in Settings
-→ Summaries. On first use it adopts the configured `gpt-plan` connection, or a sole
-configured plan connection. Multiple connections without a default require one
-choice, saved when starting the summary and retained across browser restarts.
-Other auth registrations do not appear as extra managed connections. A removed,
-signed-out or permission-disabled saved choice blocks until repaired or explicitly
-changed. Custom call presets continue to use their own preset's connection.
+To use a plan connection for built-in **Summarize**, select its saved **Model
+preset** in **Settings → Calls** and Save. Custom Call presets retain the runtime
+model preset chosen at approval. The preset's connection determines the account.
+A removed, signed-out or permission-disabled account blocks without a fallback.
+**Original summary setup** retains the previous plan binding for existing installs.
 
 Standalone browser installations retain the `com.saul.chatgpt` helper and local
 credential store. Install it with Node 24 and the pinned pnpm version:

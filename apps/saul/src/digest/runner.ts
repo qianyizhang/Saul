@@ -1,5 +1,6 @@
 import type { DbCall } from '../types/storage';
 import { planEvents } from '../models/chatgpt-plan';
+import { streamModel } from '../models/provider';
 import { parseSummary, SUMMARY_PROMPT, summaryRequestInput } from './summary';
 import { compareText } from '../reading/input-change';
 import { runCustomAction } from '../actions/run';
@@ -214,7 +215,11 @@ export class DigestRunner {
     if (tabId === undefined) return { saved };
     const comparison: DigestComparison = { index: item.index, fields: [] };
     if (!batch.action && batch.prompt !== SUMMARY_PROMPT) comparison.fields.push('Instructions');
-    if (!batch.action && (batch.model !== 'gpt-6-luna' || batch.effort !== 'medium'))
+    if (
+      !batch.action &&
+      !batch.summaryInput &&
+      (batch.model !== 'gpt-6-luna' || batch.effort !== 'medium')
+    )
       comparison.fields.push('Model settings');
     if (currentItem && currentItem.title !== item.title) comparison.fields.push('Page title');
     try {
@@ -359,18 +364,28 @@ export class DigestRunner {
     let providerFailed = true;
     try {
       let complete = false;
-      for await (const event of this.generate(
-        {
-          action: 'generate',
-          accountId: batch.accountId,
-          model: batch.model,
-          effort: batch.effort,
-          systemPrompt: batch.prompt,
-          ...summaryRequestInput(item, source),
-        },
-        signal,
-        batch.credentialOwner ?? 'local',
-      )) {
+      const { userPrompt, attachments } = summaryRequestInput(item, source);
+      const events = batch.summaryInput
+        ? streamModel(
+            { ...batch.summaryInput, systemPrompt: batch.prompt, userPrompt },
+            credential,
+            signal,
+            { attachments },
+          )
+        : this.generate(
+            {
+              action: 'generate',
+              accountId: batch.accountId,
+              model: batch.model,
+              effort: batch.effort,
+              systemPrompt: batch.prompt,
+              userPrompt,
+              ...(attachments ? { attachments } : {}),
+            },
+            signal,
+            batch.credentialOwner ?? 'local',
+          );
+      for await (const event of events) {
         if (event.type === 'delta') {
           item.raw += event.text;
           if (item.raw.length > 30000) throw new Error('Summary exceeded the output limit.');
@@ -385,7 +400,12 @@ export class DigestRunner {
     } catch (error) {
       item.status = signal.aborted ? 'cancelled' : 'failed';
       item.error = String(error instanceof Error ? error.message : error);
-      if (source.kind === 'pdf-url' && providerFailed && !signal.aborted)
+      if (
+        source.kind === 'pdf-url' &&
+        providerFailed &&
+        !signal.aborted &&
+        (!batch.summaryInput || batch.summaryInput.provider === 'chatgpt-plan')
+      )
         item.error +=
           ' PDF URL attachment failed; OpenAI must be able to fetch the URL and the model must support PDF input. No local fallback was used. Choose Local PDF processing in Settings and Run again to send extracted text instead.';
       if (providerFailed && !signal.aborted) pause();

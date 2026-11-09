@@ -1,6 +1,5 @@
 import { actionHost } from './host';
 import { streamModel } from '../models/provider';
-import { planEvents } from '../models/chatgpt-plan';
 import { summaryRequestInput } from '../digest/summary';
 import type { DigestBatch, DigestItem, DigestSource } from '../digest/types';
 import type { ActionGenerate } from '../../native/action-protocol.mts';
@@ -40,30 +39,12 @@ export async function runCustomAction(
         };
         (item.calls ??= []).push(transcript);
         let complete = false;
-        const events =
-          source.kind === 'pdf-url'
-            ? (() => {
-                if (input.provider !== 'chatgpt-plan' || !input.plan)
-                  throw new Error(
-                    'PDF URL attachments need a ChatGPT plan preset. Choose Local PDF processing and Run again to send text.',
-                  );
-                return planEvents(
-                  {
-                    action: 'generate',
-                    ...input.plan,
-                    systemPrompt: request.instructions,
-                    userPrompt: transcript.input,
-                    attachments: [source.attachment],
-                  },
-                  callSignal,
-                  input.credentialOwner ?? 'local',
-                );
-              })()
-            : streamModel(
-                { ...input, systemPrompt: request.instructions, userPrompt: transcript.input },
-                credential,
-                callSignal,
-              );
+        const events = streamModel(
+          { ...input, systemPrompt: request.instructions, userPrompt: transcript.input },
+          credential,
+          callSignal,
+          source.kind === 'pdf-url' ? { attachments: [source.attachment] } : undefined,
+        );
         for await (const event of events) {
           if (event.type === 'delta') {
             transcript.output += event.text;

@@ -37,6 +37,9 @@ async function withSharedIDs(settings: UserSettings): Promise<UserSettings> {
     mapping.set(p.id, await sharedID(p.id));
   return {
     ...settings,
+    ...(settings.summaryPresetId && {
+      summaryPresetId: mapping.get(settings.summaryPresetId) ?? settings.summaryPresetId,
+    }),
     configuration: {
       ...configuration,
       presets: configuration.presets.map((p) => ({ ...p, id: mapping.get(p.id) ?? p.id })),

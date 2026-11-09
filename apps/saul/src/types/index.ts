@@ -111,7 +111,9 @@ export interface UserSettings {
   /** Per-installation choice; never portable to another machine's settings. */
   sharedCredentials?: 'saul' | 'disconnected';
   summaryPdfProcessing?: 'attachment' | 'local';
-  /** Built-in Summarize's saved managed connection; never an auth registration ID. */
+  /** Built-in Summarize's model preset. Missing retains the original summary setup. */
+  summaryPresetId?: string;
+  /** Legacy managed binding for the original summary setup. */
   summaryConnectionKey?: string;
   sharedPresetRevision?: number;
   connections: ConnectionDefinition[];

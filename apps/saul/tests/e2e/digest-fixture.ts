@@ -1,4 +1,5 @@
 import { expect, type Worker, type BrowserContext, type Page } from '@playwright/test';
+import type { CredentialEvent, CredentialRequest } from '../../native/credentials-contract.mts';
 import type { PlanRequest, PlanEvent, PlanAccount } from '../../native/plan-protocol.mts';
 export async function installDigestProvider(
   worker: Worker,
@@ -20,23 +21,48 @@ export async function installDigestProvider(
       };
       Object.assign(globalThis, { digestFixture: state });
       chrome.runtime.connectNative = (() => {
-        const listeners: ((m: { id: string; event: PlanEvent }) => void)[] = [];
+        const listeners: ((m: { id: string; event: PlanEvent | CredentialEvent }) => void)[] = [];
         return {
           onMessage: {
-            addListener: (fn: (m: { id: string; event: PlanEvent }) => void) => listeners.push(fn),
+            addListener: (fn: (m: { id: string; event: PlanEvent | CredentialEvent }) => void) =>
+              listeners.push(fn),
           },
           onDisconnect: { addListener: () => {} },
           disconnect: () => {},
-          postMessage: (message: { id: string; request: PlanRequest; cancel?: boolean }) => {
+          postMessage: (message: {
+            id: string;
+            request: PlanRequest | Extract<CredentialRequest, { action: 'connection-catalog' }>;
+            cancel?: boolean;
+          }) => {
             if (message.cancel) {
               if (state.finishes.delete(message.id)) state.active--;
               return;
             }
             const emit = (event: PlanEvent) =>
               listeners.forEach((fn) => fn({ id: message.id, event }));
-            state.requests.push(message.request);
+            const request = message.request;
+            if (request.action !== 'connection-catalog') state.requests.push(request);
             queueMicrotask(() => {
-              if (message.request.action === 'accounts')
+              if (request.action === 'connection-catalog')
+                listeners.forEach((fn) =>
+                  fn({
+                    id: message.id,
+                    event: {
+                      type: 'result',
+                      catalog: {
+                        fetchedAt: Date.now(),
+                        models: ['gpt-6-luna', 'fixture-work-model'].map((id) => ({
+                          id,
+                          name: id,
+                          capabilities: ['write'],
+                          efforts: ['medium', 'high'],
+                          defaultEffort: 'medium',
+                        })),
+                      },
+                    },
+                  }),
+                );
+              else if (request.action === 'accounts')
                 emit({
                   type: 'result',
                   accounts: state.accounts,
