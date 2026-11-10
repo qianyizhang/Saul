@@ -19,7 +19,7 @@ make test-core CHECK_ARGS='--list'
 make test CHECK_ARGS='--reverse'
 make test-install
 make test-services  # Host-native callback/pasteboard checks, separate from the offline gate
-make test-ui        # Host-native row hit targets; requires a macOS graphical session
+make test-ui        # Native row hit targets and draft keyboard editing
 ```
 
 `test-install` checks the real build and installation scripts with disposable app
@@ -73,13 +73,11 @@ Native layout and keyboard regression journeys are maintained in
 [docs/ui-qa.md](../docs/ui-qa.md). They run against the disposable surface preview,
 using actual production views; they are separate from this offline executable suite.
 
-`make test-ui` hosts the production `FullRowButton` in native windows and sends
-window-local mouse events. It checks short/longer labels, selected/unselected rows,
-blank space, padding, corners, outside bounds, disabled controls, and native keyboard
-activation. No global input, Accessibility permission, account, or personal storage
-is used. It is separate from `make check` because it needs a graphical session;
-run it for row interaction changes, then replay the
-[row click journey](../docs/ui-qa.md#row-click-targets).
+`make test-ui` hosts production controls and sends window-local input events.
+It checks row hit targets and keyboard activation, plus [draft editing](../../../design/keyboard.md#editing-a-draft)
+in a window and a panel. It uses no global input, Accessibility permission,
+account, or personal storage. It is separate from `make check` because it needs a
+graphical session. For row changes, replay the [row click journey](../docs/ui-qa.md#row-click-targets).
 
 `make test-services` checks the Services plist/Objective-C selector and exercises
 the production callback with private named pasteboards and a disposable offline

@@ -48,17 +48,9 @@ choices and billing/permission consequences stay visible. Preferences save immed
 independently of configuration drafts, and update open extension surfaces, including
 the summary panel. The board keeps its own presentation preference.
 
-Shortcuts are listed in Settings → Preferences. **Command/Ctrl+Enter** explains an
-available source selection outside editable fields; **Command/Ctrl+.** stops the
-open explanation's active job. **Escape** dismisses the reading surface without
-cancelling work. **Command/Ctrl+,** opens Settings inside the extension workspace.
-The existing **Alt+Shift+E/L** shortcuts remain. Browser shortcuts stay with Chrome.
-
-**Control+S (⌃S)** on macOS summarizes the current page; **Command+S** still
-saves the page in Chrome. Other platforms default to **Alt+Shift+S**. This is
-a Chrome extension command, active only in Chrome on regular HTTP(S) tabs.
-**Settings → Preferences → Shortcuts** shows its actual assignment. Use **Configure Chrome
-shortcuts** to change it or assign it if Chrome reports a conflict.
+See the [keyboard reference](../../../design/keyboard.md#saul) for reading,
+workspace and browser shortcuts. **Settings → Preferences → Shortcuts** shows
+Chrome's current assignments.
 
 The full workspace provides:
 
@@ -144,7 +136,7 @@ Right-click a web page and choose **Call Saul** to summarize that tab's
 loaded page text, even when the click is on a link or selected text. It does
 not summarize the link destination or only the selection. The reader opens
 in Chrome's side panel, keeping the source tab active, and shows its page title,
-source link and progress. The context menu, Control+S, Window selections and
+source link and progress. The context menu, Call Saul shortcut, Window selections and
 saved-summary buttons use this panel. Switching tabs keeps the current summary;
 closing the panel leaves its background work running. Opening a saved summary
 does not regenerate it. Settings recovery opens the full Settings workspace.
@@ -239,8 +231,7 @@ URL selection, or its active run. Before any new account/model call, Saul compar
 current source text with the saved capture. An upfront notice shows the original date,
 text change estimate, changed instructions/title/coverage, or a capture error.
 **Run again** explicitly captures current input in a new saved summary. **Retry
-unfinished** retains the original input. Closing with **Control+W** on macOS
-(**Alt+Shift+W** elsewhere) closes only the panel and leaves work running.
+unfinished** retains the original input.
 
 Each summary offers **Inspect input/output**: capture time, character count,
 coverage, saved source input, instructions and the exact assembled prompt and raw

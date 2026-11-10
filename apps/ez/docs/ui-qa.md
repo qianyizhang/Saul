@@ -66,6 +66,13 @@ Run `make test-ui`, then check both modes and appearances:
   remain interactive without collapsing the header.
 - Check dropdown far edges, disabled controls and keyboard focus/activation.
 
+## Draft keyboard
+
+In both windows, check [draft editing](../../../design/keyboard.md#editing-a-draft)
+at the caret and over selected text. Use **Two inputs** (Tab between fields) and
+**Answer** (follow-up). Then send with the configured shortcut and check that
+single-line search and Settings fields still behave normally.
+
 ## Unsaved answer recovery
 
 Quit the preview, then run:

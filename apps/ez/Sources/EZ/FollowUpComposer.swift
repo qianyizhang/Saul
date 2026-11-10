@@ -22,6 +22,7 @@ struct FollowUpComposer: View {
                     .lineLimit(1...4).textFieldStyle(.roundedBorder)
                     .accessibilityLabel("Ask a follow-up")
                     .focused($focused)
+                    .multilineDraftReturn()
                     .onChange(of: focused) { _, focused in
                         if focused {
                             model.followUpTargetID = entry.id

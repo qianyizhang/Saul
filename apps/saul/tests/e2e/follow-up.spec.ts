@@ -54,6 +54,14 @@ test('widget follow-ups preserve drafts, context, failures and saved history', a
     expect(first.messages[1].content).toContain('Gradient descent');
     expect(first.messages[1].content).toContain('steepest increase');
     expect(first.messages[1].content).toContain('Why does that happen?');
+    await question.fill('abcDEF');
+    await question.evaluate((input: HTMLTextAreaElement) => input.setSelectionRange(3, 4));
+    await question.press('Shift+Enter');
+    await expect(question).toHaveValue('abc\nEF');
+    await question.press('Enter');
+    await expect(question).toHaveValue('abc\n\nEF');
+    await expect(question).toBeFocused();
+    expect(fixtureServer.requests).toHaveLength(2);
     await question.fill('Can you give a concrete example?');
     await question.press('ControlOrMeta+Enter');
     await expect.poll(async () => fixtureServer.requests.length).toBe(3);

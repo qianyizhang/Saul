@@ -400,30 +400,10 @@ added once; removing them does not cause them to return on launch.
 
 ## Keyboard and focus
 
-| Intent                    | EZ                                   | Saul                                                                 |
-| ------------------------- | ------------------------------------ | -------------------------------------------------------------------- |
-| Submit current input      | ⌘Return                              | ⌘/Ctrl+Return on a captured selection, outside editable page content |
-| Stop active work          | ⌘.                                   | ⌘/Ctrl+. for the active reading card                                 |
-| Dismiss a compact surface | Escape, without cancelling           | Escape, without cancelling                                           |
-| Settings                  | ⌘,                                   | ⌘/Ctrl+, in the extension workspace                                  |
-| New lookup                | ⌘N                                   | Not applicable; select another passage                               |
-| Reading entry points      | Quick Lookup ⌃⌥Space; macOS Services | Existing Alt+Shift+E / Alt+Shift+L                                   |
-
-EZ's configured bindings override its defaults. Do not capture browser navigation,
-new-tab, find, address-bar or text-editing shortcuts to imitate a native app.
-Scope commands to the active surface; let menus, forms and dialogs take priority.
-Keep shortcut reference in menus/Settings, not permanent “press X to do Y” banners.
-Closing a reading card leaves work running. Restore useful focus when a disclosure
-or transient surface closes. Every essential action must also work by click or tap.
-
-Saul's browser command **Call Saul** uses **Control+S (⌃S)** on macOS,
-leaving **Command+S** with Chrome. Other platforms default to **Alt+Shift+S**.
-**Control+W (⌃W)** closes only the summary panel in the current window; closing
-keeps generation running. Other platforms use **Alt+Shift+W**. The panel also
-offers Close. **Command+W** remains Chrome's tab command.
-Settings → Shortcuts shows Chrome's actual binding and opens Chrome's shortcut
-configuration; show an unassigned binding explicitly. The command summarizes
-only the current regular HTTP(S) page through the same action as the context menu.
+The [keyboard reference](design/keyboard.md) owns editing behavior, command scope
+and default bindings. Keep live bindings in menus and Settings. Restore useful
+focus when a disclosure or transient surface closes. Every essential action must
+also work by click or tap.
 
 ## Mobile direction
 
@@ -534,7 +514,7 @@ Add concrete motion/effect tokens and platform mappings when an actual effect is
 
 ### Calls and summaries
 
-**Call Saul** is the page command (Control+S). **Call preset** selects the work.
+**Call Saul** is the page command. **Call preset** selects the work.
 **Model preset** supplies the connection, model and options. Settings → Calls
 shows the Call preset first. **Summarize (default)** has a Model preset selector
 that saves with Settings. Its **Original summary setup** preserves the previous

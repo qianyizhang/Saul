@@ -197,6 +197,7 @@ struct ActionInputs: View {
                                     .textFieldStyle(.roundedBorder).lineLimit(2...(compact ? 3 : 4))
                                     .font(.system(size: 14)).accessibilityLabel(field)
                                     .focused($focusedField, equals: field)
+                                    .multilineDraftReturn()
                                 }.id(field)
                             }
                         }

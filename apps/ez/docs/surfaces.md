@@ -41,14 +41,14 @@ and persistence; [design](design.md) owns presentation.
 | Look Up in EZ Service | Fill first input from the dedicated Services pasteboard; always wait for Run. Reject existing drafts, active work and open Settings unchanged. |
 
 Shortcut/menu invocation preserves running requests and pending launcher work;
-the shortcut hides an already focused panel. Esc/⌘W hide without cancellation,
-⌘. stops and ⌘N starts fresh when idle. Hiding preserves history and clipboard.
+the shortcut hides an already focused panel. Hiding preserves active work,
+history and clipboard.
 Closing the main window leaves menu-bar access; Quit exits.
 
-Both surfaces share configurable lookup/action shortcuts and wheel selectors;
-Settings → Shortcuts owns bindings. Global Quick Lookup (⌃⌥Space), Settings (⌘,)
-and panel hiding stay fixed. [Architecture](architecture.md#selector-scrolling-and-keyboard-commands)
-owns input routing and conflict handling.
+Both surfaces share configurable lookup/action shortcuts and wheel selectors.
+See the [keyboard reference](../../../design/keyboard.md) for editing and commands,
+and [architecture](architecture.md#selector-scrolling-and-keyboard-commands) for
+routing and conflict handling.
 
 Illustration is a Draw action in this workspace. Connections owns credentials,
 Presets image defaults, the Draw composer its runtime PNG/GIF choice, and History

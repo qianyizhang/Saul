@@ -215,41 +215,24 @@ and full click/scroll target when labels change.
 Settings sidebar sections and editor rows use full-row click targets, independent
 of selection or title length. Configuration edits still require Save.
 
-A **lookup** is an independent request and answer; a **action** is a reusable prompt.
-Both lookup surfaces offer **Ask a follow-up** below a completed answer. Send or
-⌘Return from the field includes the saved request and earlier exchanges with the
-same model/effort/speed, using the currently selected local account. Each follow-up
-is a linked history entry; **Previous answer** returns to its parent. Draft questions
-are shared across the panel and main window and survive dismissal during the app
-session. They clear when sent or the parent is deleted. Questions allow 2,000
-characters; conversations stop at 120,000 characters without dropping context.
-Stop and save recovery use the same
-lookup lifecycle. No question is sent on opening or switching surfaces.
-
-| Action | Default shortcut |
-| --- | --- |
-| New run | ⌘N |
-| Run / send follow-up | ⌘Return |
-| Stop generation | ⌘. |
-| Previous / next action | ⌘⇧[ / ⌘⇧] |
-| Action at position 1–8 | ⌘1–8 |
-| Last action | ⌘9 |
+A **lookup** is an independent request and answer; an **action** is a reusable prompt.
+Both lookup surfaces offer **Ask a follow-up** below a completed Write answer.
+The follow-up uses the saved connection and includes earlier exchanges.
+**Previous answer** returns to its parent. Draft questions are shared across the
+panel and main window and survive dismissal during the app session. See
+[follow-up behavior](docs/architecture.md#follow-ups) for limits and recovery.
 
 Open **Settings → Shortcuts** to record replacements, clear bindings, or restore
-defaults. **Use Chrome navigation** assigns ⌘⌥← / ⌘⌥→ to previous/next action.
-You can assign ⌘T to New lookup if you prefer Chrome’s new-tab key. Shortcuts work
-while typing in either lookup surface. The Lookup menu and action hints reflect
-custom bindings. Settings and modal sheets suspend lookup shortcuts so recording,
-editing, and confirmations take priority. Text-editing and reserved app keys cannot
-be reassigned; conflicts are reported without saving. Shortcut changes save immediately.
+defaults. The [keyboard reference](../../design/keyboard.md) covers draft editing,
+default commands and fixed shortcuts. Menus and action hints reflect custom
+bindings. Settings and modal sheets suspend lookup shortcuts so recording, editing,
+and confirmations take priority. Reserved keys and conflicts are rejected;
+valid changes save immediately.
 
 Previous/next wraps in Configuration order; numbered bindings follow that order,
 and missing positions do nothing. Selecting the current action leaves the draft
 intact. Selecting another action clears inputs and restores its default preset;
 action navigation and New are blocked while a request or launcher submission is active.
-Global Quick Lookup (⌃⌥Space), Settings (⌘,), and panel hiding (Esc / ⌘W) remain fixed.
-New lookup follows [VS Code’s new-item shortcut](https://code.visualstudio.com/shortcuts/keyboard-shortcuts-macos.pdf).
-Numbered and last-item navigation follow [Chrome’s shortcuts](https://support.google.com/chrome/answer/157179).
 
 ## Local data
 
