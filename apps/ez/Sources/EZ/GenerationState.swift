@@ -97,7 +97,7 @@ extension AppModel {
 
 extension AppModel {
     func attachImage(url: URL) {
-        imageImportID = UUID()
+        beginImageImport()
         guard url.isFileURL else {
             inputImageError = "Choose an image on this Mac."
             return
@@ -112,10 +112,10 @@ extension AppModel {
     }
 
     func attachImage(data: Data, name: String) {
-        imageImportID = UUID()
+        beginImageImport()
         guard !busy, !launcherPending, currentAction?.imageInput != nil else { return }
         do {
-            inputImage = try ImageAttachment(data: data, name: name)
+            try setImageInput(ImageAttachment(data: data, name: name))
             inputImageError = nil
         } catch { inputImageError = error.localizedDescription }
     }

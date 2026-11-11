@@ -2,9 +2,75 @@ import Combine
 import EZCheckSupport
 import EZCore
 import Foundation
+import ImageIO
 
 @MainActor func searchImageStateChecks() -> [CheckCase] {
     [
+        CheckCase("sketch: draw from blank, retain failed draft, and reuse the exact flattened source") {
+            directory in
+            let store = try HistoryStore(directory: directory)
+            var sent: Data?
+            let execution = AttemptExecution(
+                generate: { entry, _ in
+                    let bytes = try entry.inputImage?.validatedData()
+                    let pending = try store.load().first { $0.id == entry.id }!
+                    try expectEqual(
+                        try store.inputImage(for: pending)?.data, bytes, "Sketch sent before save")
+                    sent = bytes
+                    throw EZError("Synthetic image request failure")
+                }, append: { try store.append($0) })
+            let model = try newMemeModel(directory, execution: execution)
+            defer { model.shutdown() }
+            try expect(!model.canSend, "An empty sketch could run")
+            var scene = model.sketch.scene
+            scene.strokes.append(SketchStroke(points: [CGPoint(x: 80, y: 256), CGPoint(x: 420, y: 256)]))
+            model.commitSketch(scene)
+            try expect(model.canSend, "A drawing still required an attachment")
+            model.undoSketch()
+            try expect(!model.canSend, "Undo left a runnable blank sketch")
+            model.redoSketch()
+            let pendingImport = model.beginImageImport()
+            model.removeImageInput()
+            model.finishImageImport(pendingImport) { model.attachImage(data: fixturePNG, name: "late.png") }
+            try expect(!model.canSend, "A late image import restored a removed sketch")
+            model.undoSketch()
+            try expectEqual(model.sketch.scene, scene, "Undo did not restore the removed drawing")
+            model.attachImage(data: fixturePNG, name: "photo.png")
+            try expectEqual(model.sketch.scene.strokes, scene.strokes, "Pasting discarded the drawing")
+            scene = model.sketch.scene
+            _ = scene.addCaption()
+            scene.captions[0].text = "Already?"
+            model.commitSketch(scene)
+            model.attachImage(data: Data("bad".utf8), name: "bad.png")
+            try expectEqual(model.sketch.scene, scene, "Invalid paste replaced the composition")
+            let done = CheckSignal()
+            let observer = model.$busy.dropFirst().filter { !$0 }.sink { _ in Task { await done.signal() } }
+            defer { observer.cancel() }
+            model.send()
+            try await done.wait()
+            let failed = model.selectedEntry!
+            try expectEqual(failed.status, "failed", "Synthetic failure was lost")
+            try expectEqual(model.sketch.scene, scene, "Failure flattened the live editable draft")
+            guard let sent, let source = CGImageSourceCreateWithData(sent as CFData, nil),
+                let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+            else { throw CheckFailure("Edited sketch did not produce a readable PNG") }
+            try expectEqual(image.width, 1024, "Edited sketch had the wrong dimensions")
+            try expectEqual(image.height, 1024, "Edited sketch had the wrong dimensions")
+            try expect(
+                try sketchDarkPixels(image, at: CGRect(x: 512, y: 512, width: 1, height: 1)) == 1,
+                "The rendered image lost the center stroke")
+            try expect(
+                try sketchDarkPixels(image, at: CGRect(x: 68, y: 824, width: 280, height: 100)) > 40,
+                "The rendered image lost the caption")
+            model.newQuery()
+            model.reuse(failed)
+            try expectEqual(model.inputImage?.data, sent, "Reuse did not load the exact sent image")
+            try expect(
+                model.sketch.scene.photo != nil && model.sketch.scene.strokes.isEmpty
+                    && model.sketch.scene.captions.isEmpty && !model.sketch.canUndo,
+                "Reuse did not open a fresh sketch with just the saved image")
+            try expect(model.canSend && model.selection == nil, "Reuse unexpectedly sent or blocked Run")
+        },
         CheckCase("image action: saved images reload from shared history rather than app configuration") {
             directory in
             let local = directory.appendingPathComponent("local")
@@ -177,6 +243,19 @@ import Foundation
                 model.selectedEntry?.error?.contains("required web search") == true, "Search failure hidden")
         },
     ]
+}
+
+private func sketchDarkPixels(_ image: CGImage, at rect: CGRect) throws -> Int {
+    let width = Int(rect.width)
+    let height = Int(rect.height)
+    guard let sample = image.cropping(to: rect),
+        let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue),
+        let data = context.data
+    else { throw CheckFailure("The sketch PNG could not be sampled") }
+    context.draw(sample, in: CGRect(origin: .zero, size: rect.size))
+    return (0..<(width * height)).filter { data.load(fromByteOffset: $0 * 4, as: UInt8.self) < 40 }.count
 }
 
 @MainActor private func newMemeModel(_ directory: URL, execution: AttemptExecution) throws -> AppModel {

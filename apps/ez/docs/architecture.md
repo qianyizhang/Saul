@@ -51,8 +51,8 @@ Text-only Draw sends one `POST /v1/images/generations`; the user selects a curre
 catalog model. Initial image options are low quality, 1024×1024 PNG. The compiled template is the exact prompt;
 image options belong to the preset. The Draw composer can override output format
 for one draft; Run freezes it in the preset snapshot. GIF uses `output_format: "gif"`
-and API animation defaults. It is generation-only and requires a 2.6 model; input
-images with GIF output fail before send. Exact GIF bytes remain in SQLite and
+and API animation defaults. EZ currently enables GIF only for text-to-image with
+a 2.6 model; input images with GIF output fail before send. Exact GIF bytes remain in SQLite and
 Download preserves `.gif`. Native previews animate unless reduced motion is enabled.
 Key Save/Reload and inspection never generate.
 
@@ -86,6 +86,14 @@ bytes before transmission. An image input selects one multipart
 hidden analysis or second request. See [image edits](https://developers.openai.com/api/docs/guides/image-generation#edit-images).
 Reuse validates the saved source; missing/invalid bytes require reattachment.
 Deletion removes saved blobs, never the original file or external exports.
+
+The built-in Make meme action keeps one in-memory Sketch composition shared by
+the two lookup surfaces. Its stable action ID selects the editor; other named
+image inputs remain attachment fields. Plain imports use exact original bytes.
+Run renders an edited composition to a square PNG and freezes it through the same
+source attachment path. A failed or completed run leaves the composition in the
+current draft. Reuse restores only the frozen source as a single image layer;
+there is no new persisted document or schema. Undo and redo are draft-local.
 
 ## Authentication invariants
 

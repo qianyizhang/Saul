@@ -4,7 +4,6 @@ import SwiftUI
 struct QuickLookupView: View {
     @ObservedObject var model: AppModel
     @ObservedObject var controller: QuickLookupController
-    @Environment(\.openWindow) private var openWindow
     @State private var showDetails = false
     @State private var showsComposer = false
     private var showsInputs: Bool { !model.minimumMode || model.selectedEntry == nil || showsComposer }
@@ -15,7 +14,11 @@ struct QuickLookupView: View {
             if showsInputs {
                 ActionInputs(
                     model: model, compact: true, presentation: controller.presentation,
-                    onConfigure: { controller.showMain(settings: true) })
+                    onConfigure: { controller.showMain(settings: true) },
+                    onEditSketch: {
+                        model.showsMainComposer = true
+                        controller.showMain()
+                    })
             }
             actions
             if showsInputs, model.currentConnection?.kind == .openAIAPI {
@@ -80,7 +83,6 @@ struct QuickLookupView: View {
         .disclosureGroupStyle(FullRowDisclosureStyle())
         .ignoresSafeArea(.container, edges: .top)
         .onAppear {
-            controller.setOpenMain { openWindow(id: "main") }
             controller.resizeContent(layout)
         }
         .onChange(of: layout) { _, layout in controller.resizeContent(layout) }

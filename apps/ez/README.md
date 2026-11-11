@@ -50,13 +50,15 @@ Its API Write preset is explicit; missing search/model access fails without chan
 providers. **Settings → Actions → Search the web** enables this for other Write
 actions. Search-enabled follow-ups search again and add API/search charges.
 
-**Make meme** accepts a sketch plus instructions. Drop, paste or choose one PNG,
-JPEG or WebP (up to 20 MB), then Run. Attachments prepare a draft without sending.
-The source is saved with History for Reuse; deletion removes that saved copy and
-the generated PNG. Your original file remains yours. **Settings → Actions → Image
-input** adds a named required image to other Draw actions. Existing text-only
-Illustration still generates from a prompt. Both starters are editable and added
-once; removing them is respected.
+**Make meme** accepts a sketch plus instructions. In the main window, draw on the
+Sketch canvas, or paste, drop or choose one PNG, JPEG or WebP (up to 20 MB). Use
+Select to move items, resize the image, or edit text. Quick Lookup can run a pasted
+image directly; **Edit sketch** opens the same draft in the main window. Only Run
+sends the sketch. History saves the exact source sent; **Reuse** opens that image
+as a single editable layer. Deletion removes the saved copy and generated PNG;
+your original file stays in place. **Settings → Actions → Image input** adds a
+required attachment to other Draw actions. Text-only Illustration still generates
+from a prompt. Starters are editable and added once; removing them is respected.
 
 Selected answers open in a reading view. **Edit** reveals your current inputs;
 **Hide** returns to reading, and **More → Reuse** restores the saved request.

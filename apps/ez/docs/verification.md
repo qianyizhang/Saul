@@ -38,6 +38,14 @@ prove `iconutil` packaging; report sandbox restrictions separately.
 
 ## Native and live acceptance
 
+Make meme Sketch (2026-11-11): `make check` passed 101 core and 60 state checks.
+The state check verified both stroke and caption pixels, rejection of a late
+import after removal, source persistence before send, a retained editable draft
+after failure, and Reuse of the exact frozen image. The offline preview built and
+launched, but macOS screen capture failed;
+pointer gestures, Quick Lookup handoff and minimum-size layout still need a
+rendered acceptance pass. No live image generation was performed.
+
 1. `make app`; quit older EZ, open `dist/EZ.app`, inspect main/panel/Settings.
 2. Complete ChatGPT sign-in yourself; verify account, permission and model catalog.
 3. Send a short Dictionary lookup on Standard: streamed text, terminal completion,

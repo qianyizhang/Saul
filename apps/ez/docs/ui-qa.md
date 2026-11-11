@@ -50,8 +50,11 @@ Connections owns credentials; Presets owns model/image options; Actions owns typ
 template and default preset. Draw launcher drafts always wait for Run.
 
 Research / Research result / Research waiting / Research error cover search status,
-inline citations and failures. Meme / Meme result / Meme invalid cover required
-image input, invalid replacement preserving the source, result and Reuse.
+inline citations and failures. Use Meme blank to draw and undo back to a blocked
+Run; use Meme to move/resize the image, add or edit text, then undo and redo.
+Paste and drop prepare a draft. In Quick Lookup, Edit sketch opens the same draft.
+Run with instructions containing `[fail]` and reopen Edit draft: objects and undo
+remain. Meme result → Reuse opens one image. Meme invalid covers inline import errors.
 Check both surfaces, modes, appearances and minimum size. All requests are synthetic;
 installed Keychain, model access, billing and launcher delivery need separate acceptance.
 

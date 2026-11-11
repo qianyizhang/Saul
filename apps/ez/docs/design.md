@@ -86,11 +86,13 @@ text collapsed. Literal output remains in Details → Inspect; Standard also exp
 the main inspector directly. [Architecture](architecture.md#spelling-comparison-presentation)
 owns parsing and bounds.
 
-Search citations are clickable in both readers. Image fields show preview,
-Choose/Replace, Paste and Remove above instructions; errors stay beside the image.
-Quick Lookup reserves attachment space and keeps Run reachable. API/search charges
-remain visible in both modes. Details records search required/completed and source
-name. Reuse prepares a draft without sending.
+Search citations are clickable in both readers. Generic image fields show preview,
+Choose/Replace, Paste and Remove above instructions. Make meme uses a square
+Sketch canvas in the main window, with Draw, Select, Add text, undo and redo.
+The selected image shows a resize handle; the selected text shows its editor.
+Quick Lookup has a compact preview, Paste and Edit sketch. Errors stay beside the
+image; Run and API charges stay reachable. Details records search
+required/completed and source name. Reuse prepares a draft without sending.
 
 [Shared control symbols](../../../design/symbols.html) defines the glyphs and
 meanings used by both apps. Symbol-only controls retain full accessible names and

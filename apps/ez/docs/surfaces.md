@@ -13,6 +13,9 @@ and persistence; [design](design.md) owns presentation.
 - Both surfaces share inputs, image, action, preset override, selected answer,
   history, account, per-answer follow-up draft and one active request. Handoff
   preserves work. Switching surfaces never sends.
+- Make meme shares one Sketch draft. The main window owns the canvas; Quick Lookup
+  can preview, paste or run, and Edit sketch opens the same draft in the main window.
+  After a run, Edit draft shows the canvas again; Hide draft returns to the answer.
 - Selecting another action or New restores its default preset. Unavailable choices
   block; never substitute account, model, billing or tier.
 - New main-window lookups put the composer below the heading. Edit/Hide reveals or
@@ -51,7 +54,7 @@ and [architecture](architecture.md#selector-scrolling-and-keyboard-commands) for
 routing and conflict handling.
 
 Illustration is a Draw action in this workspace. Connections owns credentials,
-Presets image defaults, the Draw composer its runtime PNG/GIF choice, and History
+Presets image defaults, the text-to-image composer its runtime PNG/GIF choice, and History
 saved image bytes in SQLite. Launcher input always waits for Run;
 unsaved image recovery never generates again.
 

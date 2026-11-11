@@ -118,6 +118,7 @@ import SwiftUI
 private struct SurfacePreviewControls: View {
     @ObservedObject var model: AppModel
     @ObservedObject var controller: QuickLookupController
+    @Environment(\.openWindow) private var openWindow
     let syntheticAttempt: Bool
     @State private var scenario = "Empty"
     @State private var dark = false
@@ -127,8 +128,10 @@ private struct SurfacePreviewControls: View {
         self.controller = controller
         self.syntheticAttempt = syntheticAttempt
         _scenario = State(
-            initialValue: CommandLine.arguments.contains("--actions")
-                ? "Draw" : syntheticAttempt ? "Unsaved" : "Empty")
+            initialValue: CommandLine.arguments.contains("--meme")
+                ? "Meme blank"
+                : CommandLine.arguments.contains("--actions")
+                    ? "Draw" : syntheticAttempt ? "Unsaved" : "Empty")
     }
     var body: some View {
         VStack(spacing: 0) {
@@ -142,7 +145,7 @@ private struct SurfacePreviewControls: View {
                             "No actions", "Selector hitboxes", "Long metadata", "Legacy answer",
                             "Draw", "Draw result", "Draw GIF", "Draw waiting", "Draw error",
                             "Research", "Research result", "Research waiting", "Research error",
-                            "Meme", "Meme result", "Meme invalid",
+                            "Meme blank", "Meme", "Meme result", "Meme invalid",
                         ] + (syntheticAttempt ? ["Unsaved"] : []), id: \.self
                     ) {
                         Text($0)
@@ -174,6 +177,7 @@ private struct SurfacePreviewControls: View {
         }
         .preferredColorScheme(dark ? .dark : .light)
         .onAppear {
+            controller.setOpenMain { openWindow(id: "main") }
             NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
             loadFixture()
         }
@@ -241,7 +245,7 @@ private struct SurfacePreviewControls: View {
             model.query = "Make this a Monday meme. Caption: already?"
             if scenario == "Meme invalid" {
                 model.attachImage(data: Data("invalid".utf8), name: "bad.png")
-            } else if let png = try? previewPNG() {
+            } else if scenario != "Meme blank", let png = try? previewPNG() {
                 model.attachImage(data: png, name: "sketch.png")
             }
             if scenario == "Meme result" { model.send() }

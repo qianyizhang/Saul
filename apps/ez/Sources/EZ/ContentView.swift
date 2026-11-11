@@ -3,9 +3,7 @@ import SwiftUI
 
 struct ContentView: View {
     @ObservedObject var model: AppModel
-    @Environment(\.openWindow) private var openWindow
     @State private var lookupToDelete: HistoryEntry?
-    @State private var showsComposer = false
     var body: some View {
         // Keep the system sidebar toolbar's own icon-only style outside the columns.
         NavigationSplitView {
@@ -18,7 +16,11 @@ struct ContentView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
                         if let entry = model.selectedEntry {
-                            answer(entry)
+                            if model.usesSketch && model.showsMainComposer {
+                                composer
+                            } else {
+                                answer(entry)
+                            }
                         } else {
                             welcome
                             composer
@@ -36,9 +38,9 @@ struct ContentView: View {
                 if let error = model.error {
                     banner(error, symbol: "exclamationmark.circle", color: .red) { model.error = nil }
                 }
-                if model.selectedEntry != nil && showsComposer {
+                if model.selectedEntry != nil && model.showsMainComposer && !model.usesSketch {
                     composer.padding(20)
-                } else if model.selectedEntry != nil {
+                } else if model.selectedEntry != nil && !model.showsMainComposer {
                     HStack {
                         if !model.minimumMode {
                             Text("New run starts fresh.").foregroundStyle(.secondary)
@@ -53,7 +55,8 @@ struct ContentView: View {
                         } else {
                             Button(
                                 model.minimumMode ? "Edit" : "Edit draft", systemImage: "square.and.pencil"
-                            ) { showsComposer = true }.help("Edit draft").accessibilityLabel("Edit draft")
+                            ) { model.showsMainComposer = true }.help("Edit draft").accessibilityLabel(
+                                "Edit draft")
                         }
                     }.font(AppStyle.caption).padding(.horizontal, 24).padding(.vertical, 12)
                 }
@@ -68,7 +71,6 @@ struct ContentView: View {
         }
         .tint(AppStyle.accent)
         .disclosureGroupStyle(FullRowDisclosureStyle())
-        .onChange(of: model.selection) { _, _ in showsComposer = false }
         .alert(
             "Delete lookup?",
             isPresented: Binding(
@@ -293,7 +295,7 @@ struct ContentView: View {
                 }
                 if model.selectedEntry != nil {
                     Button {
-                        showsComposer = false
+                        model.showsMainComposer = false
                     } label: {
                         Image(systemName: "chevron.down")
                     }

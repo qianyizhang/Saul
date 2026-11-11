@@ -23,9 +23,11 @@ import SaulCredentialStorage
     @Published var selectedActionID: UUID? { didSet { refreshActiveConnection() } }
     @Published var overridePresetID: UUID? { didSet { refreshActiveConnection() } }
     @Published var inputValues: [String: String] = [:]
-    var imageImportID = UUID()
-    @Published var inputImage: ImageAttachment? { didSet { imageImportID = UUID() } }
+    private var imageImportID = UUID()
+    @Published private var attachedImage: ImageAttachment?
     @Published var inputImageError: String?
+    @Published private(set) var sketch = SketchDraft()
+    @Published var showsMainComposer = false
     @Published var outputFormatOverride: String?
     var outputFormat: String { outputFormatOverride ?? currentPreset?.imageOptions?.outputFormat ?? "png" }
     @Published private(set) var draftRevision = 0
@@ -40,6 +42,7 @@ import SaulCredentialStorage
     @Published var entries: [HistoryEntry] = []
     @Published var selection: UUID? {
         didSet {
+            if selection != oldValue { showsMainComposer = false }
             loadSelectedImage()
             refreshActiveConnection()
         }
@@ -251,6 +254,11 @@ import SaulCredentialStorage
     var currentAction: Action? {
         replayEntry?.actionSnapshot ?? configuration.actions.first { $0.id == selectedActionID }
     }
+    var usesSketch: Bool {
+        currentAction?.id == Configuration.makeMemeActionID && currentAction?.imageInput != nil
+    }
+    var inputImage: ImageAttachment? { usesSketch ? sketch.scene.photo?.asset.attachment : attachedImage }
+    var hasImageInput: Bool { usesSketch ? sketch.scene.hasContent : inputImage != nil }
     func openSettings(_ section: SettingsSection = .overview) {
         if !showSettings { refreshConfiguration() }
         settingsSection = section
@@ -290,7 +298,9 @@ import SaulCredentialStorage
             if !preset.model.hasPrefix("gpt-image-2.6-") { return "GIF output requires GPT Image 2.6." }
             if action.imageInput != nil { return "GIF output is unavailable for image edits. Choose PNG." }
         }
-        if action.imageInput != nil && inputImage == nil { return "Attach an image before running." }
+        if action.imageInput != nil && !hasImageInput {
+            return usesSketch ? "Draw or paste a sketch before running." : "Attach an image before running."
+        }
         do {
             try action.validateInputs()
             _ = try PromptTemplate(action.template).render(inputValues)
@@ -398,8 +408,7 @@ import SaulCredentialStorage
         overridePresetID = nil
         outputFormatOverride = nil
         inputValues = [:]
-        inputImage = nil
-        inputImageError = nil
+        clearImageInput()
         selection = nil
         error = nil
         draftRevision += 1
@@ -428,8 +437,7 @@ import SaulCredentialStorage
         } else {
             inputValues = inputValues.filter { inputFields.contains($0.key) }
             if currentAction?.imageInput == nil {
-                inputImage = nil
-                inputImageError = nil
+                clearImageInput()
             }
         }
     }
@@ -446,7 +454,7 @@ import SaulCredentialStorage
     }
     func fillQuickLookupSelection(_ text: String?) {
         guard !busy, !launcherPending, !signingIn, !showSettings,
-            selection == nil, inputImage == nil, inputValues.values.allSatisfy({ $0.isEmpty }),
+            selection == nil, !hasImageInput, inputValues.values.allSatisfy({ $0.isEmpty }),
             let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             text.utf8.count <= 16_384, let field = inputFields.first
         else { return }
@@ -467,7 +475,7 @@ import SaulCredentialStorage
         guard !showSettings else {
             throw EZError("Close EZ Settings before looking up selected text.")
         }
-        guard inputImage == nil, inputValues.values.allSatisfy({ $0.isEmpty }) else {
+        guard !hasImageInput, inputValues.values.allSatisfy({ $0.isEmpty }) else {
             throw EZError(
                 "EZ has a draft. Finish it, then choose New lookup before looking up selected text.")
         }
@@ -512,9 +520,10 @@ import SaulCredentialStorage
         }
         var entry: HistoryEntry
         do {
+            let source = usesSketch ? try sketch.scene.attachmentForRun() : inputImage
             entry = try action.prepare(
                 values: inputValues, preset: preset, models: modelsForPreset(preset),
-                provider: connection.kind, image: inputImage)
+                provider: connection.kind, image: source)
         } catch {
             self.error = error.localizedDescription
             return
@@ -577,8 +586,7 @@ import SaulCredentialStorage
         guard !busy, !launcherPending else { return }
         selection = nil
         inputValues = [:]
-        inputImage = nil
-        inputImageError = nil
+        clearImageInput()
         overridePresetID = nil
         outputFormatOverride = nil
         replayEntry = nil
@@ -605,14 +613,18 @@ import SaulCredentialStorage
             saved.presetSnapshot = preset
             saved.inputValues = ["text": entry.query]
         }
+        replayEntry = saved
+        clearImageInput()
         do {
-            inputImage = try history?.inputImage(for: saved)
-            inputImageError = nil
+            let attachment = try history?.inputImage(for: saved)
+            if usesSketch {
+                sketch = try SketchDraft(attachment: attachment)
+            } else {
+                attachedImage = attachment
+            }
         } catch {
-            inputImage = nil
             inputImageError = "The saved input image is unavailable. Attach it again."
         }
-        replayEntry = saved
         inputValues = saved.inputValues ?? [:]
         overridePresetID = nil
         outputFormatOverride = nil
@@ -678,5 +690,58 @@ import SaulCredentialStorage
         if selection == update.entry.id && update.entry.hasImage { loadSelectedImage() }
         busy = attemptExecution?.activeID != nil
         if !update.isActive, !offline { syncAccount() }
+    }
+}
+
+extension AppModel {
+    var canEditSketch: Bool { usesSketch && !busy && !launcherPending }
+
+    func commitSketch(_ scene: SketchScene) { updateSketch { $0.commit(scene) } }
+    func undoSketch() { updateSketch { $0.undo() } }
+    func redoSketch() { updateSketch { $0.redo() } }
+
+    func setImageInput(_ attachment: ImageAttachment) throws {
+        if usesSketch {
+            var scene = sketch.scene
+            scene.photo = try SketchPhoto(attachment)
+            commitSketch(scene)
+        } else {
+            attachedImage = attachment
+        }
+    }
+
+    func clearImageInput() {
+        imageImportID = UUID()
+        attachedImage = nil
+        inputImageError = nil
+        sketch = SketchDraft()
+    }
+
+    func removeImageInput() {
+        guard !busy, !launcherPending else { return }
+        if usesSketch {
+            beginImageImport()
+            inputImageError = nil
+            commitSketch(SketchScene())
+        } else {
+            clearImageInput()
+        }
+    }
+
+    @discardableResult func beginImageImport() -> UUID {
+        imageImportID = UUID()
+        return imageImportID
+    }
+
+    func finishImageImport(_ id: UUID, apply: () -> Void) {
+        guard imageImportID == id, !busy, !launcherPending, currentAction?.imageInput != nil else { return }
+        apply()
+    }
+
+    private func updateSketch(_ update: (inout SketchDraft) -> Void) {
+        guard canEditSketch else { return }
+        let previous = sketch.scene.photo?.asset.id
+        update(&sketch)
+        if sketch.scene.photo?.asset.id != previous { imageImportID = UUID() }
     }
 }

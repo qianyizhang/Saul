@@ -330,6 +330,8 @@ public struct Configuration: Codable, Equatable {
                 capability: .draw))
         return true
     }
+    public static let makeMemeActionID = UUID(uuidString: "8ED3A908-D0BF-4FB8-8A61-86549BE9ED49")!
+
     /// Versioned seeding belongs to configuration; removed starters stay removed.
     @discardableResult public mutating func addSearchAndMeme() -> Bool {
         guard (actionTypesVersion ?? 0) < 2 else { return false }
@@ -349,7 +351,7 @@ public struct Configuration: Codable, Equatable {
                         "Search the web to answer the following question. Answer directly in the user's language, cite sources inline, and state material uncertainty.\n\n{{Question}}",
                     webSearch: true))
         }
-        let memeID = UUID(uuidString: "8ED3A908-D0BF-4FB8-8A61-86549BE9ED49")!
+        let memeID = Self.makeMemeActionID
         let memePreset = ModelPreset(
             id: UUID(uuidString: "8F092456-F150-4B43-B9FB-D58345429826")!,
             name: uniqueName("Make meme", in: presets.map(\.name)), model: "",

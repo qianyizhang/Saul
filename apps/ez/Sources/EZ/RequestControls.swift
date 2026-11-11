@@ -160,10 +160,15 @@ struct ActionInputs: View {
     var compact = false
     var presentation = 0
     var onConfigure: (() -> Void)? = nil
+    var onEditSketch: (() -> Void)? = nil
     @FocusState private var focusedField: String?
     var body: some View {
+        let imageField = model.currentAction?.imageInput
         VStack(alignment: .leading, spacing: 8) {
-            if model.currentAction?.capability == .draw {
+            if imageField != nil && model.outputFormat != "png" {
+                Button("Use PNG") { model.outputFormatOverride = "png" }
+                    .help("EZ uses PNG for image edits")
+            } else if model.currentAction?.capability == .draw && imageField == nil {
                 SelectorPicker(
                     "Output format",
                     options: ImageOptions.formats.map {
@@ -171,8 +176,13 @@ struct ActionInputs: View {
                     },
                     selection: Binding(get: { model.outputFormat }, set: { model.outputFormatOverride = $0 }))
             }
-            if let label = model.currentAction?.imageInput {
-                ImageInputView(model: model, label: label)
+            if let label = imageField {
+                if model.usesSketch && !compact {
+                    SketchEditor(model: model, label: label).id(model.draftRevision)
+                } else {
+                    ImageInputView(
+                        model: model, label: label, onEditSketch: model.usesSketch ? onEditSketch : nil)
+                }
             }
             if model.inputFields.isEmpty {
                 Button(model.minimumMode ? "Actions" : "Configure actions") {
