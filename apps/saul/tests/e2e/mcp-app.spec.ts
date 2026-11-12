@@ -464,6 +464,35 @@ test('drag feedback follows the pointer, scrolls while held and commits manual m
   await captureWorkspace(host, ui, info.outputPath('smooth-drag-preview.png'));
 });
 
+test('window rename preserves IME composition before saving or cancelling', async ({
+  sandbox,
+  fixtureServer,
+}) => {
+  const { ui } = await openWorkspace(sandbox, fixtureServer);
+  const rename = ui.getByRole('button', { name: 'Rename window: Window 1', exact: true });
+  await rename.click();
+  const input = ui.getByRole('textbox', { name: 'Window label', exact: true });
+  await input.fill('中文阅读');
+  for (const event of [
+    { key: 'Enter', isComposing: true },
+    { key: 'Escape', isComposing: true },
+    { key: 'Enter', isComposing: false, keyCode: 229 },
+  ]) {
+    await input.dispatchEvent('keydown', event);
+    await expect(input).toHaveValue('中文阅读');
+    await expect(input).toBeFocused();
+    await expect(ui.locator('#proposal')).toBeHidden();
+  }
+  await input.press('Escape');
+  await expect(input).toHaveCount(0);
+  await expect(rename).toBeFocused();
+  await rename.click();
+  await input.fill('中文阅读');
+  await input.press('Enter');
+  await expect(input).toHaveCount(0);
+  await expect(ui.locator('#proposal')).toBeVisible();
+});
+
 test('compact board keeps tab controls discoverable and cancels rename and move with Escape', async ({
   sandbox,
   fixtureServer,

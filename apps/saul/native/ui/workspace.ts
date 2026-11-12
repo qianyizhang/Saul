@@ -643,6 +643,8 @@ function renameWindow(head: HTMLElement, button: HTMLButtonElement, window: Boar
   };
   button.onclick = save;
   input.onkeydown = (event) => {
+    // Let the IME confirm or dismiss its candidate without ending the rename.
+    if (event.isComposing || event.keyCode === 229) return;
     if (event.key !== 'Enter' && event.key !== 'Escape') return;
     event.preventDefault();
     event.stopPropagation();
