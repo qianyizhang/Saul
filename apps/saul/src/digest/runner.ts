@@ -1,9 +1,13 @@
 import type { DbCall } from '../types/storage';
-import { planEvents } from '../models/chatgpt-plan';
-import { streamModel } from '../models/provider';
-import { parseSummary, SUMMARY_PROMPT, summaryRequestInput } from './summary';
+import {
+  createCallExecutor,
+  type CallExecutor,
+  type CallOutcome,
+  type CallSnapshot,
+  type FrozenCall,
+} from '../calls/execution';
+import { SUMMARY_PROMPT } from './summary';
 import { compareText } from '../reading/input-change';
-import { runCustomAction } from '../actions/run';
 import {
   activeItem,
   type DigestBatch,
@@ -37,8 +41,7 @@ export class DigestRunner {
   constructor(
     private db: DbCall,
     private capture: Capture,
-    private generate = planEvents,
-    private custom = runCustomAction,
+    private executor: CallExecutor = createCallExecutor(),
   ) {
     this.ready = db({ type: 'DB_DIGEST_RECOVER', payload: undefined });
   }
@@ -324,91 +327,72 @@ export class DigestRunner {
     item.status = signal.aborted ? 'cancelled' : 'running';
     await this.save(batch, item, source);
     if (signal.aborted) return;
-    if (batch.action) {
-      const controller = new AbortController();
-      const actionSignal = AbortSignal.any([signal, controller.signal]);
-      let pending: Promise<void> | undefined;
-      let saveError: unknown;
-      const timer = setInterval(() => {
-        if (pending || saveError) return;
-        pending = this.save(batch, item)
-          .catch((error: unknown) => {
-            saveError = error;
-            controller.abort();
-          })
-          .finally(() => {
-            pending = undefined;
-          });
-      }, 500);
-      let text: string | undefined;
-      try {
-        text = await this.custom(batch, item, source, credential, actionSignal);
-        actionSignal.throwIfAborted();
-      } catch (error) {
-        item.status = signal.aborted ? 'cancelled' : 'failed';
-        item.error = error instanceof Error ? error.message : String(error);
-        if (!signal.aborted) pause();
-      } finally {
-        clearInterval(timer);
-        await pending;
-        delete item.progress;
-      }
-      if (saveError) throw saveError;
-      if (text !== undefined) {
-        item.finalText = text;
-        item.status = 'completed';
-      }
-      await this.save(batch, item);
-      return;
-    }
-    let providerFailed = true;
+    // Translate the existing saved representation; selection remains admission-owned.
+    const call: FrozenCall = batch.action
+      ? { kind: 'script', revision: batch.action.revision.revision, input: batch.action.input }
+      : {
+          kind: 'summarize',
+          instructions: batch.prompt,
+          model: batch.summaryInput
+            ? { kind: 'preset', input: batch.summaryInput }
+            : {
+                kind: 'plan',
+                accountId: batch.accountId,
+                model: batch.model,
+                effort: batch.effort,
+                credentialOwner: batch.credentialOwner ?? 'local',
+              },
+        };
+    const project = (output: CallSnapshot) => {
+      item.raw = output.raw;
+      if (output.calls) item.calls = output.calls;
+      else delete item.calls;
+      if (output.progress !== undefined) item.progress = output.progress;
+      else delete item.progress;
+    };
+    const controller = new AbortController();
+    const executionSignal = AbortSignal.any([signal, controller.signal]);
+    let pending: Promise<void> | undefined;
+    let saveError: unknown;
+    // Preserve custom Call checkpoints; built-in Summarize still saves only at completion.
+    const timer = batch.action
+      ? setInterval(() => {
+          if (pending || saveError) return;
+          pending = this.save(batch, item)
+            .catch((error: unknown) => {
+              saveError = error;
+              controller.abort();
+            })
+            .finally(() => {
+              pending = undefined;
+            });
+        }, 500)
+      : undefined;
+    let outcome: CallOutcome;
     try {
-      let complete = false;
-      const { userPrompt, attachments } = summaryRequestInput(item, source);
-      const events = batch.summaryInput
-        ? streamModel(
-            { ...batch.summaryInput, systemPrompt: batch.prompt, userPrompt },
-            credential,
-            signal,
-            { attachments },
-          )
-        : this.generate(
-            {
-              action: 'generate',
-              accountId: batch.accountId,
-              model: batch.model,
-              effort: batch.effort,
-              systemPrompt: batch.prompt,
-              userPrompt,
-              ...(attachments ? { attachments } : {}),
-            },
-            signal,
-            batch.credentialOwner ?? 'local',
-          );
-      for await (const event of events) {
-        if (event.type === 'delta') {
-          item.raw += event.text;
-          if (item.raw.length > 30000) throw new Error('Summary exceeded the output limit.');
-        }
-        if (event.type === 'complete') complete = true;
+      outcome = await this.executor.execute(
+        { call, page: { title: item.title, url: item.url, source } },
+        { credential, signal: executionSignal, onProgress: project },
+      );
+      // Live failure/Stop state must not wait for an outstanding checkpoint.
+      // A known save failure retains its stronger interruption state.
+      if (outcome.kind !== 'completed' && !saveError) {
+        item.status = outcome.kind === 'cancelled' ? 'cancelled' : 'failed';
+        item.error = outcome.message;
       }
-      signal.throwIfAborted();
-      if (!complete) throw new Error('Generation ended without a completed response.');
-      providerFailed = false;
-      item.summary = parseSummary(item.raw);
+      // Stop admitting siblings before waiting for a slow outstanding checkpoint.
+      if (outcome.kind === 'failed' && outcome.failure === 'execution') pause();
+    } finally {
+      clearInterval(timer);
+      await pending;
+      delete item.progress;
+    }
+    if (saveError) throw saveError;
+    project(outcome.output);
+    if (outcome.kind === 'completed') {
       item.status = 'completed';
-    } catch (error) {
-      item.status = signal.aborted ? 'cancelled' : 'failed';
-      item.error = String(error instanceof Error ? error.message : error);
-      if (
-        source.kind === 'pdf-url' &&
-        providerFailed &&
-        !signal.aborted &&
-        (!batch.summaryInput || batch.summaryInput.provider === 'chatgpt-plan')
-      )
-        item.error +=
-          ' PDF URL attachment failed; OpenAI must be able to fetch the URL and the model must support PDF input. No local fallback was used. Choose Local PDF processing in Settings and Run again to send extracted text instead.';
-      if (providerFailed && !signal.aborted) pause();
+      if (outcome.result.kind === 'summary') item.summary = outcome.result.summary;
+      else item.finalText = outcome.result.text;
     }
     await this.save(batch, item);
   }

@@ -186,11 +186,17 @@ then uses the existing trusted extension digest boundary.
 
 ## Summary ownership
 
-The optional [custom action](custom-actions.md) replaces one Summarize slot.
+**Call Saul** is the page-level command, named for _Better Call Saul_. A Call
+operates on captured page context; Saul's Actions operate on local context such
+as selected text. Summarize is the first and default Call, not the execution
+module's purpose. The [glossary](../GLOSSARY.md) owns these terms.
+
+The optional [custom Call](custom-actions.md) replaces the default Summarize behavior.
 `src/actions/manager.ts` owns builder/selection transitions in the offscreen runtime;
 trusted background messages own storage access because offscreen Chrome exposes
-runtime only. `src/actions/run.ts` brokers model calls through existing provider
-and credential owners. `native/action-host.mts` is the independently installed
+runtime only. `src/calls/execution.ts` executes one frozen Call against one
+captured page through the existing model and custom-host adapters.
+`native/action-host.mts` is the independently installed
 `com.saul.actions` host. Its store stages without evaluation; explicit Load
 initializes a revision worker, and the selected revision changes only after a
 successful export check and selection save. Digest jobs retain frozen action
@@ -199,9 +205,50 @@ revision and preset identity. The built-in path and both PDF capture paths remai
 available without the action host. Detailed lifecycle, budgets and retention live
 in the action contract above.
 
-**Summary** is the user-facing term. `digest` remains the implementation name in
+**Summaries** and **Summary reader** remain the existing saved-result surface
+names, including custom Call results. `digest` remains the implementation name in
 `src/digest/`, internal messages and persisted SQLite records; it does not name a
-separate feature. Wire and storage renames require explicit migrations.
+separate feature. Existing `action` fields, revision records and native host names
+remain migration contracts; they do not make Calls local-context Actions.
+Wire and storage renames require explicit migrations.
+
+### Call execution
+
+`CallExecutor.execute` takes a `FrozenCall` and `CapturedPageContext`, with a
+separate transient credential, cancellation signal and progress callback. It
+copies the request at entry. Each `CallSnapshot` is detached from execution state;
+it contains raw output, optional progress and custom model-request transcripts,
+never credentials, database state or a mutable digest item. A terminal
+`CallOutcome` contains a validated Summary or text result, an execution/format
+failure, or cancellation with the available partial output. Progress is provisional;
+completion does not mean the result was saved. No progress is published after
+settlement. The existing native host owns custom-script budgets and worker shutdown.
+
+The background resolves and freezes the selected Call revision and model choices
+at admission. The runner translates the saved representation into the execution
+request; execution never reads current Settings or chooses behavior from a URL.
+Capture owns browser access, coverage and PDF preparation. Execution owns model
+dispatch, output accumulation, completion checks and result validation. The
+runner owns URL exclusion, two workers per batch, Stop/Delete/Retry, checkpoints
+and terminal saves. Custom Calls retain 500 ms checkpoints; built-in Summarize
+retains terminal output saves. Save failure aborts execution and preserves the
+runner's interruption/recovery behavior, without replaying generation.
+
+Execution failures pause unstarted pages. A completed built-in response with an
+invalid Summary fails only that page, allowing siblings to continue. Custom
+script failures, including invalid final text, remain execution failures. Tests
+cross the same execution interface with controlled transport adapters; runner
+checks retain scheduling, persistence-failure and frozen-Retry coverage.
+
+Text cleanup and chained requests belong inside one page's Call execution, with
+one cancellation signal and final result. Cleanup transforms captured text; it
+does not modify the live page. Existing custom scripts can already do this within
+their model-request and time limits. Future site-based Call selection belongs
+at admission, frozen before execution; site-specific DOM extraction belongs to
+capture. Automatic site rules, cross-page chains, independently saved/resumable
+steps and a workflow language are not implemented by this refactor.
+
+### Capture and persistence
 
 `src/digest/` owns the built-in bilingual summary contract, capture, runner, persistence operations, and safe standalone HTML renderer. The workspace sends validated digest actions through the background; only the background snapshots selected tabs, and only the offscreen runner can request page captures. Content scripts cannot start or inspect digests. HTML capture uses isolated-world scripting and validates the original URL before and after reading.
 
@@ -241,8 +288,10 @@ JSON source rows; PDF bytes are never persisted. See the
 [PDF capture contract](product.md#summaries) for triggers, bounds and limitations.
 
 The offscreen document hosts the digest runner alongside reading jobs. Both use
-the shared native history helper. Built-in digest generation uses the native
-ChatGPT transport with a frozen account, prompt, model and effort.
+the shared native history helper. Built-in Summarize with a saved preset uses
+the selected provider through `streamModel`; batches without a saved Summary
+input retain the native ChatGPT plan route. Both execute through the Call module
+with frozen instructions and model choices.
 
 Starts and retries serialize their checks against active sources. Each batch
 then runs independently with up to two workers. A new batch or retry cannot

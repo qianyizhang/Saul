@@ -15,13 +15,14 @@ release artifact can be built and installed independently.
 
 ## Behavior owners
 
-| Boundary                                   | Owner                                                                                       | Stable check                                                                                    |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Native attempt execution and final save    | [AttemptExecution](../apps/ez/Sources/EZCore/AttemptExecution.swift), projected by AppModel | Production Send/Stop/Save again actions in the [native state suite](../apps/ez/Tests/README.md) |
-| Browser attempt execution and persistence  | [ReadingRunner](../apps/saul/src/reading/runner.ts)                                         | Both apps consume the [Attempt contract fixtures](../contracts/README.md#execution)             |
-| Browser configuration writes and conflicts | [Settings owner](../apps/saul/src/storage/settings.ts) in the trusted background            | Concurrent owner requests and two real Settings surfaces                                        |
-| Helper installation and recovery           | [Installation transaction](../apps/saul/native/installation.mts)                            | Disposable installs, failure injection and old/new running processes                            |
-| Tab board host connection                  | [Host adapter](../apps/saul/native/ui/host-adapter.ts) using the pinned MCP Apps SDK        | Independent SDK host and the delivered document under CSP                                       |
+| Boundary                                   | Owner                                                                                                                                 | Stable check                                                                                    |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Native attempt execution and final save    | [AttemptExecution](../apps/ez/Sources/EZCore/AttemptExecution.swift), projected by AppModel                                           | Production Send/Stop/Save again actions in the [native state suite](../apps/ez/Tests/README.md) |
+| Browser attempt execution and persistence  | [ReadingRunner](../apps/saul/src/reading/runner.ts)                                                                                   | Both apps consume the [Attempt contract fixtures](../contracts/README.md#execution)             |
+| Page-level Call execution                  | [Call executor](../apps/saul/src/calls/execution.ts); [digest runner](../apps/saul/src/digest/runner.ts) retains scheduling and saves | Execution outcomes/snapshots through controlled adapters; runner and real-store browser checks  |
+| Browser configuration writes and conflicts | [Settings owner](../apps/saul/src/storage/settings.ts) in the trusted background                                                      | Concurrent owner requests and two real Settings surfaces                                        |
+| Helper installation and recovery           | [Installation transaction](../apps/saul/native/installation.mts)                                                                      | Disposable installs, failure injection and old/new running processes                            |
+| Tab board host connection                  | [Host adapter](../apps/saul/native/ui/host-adapter.ts) using the pinned MCP Apps SDK                                                  | Independent SDK host and the delivered document under CSP                                       |
 
 Views express user intent and render state. These owners hold the ordering,
 durability and lifecycle rules. Shared fixtures compare behavior; history uses the shared SQLite schema. App-local details remain

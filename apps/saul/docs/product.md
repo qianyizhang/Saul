@@ -124,17 +124,19 @@ See [native messaging](native-messaging.md).
 
 ### Summaries
 
-The built-in behavior below remains the default. **Settings → Calls →
+**Call Saul** runs a page-level Call; local-context Actions act on selected text.
+**Summarize** is the first and default Call. The [glossary](../GLOSSARY.md) owns
+these terms. **Settings → Calls →
 Customize Call Saul** can save and select a custom Call preset while retaining earlier choices.
 Create/revise uses a chosen saved preset, then checks and previews a candidate
 without running it. **Save and select** initializes trusted code; the next Call Saul
 invokes it once per page. Custom results use safe text/Markdown, their own frozen
 preset, and the existing reader/Stop/history controls. See
-[custom actions](custom-actions.md) for the versioned interface and recovery.
+[custom Calls](custom-actions.md) for the versioned interface and recovery.
 
-Right-click a web page and choose **Call Saul** to summarize that tab's
-loaded page text, even when the click is on a link or selected text. It does
-not summarize the link destination or only the selection. The reader opens
+Right-click a web page and choose **Call Saul** to run the selected Call on that
+tab's captured page context, even when the click is on a link or selected text.
+The context is the page, rather than the link destination or only the selection. The reader opens
 in Chrome's side panel, keeping the source tab active, and shows its page title,
 source link and progress. The context menu, Call Saul shortcut, Window selections and
 saved-summary buttons use this panel. Switching tabs keeps the current summary;
@@ -144,8 +146,8 @@ does not regenerate it. Settings recovery opens the full Settings workspace.
 External Tab board/native commands retain the full reader because Chrome requires
 a direct browser gesture to open a side panel. Existing reader URLs remain valid.
 
-**Select all → Summarize** summarizes a window; a smaller selection summarizes
-only those tabs. A selection across windows produces one saved summary in
+**Select all → Summarize** runs the selected Call once per tab in a window; a
+smaller selection runs it only on those tabs. A selection across windows produces one saved summary in
 display order with source-window labels.
 
 Call Saul immediately opens a reader in Chrome and checks for a saved selection.

@@ -41,7 +41,7 @@ export type DigestCapture =
 export interface DigestItem {
   finalText?: string;
   progress?: string;
-  calls?: { instructions: string; input: string; output: string; complete: boolean }[];
+  calls?: import('../calls/execution').CallSnapshot['calls'];
   index: number;
   tabId: number;
   windowId?: number;

@@ -17,6 +17,9 @@ These meanings apply across applications; surface-specific names live in the
 
 **Recipe** is a legacy storage/code name for Action, not a separate product concept.
 Existing JSON keys such as `recipes` and `recipeSnapshot` remain migration contracts.
+Saul distinguishes local-context Actions from page-level **Calls**; its
+[glossary](apps/saul/GLOSSARY.md) owns Call Saul, Call and Call preset. This does not
+restrict EZ's Action inputs or change the shared Action model.
 
 Use Settings, History, Details, More, Save, Cancel, Copy and Stop consistently.
 Explain submits a captured passage; Run executes an EZ action; Send submits a message or follow-up. Reuse restores a

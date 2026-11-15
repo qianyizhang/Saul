@@ -1,6 +1,11 @@
 # Call Saul presets
 
-Call Saul runs the call preset selected in Settings → Calls. **Summarize
+**Call Saul**, named for _Better Call Saul_, is the page-level command. A **Call**
+works on captured page context; Saul's **Actions** work on local context such as
+selected text. Page scope does not guarantee a complete capture: coverage and
+truncation remain visible. The [glossary](../GLOSSARY.md) owns these terms.
+
+Call Saul runs the Call preset selected in Settings → Calls. **Summarize
 (default)** gives a bilingual summary without the optional action helper. Custom
 calls run once per selected page, with up to two pages running concurrently. There is no combined-tab
 workflow, agent loop, package installation, file watcher or custom executable UI.
@@ -13,7 +18,7 @@ request using that preset. Revision includes the current candidate (or selected 
 and the previous error/response as context. There is no automatic repair or retry.
 Unsubmitted request, preset and file-path fields stay in the current tab's session
 through navigation and reload. This draft cache starts no model work and changes
-no approved action.
+no approved Call.
 
 The model returns exactly one JSON object:
 
@@ -35,7 +40,7 @@ automatically.
 Review **Candidate source**, choose a model preset in **Run with**, then click
 **Save and select**. That click authorizes initialization of
 trusted local code. Saul verifies the actual default export in a fresh Node worker
-before changing the selected revision. Loading does not call the action handler
+before changing the selected revision. Loading does not call the Call handler
 or start model inference. Initialization errors preserve the old selection;
 initialization side effects that already occurred cannot be undone.
 
@@ -45,6 +50,9 @@ model and options. The script cannot pass replacement model or billing choices t
 `generate`. Missing capabilities block explicitly; there is no fallback.
 
 ## Action contract 1
+
+“Action contract 1” is the existing native protocol name for custom Calls;
+its stored fields, host identity and revision format are unchanged.
 
 Modules are self-contained JavaScript or erasable TypeScript with one default
 `async run(ctx)` function. No imports, npm packages, shell tools, direct network
@@ -58,7 +66,7 @@ calls or browser mutations are supported. Use these capabilities:
 | `ctx.signal`                           | Cancellation signal; use `throwIfAborted()` in longer workflows              |
 
 Omitting `input` supplies the captured page input. A PDF URL remains attached even
-when the action supplies additional input text. URL attachments require a ChatGPT
+when the Call supplies additional input text. URL attachments require a ChatGPT
 plan preset. Choose Local PDF processing explicitly to use extracted text with
 another provider. Existing PDF capture validation, limits and retry semantics
 remain in [the summary owner](architecture.md#summary-ownership).
@@ -67,14 +75,31 @@ Return nonempty plain text or Markdown, at most 60,000 characters. The reader
 renders Markdown through React nodes; raw HTML is literal text, images are not
 loaded, and links accept only HTTP(S). Exports contain escaped plain text. Source
 links and coverage remain Saul-owned. Intermediate model output appears only in
-inspection. A failed action never presents that output as a completed answer.
+inspection. A failed Call never presents that output as a completed answer.
 
-Each page action allows at most **three model calls** and **five minutes**. Stop,
+Each page Call allows at most **three model calls** and **five minutes**. Stop,
 timeouts and disconnects cancel outstanding calls. A worker that cannot cooperate
 is terminated; other active pages in that worker also fail honestly. There are no
 automatic retries. Browser restart marks unfinished jobs interrupted and never
 resends them. Explicit Retry retains the original source, revision and model
 choices; credentials are resolved only through their existing owner.
+
+### Text preparation and chains
+
+A custom Call can clean `ctx.source.text` locally, pass the prepared text to
+`ctx.generate`, then use the answer as input to a later request. This is one
+page run with shared cancellation and one final result; intermediate model
+requests remain available in inspection. Cleanup does not change the live page
+or overwrite the saved capture. A PDF URL is not locally available text and stays
+attached when explicit input is supplied.
+
+The Call execution module owns these results and transcripts behind detached
+progress snapshots; the runner owns scheduling and persistence. See
+[Call execution](architecture.md#call-execution) for the implementation seam.
+Site-specific Call selection (for example Hacker News versus Reddit) is a future
+admission feature. Site-specific DOM extraction belongs to capture. This refactor
+adds neither automatic site rules nor a separate workflow language, cross-page
+chains or resumable steps. Existing scripts can branch on the captured URL.
 
 ## Local files, reload and recovery
 
@@ -92,9 +117,9 @@ The unified JSON `apps.saul.calls` scope owns saved call choices when the config
 helper is available; browser-only installations keep local choices. Chrome's trusted
 extension storage owns builder drafts and runtime state. The offscreen owner accesses it through validated background messages.
 The helper owns immutable revision files under `~/.saul/actions/revisions`, outside
-installed runtime generations. History saves the exact action source, revision,
-frozen preset and model-call input/output. Reuse includes the action revision and
-preset ID as well as ordered URLs, so different actions cannot reuse each other's
+installed runtime generations. History saves the exact Call source, revision,
+frozen preset and model-call input/output. Reuse includes the Call revision and
+preset ID as well as ordered URLs, so different Calls cannot reuse each other's
 answers. Model-option edits under the same preset retain the saved result; Run
 again explicitly freezes the current choices.
 
@@ -113,7 +138,7 @@ node scripts/setup.mts --components actions --extension-id YOUR_EXTENSION_ID
 replace `com.saul.chatgpt` or `com.saul.tabs`. The installer preserves their payloads
 and registrations and retains runtime generations for explicit recovery. ChatGPT
 inference still passes through the existing ChatGPT credential/refresh owner;
-actions receive no tokens or direct SQLite interface. API credentials remain in
+custom Calls receive no tokens or direct SQLite interface. API credentials remain in
 trusted extension contexts. See [setup](../../../docs/setup.md).
 
 **User modules are trusted local Node code with OS permissions.** Static checks
