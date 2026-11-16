@@ -124,8 +124,16 @@ The existing model controls edit the selected preset, so there is one authority
 for each model choice.
 
 `src/models/settings-draft.ts` owns action, preset and profile editing transitions,
-including connection-key clearing and the persisted projections. Settings views
-hold independent drafts and submit through `saul-settings`; the trusted background
+including connection-key clearing. The draft separates editable records and the
+standalone account from retained transport defaults and editor selection IDs.
+The inspected preset is derived; inspection never changes saved account, provider
+or profile choices. One conversion assembles the existing settings transport for
+Save and guarded connection/credential-owner commits. Explicit active-profile
+endpoint or credential edits update its transport fields at that boundary.
+Save validates connection syntax without treating a retained legacy provider as
+the execution choice; retired presets remain blocked at execution and can be
+explicitly repaired in the editor.
+Settings views hold independent drafts and submit through `saul-settings`; the trusted background
 owns one serialized read/commit/recovery lane in `src/storage/settings.ts`.
 A commit compares the loaded raw record's opaque fingerprint before writing.
 The Chrome record uses an opaque fingerprint; shared sections have numeric
@@ -138,10 +146,10 @@ cross-process lease and commits both sections in one JSON replacement. The
 the lock, failure and upgrade rules.
 A stale Save preserves draft fields and selection and blocks another Save until
 **Review latest** reads a fresh revision or a confirmed Reload discards the draft.
-`models/settings-recovery.ts` compares owned fields against the loaded baseline,
+`models/settings-recovery.ts` compares editable values against the loaded baseline,
 keeps unrelated latest changes, and requires choices for conflicts and removed
-items. Editor projections and storage revisions are not edits. Apply validates
-the reviewed draft without writing; Save still uses the trusted revision check.
+items. Inspection and retained storage revisions are outside that comparison.
+Apply validates the reviewed draft without writing; Save still uses the trusted revision check.
 Cancelling or a failed read preserves the original draft and editing context.
 An uncertain response follows the same read-first review, without replaying the
 write. Already matching edits require no new commit. Credential/endpoint changes
@@ -343,6 +351,20 @@ section per block, searches all sections and copies the complete original text.
 
 ## Source layout
 
+`Settings` coordinates the shared draft, account/provider operations and recovery
+focus. `PresetSettings`, its capability/provider fields, `ReadingSettings`,
+`SettingsShortcuts` and `SettingsFeedback` own their respective views. Sections
+remain mounted while hidden; provider tests remain stoppable across sections.
+The speech preview still unmounts on leaving Presets. Preset search stays with the
+coordinator so loading/error replacement does not clear it.
+
+`Library` owns History queries and mutations; `HistoryEntry` renders an entry.
+History and the explanation card share `PastAttemptContent` while retaining their
+own attempt filtering and disclosures. `CallResults` renders both built-in
+Summarize and custom Call output. `SummaryReader` retains resolve/start, polling,
+Stop/Retry, export and navigation; its existing surface name follows the
+[Saul glossary](../GLOSSARY.md).
+
 The portable [design contract](../../../DESIGN.md) generates CSS for the extension and
 self-contained MCP board, a palette for native page highlights, and
 SwiftUI roles for EZ. The root `design/generate.mts` consumes the pinned official DESIGN.md
@@ -359,7 +381,7 @@ build tooling, independent of authentication, inference, and storage runtimes.
 | `src/native/`    | Extension-side tab operations and native bridge                              |
 | `src/reading/`   | Durable runner, anchor restoration, and markers                              |
 | `src/storage/`   | Settings, native history routing, and legacy OPFS import                     |
-| `src/surface/`   | Page-side React UI                                                           |
+| `src/surface/`   | Reading UI shared by page and workspace surfaces                             |
 | `native/`        | Node CLI, MCP server, native host, transport, installer, and shared protocol |
 
 ## Surface adapters

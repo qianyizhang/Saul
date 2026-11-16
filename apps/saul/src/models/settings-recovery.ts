@@ -1,8 +1,8 @@
 import type { UserSettings } from '../types';
 import {
   createSettingsDraft,
-  editSettingsDraft,
   settingsForSave,
+  settingsFromDraft,
   type SettingsDraft,
 } from './settings-draft';
 import { normalizeSettings } from '../storage/settings';
@@ -45,23 +45,11 @@ function same(a: unknown, b: unknown): boolean {
 const byId = <T extends { id: string }>(items: T[]) =>
   Object.fromEntries(items.map((item) => [item.id, item]));
 
-/** Compare owned values once. Editor projections and storage revisions are not user edits. */
+/** Editable values are explicit; transport defaults and inspection IDs are outside this tree. */
 function values(draft: SettingsDraft): Tree {
-  const s = draft.settings;
-  const owned: Tree = { ...s };
-  for (const key of [
-    'activeProvider',
-    'activeProfileId',
-    'openaiCompatible',
-    'chromeAi',
-    'chatgptPlan',
-    'sharedPresetRevision',
-    'scopedConfigRevision',
-  ])
-    delete owned[key];
+  const s = draft.values;
   return {
-    ...owned,
-    planAccountId: s.chatgptPlan?.accountId,
+    ...s,
     profiles: byId(s.profiles ?? []),
     connections: Object.fromEntries(s.connections.map((item) => [item.key, item])),
     configuration: s.configuration && {
@@ -214,42 +202,39 @@ export function reviewSettings(
       const config = merged.configuration;
       if (!object(config)) throw new Error('The reviewed configuration is unavailable.');
       const { planAccountId, ...owned } = merged;
+      const latestSettings = settingsFromDraft(latest);
       const settings = normalizeSettings({
-        ...latest.settings,
+        ...latestSettings,
         ...owned,
-        chatgptPlan: (latest.settings.chatgptPlan ?? mine.settings.chatgptPlan) && {
-          ...(latest.settings.chatgptPlan ?? mine.settings.chatgptPlan),
-          accountId: planAccountId,
-        },
+        chatgptPlan:
+          latestSettings.chatgptPlan || planAccountId !== undefined
+            ? {
+                ...(latestSettings.chatgptPlan ?? { model: '' }),
+                accountId: planAccountId,
+              }
+            : undefined,
         connections: ordered(
           merged.connections,
-          latest.settings.connections,
-          mine.settings.connections,
+          latest.values.connections,
+          mine.values.connections,
         ),
-        profiles: ordered(
-          merged.profiles,
-          latest.settings.profiles ?? [],
-          mine.settings.profiles ?? [],
-        ),
+        profiles: ordered(merged.profiles, latest.values.profiles, mine.values.profiles),
         configuration: {
           ...config,
           presets: ordered(
             config.presets,
-            latest.settings.configuration!.presets,
-            mine.settings.configuration!.presets,
+            latest.values.configuration.presets,
+            mine.values.configuration.presets,
           ),
           recipes: ordered(
             config.recipes,
-            latest.settings.configuration!.recipes,
-            mine.settings.configuration!.recipes,
+            latest.values.configuration.recipes,
+            mine.values.configuration.recipes,
           ),
         },
       });
-      let draft = createSettingsDraft(settings);
-      if (settings.configuration?.presets.some((item) => item.id === mine.presetId))
-        draft = editSettingsDraft(draft, { type: 'select-preset', id: mine.presetId });
-      if (settings.configuration?.recipes.some((item) => item.id === mine.recipeId))
-        draft = editSettingsDraft(draft, { type: 'select-recipe', id: mine.recipeId });
+      // Preserve the fresh read's defaults and route baseline while applying owned edits.
+      const draft = { ...createSettingsDraft(settings, mine), retained: latest.retained };
       settingsForSave(draft);
       return { draft, dirty: !same(values(draft), latestValues) };
     },

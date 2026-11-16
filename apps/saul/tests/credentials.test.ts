@@ -6,6 +6,101 @@ import {
 } from '../native/credentials-contract.mts';
 import { sharedCredentialProjection, stripOfficialKeys } from '../src/storage/credentials';
 import { DEFAULT_SETTINGS, validateProviderSettings } from '../src/storage/settings';
+import { validImageOptions } from '../native/shared-presets-contract.mts';
+
+const imageRequest = {
+  action: 'api-image',
+  model: 'gpt-image-2.6-flare',
+  prompt: 'A fixture image',
+  size: '1024x1024',
+  quality: 'low',
+  outputFormat: 'png',
+};
+
+it('accepts supported scalar image options and speech voices at the credential boundary', () => {
+  for (const size of ['1024x1024', '1536x1024', '1024x1536'])
+    for (const quality of ['low', 'medium', 'high'])
+      for (const outputFormat of ['png', 'gif'])
+        expect(() =>
+          validateCredentialRequest({ ...imageRequest, size, quality, outputFormat }),
+        ).not.toThrow();
+  for (const voice of [
+    'alloy',
+    'ash',
+    'ballad',
+    'coral',
+    'echo',
+    'sage',
+    'shimmer',
+    'verse',
+    'marin',
+    'cedar',
+  ])
+    expect(() =>
+      validateCredentialRequest({ action: 'api-realtime', model: 'gpt-realtime', voice }),
+    ).not.toThrow();
+});
+
+it('rejects arrays and other nonscalar options before forwarding a credential request', () => {
+  for (const [field, scalar] of [
+    ['size', '1024x1024'],
+    ['quality', 'low'],
+    ['outputFormat', 'gif'],
+    ['voice', 'marin'],
+  ] as const) {
+    const request =
+      field === 'voice' ? { action: 'api-realtime', model: 'gpt-realtime' } : imageRequest;
+    for (const value of [
+      [scalar],
+      [[scalar]],
+      [],
+      null,
+      undefined,
+      true,
+      1,
+      {},
+      { value: scalar },
+      'unsupported',
+    ])
+      expect(() => validateCredentialRequest({ ...request, [field]: value })).toThrow();
+  }
+  const h = harness();
+  const client = h.connect('chrome-extension://extension/popup.html');
+  client.receive({ action: 'api-realtime', model: 'gpt-realtime', voice: ['marin'] });
+  expect(h.connectNative).not.toHaveBeenCalled();
+});
+
+it('keeps stored-option and credential-request policies separate', () => {
+  expect(validImageOptions({ size: '1024x1024', quality: 'low' })).toBe(true);
+  const missingFormat: Partial<typeof imageRequest> = { ...imageRequest };
+  delete missingFormat.outputFormat;
+  expect(() => validateCredentialRequest(missingFormat)).toThrow();
+  expect(() =>
+    validateCredentialRequest({ ...imageRequest, model: 'gpt-image-2.5-flare' }),
+  ).not.toThrow();
+  expect(() =>
+    validateCredentialRequest({
+      ...imageRequest,
+      model: 'gpt-image-2.5-flare',
+      outputFormat: 'gif',
+    }),
+  ).toThrow('GIF requires');
+  expect(() =>
+    validateCredentialRequest({
+      ...imageRequest,
+      model: 'gpt-image-2.5-flare',
+      outputFormat: ['gif'],
+    }),
+  ).toThrow();
+  for (const patch of [
+    { model: '' },
+    { model: ['gpt-image-2.6-flare'] },
+    { prompt: '' },
+    { prompt: ['fixture'] },
+    { extra: true },
+  ])
+    expect(() => validateCredentialRequest({ ...imageRequest, ...patch })).toThrow();
+});
 function harness() {
   let accept: (port: chrome.runtime.Port) => void = () => {};
   const nativeListeners: ((value: unknown) => void)[] = [];

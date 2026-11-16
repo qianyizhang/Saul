@@ -306,7 +306,6 @@ function validateEndpoint(baseUrl: string): URL {
 
 /** Connection editing validates syntax; credentials and model availability belong to Run. */
 export function validateSettingsConnections(settings: UserSettings): void {
-  if (settings.activeProvider === 'chrome-ai') throw new Error(CHROME_AI_RETIRED_MESSAGE);
   for (const profile of settings.profiles ?? [])
     if (profile.config.baseUrl) validateEndpoint(profile.config.baseUrl);
 }

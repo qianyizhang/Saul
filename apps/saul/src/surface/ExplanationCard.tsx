@@ -1,25 +1,17 @@
+import { runLabel } from './run-status';
+import { PastAttemptContent } from './PastAttemptContent';
 import { ControlIcon } from './ControlIcon';
 import { sendReadingMessage } from '../storage/client';
 import { GeneratedImageView } from './GeneratedImageView';
 import { useRef, useState } from 'react';
 import { X, Pin, Bookmark, Square } from 'lucide-react';
-import type { Passage, RunResult, RunStatus } from '../types/storage';
+import type { Passage, RunResult } from '../types/storage';
 import { TagStreamParser } from '../parser/tag-stream-parser';
 import { AnnotatedTextView } from './AnnotatedTextView';
 import { useAnchoredPosition } from './useAnchoredPosition';
 import { InputOutputInspector } from './InputOutputInspector';
 import { RunDetails } from './RunDetails';
 import { changeLabel, type InputComparison } from '../reading/input-change';
-export const runLabel = (status: RunStatus) =>
-  ({
-    queued: 'Waiting…',
-    running: 'Explaining…',
-    saving: 'Saving…',
-    completed: 'Saved',
-    failed: 'Incomplete',
-    interrupted: 'Interrupted',
-    cancelled: 'Stopped',
-  })[status];
 interface Props {
   reuse?: InputComparison;
   onRunCurrent?: () => void;
@@ -296,17 +288,7 @@ export function ExplanationCard({
                 <summary>
                   {runLabel(run.status)} · {new Date(run.createdAt).toLocaleString()}
                 </summary>
-                {run.error && <p>{run.error}</p>}
-                {run.inspection?.followUpQuestion && (
-                  <p className="whitespace-pre-wrap">{run.inspection.followUpQuestion}</p>
-                )}
-                {run.hasImage ? (
-                  <GeneratedImageView selectionId={passage.snapshot.id} runId={run.id} />
-                ) : (
-                  <AnnotatedTextView segments={new TagStreamParser().feed(run.responseRaw)} />
-                )}
-                <RunDetails run={run} />
-                <InputOutputInspector run={run} />
+                <PastAttemptContent run={run} selectionId={passage.snapshot.id} />
               </details>
             ))}
           </div>

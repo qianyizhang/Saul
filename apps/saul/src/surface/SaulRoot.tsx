@@ -7,7 +7,8 @@ import { EXPLAIN_RECIPE_ID } from '../models/configuration';
 import type { Passage } from '../types/storage';
 import { PassageMarkers } from '../reading/markers';
 import { FloatingTrigger } from './FloatingTrigger';
-import { ExplanationCard, runLabel } from './ExplanationCard';
+import { ExplanationCard } from './ExplanationCard';
+import { runLabel } from './run-status';
 import type { InputComparison } from '../reading/input-change';
 type Captured = NonNullable<ReturnType<typeof captureSelection>>;
 export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) {

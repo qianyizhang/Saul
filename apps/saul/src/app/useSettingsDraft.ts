@@ -4,6 +4,8 @@ import {
   createSettingsDraft,
   editSettingsDraft,
   settingsForSave,
+  settingsFromDraft,
+  settingsForInspection,
   type SettingsEdit,
 } from '../models/settings-draft';
 import { DEFAULT_SETTINGS } from '../storage/settings';
@@ -49,7 +51,7 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
     formRef.current = next;
     setForm(next);
   }
-  function receiveLoaded(result: SettingsState) {
+  function receiveLoaded(result: SettingsState, preserveSelection = false) {
     if (result.state === 'conflict') {
       setError(result.error);
       setBlocked(true);
@@ -65,7 +67,10 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
       setSaved(false);
       return;
     }
-    const next = createSettingsDraft(result.settings);
+    const next = createSettingsDraft(
+      result.settings,
+      preserveSelection ? formRef.current : undefined,
+    );
     replaceForm(next);
     loadedDraft.current = structuredClone(next);
     setReview(undefined);
@@ -136,17 +141,7 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
         return;
       }
       baseline.current = result.revision;
-      const selected = formRef.current.settings.configuration?.presets.find(
-        (p) => p.id === formRef.current.presetId,
-      );
-      const migrated = result.settings.configuration?.presets.find(
-        (p) => p.name === selected?.name && p.provider === selected?.provider,
-      );
-      const next = {
-        ...formRef.current,
-        settings: result.settings,
-        presetId: migrated?.id ?? formRef.current.presetId,
-      };
+      const next = createSettingsDraft(result.settings, formRef.current);
       replaceForm(next);
       loadedDraft.current = structuredClone(next);
       markDirty(false);
@@ -259,7 +254,7 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
         baseline: baseline.current,
         settings: { ...settingsForSave(formRef.current), sharedCredentials: owner },
       });
-      if (mounted.current) receiveLoaded(result);
+      if (mounted.current) receiveLoaded(result, true);
     } catch (cause) {
       if (mounted.current) {
         setError(message(cause));
@@ -286,9 +281,7 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
         setBlocked(true);
         throw new Error(result.error);
       }
-      const selected = formRef.current.presetId;
-      receiveLoaded(result);
-      replaceForm({ ...formRef.current, presetId: selected });
+      receiveLoaded(result, true);
     } catch (cause) {
       if (cause instanceof SettingsDeliveryError) setBlocked(true);
       throw cause;
@@ -298,7 +291,8 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
     }
   }
   return {
-    settings: form.settings,
+    settings: settingsFromDraft(form),
+    inspectedSettings: settingsForInspection(form),
     selectedPresetId: form.presetId,
     selectedRecipeId: form.recipeId,
     loaded,

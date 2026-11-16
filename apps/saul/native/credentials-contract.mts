@@ -1,6 +1,12 @@
 import { isRecord } from './value.mts';
 import { validConnectionCatalog, validConnectionStatus } from './connections-contract.mts';
-import { validConnectionEndpoint } from './shared-presets-contract.mts';
+import {
+  validConnectionEndpoint,
+  validImageSize,
+  validImageQuality,
+  validImageFormat,
+  validSpeechVoice,
+} from './shared-presets-contract.mts';
 import { validatePlanRequest, type PlanRequest } from './plan-protocol.mts';
 
 export const CREDENTIALS_HOST = 'com.saul.credentials';
@@ -108,10 +114,10 @@ export function validateCredentialRequest(value: unknown): asserts value is Cred
     value.action === 'api-image' &&
     (!text(value.prompt, 32_000) ||
       !text(value.model, 256) ||
-      !['1024x1024', '1536x1024', '1024x1536'].includes(String(value.size)) ||
-      !['low', 'medium', 'high'].includes(String(value.quality)) ||
-      !['png', 'gif'].includes(String(value.outputFormat)) ||
-      (value.outputFormat === 'gif' && !String(value.model).startsWith('gpt-image-2.6-')))
+      !validImageSize(value.size) ||
+      !validImageQuality(value.quality) ||
+      !validImageFormat(value.outputFormat) ||
+      (value.outputFormat === 'gif' && !value.model.startsWith('gpt-image-2.6-')))
   )
     throw new Error('Choose a supported Draw model and image options. GIF requires GPT Image 2.6.');
   if (value.action === 'select' && !text(value.accountId, 256))
@@ -144,18 +150,7 @@ export function validateCredentialRequest(value: unknown): asserts value is Cred
     value.action === 'api-realtime' &&
     (!text(value.model, 256) ||
       !/^gpt-realtime(?:-[a-z0-9.]+)*$/.test(value.model) ||
-      ![
-        'alloy',
-        'ash',
-        'ballad',
-        'coral',
-        'echo',
-        'sage',
-        'shimmer',
-        'verse',
-        'marin',
-        'cedar',
-      ].includes(String(value.voice)))
+      !validSpeechVoice(value.voice))
   )
     throw new Error('Choose a supported Realtime model and voice.');
 }

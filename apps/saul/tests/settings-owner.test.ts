@@ -6,6 +6,111 @@ import {
 } from '../src/storage/settings';
 import { validateSettingsRequest, type SettingsState } from '../src/contracts/settings';
 import { requestSettings, SettingsDeliveryError } from '../src/storage/settings-client';
+import {
+  createSettingsDraft,
+  editSettingsDraft,
+  settingsForSave,
+} from '../src/models/settings-draft';
+import { summaryConnections } from '../src/digest/connection';
+import { preparePreset } from '../src/models/preset-resolution';
+
+it('saves an explicit preset repair while retaining a retired legacy default', async () => {
+  const f = fixture({ activeProvider: 'chrome-ai' });
+  const before = ready(await f.owner({ action: 'read' }));
+  const original = createSettingsDraft(before.settings);
+  const retired = original.values.configuration.presets[0]!;
+  expect(() => preparePreset(before.settings, retired)).toThrow('has been retired');
+  let draft = editSettingsDraft(original, {
+    type: 'preset-local-provider',
+    provider: 'openai-compatible',
+  });
+  draft = editSettingsDraft(draft, { type: 'preset', patch: { model: 'fixture-model' } });
+  draft = editSettingsDraft(draft, {
+    type: 'connection',
+    id: 'default',
+    patch: { apiKey: 'fixture-key' },
+  });
+  const saved = ready(
+    await f.owner({
+      action: 'commit',
+      baseline: before.revision,
+      settings: settingsForSave(draft),
+    }),
+  );
+  expect(saved.settings.activeProvider).toBe('chrome-ai');
+  const repaired = saved.settings.configuration!.presets.find((p) => p.id === retired.id)!;
+  expect(preparePreset(saved.settings, repaired)).toMatchObject({
+    choices: { provider: 'openai-compatible', remote: { model: 'fixture-model' } },
+    credential: 'fixture-key',
+  });
+  expect(() => preparePreset(saved.settings, retired)).toThrow('has been retired');
+});
+
+it('commits an unrelated edit after inspection without retargeting Original summary or API defaults', async () => {
+  const source = structuredClone(DEFAULT_SETTINGS);
+  source.chatgptPlan = { accountId: 'local-A', model: 'saved-model' };
+  source.activeProfileId = 'default';
+  source.profiles = [
+    { id: 'default', name: 'Default', config: { ...source.openaiCompatible } },
+    {
+      id: 'other',
+      name: 'Other',
+      config: {
+        ...source.openaiCompatible,
+        baseUrl: 'https://other.example.test/v1',
+        apiKey: 'fixture-key',
+      },
+    },
+  ];
+  source.connections.push({
+    key: 'plan-b',
+    name: 'Plan B',
+    kind: 'chatgpt-plan',
+    accountId: 'bound-B',
+  });
+  source.configuration!.presets.push(
+    {
+      id: 'plan-b',
+      name: 'Plan B',
+      provider: 'chatgpt-plan',
+      connectionKey: 'plan-b',
+      model: 'bound-model',
+    },
+    {
+      id: 'other',
+      name: 'Other',
+      provider: 'openai-compatible',
+      profileId: 'other',
+      model: 'other-model',
+    },
+  );
+  const f = fixture(source);
+  const accounts = ['local-A', 'bound-B'].map((id) => ({
+    id,
+    label: id,
+    signedIn: true,
+    planEnabled: true,
+  }));
+  for (const id of ['plan-b', 'other']) {
+    const before = ready(await f.owner({ action: 'read' }));
+    let draft = editSettingsDraft(createSettingsDraft(before.settings), {
+      type: 'select-preset',
+      id,
+    });
+    draft = editSettingsDraft(draft, {
+      type: 'settings',
+      patch: { responseLanguage: id === 'plan-b' ? 'Chinese' : 'English' },
+    });
+    const payload = settingsForSave(draft);
+    const saved = ready(
+      await f.owner({ action: 'commit', baseline: before.revision, settings: payload }),
+    );
+    expect(saved.settings.openaiCompatible).toEqual(before.settings.openaiCompatible);
+    expect(saved.settings.activeProfileId).toBe('default');
+    expect(saved.settings.activeProvider).toBe(before.settings.activeProvider);
+    expect(summaryConnections(saved.settings, accounts).chosen).toBe('local-A');
+  }
+});
 
 function fixture(initial?: unknown) {
   const values: Record<string, unknown> =

@@ -12,14 +12,42 @@ import {
   validateConfiguration,
 } from './configuration';
 
+type RetainedSettings = Pick<
+  UserSettings,
+  | 'activeProvider'
+  | 'activeProfileId'
+  | 'openaiCompatible'
+  | 'chromeAi'
+  | 'sharedPresetRevision'
+  | 'scopedConfigRevision'
+>;
+
+export type SettingsValues = Omit<UserSettings, keyof RetainedSettings | 'chatgptPlan'> & {
+  profiles: NonNullable<UserSettings['profiles']>;
+  configuration: NonNullable<UserSettings['configuration']>;
+  planAccountId?: string;
+};
+
+export type SettingsPreferences = Pick<
+  UserSettings,
+  'responseLanguage' | 'contextPolicy' | 'summaryPresetId' | 'summaryPdfProcessing'
+>;
+
 export interface SettingsDraft {
-  settings: UserSettings;
+  values: SettingsValues;
+  /** Transport defaults are not the inspected preset or a second editable connection. */
+  retained: Readonly<
+    RetainedSettings & {
+      planOptions?: Omit<NonNullable<UserSettings['chatgptPlan']>, 'accountId'>;
+      activeProfileConfig?: Readonly<UserSettings['openaiCompatible']>;
+    }
+  >;
   presetId: string;
   recipeId: string;
 }
 
 export type SettingsEdit =
-  | { type: 'settings'; patch: Partial<UserSettings> }
+  | { type: 'settings'; patch: Partial<SettingsPreferences> }
   | { type: 'select-preset'; id: string }
   | { type: 'add-preset'; id: string }
   | { type: 'preset-name'; name: string }
@@ -78,40 +106,115 @@ function origin(url: string): string {
   }
 }
 
-/** Own the editable projection; selecting a preset never loses the previous profile. */
-export function createSettingsDraft(source: UserSettings): SettingsDraft {
+/** Keep editable records, transport defaults and inspection selection distinct. */
+export function createSettingsDraft(source: UserSettings, previous?: SettingsDraft): SettingsDraft {
   const settings = structuredClone(source);
-  const activeProfileId = settings.activeProfileId || 'default';
+  const {
+    activeProvider,
+    activeProfileId: savedProfileId,
+    openaiCompatible,
+    chromeAi,
+    chatgptPlan,
+    sharedPresetRevision,
+    scopedConfigRevision,
+    ...values
+  } = settings;
+  const activeProfileId = savedProfileId || 'default';
   const configuration = configurationFor(settings);
   const recipe = configuration.recipes.find((item) => item.id === configuration.selectedRecipeId)!;
   const preset =
     configuration.presets.find((item) => item.id === recipe.presetId) ?? configuration.presets[0];
-  const normalized = {
-    ...settings,
-    activeProfileId,
+  const selected = previous?.values.configuration.presets.find((p) => p.id === previous.presetId);
+  const restored =
+    configuration.presets.find((p) => p.id === previous?.presetId) ??
+    (selected &&
+      configuration.presets.find(
+        (p) => p.name === selected.name && p.provider === selected.provider,
+      ));
+  const editable = {
+    ...values,
     profiles: settings.profiles?.length
       ? settings.profiles
       : [{ id: activeProfileId, name: 'Default', config: { ...settings.openaiCompatible } }],
     configuration,
+    planAccountId: chatgptPlan?.accountId,
+  };
+  const planOptions = chatgptPlan && {
+    model: chatgptPlan.model,
+    ...(chatgptPlan.effort === undefined ? {} : { effort: chatgptPlan.effort }),
+    ...(chatgptPlan.fast === undefined ? {} : { fast: chatgptPlan.fast }),
   };
   return {
-    settings: preset ? settingsForPreset(normalized, preset) : normalized,
-    presetId: preset?.id ?? '',
-    recipeId: recipe.id,
+    values: editable,
+    retained: {
+      activeProvider,
+      activeProfileId,
+      openaiCompatible,
+      chromeAi,
+      sharedPresetRevision,
+      scopedConfigRevision,
+      planOptions,
+      activeProfileConfig: editable.profiles.find((p) => p.id === activeProfileId)?.config,
+    },
+    presetId: restored?.id ?? preset?.id ?? '',
+    recipeId: configuration.recipes.some((r) => r.id === previous?.recipeId)
+      ? previous!.recipeId
+      : recipe.id,
   };
+}
+
+/** One transport boundary for views and commits; inspection never participates. */
+export function settingsFromDraft(draft: SettingsDraft): UserSettings {
+  const { planAccountId, ...values } = draft.values;
+  const { planOptions, activeProfileConfig, ...retained } = draft.retained;
+  const profile = values.profiles.find((p) => p.id === retained.activeProfileId)?.config;
+  const changedRoute =
+    profile &&
+    activeProfileConfig &&
+    (profile.baseUrl !== activeProfileConfig.baseUrl ||
+      profile.apiKey !== activeProfileConfig.apiKey ||
+      profile.credentialOwner !== activeProfileConfig.credentialOwner);
+  return {
+    ...retained,
+    ...values,
+    openaiCompatible: changedRoute
+      ? {
+          ...retained.openaiCompatible,
+          baseUrl: profile.baseUrl,
+          apiKey: profile.apiKey,
+          credentialOwner: profile.credentialOwner,
+        }
+      : retained.openaiCompatible,
+    ...(planOptions || planAccountId !== undefined
+      ? {
+          chatgptPlan: {
+            ...planOptions,
+            model: planOptions?.model ?? '',
+            accountId: planAccountId ?? '',
+          },
+        }
+      : {}),
+  };
+}
+
+/** Ephemeral view only. Missing/unavailable choices remain editable. */
+export function settingsForInspection(draft: SettingsDraft): UserSettings {
+  const settings = settingsFromDraft(draft);
+  const preset = draft.values.configuration.presets.find((p) => p.id === draft.presetId);
+  return preset ? settingsForPreset(settings, preset) : settings;
 }
 
 /** Views supply edits; presets and connections retain separate owners. */
 export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): SettingsDraft {
-  const settings = draft.settings;
-  const configuration = configurationFor(settings);
+  const settings = draft.values;
+  const configuration = settings.configuration;
   switch (edit.type) {
     case 'add-connection': {
       if ((settings.profiles?.length ?? 0) >= 32)
         throw new Error('Keep at most 32 API connections.');
       return {
         ...draft,
-        settings: {
+        values: {
           ...settings,
           profiles: [
             ...(settings.profiles ?? []),
@@ -138,18 +241,15 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
       };
       return {
         ...draft,
-        settings: settingsForPreset(
-          next,
-          next.configuration.presets.find((p) => p.id === draft.presetId)!,
-        ),
+        values: next,
       };
     }
     case 'plan-account':
       return {
         ...draft,
-        settings: {
+        values: {
           ...settings,
-          chatgptPlan: { ...(settings.chatgptPlan ?? { model: '' }), accountId: edit.accountId },
+          planAccountId: edit.accountId,
         },
       };
     case 'connection': {
@@ -163,18 +263,8 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
       }
       return {
         ...draft,
-        settings: {
+        values: {
           ...settings,
-          ...(settings.activeProfileId === profile.id
-            ? {
-                openaiCompatible: {
-                  ...settings.openaiCompatible,
-                  baseUrl: config.baseUrl,
-                  apiKey: config.apiKey,
-                  credentialOwner: config.credentialOwner,
-                },
-              }
-            : {}),
           profiles: settings.profiles?.map((p) =>
             p.id === profile.id
               ? { ...p, config, ...(edit.name === undefined ? {} : { name: edit.name }) }
@@ -188,7 +278,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
         throw new Error('Choose an existing connection.');
       return {
         ...draft,
-        settings: {
+        values: {
           ...settings,
           connectionProfiles: { ...settings.connectionProfiles, [edit.key]: edit.profileId },
         },
@@ -219,12 +309,12 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
           presets: configuration.presets.map((p) => (p.id === preset.id ? updated : p)),
         },
       };
-      return { ...draft, settings: settingsForPreset(next, updated) };
+      return { ...draft, values: next };
     }
     case 'connection-name':
       return {
         ...draft,
-        settings: {
+        values: {
           ...settings,
           connections: settings.connections.map((connection) =>
             connection.key === edit.key ? { ...connection, name: edit.name } : connection,
@@ -235,11 +325,16 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
       const connection = settings.connections.find((item) => item.key === edit.key);
       const preset = configuration.presets.find((item) => item.id === draft.presetId);
       if (!connection || !preset) throw new Error('Choose an available connection.');
+      const saved = settingsFromDraft(draft);
       const kind = connection.kind === 'chatgpt-plan' ? 'chatgpt-plan' : 'openai-compatible';
       const choices =
         preset.provider === kind
           ? preset
-          : presetFromSettings({ ...settings, activeProvider: kind }, preset.id, preset.name);
+          : presetFromSettings(
+              { ...settingsForInspection(draft), activeProvider: kind },
+              preset.id,
+              preset.name,
+            );
       const updated = {
         ...preset,
         model: choices.model,
@@ -247,7 +342,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
         fast: choices.fast,
         temperature: choices.temperature,
         topK: choices.topK,
-        shared: settings.sharedPresetRevision !== undefined,
+        shared: draft.retained.sharedPresetRevision !== undefined,
         connectionKey: connection.key,
         provider:
           connection.kind === 'chatgpt-plan'
@@ -256,8 +351,8 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
         profileId:
           connection.kind === 'openai-api'
             ? settings.connectionProfiles?.[connection.key] ||
-              (settings.openaiCompatible.baseUrl.replace(/\/+$/, '') === 'https://api.openai.com/v1'
-                ? settings.activeProfileId
+              (saved.openaiCompatible.baseUrl.replace(/\/+$/, '') === 'https://api.openai.com/v1'
+                ? saved.activeProfileId
                 : undefined) ||
               connection.key
             : undefined,
@@ -269,15 +364,15 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
           presets: configuration.presets.map((item) => (item.id === preset.id ? updated : item)),
         },
       };
-      return { ...draft, settings: settingsForPreset(configured, updated) };
+      return { ...draft, values: configured };
     }
     case 'settings':
-      return { ...draft, settings: { ...settings, ...edit.patch } };
+      return { ...draft, values: { ...settings, ...edit.patch } };
     case 'preset-local-provider': {
       const preset = configuration.presets.find((p) => p.id === draft.presetId);
       if (!preset) throw new Error('Choose an existing preset.');
       const choices = presetFromSettings(
-        { ...settings, activeProvider: edit.provider },
+        { ...settingsForInspection(draft), activeProvider: edit.provider },
         preset.id,
         preset.name,
       );
@@ -298,14 +393,13 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
           presets: configuration.presets.map((p) => (p.id === preset.id ? updated : p)),
         },
       };
-      return { ...draft, settings: settingsForPreset(next, updated) };
+      return { ...draft, values: next };
     }
     case 'select-preset': {
       const preset = configuration.presets.find((item) => item.id === edit.id);
       if (!preset) throw new Error('Choose an existing preset.');
       return {
         ...draft,
-        settings: settingsForPreset(settings, preset),
         presetId: preset.id,
       };
     }
@@ -314,13 +408,17 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
       return {
         ...draft,
         presetId: edit.id,
-        settings: {
+        values: {
           ...settings,
           configuration: {
             ...configuration,
             presets: [
               ...configuration.presets,
-              presetFromSettings(settings, edit.id, nextName('New preset', configuration.presets)),
+              presetFromSettings(
+                settingsForInspection(draft),
+                edit.id,
+                nextName('New preset', configuration.presets),
+              ),
             ],
           },
         },
@@ -328,7 +426,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
     case 'preset-name':
       return {
         ...draft,
-        settings: {
+        values: {
           ...settings,
           configuration: {
             ...configuration,
@@ -349,10 +447,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
       return {
         ...draft,
         presetId: presets[0]!.id,
-        settings: settingsForPreset(
-          { ...settings, configuration: { ...configuration, presets } },
-          presets[0]!,
-        ),
+        values: { ...settings, configuration: { ...configuration, presets } },
       };
     }
     case 'select-recipe':
@@ -364,11 +459,11 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
       if (configuration.recipes.length >= 32 || configuration.presets.length >= 128)
         throw new Error('Remove an action or preset before adding Illustrate.');
       const draw = configuration.presets.find((p) => p.capability === 'draw');
-      const preset = draw ?? illustrationPreset(settings);
+      const preset = draw ?? illustrationPreset(settingsFromDraft(draft));
       return {
         ...draft,
         recipeId: 'recipe-illustrate',
-        settings: {
+        values: {
           ...settings,
           configuration: {
             ...configuration,
@@ -400,7 +495,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
       return {
         ...draft,
         recipeId: edit.id,
-        settings: {
+        values: {
           ...settings,
           configuration: {
             ...configuration,
@@ -421,7 +516,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
     case 'recipe':
       return {
         ...draft,
-        settings: {
+        values: {
           ...settings,
           configuration: {
             ...configuration,
@@ -436,7 +531,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
         throw new Error('Choose an existing default action.');
       return {
         ...draft,
-        settings: { ...settings, configuration: { ...configuration, selectedRecipeId: edit.id } },
+        values: { ...settings, configuration: { ...configuration, selectedRecipeId: edit.id } },
       };
     case 'remove-recipe':
       if (draft.recipeId === configuration.selectedRecipeId)
@@ -444,7 +539,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
       return {
         ...draft,
         recipeId: configuration.selectedRecipeId,
-        settings: {
+        values: {
           ...settings,
           configuration: {
             ...configuration,
@@ -456,7 +551,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
 }
 
 export function settingsForSave(draft: SettingsDraft): UserSettings {
-  const settings = draft.settings;
+  const settings = settingsFromDraft(draft);
   validateConfiguration(configurationFor(settings), settings.sharedPresetRevision !== undefined);
   validateSettingsConnections(settings);
   if (settings.connections) validateConnections(settings.connections);

@@ -1,6 +1,7 @@
 import { test, expect } from './fixtures.ts';
 import { settingsSection } from './driver.ts';
 import { DEFAULT_SETTINGS } from '../../src/storage/settings';
+import type { UserSettings } from '../../src/types';
 import type { SharedPresets } from '../../native/shared-presets-contract.mts';
 import type { PlanControlRequest } from '../../native/plan-protocol.mts';
 import type { CredentialRequest, CredentialEvent } from '../../native/credentials-contract.mts';
@@ -157,6 +158,12 @@ test('managed connections preserve setup after failure and report removed models
   await popup.reload();
   await popup.setViewportSize({ width: 640, height: 760 });
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  const savedBeforeInspection = await worker.evaluate(
+    async () =>
+      (await chrome.storage.local.get('saul_user_settings')).saul_user_settings as UserSettings,
+  );
+  await settingsSection(popup, 'Presets');
+  await popup.getByRole('button', { name: 'Writing', exact: true }).click();
   await settingsSection(popup, 'Connections');
   const plan = popup.getByRole('article', { name: 'ChatGPT plan', exact: true });
   await expect(plan.getByText('alex@example.com', { exact: true })).toBeVisible();
@@ -238,6 +245,18 @@ test('managed connections preserve setup after failure and report removed models
   await popup.screenshot({ path: info.outputPath('connections-dark-narrow.png') });
   expect(await popup.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await settingsSection(popup, 'Presets');
+  await expect(popup.getByLabel('Preset', { exact: true })).toHaveValue(
+    'c14b29f3-3ec2-4efc-8bed-e05531aef2cb',
+  );
+  const savedAfterConnection = await worker.evaluate(
+    async () =>
+      (await chrome.storage.local.get('saul_user_settings')).saul_user_settings as UserSettings,
+  );
+  expect(savedAfterConnection.openaiCompatible).toEqual({
+    ...savedBeforeInspection.openaiCompatible,
+    credentialOwner: 'saul', // The unchanged credential owner marks official routes on commit.
+  });
+  expect(savedAfterConnection.activeProvider).toBe(savedBeforeInspection.activeProvider);
   await popup
     .getByLabel('Preset', { exact: true })
     .selectOption('c14b29f3-3ec2-4efc-8bed-e05531aef2cb');
