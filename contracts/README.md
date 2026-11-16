@@ -84,7 +84,7 @@ shared process, runtime manifest or database migration.
 
 ## Connections and presets
 
-ChatGPT model presets share `~/Library/Application Support/Little Clarity/settings.json`.
+Shared ChatGPT plan and API model presets use `~/Library/Application Support/Little Clarity/settings.json`.
 The JSON document has a `modelPresets` section containing one `revision`, `presets`
 and `connections`. Each connection has a
 stable unique `key`, `name`, `kind` (`chatgpt-plan` / `openai-api`), optional pinned
@@ -107,8 +107,10 @@ landscape or portrait sizes and low/medium/high quality. `outputFormat` accepts
 `png` or `gif`; absence means PNG. GIF generation requires GPT Image 2.6 and
 cannot be combined with an input image. Animation uses the API defaults (9 frames,
 200 ms per frame); callers preserve the returned bytes and media type. Both clients preserve
-these fields even when the capability is unavailable locally. Credentials stay behind the selected owner. Saves replace the file atomically; stale editor revisions require Reload and
-preserve the draft. Both native adapters serialize the read/check/replace through
+these fields even when the capability is unavailable locally. Credentials stay behind the selected owner. Saves replace the file atomically; stale editor revisions block saving and
+preserve the draft until explicit recovery. Saul's
+[Settings recovery](../apps/saul/docs/product.md#settings-and-models) can review and
+reapply edits; Reload can discard them. Both native adapters serialize the read/check/replace through
 `settings.json.lock.sqlite3`: a SQLite `BEGIN IMMEDIATE` lease with a five-second
 busy timeout and no settings data. The lease is released on process exit. Keep
 the lock file in place while either app may use it; deleting it would split the lock.
@@ -158,7 +160,7 @@ bindings; older strict readers cannot consume the added fields.
 Swift and Node read the same JSON file; Saul accesses it through its existing ChatGPT helper.
 Neither app needs the other app running. Settings load/reload and new requests
 read the current store; EZ also reads on activation outside Settings. Open editors
-keep their drafts until Save or Reload. Historical and prepared requests stay frozen.
+keep their drafts until an explicit save or recovery action. Historical and prepared requests stay frozen.
 
 The conceptual interface exposes identity, permission, available models and
 supported options, then resolves the preset's fixed managed connection (or a standalone local profile) for
@@ -195,10 +197,11 @@ uncertain completion without replay. There is no background process or settings
 database migration. Upgrade both apps/helper before relying on this guarantee;
 an older writer does not honor the lease.
 
-Saul stores preferences, connection metadata, actions and non-plan model presets
+Saul stores preferences, local connection bindings, actions and app-local model presets
 in its settings scope. Custom API keys and local credential bindings remain in trusted Chrome storage;
 shared official credentials remain in the signed Saul owner. Connection keys are restored only for the same connection
-and endpoint. Shared Connection and Preset definitions come only from `modelPresets`.
+and endpoint. Shared Connection and Preset definitions, including shared API presets,
+come only from `modelPresets`; they are excluded from the app settings scope.
 For standalone browser connections, Saul’s `connectionProfiles` maps shared keys to local API profile IDs without
 copying credentials. It adopts only the already-selected official OpenAI endpoint
 or an explicit profile choice. EZ stores actions and configuration choices in its scope; its old configuration file is retained for

@@ -33,8 +33,10 @@ pnpm dev
 
 Build and verify:
 
-The hook command uses [uv](https://docs.astral.sh/uv/). It installs this repository's
-format, lint, type, and documentation-link checks for future commits.
+The hook command uses [uv](https://docs.astral.sh/uv/). Gate membership lives in
+[package.json](package.json), [root commands](../../package.json) and
+[hook configuration](../../.pre-commit-config.yaml); the [testing runbook](docs/testing.md)
+owns focused checks and diagnosis. Commands here run from `apps/saul`.
 
 ```sh
 pnpm check
@@ -53,9 +55,9 @@ Browser tests use disposable profiles and a local model fixture. On macOS, read 
 | [Architecture](docs/architecture.md)         | Runtime boundaries, data flow, and invariants               |
 | [Design contract](../../DESIGN.md)           | Portable visual identity, component and motion principles   |
 | [Design application](../../design/SKILL.md)  | Generation, cross-project adoption, and visual verification |
-| [Testing](docs/testing.md)                   | Quality gates, browser harness, and debugging               |
+| [Testing](docs/testing.md)                   | Running checks, browser harness, and debugging              |
 | [ChatGPT plan](docs/chatgpt-plan.md)         | OAuth setup, supported API surface and credential lifecycle |
 | [Native messaging](docs/native-messaging.md) | CLI/MCP setup and tab-tool safety                           |
 | [Benchmarks](docs/benchmarks/README.md)      | Reproduction commands and evidence limits                   |
 
-The native bridge is optional. See [Codex tab access](docs/native-messaging.md) for installation and removal.
+For optional tab access and its helper lifecycle, see [native messaging](docs/native-messaging.md).

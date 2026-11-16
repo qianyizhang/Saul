@@ -3,7 +3,7 @@
 ## Repository ownership
 
 The repository coordinates independently installed applications. `apps/saul`
-owns Chrome UI, capture, anchors, persistence and optional Node helpers.
+owns Chrome UI, capture, anchors, persistence adapters and Node helpers.
 `apps/ez` owns native macOS UI, authentication, inference and persistence.
 [Shared contracts](../contracts/README.md), [vocabulary](../GLOSSARY.md) and
 [design](../DESIGN.md) have one root owner. Swift and browser builds retain their
@@ -12,6 +12,24 @@ own toolchains. Root commands coordinate them; they are not runtime dependencies
 The Git history includes both original repositories. Application-local docs remain
 the authority for platform details. CI has separate browser and native jobs; each
 release artifact can be built and installed independently.
+
+## Documentation ownership
+
+Keep current detail in its owner; entry points may summarize it and link there.
+Read source when a document disagrees with implementation, then correct the living
+owner. Historical records follow the [snapshot policy](artifacts.md#historical-references).
+
+| Information                                                 | Owner                                                                                                                         |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Entry points and essential commands                         | Root and application READMEs                                                                                                  |
+| Component requirements, installation, upgrades and recovery | [Setup](setup.md), linking specialist signing/helper procedures                                                               |
+| Cross-app ownership and decisions                           | This document; app architecture docs own runtime details                                                                      |
+| Cross-app guarantees and credential lifecycle               | [Contracts](../contracts/README.md) and [credentials](../contracts/credentials.md)                                            |
+| Current user behavior                                       | [Saul product](../apps/saul/docs/product.md), [EZ surfaces](../apps/ez/docs/surfaces.md) and linked feature guides            |
+| Terms and presentation                                      | [Glossary](../GLOSSARY.md), [design](../DESIGN.md) and their app-specific extensions                                          |
+| Gate membership and tool pins                               | Package scripts, Makefiles, hook/workflow configuration and bootstrap scripts                                                 |
+| Running checks and diagnosing failures                      | [Saul testing](../apps/saul/docs/testing.md), [EZ verification](../apps/ez/docs/verification.md) and their linked test guides |
+| Historical evidence and retention                           | Existing dated records/bundles under the [artifact policy](artifacts.md)                                                      |
 
 ## Behavior owners
 
@@ -64,12 +82,9 @@ contracts. Build outputs are never hand-edited or committed.
 
 ## Installation
 
-Extension, ChatGPT helper, tab helper, action helper and native app are explicit setup selections.
-The extension requires the ChatGPT/history helper for shared persistence, including API-provider reading. It does not require EZ.
-ChatGPT plan features and built-in summaries need the ChatGPT helper. Custom
-Summarize modules use a third optional action helper and retain their selected
-provider's credential owner. External tab access
-and native window names need the tab helper. Codex registration is separate.
+[Setup](setup.md) owns component requirements and install/recovery commands.
+Saul requires the ChatGPT/history helper for saved history; tab/action helpers
+are optional. The applications remain independently installable.
 
 The optional setup CLI runs with Node; the native installed app does not.
 Current browser helpers retain the installation-time Node executable dependency.
@@ -83,10 +98,8 @@ processes keep their original generation, including lazy-loaded assets; later
 connections use the new generation. Credential and runtime data roots stay fixed.
 An interrupted install has an explicit recovery path and never kills or replays work.
 
-Migrating the old mutable installation requires one manual disconnect/reconnect
-window. If both legacy helpers are installed, the first migration includes both;
-subsequent updates preserve an unselected helper's payload and registration.
-See [setup](setup.md) for migration and recovery commands.
+See [setup](setup.md#one-time-helper-migration) for the old mutable installation's
+manual disconnect window and [recovery](setup.md#failed-preparation-and-explicit-recovery).
 
 ## Optional shared capabilities
 
@@ -124,7 +137,7 @@ and Chrome Native Messaging. It starts on demand and has no daemon.
 
 ## Data ownership
 
-ChatGPT model presets share one local JSON document through native Swift and
+Shared ChatGPT plan and API model presets use one local JSON document through native Swift and
 Node adapters; [the shared contract](../contracts/README.md#connections-and-presets)
 defines migration, revisions and presets bound to stable connections. App-specific
 preferences and actions use `apps.saul` and `apps.ez` scopes in that document.
@@ -156,12 +169,9 @@ History reloads on activation/focus rather than a recurring background timer.
 The [History operation contract](../contracts/README.md#history-operations) shares
 recovery/deletion meanings and real-store fixtures across Swift and Node. Saul's
 typed operation catalogue owns Native Messaging admission and reconnect policy;
-EZ keeps direct SQLite access and explicit save-only recovery.
-Bridge loss permits at most three connection attempts for safe history operations,
-using the same operation identity for submission/claim/save acknowledgement. These
-retries never repeat inference. Uncertain delete, clear and bookmark operations are
-not retried automatically. Operation IDs live with the existing run/submission
-rows; there is no separate receipt log containing deleted history.
+EZ keeps direct SQLite access and explicit save-only recovery. Operation IDs live
+with the existing run/submission rows; there is no separate receipt log containing
+deleted history.
 
 Migration imports the old browser OPFS database and EZ JSONL/images once. It
 validates records and attachments and commits a durable migration marker before

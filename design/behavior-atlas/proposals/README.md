@@ -1,9 +1,14 @@
 # Accepted journey comparisons
 
+> **Historical design studies — not maintained.** Preserve these comparisons and
+> their baseline evidence. Current behavior belongs to [Saul product](../../../apps/saul/docs/product.md),
+> [EZ surfaces](../../../apps/ez/docs/surfaces.md) and current source. See the
+> [historical-reference policy](../../../docs/artifacts.md#historical-references).
+
 All three proposals were accepted and implemented. Renderer
 source remains unchanged. The comparisons below preserve the design study against
-source `0a949cf`; the parent maps now show current behavior.
-The [six current maps](../README.md) remain separate. These smaller models put
+source `0a949cf`; the parent maps record the post-change survey.
+The [six snapshot maps](../README.md) remain separate. These smaller models put
 one decision in Comparison mode with shared start/end states, independently
 scrubbable branches and both app/map views. Every new edge is `proposed: true`.
 
@@ -23,7 +28,7 @@ verified below; their user impact is a design judgment, not measured usability.
 ### Baseline evidence and ownership
 
 The descriptions and line numbers in this section refer to `0a949cf`, before
-implementation. Use the parent maps for current behavior and source anchors.
+implementation. The parent maps retain the post-change survey and its source anchors.
 
 - EZ's Min Mode menu owns Reuse in
   [ContentView.swift](../../../apps/ez/Sources/EZ/ContentView.swift), lines 243–252.
@@ -66,7 +71,7 @@ implementation. Use the parent maps for current behavior and source anchors.
 
 ## Build and review
 
-The parent [regeneration instructions](../README.md#regenerate) build the current
+The parent [regeneration instructions](../README.md#regenerate) build the snapshot
 maps and these comparisons together. Open one and choose **Comparison**;
 click shared timeline stops to align both views,
 or scrub each branch separately. **Map major** reveals which stops are bypassed;

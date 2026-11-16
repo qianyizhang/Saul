@@ -9,7 +9,7 @@ Node, Python, Electron or webview runtime.
 | Owner                                                        | Responsibility                                                                 |
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------ |
 | `EZApp` / `QuickLookupController`                            | Windows, menu bar, Services, launcher and keyboard lifecycle                   |
-| `AppModel` / `GenerationState`                                 | User actions, selected configuration, draft, history and visible errors        |
+| `AppModel` / `GenerationState`                               | User actions, selected configuration, draft, history and visible errors        |
 | `AttemptExecution`                                           | Frozen attempt, generation, cancellation, terminal save and save-only recovery |
 | `GenerationProvider` / `SaulGeneration`                      | Supported operations and requests to the signed credential owner               |
 | `ChatGPTAuth` / `LoopbackListener` / `OIDC`                  | Owner-side OAuth, bounded loopback callback and verified identity              |
@@ -259,8 +259,9 @@ One app-local key monitor serves both surfaces, including focused text fields.
 Settings, sheets and dialogs take priority; key repeats do not repeat actions.
 Global panel and lifecycle keys stay fixed.
 
-`LookupShortcutsStore` validates version, keys, modifiers, reserved shortcuts and
-collisions in owner-only `shortcuts.json`, including cleared bindings. Corrupt or
+`LookupShortcutsStore` uses owner-only
+`~/Library/Application Support/EZ/shortcuts.json`. It validates version, keys, modifiers, reserved shortcuts and
+collisions, including cleared bindings. Corrupt or
 unsupported files remain intact with a Settings error; defaults run until explicit
 restore. Writes atomically replace a flushed owner-only sibling before publishing
 bindings. Chrome navigation updates both bindings together.
@@ -286,7 +287,7 @@ the same long-input bound and falls back to one unhighlighted pair.
 and EZ actions in `apps.ez.configuration`. Section revisions reject stale saves;
 `ConfigurationStore` imports old `EZ/configuration.json` once and retains it for
 recovery. Shared connection definitions win; legacy EZ definitions are adopted only
-when the shared list is absent and omitted on later scope writes. Legacy presets
+when the shared list is absent and omitted on later scope writes. Previous model/effort/Fast preferences seed the initial Current preset. Legacy presets
 decode as `gpt-plan`/Write; persisted `recipes`/`recipeSnapshot` keys remain stable.
 Account identity belongs to the saved connection; secrets stay with its credential owner. Shortcuts, Min Mode and window
 placement keep their local stores.
@@ -322,3 +323,10 @@ Add text workflows as actions. `QueryMode` remains a legacy history discriminato
 and starter icon mapping. Reuse app actions for shortcuts/menu entry points and
 explicit API presets for API billing. Further conversation or provider features
 need explicit context, retention and billing decisions; see [roadmap](roadmap.md).
+
+## Official integration references
+
+- [Registration and sign-in](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)
+- [Accounts and refresh](https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions)
+- [Models and Responses](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)
+- [Preview constraints](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)

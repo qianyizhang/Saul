@@ -2,7 +2,9 @@
 
 The root coordinator installs only selected components. It is a local command,
 not a published npm package. Run `node scripts/setup.mts --help` for all options.
-EZ can also be built/installed directly with Make and Apple tools without Node.
+EZ requires macOS 14+ and Apple Command Line Tools with Swift 6.3+
+(`xcode-select --install`). It can also be built/installed directly with Make and
+Apple tools without Node.
 
 | Selection   | Requires                                                                     | Does not require                  |
 | ----------- | ---------------------------------------------------------------------------- | --------------------------------- |
@@ -28,11 +30,12 @@ node scripts/setup.mts --components extension
 ```
 
 Load the printed directory explicitly in `chrome://extensions` (Developer mode,
-Load unpacked). Copy its actual ID. Then install wanted helpers:
+Load unpacked). Copy its actual ID. Then install the required ChatGPT/history helper; add `tabs`
+only for optional tab access:
 
 ```sh
-node scripts/setup.mts --components chatgpt,tabs --extension-id YOUR_ID
-# Add --codex only if you want Codex MCP registration.
+node scripts/setup.mts --components chatgpt --extension-id YOUR_ID
+# Add tabs to --components and --codex only if you want Codex MCP registration.
 ```
 
 `--prepare` builds without installing. `--skip-build` uses prepared browser

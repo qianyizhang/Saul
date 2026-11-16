@@ -18,10 +18,9 @@
 
 From `apps/ez`, run `make tools` once, then `make check`. The [Makefile](../Makefile)
 owns gate membership; [CONTRIBUTING](../CONTRIBUTING.md#development-setup-and-gates)
-owns tool pins, hooks and hosted setup. The gate covers formatting/lint, shell,
-workflow/plist checks, warnings-as-errors and complete Swift concurrency in Swift 5
-mode, offline suites, installation/tooling, credential owner and preview typechecks.
-It does not open preview windows or establish live-service behavior.
+explains tool setup, hooks and hosted execution. Tool versions and hashes live in
+[bootstrap-tools.sh](../scripts/bootstrap-tools.sh). The gate does not open preview
+windows or establish live-service behavior.
 
 [Tests/README.md](../Tests/README.md) owns cases, filtering and fixture rules.
 `make test` runs core and app-state suites even if one fails; executable harnesses

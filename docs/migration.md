@@ -32,6 +32,9 @@ Benchmark measurements remain under `apps/saul/docs/benchmarks`.
 
 ## Verification — 2026-10-20
 
+Retained source-migration evidence; results and artifact statements below apply
+to that migration, not the current checkout or installed apps.
+
 | Scope                  | Evidence                                                                                                                 |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | Shared tooling/setup   | 20 tests passed, including dry-run, literal subprocess arguments, component isolation and failure ordering               |

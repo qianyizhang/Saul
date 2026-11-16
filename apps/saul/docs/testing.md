@@ -13,8 +13,13 @@ launches. Keep this probe and browser crash notifications enabled.
 
 ## Commands
 
+Run the commands below from `apps/saul`; run root `pnpm check` for the combined
+repository gate. Exact membership is owned by [app scripts](../package.json),
+[root scripts](../../../package.json), [hooks](../../../.pre-commit-config.yaml)
+and [CI workflows](../../../.github/workflows).
+
 ```sh
-# Repository gate
+# Browser app gate
 pnpm check
 
 # Browser setup and full suite
@@ -182,20 +187,14 @@ A successful smoke run verifies setup only. Record the built source scope, passe
 
 ## Metadata review — 2026-10-20
 
-Formatting, lint, types, local links, design receipts and the production build passed.
-All 194 unit/transport cases passed across the sandboxed run and the approved rerun
-of the two socket-dependent files. Browser coverage finished with 72 cases passing
-and five optional/disabled cases skipped: the initial broad run passed 70, then all
-14 affected layout/configuration/inspection/Min Mode cases passed after fixing
-two test assumptions. The final rerun checked labelled value-column alignment,
-long model/preset wrapping, keyboard disclosure activation and overflow at 360,
-440 and 1000 px in light/dark appearances. Inspected screenshots also covered
-settings, actions, summary reading, tab boards and error states. All browser data
-came from disposable local fixtures; the installed extension was not reloaded.
-
-The harness uses the production native SQLite owner in a disposable directory and
-a test-only loopback transport. It installs no personal native host and reads no
-personal history. Native framing and installed payloads have separate checks.
+Historical layout baseline: static checks and the production build passed, along
+with 194 unit/transport cases (the socket-dependent checks used approved local
+access) and browser coverage of 72 passing and five skipped cases. Fourteen affected
+cases were rerun after correcting two test assumptions.
+Review covered labelled value alignment, long labels, keyboard disclosure and
+360/440/1000 px light/dark layouts across Settings, reading, boards and errors.
+All data came from disposable fixtures; the installed extension was not reloaded.
+These dated results do not establish current acceptance.
 
 ## Evidence limits
 

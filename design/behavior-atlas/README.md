@@ -1,9 +1,15 @@
 # Saul / EZ behavior atlas
 
-Source-derived, fixed-fixture journeys for reviewing the current product. Six JSON
+> **Historical snapshot — not maintained.** Models, comparisons, source anchors
+> and recorded checks describe the baseline below, not current behavior. See
+> [Saul product](../../apps/saul/docs/product.md), [EZ surfaces](../../apps/ez/docs/surfaces.md)
+> and current source for today's behavior. Retention and future reconstruction
+> follow the [historical-reference policy](../../docs/artifacts.md#historical-references).
+
+Source-derived, fixed-fixture journeys for reviewing the product at that baseline. Six JSON
 models contain 168 states, 261 transitions and 66 named journeys. The reusable
 repo-kit scaffold owns validation, rendering and interaction; these files own
-Saul/EZ facts. Current maps include the three accepted changes; scaffold source
+Saul/EZ facts. The six maps include the three accepted changes; scaffold source
 remains unchanged.
 
 Source: the code accompanying this IR, based on
@@ -28,7 +34,7 @@ recovery, including repeat visits. Journey enables only its next step; Explorati
 enables modeled outgoing transitions and pauses at meaningful outcomes. App major
 is operable with a passive map; Map major reverses that relationship. **N** toggles
 all names / nearby names. Inspect a distant landmark to read its source and detail.
-These six current maps contain implemented transitions. Three separate
+These six snapshot maps contain implemented transitions. Three separate
 [comparison studies](proposals/README.md) preserve the original accepted designs
 against the pre-change baseline. Their links remain in the catalog.
 
@@ -83,15 +89,19 @@ for model in design/behavior-atlas/*.json design/behavior-atlas/proposals/*.json
   node "$ATLAS_OUT/scaffold/build.ts" --input "$model" \
     --out "$ATLAS_OUT/${relative%.json}.html"
 done
-cp design/behavior-atlas/catalog.html "$ATLAS_OUT/index.html"
-python3.12 -m http.server 0 --bind 127.0.0.1 --directory "$ATLAS_OUT"
+# Keep repository documentation links valid from this four-level output path.
+sed 's|href="../../|href="../../../../|g' design/behavior-atlas/catalog.html > "$ATLAS_OUT/index.html"
+python3.12 -m http.server 0 --bind 127.0.0.1 --directory .
 ```
 
-To refresh an existing owned generated HTML, use the builder's explicit
-`--replace`. Edit IR and regenerate; never patch generated HTML. Update the
-catalog counts and baseline when changing model scope. Keep the bundle README's
-source, checks, limits and review date together; generated files and screenshots
-follow the [artifact policy](../../docs/artifacts.md).
+Open `/.artifacts/shared/behavior-atlas/new-review/` at the printed local server
+address. Serving the repository root also makes the documentation links available.
+
+These commands reproduce the retained models; they do not reconstruct current
+behavior. Do not edit the snapshot IR or refresh its anchors, comparisons or
+renderings. For a new review, derive behavior from current source under the
+historical-reference policy above. Generated output and screenshots follow the
+[artifact policy](../../docs/artifacts.md).
 
 ## Validation
 

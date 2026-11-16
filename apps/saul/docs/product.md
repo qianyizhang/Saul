@@ -69,6 +69,14 @@ preset beside its fields, with a compact selector at narrow widths. Section chan
 preserve the mounted configuration draft. Save and conflict recovery remain reachable
 across sections; preferences and access retain their independent immediate-save behavior.
 
+Stale or uncertain saves keep the draft and block another save. **Review latest**
+compares the original, saved and local values; same-field conflicts need an explicit
+choice. Apply changes only the draft, then Save checks the fresh revision. Cancel
+keeps the draft. Edits already present in saved settings need no second save.
+**Reload** replaces it with saved settings after confirming discard
+when dirty. The [shared transaction contract](../../../contracts/README.md#unified-configuration-scopes)
+owns revision and atomic-save guarantees.
+
 - Named actions pair editable prompts with a default model preset. Explain, Lookup, and Nudge are editable starters. A preset binds a connection, capability, model, and supported options. Managed ChatGPT plan presets use their connection’s bound account; standalone presets retain the locally selected account.
 - The existing prompt and model migrate into Explain and Current. Choosing another action for the same passage creates a new attempt; retry keeps the original request choices even after Settings changes.
 - Templates substitute `{{text}}`, `{{context}}`, `{{page title}}`, `{{page url}}`, `{{heading}}`, and `{{paragraph}}` once. `{{text}}` is required; unavailable referenced context blocks submission. Enabled context is included once, and template expressions are unsupported.
