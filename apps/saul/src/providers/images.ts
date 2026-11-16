@@ -1,6 +1,6 @@
 import { credentialCall } from '../native/credentials';
 import { validateCredentialRequest } from '../../native/credentials-contract.mts';
-import type { RunInput } from '../types/storage';
+import type { ModelRequest } from './request';
 
 export interface GeneratedImage {
   data: string;
@@ -27,7 +27,7 @@ export function validateGeneratedImage(image: GeneratedImage): void {
     throw new Error('The provider returned an invalid or oversized image.');
 }
 export async function generateImage(
-  input: RunInput,
+  input: ModelRequest,
   key: string,
   signal?: AbortSignal,
 ): Promise<GeneratedImage> {

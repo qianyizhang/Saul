@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { UserSettings } from '../types';
+import type { Configuration } from '../configuration/definition';
 import { credentialCall } from '../native/credentials';
 import { useMinimumMode } from './useMinimumMode';
 
@@ -9,7 +9,7 @@ export function SharedCredentialSettings({
   visible,
   change,
 }: {
-  owner: UserSettings['sharedCredentials'];
+  owner: Configuration['sharedCredentials'];
   disabled: boolean;
   visible: boolean;
   change: (owner: 'saul' | 'disconnected') => Promise<void>;

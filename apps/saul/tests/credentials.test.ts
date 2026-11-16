@@ -4,8 +4,9 @@ import {
   validateCredentialEvent,
   validateCredentialRequest,
 } from '../native/credentials-contract.mts';
-import { sharedCredentialProjection, stripOfficialKeys } from '../src/storage/credentials';
-import { DEFAULT_SETTINGS, validateProviderSettings } from '../src/storage/settings';
+import { sharedCredentialProjection, stripOfficialKeys } from '../src/configuration/credentials';
+import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
+import { preparePreset } from '../src/configuration/resolve';
 import { validImageOptions } from '../native/shared-presets-contract.mts';
 
 const imageRequest = {
@@ -222,7 +223,7 @@ it('cancels an ordinary operation on caller loss', () => {
   expect(h.connectNative).toHaveBeenCalledTimes(1);
 });
 it('projects only official keys into the native owner and preserves custom provider credentials', () => {
-  const settings = structuredClone(DEFAULT_SETTINGS);
+  const settings = structuredClone(DEFAULT_CONFIGURATION);
   settings.openaiCompatible.apiKey = 'official-fixture';
   settings.profiles = [
     {
@@ -243,6 +244,9 @@ it('projects only official keys into the native owner and preserves custom provi
   expect(backup.openaiCompatible.apiKey).toBe('');
   expect(backup.profiles![0]!.config.apiKey).toBe('custom-fixture');
   expect(() =>
-    validateProviderSettings({ ...projected, sharedCredentials: 'disconnected' }),
+    preparePreset(
+      { ...projected, sharedCredentials: 'disconnected' },
+      { ...projected.configuration!.presets[0]!, profileId: 'custom', provider: 'chatgpt-plan' },
+    ),
   ).toThrow(/Connect/);
 });

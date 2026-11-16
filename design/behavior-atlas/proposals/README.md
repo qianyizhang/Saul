@@ -37,7 +37,7 @@ implementation. The parent maps retain the post-change survey and its source anc
   [AttemptExecution.swift](../../../apps/ez/Sources/EZCore/AttemptExecution.swift)
   must continue saving pending input before generation. The proposal is not
   shorthand for bypassing validation or blindly resending a current draft.
-- Saul's [useSettingsDraft.ts](../../../apps/saul/src/app/useSettingsDraft.ts),
+- Saul's `apps/saul/src/app/useSettingsDraft.ts` (historical source at the recorded baseline),
   lines 104–156, blocks stale/uncertain saves and confirms replacement on Reload.
   [Settings.tsx](../../../apps/saul/src/app/Settings.tsx), lines 1007–1025, exposes
   Reload while keeping Save disabled. Proposed read/review/reapply stays in this

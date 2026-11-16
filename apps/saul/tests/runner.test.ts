@@ -17,7 +17,7 @@ const attemptContract = JSON.parse(
     expected: { providerCalls: number; hasOutput: boolean; savedSuccess: boolean };
   }[];
 };
-vi.mock('../src/models/openai-compatible', () => ({ streamOpenAICompatible: mocks.remote }));
+vi.mock('../src/providers/openai-compatible', () => ({ streamOpenAICompatible: mocks.remote }));
 const submission = (id: string): Submission => ({
   submissionId: id,
   regenerate: true,

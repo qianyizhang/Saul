@@ -4,7 +4,7 @@ import {
   validateActionState,
   type ActionState,
 } from '../actions/contract';
-import { scopedCall, ConfigUnavailableError } from './scoped-config';
+import { scopedCall, ConfigUnavailableError } from '../native/config-transport';
 
 /** Durable choices live in JSON when the optional config helper is available.
  * Builder activity/output remains in Chrome. Once migrated, helper loss blocks writes. */

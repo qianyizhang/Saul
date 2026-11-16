@@ -1,7 +1,7 @@
 import { validSpeechOptions } from '../../native/shared-presets-contract.mts';
-import type { UserSettings } from '../types';
-import { configurationFor } from '../models/configuration';
-import { preparePreset } from '../models/preset-resolution';
+import type { Configuration } from '../configuration/definition';
+import { configurationFor } from '../configuration/definition';
+import { preparePreset } from '../configuration/resolve';
 
 export const SPEECH_PORT = 'saul-speech';
 const MAX_AUDIO_BYTES = 6_000_000;
@@ -42,7 +42,7 @@ export function validateSpeechRequest(value: unknown): asserts value is SpeechRe
 
 /** Resolve one saved connection. Never borrow another profile's key or use plan OAuth. */
 export function speechCredential(
-  settings: UserSettings,
+  settings: Configuration,
   request: SpeechRequest,
 ): string | undefined {
   validateSpeechRequest(request);

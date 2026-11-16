@@ -1,14 +1,17 @@
+import { DEFAULT_CONFIGURATION } from '../../src/configuration/definition';
 import { settingsSection } from './driver.ts';
 import { test, expect } from './fixtures.ts';
-import type { UserSettings } from '../../src/types';
+import type { Configuration } from '../../src/configuration/definition';
 
 test('saved on-device selection shows a recovery choice without silently switching connections', async ({
   sandbox,
 }) => {
   const { popup } = await sandbox.launch();
-  await popup.evaluate(async () => {
-    await chrome.storage.local.set({ saul_user_settings: { activeProvider: 'chrome-ai' } });
-  });
+  await popup.evaluate(async (settings) => {
+    settings.activeProvider = 'chrome-ai';
+    settings.configuration!.presets[0]!.provider = 'chrome-ai';
+    await chrome.storage.local.set({ saul_user_settings: settings });
+  }, DEFAULT_CONFIGURATION);
   await popup.reload();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await settingsSection(popup, 'Presets');
@@ -29,7 +32,7 @@ test('saved on-device selection shows a recovery choice without silently switchi
   await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
   const saved = await popup.evaluate(
     async () =>
-      (await chrome.storage.local.get('saul_user_settings')).saul_user_settings as UserSettings,
+      (await chrome.storage.local.get('saul_user_settings')).saul_user_settings as Configuration,
   );
   expect(saved.activeProvider).toBe('chrome-ai');
   expect(saved.configuration?.presets[0]).toMatchObject({

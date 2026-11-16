@@ -1,9 +1,9 @@
 import { ActionLabel } from '../surface/ActionLabel';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SummaryProgress } from '../../native/protocol.mts';
-import { planCall } from '../models/chatgpt-plan';
-import { requestSettings } from '../storage/settings-client';
-import type { UserSettings } from '../types';
+import { planCall } from '../providers/chatgpt-plan';
+import { requestSettings } from '../configuration/client';
+import type { Configuration } from '../configuration/definition';
 import { summaryConnections, type SummaryConnection } from '../digest/connection';
 import { sendActionMessage, sendDigestMessage, sendWorkspaceMessage } from '../storage/client';
 import { activeItem, type DigestBatch, type DigestOverview } from '../digest/types';
@@ -13,7 +13,7 @@ import type { DigestComparison } from '../digest/types';
 import { ComparisonNote } from './SummaryInspection';
 import { CallResults } from './CallResults';
 
-async function summaryAccounts(settings: UserSettings) {
+async function summaryAccounts(settings: Configuration) {
   if (settings.sharedCredentials === 'disconnected')
     throw new Error('Connect this app in Settings → Preferences → Integrations.');
   const result = await planCall({ action: 'accounts' });

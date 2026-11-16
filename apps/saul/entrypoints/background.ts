@@ -1,3 +1,4 @@
+import { readCredentialRoute } from '../src/providers/credential-route';
 import { initAnnotations } from '../src/annotations/background';
 import { callPresetStorage } from '../src/storage/call-presets';
 import { snapshotSelection, captureTab, verifyCaptureTab } from '../src/digest/capture';
@@ -7,17 +8,17 @@ import { validateSummaryConnection } from '../src/digest/connection';
 import { initSummaryActions } from '../src/digest/actions';
 import { initPlanBridge } from '../src/native/plan';
 import { initCredentialBridge } from '../src/native/credentials';
-import { nativeCredentialAccess } from '../src/storage/credentials';
+import { nativeCredentialAccess } from '../src/configuration/credentials';
 import { initSpeechBridge } from '../src/speech/bridge';
 import { initActionBridge } from '../src/native/actions';
 import { actionState, validateActionRequest, validateActionState } from '../src/actions/contract';
 import { prepareActionPreset } from '../src/actions/configuration';
-import { sharedPresets } from '../src/storage/shared-presets';
+import { sharedPresets } from '../src/configuration/shared';
+import { createConfigurationStore, SETTINGS_STORAGE_KEY } from '../src/configuration/store';
 import {
-  createSettingsOwner,
+  chromeConfigurationStorage,
   initStorageSecurity,
-  SETTINGS_STORAGE_KEY,
-} from '../src/storage/settings';
+} from '../src/configuration/chrome-storage';
 import {
   getErrorNotificationsMuted,
   setErrorNotificationsMuted,
@@ -29,7 +30,7 @@ import {
   MINIMUM_MODE_STORAGE_KEY,
 } from '../src/storage/presentation';
 import { runnerRequest } from '../src/storage/client';
-import { configurationFor } from '../src/models/configuration';
+import { configurationFor } from '../src/configuration/definition';
 import {
   prepareFollowUpRun,
   prepareFrozenRun,
@@ -51,7 +52,11 @@ import type { ResolvedContext, SelectionSnapshot } from '../src/types';
 
 const db: DbCall = (message) => runnerRequest({ operation: 'db', message: message as DbRequest });
 const callPresets = callPresetStorage();
-const settingsOwner = createSettingsOwner(undefined, sharedPresets, nativeCredentialAccess);
+const settingsOwner = createConfigurationStore(
+  chromeConfigurationStorage,
+  sharedPresets,
+  nativeCredentialAccess,
+);
 async function currentSettings() {
   const result = await settingsOwner({ action: 'read' });
   if (result.state !== 'ready') throw new Error(result.error);
@@ -397,7 +402,8 @@ export default defineBackground(() => {
           sender.url !== chrome.runtime.getURL('offscreen.html')
         )
           throw new Error('Runner only');
-        return { mode: (await currentSettings()).sharedCredentials ?? 'standalone' };
+        const route = await readCredentialRoute();
+        return { mode: route === 'local' ? 'standalone' : route };
       }
       if (request.target === 'saul-action-state') {
         if (

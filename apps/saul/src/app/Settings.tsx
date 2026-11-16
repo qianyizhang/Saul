@@ -9,13 +9,13 @@ import { SharedCredentialSettings } from './SharedCredentialSettings';
 import { usePlanSettings } from './usePlanSettings';
 import { ActionLabel } from '../surface/ActionLabel';
 import { useEffect, useRef, useState } from 'react';
-import { useSettingsDraft } from './useSettingsDraft';
+import { useSettingsEditor } from './useSettingsEditor';
 import { useProviderTest } from './useProviderTest';
-import { configurationFor } from '../models/configuration';
+import { configurationFor } from '../configuration/definition';
 import { ActionSettings } from './ActionSettings';
 import type { SettingsSection } from './settings-sections';
 import { SettingsRecovery } from './SettingsRecovery';
-import type { SettingsPreferences } from '../models/settings-draft';
+import type { SettingsPreferences } from '../settings/draft';
 
 export function Settings({
   onDirty,
@@ -27,8 +27,8 @@ export function Settings({
   onSectionChange?: (section: SettingsSection) => void;
 }) {
   const [connectionDirty, setConnectionDirty] = useState(false);
-  const draft = useSettingsDraft((value) => onDirty?.(value || connectionDirty));
-  const { settings, inspectedSettings, loaded, dirty, saved, saving, save } = draft;
+  const draft = useSettingsEditor((value) => onDirty?.(value || connectionDirty));
+  const { configuration: settings, inspection, loaded, dirty, saved, saving, save } = draft;
   const reviewButton = useRef<HTMLButtonElement>(null),
     saveButton = useRef<HTMLButtonElement>(null);
   const wasReviewing = useRef(false);
@@ -44,18 +44,8 @@ export function Settings({
   const [speechBusy, setSpeechBusy] = useState(false);
   const [actionBuilding, setActionBuilding] = useState(false);
   const configuration = configurationFor(settings);
-  const selectedPreset = configuration.presets.find(
-    (preset) => preset.id === draft.selectedPresetId,
-  );
-  const planValue = {
-    ...(settings.chatgptPlan ?? { accountId: '', model: '' }),
-    ...(selectedPreset?.provider === 'chatgpt-plan'
-      ? { model: selectedPreset.model, effort: selectedPreset.effort, fast: selectedPreset.fast }
-      : {}),
-    ...(section === 'models' && selectedPreset?.provider === 'chatgpt-plan'
-      ? { accountId: inspectedSettings.chatgptPlan?.accountId ?? '' }
-      : {}),
-  };
+  const selectedPreset = draft.selectedPreset;
+  const planValue = draft.planEditor[section === 'models' ? 'preset' : 'connection'];
   const plan = usePlanSettings(
     planValue,
     (value) => {
@@ -82,7 +72,7 @@ export function Settings({
     providerTest.clear();
   }
   const test = (mode: 'endpoint' | 'generation') =>
-    providerTest.test(mode, inspectedSettings, selectedPreset?.id);
+    providerTest.test(mode, settings, selectedPreset?.id);
   const locked = testing || planBusy || speechBusy;
   if (!loaded)
     return error ? (
@@ -159,7 +149,7 @@ export function Settings({
         ) : (
           <ConnectionSettings
             settings={settings}
-            disabled={locked}
+            disabled={locked || draft.blocked}
             visible={section === 'connections'}
             dirty={dirty}
             commit={draft.commitConnections}
@@ -180,7 +170,7 @@ export function Settings({
             connectionProfiles: settings.connectionProfiles,
             sharedCredentials: settings.sharedCredentials,
           }}
-          remote={inspectedSettings.openaiCompatible}
+          remote={inspection.remote}
           plan={plan}
           visible={section === 'models'}
           saved={!dirty}

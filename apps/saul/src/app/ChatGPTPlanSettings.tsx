@@ -1,7 +1,7 @@
 import { ControlIcon } from '../surface/ControlIcon';
 import { useEffect, useRef } from 'react';
 import { ActionLabel } from '../surface/ActionLabel';
-import { planCall } from '../models/chatgpt-plan';
+import { planCall } from '../providers/chatgpt-plan';
 import { planModelDefaults } from '../../native/plan-models.mts';
 import { useMinimumMode } from './useMinimumMode';
 import type { PlanSettingsState } from './usePlanSettings';

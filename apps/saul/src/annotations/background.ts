@@ -8,9 +8,9 @@ import {
   type AnnotationRequest,
 } from './contract';
 import { prepareActionPreset } from '../actions/configuration';
-import { configurationFor } from '../models/configuration';
+import { configurationFor } from '../configuration/definition';
 import { callPresetStorage } from '../storage/call-presets';
-import type { UserSettings } from '../types';
+import type { Configuration } from '../configuration/definition';
 import { z } from 'zod';
 
 import { ANNOTATION_ACCESS_KEY, annotationPanelKey, annotationVersionKey } from './routing';
@@ -207,7 +207,7 @@ async function capture(request: unknown, sender: chrome.runtime.MessageSender) {
   ).some((v) => v.windowId === windowId);
   return { ...result, ...(!opened ? { panelError: 'Open the annotation editor.' } : {}) };
 }
-export function initAnnotations(settings: () => Promise<UserSettings>) {
+export function initAnnotations(settings: () => Promise<Configuration>) {
   chrome.commands.onCommand.addListener((command, tab) => {
     if (command === 'saul-annotate' && tab?.id !== undefined && !tab.incognito)
       void chrome.tabs.sendMessage(tab.id, { type: 'SAUL_ANNOTATE' }).catch(() => undefined);

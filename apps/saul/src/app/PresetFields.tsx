@@ -1,7 +1,7 @@
 import { IMAGE_OPTIONS, SPEECH_VOICES } from '../../native/shared-presets-contract.mts';
 import type { ConnectionModel } from '../../native/connections-contract.mts';
-import type { ModelPreset, UserSettings } from '../types';
-import type { SettingsEdit } from '../models/settings-draft';
+import type { ModelPreset, Configuration } from '../configuration/definition';
+import type { SettingsEdit } from '../settings/draft';
 import { ActionLabel } from '../surface/ActionLabel';
 import { SpeechTest } from './SpeechTest';
 
@@ -250,7 +250,7 @@ export function ApiPresetFields({
   testing,
   test,
 }: ModelFields & {
-  profiles: UserSettings['profiles'];
+  profiles: Configuration['profiles'];
   selectProfile: (id: string) => void;
   fallbackTemperature: number;
   testing: boolean;

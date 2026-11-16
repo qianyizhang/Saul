@@ -1,7 +1,7 @@
 import type { AnnotationAttempt } from './attempts';
 import { evidence, type Annotation } from './contract';
 import type { DbCall, RunInput } from '../types/storage';
-import { streamModel } from '../models/provider';
+import { streamModel } from '../providers/stream';
 import { actionHost } from '../actions/host';
 export type AnnotationRunRequest =
   | {

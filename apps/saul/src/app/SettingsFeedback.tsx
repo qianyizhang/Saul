@@ -1,12 +1,12 @@
 import type { Ref } from 'react';
 import { ActionLabel } from '../surface/ActionLabel';
-import type { useSettingsDraft } from './useSettingsDraft';
+import type { useSettingsEditor } from './useSettingsEditor';
 import type { useProviderTest } from './useProviderTest';
 import type { PlanSettingsState } from './usePlanSettings';
 import type { SettingsSection } from './settings-sections';
 
 type SaveState = Pick<
-  ReturnType<typeof useSettingsDraft>,
+  ReturnType<typeof useSettingsEditor>,
   'dirty' | 'saved' | 'saving' | 'blocked' | 'recoveryNotice' | 'save' | 'reviewLatest' | 'reload'
 >;
 type ProviderTestState = Pick<
@@ -48,6 +48,7 @@ export function SettingsFeedback({
       hidden={
         !dirty &&
         !saved &&
+        !draft.blocked &&
         !error &&
         !notice &&
         !draft.recoveryNotice &&

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { test, expect } from './fixtures.ts';
 import { getFirstHistory, getHistory, openFirstPageExplanation, sendDb } from './driver.ts';
-import { DEFAULT_SETTINGS } from '../../src/storage/settings';
+import { DEFAULT_CONFIGURATION } from '../../src/configuration/definition';
 import { reviewScreenshots } from './artifacts.ts';
 
 const gif = readFileSync(new URL('../../../../contracts/fixtures/animation.gif', import.meta.url));
@@ -10,7 +10,7 @@ test('Illustrate chooses GIF at runtime, saves exact bytes, previews and downloa
   fixtureServer,
 }, info) => {
   let browser = await sandbox.launch();
-  const settings = structuredClone(DEFAULT_SETTINGS);
+  const settings = structuredClone(DEFAULT_CONFIGURATION);
   settings.configuration!.presets.forEach((p) => {
     if (p.capability === 'draw') p.model = 'gpt-image-2.6-flare';
   });

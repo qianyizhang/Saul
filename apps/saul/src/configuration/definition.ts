@@ -1,12 +1,101 @@
-import { validImageOptions, validSpeechOptions } from '../../native/shared-presets-contract.mts';
+import type { ContextPolicy } from '../types';
 import type {
-  ModelPreset,
-  ReadingConfiguration,
-  Recipe,
-  ResolvedContext,
-  UserSettings,
-} from '../types';
-import { DEFAULT_SYSTEM_PROMPT, renderReadingContext } from './prompts';
+  ActionCapability,
+  SharedImageOptions,
+  SharedSpeechOptions,
+  ConnectionDefinition,
+} from '../../native/shared-presets-contract.mts';
+export type ProviderType = 'openai-compatible' | 'chrome-ai' | 'chatgpt-plan';
+
+/** Explicit defaults used when creating a new Preset or switching its provider. */
+export interface ProviderDefaults {
+  provider: ProviderType;
+  profileId?: string;
+  remote: Configuration['openaiCompatible'];
+  plan?: Configuration['chatgptPlan'];
+  local: Configuration['chromeAi'];
+}
+
+export interface APIProfile {
+  id: string;
+  name: string;
+  config: Configuration['openaiCompatible'];
+}
+
+export interface ModelPreset {
+  id: string;
+  name: string;
+  provider: ProviderType;
+  model: string;
+  profileId?: string;
+  temperature?: number;
+  topK?: number;
+  effort?: string;
+  fast?: boolean;
+  connectionKey?: string;
+  capability?: ActionCapability;
+  imageOptions?: SharedImageOptions;
+  speechOptions?: SharedSpeechOptions;
+  shared?: boolean;
+}
+
+export interface Recipe {
+  capability?: 'write' | 'draw';
+  id: string;
+  name: string;
+  presetId: string;
+  template: string;
+  systemPrompt: string;
+}
+
+export interface ReadingConfiguration {
+  schemaVersion: 1;
+  selectedRecipeId: string;
+  presets: ModelPreset[];
+  recipes: Recipe[];
+}
+
+export interface Configuration {
+  /** Per-installation choice; never portable to another machine's settings. */
+  sharedCredentials?: 'saul' | 'disconnected';
+  summaryPdfProcessing?: 'attachment' | 'local';
+  /** Built-in Summarize's model preset. Missing retains the original summary setup. */
+  summaryPresetId?: string;
+  /** Managed binding for the active Original summary choice. */
+  summaryConnectionKey?: string;
+  sharedPresetRevision?: number;
+  connections: ConnectionDefinition[];
+  /** App-local connection key → API profile ID; contains no credential. */
+  connectionProfiles?: Record<string, string>;
+  scopedConfigRevision?: number;
+  profiles?: APIProfile[];
+  activeProfileId?: string;
+  responseLanguage?: string;
+  activeProvider: ProviderType;
+  openaiCompatible: {
+    baseUrl: string;
+    apiKey: string;
+    credentialOwner?: 'saul';
+    model: string;
+    temperature: number;
+  };
+  chatgptPlan?: { accountId: string; model: string; effort?: string; fast?: boolean };
+  chromeAi: {
+    temperature: number;
+    topK: number;
+  };
+  contextPolicy: ContextPolicy;
+  customPromptTemplate?: string;
+  configuration?: ReadingConfiguration;
+}
+
+import {
+  DEFAULT_CONNECTIONS,
+  validImageOptions,
+  validSpeechOptions,
+} from '../../native/shared-presets-contract.mts';
+import type { ResolvedContext } from '../types';
+import { DEFAULT_SYSTEM_PROMPT, renderReadingContext } from '../reading/prompts.ts';
 
 export const EXPLAIN_RECIPE_ID = 'recipe-explain';
 export const TEMPLATE_FIELDS = [
@@ -95,37 +184,49 @@ export function renderRecipePrompt(
   return parts.join('\n');
 }
 
-export function presetFromSettings(settings: UserSettings, id: string, name: string): ModelPreset {
-  switch (settings.activeProvider) {
+export function presetFromSelection(
+  settings: ProviderDefaults,
+  id: string,
+  name: string,
+): ModelPreset {
+  switch (settings.provider) {
     case 'chatgpt-plan':
       return {
         id,
         name,
         provider: 'chatgpt-plan',
-        model: settings.chatgptPlan?.model || '',
-        ...(settings.chatgptPlan?.effort === undefined
-          ? {}
-          : { effort: settings.chatgptPlan.effort }),
-        ...(settings.chatgptPlan?.fast === undefined ? {} : { fast: settings.chatgptPlan.fast }),
+        model: settings.plan?.model || '',
+        ...(settings.plan?.effort === undefined ? {} : { effort: settings.plan.effort }),
+        ...(settings.plan?.fast === undefined ? {} : { fast: settings.plan.fast }),
       };
     case 'chrome-ai':
-      return { id, name, provider: 'chrome-ai', model: 'gemini-nano', ...settings.chromeAi };
+      return { id, name, provider: 'chrome-ai', model: 'gemini-nano', ...settings.local };
     case 'openai-compatible':
       return {
         id,
         name,
         provider: 'openai-compatible',
-        model: settings.openaiCompatible.model,
-        profileId: settings.activeProfileId || 'default',
-        temperature: settings.openaiCompatible.temperature,
+        model: settings.remote.model,
+        profileId: settings.profileId || 'default',
+        temperature: settings.remote.temperature,
       };
   }
 }
 
 export const DEFAULT_RECIPE_SYSTEM_PROMPT =
   'You are Saul, a concise language assistant. Follow the requested task and answer directly. Use plain text; annotate useful concepts with <term note="A brief explanation">concept</term> when helpful. Do not nest term tags.';
-export function starterConfiguration(settings: UserSettings): ReadingConfiguration {
-  const preset = presetFromSettings(settings, 'preset-current', 'Current');
+export function starterConfiguration(settings: Configuration): ReadingConfiguration {
+  const preset = presetFromSelection(
+    {
+      provider: settings.activeProvider,
+      remote: settings.openaiCompatible,
+      local: settings.chromeAi,
+      plan: settings.chatgptPlan,
+      profileId: settings.activeProfileId,
+    },
+    'preset-current',
+    'Current',
+  );
   return {
     schemaVersion: 1,
     selectedRecipeId: EXPLAIN_RECIPE_ID,
@@ -159,7 +260,7 @@ export function starterConfiguration(settings: UserSettings): ReadingConfigurati
   };
 }
 
-export function illustrationPreset(settings: UserSettings): ModelPreset {
+export function illustrationPreset(settings: Configuration): ModelPreset {
   return {
     id: 'preset-illustration',
     name: 'Saul illustration',
@@ -181,8 +282,10 @@ export function illustrationRecipe(): Recipe {
     systemPrompt: '',
   };
 }
-export function configurationFor(settings: UserSettings): ReadingConfiguration {
-  return settings.configuration || starterConfiguration(settings);
+export function configurationFor(settings: Configuration): ReadingConfiguration {
+  if (!settings.configuration)
+    throw new Error('Saved configuration is missing. Back up and reset it from Settings.');
+  return settings.configuration;
 }
 
 function record(value: unknown, label: string): Record<string, unknown> {
@@ -206,10 +309,12 @@ function optionalNumber(value: unknown, label: string): number | undefined {
 }
 export function normalizeConfiguration(
   value: unknown,
-  settings: UserSettings,
+  settings: Configuration,
 ): ReadingConfiguration {
-  if (value === undefined) return starterConfiguration(settings);
+  if (value === undefined)
+    throw new Error('Saved configuration is missing. Back up and reset it from Settings.');
   const stored = record(value, 'Configuration');
+  if ('providers' in stored) throw new Error('Obsolete configuration fields are not supported.');
   if (stored.schemaVersion !== 1)
     throw new Error('Unsupported configuration version. Original settings are preserved.');
   if (!Array.isArray(stored.presets) || !Array.isArray(stored.recipes))
@@ -219,6 +324,7 @@ export function normalizeConfiguration(
     selectedRecipeId: string(stored.selectedRecipeId, 'Default action ID', 128),
     presets: stored.presets.map((entry) => {
       const preset = record(entry, 'Preset');
+      if ('providerKey' in preset) throw new Error('Obsolete preset fields are not supported.');
       if (!['openai-compatible', 'chatgpt-plan', 'chrome-ai'].includes(String(preset.provider)))
         throw new Error('Preset provider is not supported.');
       if (preset.fast !== undefined && typeof preset.fast !== 'boolean')
@@ -308,3 +414,30 @@ export function validateConfiguration(configuration: ReadingConfiguration, share
       throw new Error(`“${recipe.name}” system prompt exceeds 32 KB.`);
   }
 }
+
+const DEFAULT_CONNECTION_SETTINGS: Configuration = {
+  connections: structuredClone([...DEFAULT_CONNECTIONS]),
+  activeProvider: 'openai-compatible',
+  openaiCompatible: {
+    baseUrl: 'https://api.openai.com/v1',
+    apiKey: '',
+    model: '',
+    temperature: 0.3,
+  },
+  chromeAi: {
+    temperature: 0.3,
+    topK: 3,
+  },
+  contextPolicy: {
+    includeSelection: true,
+    includeContainingParagraph: true,
+    includeContainingHeading: true,
+    includePageMetadata: true,
+  },
+  customPromptTemplate: DEFAULT_SYSTEM_PROMPT,
+};
+export const DEFAULT_CONFIGURATION: Configuration = {
+  ...DEFAULT_CONNECTION_SETTINGS,
+  summaryPdfProcessing: 'attachment',
+  configuration: starterConfiguration(DEFAULT_CONNECTION_SETTINGS),
+};

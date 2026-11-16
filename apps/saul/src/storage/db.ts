@@ -3,7 +3,7 @@ import {
   annotationAttempts,
   annotationImage,
 } from '../../native/annotation-store.mts';
-import { validateGeneratedImage, type GeneratedImage } from '../models/images';
+import { validateGeneratedImage, type GeneratedImage } from '../providers/images';
 import { digestStore } from '../digest/store';
 import type { SqlDatabase, SqlValue } from './sql';
 import { nanoid } from 'nanoid';
@@ -19,7 +19,7 @@ import type {
   RunInput,
   Submission,
 } from '../types/storage';
-import { EXPLAIN_RECIPE_ID } from '../models/configuration';
+import { EXPLAIN_RECIPE_ID } from '../configuration/definition';
 import { inspectionInput } from '../reading/inspection';
 import type { SelectionSnapshot } from '../types';
 

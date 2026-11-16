@@ -1,9 +1,9 @@
 import { workspaceSender } from '../contracts/reading';
-import type { UserSettings } from '../types';
+import type { Configuration } from '../configuration/definition';
 import { credentialCall } from '../native/credentials';
 import { generateSpeech, speechCredential, SPEECH_PORT, validateSpeechRequest } from './realtime';
 
-export function initSpeechBridge(currentSettings: () => Promise<UserSettings>) {
+export function initSpeechBridge(currentSettings: () => Promise<Configuration>) {
   chrome.runtime.onConnect.addListener((port) => {
     if (port.name !== SPEECH_PORT) return;
     if (!port.sender || !workspaceSender(port.sender)) {

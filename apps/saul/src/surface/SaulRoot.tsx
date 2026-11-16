@@ -3,7 +3,7 @@ import { captureSelection, buildResolvedContext } from '../capture/selection';
 import { sendReadingMessage } from '../storage/client';
 import type { ReadingRequest } from '../contracts/reading';
 import type { ReadingOperations } from '../contracts/reading';
-import { EXPLAIN_RECIPE_ID } from '../models/configuration';
+import { EXPLAIN_RECIPE_ID } from '../configuration/definition';
 import type { Passage } from '../types/storage';
 import { PassageMarkers } from '../reading/markers';
 import { FloatingTrigger } from './FloatingTrigger';

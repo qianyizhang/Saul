@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { RecoveryChoice, SettingsReview } from '../models/settings-recovery';
+import type { RecoveryChoice, SettingsReview } from '../settings/recovery';
 
 export function SettingsRecovery({
   review,
@@ -7,7 +7,7 @@ export function SettingsRecovery({
   apply,
   cancel,
 }: {
-  review: SettingsReview;
+  review: Pick<SettingsReview, 'changes'>;
   error: string;
   apply: (choices: Record<string, RecoveryChoice | undefined>) => void;
   cancel: () => void;

@@ -549,7 +549,7 @@ it('runs custom actions per page with two-page concurrency and pins code and pre
     return { type: 'result', text: 'Final ' + index };
   });
   const builtIn = vi.fn(success);
-  const model = vi.fn<typeof import('../src/models/provider').streamModel>(success);
+  const model = vi.fn<typeof import('../src/providers/stream').streamModel>(success);
   const runner = new DigestRunner(
     f.db,
     f.capture,
@@ -648,7 +648,7 @@ it.each(['preset', 'script'] as const)(
   async (kind) => {
     const f = fixture();
     let hold = true;
-    const model = vi.fn<typeof import('../src/models/provider').streamModel>(
+    const model = vi.fn<typeof import('../src/providers/stream').streamModel>(
       async function* (_input, _credential, signal) {
         if (hold) {
           yield { type: 'delta', text: 'partial' };
@@ -700,7 +700,7 @@ it('a custom checkpoint failure cancels execution and siblings without saving a 
       throw new Error('checkpoint disk full');
     return db(request);
   });
-  const model = vi.fn<typeof import('../src/models/provider').streamModel>(
+  const model = vi.fn<typeof import('../src/providers/stream').streamModel>(
     async function* (_input, _credential, signal) {
       yield { type: 'delta', text: 'partial' };
       await new Promise<void>((resolve) =>

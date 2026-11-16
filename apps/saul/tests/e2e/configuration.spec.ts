@@ -4,7 +4,7 @@ import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider, createFixtureServer } from './support.ts';
 import { getFirstHistory, getHistory, openFirstPageExplanation, sendDb } from './driver.ts';
 import type { Page } from '@playwright/test';
-import type { UserSettings } from '../../src/types';
+import type { Configuration } from '../../src/configuration/definition';
 
 test('a saved attempt with a changed credential owner shows a preset-selection hint without sending', async ({
   sandbox,
@@ -20,7 +20,7 @@ test('a saved attempt with a changed credential owner shows a preset-selection h
   const calls = fixtureServer.requests.length;
   await popup.evaluate(async () => {
     const stored = await chrome.storage.local.get('saul_user_settings');
-    const settings = stored.saul_user_settings as UserSettings;
+    const settings = stored.saul_user_settings as Configuration;
     settings.sharedCredentials = 'saul';
     settings.openaiCompatible.credentialOwner = 'saul';
     for (const profile of settings.profiles ?? []) profile.config.credentialOwner = 'saul';
@@ -236,7 +236,7 @@ test('missing recipe context or connection blocks submission without using anoth
   expect(fixtureServer.requests).toHaveLength(initialRequests);
   await popup.evaluate(async () => {
     const stored = await chrome.storage.local.get('saul_user_settings');
-    const settings = stored.saul_user_settings as UserSettings;
+    const settings = stored.saul_user_settings as Configuration;
     settings.configuration!.presets[0]!.profileId = 'removed-connection';
     await chrome.storage.local.set({ saul_user_settings: settings });
   });

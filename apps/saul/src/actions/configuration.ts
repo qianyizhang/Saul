@@ -1,9 +1,13 @@
-import type { UserSettings } from '../types';
-import { configurationFor } from '../models/configuration';
-import { preparePreset } from '../models/preset-resolution';
+import type { Configuration } from '../configuration/definition';
+import { configurationFor } from '../configuration/definition';
+import { preparePreset } from '../configuration/resolve';
 import type { RunInput } from '../types/storage';
 
-export function prepareActionPreset(settings: UserSettings, presetId: string, inspectOnly = false) {
+export function prepareActionPreset(
+  settings: Configuration,
+  presetId: string,
+  inspectOnly = false,
+) {
   const preset = configurationFor(settings).presets.find((p) => p.id === presetId);
   if (!preset) throw new Error('Choose an existing saved preset in Settings → Calls.');
   const prepared = preparePreset(settings, preset, 'write', inspectOnly);

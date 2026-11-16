@@ -1,19 +1,20 @@
-import { projectPresetForEditing as settingsForPreset } from './preset-resolution';
+import { inspectPreset } from '../configuration/inspect';
 import { validateConnections } from '../../native/shared-presets-contract.mts';
 import { officialOpenAI } from '../../native/credentials-contract.mts';
-import type { ModelPreset, ProviderType, Recipe, UserSettings } from '../types';
-import { DEFAULT_SETTINGS, validateSettingsConnections } from '../storage/settings';
+import type { ModelPreset, ProviderType, Recipe, Configuration } from '../configuration/definition';
+import { DEFAULT_CONFIGURATION } from '../configuration/definition';
+import { validateSettingsConnections } from '../configuration/resolve';
 import {
   configurationFor,
   illustrationPreset,
   illustrationRecipe,
   DEFAULT_RECIPE_SYSTEM_PROMPT,
-  presetFromSettings,
+  presetFromSelection,
   validateConfiguration,
-} from './configuration';
+} from '../configuration/definition';
 
 type RetainedSettings = Pick<
-  UserSettings,
+  Configuration,
   | 'activeProvider'
   | 'activeProfileId'
   | 'openaiCompatible'
@@ -22,14 +23,14 @@ type RetainedSettings = Pick<
   | 'scopedConfigRevision'
 >;
 
-export type SettingsValues = Omit<UserSettings, keyof RetainedSettings | 'chatgptPlan'> & {
-  profiles: NonNullable<UserSettings['profiles']>;
-  configuration: NonNullable<UserSettings['configuration']>;
+export type SettingsValues = Omit<Configuration, keyof RetainedSettings | 'chatgptPlan'> & {
+  profiles: NonNullable<Configuration['profiles']>;
+  configuration: NonNullable<Configuration['configuration']>;
   planAccountId?: string;
 };
 
 export type SettingsPreferences = Pick<
-  UserSettings,
+  Configuration,
   'responseLanguage' | 'contextPolicy' | 'summaryPresetId' | 'summaryPdfProcessing'
 >;
 
@@ -38,8 +39,8 @@ export interface SettingsDraft {
   /** Transport defaults are not the inspected preset or a second editable connection. */
   retained: Readonly<
     RetainedSettings & {
-      planOptions?: Omit<NonNullable<UserSettings['chatgptPlan']>, 'accountId'>;
-      activeProfileConfig?: Readonly<UserSettings['openaiCompatible']>;
+      planOptions?: Omit<NonNullable<Configuration['chatgptPlan']>, 'accountId'>;
+      activeProfileConfig?: Readonly<Configuration['openaiCompatible']>;
     }
   >;
   presetId: string;
@@ -72,7 +73,7 @@ export type SettingsEdit =
   | {
       type: 'connection';
       id: string;
-      patch: Partial<Pick<UserSettings['openaiCompatible'], 'baseUrl' | 'apiKey'>>;
+      patch: Partial<Pick<Configuration['openaiCompatible'], 'baseUrl' | 'apiKey'>>;
       name?: string;
     }
   | { type: 'connection-profile'; key: string; profileId: string }
@@ -107,7 +108,10 @@ function origin(url: string): string {
 }
 
 /** Keep editable records, transport defaults and inspection selection distinct. */
-export function createSettingsDraft(source: UserSettings, previous?: SettingsDraft): SettingsDraft {
+export function createSettingsDraft(
+  source: Configuration,
+  previous?: SettingsDraft,
+): SettingsDraft {
   const settings = structuredClone(source);
   const {
     activeProvider,
@@ -164,7 +168,7 @@ export function createSettingsDraft(source: UserSettings, previous?: SettingsDra
 }
 
 /** One transport boundary for views and commits; inspection never participates. */
-export function settingsFromDraft(draft: SettingsDraft): UserSettings {
+export function settingsFromDraft(draft: SettingsDraft): Configuration {
   const { planAccountId, ...values } = draft.values;
   const { planOptions, activeProfileConfig, ...retained } = draft.retained;
   const profile = values.profiles.find((p) => p.id === retained.activeProfileId)?.config;
@@ -198,10 +202,10 @@ export function settingsFromDraft(draft: SettingsDraft): UserSettings {
 }
 
 /** Ephemeral view only. Missing/unavailable choices remain editable. */
-export function settingsForInspection(draft: SettingsDraft): UserSettings {
+export function inspectDraftPreset(draft: SettingsDraft) {
   const settings = settingsFromDraft(draft);
   const preset = draft.values.configuration.presets.find((p) => p.id === draft.presetId);
-  return preset ? settingsForPreset(settings, preset) : settings;
+  return inspectPreset(settings, preset);
 }
 
 /** Views supply edits; presets and connections retain separate owners. */
@@ -221,7 +225,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
             {
               id: edit.id,
               name: nextName('New connection', settings.profiles ?? []),
-              config: { ...DEFAULT_SETTINGS.openaiCompatible },
+              config: { ...DEFAULT_CONFIGURATION.openaiCompatible },
             },
           ],
         },
@@ -330,8 +334,8 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
       const choices =
         preset.provider === kind
           ? preset
-          : presetFromSettings(
-              { ...settingsForInspection(draft), activeProvider: kind },
+          : presetFromSelection(
+              { ...inspectDraftPreset(draft), provider: kind },
               preset.id,
               preset.name,
             );
@@ -371,8 +375,8 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
     case 'preset-local-provider': {
       const preset = configuration.presets.find((p) => p.id === draft.presetId);
       if (!preset) throw new Error('Choose an existing preset.');
-      const choices = presetFromSettings(
-        { ...settingsForInspection(draft), activeProvider: edit.provider },
+      const choices = presetFromSelection(
+        { ...inspectDraftPreset(draft), provider: edit.provider },
         preset.id,
         preset.name,
       );
@@ -414,8 +418,8 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
             ...configuration,
             presets: [
               ...configuration.presets,
-              presetFromSettings(
-                settingsForInspection(draft),
+              presetFromSelection(
+                inspectDraftPreset(draft),
                 edit.id,
                 nextName('New preset', configuration.presets),
               ),
@@ -550,7 +554,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
   }
 }
 
-export function settingsForSave(draft: SettingsDraft): UserSettings {
+export function settingsForSave(draft: SettingsDraft): Configuration {
   const settings = settingsFromDraft(draft);
   validateConfiguration(configurationFor(settings), settings.sharedPresetRevision !== undefined);
   validateSettingsConnections(settings);

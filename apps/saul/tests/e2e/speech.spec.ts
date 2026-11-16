@@ -1,7 +1,7 @@
 import { getHistory, settingsSection } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
-import { DEFAULT_SETTINGS } from '../../src/storage/settings';
+import { DEFAULT_CONFIGURATION } from '../../src/configuration/definition';
 
 test('Speak preview uses its saved API preset, stops on navigation and retains no audio history', async ({
   sandbox,
@@ -10,7 +10,7 @@ test('Speak preview uses its saved API preset, stops on navigation and retains n
   await popup.route('https://api.openai.com/v1/models', (route) =>
     route.fulfill({ json: { data: [{ id: 'gpt-realtime-2.1-mini' }] } }),
   );
-  const settings = structuredClone(DEFAULT_SETTINGS);
+  const settings = structuredClone(DEFAULT_CONFIGURATION);
   settings.configuration!.presets.push({
     id: 'speech-preset',
     name: 'Voice preview',
@@ -163,7 +163,7 @@ test('creates a Speak preset through its editor and keeps API setup in Connectio
     const settings = structuredClone(defaults);
     settings.openaiCompatible.apiKey = 'fixture-no-network';
     await chrome.storage.local.set({ saul_user_settings: settings });
-  }, DEFAULT_SETTINGS);
+  }, DEFAULT_CONFIGURATION);
   await popup.setViewportSize({ width: 390, height: 850 });
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await settingsSection(popup, 'Presets');

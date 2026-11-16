@@ -79,12 +79,12 @@ owns revision and atomic-save guarantees.
 
 - Named actions pair editable prompts with a default model preset. Explain, Lookup, and Nudge are editable starters. A preset binds a connection, capability, model, and supported options. ChatGPT plan presets use their connection’s bound account when present, including in standalone mode. In standalone mode, a preset without a bound account uses the locally selected account.
 - Inspecting a preset does not change the standalone account or the saved provider/profile defaults, including when another edit is saved. Standalone Original summary continues to use the saved local account.
-- The existing prompt and model migrate into Explain and Current. Choosing another action for the same passage creates a new attempt; retry keeps the original request choices even after Settings changes.
+- New installations start with explicit Actions and Presets. Choosing another action for the same passage creates a new attempt; retry keeps the original request choices even after Settings changes.
 - Templates substitute `{{text}}`, `{{context}}`, `{{page title}}`, `{{page url}}`, `{{heading}}`, and `{{paragraph}}` once. `{{text}}` is required; unavailable referenced context blocks submission. Enabled context is included once, and template expressions are unsupported.
 - OpenAI-compatible profiles keep separate endpoint, model, temperature, and key values.
 - Changing endpoint origin clears the current key.
-- Missing/stale profile selection preserves the current configuration in a recovered profile.
-- Invalid saved settings show the affected field and offer an explicit backup-and-reset action.
+- Missing referenced profiles remain unavailable until explicitly repaired; no replacement profile is synthesized.
+- Invalid or obsolete saved settings show the affected field and offer an explicit backup-and-reset action. Unsupported old records remain untouched; Saul does not infer Actions or synthesize profiles from them.
 - Save, connection test, and generation test use the current draft without overwriting unreadable stored settings.
 - A saved attempt whose credential owner or endpoint changed keeps its output and
   shows “Select a new preset in Settings, then start a new attempt.” Retry never

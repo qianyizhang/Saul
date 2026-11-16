@@ -1,240 +1,115 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import {
-  createSettingsOwner,
-  DEFAULT_SETTINGS,
-  getSettings,
-  InvalidStoredSettingsError,
-  validateProviderSettings,
-  normalizeSettings,
-} from '../src/storage/settings';
-
-const get = vi.fn();
-const set = vi.fn();
+import { chromeConfigurationStorage } from '../src/configuration/chrome-storage';
+import { createConfigurationStore } from '../src/configuration/store';
+import { decodeConfiguration } from '../src/configuration/record';
+import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
+import { preparePreset } from '../src/configuration/resolve';
+const get = vi.fn(),
+  set = vi.fn();
 beforeEach(() => {
   get.mockReset();
   set.mockReset();
   vi.stubGlobal('chrome', { storage: { local: { get, set } } });
 });
 afterEach(() => vi.unstubAllGlobals());
-it('resolves provider definitions at the persisted settings boundary', () => {
-  const legacy = normalizeSettings({});
-  expect(legacy.connections).toEqual(DEFAULT_SETTINGS.connections);
-  legacy.connections[0]!.name = 'Local edit';
-  expect(normalizeSettings({}).connections[0]!.name).toBe('ChatGPT plan');
-  expect(normalizeSettings({ connections: [] }).connections).toEqual([]);
-  for (const connections of [null, {}, [{ key: 'invalid' }]])
-    expect(() => normalizeSettings({ connections })).toThrow('Connections need unique');
-});
-it('retains saved on-device settings while requiring an explicit enabled provider choice', async () => {
-  get.mockResolvedValueOnce({ saul_user_settings: { activeProvider: 'chrome-ai' } });
-  const settings = await getSettings();
-  expect(settings.activeProvider).toBe('chrome-ai');
-  expect(() => validateProviderSettings(settings)).toThrow('has been retired');
-  expect(set).not.toHaveBeenCalled();
-});
-
-it('uses defaults for absent settings and retains nested defaults for older records', async () => {
-  get.mockResolvedValueOnce({});
-  await expect(getSettings()).resolves.toEqual(DEFAULT_SETTINGS);
-  get.mockResolvedValueOnce({
-    saul_user_settings: { contextPolicy: { includePageMetadata: false } },
-  });
-  const settings = await getSettings();
-  expect(settings.contextPolicy).toEqual({
-    ...DEFAULT_SETTINGS.contextPolicy,
-    includePageMetadata: false,
-  });
-});
-it('defaults PDFs to URL attachments, persists an explicit local choice, and rejects invalid saved modes', async () => {
+const read = () => createConfigurationStore(chromeConfigurationStorage)({ action: 'read' });
+it('uses detached defaults only for absent configuration', async () => {
+  get.mockResolvedValue({});
+  const a = await read();
+  expect(a).toMatchObject({ state: 'ready', settings: DEFAULT_CONFIGURATION });
+  if (a.state !== 'ready') throw new Error('Expected defaults');
+  a.settings.connections[0]!.name = 'Changed';
+  expect(await read()).toMatchObject({ state: 'ready', settings: DEFAULT_CONFIGURATION });
   get.mockResolvedValue({ saul_user_settings: {} });
-  expect((await getSettings()).summaryPdfProcessing).toBe('attachment');
-  get.mockResolvedValue({ saul_user_settings: { summaryPdfProcessing: 'local' } });
-  expect((await getSettings()).summaryPdfProcessing).toBe('local');
-  for (const summaryPdfProcessing of ['auto', true, null, 0]) {
-    get.mockResolvedValue({ saul_user_settings: { summaryPdfProcessing } });
-    await expect(getSettings()).rejects.toThrow(/PDF processing/);
-  }
-});
-
-it('normalizes partial legacy provider records without dropping nested defaults', async () => {
-  get.mockResolvedValue({
-    saul_user_settings: {
-      openaiCompatible: { baseUrl: 'http://localhost:11434/v1' },
-      profiles: [{ id: 'legacy', name: 'Legacy', config: { model: 'legacy-model' } }],
-      activeProfileId: 'legacy',
-    },
+  expect(await read()).toMatchObject({
+    state: 'invalid',
+    error: expect.stringContaining('configuration is missing'),
   });
-  const settings = await getSettings();
-  expect(settings.openaiCompatible).toEqual({
-    ...DEFAULT_SETTINGS.openaiCompatible,
-    baseUrl: 'http://localhost:11434/v1',
-  });
-  expect(settings.profiles).toEqual([
-    {
-      id: 'legacy',
-      name: 'Legacy',
-      config: { ...DEFAULT_SETTINGS.openaiCompatible, model: 'legacy-model' },
-    },
-    {
-      id: 'recovered-current',
-      name: 'Recovered current settings',
-      config: { ...DEFAULT_SETTINGS.openaiCompatible, baseUrl: 'http://localhost:11434/v1' },
-    },
-  ]);
-  expect(settings.activeProfileId).toBe('recovered-current');
-  expect(settings.configuration?.presets[0]?.profileId).toBe('recovered-current');
-});
-
-it.each([
-  ['missing', undefined, 'recovered-current'],
-  ['stale', 'retired-profile', 'retired-profile'],
-] as const)(
-  'recovers the current provider config when the active profile is %s',
-  async (_case, storedActiveProfileId, recoveredId) => {
-    get.mockResolvedValue({
-      saul_user_settings: {
-        openaiCompatible: {
-          baseUrl: 'http://localhost:11434/v1',
-          apiKey: 'current-key',
-          model: 'current-model',
-          temperature: 0.7,
-        },
-        profiles: [{ id: 'legacy', name: 'Legacy', config: { model: 'legacy-model' } }],
-        ...(storedActiveProfileId === undefined ? {} : { activeProfileId: storedActiveProfileId }),
-      },
-    });
-    const settings = await getSettings();
-    expect(settings.activeProfileId).toBe(recoveredId);
-    expect(settings.profiles).toEqual([
-      {
-        id: 'legacy',
-        name: 'Legacy',
-        config: { ...DEFAULT_SETTINGS.openaiCompatible, model: 'legacy-model' },
-      },
-      {
-        id: recoveredId,
-        name: 'Recovered current settings',
-        config: {
-          baseUrl: 'http://localhost:11434/v1',
-          apiKey: 'current-key',
-          model: 'current-model',
-          temperature: 0.7,
-        },
-      },
-    ]);
-  },
-);
-
-it('retains an intentionally blank profile name', async () => {
-  get.mockResolvedValue({
-    saul_user_settings: {
-      profiles: [{ id: 'unnamed', name: '', config: {} }],
-      activeProfileId: 'unnamed',
-    },
-  });
-  const settings = await getSettings();
-  expect(settings.profiles?.[0]).toMatchObject({ id: 'unnamed', name: '' });
-  expect(settings.activeProfileId).toBe('unnamed');
-});
-
-it.each([
-  [{ activeProvider: 'future-provider' }, 'Saved provider is not supported.'],
-  [
-    { openaiCompatible: { temperature: 'warm' } },
-    'Saved provider temperature must be a finite number.',
-  ],
-  [
-    { contextPolicy: { includePageMetadata: 'yes' } },
-    'Saved page-metadata setting must be true or false.',
-  ],
-  [
-    { profiles: [{ id: 'missing-name', config: {} }] },
-    'Saved API profiles require an ID and name.',
-  ],
-  [
-    {
-      profiles: [
-        { id: 'same', name: 'First' },
-        { id: 'same', name: 'Second' },
-      ],
-    },
-    'Saved API profile IDs must be unique.',
-  ],
-] as const)(
-  'identifies malformed saved settings without leaking invalid runtime types: %o',
-  async (stored, detail) => {
-    get.mockResolvedValue({ saul_user_settings: stored });
-    await expect(getSettings()).rejects.toMatchObject({
-      name: 'InvalidStoredSettingsError',
-      message: expect.stringContaining(detail),
-    });
-    await expect(getSettings()).rejects.toBeInstanceOf(InvalidStoredSettingsError);
-    expect(set).not.toHaveBeenCalled();
-  },
-);
-
-it('does not silently replace unreadable settings with defaults or write over them', async () => {
-  get.mockRejectedValue(new Error('Storage unavailable'));
-  await expect(getSettings()).rejects.toThrow('Could not read saved settings');
-  await expect(createSettingsOwner()({ action: 'read' })).rejects.toThrow(
-    'Could not read saved settings',
-  );
   expect(set).not.toHaveBeenCalled();
 });
+it('validates current records and preserves optional PDF preferences', () => {
+  expect(decodeConfiguration(DEFAULT_CONFIGURATION)).toEqual(DEFAULT_CONFIGURATION);
+  expect(
+    decodeConfiguration({ ...DEFAULT_CONFIGURATION, summaryPdfProcessing: 'local' })
+      .summaryPdfProcessing,
+  ).toBe('local');
+  for (const summaryPdfProcessing of ['auto', true, null, 0])
+    expect(() => decodeConfiguration({ ...DEFAULT_CONFIGURATION, summaryPdfProcessing })).toThrow(
+      'PDF processing',
+    );
+  for (const connections of [null, {}, [{ key: 'invalid' }]])
+    expect(() => decodeConfiguration({ ...DEFAULT_CONFIGURATION, connections })).toThrow(
+      'Connections need unique',
+    );
+});
 
-it('backs up the current invalid value and resets settings in one write', async () => {
-  const invalid = { openaiCompatible: { temperature: 'warm' } };
-  get.mockResolvedValue({
-    saul_user_settings: invalid,
-    saul_user_settings_recovery_backup: { older: true },
-  });
-  const owner = createSettingsOwner();
-  const state = await owner({ action: 'read' });
-  if (state.state !== 'invalid') throw new Error('Expected invalid settings');
-  await expect(owner({ action: 'reset', baseline: state.revision })).resolves.toMatchObject({
+it('rejects nested connection aliases instead of silently changing their meaning', () => {
+  const configuration = structuredClone(DEFAULT_CONFIGURATION);
+  expect(() =>
+    decodeConfiguration({
+      ...configuration,
+      configuration: { ...configuration.configuration, providers: [] },
+    }),
+  ).toThrow('Obsolete configuration');
+  expect(() =>
+    decodeConfiguration({
+      ...configuration,
+      configuration: {
+        ...configuration.configuration,
+        presets: configuration.configuration!.presets.map((preset) => ({
+          ...preset,
+          providerKey: 'old',
+        })),
+      },
+    }),
+  ).toThrow('Obsolete preset');
+});
+it.each([
+  { activeProvider: 'unknown' },
+  { openaiCompatible: { temperature: 'warm' } },
+  { contextPolicy: { includeSelection: 'yes' } },
+  { sharedCredentials: 'other' },
+  { providers: [] },
+  { providerConnections: {} },
+  { summaryProviderKey: 'old' },
+])('preserves invalid records until an explicit backed-up reset: %j', async (patch) => {
+  const invalid = { ...structuredClone(DEFAULT_CONFIGURATION), ...patch };
+  get.mockResolvedValue({ saul_user_settings: invalid });
+  const owner = createConfigurationStore(chromeConfigurationStorage);
+  const result = await owner({ action: 'read' });
+  expect(result.state).toBe('invalid');
+  expect(set).not.toHaveBeenCalled();
+  if (result.state !== 'invalid') throw new Error('Expected invalid record');
+  expect(await owner({ action: 'reset', baseline: result.revision })).toMatchObject({
     state: 'ready',
-    settings: DEFAULT_SETTINGS,
     reset: true,
   });
-  expect(set).toHaveBeenCalledTimes(1);
   expect(set).toHaveBeenCalledWith({
+    saul_user_settings: DEFAULT_CONFIGURATION,
     saul_user_settings_recovery_backup: invalid,
-    saul_user_settings: DEFAULT_SETTINGS,
   });
 });
-
-it('does not overwrite settings that became valid before recovery was confirmed', async () => {
-  get.mockResolvedValue({ saul_user_settings: DEFAULT_SETTINGS });
-  const owner = createSettingsOwner();
-  const state = await owner({ action: 'read' });
-  if (state.state !== 'ready') throw new Error('Expected ready settings');
-  await expect(owner({ action: 'reset', baseline: state.revision })).resolves.toMatchObject({
+it('preserves retired choices for explicit repair but never executes them', () => {
+  const stored = structuredClone(DEFAULT_CONFIGURATION);
+  stored.configuration!.presets[0]!.provider = 'chrome-ai';
+  const settings = decodeConfiguration(stored);
+  expect(() => preparePreset(settings, settings.configuration!.presets[0]!)).toThrow('retired');
+});
+it('does not replace unreadable configuration or poison a later request', async () => {
+  get.mockRejectedValueOnce(new Error('Storage unavailable')).mockResolvedValue({});
+  const owner = createConfigurationStore(chromeConfigurationStorage);
+  await expect(owner({ action: 'read' })).rejects.toThrow('Could not read saved settings');
+  expect(await owner({ action: 'read' })).toMatchObject({ state: 'ready' });
+  expect(set).not.toHaveBeenCalled();
+});
+it('retains a valid record when reset is no longer needed', async () => {
+  get.mockResolvedValue({ saul_user_settings: DEFAULT_CONFIGURATION });
+  const owner = createConfigurationStore(chromeConfigurationStorage);
+  const result = await owner({ action: 'read' });
+  if (result.state !== 'ready') throw new Error('Expected current record');
+  expect(await owner({ action: 'reset', baseline: result.revision })).toMatchObject({
     state: 'ready',
-    settings: DEFAULT_SETTINGS,
     reset: false,
   });
   expect(set).not.toHaveBeenCalled();
-});
-
-it('allows a later retry without losing an existing provider profile', async () => {
-  const stored = {
-    ...DEFAULT_SETTINGS,
-    profiles: [{ id: 'local', name: 'Local', config: DEFAULT_SETTINGS.openaiCompatible }],
-    activeProfileId: 'local',
-  };
-  get
-    .mockRejectedValueOnce(new Error('Storage unavailable'))
-    .mockResolvedValue({ saul_user_settings: stored });
-  await expect(getSettings()).rejects.toThrow();
-  const owner = createSettingsOwner();
-  const state = await owner({ action: 'read' });
-  if (state.state !== 'ready') throw new Error('Expected ready settings');
-  await owner({
-    action: 'commit',
-    baseline: state.revision,
-    settings: { ...state.settings, responseLanguage: 'Chinese' },
-  });
-  expect(set).toHaveBeenCalledWith({
-    saul_user_settings: { ...stored, responseLanguage: 'Chinese' },
-  });
 });

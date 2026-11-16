@@ -1,7 +1,7 @@
-import type { GeneratedImage } from '../models/images';
+import type { GeneratedImage } from '../providers/images';
 import type { DbCall, Passage, RunResult, QueuedRun, Submission } from '../types/storage';
-import { streamModel } from '../models/provider';
-import { type ModelActivity, type ModelEvent, IncompleteGeneration } from '../models/events';
+import { streamModel } from '../providers/stream';
+import { type ModelActivity, type ModelEvent, IncompleteGeneration } from '../providers/events';
 import { TagStreamParser } from '../parser/tag-stream-parser';
 
 type Task = QueuedRun & {

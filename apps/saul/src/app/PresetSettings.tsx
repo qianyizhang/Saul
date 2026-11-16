@@ -1,11 +1,11 @@
 import { connectionCapabilities } from '../../native/shared-presets-contract.mts';
 import { catalogIssue } from '../../native/connections-contract.mts';
-import type { ModelPreset, UserSettings } from '../types';
-import type { SettingsEdit } from '../models/settings-draft';
+import type { ModelPreset, Configuration } from '../configuration/definition';
+import type { SettingsEdit } from '../settings/draft';
 import { useConnectionCatalog } from './useConnectionCatalog';
 import type { PlanSettingsState } from './usePlanSettings';
 import { ChatGPTPlanSettings } from './ChatGPTPlanSettings';
-import { CHROME_AI_RETIRED_MESSAGE } from '../models/retired-provider';
+import { CHROME_AI_RETIRED_MESSAGE } from '../providers/retired-provider';
 import {
   DrawPresetFields,
   SpeakPresetFields,
@@ -51,10 +51,10 @@ export function PresetSettings({
   selectedPresetId: string;
   selectedPreset: ModelPreset | undefined;
   settings: Pick<
-    UserSettings,
+    Configuration,
     'connections' | 'profiles' | 'connectionProfiles' | 'sharedCredentials'
   >;
-  remote: UserSettings['openaiCompatible'];
+  remote: Configuration['openaiCompatible'];
   plan: PlanSettingsState;
   visible: boolean;
   saved: boolean;

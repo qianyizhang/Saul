@@ -1,8 +1,8 @@
 import { settingsSection } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
-import { DEFAULT_SETTINGS } from '../../src/storage/settings';
-import type { UserSettings } from '../../src/types';
+import { DEFAULT_CONFIGURATION } from '../../src/configuration/definition';
+import type { Configuration } from '../../src/configuration/definition';
 import { installDigestProvider } from './digest-fixture';
 import type { PlanControlRequest } from '../../native/plan-protocol.mts';
 import type { SharedPresets } from '../../native/shared-presets-contract.mts';
@@ -71,7 +71,7 @@ test('bound plan inspection and model edits keep the standalone account separate
       } else if (r.action !== 'config-read') throw new Error('Unexpected fixture request');
       return { id: message.id, event: { type: 'result', config, library } };
     }) as typeof chrome.runtime.sendNativeMessage;
-  }, DEFAULT_SETTINGS);
+  }, DEFAULT_CONFIGURATION);
   await popup.reload();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await settingsSection(popup, 'Presets');
@@ -87,7 +87,7 @@ test('bound plan inspection and model edits keep the standalone account separate
   const account = () =>
     worker.evaluate(
       async () =>
-        ((await chrome.storage.local.get('saul_user_settings')).saul_user_settings as UserSettings)
+        ((await chrome.storage.local.get('saul_user_settings')).saul_user_settings as Configuration)
           .chatgptPlan?.accountId,
     );
   await save();
@@ -113,7 +113,7 @@ test('preset inspection stays clean through an unrelated save and stale-save rev
   fixtureServer,
 }) => {
   const { popup, worker, context } = await sandbox.launch();
-  const source = structuredClone(DEFAULT_SETTINGS);
+  const source = structuredClone(DEFAULT_CONFIGURATION);
   source.activeProfileId = 'default';
   source.openaiCompatible = {
     ...source.openaiCompatible,
@@ -180,7 +180,7 @@ test('preset inspection stays clean through an unrelated save and stale-save rev
   await expect(popup.getByLabel('Model name', { exact: true })).toHaveValue('inspected-model');
   const saved = await worker.evaluate(
     async () =>
-      (await chrome.storage.local.get('saul_user_settings')).saul_user_settings as UserSettings,
+      (await chrome.storage.local.get('saul_user_settings')).saul_user_settings as Configuration,
   );
   expect(saved.openaiCompatible).toEqual(source.openaiCompatible);
   expect(saved.activeProfileId).toBe(source.activeProfileId);

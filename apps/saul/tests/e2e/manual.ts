@@ -1,4 +1,9 @@
-import { createFixtureServer, createSandbox, taggedAnswer } from './support.ts';
+import {
+  createFixtureServer,
+  createSandbox,
+  taggedAnswer,
+  configureFixtureProvider,
+} from './support.ts';
 
 // Uses Node's native TypeScript support (Node >=22.18); no extra runner needed.
 const smoke = process.argv.includes('--smoke');
@@ -16,14 +21,7 @@ try {
   sandbox = await createSandbox({ headless, handleProcessSignals: false });
   const { context, popup } = await sandbox.launch();
   context.once('close', stop);
-  await popup.evaluate(async (origin) => {
-    await chrome.storage.local.set({
-      saul_user_settings: {
-        activeProvider: 'openai-compatible',
-        openaiCompatible: { baseUrl: `${origin}/v1`, apiKey: '', model: 'test-model' },
-      },
-    });
-  }, server.origin);
+  await configureFixtureProvider(popup, server.origin);
   await popup.reload();
   const article = await context.newPage();
   await article.goto(`${server.origin}/article`);

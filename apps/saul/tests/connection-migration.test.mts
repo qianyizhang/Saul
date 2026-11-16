@@ -5,7 +5,6 @@ import { join } from 'node:path';
 import { SharedPresetsStore } from '../native/shared-presets.mts';
 import { SharedHistory, HistoryConnection } from '../native/history.mts';
 import { DEFAULT_CONNECTIONS } from '../native/shared-presets-contract.mts';
-import { createSettingsOwner } from '../src/storage/settings';
 
 it('upgrades shared connection names once and preserves IDs, scoped settings and original conflicts', () => {
   const dir = mkdtempSync(join(tmpdir(), 'connection-upgrade-'));
@@ -60,35 +59,6 @@ it('upgrades shared connection names once and preserves IDs, scoped settings and
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
-});
-
-it('upgrades browser settings through their write owner without losing local credentials', async () => {
-  let stored: unknown = {
-    providers: DEFAULT_CONNECTIONS,
-    providerConnections: { 'openai-api': 'profile' },
-    openaiCompatible: {
-      baseUrl: 'https://api.openai.com/v1',
-      apiKey: 'synthetic-key',
-      model: 'saved',
-    },
-  };
-  let writes = 0;
-  const owner = createSettingsOwner({
-    read: async () => stored,
-    write: async (value) => {
-      stored = value.saul_user_settings;
-      writes++;
-    },
-  });
-  const first = await owner({ action: 'read' });
-  expect(first.state).toBe('ready');
-  expect(stored).toMatchObject({
-    connectionProfiles: { 'openai-api': 'profile' },
-    openaiCompatible: { apiKey: 'synthetic-key' },
-  });
-  expect(stored).not.toHaveProperty('providers');
-  await owner({ action: 'read' });
-  expect(writes).toBe(1);
 });
 
 it('upgrades frozen native and browser history transactionally and refuses downgrades', () => {

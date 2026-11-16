@@ -1,8 +1,8 @@
 import { test, expect } from './fixtures.ts';
 import { settingsSection } from './driver.ts';
 import type { CredentialRequest, CredentialEvent } from '../../native/credentials-contract.mts';
-import type { UserSettings } from '../../src/types';
-import { DEFAULT_SETTINGS } from '../../src/storage/settings';
+import type { Configuration } from '../../src/configuration/definition';
+import { DEFAULT_CONFIGURATION } from '../../src/configuration/definition';
 
 test('shared credential adoption preserves denied sources, removes verified official copies and disconnects without fallback', async ({
   sandbox,
@@ -10,13 +10,13 @@ test('shared credential adoption preserves denied sources, removes verified offi
   const { worker, popup } = await sandbox.launch();
   await worker.evaluate(async (defaults) => {
     const key = 'saul_user_settings';
-    const saved = ((await chrome.storage.local.get(key))[key] as UserSettings) || defaults;
+    const saved = ((await chrome.storage.local.get(key))[key] as Configuration) || defaults;
     const official = {
       ...saved.openaiCompatible,
       baseUrl: 'https://api.openai.com/v1',
       apiKey: 'fixture-official-key',
     };
-    const settings: UserSettings = {
+    const settings: Configuration = {
       ...saved,
       activeProvider: 'openai-compatible',
       openaiCompatible: official,
@@ -134,7 +134,7 @@ test('shared credential adoption preserves denied sources, removes verified offi
         },
       } as unknown as chrome.runtime.Port;
     }) as typeof chrome.runtime.connectNative;
-  }, DEFAULT_SETTINGS);
+  }, DEFAULT_CONFIGURATION);
   await popup.reload();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await settingsSection(popup, 'Presets');
@@ -153,8 +153,8 @@ test('shared credential adoption preserves denied sources, removes verified offi
         'saul_user_settings_recovery_backup',
       ]);
       return values as {
-        saul_user_settings: UserSettings;
-        saul_user_settings_recovery_backup: UserSettings;
+        saul_user_settings: Configuration;
+        saul_user_settings_recovery_backup: Configuration;
       };
     });
   expect((await state()).saul_user_settings.openaiCompatible.apiKey).toBe('fixture-official-key');

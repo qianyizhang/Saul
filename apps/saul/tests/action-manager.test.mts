@@ -1,3 +1,4 @@
+import type { ModelRequest } from '../src/providers/request';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,10 +9,10 @@ import { ACTION_STATE_KEY, type ActionState } from '../src/actions/contract';
 import { ActionStore } from '../.build/native/action-store.mjs';
 import { ActionRuntime } from '../.build/native/action-runtime.mjs';
 import type { DbCall, RunInput } from '../src/types/storage';
-import type { ModelEvent } from '../src/models/events';
+import type { ModelEvent } from '../src/providers/events';
 import { prepareActionPreset } from '../src/actions/configuration';
-import { DEFAULT_SETTINGS } from '../src/storage/settings';
-import { starterConfiguration } from '../src/models/configuration';
+import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
+import { starterConfiguration } from '../src/configuration/definition';
 import { prepareFrozenRun } from '../src/reading/configuration';
 
 vi.mock('../src/actions/host', () => ({ actionHost: vi.fn() }));
@@ -211,7 +212,7 @@ it('a failed initial builder save preserves idle state and never starts inferenc
 it('reconciles an interrupted builder without resending and cancels explicit creation', async () => {
   saved = { building: true, raw: 'partial candidate' };
   const generate = vi.fn(async function* (
-    _input: RunInput,
+    _input: ModelRequest,
     _credential: string,
     signal?: AbortSignal,
   ): AsyncGenerator<ModelEvent> {
@@ -267,7 +268,7 @@ it('retains bounded oversized builder output with its real error instead of a fa
 });
 
 it('freezes preset choices, excludes credentials from saved input and blocks changed connection origins', () => {
-  const settings = structuredClone(DEFAULT_SETTINGS);
+  const settings = structuredClone(DEFAULT_CONFIGURATION);
   settings.openaiCompatible = {
     baseUrl: 'https://provider.example/v1',
     model: 'chosen',

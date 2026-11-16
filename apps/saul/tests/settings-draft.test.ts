@@ -4,14 +4,14 @@ import {
   editSettingsDraft,
   settingsForSave,
   settingsFromDraft,
-  settingsForInspection,
-} from '../src/models/settings-draft';
-import { DEFAULT_SETTINGS } from '../src/storage/settings';
-import { configurationFor } from '../src/models/configuration';
-import type { UserSettings } from '../src/types';
+  inspectDraftPreset,
+} from '../src/settings/draft';
+import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
+import { configurationFor } from '../src/configuration/definition';
+import type { Configuration } from '../src/configuration/definition';
 
-function savedChoices(): UserSettings {
-  const settings = structuredClone(DEFAULT_SETTINGS);
+function savedChoices(): Configuration {
+  const settings = structuredClone(DEFAULT_CONFIGURATION);
   settings.activeProfileId = 'default';
   settings.openaiCompatible.model = 'saved-api-model';
   settings.profiles = [
@@ -94,7 +94,7 @@ it.each(['other', 'plan-b', 'speech', 'preset-illustration', 'retired'])(
 it('derives the inspected route without replacing the standalone account or saved provider', () => {
   let draft = createSettingsDraft(savedChoices());
   draft = editSettingsDraft(draft, { type: 'select-preset', id: 'plan-b' });
-  expect(settingsForInspection(draft).chatgptPlan).toEqual({
+  expect(inspectDraftPreset(draft).plan).toEqual({
     accountId: 'bound-B',
     model: 'plan-model',
     effort: 'high',
@@ -106,9 +106,9 @@ it('derives the inspected route without replacing the standalone account or save
     accountId: 'explicit-C',
     model: 'saved-plan-model',
   });
-  expect(settingsForInspection(draft).chatgptPlan?.accountId).toBe('bound-B');
+  expect(inspectDraftPreset(draft).plan?.accountId).toBe('bound-B');
   draft = editSettingsDraft(draft, { type: 'select-preset', id: 'other' });
-  expect(settingsForInspection(draft).openaiCompatible).toMatchObject({
+  expect(inspectDraftPreset(draft).remote).toMatchObject({
     baseUrl: 'https://other.example.test/v1',
     model: 'other-model',
     temperature: 0.8,
@@ -142,7 +142,7 @@ it('updates only an explicitly edited active profile route at the transport boun
     credentialOwner: undefined,
   });
   expect(settingsForSave(original).openaiCompatible).toEqual(source.openaiCompatible);
-  expect(settingsForInspection(draft).openaiCompatible.apiKey).toBe('other-new-key');
+  expect(inspectDraftPreset(draft).remote.apiKey).toBe('other-new-key');
 });
 
 it('keeps managed inspection and unavailable profile edits out of saved defaults', () => {
@@ -160,7 +160,7 @@ it('keeps managed inspection and unavailable profile edits out of saved defaults
     type: 'select-preset',
     id: 'managed',
   });
-  expect(settingsForInspection(draft).openaiCompatible).toMatchObject({
+  expect(inspectDraftPreset(draft).remote).toMatchObject({
     apiKey: '',
     credentialOwner: 'saul',
     model: 'managed-model',
@@ -168,7 +168,7 @@ it('keeps managed inspection and unavailable profile edits out of saved defaults
   expect(settingsForSave(draft).openaiCompatible).toEqual(source.openaiCompatible);
   draft = { ...draft, values: { ...draft.values, profiles: [] } };
   draft = editSettingsDraft(draft, { type: 'select-preset', id: 'other' });
-  expect(settingsForInspection(draft).openaiCompatible.baseUrl).toBe('');
+  expect(inspectDraftPreset(draft).remote.baseUrl).toBe('');
   expect(draft.values.configuration.presets.find((p) => p.id === 'other')?.profileId).toBe('other');
 });
 
@@ -205,7 +205,7 @@ it('seeds a new Write preset from the inspected values without changing saved de
 });
 
 it('keeps connection credentials separate when switching presets and connections', () => {
-  let draft = createSettingsDraft(DEFAULT_SETTINGS);
+  let draft = createSettingsDraft(DEFAULT_CONFIGURATION);
   draft = editSettingsDraft(draft, {
     type: 'connection',
     id: 'default',
@@ -222,12 +222,12 @@ it('keeps connection credentials separate when switching presets and connections
   draft = editSettingsDraft(draft, { type: 'preset-profile', id: 'second' });
   draft = editSettingsDraft(draft, { type: 'preset', patch: { model: 'second-model' } });
   draft = editSettingsDraft(draft, { type: 'select-preset', id: 'preset-current' });
-  expect(settingsForInspection(draft).openaiCompatible).toMatchObject({
+  expect(inspectDraftPreset(draft).remote).toMatchObject({
     apiKey: 'first-key',
     model: 'first-model',
   });
   draft = editSettingsDraft(draft, { type: 'select-preset', id: 'another' });
-  expect(settingsForInspection(draft).openaiCompatible).toMatchObject({
+  expect(inspectDraftPreset(draft).remote).toMatchObject({
     apiKey: 'second-key',
     model: 'second-model',
   });
@@ -235,7 +235,7 @@ it('keeps connection credentials separate when switching presets and connections
 });
 
 it('clears credentials on origin changes while retaining same-origin path edits', () => {
-  let draft = createSettingsDraft(DEFAULT_SETTINGS);
+  let draft = createSettingsDraft(DEFAULT_CONFIGURATION);
   draft = editSettingsDraft(draft, {
     type: 'connection',
     id: 'default',
@@ -256,7 +256,7 @@ it('clears credentials on origin changes while retaining same-origin path edits'
 });
 
 it('owns recipe/preset references and preserves editing selection across unrelated changes', () => {
-  let draft = createSettingsDraft(DEFAULT_SETTINGS);
+  let draft = createSettingsDraft(DEFAULT_CONFIGURATION);
   expect(() => editSettingsDraft(draft, { type: 'remove-preset' })).toThrow('used by');
   draft = editSettingsDraft(draft, { type: 'add-preset', id: 'spare' });
   draft = editSettingsDraft(draft, { type: 'add-recipe', id: 'new' });
@@ -276,15 +276,15 @@ it('owns recipe/preset references and preserves editing selection across unrelat
 });
 
 it('keeps invalid edits in the draft until explicit validation succeeds', () => {
-  let draft = createSettingsDraft(DEFAULT_SETTINGS);
+  let draft = createSettingsDraft(DEFAULT_CONFIGURATION);
   draft = editSettingsDraft(draft, { type: 'recipe', patch: { template: '{{text' } });
   expect(() => settingsForSave(draft)).toThrow('Close each input');
   expect(configurationFor(settingsFromDraft(draft)).recipes[0]?.template).toBe('{{text');
-  expect(configurationFor(DEFAULT_SETTINGS).recipes[0]?.template).not.toBe('{{text');
+  expect(configurationFor(DEFAULT_CONFIGURATION).recipes[0]?.template).not.toBe('{{text');
 });
 
 it('preserves a shared Draw preset through unrelated settings and connection-name edits', () => {
-  const source = structuredClone(DEFAULT_SETTINGS);
+  const source = structuredClone(DEFAULT_CONFIGURATION);
   source.sharedPresetRevision = 2;
   source.connections = [
     { key: 'gpt-plan', name: 'Plan', kind: 'chatgpt-plan' },
@@ -313,7 +313,7 @@ it('preserves a shared Draw preset through unrelated settings and connection-nam
 });
 
 it('edits provider connections without overwriting a selected Speak or Write preset', () => {
-  let draft = createSettingsDraft(DEFAULT_SETTINGS);
+  let draft = createSettingsDraft(DEFAULT_CONFIGURATION);
   draft = editSettingsDraft(draft, { type: 'preset', patch: { model: 'write-choice' } });
   const write = structuredClone(configurationFor(settingsFromDraft(draft)).presets[0]);
   draft = editSettingsDraft(draft, {
@@ -343,7 +343,7 @@ it('edits provider connections without overwriting a selected Speak or Write pre
 });
 
 it('keeps the chosen Write model when editing its connection, preferences and name', () => {
-  let draft = createSettingsDraft(DEFAULT_SETTINGS);
+  let draft = createSettingsDraft(DEFAULT_CONFIGURATION);
   draft = editSettingsDraft(draft, { type: 'preset', patch: { model: 'chosen-model' } });
   draft = editSettingsDraft(draft, {
     type: 'connection',
@@ -356,7 +356,7 @@ it('keeps the chosen Write model when editing its connection, preferences and na
 });
 
 it('gives a new reading action a Write preset when a Speak preset is being edited', () => {
-  let draft = createSettingsDraft(DEFAULT_SETTINGS);
+  let draft = createSettingsDraft(DEFAULT_CONFIGURATION);
   const writing = draft.presetId;
   draft = editSettingsDraft(draft, { type: 'add-preset', id: 'speak' });
   draft = editSettingsDraft(draft, { type: 'preset-connection', key: 'openai-api' });

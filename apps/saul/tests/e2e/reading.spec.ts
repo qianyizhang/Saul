@@ -137,8 +137,10 @@ test('queue limits, frozen configuration, repeated Explain, stop, and deletion d
     ).toHaveLength(1);
     await popup.evaluate(async () => {
       const data = await chrome.storage.local.get('saul_user_settings');
-      (data.saul_user_settings as { openaiCompatible: { model: string } }).openaiCompatible.model =
-        'later-model';
+      const settings = data.saul_user_settings as {
+        configuration: { presets: { model: string }[] };
+      };
+      settings.configuration.presets[0]!.model = 'later-model';
       await chrome.storage.local.set(data);
     });
     server.releaseAll();

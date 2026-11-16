@@ -31,19 +31,3 @@ export function renderReadingContext(context: ResolvedContext): string {
 
   return parts.join('\n');
 }
-
-export function renderExplainPrompt(context: ResolvedContext, customInstruction?: string): string {
-  const surrounding = renderReadingContext(context);
-  const parts = surrounding ? [surrounding] : [];
-  parts.push(`\n--- Selected Text to Explain ---\n"${context.selection}"`);
-
-  if (customInstruction) {
-    parts.push(`\nAdditional Instruction: ${customInstruction}`);
-  } else {
-    parts.push(
-      `\nPlease explain this concept clearly in context and annotate key sub-concepts with <term note="...">...</term>.`,
-    );
-  }
-
-  return parts.join('\n');
-}

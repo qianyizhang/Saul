@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { test, expect } from './fixtures.ts';
 import { settingsSection, summaryMore } from './driver.ts';
 import { installDigestProvider, openDigestReader } from './digest-fixture.ts';
-import { DEFAULT_SETTINGS } from '../../src/storage/settings';
+import { DEFAULT_CONFIGURATION } from '../../src/configuration/definition';
 import type {
   ConnectionDefinition,
   SharedPreset,
@@ -82,7 +82,7 @@ async function installSharedSummary(
         return { id: packet.id, event: { type: 'result', ...result } };
       }) as typeof chrome.runtime.sendNativeMessage;
     },
-    { defaults: DEFAULT_SETTINGS, connections, presets },
+    { defaults: DEFAULT_CONFIGURATION, connections, presets },
   );
   await installDigestProvider(worker, hold, undefined, accounts);
 }

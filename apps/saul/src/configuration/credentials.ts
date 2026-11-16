@@ -1,10 +1,10 @@
-import type { UserSettings } from '../types';
-import type { CredentialAccess } from './settings';
+import type { Configuration } from './definition';
+import type { CredentialAccess } from './store';
 import { nativeCredentialCall } from '../native/credentials';
 import { officialOpenAI } from '../../native/credentials-contract.mts';
-export function sharedCredentialProjection(source: UserSettings): UserSettings {
+export function sharedCredentialProjection(source: Configuration): Configuration {
   const settings = structuredClone(source);
-  const mark = (connection: UserSettings['openaiCompatible']) => {
+  const mark = (connection: Configuration['openaiCompatible']) => {
     if (officialOpenAI(connection.baseUrl)) {
       connection.apiKey = '';
       connection.credentialOwner = 'saul';
@@ -36,6 +36,7 @@ export function stripOfficialKeys(value: unknown): unknown {
   return copy;
 }
 export const nativeCredentialAccess: CredentialAccess = {
+  sanitizeBackup: stripOfficialKeys,
   async prepare(settings, current) {
     if (settings.sharedCredentials !== 'saul') {
       if (
@@ -92,10 +93,6 @@ export const nativeCredentialAccess: CredentialAccess = {
   },
   async committed(settings, current) {
     if (settings.sharedCredentials !== 'saul') return;
-    const key = 'saul_user_settings_recovery_backup';
-    const backup = await chrome.storage.local.get(key);
-    if (backup[key] !== undefined)
-      await chrome.storage.local.set({ [key]: stripOfficialKeys(backup[key]) });
     if (current.sharedCredentials !== 'saul') {
       try {
         await nativeCredentialCall({ action: 'migration-verified' });

@@ -1,17 +1,17 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { DEFAULT_SETTINGS } from '../src/storage/settings';
-import { starterConfiguration } from '../src/models/configuration';
+import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
+import { starterConfiguration } from '../src/configuration/definition';
 import {
   preparePreset,
   prepareFrozenPreset,
   SELECT_NEW_PRESET,
-} from '../src/models/preset-resolution';
+} from '../src/configuration/resolve';
 import { prepareRecipeRun } from '../src/reading/configuration';
 import { prepareActionPreset } from '../src/actions/configuration';
-import { planEvents } from '../src/models/chatgpt-plan';
+import { planEvents } from '../src/providers/chatgpt-plan';
 
 function settings() {
-  const value = structuredClone(DEFAULT_SETTINGS);
+  const value = structuredClone(DEFAULT_CONFIGURATION);
   value.activeProfileId = 'original';
   value.openaiCompatible = {
     baseUrl: 'https://api.openai.com/v1',

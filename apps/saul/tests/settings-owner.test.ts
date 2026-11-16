@@ -1,21 +1,17 @@
 import { expect, it, vi } from 'vitest';
-import {
-  createSettingsOwner,
-  DEFAULT_SETTINGS,
-  SETTINGS_STORAGE_KEY,
-} from '../src/storage/settings';
+import { createConfigurationStore, SETTINGS_STORAGE_KEY } from '../src/configuration/store';
+import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 import { validateSettingsRequest, type SettingsState } from '../src/contracts/settings';
-import { requestSettings, SettingsDeliveryError } from '../src/storage/settings-client';
-import {
-  createSettingsDraft,
-  editSettingsDraft,
-  settingsForSave,
-} from '../src/models/settings-draft';
+import { requestSettings, SettingsDeliveryError } from '../src/configuration/client';
+import { createSettingsDraft, editSettingsDraft, settingsForSave } from '../src/settings/draft';
 import { summaryConnections } from '../src/digest/connection';
-import { preparePreset } from '../src/models/preset-resolution';
+import { preparePreset } from '../src/configuration/resolve';
 
 it('saves an explicit preset repair while retaining a retired legacy default', async () => {
-  const f = fixture({ activeProvider: 'chrome-ai' });
+  const retiredConfiguration = structuredClone(DEFAULT_CONFIGURATION);
+  retiredConfiguration.activeProvider = 'chrome-ai';
+  retiredConfiguration.configuration!.presets[0]!.provider = 'chrome-ai';
+  const f = fixture(retiredConfiguration);
   const before = ready(await f.owner({ action: 'read' }));
   const original = createSettingsDraft(before.settings);
   const retired = original.values.configuration.presets[0]!;
@@ -47,7 +43,7 @@ it('saves an explicit preset repair while retaining a retired legacy default', a
 });
 
 it('commits an unrelated edit after inspection without retargeting Original summary or API defaults', async () => {
-  const source = structuredClone(DEFAULT_SETTINGS);
+  const source = structuredClone(DEFAULT_CONFIGURATION);
   source.chatgptPlan = { accountId: 'local-A', model: 'saved-model' };
   source.activeProfileId = 'default';
   source.profiles = [
@@ -116,12 +112,13 @@ function fixture(initial?: unknown) {
   const values: Record<string, unknown> =
     initial === undefined ? {} : { [SETTINGS_STORAGE_KEY]: initial };
   const storage = {
+    readBackup: async () => structuredClone(values.saul_user_settings_recovery_backup),
     read: vi.fn(async () => structuredClone(values[SETTINGS_STORAGE_KEY])),
     write: vi.fn(async (patch: Record<string, unknown>) => {
       Object.assign(values, structuredClone(patch));
     }),
   };
-  return { values, storage, owner: createSettingsOwner(storage) };
+  return { values, storage, owner: createConfigurationStore(storage) };
 }
 function ready(state: SettingsState) {
   expect(state.state).toBe('ready');
@@ -221,10 +218,10 @@ it('accepts subsequent saves after Chrome reorders nested storage object keys', 
 });
 
 it('keeps revisions useful after a background restart and excludes unrelated preferences', async () => {
-  const f = fixture({ responseLanguage: 'English' });
+  const f = fixture({ ...DEFAULT_CONFIGURATION, responseLanguage: 'English' });
   const baseline = ready(await f.owner({ action: 'read' }));
   f.values.saul_minimum_mode = false;
-  const restarted = createSettingsOwner(f.storage);
+  const restarted = createConfigurationStore(f.storage);
   expect(ready(await restarted({ action: 'read' })).revision).toBe(baseline.revision);
   ready(
     await restarted({
@@ -239,7 +236,7 @@ it('keeps revisions useful after a background restart and excludes unrelated pre
   ).resolves.toMatchObject({ state: 'conflict' });
 });
 
-it('never writes migrated or invalid records on read and keeps invalid recovery in the same lane', async () => {
+it('does not rewrite invalid records on read and keeps invalid recovery in the same lane', async () => {
   const malformed = { openaiCompatible: { temperature: 'hot' } };
   const f = fixture(malformed);
   const bad = await f.owner({ action: 'read' });
@@ -247,14 +244,14 @@ it('never writes migrated or invalid records on read and keeps invalid recovery 
   expect(f.values[SETTINGS_STORAGE_KEY]).toEqual(malformed);
   expect(f.storage.write).not.toHaveBeenCalled();
   await expect(
-    f.owner({ action: 'commit', baseline: bad.revision, settings: DEFAULT_SETTINGS }),
+    f.owner({ action: 'commit', baseline: bad.revision, settings: DEFAULT_CONFIGURATION }),
   ).rejects.toThrow('Saved settings need repair');
   const [reset, stale] = await Promise.all([
     f.owner({ action: 'reset', baseline: bad.revision }),
     f.owner({
       action: 'commit',
       baseline: bad.revision,
-      settings: { ...DEFAULT_SETTINGS, responseLanguage: 'Chinese' },
+      settings: { ...DEFAULT_CONFIGURATION, responseLanguage: 'Chinese' },
     }),
   ]);
   expect(reset).toMatchObject({ state: 'ready', reset: true });
@@ -263,11 +260,22 @@ it('never writes migrated or invalid records on read and keeps invalid recovery 
   expect(f.storage.write).toHaveBeenCalledTimes(1);
 });
 
+it('rejects obsolete aliases without rewriting the stored record', async () => {
+  const obsolete = { ...DEFAULT_CONFIGURATION, providers: DEFAULT_CONFIGURATION.connections };
+  const f = fixture(obsolete);
+  expect(await f.owner({ action: 'read' })).toMatchObject({
+    state: 'invalid',
+    error: expect.stringContaining('Obsolete'),
+  });
+  expect(f.storage.write).not.toHaveBeenCalled();
+  expect(f.values[SETTINGS_STORAGE_KEY]).toEqual(obsolete);
+});
+
 it('a stale recovery request cannot replace newly valid settings or its existing backup', async () => {
   const f = fixture({ activeProvider: 'unknown' });
   const bad = await f.owner({ action: 'read' });
   if (bad.state !== 'invalid') throw new Error('Expected invalid fixture');
-  f.values[SETTINGS_STORAGE_KEY] = DEFAULT_SETTINGS;
+  f.values[SETTINGS_STORAGE_KEY] = DEFAULT_CONFIGURATION;
   f.values.saul_user_settings_recovery_backup = { retained: true };
   await expect(f.owner({ action: 'reset', baseline: bad.revision })).resolves.toMatchObject({
     state: 'conflict',
@@ -291,10 +299,37 @@ it('preserves baseline and data after a failed write and does not poison later r
   expect(ready(await f.owner({ action: 'read' })).settings.responseLanguage).toBe('Chinese');
 });
 
+it('commits credential backup cleanup with local settings and does not retire credentials after a failed write', async () => {
+  const f = fixture();
+  f.values.saul_user_settings_recovery_backup = { apiKey: 'backup-secret' };
+  const credentials = {
+    prepare: vi.fn(async (settings: typeof DEFAULT_CONFIGURATION) => settings),
+    sanitizeBackup: vi.fn(() => ({ apiKey: '' })),
+    committed: vi.fn(async () => undefined),
+  };
+  const owner = createConfigurationStore(f.storage, undefined, credentials);
+  const before = ready(await owner({ action: 'read' }));
+  const request = {
+    action: 'commit',
+    baseline: before.revision,
+    settings: { ...before.settings, sharedCredentials: 'saul' },
+  };
+  f.storage.write.mockRejectedValueOnce(new Error('Local write failed'));
+  await expect(owner(request)).rejects.toThrow('Local write failed');
+  expect(f.values.saul_user_settings_recovery_backup).toEqual({ apiKey: 'backup-secret' });
+  expect(credentials.committed).not.toHaveBeenCalled();
+  await owner(request);
+  expect(f.storage.write).toHaveBeenLastCalledWith({
+    [SETTINGS_STORAGE_KEY]: request.settings,
+    saul_user_settings_recovery_backup: { apiKey: '' },
+  });
+  expect(credentials.committed).toHaveBeenCalledTimes(1);
+});
+
 it('validates incoming configuration and does not leak credentials into revision/error fields', async () => {
   const f = fixture({
-    ...DEFAULT_SETTINGS,
-    openaiCompatible: { ...DEFAULT_SETTINGS.openaiCompatible, apiKey: 'private-fixture' },
+    ...DEFAULT_CONFIGURATION,
+    openaiCompatible: { ...DEFAULT_CONFIGURATION.openaiCompatible, apiKey: 'private-fixture' },
   });
   const baseline = ready(await f.owner({ action: 'read' }));
   expect(baseline.revision).not.toContain('private-fixture');
@@ -337,7 +372,11 @@ it('reports uncertain delivery without retrying a lost commit response', async (
   vi.stubGlobal('chrome', { runtime: { sendMessage } });
   try {
     await expect(
-      requestSettings({ action: 'commit', baseline: 'a'.repeat(64), settings: DEFAULT_SETTINGS }),
+      requestSettings({
+        action: 'commit',
+        baseline: 'a'.repeat(64),
+        settings: DEFAULT_CONFIGURATION,
+      }),
     ).rejects.toBeInstanceOf(SettingsDeliveryError);
     expect(sendMessage).toHaveBeenCalledTimes(1);
     sendMessage.mockResolvedValueOnce(undefined);

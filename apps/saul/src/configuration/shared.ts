@@ -1,27 +1,9 @@
 import { validateScopedConfigValue } from '../../native/shared-presets-contract.mts';
-import { scopedCall, portableSettings, restoreSettings } from './scoped-config';
-import type { UserSettings, ModelPreset } from '../types';
+import { portableSettings, restoreSettings } from './scoped';
+import { scopedCall, sharedCall, commitSharedConfiguration } from '../native/config-transport';
+import type { Configuration, ModelPreset } from './definition';
 import type { SharedPreset, SharedPresets } from '../../native/shared-presets-contract.mts';
-import {
-  PLAN_HOST,
-  validatePlanResult,
-  type PlanControlRequest,
-} from '../../native/plan-protocol.mts';
-import { configurationFor } from '../models/configuration';
-
-type PresetRequest = Extract<
-  PlanControlRequest,
-  { action: 'presets-read' | 'presets-import' | 'presets-save' }
->;
-async function sharedCall(request: PresetRequest): Promise<SharedPresets> {
-  const reply = await chrome.runtime.sendNativeMessage(PLAN_HOST, {
-    id: crypto.randomUUID(),
-    request,
-  });
-  if (reply?.event?.type === 'error') throw new Error(reply.event.message);
-  validatePlanResult(request, reply?.event);
-  return reply.event.library;
-}
+import { configurationFor } from './definition';
 
 // Stable migration IDs leave saved attempts untouched and keep recipe references together.
 async function sharedID(id: string): Promise<string> {
@@ -30,7 +12,7 @@ async function sharedID(id: string): Promise<string> {
   const h = [...new Uint8Array(digest)].map((n) => n.toString(16).padStart(2, '0')).join('');
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
 }
-async function withSharedIDs(settings: UserSettings): Promise<UserSettings> {
+async function withSharedIDs(settings: Configuration): Promise<Configuration> {
   const configuration = configurationFor(settings);
   const mapping = new Map<string, string>();
   for (const p of configuration.presets.filter((p) => p.provider === 'chatgpt-plan' || p.shared))
@@ -61,12 +43,12 @@ const portable = (p: ModelPreset): SharedPreset => ({
   ...(p.imageOptions ? { imageOptions: p.imageOptions } : {}),
   ...(p.speechOptions ? { speechOptions: p.speechOptions } : {}),
 });
-const definitions = (settings: UserSettings) =>
+const definitions = (settings: Configuration) =>
   configurationFor(settings)
     .presets.filter((p) => p.provider === 'chatgpt-plan' || p.shared)
     .map(portable);
 
-function project(settings: UserSettings, library: SharedPresets): UserSettings {
+function project(settings: Configuration, library: SharedPresets): Configuration {
   const configuration = configurationFor(settings);
   const connections = structuredClone(library.connections);
   const connectionProfiles = { ...settings.connectionProfiles };
@@ -110,7 +92,7 @@ function project(settings: UserSettings, library: SharedPresets): UserSettings {
   };
 }
 export const sharedPresets = {
-  async load(source: UserSettings): Promise<UserSettings> {
+  async load(source: Configuration): Promise<Configuration> {
     let settings = source;
     const old = definitions(source);
     let library: SharedPresets;
@@ -140,7 +122,7 @@ export const sharedPresets = {
     }
     return restoreSettings(projected, config);
   },
-  async save(source: UserSettings): Promise<UserSettings> {
+  async save(source: Configuration): Promise<Configuration> {
     const settings = await withSharedIDs(source);
     const presets = definitions(settings);
     if (settings.sharedPresetRevision === undefined) {
@@ -161,13 +143,8 @@ export const sharedPresets = {
       connections: settings.connections,
       value: portableSettings(settings),
     } as const;
-    const reply = await chrome.runtime.sendNativeMessage(PLAN_HOST, {
-      id: crypto.randomUUID(),
-      request,
-    });
-    if (reply?.event?.type === 'error') throw new Error(reply.event.message);
-    validatePlanResult(request, reply?.event);
-    const projected = project(settings, reply.event.library);
-    return { ...projected, scopedConfigRevision: reply.event.config.revision };
+    const result = await commitSharedConfiguration(request);
+    const projected = project(settings, result.library);
+    return { ...projected, scopedConfigRevision: result.config.revision };
   },
 };

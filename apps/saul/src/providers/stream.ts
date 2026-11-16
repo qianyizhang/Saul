@@ -1,5 +1,5 @@
 import { generateImage } from './images';
-import type { RunInput } from '../types/storage';
+import type { ModelRequest } from './request';
 import { streamOpenAICompatible } from './openai-compatible';
 import { CHROME_AI_RETIRED_MESSAGE } from './retired-provider';
 import { planEvents } from './chatgpt-plan';
@@ -9,7 +9,7 @@ import { catalogIssue, validConnectionCatalog } from '../../native/connections-c
 import type { PdfUrlAttachment } from '../../native/plan-protocol.mts';
 
 export async function* streamModel(
-  input: RunInput,
+  input: ModelRequest,
   credential: string,
   signal?: AbortSignal,
   options: { maxTokens?: number; attachments?: PdfUrlAttachment[]; images?: string[] } = {},

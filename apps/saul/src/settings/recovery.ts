@@ -1,11 +1,11 @@
-import type { UserSettings } from '../types';
+import type { Configuration } from '../configuration/definition';
 import {
   createSettingsDraft,
   settingsForSave,
   settingsFromDraft,
   type SettingsDraft,
-} from './settings-draft';
-import { normalizeSettings } from '../storage/settings';
+} from './draft';
+import { decodeConfiguration } from '../configuration/record';
 
 type Tree = Record<string, unknown>;
 export type RecoveryChoice = 'mine' | 'latest';
@@ -143,7 +143,7 @@ function origin(value: unknown): string {
 export function reviewSettings(
   base: SettingsDraft,
   local: SettingsDraft,
-  current: UserSettings,
+  current: Configuration,
 ): SettingsReview {
   const latest = createSettingsDraft(current),
     mine = structuredClone(local);
@@ -203,7 +203,7 @@ export function reviewSettings(
       if (!object(config)) throw new Error('The reviewed configuration is unavailable.');
       const { planAccountId, ...owned } = merged;
       const latestSettings = settingsFromDraft(latest);
-      const settings = normalizeSettings({
+      const settings = decodeConfiguration({
         ...latestSettings,
         ...owned,
         chatgptPlan:

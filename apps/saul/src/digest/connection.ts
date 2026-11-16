@@ -1,4 +1,4 @@
-import type { UserSettings } from '../types';
+import type { Configuration } from '../configuration/definition';
 import type { PlanAccount } from '../../native/plan-protocol.mts';
 
 export interface SummaryConnection {
@@ -9,7 +9,7 @@ export interface SummaryConnection {
 }
 
 /** Public connections own managed selection; standalone installations retain local accounts. */
-export function summaryConnections(settings: UserSettings, accounts: PlanAccount[]) {
+export function summaryConnections(settings: Configuration, accounts: PlanAccount[]) {
   const eligible = accounts.filter((a) => a.signedIn && a.planEnabled);
   const managed = settings.sharedCredentials === 'saul';
   const choices: SummaryConnection[] = managed
@@ -61,7 +61,11 @@ export function summaryConnections(settings: UserSettings, accounts: PlanAccount
 }
 
 /** Check the binding again at admission; an editor's stale account must not retarget a new run. */
-export function validateSummaryConnection(settings: UserSettings, accountId: string, key?: string) {
+export function validateSummaryConnection(
+  settings: Configuration,
+  accountId: string,
+  key?: string,
+) {
   if (settings.sharedCredentials === 'disconnected')
     throw new Error('Connect this app in Settings → Preferences → Integrations.');
   if (settings.sharedCredentials !== 'saul') {

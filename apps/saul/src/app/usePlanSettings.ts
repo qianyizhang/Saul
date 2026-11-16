@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { planCall } from '../models/chatgpt-plan';
+import { planCall } from '../providers/chatgpt-plan';
 import type { PlanAccount, PlanModel } from '../../native/plan-protocol.mts';
-import type { UserSettings } from '../types';
+import type { Configuration } from '../configuration/definition';
 import { planModelDefaults, planModelIssue } from '../../native/plan-models.mts';
 import { useMinimumMode } from './useMinimumMode';
 
 export function usePlanSettings(
-  value: NonNullable<UserSettings['chatgptPlan']>,
-  onChange: (value: NonNullable<UserSettings['chatgptPlan']>) => void,
+  value: NonNullable<Configuration['chatgptPlan']>,
+  onChange: (value: NonNullable<Configuration['chatgptPlan']>) => void,
   onBusyChange: (busy: boolean) => void,
   enabled: boolean,
-  credentialOwner?: UserSettings['sharedCredentials'],
+  credentialOwner?: Configuration['sharedCredentials'],
 ) {
   const { minimum } = useMinimumMode();
   const [accounts, setAccounts] = useState<PlanAccount[]>([]);

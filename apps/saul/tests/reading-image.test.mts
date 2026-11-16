@@ -3,10 +3,10 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { SaulDatabase } from '../src/storage/db';
 import { ReadingRunner } from '../src/reading/runner';
 import type { DbCall, DbRequest, Submission } from '../src/types/storage';
-import { generateImage } from '../src/models/images';
+import { generateImage } from '../src/providers/images';
 import { HistoryConnection } from '../.build/native/history.mjs';
-vi.mock('../src/models/images', async (original) => ({
-  ...(await original<typeof import('../src/models/images')>()),
+vi.mock('../src/providers/images', async (original) => ({
+  ...(await original<typeof import('../src/providers/images')>()),
   generateImage: vi.fn(),
 }));
 const gif = readFileSync(

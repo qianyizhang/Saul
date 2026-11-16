@@ -4,14 +4,14 @@ import {
   editSettingsDraft,
   settingsFromDraft,
   settingsForSave,
-} from '../src/models/settings-draft';
-import { reviewSettings } from '../src/models/settings-recovery';
-import { DEFAULT_SETTINGS } from '../src/storage/settings';
+} from '../src/settings/draft';
+import { reviewSettings } from '../src/settings/recovery';
+import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 
-const baseDraft = () => createSettingsDraft(DEFAULT_SETTINGS);
+const baseDraft = () => createSettingsDraft(DEFAULT_CONFIGURATION);
 
 it('ignores inspection of a bound plan account but reviews an explicit standalone account edit', () => {
-  const source = structuredClone(DEFAULT_SETTINGS);
+  const source = structuredClone(DEFAULT_CONFIGURATION);
   source.chatgptPlan = { accountId: 'local-A', model: 'saved-model' };
   source.connections.push({
     key: 'bound-plan',

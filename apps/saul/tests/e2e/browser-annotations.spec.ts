@@ -15,6 +15,18 @@ test('queued comment edits preserve a concurrent edit and recover the local draf
   await expect(source.locator('saul-root')).toBeAttached();
   await source.locator('#concept').click({ clickCount: 3 });
   await source.getByRole('button', { name: 'Annotate', exact: true }).click();
+  // Screenshot capture may outlive Chrome's gesture. Exercise its explicit recovery action.
+  await expect
+    .poll(
+      async () =>
+        (await worker.evaluate(
+          async () => (await chrome.runtime.getContexts({ contextTypes: ['SIDE_PANEL'] })).length,
+        )) > 0 ||
+        (await source.getByRole('button', { name: 'Open annotation', exact: true }).isVisible()),
+    )
+    .toBe(true);
+  if (await source.getByRole('button', { name: 'Open annotation', exact: true }).isVisible())
+    await source.getByRole('button', { name: 'Open annotation', exact: true }).click();
   await expect
     .poll(() =>
       worker.evaluate(
@@ -145,8 +157,10 @@ test('captures text before opening the native panel, saves drafts, replies throu
   await popup.evaluate(async () => {
     const v = (await chrome.storage.local.get('saul_user_settings')).saul_user_settings as {
       openaiCompatible: { model: string };
+      configuration: { presets: { model: string }[] };
     };
     v.openaiCompatible.model = 'gpt-6';
+    v.configuration.presets[0]!.model = 'gpt-6';
     await chrome.storage.local.set({ saul_user_settings: v });
   });
   const source = await context.newPage();

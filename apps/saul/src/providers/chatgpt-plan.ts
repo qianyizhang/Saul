@@ -1,3 +1,4 @@
+import { readCredentialRoute } from './credential-route';
 import {
   PLAN_PORT,
   validatePlanResult,
@@ -9,8 +10,7 @@ import {
 import { IncompleteGeneration } from './events';
 import { isCredentialPlan } from '../../native/credentials-contract.mts';
 import { credentialEvents } from '../native/credentials';
-import { getSettings } from '../storage/settings';
-import { SELECT_NEW_PRESET } from './preset-resolution';
+import { SELECT_NEW_PRESET } from '../configuration/resolve';
 
 export class HistoryDisconnected extends Error {}
 
@@ -21,24 +21,7 @@ export async function* planEvents(
 ): AsyncGenerator<PlanEvent> {
   signal?.throwIfAborted();
   if (isCredentialPlan(request)) {
-    let mode: string | undefined;
-    if (chrome.storage?.local) mode = (await getSettings()).sharedCredentials;
-    else {
-      const reply: unknown = await chrome.runtime.sendMessage({ target: 'saul-credential-mode' });
-      if (
-        !reply ||
-        typeof reply !== 'object' ||
-        !('success' in reply) ||
-        reply.success !== true ||
-        !('result' in reply) ||
-        !reply.result ||
-        typeof reply.result !== 'object' ||
-        !('mode' in reply.result) ||
-        !['saul', 'disconnected', 'standalone'].includes(String(reply.result.mode))
-      )
-        throw new Error('Cannot resolve the saved Saul credential route. Retry explicitly.');
-      mode = String(reply.result.mode);
-    }
+    const mode = await readCredentialRoute();
     if (mode === 'disconnected')
       throw new Error('Connect this app to Saul credentials in Connections.');
     if (expectedOwner !== undefined && expectedOwner !== (mode === 'saul' ? 'saul' : 'local'))

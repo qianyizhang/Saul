@@ -6,8 +6,8 @@ import {
   type FrozenCall,
 } from '../src/calls/execution';
 import type { actionHost } from '../src/actions/host';
-import type { streamModel } from '../src/models/provider';
-import type { ModelEvent } from '../src/models/events';
+import type { streamModel } from '../src/providers/stream';
+import type { ModelEvent } from '../src/providers/events';
 type TextEvent = Extract<ModelEvent, { type: 'delta' | 'complete' }>;
 import type { RunInput } from '../src/types/storage';
 
@@ -142,10 +142,12 @@ describe.each(['plan', 'preset'] as const)('%s Summarize execution', (route) => 
         capturedAt: 1,
       },
     };
-    const plan = vi.fn<typeof import('../src/models/chatgpt-plan').planEvents>(async function* () {
-      yield { type: 'delta', text: 'partial' };
-      throw new Error('PDF unavailable');
-    });
+    const plan = vi.fn<typeof import('../src/providers/chatgpt-plan').planEvents>(
+      async function* () {
+        yield { type: 'delta', text: 'partial' };
+        throw new Error('PDF unavailable');
+      },
+    );
     const model = vi.fn<typeof streamModel>(async function* () {
       yield { type: 'delta', text: 'partial' };
       throw new Error('PDF unavailable');

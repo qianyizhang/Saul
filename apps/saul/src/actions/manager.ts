@@ -1,6 +1,6 @@
 import { callPresetStorage } from '../storage/call-presets';
 import type { DbCall, RunInput } from '../types/storage';
-import { streamModel } from '../models/provider';
+import { streamModel } from '../providers/stream';
 import { actionHost } from './host';
 import { BUILDER_PROMPT, type ActionRequest, type ActionState } from './contract';
 import { validateActionModule } from '../../native/action-protocol.mts';

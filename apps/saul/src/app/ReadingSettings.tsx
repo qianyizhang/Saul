@@ -1,8 +1,8 @@
 import { ActionLabel } from '../surface/ActionLabel';
 import { AppVersion } from './AppVersion';
 import { RecipeSettings } from './RecipeSettings';
-import type { ReadingConfiguration, UserSettings } from '../types';
-import type { SettingsEdit, SettingsPreferences } from '../models/settings-draft';
+import type { ReadingConfiguration, Configuration } from '../configuration/definition';
+import type { SettingsEdit, SettingsPreferences } from '../settings/draft';
 import type { SettingsSection } from './settings-sections';
 
 export function ReadingSettings({
@@ -18,8 +18,8 @@ export function ReadingSettings({
   section: SettingsSection;
   configuration: ReadingConfiguration;
   recipeId: string;
-  responseLanguage: UserSettings['responseLanguage'];
-  contextPolicy: UserSettings['contextPolicy'];
+  responseLanguage: Configuration['responseLanguage'];
+  contextPolicy: Configuration['contextPolicy'];
   onEdit: (edit: SettingsEdit) => void;
   update: (patch: Partial<Pick<SettingsPreferences, 'responseLanguage' | 'contextPolicy'>>) => void;
   onSectionChange: (section: SettingsSection) => void;

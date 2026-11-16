@@ -1,6 +1,6 @@
 import { ActionLabel } from '../surface/ActionLabel';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { ModelPreset } from '../types';
+import type { ModelPreset } from '../configuration/definition';
 import { ACTION_FORM_LIMITS, type ActionRequest, type ActionState } from '../actions/contract';
 import { sendActionMessage } from '../storage/client';
 import { InspectionText } from '../surface/InspectionText';

@@ -20,6 +20,67 @@ boolean presentation value over the existing validated reading subscription. Con
 scripts do not gain direct storage or credential access. Provider validation or an
 unreadable provider record does not prevent changing presentation.
 
+## Source modules and interfaces
+
+Runtime composition stays in `entrypoints/`. Source modules follow domain and
+lifecycle ownership; callers import the interface for the operation they need.
+
+| Module                          | Responsibility                                                                                                                                           |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `configuration/`                | Connection, Preset and Action definitions; inspection, execution resolution and revisioned persistence.                                                  |
+| `settings/`                     | One surface's draft and edit/save/review/reset lifecycle.                                                                                                |
+| `providers/`                    | Execute prepared model requests; stream events, images and final credential-route checks.                                                                |
+| `native/`                       | Browser-side native transport and tab operations. `config-transport.ts` validates native configuration replies without owning configuration policy.      |
+| `app/`, `surface/`              | Workspace/settings views and in-page reading views.                                                                                                      |
+| `capture/`, `reading/`          | Selection/context capture, prompt rendering, anchors, markers and reading job lifecycle.                                                                 |
+| `annotations/`                  | Annotation capture, revisioned changes and reply lifecycle.                                                                                              |
+| `digest/`, `calls/`, `actions/` | Page capture and saved results, frozen Call execution, and custom Call host/selection lifecycle. Existing wire names retain their protocol meaning.      |
+| `storage/`                      | History/database operations, schema upgrades and presentation/notification preferences.                                                                  |
+| `speech/`                       | Speech routing and realtime session lifecycle.                                                                                                           |
+| `contracts/`, `types/`          | Validated browser protocols and capture/history data shapes. Configuration types live with their definition; provider request types live with execution. |
+| `parser/`, `design/`            | Incremental annotated-text parsing and generated design values/control symbols.                                                                          |
+
+### Configuration and editing lifecycles
+
+`configuration/definition.ts` owns the Configuration, Connection-backed Preset and
+Action definitions and reference rules. `inspect.ts` returns a `PresetInspection`
+that can describe unavailable choices. `resolve.ts` admits execution and returns
+frozen model choices with a separate transient credential. Neither operation
+constructs a synthetic Configuration to represent one Preset. `providers/request.ts`
+defines model input independently of reading context and database records.
+
+`settings/editor.ts` owns an editing session: draft, baseline, selection, busy
+operation, save uncertainty, conflict review and explicit reset. `draft.ts` and
+`recovery.ts` implement its pure transitions. `app/useSettingsEditor.ts` subscribes
+React and owns browser unload warnings, discard confirmation and session lifetime;
+late responses from a closed session cannot replace a newer session's state.
+
+The editor loads a snapshot, applies edits, validates, and submits a revisioned
+commit through `configuration/client.ts`. Confirmed saves accept a fresh baseline.
+Stale revisions or uncertain submitted outcomes retain the draft and block Save.
+Connection/credential commits and invalid-record resets also require a fresh read
+after a submitted request fails, including server errors after partial success.
+Review reads current configuration and compares original/latest/draft values;
+Apply updates only the draft and baseline, and a separate explicit Save persists
+remaining changes. Matching changes need no replay. Invalid records require an
+explicit backed-up reset through the same store.
+
+`configuration/store.ts` serializes reads, commits and recovery. It preserves the
+credential prepare → shared commit → local commit → credential retirement order.
+These effects are not one cross-process transaction: partial success remains an
+uncertain outcome requiring a fresh read. Recovery-backup sanitization is included
+in the local store write. Credential adapters do not write Chrome storage.
+`chrome-storage.ts`, `shared.ts`, `scoped.ts`, `record.ts` and `credentials.ts` are
+persistence implementation files; the UI does not coordinate them.
+
+Only an absent record receives new-installation defaults. Old connection-field
+aliases and records without explicit Action/Preset configuration are rejected and
+left intact for explicit backup/reset. There is no inferred-action migration,
+recovered-profile synthesis, old module re-export or compatibility shim. Existing
+standalone account/profile setup and original Summary selection are active product
+paths, not compatibility adapters. Shared credential adoption and history schema
+upgrades remain with their existing owners.
+
 ## Reading flow
 
 ```text
@@ -97,7 +158,7 @@ Runtime messages do not return to their sender. Content and popup requests there
 
 ## Model boundary
 
-`src/models/provider.ts` is the streaming facade used by the reading runner and generation tests. It dispatches to OpenAI-compatible or ChatGPT plan adapters and returns the same delta/completion events. Both HTTP adapters reuse `native/sse.mts` for bounded SSE framing across UTF-8 chunks, CRLF/LF separators, multiline `data:` fields, provider errors, cancellation, and incomplete output. Chrome on-device AI is retired. Legacy saved selections and frozen requests remain readable but reject execution with an explicit provider-choice message; no model preparation or local streaming implementation remains.
+`src/providers/stream.ts` is the streaming facade used by the reading runner and generation tests. It dispatches to OpenAI-compatible or ChatGPT plan adapters and returns the same delta/completion events. Both HTTP adapters reuse `native/sse.mts` for bounded SSE framing across UTF-8 chunks, CRLF/LF separators, multiline `data:` fields, provider errors, cancellation, and incomplete output. Chrome on-device AI is retired. Legacy saved selections and frozen requests remain readable but reject execution with an explicit provider-choice message; no model preparation or local streaming implementation remains.
 
 Prompts and context are frozen when a job is submitted. Later settings edits do not change an in-flight job. API credentials are associated with their endpoint origin and are not persisted with job inputs. Saved connection IDs remain in frozen preset inputs. ChatGPT plan jobs freeze a non-secret account registration ID and model; OAuth credentials stay in the native helper.
 
@@ -107,15 +168,14 @@ shared input/output inspector renders literal text from the selected attempt in
 the page card and History, including partial output; it does not reconstruct prompts
 from current settings or claim to retain raw HTTP/SSE traffic.
 
-`src/models/configuration.ts` owns named actions (stored as `recipes`) and model presets in settings.
-`src/models/preset-resolution.ts` owns execution-time Capability checks, explicit
+`src/configuration/definition.ts` owns named actions (stored as `recipes`) and model presets in settings.
+`src/configuration/resolve.ts` owns execution-time Capability checks, explicit
 Connection selection and frozen credential routes for Reading, custom Summarize,
 provider tests and Speak. Editor projection retains unavailable choices separately.
 Retries never promote a local credential route to Saul: a changed owner or endpoint
 shows a preset-selection hint and requires a new attempt. Plan execution checks
 the frozen owner again immediately before opening its transport.
-Legacy settings migrate to an Explain action and a Current preset; prompt roles,
-the active connection, and the selected model are preserved. Actions contain
+New installations create the starter Actions and Presets explicitly. Actions contain
 literal prompt templates and reference a default preset. Presets identify a
 connection, capability, model and options; they contain no keys. Managed ChatGPT
 connections pin one account. Standalone installations retain an app-owned account
@@ -123,7 +183,7 @@ and API profile binding until explicitly connected to the shared credential owne
 The existing model controls edit the selected preset, so there is one authority
 for each model choice.
 
-`src/models/settings-draft.ts` owns action, preset and profile editing transitions,
+`src/settings/draft.ts` owns action, preset and profile editing transitions,
 including connection-key clearing. The draft separates editable records and the
 standalone account from retained transport defaults and editor selection IDs.
 The inspected preset is derived; inspection never changes saved account, provider
@@ -133,20 +193,22 @@ endpoint or credential edits update its transport fields at that boundary.
 Save validates connection syntax without treating a retained legacy provider as
 the execution choice; retired presets remain blocked at execution and can be
 explicitly repaired in the editor.
-Settings views hold independent drafts and submit through `saul-settings`; the trusted background
-owns one serialized read/commit/recovery lane in `src/storage/settings.ts`.
+Settings views use independent editing sessions and submit through `saul-settings`;
+the trusted background owns one serialized lane in `src/configuration/store.ts`.
+The plan transport uses `providers/credential-route.ts` to read only the current
+credential mode, directly in trusted contexts or through a validated runtime
+message. This read never upgrades or writes configuration.
 A commit compares the loaded raw record's opaque fingerprint before writing.
 The Chrome record uses an opaque fingerprint; shared sections have numeric
 revisions. Initial shared-settings adoption may persist migration IDs/revisions
-during a read. A one-time connection-name upgrade also writes canonical fields;
-unchanged reads do not rewrite the Chrome record.
+during a read. Ordinary reads do not rewrite the Chrome record; obsolete aliases require explicit recovery.
 The native configuration owner checks shared and scoped revisions under one
 cross-process lease and commits both sections in one JSON replacement. The
 [shared contract](../../../contracts/README.md#unified-configuration-scopes) owns
 the lock, failure and upgrade rules.
 A stale Save preserves draft fields and selection and blocks another Save until
 **Review latest** reads a fresh revision or a confirmed Reload discards the draft.
-`models/settings-recovery.ts` compares editable values against the loaded baseline,
+`src/settings/recovery.ts` compares editable values against the loaded baseline,
 keeps unrelated latest changes, and requires choices for conflicts and removed
 items. Inspection and retained storage revisions are outside that comparison.
 Apply validates the reviewed draft without writing; Save still uses the trusted revision check.
@@ -349,10 +411,10 @@ used. Summary inspection assembles the exact user prompt through the same functi
 as generation; the shared `InspectionText` renders at most one 6,000-character
 section per block, searches all sections and copies the complete original text.
 
-## Source layout
+## Surface composition
 
-`Settings` coordinates the shared draft, account/provider operations and recovery
-focus. `PresetSettings`, its capability/provider fields, `ReadingSettings`,
+`Settings` renders its editing session and coordinates account/provider operations
+and recovery focus. `PresetSettings`, its capability/provider fields, `ReadingSettings`,
 `SettingsShortcuts` and `SettingsFeedback` own their respective views. Sections
 remain mounted while hidden; provider tests remain stoppable across sections.
 The speech preview still unmounts on leaving Presets. Preset search stays with the
@@ -371,18 +433,6 @@ SwiftUI roles for EZ. The root `design/generate.mts` consumes the pinned officia
 parser; `pnpm design:check` rejects stale artifacts. The [application workflow](../../../design/SKILL.md)
 also governs layout/interaction adaptation and rendered review. Generation is
 build tooling, independent of authentication, inference, and storage runtimes.
-
-| Path             | Purpose                                                                      |
-| ---------------- | ---------------------------------------------------------------------------- |
-| `src/app/`       | Popup/workspace screens and settings controllers                             |
-| `src/capture/`   | Selection and context capture                                                |
-| `src/contracts/` | Cross-context request validation                                             |
-| `src/models/`    | Provider adapters, prompts, and stream events                                |
-| `src/native/`    | Extension-side tab operations and native bridge                              |
-| `src/reading/`   | Durable runner, anchor restoration, and markers                              |
-| `src/storage/`   | Settings, native history routing, and legacy OPFS import                     |
-| `src/surface/`   | Reading UI shared by page and workspace surfaces                             |
-| `native/`        | Node CLI, MCP server, native host, transport, installer, and shared protocol |
 
 ## Surface adapters
 

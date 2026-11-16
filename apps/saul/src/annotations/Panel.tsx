@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { annotationMessage, annotations, attempts } from './client';
 import { annotationPanelKey, annotationVersionKey } from './routing';
 import type { Annotation, AnnotationChange, AnnotationSummary } from './contract';
-import type { ModelPreset } from '../types';
+import type { ModelPreset } from '../configuration/definition';
 import type { ActionChoice } from '../actions/contract';
 import './panel.css';
 

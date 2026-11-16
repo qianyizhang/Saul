@@ -1,6 +1,6 @@
 import { actionHost } from '../actions/host';
-import { planEvents } from '../models/chatgpt-plan';
-import { streamModel } from '../models/provider';
+import { planEvents } from '../providers/chatgpt-plan';
+import { streamModel } from '../providers/stream';
 import { parseSummary, summaryRequestInput } from '../digest/summary';
 import type { DigestSource, Summary } from '../digest/types';
 import type { RunInput } from '../types/storage';

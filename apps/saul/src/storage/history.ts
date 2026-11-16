@@ -1,4 +1,4 @@
-import { HistoryDisconnected, planCall } from '../models/chatgpt-plan';
+import { HistoryDisconnected, planCall } from '../providers/chatgpt-plan';
 import MigrationWorker from './migration-worker?worker';
 import type { DbCall, DbRequest, DbType } from '../types/storage';
 import {
