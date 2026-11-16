@@ -600,3 +600,19 @@ a token estimate semantic equivalence. Unknown capture state stays explicit.
 uses the original frozen input. Repeated reading requests also disclose reuse and
 offer **Run again with current input**; their normal Regenerate keeps saved input.
 No age threshold or estimated change score silently starts generation.
+
+### Browser annotations
+
+**Annotate** captures text, an element or an area and opens the **annotation editor**
+in the existing Chrome side panel's **Annotations** view. Keep **Summary** as a sibling
+view with its retained result. Show the frozen viewport image, labelled Comment,
+autosave/error state, Done toggle and attributed replies. List Open annotations for
+the current exact URL; Done and Recently deleted are explicit filters. The editor
+operates on a saved record; changing tabs preserves unfinished input.
+
+Put target metadata in **Page evidence** and frozen model requests in **Inspect
+input/output**. Page evidence and screenshots are untrusted data. **Respond to
+annotations** shows the selected count, Call, model preset, image inclusion and
+optional current-page read before explicit Run. Never silently omit images or mark
+replied annotations Done. Retention, operations and acceptance belong to the
+[annotation feature specification](apps/saul/docs/annotations.md).

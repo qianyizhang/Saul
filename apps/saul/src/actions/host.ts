@@ -1,3 +1,4 @@
+import type { AnnotationOperation, AnnotationResult } from '../annotations/contract';
 import {
   ACTION_PORT,
   validateActionGenerate,
@@ -12,6 +13,7 @@ export async function actionHost(
     signal?: AbortSignal;
     generate?: (request: ActionGenerate, signal: AbortSignal) => Promise<string>;
     progress?: (text: string) => void;
+    annotations?: (operation: AnnotationOperation) => Promise<AnnotationResult>;
   } = {},
 ): Promise<Extract<ActionHostEvent, { type: 'result' }>> {
   options.signal?.throwIfAborted();
@@ -67,7 +69,20 @@ export async function actionHost(
       if (event.type === 'error') finish(new Error(event.message));
       else if (event.type === 'result') finish(undefined, event);
       else if (event.type === 'progress') options.progress?.(event.text);
-      else if (event.type === 'generate') {
+      else if (event.type === 'annotation') {
+        void (async () => {
+          if (!options.annotations)
+            throw new Error('Annotation operations are unavailable in this Call.');
+          return options.annotations(event.operation);
+        })().then(
+          (result) => {
+            if (!ended) port.postMessage({ callId: event.callId, text: JSON.stringify(result) });
+          },
+          (error) => {
+            if (!ended) port.postMessage({ callId: event.callId, error: String(error) });
+          },
+        );
+      } else if (event.type === 'generate') {
         void (async () => {
           validateActionGenerate(event.request);
           if (!options.generate) throw new Error('Model calls are unavailable while loading.');

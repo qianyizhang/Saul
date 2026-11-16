@@ -145,3 +145,26 @@ trusted extension contexts. See [setup](../../../docs/setup.md).
 define the supported contract. Workers and import restrictions are not a security
 sandbox. Only load code you trust. Personal installations and live-provider calls
 require their own explicit installation/testing actions.
+
+## Annotation Calls
+
+The annotation editor offers **Respond to annotations** and approved custom Calls.
+Each selected annotation is a separate invocation with the existing three-model-call
+and five-minute limits, at most two invocations active at once. Its frozen
+`ctx.source.annotations` contains `{id, comment, evidence}`; `ctx.source.text` holds
+that annotation's evidence. Screenshot input stays attached to `ctx.generate`, even
+when the script supplies custom text. **Text evidence only** must be chosen explicitly.
+
+Within annotation invocations, `ctx.annotations(operation)` uses the shared
+[annotation operation contract](../src/annotations/contract.ts), limited to the assigned
+annotation ID and at most 50 operations. Read/list and revision-checked changes use the
+same owner as the editor. A successful change returns the new revision; failures are
+per item. Ordinary page Calls cannot use this capability. Returning nonempty text
+appends one final attributed reply. Use edits, completion or deletion only when the
+user's Call request asks for them; page evidence never grants authority.
+
+Each model request and output is retained in attempt inspection. Failed or interrupted
+invocations do not append incomplete replies. A completed response that cannot be saved
+retains **Save reply without generating**. The runner never retries inference on restart.
+Annotation replies are limited to 16,000 characters; oversized evidence or output fails
+explicitly. Shared generation connection/model validation remains unchanged.

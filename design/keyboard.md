@@ -36,16 +36,17 @@ Check with [native UI checks](../apps/ez/Tests/README.md#offline-checks).
 
 ## Saul
 
-| Command                  | Key                                    | Scope                                                                     |
-| ------------------------ | -------------------------------------- | ------------------------------------------------------------------------- |
-| Explain selected passage | ⌘/Ctrl+Enter or Alt+Shift+E            | Page selection outside editable content                                   |
-| Send follow-up           | ⌘/Ctrl+Enter                           | Focused follow-up draft                                                   |
-| Toggle page explanations | Alt+Shift+L                            | Page outside editable content                                             |
-| Stop generating          | ⌘/Ctrl+.                               | Active reading card, outside editable content                             |
-| Dismiss the reading card | Escape                                 | Page; work continues                                                      |
-| Open Settings            | ⌘/Ctrl+,                               | Extension popup and workspace                                             |
-| Call Saul                | Ctrl+S on macOS; Alt+Shift+S elsewhere | Chrome default; runs for the current regular HTTP(S) tab                  |
-| Close summary panel      | Ctrl+W on macOS; Alt+Shift+W elsewhere | Chrome default; closes only the current window's panel and work continues |
+| Command                  | Key                                    | Scope                                                                                                        |
+| ------------------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Explain selected passage | ⌘/Ctrl+Enter or Alt+Shift+E            | Page selection outside editable content                                                                      |
+| Send follow-up           | ⌘/Ctrl+Enter                           | Focused follow-up draft                                                                                      |
+| Toggle page explanations | Alt+Shift+L                            | Page outside editable content                                                                                |
+| Stop generating          | ⌘/Ctrl+.                               | Active reading card, outside editable content                                                                |
+| Dismiss the reading card | Escape                                 | Page; work continues                                                                                         |
+| Open Settings            | ⌘/Ctrl+,                               | Extension popup and workspace                                                                                |
+| Annotate page            | Ctrl+A on macOS; Alt+Shift+A elsewhere | Outside editable content; click element, drag area or navigate targets with arrows and Enter; Escape cancels |
+| Call Saul                | Ctrl+S on macOS; Alt+Shift+S elsewhere | Chrome default; runs for the current regular HTTP(S) tab                                                     |
+| Close summary panel      | Ctrl+W on macOS; Alt+Shift+W elsewhere | Chrome default; closes only the current window's panel and work continues                                    |
 
 The open summary panel also handles Ctrl+W locally. Command+S and Command+W
 remain Chrome's on macOS. The [tab board](../apps/saul/docs/mcp-app.md) has its own

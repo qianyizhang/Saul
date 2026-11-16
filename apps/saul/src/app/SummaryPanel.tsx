@@ -1,13 +1,31 @@
+import { AnnotationPanel } from '../annotations/Panel';
+import { annotationPanelKey } from '../annotations/routing';
 import { useCallback, useEffect, useState } from 'react';
 import { useMinimumMode } from './useMinimumMode';
 import { SummaryHistory, SummaryReader } from './Summaries';
 import { closeSummaryPanel, summaryPanelKey, summaryPanelRoute } from '../digest/panel';
 
 export function SummaryPanel() {
+  const [windowId, setWindowId] = useState<number>();
   const { minimum } = useMinimumMode();
+  const [annotationView, setAnnotationView] = useState(false);
+  useEffect(() => {
+    if (windowId === undefined) return;
+    const key = annotationPanelKey(windowId);
+    const apply = (value: unknown) =>
+      setAnnotationView(
+        !!value && typeof value === 'object' && 'view' in value && value.view === 'annotations',
+      );
+    void chrome.storage.session.get(key).then((v) => apply(v[key]));
+    const changed = (changes: Record<string, chrome.storage.StorageChange>) => {
+      if (changes[key]) apply(changes[key].newValue);
+    };
+    chrome.storage.onChanged.addListener(changed);
+    return () => chrome.storage.onChanged.removeListener(changed);
+  }, [windowId]);
   const [route, setRoute] = useState<string>();
   const [error, setError] = useState('');
-  const [windowId, setWindowId] = useState<number>();
+
   const close = () => {
     if (windowId !== undefined)
       void closeSummaryPanel(windowId).catch((e: Error) => setError(e.message));
@@ -90,35 +108,66 @@ export function SummaryPanel() {
   }, []);
   return (
     <main className="shell summary-panel" data-minimum={minimum}>
-      {error && (
-        <p role="alert" className="notice error">
-          {error}
-        </p>
-      )}
-      {!route && !error && <p role="status">Loading summary…</p>}
-      {route?.startsWith('#summary/') ? (
-        <SummaryReader
-          key={route.split('?')[0]}
-          route={route}
-          sidePanel
-          onClose={close}
-          onResolved={resolved}
-        />
-      ) : route ? (
-        <section className="stack">
-          <div className="row between">
-            <h2>Saved summaries</h2>
-            <button className="btn quiet" onClick={close} aria-label="Close summary panel">
-              Close
-            </button>
-          </div>
-          <SummaryHistory
-            onOpen={(id) => {
-              location.hash = 'summary/' + encodeURIComponent(id);
-            }}
+      <nav className="row" aria-label="Saul panel">
+        <button
+          className="btn"
+          aria-pressed={!annotationView}
+          onClick={() => {
+            setAnnotationView(false);
+            if (windowId !== undefined)
+              void chrome.storage.session.set({
+                [annotationPanelKey(windowId)]: { view: 'summary' },
+              });
+          }}
+        >
+          Summary
+        </button>
+        <button
+          className="btn"
+          aria-pressed={annotationView}
+          onClick={() => {
+            setAnnotationView(true);
+            if (windowId !== undefined)
+              void chrome.storage.session.set({
+                [annotationPanelKey(windowId)]: { view: 'annotations' },
+              });
+          }}
+        >
+          Annotations
+        </button>
+      </nav>
+      {annotationView && windowId !== undefined && <AnnotationPanel windowId={windowId} />}
+      <div hidden={annotationView}>
+        {error && (
+          <p role="alert" className="notice error">
+            {error}
+          </p>
+        )}
+        {!route && !error && <p role="status">Loading summary…</p>}
+        {route?.startsWith('#summary/') ? (
+          <SummaryReader
+            key={route.split('?')[0]}
+            route={route}
+            sidePanel
+            onClose={close}
+            onResolved={resolved}
           />
-        </section>
-      ) : null}
+        ) : route ? (
+          <section className="stack">
+            <div className="row between">
+              <h2>Saved summaries</h2>
+              <button className="btn quiet" onClick={close} aria-label="Close summary panel">
+                Close
+              </button>
+            </div>
+            <SummaryHistory
+              onOpen={(id) => {
+                location.hash = 'summary/' + encodeURIComponent(id);
+              }}
+            />
+          </section>
+        ) : null}
+      </div>
     </main>
   );
 }

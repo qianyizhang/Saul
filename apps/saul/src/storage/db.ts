@@ -1,3 +1,8 @@
+import {
+  annotationStore,
+  annotationAttempts,
+  annotationImage,
+} from '../../native/annotation-store.mts';
 import { validateGeneratedImage, type GeneratedImage } from '../models/images';
 import { digestStore } from '../digest/store';
 import type { SqlDatabase, SqlValue } from './sql';
@@ -290,6 +295,12 @@ export class SaulDatabase {
   }
   private executeReady(message: DbRequest, operationId: string): unknown {
     switch (message.type) {
+      case 'DB_ANNOTATION_IMAGE':
+        return annotationImage(this.db, this.owner, message.payload);
+      case 'DB_ANNOTATION':
+        return annotationStore(this.db, this.owner, message.payload);
+      case 'DB_ANNOTATION_ATTEMPT':
+        return annotationAttempts(this.db, this.owner, message.payload);
       case 'DB_READING_RESOLVE': {
         const { snapshot, submissionId, recipeId } = message.payload;
         const submitted = this.submittedSelection(submissionId, snapshot.page.url);

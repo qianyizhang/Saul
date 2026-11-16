@@ -12,7 +12,7 @@ export async function* streamModel(
   input: RunInput,
   credential: string,
   signal?: AbortSignal,
-  options: { maxTokens?: number; attachments?: PdfUrlAttachment[] } = {},
+  options: { maxTokens?: number; attachments?: PdfUrlAttachment[]; images?: string[] } = {},
 ): AsyncGenerator<ModelEvent> {
   if (options.attachments?.length && input.provider !== 'chatgpt-plan')
     throw new Error(
@@ -44,6 +44,7 @@ export async function* streamModel(
           ...input.remote,
           apiKey: credential,
           maxTokens: options.maxTokens,
+          images: options.images,
           connectionKey: input.preset?.connectionKey,
         },
         input.systemPrompt,
@@ -63,6 +64,7 @@ export async function* streamModel(
           systemPrompt: input.systemPrompt,
           userPrompt: input.userPrompt,
           ...(options.attachments ? { attachments: options.attachments } : {}),
+          ...(options.images ? { images: options.images } : {}),
         },
         signal,
         input.credentialOwner ?? 'local',

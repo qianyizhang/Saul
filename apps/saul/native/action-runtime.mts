@@ -5,6 +5,7 @@ import {
   ACTION_MAX_CALLS,
   ACTION_TIMEOUT_MS,
   validateActionGenerate,
+  validateAnnotationOperation,
   type ActionHostEvent,
   type ActionSource,
 } from './action-protocol.mts';
@@ -13,6 +14,8 @@ interface Running {
   emit: (event: ActionHostEvent) => void;
   finish: (error?: Error, text?: string) => void;
   calls: Set<number>;
+  annotationCalls: Set<number>;
+  annotations: boolean;
 }
 interface Generation {
   worker: Worker;
@@ -92,6 +95,18 @@ export class ActionRuntime {
                 )
                   throw new Error('Action exceeded the three-model-call limit.');
                 run.calls.add(event.callId);
+                run.emit(event);
+              } else if (event.type === 'annotation') {
+                validateAnnotationOperation(event.operation);
+                if (
+                  !run.annotations ||
+                  event.callId !== 1001 + run.annotationCalls.size ||
+                  run.annotationCalls.size >= 50
+                )
+                  throw new Error(
+                    'Annotation operations require an annotation run and are limited to 50 per run.',
+                  );
+                run.annotationCalls.add(event.callId);
                 run.emit(event);
               } else if (event.type === 'progress') {
                 if (typeof event.text !== 'string' || event.text.length > 500)
@@ -181,7 +196,13 @@ export class ActionRuntime {
         () => kill('Action exceeded the five-minute page deadline.'),
         remaining,
       );
-      generation.runs.set(id, { emit, finish, calls: new Set() });
+      generation.runs.set(id, {
+        emit,
+        finish,
+        calls: new Set(),
+        annotationCalls: new Set(),
+        annotations: !!source.annotations?.length,
+      });
       signal.addEventListener('abort', abort, { once: true });
       generation.worker.postMessage({ id, source });
     });
@@ -193,7 +214,11 @@ export class ActionRuntime {
     result: { text?: string; error?: string },
   ) {
     const generation = await this.generations.get(revision);
-    if (generation?.runs.get(id)?.calls.has(callId))
+    if (
+      generation &&
+      (generation.runs.get(id)?.calls.has(callId) ||
+        generation.runs.get(id)?.annotationCalls.has(callId))
+    )
       generation.worker.postMessage({ id, callId, ...result });
   }
   async close() {

@@ -1,3 +1,4 @@
+import type { AnnotationDbOperations } from '../annotations/attempts';
 import type { ModelActivity } from '../models/events';
 import type { DigestDbOperations } from '../digest/types';
 import type {
@@ -80,7 +81,7 @@ export interface HistoryItem {
   unread: boolean;
 }
 
-export interface DbOperations extends DigestDbOperations {
+export interface DbOperations extends DigestDbOperations, AnnotationDbOperations {
   DB_IMAGE: {
     payload: { selectionId: string; runId?: string };
     result: import('../models/images').GeneratedImage | undefined;

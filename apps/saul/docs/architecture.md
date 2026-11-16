@@ -441,3 +441,33 @@ Retry uses the saved input. Without an explicit preset, the original summary
 setup still resolves its legacy plan binding through `src/digest/connection.ts`.
 Reauthorization uses the selected registration in both
 apps; only an explicit Add another account requests a new registration.
+
+## Annotation ownership
+
+`src/annotations/contract.ts` owns the bounded operation schema shared by Chrome,
+Calls and native tools. `native/annotation-store.mts` owns additive browser-specific SQLite tables in
+the existing history store, scoped by profile owner. It is the only annotation writer;
+EZ does not project these tables. They do not change shared schema version 4 or the
+existing passage/summary deletion meanings. `runner.ts` owns frozen attempts, at most
+two active generations, interruption recovery and save-only completion. No extra helper
+or database is introduced. Expired deleted rows and cascading attempt images are
+removed on annotation access and offscreen startup recovery.
+
+Capture checks browser-supplied tab/document identity and navigation events. The
+Chrome screenshot callback opens the side panel while retaining the initiating
+gesture; screenshot pixels are already captured before panel layout changes. Failure
+retains the original target without a substitute image. Screenshots are marked and
+bounded to JPEG, 1600 × 1200 maximum and 450,000 data-URL characters, inside the existing
+native transport limit. Number assignment precedes immutable image attachment.
+
+`background.ts` admits page capture/current-page marker reads, trusted editor operations,
+and opted-in agent operations separately. Content scripts do not receive model settings
+or arbitrary history access. `saul_annotations` requires Annotation access and explicit
+URL/ID scope; caller-assigned scope is not permission inferred from page text. Requests
+are validated again by the persistent owner. Record revisions prevent lost updates;
+operation IDs with content fingerprints prevent duplicate edits and reject ID reuse.
+
+`Panel.tsx` retains failed drafts in trusted extension storage, with explicit conflict
+review. The existing Summary panel route remains independent. `capture.ts` owns picking
+and conservative live marker resolution. Frozen evidence remains the authority when
+live targets disappear. See [the feature specification](annotations.md).

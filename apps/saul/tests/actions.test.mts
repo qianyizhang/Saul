@@ -183,3 +183,34 @@ it('shutdown rejects pending initialization and cannot spawn a late worker after
   await expect(f.runtime.load(candidate.revision)).rejects.toThrow('closed');
   expect((await f.store.get(candidate.revision)).approved).toBeUndefined();
 });
+
+it('custom Calls can use scoped annotation operations only in annotation runs', async () => {
+  const f = await fixture();
+  const candidate = await f.store.stage(
+    module(
+      'export default async function run(ctx) { const result = await ctx.annotations({action:"read",id:"note",image:false}); return result.record.comment; }',
+    ),
+  );
+  await f.runtime.load(candidate.revision);
+  const annotated = {
+    ...source,
+    annotations: [{ id: 'note', comment: 'Question', evidence: 'Saved page evidence' }],
+  };
+  await expect(
+    f.runtime.run(
+      'annotation',
+      candidate.revision,
+      annotated,
+      (event) => {
+        if (event.type === 'annotation')
+          void f.runtime.reply(candidate.revision, 'annotation', event.callId, {
+            text: JSON.stringify({ record: { comment: 'Scoped answer' } }),
+          });
+      },
+      new AbortController().signal,
+    ),
+  ).resolves.toBe('Scoped answer');
+  await expect(
+    f.runtime.run('page', candidate.revision, source, () => {}, new AbortController().signal),
+  ).rejects.toThrow('require an annotation run');
+});

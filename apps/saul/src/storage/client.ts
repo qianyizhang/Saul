@@ -50,6 +50,11 @@ export function sendActionMessage(message: ActionRequest): Promise<ActionState> 
 }
 export type RunnerRequest =
   | {
+      operation: 'annotation';
+      message: import('../annotations/runner').AnnotationRunRequest;
+      prepared?: { input: RunInput; credential: string };
+    }
+  | {
       operation: 'action';
       message: ActionRequest;
       prepared?: { input: RunInput; credential: string };

@@ -1,3 +1,4 @@
+import { validVisionImages } from './vision.mts';
 import { isRecord } from './value.mts';
 import { validConnectionCatalog, validConnectionStatus } from './connections-contract.mts';
 import {
@@ -36,6 +37,7 @@ export type CredentialRequest =
       model: string;
       systemPrompt: string;
       userPrompt: string;
+      images?: string[];
       temperature?: number;
       maxTokens?: number;
     }
@@ -84,6 +86,7 @@ export function validateCredentialRequest(value: unknown): asserts value is Cred
       'model',
       'systemPrompt',
       'userPrompt',
+      'images',
       'temperature',
       'maxTokens',
       'connectionKey',
@@ -135,6 +138,7 @@ export function validateCredentialRequest(value: unknown): asserts value is Cred
     (!text(value.model, 256) ||
       !text(value.systemPrompt, 100_000, true) ||
       !text(value.userPrompt, 200_000) ||
+      (value.images !== undefined && !validVisionImages(value.images)) ||
       (value.temperature !== undefined &&
         (typeof value.temperature !== 'number' ||
           !Number.isFinite(value.temperature) ||

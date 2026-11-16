@@ -281,3 +281,12 @@ use compatible Write or Draw presets.
 [Shared control symbols](../../../design/symbols.html) defines the glyphs and
 meanings used by both apps. Symbol-only controls retain full accessible names and
 tooltips in Min Mode and Standard view.
+
+## Browser annotations
+
+[Browser annotations](annotations.md) retain captured text, elements and areas per
+exact page URL, independently of Reading passages and Summary results. Annotate opens
+the shared panel's annotation editor. Calls and opted-in agents use the same records,
+revision checks, replies and seven-day deletion recovery. Capture and autosave never
+start inference; Respond to annotations is explicit. See the feature specification
+for supported pages, screenshot evidence, retention and acceptance.

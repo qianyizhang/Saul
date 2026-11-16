@@ -231,3 +231,13 @@ Subprocess and installation tests exercise `.build/native/*.mjs`, complete adjac
 assets, retained generations and the emitted JXA script. Pure unit tests import
 source. The source/output decision is recorded once in the
 [root architecture](../../../docs/architecture.md#typescript-maintenance).
+
+## Browser annotation checks
+
+`tests/browser-annotations.test.ts` covers SQLite persistence, revision and scope failures,
+idempotent edits, retention, image request shape and save-only recovery.
+`tests/e2e/browser-annotations.spec.ts` uses the production extension and native SQLite
+transport with synthetic pages/models: native panel capture, saved screenshot input,
+replies, restart, picking, cancellation, navigation races and the agent boundary.
+The test-only bridge adapter dispatches inside the service worker; it is absent from
+production bundles. Model inference remains a deterministic local fixture.

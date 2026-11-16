@@ -6,6 +6,7 @@ export interface OpenAICompatibleConfig {
   apiKey: string;
   credentialOwner?: 'saul';
   connectionKey?: string;
+  images?: string[];
   model: string;
   temperature?: number;
   maxTokens?: number;
@@ -32,6 +33,7 @@ export async function* streamOpenAICompatible(
         model: config.model,
         systemPrompt,
         userPrompt,
+        ...(config.images ? { images: config.images } : {}),
         temperature: config.temperature,
         maxTokens: config.maxTokens,
       },
@@ -57,7 +59,15 @@ export async function* streamOpenAICompatible(
     model: config.model,
     messages: [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
+      {
+        role: 'user',
+        content: config.images?.length
+          ? [
+              { type: 'text', text: userPrompt },
+              ...config.images.map((url) => ({ type: 'image_url', image_url: { url } })),
+            ]
+          : userPrompt,
+      },
     ],
     temperature: config.temperature ?? 0.3,
     stream: true,

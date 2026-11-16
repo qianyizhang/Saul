@@ -1,3 +1,4 @@
+import { initAnnotations } from '../src/annotations/background';
 import { callPresetStorage } from '../src/storage/call-presets';
 import { snapshotSelection, captureTab, verifyCaptureTab } from '../src/digest/capture';
 import { compareRunInput } from '../src/reading/input-change';
@@ -292,6 +293,7 @@ async function openSource(selectionId: string) {
 }
 export default defineBackground(() => {
   initSummaryActions();
+  initAnnotations(currentSettings);
   const settings = settingsOwner;
   initStorageSecurity();
   initNativeBridge();

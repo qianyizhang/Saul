@@ -15,6 +15,7 @@ import {
 } from '../src/contracts/reading';
 import { validateWorkspace } from '../src/contracts/workspace';
 const fields = {
+  saul_annotations: ['session', 'scope', 'author', 'operation'],
   saul_tabs_edit: [
     'session',
     'kind',
@@ -58,6 +59,7 @@ const complete: {
       ? true
       : never;
 } = {
+  saul_annotations: true,
   saul_tabs_edit: true,
   saul_tabs_undo: true,
   saul_summary_open: true,
@@ -77,6 +79,11 @@ const complete: {
   saul_groups_update: true,
 };
 const samples = {
+  saul_annotations: {
+    scope: { urls: ['https://example.com/'], ids: [] },
+    author: { kind: 'agent', name: 'Test' },
+    operation: { action: 'list', url: 'https://example.com/', filter: 'open', offset: 0 },
+  },
   saul_tabs_edit: { kind: 'move', expected: '{}', tabIds: [1], windowId: 2 },
   saul_tabs_undo: { token: 'undo' },
   saul_summary_open: { tabIds: [1] },

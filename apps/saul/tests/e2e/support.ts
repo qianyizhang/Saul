@@ -1,7 +1,7 @@
 import { SharedHistory } from '../../.build/native/history.mjs';
 import { validateHistoryRequest } from '../../native/history-protocol.mts';
 import { randomUUID } from 'node:crypto';
-import { chromium, type BrowserContext } from '@playwright/test';
+import { chromium, expect, type BrowserContext } from '@playwright/test';
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -282,10 +282,22 @@ export async function createSandbox(options: SandboxOptions = {}) {
         minify: false,
       },
     });
+    if (options.browserToolsFixtures)
+      await (
+        await import('esbuild')
+      ).build({
+        entryPoints: [fileURLToPath(new URL('./annotation-bridge-fixture.ts', import.meta.url))],
+        outfile: path.join(extension, 'annotation-bridge-fixture.js'),
+        bundle: true,
+        format: 'iife',
+        platform: 'browser',
+        logLevel: 'silent',
+      });
     const backgroundFile = path.join(extension, 'background.js');
     await writeFile(
       backgroundFile,
       "importScripts('./history-transport-fixture.js');\n" +
+        (options.browserToolsFixtures ? "importScripts('./annotation-bridge-fixture.js');\n" : '') +
         (await readFile(backgroundFile, 'utf8')),
     );
     if (options.artifactsDir) await mkdir(options.artifactsDir, { recursive: true });
@@ -348,6 +360,16 @@ export async function createSandbox(options: SandboxOptions = {}) {
       const extensionId = new URL(worker.url()).host;
       const popup = await context.newPage();
       await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+      // The transport fixture publishes this asynchronously at worker startup.
+      // Direct fixture requests must not race that publication and fetch undefined/fixture.
+      await expect
+        .poll(() =>
+          popup.evaluate(
+            async () =>
+              (await chrome.storage.local.get('saul_test_history_url')).saul_test_history_url,
+          ),
+        )
+        .toBe(historyEndpoint);
       return { context, worker, popup };
     },
     async close(failed = false) {

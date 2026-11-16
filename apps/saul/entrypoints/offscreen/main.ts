@@ -1,3 +1,4 @@
+import { AnnotationRunner } from '../../src/annotations/runner';
 import { DigestRunner } from '../../src/digest/runner';
 import { captureSummarySource } from '../../src/digest/source';
 import { sharedDb as db } from '../../src/storage/history';
@@ -11,6 +12,12 @@ import type { ActionState } from '../../src/actions/contract';
 const changed = (url: string) => {
   void chrome.runtime.sendMessage({ target: 'saul-events', url }).catch(() => undefined);
 };
+const annotations = new AnnotationRunner(db, undefined, undefined, (url) => {
+  void chrome.runtime
+    .sendMessage({ target: 'saul-annotation', action: 'updated', url })
+    .catch(() => undefined);
+});
+void annotations.ready.catch(() => undefined);
 const digest = new DigestRunner(db, captureSummarySource);
 // Chrome offscreen documents expose runtime only. Trusted storage stays behind the background.
 async function actionStateRequest(action: 'read' | 'write', state?: ActionState) {
@@ -43,6 +50,8 @@ chrome.runtime.onMessage.addListener(
     (async () => {
       await runner.ready;
       switch (message.operation) {
+        case 'annotation':
+          return annotations.request(message.message, message.prepared);
         case 'digest':
           return digest.request(message.message, message.snapshot, message.credential);
         case 'action':
