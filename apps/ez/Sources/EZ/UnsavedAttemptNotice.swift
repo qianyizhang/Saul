@@ -4,6 +4,7 @@ import SwiftUI
 struct UnsavedAttemptNotice: View {
     @ObservedObject var model: AppModel
     let entry: HistoryEntry
+    var showsExport = true
 
     var body: some View {
         if let message = model.saveError(for: entry.id) {
@@ -16,9 +17,11 @@ struct UnsavedAttemptNotice: View {
                         "Save again"
                     ).accessibilityLabel("Save again")
                         .disabled(!model.canSaveAgain)
-                    Button("Export…") { model.export(entry) }
+                    if showsExport && entry.capability == .write {
+                        Button("Export…") { model.export(entry) }
+                    }
                 }
-                Text("Save or export this answer before quitting EZ.")
+                Text("Save this answer before quitting EZ.")
                     .foregroundStyle(.secondary)
                 DisclosureGroup("Error") {
                     Text(message).textSelection(.enabled).padding(.top, 4)

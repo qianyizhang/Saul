@@ -38,6 +38,17 @@ prove `iconutil` packaging; report sandbox restrictions separately.
 
 ## Native and live acceptance
 
+Lookup choosers and main reader (2026-11-16, based on `42f092a`):
+`make check` passed 102 core and 65 app-state checks; `make test-ui` passed
+10 window-local checks, including chooser search, Escape, focus, skipping
+unavailable rows and synthetic wheel selection. The offline Surface Preview
+rendered both lookup surfaces, including 420-point Quick Lookup, and reached
+synthetic Draw, Sketch and Research results, active and failed Draw, and an
+unsaved Write result. ScreenCaptureKit denied capture; preview view snapshots
+show the content but omit some macOS compositing. Physical wheel, VoiceOver,
+native save and delete dialogs, and installed or live providers need separate
+acceptance. Use the [UI journeys](ui-qa.md) to repeat those checks.
+
 Make meme Sketch (2026-11-11): `make check` passed 101 core and 60 state checks.
 The state check verified both stroke and caption pixels, rejection of a late
 import after removal, source persistence before send, a retained editable draft

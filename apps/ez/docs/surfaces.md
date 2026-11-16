@@ -5,7 +5,7 @@ and persistence; [design](design.md) owns presentation.
 
 | Surface                | Responsibility                                                                                                                                 |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Quick Lookup panel** | Compact action/input selection, Run/Stop, reading, Copy/Download; disclose presets and Details on demand. Open the main window for management. |
+| **Quick Lookup panel** | Compact Action/Preset and input selection, Run/Stop, reading, Copy/Download and Details. Open the main window for management. |
 | **Main window**        | Lookups plus history search, reuse, export, deletion and Settings. Own feature growth, configuration and connections.                            |
 
 ## Shared workspace
@@ -18,11 +18,14 @@ and persistence; [design](design.md) owns presentation.
   After a run, Edit draft shows the canvas again; Hide draft returns to the answer.
 - Selecting another action or New restores its default preset. Unavailable choices
   block; never substitute account, model, billing or tier.
-- New main-window lookups put the composer below the heading. Edit/Hide reveals or
-  hides the retained draft; Reuse explicitly restores the saved request.
-- Answers prioritize Copy (Download for images). Min Mode puts Reuse/Export/Delete
-  in More and inspection in Details; Standard also shows Reuse. Quick Lookup
-  hides inputs while reading in Min Mode. New/Stop remain reachable.
+- Both composers put Action and Preset above the inputs. The main window puts a
+  new composer below the heading. Edit/Hide opens or hides work already retained
+  in the shared draft; Reuse restores the selected saved request without running it.
+- The main reader shows available Copy or Download, Reuse, Export and Delete in
+  one row in both modes. Delete is separated at the far edge and confirms shared
+  deletion. Details holds the record and inspection, followed by the follow-up.
+  Quick Lookup hides inputs while reading in Min Mode and keeps its utilities
+  menu and workspace handoff. New/Stop remain reachable.
 - Min Mode defaults on and is local to EZ. Settings → Preferences and the panel
   menu change the same preference. Exact model, requested/actual tier and metrics
   remain available in Details; errors, blockers and unsaved recovery stay visible.

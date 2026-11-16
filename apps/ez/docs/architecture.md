@@ -242,9 +242,13 @@ window on macOS 15+; macOS 14 cold launch may show it.
 
 ## Selector scrolling and keyboard commands
 
-`SelectorPicker` wraps width-filling `NSPopUpButton`; label length never changes
-its hitbox. AppKit routes wheel events only to the hovered control. Selection clamps
-at the ends, ignores momentum and throttles steps. `FullRowButton` gives Settings
+Both composers use `LookupChoiceButton` for a native searchable popover. The
+shared wheel stepper also serves `SelectorPicker`'s remaining AppKit dropdowns.
+Label length never changes the hitbox. Only the hovered choice steps; it skips
+disabled rows, clamps at the ends, ignores momentum and throttles input. The open
+popover gives the search field and result navigation priority over lookup shortcuts.
+Escape and preset selection return focus to the choice button. Changing the action
+opens its fields and focuses the first input. `FullRowButton` gives Settings
 sections/editor rows and the main Settings entry a rectangular padded hit area;
 selection changes background only.
 

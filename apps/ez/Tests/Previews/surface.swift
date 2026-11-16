@@ -73,6 +73,10 @@ import SwiftUI
                             ]))
                         return .text(result)
                     }
+                    if entry.query.contains("[slow]") { try await Task.sleep(for: .seconds(120)) }
+                    if entry.query.contains("[fail]") {
+                        throw EZError("Synthetic text request failure. Your draft is retained.")
+                    }
                     var result = ResponseAccumulator()
                     try result.consume(
                         JSONSerialization.data(withJSONObject: [
@@ -139,7 +143,8 @@ private struct SurfacePreviewControls: View {
                 Picker("Fixture", selection: $scenario) {
                     ForEach(
                         [
-                            "Empty", "Signed out", "Two inputs", "Many inputs", "Answer", "Waiting",
+                            "Empty", "Signed out", "Two inputs", "Many inputs", "Answer", "Retained draft",
+                            "Waiting",
                             "Thinking",
                             "Streaming", "Blocked", "Prose corrections",
                             "No actions", "Selector hitboxes", "Long metadata", "Legacy answer",
@@ -209,8 +214,14 @@ private struct SurfacePreviewControls: View {
         if scenario == "Selector hitboxes" {
             config.actions[0].name = "A deliberately long action title for checking the full selector hitbox"
             config.actions[1].name = "S"
-            config.presets[0].name = "A deliberately long preset title"
+            config.presets[0].name =
+                "A deliberately long retired preset name for checking unavailable choices"
+            config.presets[0].model = "fixture-retired"
             config.presets[1].name = "S"
+            config.presets.append(
+                ModelPreset(
+                    name: "Speech preview", model: "fixture-audio", effort: "", fast: false,
+                    connectionKey: "openai-api", capability: .speak, speechOptions: SpeechOptions()))
         }
         if scenario == "Many inputs" {
             config.actions.append(
@@ -220,6 +231,11 @@ private struct SurfacePreviewControls: View {
         }
         if scenario.hasPrefix("Draw") { config.addIllustration() }
         if scenario.hasPrefix("Meme") || scenario.hasPrefix("Research") { config.addSearchAndMeme() }
+        // Production starters await model discovery. Supply offline IDs before making synthetic requests.
+        for index in config.presets.indices where config.presets[index].model.isEmpty {
+            config.presets[index].model =
+                config.presets[index].capability == .draw ? "gpt-image-2.6-fixture" : "fixture-luna"
+        }
         if scenario == "No actions" { config.actions = [] }
         do { try model.saveConfiguration(config) } catch { model.error = error.localizedDescription }
         let action: Action?
@@ -263,13 +279,18 @@ private struct SurfacePreviewControls: View {
             if scenario == "Draw error" { model.query += " [fail]" }
             if scenario != "Draw" { model.send() }
         }
-        if ["Answer", "Waiting", "Thinking", "Streaming", "Blocked", "Long metadata", "Legacy answer"]
-            .contains(scenario)
-        {
+        if [
+            "Answer", "Retained draft", "Waiting", "Thinking", "Streaming", "Blocked", "Long metadata",
+            "Legacy answer",
+        ]
+        .contains(scenario) {
             model.query = "Serendipity"
         }
-        if ["Answer", "Waiting", "Thinking", "Streaming", "Blocked", "Long metadata", "Legacy answer"]
-            .contains(scenario), let action,
+        if [
+            "Answer", "Retained draft", "Waiting", "Thinking", "Streaming", "Blocked", "Long metadata",
+            "Legacy answer",
+        ]
+        .contains(scenario), let action,
             let preset = model.currentPreset
         {
             if var entry = try? action.prepare(
@@ -299,6 +320,7 @@ private struct SurfacePreviewControls: View {
                     entry.metrics = nil
                     entry.actualServiceTier = nil
                 }
+                model.query = scenario == "Retained draft" ? "An unrelated question I have not run yet." : ""
                 model.entries = [entry]
                 model.selection = entry.id
                 model.busy = pending

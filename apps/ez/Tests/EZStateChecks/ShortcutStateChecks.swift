@@ -51,7 +51,7 @@ import Foundation
             try expect(f.model.currentAction == nil, "Navigation resurrected a action")
         },
         stateCase("shortcuts leave history replay and reset through the shared actions") { f in
-            f.model.reuse(try f.snapshot())
+            f.model.reuse(try f.savedAnswer())
             f.model.performLookupCommand(.nextRecipe)
             try expectEqual(
                 f.model.currentAction?.id, f.configuration.actions.first?.id, "Shortcut contract mismatch")

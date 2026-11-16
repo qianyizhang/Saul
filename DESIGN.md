@@ -183,8 +183,9 @@ attempt and show **Unsaved** with Copy/Export and an explicit save recovery acti
 this notice visible after navigating away and back, including in Min Mode.
 Explain that unsaved output must be saved or exported before quitting.
 
-A stale Settings save must preserve the local draft and selection. Show the
-conflict beside Save and offer **Review latest**. Keep the original draft while
+A stale Settings save must preserve the local draft and selection. EZ reports
+the error beside Save; a conflict review is planned. Saul offers **Review latest**
+beside Save. Keep the original draft while
 reading current values. Show only local edits; retain non-conflicting edits by
 default and require **Mine / Latest** for fields changed on both sides or removed
 items. **Apply to draft** is separate from Save. Cancel keeps the original draft
@@ -220,6 +221,10 @@ move explanatory paragraphs behind Details. Disclosures remain for controls,
 recorded data and actionable recovery.
 Keep uncommon operations in named More, Details or Settings destinations. Revealing
 one task must not expand unrelated editors into the same page.
+The EZ main reader keeps available Copy or Download, Reuse, Export and Delete
+visible in both modes. Details holds the record; Delete sits at the far edge
+and keeps its shared-history confirmation. EZ puts the follow-up after Details
+in the main reader. Quick Lookup and Saul keep their own compact action policies.
 
 Buttons show one clear word or a familiar symbol alone, not both.
 Copy, Send, Refresh and sidebar toggles use symbols in both modes. Keep complete
@@ -484,8 +489,8 @@ Details describes the displayed answer. Keep current draft settings separate:
 show them when composing, or behind **Next lookup** when reading. Do not expand
 both model summaries by default. Keep requested speed and recorded service tier
 separately labelled; unknown values stay unknown. Keep **Details** outside More.
-EZ places **Inspect** inside Details in Min Mode; Standard view also exposes the
-main-window inspector directly. Saul keeps **Inspect input/output** beside Details.
+EZ places **Inspect** inside Details in both modes. Saul keeps
+**Inspect input/output** beside Details.
 Inspection need not repeat metadata already available for the same answer.
 Use full-row disclosure targets.
 

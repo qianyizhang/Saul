@@ -62,7 +62,12 @@ import ImageIO
             scene.strokes.append(SketchStroke(points: [CGPoint(x: 80, y: 256), CGPoint(x: 420, y: 256)]))
             model.commitSketch(scene)
             try expect(model.canSend, "A drawing still required an attachment")
+            let instructions = model.inputValues
+            model.inputValues = [:]
             model.undoSketch()
+            try expect(
+                !model.hasImageInput && model.hasRetainedDraft, "A redo-only sketch lost its edit affordance")
+            model.inputValues = instructions
             try expect(!model.canSend, "Undo left a runnable blank sketch")
             model.redoSketch()
             let pendingImport = model.beginImageImport()
@@ -264,9 +269,10 @@ import ImageIO
             model.apiConnected = true
             model.chooseAction(config.actions.first { $0.webSearch }!.id)
             model.query = "Question"
-            try expect(
-                model.compatiblePresets.allSatisfy { $0.connectionKey == "openai-api" },
-                "Plan presets offered for search")
+            let plan = config.presets.first { $0.connectionKey == "gpt-plan" }!
+            model.chooseLookupPreset(plan.id)
+            try expectEqual(
+                model.currentPreset?.connectionKey, "openai-api", "Chooser switched search to plan billing")
             let done = CheckSignal()
             let observer = model.$busy.dropFirst().filter { !$0 }.sink { _ in Task { await done.signal() } }
             defer { observer.cancel() }

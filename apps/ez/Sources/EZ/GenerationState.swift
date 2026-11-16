@@ -5,12 +5,33 @@ extension AppModel {
     var currentConnection: ConnectionDefinition? {
         configuration.connections.first { $0.key == currentPreset?.connectionKey }
     }
-    var compatiblePresets: [ModelPreset] {
-        configuration.presets.filter { preset in
-            preset.capability == currentAction?.capability
-                && (currentAction?.webSearch != true
-                    || configuration.connections.first { $0.key == preset.connectionKey }?.kind == .openAIAPI)
+    func lookupPresetChoiceIssue(_ preset: ModelPreset) -> String? {
+        guard let action = currentAction else { return "Choose an action first." }
+        guard preset.capability != .speak else { return "Speak previews run in Settings → Presets." }
+        guard preset.capability == action.capability else {
+            return "This action needs a \(action.capability.name) preset."
         }
+        guard let connection = configuration.connections.first(where: { $0.key == preset.connectionKey })
+        else {
+            return "The preset’s connection is unavailable. Update the preset in Settings."
+        }
+        if action.webSearch && connection.kind != .openAIAPI {
+            return "Web search needs an OpenAI API Write preset."
+        }
+        guard connection.capabilities.contains(preset.capability) else {
+            return "This connection does not support \(preset.capability.name)."
+        }
+        if preset.model.isEmpty { return "Choose a model in Settings → Presets." }
+        // An unopened connection can load its catalog when selected. Only block on known model evidence.
+        if offline || connectionCatalogs[preset.connectionKey]?.isFresh == true { return presetIssue(preset) }
+        return nil
+    }
+    func chooseLookupPreset(_ id: UUID?) {
+        let preset =
+            id.flatMap { id in configuration.presets.first { $0.id == id } }
+            ?? (id == nil ? replayEntry?.presetSnapshot : nil)
+        guard let preset, lookupPresetChoiceIssue(preset) == nil else { return }
+        choosePreset(id)
     }
     var needsPlan: Bool { currentConnection?.kind == .chatGPTPlan }
     var connectionIssue: String? {

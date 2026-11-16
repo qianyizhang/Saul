@@ -1,70 +1,110 @@
 import EZCore
 import SwiftUI
 
-struct PresetPicker: View {
+struct LookupChoices: View {
     @ObservedObject var model: AppModel
-    var showsLabel = true
-    var showsSpeed = false
-    private var options: [SelectorOption<String>] {
-        var items: [SelectorOption<String>] = []
-        if let saved = model.replayEntry?.presetSnapshot {
-            items.append(.init(value: "saved", title: presetTitle(saved, saved: true)))
-        }
-        items += model.compatiblePresets.map {
-            .init(value: $0.id.uuidString, title: presetTitle($0))
-        }
-        if let selected = model.currentPreset, !items.contains(where: { $0.value == selected.id.uuidString }),
-            model.replayEntry == nil
-        {
-            items.append(
-                .init(value: selected.id.uuidString, title: "\(selected.name) (unavailable)", enabled: false))
-        }
-        if model.currentPreset == nil { items.append(.init(value: "", title: "No preset")) }
-        return items
-    }
-    private func presetTitle(_ preset: ModelPreset, saved: Bool = false) -> String {
-        let name = saved ? "Saved: \(preset.name)" : preset.name
-        if preset.capability == .draw { return name }
-        guard showsSpeed else { return name }
-        if model.minimumMode {
-            return preset.fast ? "\(name) · Fast" : name
-        }
-        let override = !saved && model.overridePresetID == preset.id ? " · Override" : ""
-        return name + override + (preset.fast ? " · Fast requested" : " · Standard")
-    }
+
     var body: some View {
-        SelectorPicker(
-            "Preset", options: options,
-            selection: Binding(
-                get: {
-                    model.replayEntry != nil && model.overridePresetID == nil
-                        ? "saved" : model.currentPreset?.id.uuidString ?? ""
-                }, set: { model.choosePreset(UUID(uuidString: $0)) }), showsLabel: showsLabel
-        )
-        .disabled(model.busy || model.connecting || model.signingIn || model.launcherPending)
+        HStack(spacing: 8) {
+            LookupChoiceButton(
+                role: "Action", options: actions,
+                selection: model.replayEntry?.actionSnapshot != nil
+                    ? "saved" : model.selectedActionID?.uuidString ?? ""
+            ) { value in
+                if let id = UUID(uuidString: value) { model.chooseAction(id) }
+            }
+            .frame(maxWidth: .infinity)
+            .disabled(model.busy || model.launcherPending)
+            LookupChoiceButton(
+                role: "Preset", options: presets, selection: presetSelection
+            ) { model.chooseLookupPreset(UUID(uuidString: $0)) }
+            .frame(maxWidth: .infinity)
+            .disabled(model.busy || model.connecting || model.signingIn || model.launcherPending)
+        }.frame(height: 44)
+    }
+
+    private var actions: [LookupChoice] {
+        var choices = model.configuration.actions.map {
+            LookupChoice(id: $0.id.uuidString, name: $0.name, symbol: $0.symbol, detail: $0.capability.name)
+        }
+        if let saved = model.replayEntry?.actionSnapshot {
+            choices.insert(
+                LookupChoice(
+                    id: "saved", name: "Saved: \(saved.name)", symbol: saved.symbol,
+                    detail: saved.capability.name),
+                at: 0)
+        }
+        return choices
+    }
+
+    private var presetSelection: String {
+        if model.replayEntry?.presetSnapshot != nil && model.overridePresetID == nil { return "saved" }
+        return model.currentPreset?.id.uuidString ?? ""
+    }
+
+    private var presets: [LookupChoice] {
+        var choices = model.configuration.presets.map { presetChoice($0) }
+        if let saved = model.replayEntry?.presetSnapshot {
+            choices.insert(presetChoice(saved, saved: true), at: 0)
+        }
+        return choices
+    }
+
+    private func presetChoice(_ preset: ModelPreset, saved: Bool = false) -> LookupChoice {
+        let connection = model.configuration.connections.first { $0.key == preset.connectionKey }
+        let speed =
+            preset.capability == .write
+            ? (preset.fast ? "Fast" : (model.minimumMode ? nil : "Standard")) : nil
+        let detail = [
+            preset.capability.name, connection?.lookupBillingLabel ?? "Connection unavailable",
+            !saved && model.overridePresetID == preset.id && !model.minimumMode ? "Override" : nil,
+        ].compactMap { $0 }.joined(separator: " · ")
+        return LookupChoice(
+            id: saved ? "saved" : preset.id.uuidString, name: saved ? "Saved: \(preset.name)" : preset.name,
+            detail: detail, badge: speed, unavailable: model.lookupPresetChoiceIssue(preset))
     }
 }
 
-struct RequestControls: View {
+struct LookupBillingLabel: View {
+    @ObservedObject var model: AppModel
+
+    var body: some View {
+        if let connection = model.currentConnection {
+            Text(connection.lookupBillingLabel(search: model.currentAction?.webSearch == true))
+                .font(AppStyle.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+extension ConnectionDefinition {
+    fileprivate var lookupBillingLabel: String { lookupBillingLabel(search: false) }
+
+    fileprivate func lookupBillingLabel(search: Bool) -> String {
+        let provider = kind.name
+        let identity = name == provider ? provider : "\(provider) · \(name)"
+        guard kind == .openAIAPI else { return identity }
+        return identity + (search ? " · search charges apply" : " · billed separately")
+    }
+}
+
+struct NextLookupDetailsButton: View {
     @ObservedObject var model: AppModel
     @State private var showDetails = false
     var body: some View {
-        HStack(spacing: 6) {
-            PresetPicker(model: model, showsLabel: false, showsSpeed: true).frame(width: 250)
-            Button {
-                showDetails.toggle()
-            } label: {
-                Image(systemName: "info.circle").frame(width: 24, height: 24)
-                    .contentShape(Rectangle())
-            }.buttonStyle(.borderless).help("Details")
-                .accessibilityLabel("Details")
-                .popover(isPresented: $showDetails) {
-                    RequestDetails(model: model, showsAnswer: false) {
-                        showDetails = false
-                        model.openSettings(.configuration)
-                    }
-                }
-        }.controlSize(.small)
+        Button {
+            showDetails.toggle()
+        } label: {
+            Image(systemName: "info.circle").frame(width: 24, height: 24).contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless).help("Next lookup details")
+        .accessibilityLabel("Next lookup details")
+        .popover(isPresented: $showDetails) {
+            RequestDetails(model: model, showsAnswer: false) {
+                showDetails = false
+                model.openSettings(.configuration)
+            }
+        }
     }
 }
 
@@ -122,36 +162,6 @@ struct RequestDetails: View {
                     .font(AppStyle.caption).foregroundStyle(.secondary)
             }
         }.textSelection(.enabled)
-    }
-}
-
-struct ActionPicker: View {
-    @ObservedObject var model: AppModel
-    var showsLabel = true
-    private var options: [SelectorOption<String>] {
-        var items: [SelectorOption<String>] = []
-        if let saved = model.replayEntry?.actionSnapshot {
-            items.append(.init(value: "saved", title: "Saved: \(saved.name)", symbol: saved.symbol))
-        }
-        items += model.configuration.actions.map {
-            .init(value: $0.id.uuidString, title: $0.name, symbol: $0.symbol)
-        }
-        if model.currentAction == nil {
-            items.append(.init(value: "", title: "No actions — open Configuration"))
-        }
-        return items
-    }
-    var body: some View {
-        SelectorPicker(
-            "Action", options: options,
-            selection: Binding(
-                get: { model.replayEntry != nil ? "saved" : model.selectedActionID?.uuidString ?? "" },
-                set: { value in
-                    guard value != "saved" else { return }
-                    model.chooseAction(UUID(uuidString: value))
-                }), showsLabel: showsLabel
-        )
-        .disabled(model.busy || model.launcherPending)
     }
 }
 

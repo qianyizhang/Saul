@@ -56,8 +56,12 @@ changes/dismissal. Overview routes current choices to their editor. Use the shar
 
 ## Controls and metadata
 
-- Dropdowns keep a full-width click/scroll target regardless of label length.
-  Quick Lookup's footer preset selector is 250 points wide, with adjacent Details.
+- Both composers put equal Action and Preset choice buttons above the full-width
+  inputs. Each shows the role and current value. Open the button to search the
+  complete catalog in its configured order; current and unavailable rows are marked.
+  Long names and reasons remain available in tooltips and accessibility. Keep Fast
+  visible and show the connection and billing route while composing. Other native
+  dropdowns keep a full-width click/scroll target regardless of label length.
 - Disclosure headers use a full-width button at least 32 points high. Chevron,
   label and whitespace toggle once; expanded content remains interactive.
   Keyboard activation and an accessible Expanded/Collapsed value are required.
@@ -82,8 +86,7 @@ Original/Corrected: removed text has warm tint/strikethrough; additions green/un
 Labels make color nonessential. Wide layouts align paragraph rows in one scroll
 area; narrow layouts show Corrected first and disclose Original. Notes sit under
 Why these changes. Unrecognized formats keep ordinary reading with long original
-text collapsed. Literal output remains in Details → Inspect; Standard also exposes
-the main inspector directly. [Architecture](architecture.md#spelling-comparison-presentation)
+text collapsed. Literal output remains in Details → Inspect in both modes. [Architecture](architecture.md#spelling-comparison-presentation)
 owns parsing and bounds.
 
 Search citations are clickable in both readers. Generic image fields show preview,

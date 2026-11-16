@@ -34,6 +34,7 @@ case "$kind" in
         ez_build_product EZChecks
         ez_link_modules EZChecks EZCheckSupport
         ez_compile_library Sources/EZ/AppStyle.swift Sources/EZ/DesignTokens.swift Sources/EZ/MultilineDraftReturn.swift \
+            Sources/EZ/LookupChoiceButton.swift Sources/EZ/SelectorPicker.swift \
             Tests/EZUIChecks/*.swift "${ez_objects[@]}" -o "$ez_bin_dir/EZUIChecks"
         exec "$ez_bin_dir/EZUIChecks" "$@"
         ;;

@@ -64,7 +64,7 @@ import Foundation
                 "New lookup resurrected removed action")
         },
         stateCase("history reuse restores removed action preset and inputs") { f in
-            let snapshot = try f.snapshot()
+            let snapshot = try f.savedAnswer()
             try f.model.saveConfiguration(Configuration())
             f.model.reuse(snapshot)
             try expect(
@@ -77,7 +77,7 @@ import Foundation
                 "New lookup resurrected removed configuration")
         },
         stateCase("configuration edit preserves history replay until new lookup") { f in
-            let snapshot = try f.snapshot()
+            let snapshot = try f.savedAnswer()
             f.model.reuse(snapshot)
             var edited = f.configuration
             let index = edited.actions.firstIndex { $0.id == f.multi.id }!
@@ -91,6 +91,61 @@ import Foundation
             try expect(
                 f.model.currentAction?.id == f.configuration.actions.first?.id,
                 "New lookup did not select a remaining action")
+        },
+        stateCase("history selection keeps an independent draft until explicit Reuse") { f in
+            let answer = try f.savedAnswer()
+            try f.history.append(answer)
+            f.model.entries = [answer]
+            f.model.selection = answer.id
+            try expect(!f.model.hasRetainedDraft, "History selection was mistaken for a draft")
+
+            f.model.query = "Unrelated draft"
+            f.model.showsMainComposer = true
+            f.model.showsMainComposer = false
+            try expect(
+                f.model.hasRetainedDraft && f.model.query == "Unrelated draft", "Edit/Hide lost the draft")
+            try expectEqual(f.model.selection, answer.id, "Edit/Hide replaced the viewed answer")
+
+            for status in ["pending", "unsaved"] {
+                var unavailable = answer
+                unavailable.status = status
+                f.model.reuse(unavailable)
+                try expectEqual(f.model.query, "Unrelated draft", "Reuse accepted an unavailable request")
+            }
+            var foreign = answer
+            foreign.sourceID = "saul-fixture"
+            f.model.reuse(foreign)
+            try expectEqual(f.model.query, "Unrelated draft", "Reuse replaced the draft with a Saul request")
+
+            f.model.reuse(answer)
+            try expectEqual(
+                f.model.inputValues, answer.inputValues!, "Reuse did not restore the saved inputs")
+            try expectEqual(f.model.currentPreset, answer.presetSnapshot, "Reuse lost the saved preset")
+            try expect(
+                f.model.selection == nil && !f.model.busy, "Reuse did not open the draft without sending")
+            try expectEqual(try f.history.load().count, 1, "Reuse wrote another history record")
+        },
+        stateCase("preset choices surface unavailable models without substituting a route") { f in
+            f.model.chooseAction(f.single.id)
+            let selected = f.model.currentPreset
+            try expect(f.model.lookupPresetChoiceIssue(f.alternate) == nil, "A valid override was disabled")
+            var retired = f.alternate
+            retired.id = UUID()
+            retired.name = "Retired model"
+            retired.model = "retired-fixture-model"
+            var configuration = f.configuration
+            configuration.presets.append(retired)
+            try f.model.saveConfiguration(configuration)
+            try expect(f.model.lookupPresetChoiceIssue(retired) != nil, "A removed model was available")
+            var incompatible = f.alternate
+            incompatible.capability = .speak
+            try expect(
+                f.model.lookupPresetChoiceIssue(incompatible) != nil,
+                "A Speak preview was available for Write")
+            f.model.chooseLookupPreset(retired.id)
+            try expectEqual(f.model.currentPreset, selected, "A removed model replaced the selected route")
+            f.model.chooseLookupPreset(f.alternate.id)
+            try expectEqual(f.model.currentPreset, f.alternate, "A supported preset could not be selected")
         },
         stateCase("thinking light follows only the selected pending lookup while busy") { f in
             let entry = try f.selectLookup()

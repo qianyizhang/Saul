@@ -228,13 +228,13 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
             model.send()
             try expect(!model.canSend && calls == 0, "Missing API key sent a request")
             model.apiConnected = true
-            model.choosePreset(model.configuration.presets.first { $0.capability == .write }!.id)
+            let write = model.configuration.presets.first { $0.capability == .write }!
+            model.chooseLookupPreset(write.id)
+            try expectEqual(model.currentPreset?.capability, .draw, "Chooser selected Write for Draw")
+            model.choosePreset(write.id)
             try expect(
                 !model.canSend && model.requestIssue?.contains("Draw") == true,
                 "Write preset accepted for Draw action")
-            try expect(
-                model.compatiblePresets.allSatisfy { $0.capability == .draw },
-                "Incompatible preset offered for Draw")
             model.choosePreset(model.configuration.presets.first { $0.capability == .draw }!.id)
             var unavailable = model.configuration
             unavailable.connections.removeAll { $0.key == "openai-api" }

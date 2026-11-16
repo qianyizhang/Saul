@@ -12,6 +12,7 @@ struct QuickLookupView: View {
         VStack(alignment: .leading, spacing: 10) {
             header
             if showsInputs {
+                LookupChoices(model: model)
                 ActionInputs(
                     model: model, compact: true, presentation: controller.presentation,
                     onConfigure: { controller.showMain(settings: true) },
@@ -21,13 +22,6 @@ struct QuickLookupView: View {
                     })
             }
             actions
-            if showsInputs, model.currentConnection?.kind == .openAIAPI {
-                Text(
-                    model.currentAction?.webSearch == true
-                        ? "OpenAI API · search charges apply" : "OpenAI API · billed separately"
-                )
-                .font(AppStyle.caption).foregroundStyle(.secondary)
-            }
             if !notices.isEmpty || needsSetup || (model.needsPlan && model.connecting) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
@@ -92,7 +86,7 @@ struct QuickLookupView: View {
     private var header: some View {
         HStack(spacing: 8) {
             if showsInputs {
-                ActionPicker(model: model, showsLabel: false)
+                Text("Quick Lookup").font(AppStyle.caption).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else if let entry = model.selectedEntry {
                 Label(entry.actionName, systemImage: entry.actionSymbol)
@@ -105,8 +99,8 @@ struct QuickLookupView: View {
                 ControlLabel(symbol: .openWorkspace)
             }.help("Open EZ & history").accessibilityLabel("Open EZ & history")
             Menu {
-                if let entry = model.selectedEntry, entry.status != "pending" {
-                    Button("Reuse") { model.reuse(entry) }.disabled(model.busy || model.launcherPending)
+                if let entry = model.selectedEntry, model.canReuse(entry) {
+                    Button("Reuse") { model.reuse(entry) }
                     Divider()
                 }
                 Toggle("Min Mode", isOn: $model.minimumMode)
@@ -136,7 +130,9 @@ struct QuickLookupView: View {
                 "New lookup · \(model.shortcuts.binding(for: .newLookup).display)"
             )
             .disabled(model.busy || model.launcherPending)
-            if model.minimumMode && model.selectedEntry != nil && !model.busy {
+            if model.minimumMode && model.selectedEntry != nil && !model.busy && !model.launcherPending
+                && (showsComposer || model.hasRetainedDraft)
+            {
                 Button(showsInputs ? "Hide" : "Edit") { showsComposer.toggle() }
                     .help(showsInputs ? "Hide draft" : "Edit draft")
                     .accessibilityLabel(showsInputs ? "Hide draft" : "Edit draft")
@@ -167,8 +163,7 @@ struct QuickLookupView: View {
     private var footer: some View {
         HStack(spacing: 8) {
             if showsInputs {
-                PresetPicker(model: model, showsLabel: false, showsSpeed: true)
-                    .frame(width: 250)
+                LookupBillingLabel(model: model)
             } else if let entry = model.selectedEntry {
                 Text(
                     entry.presetSnapshot.map {
@@ -190,10 +185,10 @@ struct QuickLookupView: View {
                 .accessibilityLabel("Details")
                 .popover(isPresented: $showDetails) { details }
             Spacer(minLength: 0)
-            if let entry = model.selectedEntry, entry.capability == .draw, entry.hasImage {
+            if let entry = model.selectedEntry, entry.capability == .draw, model.imageData(for: entry) != nil
+            {
                 Button("Download") { model.downloadImage(entry) }.buttonStyle(.borderless)
-                    .disabled(model.imageLoading)
-            } else if let entry = model.selectedEntry, !entry.response.isEmpty {
+            } else if let entry = model.selectedEntry, entry.capability == .write, !entry.response.isEmpty {
                 Button {
                     model.copy(entry.citedResponse)
                 } label: {
@@ -250,6 +245,7 @@ struct QuickLookupView: View {
     }
     private var layout: QuickLookupLayout {
         QuickLookupLayout(
+            showsChoices: showsInputs,
             fieldCount: showsInputs ? model.inputFields.count : 0,
             showsNotice: !notices.isEmpty || needsSetup || (model.needsPlan && model.connecting),
             showsAnswer: model.selectedEntry != nil,

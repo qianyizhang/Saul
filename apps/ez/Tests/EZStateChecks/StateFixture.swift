@@ -39,6 +39,12 @@ import Foundation
             values: ["fuzzy term": "elicit", "fuzzy context": "draw out"],
             preset: alternate, models: model.models, provider: .chatGPTPlan)
     }
+    func savedAnswer() throws -> HistoryEntry {
+        var entry = try snapshot()
+        entry.status = "completed"
+        entry.response = "A saved fixture answer."
+        return entry
+    }
     func selectLookup() throws -> HistoryEntry {
         let entry = try snapshot()
         try history.append(entry)

@@ -3,13 +3,13 @@ import EZCore
 import Foundation
 
 extension AppModel {
-    func refreshActiveConnection() {
+    func refreshActiveConnection(preferred: ConnectionDefinition? = nil) {
         let previous = activeConnectionRefresh
         previous?.cancel()
         let selectedConnection = selectedEntry.flatMap { entry in
             configuration.connections.first { $0.key == entry.presetSnapshot?.connectionKey }
         }
-        guard !offline, let connection = selectedConnection ?? currentConnection,
+        guard !offline, let connection = preferred ?? selectedConnection ?? currentConnection,
             connectionCatalogs[connection.key]?.isFresh != true
         else { return }
         activeConnectionRefresh = Task {

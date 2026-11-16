@@ -8,7 +8,9 @@ struct FollowUpComposer: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        if entry.sourceID == nil && entry.status == "completed" && !entry.response.isEmpty {
+        if entry.sourceID == nil && entry.capability == .write && entry.status == "completed"
+            && !entry.response.isEmpty
+        {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Ask a follow-up").font(AppStyle.caption).foregroundStyle(.secondary)
                 HStack(alignment: .bottom, spacing: 8) {

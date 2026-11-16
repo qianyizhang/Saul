@@ -21,7 +21,9 @@ import SaulCredentialStorage
     @Published var settingsPresetID: UUID?
     @Published private(set) var configuration = Configuration()
     @Published var selectedActionID: UUID? { didSet { refreshActiveConnection() } }
-    @Published var overridePresetID: UUID? { didSet { refreshActiveConnection() } }
+    @Published var overridePresetID: UUID? {
+        didSet { refreshActiveConnection(preferred: currentConnection) }
+    }
     @Published var inputValues: [String: String] = [:]
     private var imageImportID = UUID()
     @Published private var attachedImage: ImageAttachment?
@@ -264,6 +266,11 @@ import SaulCredentialStorage
     }
     var inputImage: ImageAttachment? { usesSketch ? sketch.scene.photo?.asset.attachment : attachedImage }
     var hasImageInput: Bool { usesSketch ? sketch.scene.hasContent : inputImage != nil }
+    var hasRetainedDraft: Bool {
+        inputValues.values.contains { !$0.isEmpty } || hasImageInput || replayEntry != nil
+            || overridePresetID != nil || outputFormatOverride != nil
+            || (usesSketch && (sketch.canUndo || sketch.canRedo))
+    }
     func openSettings(_ section: SettingsSection = .overview) {
         if !showSettings { refreshConfiguration() }
         settingsSection = section
@@ -628,12 +635,15 @@ import SaulCredentialStorage
         error = nil
         draftRevision += 1
     }
+    func canReuse(_ entry: HistoryEntry) -> Bool {
+        entry.sourceID == nil && !["pending", "unsaved"].contains(entry.status) && !busy && !launcherPending
+    }
     func reuse(_ entry: HistoryEntry) {
-        guard entry.sourceID == nil else {
+        if entry.sourceID != nil {
             error = "Open this saved request in Saul to run it again."
             return
         }
-        guard !busy, !launcherPending else { return }
+        guard canReuse(entry) else { return }
         var saved = entry
         if saved.actionSnapshot == nil {
             let preset = ModelPreset(
