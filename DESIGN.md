@@ -184,9 +184,21 @@ this notice visible after navigating away and back, including in Min Mode.
 Explain that unsaved output must be saved or exported before quitting.
 
 A stale Settings save must preserve the local draft and selection. Show the
-conflict beside Save and offer an explicit reload of the current saved settings.
-Confirm discarding a dirty draft before reloading. An unknown save outcome also
-requires reloading before another save; never silently overwrite or merge it.
+conflict beside Save and offer **Review latest**. Keep the original draft while
+reading current values. Show only local edits; retain non-conflicting edits by
+default and require **Mine / Latest** for fields changed on both sides or removed
+items. **Apply to draft** is separate from Save. Cancel keeps the original draft
+and editing context. Keep the existing confirmed Reload as an explicit discard
+path. An unknown save outcome requires a fresh read before another save; if the
+edits already match saved values, do not send the write again. Never silently
+overwrite or merge settings. Credentials stay masked and paired with their endpoint.
+
+In EZ, failed and stopped native requests offer **Retry same request** in the main
+window and Quick Lookup, for text and images. Retry creates a new attempt using
+the frozen request and validates its saved connection, model and image input.
+Keep the previous result and unrelated draft. Unavailable choices block with
+**Review saved request**; no fallback or automatic retry. Completed answers keep
+Reuse; unsaved results keep the storage-only Save again action.
 
 Input labels remain identifiable after typing, especially in multi-field forms.
 Disclosures name what they reveal and have a full-row activation target. Opening
@@ -432,6 +444,12 @@ status cues or floating entry points. Use existing platform icons consistently.
 ## Components
 
 ### Reading activity
+
+The selection widget uses **Explain & open** / **Illustrate & open** to open the
+requested card once submission is accepted. Keyboard requests stay quiet,
+including repeated requests; their notice offers View. Opening is a user action,
+not a completion effect. Close/Escape hide the card without cancelling work;
+completion must never reopen it or steal focus.
 
 Use a quiet thinking light on the answer boundary, matching EZ. A 24%-width
 light moves smoothly across a fixed 2px divider on a 3.2-second round trip.

@@ -166,13 +166,17 @@ pnpm exec playwright show-trace ../../.artifacts/saul/e2e/latest/results/<case>/
 
 In `pnpm test:user`:
 
-1. Select the fixture concept and choose **Explain**.
-2. Confirm the page stays readable while the underline and queued/ready cues update.
+1. Select the fixture concept and choose **Explain & open**. Confirm its card opens after acceptance. **Illustrate & open** follows the same rule for images.
+2. Close the card before completion and confirm it stays closed. Submit another selection with **Alt+Shift+E**; confirm this keyboard request stays quiet while the underline and queued/ready cues update.
 3. Open the marker, inspect notes, close it, refresh, and reopen the restored result.
 4. Check unread state, **Alt+Shift+L**, source navigation, keyboard/pin/follow-up/stop behavior, and direct tab edits or Codex proposal review when relevant.
 5. Toggle **Mute error notifications** in Settings; verify another tab and a browser relaunch observe the setting, then turn it off.
 6. Toggle **Min Mode** while a page explanation and full History workspace are open. Check that the presentation changes immediately, remains after restart, and can change with an invalid provider draft. In Min Mode, verify **More**, **Details**, source links, errors, and unsaved changes.
 7. Check **Command/Ctrl+Enter** on a source selection, **Escape** while generation is active, and **Command/Ctrl+.** with the job open. Editable fields and Chrome shortcuts must keep their existing behavior.
+8. Make conflicting Settings edits in two surfaces. **Review latest** keeps the
+   original draft while showing changed fields. Cancel returns to the same editing
+   context; Apply requires conflict choices and changes only the draft. Save checks
+   the new revision. An already delivered save needs no second commit.
 
 A successful smoke run verifies setup only. Record the built source scope, passed checks, and untested live-provider behavior after hands-on review.
 

@@ -136,9 +136,16 @@ The native configuration owner checks shared and scoped revisions under one
 cross-process lease and commits both sections in one JSON replacement. The
 [shared contract](../../../contracts/README.md#unified-configuration-scopes) owns
 the lock, failure and upgrade rules.
-A stale Save preserves all draft fields and selections and blocks another Save
-until explicit reload; discarding a dirty draft for reload requires confirmation.
-An uncertain response also preserves the draft without replaying the write.
+A stale Save preserves draft fields and selection and blocks another Save until
+**Review latest** reads a fresh revision or a confirmed Reload discards the draft.
+`models/settings-recovery.ts` compares owned fields against the loaded baseline,
+keeps unrelated latest changes, and requires choices for conflicts and removed
+items. Editor projections and storage revisions are not edits. Apply validates
+the reviewed draft without writing; Save still uses the trusted revision check.
+Cancelling or a failed read preserves the original draft and editing context.
+An uncertain response follows the same read-first review, without replaying the
+write. Already matching edits require no new commit. Credential/endpoint changes
+are reviewed together so recovery cannot pair a key with another destination.
 Presentation and notification preferences use separate keys and do not cause
 configuration conflicts. Invalid-record backup/reset uses the same commit lane.
 

@@ -40,7 +40,7 @@ async function selectRecipe(page: Page, recipeId: string) {
   await page.locator('#concept').click({ clickCount: 3 });
   await expect(page.getByRole('combobox', { name: 'Action', exact: true })).toBeVisible();
   await page.getByRole('combobox', { name: 'Action', exact: true }).selectOption(recipeId);
-  await page.getByRole('button', { name: 'Explain', exact: true }).click();
+  await page.getByRole('button', { name: 'Explain & open', exact: true }).click();
 }
 function sentRequest(server: Awaited<ReturnType<typeof createFixtureServer>>, index: number) {
   return JSON.parse(server.requests[index]!.body) as {

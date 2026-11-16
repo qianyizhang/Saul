@@ -1,0 +1,26 @@
+import EZCore
+import SwiftUI
+
+struct RetryAttemptNotice: View {
+    @ObservedObject var model: AppModel
+    let entry: HistoryEntry
+    var onReview: () -> Void = {}
+
+    var body: some View {
+        if entry.isRetryable {
+            VStack(alignment: .leading, spacing: 8) {
+                Button("Retry same request", systemImage: "arrow.clockwise") { model.retry(entry.id) }
+                    .disabled(!model.canRetry(entry))
+                    .help("Start a new request with the saved inputs and preset")
+                if let failure = model.retryFailure, failure.entryID == entry.id {
+                    Text(failure.message).foregroundStyle(.red).textSelection(.enabled)
+                    Button("Review saved request") {
+                        model.reuse(entry)
+                        model.showsMainComposer = true
+                        onReview()
+                    }.disabled(!model.canRetry(entry))
+                }
+            }.font(AppStyle.caption).controlSize(.small)
+        }
+    }
+}

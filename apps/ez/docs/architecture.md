@@ -135,6 +135,15 @@ saves the terminal snapshot before publishing a saved outcome. An initial save
 failure blocks the request. Cancellation invalidates callbacks from older attempts.
 Requested and returned service tiers remain separate.
 
+Failed or interrupted native requests expose **Retry same request** in both reading
+surfaces. `HistoryEntry.prepareRetry` creates a new identity from the frozen prompt,
+action, preset, connection and source image, clearing only previous output/status.
+`AppModel.retry` reloads configuration and saved image bytes, validates availability
+and immutable connection identity, then enters the same pending-save execution
+owner. It never routes through the current editor. The previous result and any
+unrelated draft remain intact; missing inputs or changed routes offer review of
+the saved request. Completed and Unsaved entries do not offer inference Retry.
+
 A terminal save failure retains the exact completed/interrupted/failed snapshot,
 images, provider error and metrics in memory by UUID, projected as **Unsaved**
 with a separate save error. New lookup, selection and hiding preserve it.

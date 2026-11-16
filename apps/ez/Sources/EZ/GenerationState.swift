@@ -14,16 +14,20 @@ extension AppModel {
     }
     var needsPlan: Bool { currentConnection?.kind == .chatGPTPlan }
     var connectionIssue: String? {
+        connectionIssue(for: currentPreset)
+    }
+    func connectionIssue(for preset: ModelPreset?) -> String? {
         if !offline, !sharedCredentialsConnected {
             return "Connect to Saul in Settings → Preferences → Integrations."
         }
-        guard currentPreset != nil else { return nil }
-        guard let connection = currentConnection else {
+        guard let preset else { return nil }
+        guard let connection = configuration.connections.first(where: { $0.key == preset.connectionKey })
+        else {
             return "The selected preset's connection is unavailable. Open Connections."
         }
-        guard connection.capabilities.contains(currentPreset?.capability ?? .write) else {
+        guard connection.capabilities.contains(preset.capability) else {
             return
-                "Connection ‘\(connection.name)’ cannot \(currentPreset?.capability.rawValue ?? "write"). Choose a compatible preset."
+                "Connection ‘\(connection.name)’ cannot \(preset.capability.rawValue). Choose a compatible preset."
         }
         if !offline {
             if connection.kind == .chatGPTPlan && connection.accountId == nil {

@@ -213,8 +213,7 @@ test('empty model output stays a failed attempt without a completed answer', asy
     await article.goto(server.origin + '/article');
     await expect(article.locator('saul-root')).toBeAttached();
     await article.locator('#concept').click({ clickCount: 3 });
-    await article.getByRole('button', { name: 'Explain', exact: true }).click();
-    await article.getByRole('button', { name: 'View', exact: true }).click();
+    await article.getByRole('button', { name: 'Explain & open', exact: true }).click();
     await expect(article.getByRole('alert')).toContainText('The model returned no explanation');
     await expect(article.getByText('Saved', { exact: true })).toHaveCount(0);
     expect((await getFirstHistory(popup)).latest.status).toBe('failed');
@@ -320,8 +319,7 @@ test('stopping a slow explanation retains partial text without saving a complete
     await article.goto(server.origin + '/article');
     await expect(article.locator('saul-root')).toBeAttached();
     await article.locator('#concept').click({ clickCount: 3 });
-    await article.getByRole('button', { name: 'Explain', exact: true }).click();
-    await article.getByRole('button', { name: 'View', exact: true }).click();
+    await article.getByRole('button', { name: 'Explain & open', exact: true }).click();
     await expect(article.getByText('A gradient describes how a', { exact: false })).toBeVisible();
     await article.getByRole('button', { name: 'Stop', exact: true }).click();
     await expect(article.getByText('Stopped', { exact: true })).toBeVisible();

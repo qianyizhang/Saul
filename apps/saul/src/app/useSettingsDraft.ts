@@ -7,6 +7,11 @@ import {
   type SettingsEdit,
 } from '../models/settings-draft';
 import { DEFAULT_SETTINGS } from '../storage/settings';
+import {
+  reviewSettings,
+  type RecoveryChoice,
+  type SettingsReview,
+} from '../models/settings-recovery';
 import { requestSettings, SettingsDeliveryError } from '../storage/settings-client';
 import type { ConnectionDefinition } from '../../native/shared-presets-contract.mts';
 
@@ -17,6 +22,11 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
   const [form, setForm] = useState(() => createSettingsDraft(DEFAULT_SETTINGS));
   const formRef = useRef(form);
   const baseline = useRef<string | undefined>(undefined);
+  const loadedDraft = useRef<typeof form | undefined>(undefined);
+  const [review, setReview] = useState<{
+    plan: SettingsReview;
+    latest: SettingsState & { state: 'ready' };
+  }>();
   const running = useRef(false);
   const mounted = useRef(true);
   const [loaded, setLoaded] = useState(false),
@@ -55,7 +65,10 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
       setSaved(false);
       return;
     }
-    replaceForm(createSettingsDraft(result.settings));
+    const next = createSettingsDraft(result.settings);
+    replaceForm(next);
+    loadedDraft.current = structuredClone(next);
+    setReview(undefined);
     setLoaded(true);
     markDirty(false);
     setSaved(false);
@@ -106,11 +119,15 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
     running.current = true;
     setSaving(true);
     setError('');
+    setRecoveryNotice('');
+    let submitted = false;
     try {
+      const settings = settingsForSave(formRef.current);
+      submitted = true;
       const result = await requestSettings({
         action: 'commit',
         baseline: baseline.current,
-        settings: settingsForSave(formRef.current),
+        settings,
       });
       if (!mounted.current) return;
       if (result.state !== 'ready') {
@@ -125,21 +142,68 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
       const migrated = result.settings.configuration?.presets.find(
         (p) => p.name === selected?.name && p.provider === selected?.provider,
       );
-      replaceForm({
+      const next = {
         ...formRef.current,
         settings: result.settings,
         presetId: migrated?.id ?? formRef.current.presetId,
-      });
+      };
+      replaceForm(next);
+      loadedDraft.current = structuredClone(next);
       markDirty(false);
       setSaved(true);
     } catch (cause) {
       if (!mounted.current) return;
       setError(message(cause));
-      if (cause instanceof SettingsDeliveryError) setBlocked(true);
+      if (submitted) setBlocked(true);
     } finally {
       running.current = false;
       if (mounted.current) setSaving(false);
     }
+  }
+  async function reviewLatest() {
+    if (running.current || !loadedDraft.current) return;
+    running.current = true;
+    setSaving(true);
+    setError('');
+    try {
+      const latest = await requestSettings({ action: 'read' });
+      if (!mounted.current) return;
+      if (latest.state !== 'ready') throw new Error(latest.error);
+      setReview({
+        plan: reviewSettings(loadedDraft.current, formRef.current, latest.settings),
+        latest,
+      });
+    } catch (cause) {
+      if (mounted.current) setError(`${message(cause)} Your draft is still here.`);
+    } finally {
+      running.current = false;
+      if (mounted.current) setSaving(false);
+    }
+  }
+  function applyReview(choices: Record<string, RecoveryChoice | undefined>) {
+    if (!review || running.current) return;
+    try {
+      const result = review.plan.apply(choices);
+      baseline.current = review.latest.revision;
+      loadedDraft.current = createSettingsDraft(review.latest.settings);
+      replaceForm(result.draft);
+      markDirty(result.dirty);
+      setBlocked(false);
+      setSaved(false);
+      setError('');
+      setReview(undefined);
+      setRecoveryNotice(
+        result.dirty
+          ? 'Reviewed edits are in your draft. Save to apply them.'
+          : 'Your edits already match the saved settings.',
+      );
+    } catch (cause) {
+      setError(message(cause));
+    }
+  }
+  function cancelReview() {
+    setReview(undefined);
+    setError('Your draft is still here. Review latest settings before saving again.');
   }
   async function reload() {
     if (running.current) return;
@@ -246,6 +310,10 @@ export function useSettingsDraft(onDirty?: (dirty: boolean) => void) {
     canResetInvalidSettings,
     resettingInvalidSettings,
     recoveryNotice,
+    review: review?.plan,
+    reviewLatest,
+    applyReview,
+    cancelReview,
     edit,
     save,
     reload,

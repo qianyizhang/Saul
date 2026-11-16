@@ -28,6 +28,11 @@ import SaulCredentialStorage
     @Published var inputImageError: String?
     @Published private(set) var sketch = SketchDraft()
     @Published var showsMainComposer = false
+    struct RetryFailure {
+        let entryID: UUID
+        let message: String
+    }
+    @Published private(set) var retryFailure: RetryFailure?
     @Published var outputFormatOverride: String?
     var outputFormat: String { outputFormatOverride ?? currentPreset?.imageOptions?.outputFormat ?? "png" }
     @Published private(set) var draftRevision = 0
@@ -581,6 +586,33 @@ import SaulCredentialStorage
     func saveAgain(_ id: UUID) {
         guard canSaveAgain, entries.contains(where: { $0.id == id }) else { return }
         attemptExecution?.saveAgain(id)
+    }
+    func canRetry(_ entry: HistoryEntry) -> Bool {
+        entry.isRetryable && attemptExecution != nil && history != nil && lock != nil
+            && !busy && !launcherPending && !signingIn && !connecting && !apiKeyBusy
+    }
+    func retry(_ id: UUID) {
+        guard let original = entries.first(where: { $0.id == id }), canRetry(original),
+            let attemptExecution, let history
+        else { return }
+        retryFailure = nil
+        refreshConfiguration()
+        do {
+            guard configurationLoaded else {
+                throw EZError(configurationError ?? "Configuration is unavailable. Open Settings.")
+            }
+            guard let preset = original.presetSnapshot,
+                let connection = configuration.connections.first(where: { $0.key == preset.connectionKey })
+            else { throw EZError("The saved preset or connection is unavailable. Review the saved request.") }
+            if let issue = connectionIssue(for: preset) { throw EZError(issue) }
+            if let issue = presetIssue(preset) { throw EZError(issue) }
+            let next = try original.prepareRetry(
+                connection: connection, image: history.inputImage(for: original))
+            try attemptExecution.start(next)
+            selection = next.id
+        } catch {
+            retryFailure = RetryFailure(entryID: id, message: error.localizedDescription)
+        }
     }
     func newQuery() {
         guard !busy, !launcherPending else { return }

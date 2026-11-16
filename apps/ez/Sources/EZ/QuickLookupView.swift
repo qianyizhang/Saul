@@ -217,6 +217,7 @@ struct QuickLookupView: View {
             LookupAnswerText(
                 entry: entry, activity: model.selectedResponseActivity, compact: true,
                 imageData: model.imageData(for: entry), imageLoading: model.imageLoading)
+            RetryAttemptNotice(model: model, entry: entry) { controller.showMain() }
             if let parentID = entry.parentID, model.entries.contains(where: { $0.id == parentID }) {
                 Button("Previous answer") { model.selection = parentID }.buttonStyle(.borderless)
             }

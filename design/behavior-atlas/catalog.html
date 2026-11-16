@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Saul / EZ · Behavior atlas</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --paper: #f6f5f3;
+        --ink: #282a2e;
+        --muted: #62656c;
+        --line: #d5d5d3;
+        --link: #245dc5;
+        --panel: #fff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font:
+          15px/1.6 system-ui,
+          sans-serif;
+      }
+      main {
+        max-width: 1120px;
+        margin: auto;
+        padding: 48px 28px;
+      }
+      header {
+        max-width: 760px;
+        margin-bottom: 36px;
+      }
+      .eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      h1 {
+        font:
+          46px/1.1 Georgia,
+          serif;
+        margin: 15px 0;
+      }
+      h2 {
+        font:
+          23px/1.25 Georgia,
+          serif;
+        margin: 0 0 18px;
+      }
+      header p {
+        font-size: 17px;
+        color: var(--muted);
+      }
+      nav {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 48px;
+      }
+      nav.proposals {
+        display: block;
+        margin-bottom: 40px;
+      }
+      ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      li {
+        border-top: 1px solid var(--line);
+        padding: 20px 0 24px;
+      }
+      a {
+        color: var(--link);
+        text-decoration: none;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        font-size: 19px;
+        min-height: 44px;
+      }
+      a:hover span:first-child {
+        text-decoration: underline;
+      }
+      a:focus-visible {
+        outline: 3px solid var(--link);
+        outline-offset: 4px;
+        border-radius: 3px;
+      }
+      li p {
+        margin: 4px 0 10px;
+        max-width: 430px;
+      }
+      small,
+      footer {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      footer {
+        margin-top: 24px;
+        border-top: 1px solid var(--line);
+        padding-top: 18px;
+      }
+      footer p {
+        margin: 6px 0;
+      }
+      footer strong {
+        color: var(--ink);
+      }
+      @media (max-width: 720px) {
+        main {
+          padding: 28px 20px;
+        }
+        nav {
+          grid-template-columns: 1fr;
+          gap: 30px;
+        }
+        h1 {
+          font-size: 36px;
+        }
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --paper: #222326;
+          --ink: #e8e9ec;
+          --muted: #b7bac2;
+          --line: #4d5056;
+          --link: #90b5ff;
+          --panel: #2b2d31;
+        }
+      }
+      @media (forced-colors: active) {
+        a:focus-visible {
+          outline: 3px solid Highlight;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="eyebrow">Current source · 15 November 2026</div>
+        <h1>Saul / EZ behavior atlas</h1>
+        <p>
+          Pick a part of the product. Replay a code-backed journey, then explore the alternatives
+          from each state.
+        </p>
+      </header>
+      <nav class="proposals" aria-labelledby="proposals-title">
+        <h2 id="proposals-title">Implemented changes · design comparisons</h2>
+        <p>
+          Open a proposal and choose <strong>Comparison</strong>. Scrub either branch to compare the
+          same start and outcome. All three changes are implemented. These comparisons retain the
+          original design studies; the maps below show current behavior.
+        </p>
+        <ul>
+          <li>
+            <a href="proposals/ez-retry.html"
+              ><span>1 · EZ: put Retry beside the failure</span><span aria-hidden="true">↗</span></a
+            >
+            <p>
+              More → Reuse → Run becomes one explicit Retry. Reuse remains available for editing.
+            </p>
+          </li>
+          <li>
+            <a href="proposals/saul-conflict.html"
+              ><span>2 · Saul: recover without retyping the draft</span
+              ><span aria-hidden="true">↗</span></a
+            >
+            <p>
+              Review current values while keeping your edit, then reapply it deliberately. Apply to
+              draft and Save remain separate.
+            </p>
+          </li>
+          <li>
+            <a href="proposals/saul-open.html"
+              ><span>3 · Saul: make “read now” a single action</span
+              ><span aria-hidden="true">↗</span></a
+            >
+            <p>
+              Explain &amp; open removes the later View click. Pointer actions open text and images;
+              keyboard queuing stays quiet.
+            </p>
+          </li>
+        </ul>
+      </nav>
+      <nav aria-label="Behavior maps">
+        <section aria-labelledby="ez">
+          <h2 id="ez">EZ · native Mac app</h2>
+          <ul>
+            <li>
+              <a href="ez-lookup.html"
+                ><span>Lookup &amp; saved work</span><span aria-hidden="true">↗</span></a
+              >
+              <p>Run, stop, recover, follow up, reuse and hand off Quick Lookup.</p>
+              <small>11 journeys · 26 states</small>
+            </li>
+            <li>
+              <a href="ez-images.html"
+                ><span>Images &amp; sketch</span><span aria-hidden="true">↗</span></a
+              >
+              <p>Illustration, GIF, Make meme, retained sketches and image recovery.</p>
+              <small>10 journeys · 18 states</small>
+            </li>
+            <li>
+              <a href="ez-settings.html"
+                ><span>Settings &amp; connections</span><span aria-hidden="true">↗</span></a
+              >
+              <p>Presets, actions, unsaved edits, authorization and speech preview.</p>
+              <small>9 journeys · 32 states</small>
+            </li>
+          </ul>
+        </section>
+        <section aria-labelledby="saul">
+          <h2 id="saul">Saul · Chrome extension</h2>
+          <ul>
+            <li>
+              <a href="saul-reading.html"
+                ><span>Reading &amp; history</span><span aria-hidden="true">↗</span></a
+              >
+              <p>Select, Explain, View, reuse, retry, follow up and inspect saved passages.</p>
+              <small>13 journeys · 30 states</small>
+            </li>
+            <li>
+              <a href="saul-calls.html"
+                ><span>Calls &amp; window work</span><span aria-hidden="true">↗</span></a
+              >
+              <p>Capture a page, summarize, stop, retry frozen input, compare and organize tabs.</p>
+              <small>11 journeys · 25 states</small>
+            </li>
+            <li>
+              <a href="saul-settings.html"
+                ><span>Settings &amp; Calls setup</span><span aria-hidden="true">↗</span></a
+              >
+              <p>
+                Resolve edit conflicts, connect accounts, and inspect code before selecting a Call.
+              </p>
+              <small>12 journeys · 37 states</small>
+            </li>
+          </ul>
+        </section>
+      </nav>
+      <footer>
+        <p>
+          <strong>Review the route:</strong> Journey replays a fixed sequence. Exploration enables
+          only modeled next steps. Switch App major / Map major; press N to change map label
+          density.
+        </p>
+        <p>
+          Source includes the accepted journey changes since 0a949cf. Fixed fictional fixtures; no
+          live app actions, credentials or provider requests. Coverage and source references are
+          inside each map.
+        </p>
+        <p>
+          The six current behavior maps remain separate from the original design comparisons above.
+          These are scoped projections, not an exhaustive inventory of every control or concurrent
+          state.
+        </p>
+      </footer>
+    </main>
+  </body>
+</html>

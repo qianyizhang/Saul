@@ -4,9 +4,9 @@ See the [glossary](../GLOSSARY.md) for shared domain and surface names.
 
 ## Reading
 
-1. Select a term or short passage, choose an action, and select **Explain**. **Alt+Shift+E** uses the selected or default action.
-2. Saul saves the request, adds a quiet underline, and confirms that the job is queued. It does not open a card automatically.
-3. Keep reading. A completion notification offers **View**; the badge and page list retain unread state.
+1. Select a term or short passage, choose an action, and select **Explain & open** or **Illustrate & open**. The card opens once the submission is accepted, including when saved work is reused.
+2. **Alt+Shift+E** and **Command/Ctrl+Enter** use the selected or default action and queue quietly. Repeated keyboard requests also stay quiet; View opens their saved or active request.
+3. Saul saves the request and adds a quiet underline. For work outside the open card, a completion notification offers **View**; the badge and page list retain unread state. Completion never reopens a closed card.
 4. Click a marker or open the page list with **Alt+Shift+L** to inspect progress or the saved answer.
 
 Reading jobs survive card closure, refresh, navigation, or source-tab closure while the extension runtime remains available. **Stop** cancels queued or running work and retains partial text. **Regenerate** and follow-ups create new attempts; the last successful answer remains available if a later attempt fails.

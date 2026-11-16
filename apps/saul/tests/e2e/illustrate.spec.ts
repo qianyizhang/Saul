@@ -86,8 +86,9 @@ test('Illustrate chooses GIF at runtime, saves exact bytes, previews and downloa
   await page.locator('#concept').click({ clickCount: 3 });
   await page.getByLabel('Action', { exact: true }).selectOption('recipe-illustrate');
   await page.getByLabel('Output format', { exact: true }).selectOption('gif');
-  await expect(page.getByRole('button', { name: 'Illustrate', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Illustrate', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Illustrate & open', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Illustrate & open', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Saul explanation' })).toBeVisible();
   await expect
     .poll(async () => (await getHistory(browser.popup))[0]?.latest.status)
     .toBe('completed');
@@ -129,6 +130,18 @@ test('Illustrate chooses GIF at runtime, saves exact bytes, previews and downloa
       outputFormat: 'gif',
     }),
   ]);
+  await page.getByRole('button', { name: 'Close explanation', exact: true }).click();
+  await page.locator('#second').click({ clickCount: 3 });
+  await page.getByLabel('Action', { exact: true }).selectOption('recipe-illustrate');
+  await page.getByLabel('Output format', { exact: true }).selectOption('gif');
+  await page.keyboard.press('Alt+Shift+KeyE');
+  await expect.poll(async () => (await getHistory(browser.popup)).length).toBe(2);
+  await expect
+    .poll(async () =>
+      (await getHistory(browser.popup)).every((item) => item.latest.status === 'completed'),
+    )
+    .toBe(true);
+  await expect(page.getByRole('region', { name: 'Saul explanation' })).toHaveCount(0);
   browser = await sandbox.launch();
   page = await browser.context.newPage();
   await page.goto(fixtureServer.origin + '/article');

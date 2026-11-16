@@ -1,0 +1,777 @@
+{
+  "version": 1,
+  "title": "Saul · Calls and window work",
+  "initial": "window",
+  "source": {
+    "revision": "Code accompanying this IR; baseline 0a949cf12f226a63b0db6244f9fc2a1e3fef78d1 plus accepted journey changes, reviewed 2026-11-16",
+    "description": "Source-derived current behavior, including the accepted Retry, Settings review and pointer-open changes. Fixed fictional fixtures; no live provider requests. Affected browser flows and native offline checks passed. Scaffold: repo-kit 4914a36."
+  },
+  "coverage": {
+    "included": [
+      "Window tab selection, group/Undo and Call Saul via Summarize.",
+      "Configured built-in Summarize: saved-work resolution, capture, generation, Stop/settlement, frozen-source retry, current-input rerun and local-save failure.",
+      "Inspection and Compare current page do not generate; closing the reader preserves execution.",
+      "Includes the current uncommitted CallExecutor refactor: captured-page execution is separate from scheduling and persistence.",
+      "Reviewed layout hints group navigation contexts and route/recovery neighborhoods; coordinates are presentation only, not time or rank."
+    ],
+    "omitted": [
+      "The graph follows one source item. Two-worker concurrency, mixed multi-tab results and same-URL admission guards are described but not multiplied into states.",
+      "HTML/local-PDF/URL-PDF capture distinctions and optional script execution are not expanded here; custom Call creation is in Saul settings.",
+      "Tab-board MCP proposals, browser automation, window rename, pinned/group movement and Undo conflict variants are inventoried in README but not expanded.",
+      "A finite scenario projection, not the full Cartesian product of app state. System buttons simulate possible source-code outcomes.",
+      "No proposed optimization: Comparison is intentionally absent.",
+      "Terminal landmarks end this scoped review; they do not imply that the real application quits. Compound navigation labels name their menu/section steps; route counts are model transitions, not measured click counts."
+    ]
+  },
+  "regions": [
+    {
+      "id": "window",
+      "label": "Window"
+    },
+    {
+      "id": "reader",
+      "label": "Reader"
+    },
+    {
+      "id": "history",
+      "label": "History · summaries"
+    }
+  ],
+  "states": [
+    {
+      "id": "window",
+      "region": "window",
+      "label": "Window overview",
+      "detail": "The workspace lists ordinary tabs. Summarize is available after selecting one or more sources.",
+      "source": "apps/saul/src/app/Tabs.tsx:222",
+      "preview": {
+        "title": "Window overview",
+        "body": "The workspace lists ordinary tabs. Summarize is available after selecting one or more sources."
+      }
+    },
+    {
+      "id": "selected",
+      "region": "window",
+      "label": "Tabs selected",
+      "detail": "The fixture selects one supported, unpinned source. Group/Move and Summarize are distinct operations.",
+      "source": "apps/saul/src/app/Tabs.tsx:281",
+      "preview": {
+        "title": "Tabs selected",
+        "body": "The fixture selects one supported, unpinned source. Group/Move and Summarize are distinct operations."
+      }
+    },
+    {
+      "id": "group-editor",
+      "region": "window",
+      "label": "Group name",
+      "detail": "A fixed group name is entered for the selected tabs. Nothing has moved yet.",
+      "source": "apps/saul/src/app/Tabs.tsx:346",
+      "preview": {
+        "title": "Group name ready",
+        "body": "A fixed group name is entered for the selected tabs. Nothing has moved yet."
+      }
+    },
+    {
+      "id": "grouped",
+      "region": "window",
+      "label": "Tabs grouped",
+      "detail": "The browser edit returned a snapshot and an Undo token. No summary was generated.",
+      "source": "apps/saul/src/app/Tabs.tsx:99",
+      "preview": {
+        "title": "Tabs grouped",
+        "body": "The browser edit returned a snapshot and an Undo token. No summary was generated."
+      },
+      "outcome": "Tabs grouped"
+    },
+    {
+      "id": "undone",
+      "region": "window",
+      "label": "Grouping undone",
+      "detail": "Undo verified and restored the affected browser layout. Its token is consumed.",
+      "source": "apps/saul/src/app/Tabs.tsx:121",
+      "preview": {
+        "title": "Grouping undone",
+        "body": "Undo verified and restored the affected browser layout. Its token is consumed."
+      },
+      "outcome": "Tab edit undone",
+      "terminal": true
+    },
+    {
+      "id": "opening",
+      "region": "reader",
+      "label": "Resolve saved work",
+      "detail": "The reader first resolves the exact selected source URLs. Existing work can reopen without a model request.",
+      "source": "apps/saul/src/app/Summaries.tsx:271",
+      "preview": {
+        "title": "Opening Call Saul",
+        "body": "The reader first resolves the exact selected source URLs. Existing work can reopen without a model request."
+      }
+    },
+    {
+      "id": "capturing",
+      "region": "reader",
+      "label": "Capturing source",
+      "detail": "A new batch is stored. Page/PDF input is captured and saved before execution.",
+      "source": "apps/saul/src/digest/runner.ts:298",
+      "preview": {
+        "title": "Capturing source",
+        "body": "A new batch is stored. Page/PDF input is captured and saved before execution."
+      }
+    },
+    {
+      "id": "capture-error",
+      "region": "reader",
+      "label": "Capture failed",
+      "detail": "Capture or access failed before model execution. Retry unfinished explicitly tries the source again.",
+      "source": "apps/saul/src/digest/runner.ts:314",
+      "preview": {
+        "title": "Source capture failed",
+        "body": "Capture or access failed before model execution. Retry unfinished explicitly tries the source again."
+      }
+    },
+    {
+      "id": "running",
+      "region": "reader",
+      "label": "Generating",
+      "detail": "The frozen captured page is sent to the configured Call executor. Completion requires a valid final result and local save.",
+      "source": "apps/saul/src/calls/execution.ts:68",
+      "preview": {
+        "title": "Generating summary",
+        "body": "The frozen captured page is sent to the configured Call executor. Completion requires a valid final result and local save."
+      }
+    },
+    {
+      "id": "saved",
+      "region": "reader",
+      "label": "Summary saved",
+      "detail": "The item completed and its final structured summary was saved. Reopening reads this result.",
+      "source": "apps/saul/src/digest/runner.ts:392",
+      "preview": {
+        "title": "Summary saved",
+        "body": "The item completed and its final structured summary was saved. Reopening reads this result."
+      },
+      "outcome": "Summary saved"
+    },
+    {
+      "id": "failed",
+      "region": "reader",
+      "label": "Call failed",
+      "detail": "The captured source remains stored. A provider execution failure pauses unstarted siblings; Retry unfinished is explicit.",
+      "source": "apps/saul/src/digest/runner.ts:379",
+      "preview": {
+        "title": "Call failed · source retained",
+        "body": "The captured source remains stored. A provider execution failure pauses unstarted siblings; Retry unfinished is explicit."
+      }
+    },
+    {
+      "id": "stopping",
+      "region": "reader",
+      "label": "Stopping Call",
+      "detail": "Stop aborts this run and waits for both worker streams and saves to settle before retry/delete are released.",
+      "source": "apps/saul/src/digest/runner.ts:53",
+      "preview": {
+        "title": "Stopping Call",
+        "body": "Stop aborts this run and waits for both worker streams and saves to settle before retry/delete are released."
+      }
+    },
+    {
+      "id": "stopped",
+      "region": "reader",
+      "label": "Call stopped",
+      "detail": "The stopped item retains captured input and honest partial status. It never restarts automatically.",
+      "source": "apps/saul/src/digest/runner.ts:286",
+      "preview": {
+        "title": "Call stopped",
+        "body": "The stopped item retains captured input and honest partial status. It never restarts automatically."
+      },
+      "outcome": "Call stopped"
+    },
+    {
+      "id": "retrying",
+      "region": "reader",
+      "label": "Frozen-input retry",
+      "detail": "Only unfinished items are re-queued. The saved source is loaded; previously completed siblings are not regenerated.",
+      "source": "apps/saul/src/digest/runner.ts:141",
+      "preview": {
+        "title": "Retrying frozen input",
+        "body": "Only unfinished items are re-queued. The saved source is loaded; previously completed siblings are not regenerated."
+      }
+    },
+    {
+      "id": "save-failed",
+      "region": "reader",
+      "label": "Save failed",
+      "detail": "The run stops with an interruption error. No saved-success claim is published. Recovery is explicit.",
+      "source": "apps/saul/src/digest/runner.ts:159",
+      "preview": {
+        "title": "Progress save failed",
+        "body": "The run stops with an interruption error. No saved-success claim is published. Recovery is explicit."
+      }
+    },
+    {
+      "id": "reused",
+      "region": "reader",
+      "label": "Saved Call reused",
+      "detail": "The same ordered URL selection reopened stored work. Current source comparison is shown; no new model request was made.",
+      "source": "apps/saul/src/app/Summaries.tsx:493",
+      "preview": {
+        "title": "Saved summary reused",
+        "body": "The same ordered URL selection reopened stored work. Current source comparison is shown; no new model request was made."
+      },
+      "outcome": "Saved summary reopened"
+    },
+    {
+      "id": "inspection",
+      "region": "reader",
+      "label": "Inspect input",
+      "detail": "Shows literal captured input, coverage, instructions, prompt and raw output for the saved item.",
+      "source": "apps/saul/src/app/SummaryInspection.tsx:65",
+      "preview": {
+        "title": "Inspect saved input/output",
+        "body": "Shows literal captured input, coverage, instructions, prompt and raw output for the saved item."
+      }
+    },
+    {
+      "id": "compared",
+      "region": "reader",
+      "label": "Source compared",
+      "detail": "The source was read again for comparison only. The saved input remains unchanged and no model request was made.",
+      "source": "apps/saul/src/digest/runner.ts:207",
+      "preview": {
+        "title": "Current page compared",
+        "body": "The source was read again for comparison only. The saved input remains unchanged and no model request was made."
+      },
+      "outcome": "Current input compared"
+    },
+    {
+      "id": "closed-running",
+      "region": "window",
+      "label": "Closed · running",
+      "detail": "The reader is disposable. Closing it does not stop the Call or delete input/output.",
+      "source": "apps/saul/src/app/Summaries.tsx:561",
+      "preview": {
+        "title": "Reader closed · work active",
+        "body": "The reader is disposable. Closing it does not stop the Call or delete input/output."
+      }
+    },
+    {
+      "id": "closed-saved",
+      "region": "window",
+      "label": "Closed · saved",
+      "detail": "Completion saved the result without stealing focus or opening another reader.",
+      "source": "apps/saul/src/digest/runner.ts:392",
+      "preview": {
+        "title": "Reader closed · work saved",
+        "body": "Completion saved the result without stealing focus or opening another reader."
+      }
+    },
+    {
+      "id": "history",
+      "region": "history",
+      "label": "Saved summaries",
+      "detail": "History → Summaries lists stored Calls. Selecting a saved result is a read.",
+      "source": "apps/saul/src/app/Summaries.tsx:104",
+      "preview": {
+        "title": "Saved summaries",
+        "body": "History → Summaries lists stored Calls. Selecting a saved result is a read."
+      }
+    },
+    {
+      "id": "exported",
+      "region": "reader",
+      "label": "Exported",
+      "detail": "Export HTML writes a self-contained snapshot, including partial/incomplete states when present.",
+      "source": "apps/saul/src/app/Summaries.tsx:353",
+      "preview": {
+        "title": "Summary exported",
+        "body": "Export HTML writes a self-contained snapshot, including partial/incomplete states when present."
+      },
+      "outcome": "Summary exported",
+      "terminal": true
+    },
+    {
+      "id": "delete",
+      "region": "reader",
+      "label": "Delete saved summary?",
+      "detail": "The confirmation covers this summary and its captured source. Passage-history Clear all is separate.",
+      "source": "apps/saul/src/app/Summaries.tsx:565",
+      "preview": {
+        "title": "Delete saved summary?",
+        "body": "The confirmation covers this summary and its captured source. Passage-history Clear all is separate.",
+        "overlay": {
+          "title": "Delete saved summary and source?",
+          "body": "The confirmation covers this summary and its captured source. Passage-history Clear all is separate.",
+          "blocks": []
+        }
+      }
+    },
+    {
+      "id": "deleted",
+      "region": "history",
+      "label": "Deleted",
+      "detail": "The selected saved summary and source were removed; other passage history is unchanged.",
+      "source": "apps/saul/src/digest/runner.ts:117",
+      "preview": {
+        "title": "Summary deleted",
+        "body": "The selected saved summary and source were removed; other passage history is unchanged."
+      },
+      "outcome": "Summary deleted",
+      "terminal": true
+    },
+    {
+      "id": "blocked",
+      "region": "reader",
+      "label": "Setup needed",
+      "detail": "The configured preset, account, helper or source selection cannot start. Correct the explicit setup; no fallback model is chosen.",
+      "source": "apps/saul/src/app/Summaries.tsx:262",
+      "preview": {
+        "title": "Call setup needed",
+        "body": "The configured preset, account, helper or source selection cannot start. Correct the explicit setup; no fallback model is chosen."
+      },
+      "terminal": true
+    }
+  ],
+  "transitions": [
+    {
+      "id": "select",
+      "from": "window",
+      "to": "selected",
+      "label": "Select source tab",
+      "source": "apps/saul/src/app/Tabs.tsx:256",
+      "kind": "input"
+    },
+    {
+      "id": "group",
+      "from": "selected",
+      "to": "group-editor",
+      "label": "Group; enter name",
+      "source": "apps/saul/src/app/Tabs.tsx:288",
+      "kind": "input"
+    },
+    {
+      "id": "group-apply",
+      "from": "group-editor",
+      "to": "grouped",
+      "label": "Create group",
+      "source": "apps/saul/src/app/Tabs.tsx:349",
+      "kind": "user"
+    },
+    {
+      "id": "undo",
+      "from": "grouped",
+      "to": "undone",
+      "label": "Undo",
+      "source": "apps/saul/src/app/Tabs.tsx:249",
+      "kind": "user"
+    },
+    {
+      "id": "call",
+      "from": "selected",
+      "to": "opening",
+      "label": "Summarize",
+      "source": "apps/saul/src/app/Tabs.tsx:314",
+      "kind": "user"
+    },
+    {
+      "id": "new",
+      "from": "opening",
+      "to": "capturing",
+      "label": "No saved match; configured Call starts",
+      "source": "apps/saul/src/app/Summaries.tsx:303",
+      "kind": "system"
+    },
+    {
+      "id": "reopen",
+      "from": "opening",
+      "to": "reused",
+      "label": "Saved URL selection resolved",
+      "source": "apps/saul/src/app/Summaries.tsx:289",
+      "kind": "system"
+    },
+    {
+      "id": "setup-block",
+      "from": "opening",
+      "to": "blocked",
+      "label": "Setup or validation blocks start",
+      "source": "apps/saul/src/app/Summaries.tsx:262",
+      "kind": "system"
+    },
+    {
+      "id": "captured",
+      "from": "capturing",
+      "to": "running",
+      "label": "Capture saved; execution starts",
+      "source": "apps/saul/src/digest/runner.ts:322",
+      "kind": "system"
+    },
+    {
+      "id": "capture-fails",
+      "from": "capturing",
+      "to": "capture-error",
+      "label": "Capture fails before generation",
+      "source": "apps/saul/src/digest/runner.ts:314",
+      "kind": "system"
+    },
+    {
+      "id": "retry-capture",
+      "from": "capture-error",
+      "to": "capturing",
+      "label": "Retry unfinished",
+      "source": "apps/saul/src/app/Summaries.tsx:526",
+      "kind": "user"
+    },
+    {
+      "id": "finish",
+      "from": "running",
+      "to": "saved",
+      "label": "Valid result and local save succeed",
+      "source": "apps/saul/src/digest/runner.ts:392",
+      "kind": "system"
+    },
+    {
+      "id": "fail",
+      "from": "running",
+      "to": "failed",
+      "label": "Call execution fails",
+      "source": "apps/saul/src/digest/runner.ts:379",
+      "kind": "system"
+    },
+    {
+      "id": "stop",
+      "from": "running",
+      "to": "stopping",
+      "label": "Stop",
+      "source": "apps/saul/src/app/Summaries.tsx:518",
+      "kind": "user"
+    },
+    {
+      "id": "settle",
+      "from": "stopping",
+      "to": "stopped",
+      "label": "Workers and saves settle",
+      "source": "apps/saul/src/digest/runner.ts:286",
+      "kind": "system"
+    },
+    {
+      "id": "retry",
+      "from": "failed",
+      "to": "retrying",
+      "label": "Retry unfinished",
+      "source": "apps/saul/src/app/Summaries.tsx:526",
+      "kind": "user"
+    },
+    {
+      "id": "retry-stop",
+      "from": "stopped",
+      "to": "retrying",
+      "label": "Retry unfinished",
+      "source": "apps/saul/src/app/Summaries.tsx:526",
+      "kind": "user"
+    },
+    {
+      "id": "retry-source",
+      "from": "retrying",
+      "to": "running",
+      "label": "Stored capture loaded",
+      "source": "apps/saul/src/digest/runner.ts:307",
+      "kind": "system"
+    },
+    {
+      "id": "save-error",
+      "from": "running",
+      "to": "save-failed",
+      "label": "Final progress save fails",
+      "source": "apps/saul/src/digest/runner.ts:159",
+      "kind": "system"
+    },
+    {
+      "id": "retry-save-error",
+      "from": "save-failed",
+      "to": "retrying",
+      "label": "Retry unfinished after storage recovers",
+      "source": "apps/saul/src/digest/runner.ts:141",
+      "kind": "user"
+    },
+    {
+      "id": "rerun",
+      "from": "reused",
+      "to": "capturing",
+      "label": "Run again with current input",
+      "source": "apps/saul/src/app/Summaries.tsx:432",
+      "kind": "user"
+    },
+    {
+      "id": "inspect",
+      "from": "saved",
+      "to": "inspection",
+      "label": "Inspect input/output",
+      "source": "apps/saul/src/app/SummaryInspection.tsx:65",
+      "kind": "user"
+    },
+    {
+      "id": "compare",
+      "from": "inspection",
+      "to": "compared",
+      "label": "Compare current page",
+      "source": "apps/saul/src/app/SummaryInspection.tsx:82",
+      "kind": "user"
+    },
+    {
+      "id": "rerun-compared",
+      "from": "compared",
+      "to": "capturing",
+      "label": "Run again",
+      "source": "apps/saul/src/app/Summaries.tsx:432",
+      "kind": "user"
+    },
+    {
+      "id": "close",
+      "from": "running",
+      "to": "closed-running",
+      "label": "Close summary panel",
+      "source": "apps/saul/src/app/Summaries.tsx:389",
+      "kind": "user"
+    },
+    {
+      "id": "complete-closed",
+      "from": "closed-running",
+      "to": "closed-saved",
+      "label": "Call completes and saves",
+      "source": "apps/saul/src/digest/runner.ts:392",
+      "kind": "system"
+    },
+    {
+      "id": "history",
+      "from": "window",
+      "to": "history",
+      "label": "History → Summaries",
+      "source": "apps/saul/src/app/Workspace.tsx:123",
+      "kind": "user"
+    },
+    {
+      "id": "history-after-close",
+      "from": "closed-saved",
+      "to": "history",
+      "label": "Open Saved summaries",
+      "source": "apps/saul/src/app/Summaries.tsx:104",
+      "kind": "user"
+    },
+    {
+      "id": "read",
+      "from": "history",
+      "to": "saved",
+      "label": "Select saved summary",
+      "source": "apps/saul/src/app/Summaries.tsx:114",
+      "kind": "user"
+    },
+    {
+      "id": "export",
+      "from": "saved",
+      "to": "exported",
+      "label": "More → Export HTML",
+      "source": "apps/saul/src/app/Summaries.tsx:423",
+      "kind": "user"
+    },
+    {
+      "id": "delete",
+      "from": "saved",
+      "to": "delete",
+      "label": "Details → Delete summary",
+      "source": "apps/saul/src/app/Summaries.tsx:565",
+      "kind": "user"
+    },
+    {
+      "id": "delete-cancel",
+      "from": "delete",
+      "to": "saved",
+      "label": "Cancel",
+      "source": "apps/saul/src/app/Summaries.tsx:570",
+      "kind": "user"
+    },
+    {
+      "id": "delete-confirm",
+      "from": "delete",
+      "to": "deleted",
+      "label": "Confirm deletion; store succeeds",
+      "source": "apps/saul/src/digest/runner.ts:117",
+      "kind": "user"
+    }
+  ],
+  "journeys": [
+    {
+      "id": "summary",
+      "label": "Summarize a selected page",
+      "start": "window",
+      "steps": ["select", "call", "new", "captured", "finish"],
+      "description": "A configured Call starts after saved-work resolution; it does not ask for a redundant second Run."
+    },
+    {
+      "id": "retry",
+      "label": "Retry a failed Call with frozen source",
+      "start": "window",
+      "steps": ["select", "call", "new", "captured", "fail", "retry", "retry-source", "finish"],
+      "description": "The current CallExecutor refactor retains scheduling and persistence in DigestRunner."
+    },
+    {
+      "id": "stop",
+      "label": "Stop a Call, wait, then retry",
+      "start": "window",
+      "steps": [
+        "select",
+        "call",
+        "new",
+        "captured",
+        "stop",
+        "settle",
+        "retry-stop",
+        "retry-source",
+        "finish"
+      ],
+      "description": "Stop settlement is a distinct phase; no early retry while workers are still finishing."
+    },
+    {
+      "id": "capture",
+      "label": "Recover from source-capture failure",
+      "start": "window",
+      "steps": ["select", "call", "new", "capture-fails", "retry-capture", "captured", "finish"],
+      "description": "No model request is sent before a usable capture is saved."
+    },
+    {
+      "id": "reuse",
+      "label": "Reopen a saved Call without generation",
+      "start": "window",
+      "steps": ["select", "call", "reopen"],
+      "description": "Exact ordered source selection resolves the existing record."
+    },
+    {
+      "id": "compare",
+      "label": "Inspect saved input, compare current source, then rerun",
+      "start": "saved",
+      "steps": ["inspect", "compare", "rerun-compared", "captured", "finish"],
+      "description": "Comparison is read-only; Run again creates a new request from current input."
+    },
+    {
+      "id": "background",
+      "label": "Close the reader and later find its result",
+      "start": "window",
+      "steps": [
+        "select",
+        "call",
+        "new",
+        "captured",
+        "close",
+        "complete-closed",
+        "history-after-close",
+        "read"
+      ],
+      "description": "The saved result is discoverable from History; closing never means Stop."
+    },
+    {
+      "id": "save-failure",
+      "label": "Recover from a final save failure",
+      "start": "window",
+      "steps": [
+        "select",
+        "call",
+        "new",
+        "captured",
+        "save-error",
+        "retry-save-error",
+        "retry-source",
+        "finish"
+      ],
+      "description": "An explicit unfinished-item retry is not a claim of save-only recovery."
+    },
+    {
+      "id": "group",
+      "label": "Group tabs, then undo",
+      "start": "window",
+      "steps": ["select", "group", "group-apply", "undo"],
+      "description": "A real Window interaction, independent from AI Calls."
+    },
+    {
+      "id": "export",
+      "label": "Export a saved summary",
+      "start": "saved",
+      "steps": ["export"],
+      "description": "The native browser download is simulated."
+    },
+    {
+      "id": "delete",
+      "label": "Review deletion of a saved summary",
+      "start": "saved",
+      "steps": ["delete", "delete-cancel", "delete", "delete-confirm"],
+      "description": "Cancellation returns to the same saved record before a second deliberate confirmation."
+    }
+  ],
+  "layout": {
+    "states": {
+      "blocked": [780, 810],
+      "capture-error": [1150, 440],
+      "capturing": [1040, 160],
+      "closed-running": [180, 1040],
+      "closed-saved": [460, 1110],
+      "compared": [1810, 950],
+      "delete": [1930, 1210],
+      "deleted": [930, 1410],
+      "exported": [1630, 1190],
+      "failed": [1430, 570],
+      "group-editor": [370, 500],
+      "grouped": [140, 720],
+      "history": [760, 1210],
+      "inspection": [1800, 630],
+      "opening": [800, 180],
+      "retrying": [1170, 900],
+      "reused": [780, 500],
+      "running": [1360, 230],
+      "save-failed": [1130, 680],
+      "saved": [1630, 320],
+      "selected": [400, 180],
+      "stopped": [1390, 1030],
+      "stopping": [1600, 800],
+      "undone": [420, 840],
+      "window": [150, 180]
+    },
+    "regions": {
+      "window": {
+        "label": [85, -30],
+        "outline": [
+          [50, 361.25],
+          [160.0, 75],
+          [410.0, 65],
+          [550, 361.25],
+          [565, 876.5],
+          [440.0, 1220],
+          [160.0, 1220],
+          [35, 876.5]
+        ]
+      },
+      "reader": {
+        "label": [725, -50],
+        "outline": [
+          [690, 371.25],
+          [982.6, 55],
+          [1647.6, 45],
+          [2020, 371.25],
+          [2035, 940.5],
+          [1727.4, 1320],
+          [982.6, 1320],
+          [675, 940.5]
+        ]
+      },
+      "history": {
+        "label": [705, 1580],
+        "outline": [
+          [670, 1208.75],
+          [747.0, 1105],
+          [922.0, 1095],
+          [1020, 1208.75],
+          [1035, 1395.5],
+          [943.0, 1520],
+          [747.0, 1520],
+          [655, 1395.5]
+        ]
+      }
+    }
+  }
+}

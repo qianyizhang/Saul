@@ -457,7 +457,7 @@ export function createSettingsOwner(
         return {
           state: 'conflict',
           error:
-            'Settings changed in another surface. Your draft is still here. Reload saved settings to continue.',
+            'Settings changed in another surface. Your draft is still here. Review latest settings to keep your edits, or reload to discard them.',
         };
 
       if (request.action === 'commit') {

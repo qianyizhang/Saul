@@ -6,6 +6,42 @@ import ImageIO
 
 @MainActor func searchImageStateChecks() -> [CheckCase] {
     [
+        CheckCase("retry: image edits reload their frozen source and block when it is missing") { directory in
+            let store = try HistoryStore(directory: directory)
+            var received: [HistoryEntry] = []
+            let execution = AttemptExecution(
+                generate: { entry, _ in
+                    received.append(entry)
+                    throw EZError("Synthetic image failure")
+                }, append: { try store.append($0) })
+            let model = try newMemeModel(directory, execution: execution)
+            defer { model.shutdown() }
+            model.attachImage(data: fixturePNG, name: "source.png")
+            var done = CheckSignal()
+            let observer = model.$busy.dropFirst().filter { !$0 }.sink { _ in
+                let signal = done
+                Task { await signal.signal() }
+            }
+            defer { observer.cancel() }
+            model.send()
+            try await done.wait()
+            let failed = model.selectedEntry!
+            model.removeImageInput()
+            done = CheckSignal()
+            model.retry(failed.id)
+            try await done.wait()
+            try expectEqual(received.count, 2, "Image retry did not send once")
+            try expectEqual(
+                received[1].inputImage?.data, received[0].inputImage?.data, "Retry used live sketch")
+            try expectEqual(received[1].query, received[0].query, "Image prompt changed")
+            try expect(!model.hasImageInput, "Image retry changed the draft")
+            try store.delete(id: failed.id)
+            model.retry(failed.id)
+            try expectEqual(received.count, 2, "Missing input reached image provider")
+            try expect(
+                model.retryFailure?.message.contains("input image") == true, "Missing input was not explained"
+            )
+        },
         CheckCase("sketch: draw from blank, retain failed draft, and reuse the exact flattened source") {
             directory in
             let store = try HistoryStore(directory: directory)

@@ -68,7 +68,9 @@ export const FloatingTrigger: React.FC<FloatingTriggerProps> = ({
       >
         <Sparkles className="w-3.5 h-3.5" />
         <span>
-          {recipes.find((r) => r.id === recipeId)?.capability === 'draw' ? 'Illustrate' : 'Explain'}
+          {recipes.find((r) => r.id === recipeId)?.capability === 'draw'
+            ? 'Illustrate & open'
+            : 'Explain & open'}
         </span>
       </button>
     </div>

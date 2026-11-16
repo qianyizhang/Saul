@@ -3,10 +3,40 @@ import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider, createFixtureServer } from './support.ts';
 import {
   explainSelection as explain,
+  queueSelection,
   getFirstHistory,
   getHistory as history,
   openFirstPageExplanation as view,
 } from './driver.ts';
+
+test('pointer opens once; closing before completion stays closed and keyboard reuse stays quiet', async ({
+  sandbox,
+}) => {
+  const server = await createFixtureServer('An explicitly opened answer.', { gated: true });
+  try {
+    const { popup, context } = await sandbox.launch();
+    await configureFixtureProvider(popup, server.origin);
+    const page = await context.newPage();
+    await page.goto(server.origin + '/article');
+    await explain(page);
+    const card = page.getByRole('region', { name: 'Saul explanation' });
+    await expect(card).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Close explanation', exact: true }).click();
+    server.releaseAll();
+    await expect.poll(async () => (await getFirstHistory(popup)).latest.status).toBe('completed');
+    await expect(card).toHaveCount(0);
+    await queueSelection(page);
+    await expect(page.getByText('Request available', { exact: true })).toBeVisible();
+    await expect(card).toHaveCount(0);
+    expect(server.requests).toHaveLength(1);
+    await explain(page);
+    await expect(card).toBeVisible();
+    expect(server.requests).toHaveLength(1);
+  } finally {
+    await server.close();
+  }
+});
 test('quiet queue, underline view, refresh and persistent unread explanations', async ({
   sandbox,
   fixtureServer,
@@ -16,7 +46,7 @@ test('quiet queue, underline view, refresh and persistent unread explanations', 
   let page = await browser.context.newPage();
   await page.goto(fixtureServer.origin + '/article');
   const original = await page.locator('#concept').boundingBox();
-  await explain(page);
+  await queueSelection(page);
   await expect(page.getByRole('region', { name: 'Saul explanation' })).toHaveCount(0);
   await expect.poll(async () => (await history(browser.popup))[0]?.latest.status).toBe('completed');
   await expect(page.getByText('Explanation ready', { exact: true })).toBeVisible();
@@ -382,7 +412,7 @@ test('an old in-flight page refresh cannot strand the subscription after SPA nav
     await configureFixtureProvider(popup, server.origin);
     const page = await context.newPage();
     await page.goto(server.origin + '/article');
-    await explain(page);
+    await queueSelection(page);
     await expect(page.getByText('Explanation ready', { exact: true })).toBeVisible();
     const row = await getFirstHistory(popup);
     // Hold one background-to-offscreen page response across a same-document navigation.
@@ -429,7 +459,7 @@ test('an old in-flight page refresh cannot strand the subscription after SPA nav
     await expect(page.getByRole('button', { name: 'Page explanations', exact: true })).toHaveCount(
       0,
     );
-    await explain(page, '#third');
+    await queueSelection(page, '#third');
     await expect.poll(() => server.requests.length).toBe(2);
     await expect(page.getByText('Explanation ready', { exact: true })).toBeVisible();
     await expect(

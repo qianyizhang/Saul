@@ -13,10 +13,9 @@ test('deleting a saved passage updates its page and clearing history survives re
   await article.goto(fixtureServer.origin + '/article');
   await expect(article.locator('saul-root')).toBeAttached();
   await article.locator('#concept').click({ clickCount: 3 });
-  await article.getByRole('button', { name: 'Explain', exact: true }).click();
-  await expect(article.getByText('Explanation ready', { exact: true })).toBeVisible();
-  await article.getByRole('button', { name: 'View', exact: true }).click();
+  await article.getByRole('button', { name: 'Explain & open', exact: true }).click();
   await expect(article.getByRole('region', { name: 'Saul explanation' })).toBeVisible();
+  await expect(article.getByText('Saved', { exact: true })).toBeVisible();
 
   await popup.getByRole('button', { name: 'History', exact: true }).click();
   await popup.locator('.history-title').click();

@@ -123,6 +123,57 @@ import Foundation
 
 @MainActor func attemptStateChecks() -> [CheckCase] {
     [
+        attemptCase("retry freezes the request and keeps the failed result and unrelated draft") { f in
+            f.control.generate = { _, _, _ in throw EZError("Provider unavailable") }
+            f.model.send()
+            try await f.terminal.wait()
+            let failed = f.model.selectedEntry!
+            f.model.newQuery()
+            f.model.chooseAction(f.state.multi.id)
+            f.model.inputValues = ["fuzzy term": "do not send", "fuzzy context": "current draft"]
+            let draft = f.model.inputValues
+            var seen: HistoryEntry?
+            f.control.generate = { entry, _, _ in
+                seen = entry
+                return try response("Recovered")
+            }
+            f.terminal = CheckSignal()
+            f.model.retry(failed.id)
+            try await f.terminal.wait()
+            let saved = f.model.selectedEntry!
+            try expect(saved.id != failed.id, "Retry overwrote the failed attempt")
+            try expectEqual(seen?.query, failed.query, "Retry sent the current draft")
+            try expectEqual(seen?.actionSnapshot, failed.actionSnapshot, "Retry changed action")
+            try expectEqual(seen?.presetSnapshot, failed.presetSnapshot, "Retry changed preset")
+            try expectEqual(seen?.connectionSnapshot, failed.connectionSnapshot, "Retry changed connection")
+            try expectEqual(f.model.inputValues, draft, "Retry changed the unrelated draft")
+            try expectEqual(saved.status, "completed", "Retry did not finish")
+            try expectEqual(
+                f.model.entries.first { $0.id == failed.id }?.status, "failed", "Failure was lost")
+            try expectEqual(f.control.providerCalls, 2, "Retry sent more than one request")
+            f.model.retry(saved.id)
+            try expectEqual(f.control.providerCalls, 2, "Completed answer offered a retry")
+        },
+        attemptCase("retry blocks changed routes and failed initial saves without losing the result") { f in
+            f.control.generate = { _, _, _ in throw EZError("Provider unavailable") }
+            f.model.send()
+            try await f.terminal.wait()
+            let failed = f.model.selectedEntry!
+            var config = f.model.configuration
+            config.connections[0].accountId = "different-account"
+            try f.model.saveConfiguration(config)
+            f.model.retry(failed.id)
+            try expect(f.model.retryFailure != nil, "Changed account was accepted")
+            try expectEqual(f.control.providerCalls, 1, "Changed route reached provider")
+            try f.model.saveConfiguration(f.state.configuration)
+            f.control.failedWrites = [3]
+            f.model.retry(failed.id)
+            try expect(
+                f.model.retryFailure?.message.contains("history could not be saved") == true,
+                "Initial-save failure was not explained")
+            try expectEqual(f.model.selection, failed.id, "Blocked retry changed selected answer")
+            try expectEqual(f.control.providerCalls, 1, "Initial-save failure reached provider")
+        },
         attemptCase("follow-ups retain earlier context, saved model and the original draft") { f in
             f.model.send()
             try await f.terminal.wait()

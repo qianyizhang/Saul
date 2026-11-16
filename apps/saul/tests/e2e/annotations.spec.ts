@@ -3,7 +3,8 @@ import { configureFixtureProvider } from './support.ts';
 import type { Page } from '@playwright/test';
 async function select(page: Page, selector: string) {
   await page.locator(selector).dblclick();
-  await page.getByRole('button', { name: 'Explain', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Explain & open', exact: true })).toBeVisible();
+  await page.keyboard.press('Alt+Shift+KeyE');
   await expect(page.getByText('Explanation ready', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Dismiss notification' }).click();
 }
@@ -65,7 +66,8 @@ test('View source opens a new tab, restores below-fold location and opens the sa
   await expect(page.locator('saul-root')).toBeAttached();
   await page.locator('#concept').scrollIntoViewIfNeeded();
   await page.locator('#concept').click({ clickCount: 3 });
-  await page.getByRole('button', { name: 'Explain', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Explain & open', exact: true })).toBeVisible();
+  await page.keyboard.press('Alt+Shift+KeyE');
   await expect(page.getByText('Explanation ready', { exact: true })).toBeVisible();
   await page.close();
   await popup.getByRole('button', { name: 'History', exact: true }).click();
@@ -88,7 +90,8 @@ test('native highlights leave source layout and markup unchanged', async ({
   const before = await page.locator('#concept').boundingBox();
   const html = await page.locator('#concept').innerHTML();
   await page.locator('#concept').click({ clickCount: 3 });
-  await page.getByRole('button', { name: 'Explain', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Explain & open', exact: true })).toBeVisible();
+  await page.keyboard.press('Alt+Shift+KeyE');
   await expect(page.getByText('Explanation ready', { exact: true })).toBeVisible();
   expect(await page.locator('#concept').boundingBox()).toEqual(before);
   expect(await page.locator('#concept').innerHTML()).toEqual(html);
@@ -159,11 +162,13 @@ test('overlapping passages remain available through the page list without ambigu
   const page = await context.newPage();
   await page.goto(fixtureServer.origin + '/article');
   await page.locator('#concept').click({ clickCount: 3 });
-  await page.getByRole('button', { name: 'Explain', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Explain & open', exact: true })).toBeVisible();
+  await page.keyboard.press('Alt+Shift+KeyE');
   await expect(page.getByText('Explanation ready', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Dismiss notification' }).click();
   await page.locator('#concept').dblclick({ position: { x: 25, y: 15 } });
-  await page.getByRole('button', { name: 'Explain', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Explain & open', exact: true })).toBeVisible();
+  await page.keyboard.press('Alt+Shift+KeyE');
   await expect(page.getByRole('button', { name: 'Page explanations', exact: true })).toContainText(
     'Saul · 2',
   );

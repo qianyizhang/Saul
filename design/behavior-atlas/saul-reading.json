@@ -1,0 +1,931 @@
+{
+  "version": 1,
+  "title": "Saul · Reading and history",
+  "initial": "page",
+  "source": {
+    "revision": "Code accompanying this IR; baseline 0a949cf12f226a63b0db6244f9fc2a1e3fef78d1 plus accepted journey changes, reviewed 2026-11-16",
+    "description": "Source-derived current behavior, including the accepted Retry, Settings review and pointer-open changes. Fixed fictional fixtures; no live provider requests. Affected browser flows and native offline checks passed. Scaffold: repo-kit 4914a36."
+  },
+  "coverage": {
+    "included": [
+      "A supported HTTP(S) source page and configured Write/Draw Actions; illustrative selected text only.",
+      "Frozen-input retries, current-input rerun, follow-up, explicit Stop, image save recovery, bookmarks and source/history navigation.",
+      "Reuse resolves before credential validation; reopening and inspection do not generate.",
+      "New Explain/Illustrate shows Waiting… with View; saved reuse opens the existing card immediately.",
+      "Reviewed layout hints group navigation contexts and route/recovery neighborhoods; coordinates are presentation only, not time or rank.",
+      "Explain & open and Illustrate & open open after acceptance. Keyboard requests, including repeated saved requests, stay quiet. Closing before completion stays closed."
+    ],
+    "omitted": [
+      "Exact DOM anchoring ambiguity, every context budget/parser branch and stacked hint placement are summarized.",
+      "Provider setup is in Saul settings. Browser restart and native-helper reconnect are not expanded into all intermediate states.",
+      "This map is a fixed selection scenario, not every concurrent passage or provider queue permutation.",
+      "A finite scenario projection, not the full Cartesian product of app state. System buttons simulate possible source-code outcomes.",
+      "No proposed optimization: Comparison is intentionally absent.",
+      "Terminal landmarks end this scoped review; they do not imply that the real application quits. Compound navigation labels name their menu/section steps; route counts are model transitions, not measured click counts."
+    ]
+  },
+  "regions": [
+    {
+      "id": "page",
+      "label": "Source page"
+    },
+    {
+      "id": "card",
+      "label": "Explanation card"
+    },
+    {
+      "id": "history",
+      "label": "History · passages"
+    }
+  ],
+  "states": [
+    {
+      "id": "page",
+      "region": "page",
+      "label": "Page open",
+      "detail": "A supported page is open with no selected text. Existing highlights can reopen stored answers.",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:59",
+      "preview": {
+        "title": "Page open",
+        "body": "A supported page is open with no selected text. Existing highlights can reopen stored answers."
+      }
+    },
+    {
+      "id": "selection",
+      "region": "page",
+      "label": "Passage selected",
+      "detail": "The selection widget offers an Action. Fictional passage: “Closing a view does not cancel its request.”",
+      "source": "apps/saul/src/surface/FloatingTrigger.tsx:63",
+      "preview": {
+        "title": "Passage selected",
+        "body": "The selection widget offers an Action. Fictional passage: “Closing a view does not cancel its request.”"
+      }
+    },
+    {
+      "id": "requested",
+      "region": "page",
+      "label": "Action requested",
+      "detail": "The explicit pointer action resolves saved work, then opens the accepted request on the same page.",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:329",
+      "preview": {
+        "title": "Action requested",
+        "body": "The explicit pointer action resolves saved work, then opens the accepted request on the same page."
+      }
+    },
+    {
+      "id": "receiving",
+      "region": "card",
+      "label": "Receiving",
+      "detail": "A new frozen attempt is running. Two attempts per provider may execute concurrently; this map follows one.",
+      "source": "apps/saul/src/reading/runner.ts:72",
+      "preview": {
+        "title": "Receiving explanation",
+        "body": "A new frozen attempt is running. Two attempts per provider may execute concurrently; this map follows one."
+      }
+    },
+    {
+      "id": "saved",
+      "region": "card",
+      "label": "Saved explanation",
+      "detail": "Completion and successful persistence are required. A completed answer is retained while later attempts run.",
+      "source": "apps/saul/src/reading/runner.ts:146",
+      "preview": {
+        "title": "Explanation saved",
+        "body": "Completion and successful persistence are required. A completed answer is retained while later attempts run."
+      },
+      "outcome": "Explanation saved"
+    },
+    {
+      "id": "failed",
+      "region": "card",
+      "label": "Failed",
+      "detail": "The provider failed or ended without a completion signal. Available text is retained; Retry is explicit.",
+      "source": "apps/saul/src/reading/runner.ts:184",
+      "preview": {
+        "title": "Explanation failed",
+        "body": "The provider failed or ended without a completion signal. Available text is retained; Retry is explicit."
+      }
+    },
+    {
+      "id": "stopped",
+      "region": "card",
+      "label": "Stopped",
+      "detail": "Stop cancels generation; the partial explanation and stopped reason are saved.",
+      "source": "apps/saul/src/reading/runner.ts:278",
+      "preview": {
+        "title": "Stopped · partial retained",
+        "body": "Stop cancels generation; the partial explanation and stopped reason are saved."
+      },
+      "outcome": "Stopped and retained"
+    },
+    {
+      "id": "save-failed",
+      "region": "card",
+      "label": "Text unsaved",
+      "detail": "Available text is retained. A later explicit retry first persists the failed record before admitting a new attempt.",
+      "source": "apps/saul/src/reading/runner.ts:37",
+      "preview": {
+        "title": "Text save failed",
+        "body": "Available text is retained. A later explicit retry first persists the failed record before admitting a new attempt."
+      }
+    },
+    {
+      "id": "closed-running",
+      "region": "page",
+      "label": "Closed · running",
+      "detail": "Closing the explanation changes only local view selection. The request continues.",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:471",
+      "preview": {
+        "title": "Card closed · request active",
+        "body": "Closing the explanation changes only local view selection. The request continues."
+      }
+    },
+    {
+      "id": "closed-saved",
+      "region": "page",
+      "label": "Closed · saved",
+      "detail": "The result is stored and its highlight remains available. Reopen does not generate.",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:59",
+      "preview": {
+        "title": "Card closed · answer saved",
+        "body": "The result is stored and its highlight remains available. Reopen does not generate."
+      }
+    },
+    {
+      "id": "reused",
+      "region": "card",
+      "label": "Saved result reused",
+      "detail": "Selecting the same passage/action reopens saved work and compares current prepared input. No new model request.",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:290",
+      "preview": {
+        "title": "Saved result reused",
+        "body": "Selecting the same passage/action reopens saved work and compares current prepared input. No new model request."
+      },
+      "outcome": "Saved result reopened"
+    },
+    {
+      "id": "more",
+      "region": "card",
+      "label": "Explanation · More",
+      "detail": "Min Mode reveals Regenerate and Bookmark here. Ordinary Regenerate uses the frozen request.",
+      "source": "apps/saul/src/surface/ExplanationCard.tsx:374",
+      "preview": {
+        "title": "Explanation · More",
+        "body": "Min Mode reveals Regenerate and Bookmark here. Ordinary Regenerate uses the frozen request.",
+        "overlay": {
+          "title": "More",
+          "body": "Min Mode reveals Regenerate and Bookmark here. Ordinary Regenerate uses the frozen request.",
+          "blocks": []
+        }
+      }
+    },
+    {
+      "id": "followup",
+      "region": "card",
+      "label": "Follow-up ready",
+      "detail": "A fixed follow-up draft belongs to this passage. It needs a saved completed Write answer; Send creates another attempt.",
+      "source": "apps/saul/src/surface/ExplanationCard.tsx:315",
+      "preview": {
+        "title": "Follow-up ready",
+        "body": "A fixed follow-up draft belongs to this passage. It needs a saved completed Write answer; Send creates another attempt."
+      }
+    },
+    {
+      "id": "followup-running",
+      "region": "card",
+      "label": "Follow-up running",
+      "detail": "The saved prompt/context and completed answer prepare this new attempt. The older answer remains available.",
+      "source": "apps/saul/entrypoints/background.ts:194",
+      "preview": {
+        "title": "Receiving follow-up",
+        "body": "The saved prompt/context and completed answer prepare this new attempt. The older answer remains available."
+      }
+    },
+    {
+      "id": "followup-saved",
+      "region": "card",
+      "label": "Follow-up saved",
+      "detail": "The follow-up attempt completed and saved. History of attempts is available in the card.",
+      "source": "apps/saul/src/surface/ExplanationCard.tsx:281",
+      "preview": {
+        "title": "Follow-up saved",
+        "body": "The follow-up attempt completed and saved. History of attempts is available in the card."
+      },
+      "outcome": "Follow-up saved",
+      "terminal": true
+    },
+    {
+      "id": "bookmarked",
+      "region": "card",
+      "label": "Passage bookmarked",
+      "detail": "The bookmark toggles storage metadata; it does not create a new model request.",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:476",
+      "preview": {
+        "title": "Passage bookmarked",
+        "body": "The bookmark toggles storage metadata; it does not create a new model request."
+      },
+      "outcome": "Bookmark saved",
+      "terminal": true
+    },
+    {
+      "id": "history",
+      "region": "history",
+      "label": "Passage history",
+      "detail": "History searches saved passages. Expanding a row reads saved input/output; it does not run an Action.",
+      "source": "apps/saul/src/app/Library.tsx:188",
+      "preview": {
+        "title": "Passage history",
+        "body": "History searches saved passages. Expanding a row reads saved input/output; it does not run an Action."
+      }
+    },
+    {
+      "id": "history-detail",
+      "region": "history",
+      "label": "Saved details",
+      "detail": "The selected saved attempt and literal prompt/output are readable without a live connection.",
+      "source": "apps/saul/src/app/Library.tsx:188",
+      "preview": {
+        "title": "Saved passage details",
+        "body": "The selected saved attempt and literal prompt/output are readable without a live connection."
+      },
+      "outcome": "Saved passage inspected"
+    },
+    {
+      "id": "located",
+      "region": "page",
+      "label": "Source highlight reopened",
+      "detail": "Open source returns to the stored page/selection. An unresolved anchor leaves location unavailable rather than guessing.",
+      "source": "apps/saul/src/app/Library.tsx:221",
+      "preview": {
+        "title": "Source highlight reopened",
+        "body": "Open source returns to the stored page/selection. An unresolved anchor leaves location unavailable rather than guessing."
+      },
+      "outcome": "Source reopened",
+      "terminal": true
+    },
+    {
+      "id": "library-exported",
+      "region": "history",
+      "label": "Exported",
+      "detail": "Export to Markdown includes the whole passage library, regardless of the current filter.",
+      "source": "apps/saul/src/app/Library.tsx:347",
+      "preview": {
+        "title": "History exported",
+        "body": "Export to Markdown includes the whole passage library, regardless of the current filter."
+      },
+      "outcome": "History exported",
+      "terminal": true
+    },
+    {
+      "id": "clear-confirm",
+      "region": "history",
+      "label": "Clear history?",
+      "detail": "The confirmation names saved history and bookmarks in both EZ and Saul. Summary deletion is separate.",
+      "source": "apps/saul/src/app/Library.tsx:355",
+      "preview": {
+        "title": "Clear shared passage history?",
+        "body": "The confirmation names saved history and bookmarks in both EZ and Saul. Summary deletion is separate.",
+        "overlay": {
+          "title": "Delete saved history and bookmarks?",
+          "body": "The confirmation names saved history and bookmarks in both EZ and Saul. Summary deletion is separate.",
+          "blocks": []
+        }
+      }
+    },
+    {
+      "id": "cleared",
+      "region": "history",
+      "label": "Passage history cleared",
+      "detail": "The shared passage/history deletion succeeded. Saved summaries are managed separately.",
+      "source": "apps/saul/src/app/Library.tsx:355",
+      "preview": {
+        "title": "Passage history cleared",
+        "body": "The shared passage/history deletion succeeded. Saved summaries are managed separately."
+      },
+      "outcome": "Passage history cleared",
+      "terminal": true
+    },
+    {
+      "id": "draw-selected",
+      "region": "page",
+      "label": "Illustrate ready",
+      "detail": "This fixture has a compatible API Draw preset and PNG selected. Image generation begins only after the Action click.",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:316",
+      "preview": {
+        "title": "Illustrate selected",
+        "body": "This fixture has a compatible API Draw preset and PNG selected. Image generation begins only after the Action click."
+      }
+    },
+    {
+      "id": "drawing",
+      "region": "card",
+      "label": "Generating illustration",
+      "detail": "One explicit image request is active. Input format and model choices are frozen.",
+      "source": "apps/saul/src/reading/runner.ts:84",
+      "preview": {
+        "title": "Generating illustration",
+        "body": "One explicit image request is active. Input format and model choices are frozen."
+      }
+    },
+    {
+      "id": "image-unsaved",
+      "region": "card",
+      "label": "Image unsaved",
+      "detail": "Exact bytes are retained in this runner. Download or Retry saving image before closing/restarting the runner.",
+      "source": "apps/saul/src/reading/runner.ts:174",
+      "preview": {
+        "title": "Image not saved",
+        "body": "Exact bytes are retained in this runner. Download or Retry saving image before closing/restarting the runner."
+      }
+    },
+    {
+      "id": "image-saved",
+      "region": "card",
+      "label": "Image saved",
+      "detail": "Image chunks and the completed attempt are saved. Image content loads for the selected attempt.",
+      "source": "apps/saul/src/reading/runner.ts:244",
+      "preview": {
+        "title": "Illustration saved",
+        "body": "Image chunks and the completed attempt are saved. Image content loads for the selected attempt."
+      },
+      "outcome": "Illustration saved",
+      "terminal": true
+    },
+    {
+      "id": "blocked",
+      "region": "page",
+      "label": "Action could not start",
+      "detail": "A missing/unsupported preset, changed source page or storage failure shows an error. No substitute model is selected.",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:336",
+      "preview": {
+        "title": "Action could not start",
+        "body": "A missing/unsupported preset, changed source page or storage failure shows an error. No substitute model is selected."
+      }
+    },
+    {
+      "id": "waiting",
+      "region": "page",
+      "label": "Waiting · View",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:399",
+      "detail": "A keyboard request was accepted. Waiting/View remains quiet; completion never opens a card.",
+      "preview": {
+        "title": "Waiting · card closed",
+        "body": "A keyboard request was accepted. Waiting/View remains quiet; completion never opens a card."
+      }
+    },
+    {
+      "id": "draw-waiting",
+      "region": "page",
+      "label": "Waiting · View",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:335",
+      "detail": "The new Draw request shows a Waiting… notice. View opens the image attempt card.",
+      "preview": {
+        "title": "Illustration waiting",
+        "body": "The new Draw request shows a Waiting… notice. View opens the image attempt card."
+      }
+    },
+    {
+      "id": "queued-request",
+      "region": "page",
+      "label": "Keyboard request",
+      "detail": "Alt+Shift+E or Command/Ctrl+Enter queues the selected text or image action without opening its card.",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:399",
+      "preview": {
+        "title": "Keyboard request",
+        "body": "Alt+Shift+E or Command/Ctrl+Enter queues the selected text or image action without opening its card.",
+        "fields": []
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "id": "select",
+      "from": "page",
+      "to": "selection",
+      "label": "Select passage",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:276",
+      "kind": "input"
+    },
+    {
+      "id": "request",
+      "from": "selection",
+      "to": "requested",
+      "label": "Explain & open",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:329",
+      "kind": "user"
+    },
+    {
+      "id": "new-attempt",
+      "from": "requested",
+      "to": "receiving",
+      "label": "Accepted; open answer card",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:329",
+      "kind": "system"
+    },
+    {
+      "id": "reuse",
+      "from": "requested",
+      "to": "reused",
+      "label": "Matching saved work found",
+      "source": "apps/saul/entrypoints/background.ts:145",
+      "kind": "system"
+    },
+    {
+      "id": "blocked",
+      "from": "requested",
+      "to": "blocked",
+      "label": "Validation or initial save fails",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:336",
+      "kind": "system"
+    },
+    {
+      "id": "reselect",
+      "from": "blocked",
+      "to": "selection",
+      "label": "Correct setup and reselect passage",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:276",
+      "kind": "input"
+    },
+    {
+      "id": "complete",
+      "from": "receiving",
+      "to": "saved",
+      "label": "Completion and local save succeed",
+      "source": "apps/saul/src/reading/runner.ts:163",
+      "kind": "system"
+    },
+    {
+      "id": "failure",
+      "from": "receiving",
+      "to": "failed",
+      "label": "Provider fails / incomplete stream",
+      "source": "apps/saul/src/reading/runner.ts:184",
+      "kind": "system"
+    },
+    {
+      "id": "stop",
+      "from": "receiving",
+      "to": "stopped",
+      "label": "Stop",
+      "source": "apps/saul/src/reading/runner.ts:278",
+      "kind": "user"
+    },
+    {
+      "id": "text-save-fails",
+      "from": "receiving",
+      "to": "save-failed",
+      "label": "Storage fails while finishing",
+      "source": "apps/saul/src/reading/runner.ts:206",
+      "kind": "system"
+    },
+    {
+      "id": "retry-failure",
+      "from": "failed",
+      "to": "receiving",
+      "label": "Retry explanation",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:487",
+      "kind": "user"
+    },
+    {
+      "id": "retry-stop",
+      "from": "stopped",
+      "to": "receiving",
+      "label": "Retry explanation",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:487",
+      "kind": "user"
+    },
+    {
+      "id": "retry-storage",
+      "from": "save-failed",
+      "to": "receiving",
+      "label": "Retry after storage recovers",
+      "source": "apps/saul/src/reading/runner.ts:42",
+      "kind": "user"
+    },
+    {
+      "id": "close-running",
+      "from": "receiving",
+      "to": "closed-running",
+      "label": "Close explanation",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:471",
+      "kind": "user"
+    },
+    {
+      "id": "complete-closed",
+      "from": "closed-running",
+      "to": "closed-saved",
+      "label": "Request completes and saves",
+      "source": "apps/saul/src/reading/runner.ts:163",
+      "kind": "system"
+    },
+    {
+      "id": "reopen",
+      "from": "closed-saved",
+      "to": "saved",
+      "label": "Open saved highlight",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:59",
+      "kind": "user"
+    },
+    {
+      "id": "close-saved",
+      "from": "saved",
+      "to": "closed-saved",
+      "label": "Close explanation",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:471",
+      "kind": "user"
+    },
+    {
+      "id": "select-again",
+      "from": "closed-saved",
+      "to": "selection",
+      "label": "Select the same passage",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:276",
+      "kind": "input"
+    },
+    {
+      "id": "current-input",
+      "from": "reused",
+      "to": "receiving",
+      "label": "Run again with current input",
+      "source": "apps/saul/src/surface/ExplanationCard.tsx:177",
+      "kind": "user"
+    },
+    {
+      "id": "more",
+      "from": "saved",
+      "to": "more",
+      "label": "More",
+      "source": "apps/saul/src/surface/ExplanationCard.tsx:401",
+      "kind": "user"
+    },
+    {
+      "id": "regenerate",
+      "from": "more",
+      "to": "receiving",
+      "label": "Regenerate frozen request",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:487",
+      "kind": "user"
+    },
+    {
+      "id": "bookmark",
+      "from": "more",
+      "to": "bookmarked",
+      "label": "Bookmark",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:476",
+      "kind": "user"
+    },
+    {
+      "id": "followup-input",
+      "from": "saved",
+      "to": "followup",
+      "label": "Fill follow-up",
+      "source": "apps/saul/src/surface/ExplanationCard.tsx:315",
+      "kind": "input"
+    },
+    {
+      "id": "followup-send",
+      "from": "followup",
+      "to": "followup-running",
+      "label": "Send follow-up",
+      "source": "apps/saul/entrypoints/background.ts:194",
+      "kind": "user"
+    },
+    {
+      "id": "followup-finish",
+      "from": "followup-running",
+      "to": "followup-saved",
+      "label": "Completion and local save succeed",
+      "source": "apps/saul/src/reading/runner.ts:163",
+      "kind": "system"
+    },
+    {
+      "id": "history",
+      "from": "page",
+      "to": "history",
+      "label": "Open Saul → History → Passages",
+      "source": "apps/saul/src/app/Workspace.tsx:123",
+      "kind": "user"
+    },
+    {
+      "id": "expand",
+      "from": "history",
+      "to": "history-detail",
+      "label": "Expand saved passage",
+      "source": "apps/saul/src/app/Library.tsx:188",
+      "kind": "user"
+    },
+    {
+      "id": "source",
+      "from": "history-detail",
+      "to": "located",
+      "label": "Open source",
+      "source": "apps/saul/src/app/Library.tsx:221",
+      "kind": "user"
+    },
+    {
+      "id": "export",
+      "from": "history",
+      "to": "library-exported",
+      "label": "Manage → Export to Markdown",
+      "source": "apps/saul/src/app/Library.tsx:347",
+      "kind": "user"
+    },
+    {
+      "id": "clear",
+      "from": "history",
+      "to": "clear-confirm",
+      "label": "Manage → Clear all",
+      "source": "apps/saul/src/app/Library.tsx:355",
+      "kind": "user"
+    },
+    {
+      "id": "clear-cancel",
+      "from": "clear-confirm",
+      "to": "history",
+      "label": "Cancel",
+      "source": "apps/saul/src/app/Library.tsx:357",
+      "kind": "user"
+    },
+    {
+      "id": "clear-confirm",
+      "from": "clear-confirm",
+      "to": "cleared",
+      "label": "Confirm deletion; storage succeeds",
+      "source": "apps/saul/src/app/Library.tsx:357",
+      "kind": "user"
+    },
+    {
+      "id": "draw",
+      "from": "selection",
+      "to": "draw-selected",
+      "label": "Choose Illustrate and PNG",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:316",
+      "kind": "input"
+    },
+    {
+      "id": "draw-run",
+      "from": "draw-selected",
+      "to": "drawing",
+      "label": "Illustrate & open; accepted",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:329",
+      "kind": "user"
+    },
+    {
+      "id": "image-ok",
+      "from": "drawing",
+      "to": "image-saved",
+      "label": "Image and terminal save succeed",
+      "source": "apps/saul/src/reading/runner.ts:159",
+      "kind": "system"
+    },
+    {
+      "id": "image-save-fails",
+      "from": "drawing",
+      "to": "image-unsaved",
+      "label": "Image succeeds; saving fails",
+      "source": "apps/saul/src/reading/runner.ts:174",
+      "kind": "system"
+    },
+    {
+      "id": "image-save-retry",
+      "from": "image-unsaved",
+      "to": "image-saved",
+      "label": "Retry saving image; storage succeeds",
+      "source": "apps/saul/src/reading/runner.ts:244",
+      "kind": "user"
+    },
+    {
+      "id": "view",
+      "from": "waiting",
+      "to": "receiving",
+      "label": "View waiting attempt",
+      "kind": "user",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:565"
+    },
+    {
+      "id": "view-image",
+      "from": "draw-waiting",
+      "to": "drawing",
+      "label": "View waiting illustration",
+      "kind": "user",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:565"
+    },
+    {
+      "id": "complete-before-view",
+      "from": "waiting",
+      "to": "closed-saved",
+      "label": "Completion and save before View",
+      "kind": "system",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:146"
+    },
+    {
+      "id": "queue",
+      "from": "selection",
+      "to": "queued-request",
+      "label": "Alt+Shift+E",
+      "kind": "user",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:399"
+    },
+    {
+      "id": "queue-accepted",
+      "from": "queued-request",
+      "to": "waiting",
+      "label": "New submission accepted",
+      "kind": "system",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:399"
+    },
+    {
+      "id": "queue-reused",
+      "from": "queued-request",
+      "to": "closed-saved",
+      "label": "Saved request available; show View notice",
+      "kind": "system",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:399"
+    },
+    {
+      "id": "queue-image",
+      "from": "draw-selected",
+      "to": "draw-waiting",
+      "label": "Alt+Shift+E; accepted",
+      "kind": "user",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:399"
+    }
+  ],
+  "journeys": [
+    {
+      "id": "explain",
+      "label": "Read a passage and save an explanation",
+      "start": "page",
+      "steps": ["select", "request", "new-attempt", "complete"],
+      "description": "The selection button opens the accepted request. No second View action is needed."
+    },
+    {
+      "id": "reuse",
+      "label": "Reopen a saved answer without another request",
+      "start": "page",
+      "steps": [
+        "select",
+        "request",
+        "new-attempt",
+        "complete",
+        "close-saved",
+        "select-again",
+        "request",
+        "reuse"
+      ],
+      "description": "The second Action selection resolves stored work before asking for credentials."
+    },
+    {
+      "id": "fresh-input",
+      "label": "Compare saved input, then run current input",
+      "start": "closed-saved",
+      "steps": ["select-again", "request", "reuse", "current-input", "complete"],
+      "description": "Current-input rerun differs from ordinary frozen-request Regenerate."
+    },
+    {
+      "id": "retry",
+      "label": "Retry a failed explanation",
+      "start": "page",
+      "steps": ["select", "request", "new-attempt", "failure", "retry-failure", "complete"],
+      "description": "The retry is explicit and retains the frozen request."
+    },
+    {
+      "id": "stop",
+      "label": "Stop, then explicitly retry",
+      "start": "page",
+      "steps": ["select", "request", "new-attempt", "stop", "retry-stop", "complete"],
+      "description": "Stopping preserves partial output; no automatic inference retry."
+    },
+    {
+      "id": "close",
+      "label": "Close the card while work continues",
+      "start": "page",
+      "steps": ["select", "request", "new-attempt", "close-running", "complete-closed", "reopen"],
+      "description": "Closing is a view action, not cancellation."
+    },
+    {
+      "id": "followup",
+      "label": "Follow up on a saved explanation",
+      "start": "saved",
+      "steps": ["followup-input", "followup-send", "followup-finish"],
+      "description": "A saved completed Write answer is required."
+    },
+    {
+      "id": "bookmark",
+      "label": "Bookmark a saved passage",
+      "start": "saved",
+      "steps": ["more", "bookmark"],
+      "description": "Min Mode disclosure is part of the route."
+    },
+    {
+      "id": "history",
+      "label": "Inspect a passage and locate its source",
+      "start": "page",
+      "steps": ["history", "expand", "source"],
+      "description": "All steps are reads of saved work."
+    },
+    {
+      "id": "export",
+      "label": "Export saved passage history",
+      "start": "page",
+      "steps": ["history", "export"],
+      "description": "The export includes the full library, not only filtered results."
+    },
+    {
+      "id": "image-recovery",
+      "label": "Recover an unsaved illustration",
+      "start": "page",
+      "steps": ["select", "draw", "draw-run", "image-save-fails", "image-save-retry"],
+      "description": "Retries persistence of the original image bytes, without inference."
+    },
+    {
+      "id": "text-recovery",
+      "label": "Recover after a text save failure",
+      "start": "page",
+      "steps": ["select", "request", "new-attempt", "text-save-fails", "retry-storage", "complete"],
+      "description": "This browser path saves the failed record before a new explicit generation attempt; it is not EZ Save again."
+    },
+    {
+      "id": "quiet-queue",
+      "label": "Queue quietly, then open the saved answer",
+      "start": "page",
+      "steps": ["select", "queue", "queue-accepted", "complete-before-view", "reopen"],
+      "description": "Keyboard requests keep the page unobscured. View is deliberate, including repeated requests."
+    }
+  ],
+  "layout": {
+    "states": {
+      "blocked": [130, 780],
+      "bookmarked": [1900, 560],
+      "clear-confirm": [530, 1440],
+      "cleared": [760, 1330],
+      "closed-running": [820, 480],
+      "closed-saved": [580, 600],
+      "draw-selected": [160, 470],
+      "draw-waiting": [370, 580],
+      "drawing": [1930, 180],
+      "failed": [1100, 470],
+      "followup": [1440, 750],
+      "followup-running": [1680, 820],
+      "followup-saved": [1650, 1080],
+      "history": [220, 1120],
+      "history-detail": [450, 1160],
+      "image-saved": [1940, 1120],
+      "image-unsaved": [1930, 850],
+      "library-exported": [250, 1430],
+      "located": [720, 930],
+      "more": [1690, 330],
+      "page": [140, 170],
+      "receiving": [1160, 180],
+      "requested": [580, 230],
+      "reused": [1100, 780],
+      "save-failed": [1510, 450],
+      "saved": [1410, 180],
+      "selection": [360, 170],
+      "stopped": [1280, 590],
+      "waiting": [800, 180],
+      "queued-request": [570, 850]
+    },
+    "regions": {
+      "page": {
+        "label": [75, -40],
+        "outline": [
+          [40, 308.75],
+          [231.4, 65],
+          [666.4, 55],
+          [910, 308.75],
+          [925, 747.5],
+          [718.6, 1040],
+          [231.4, 1040],
+          [25, 747.5]
+        ]
+      },
+      "card": {
+        "label": [1045, -30],
+        "outline": [
+          [1010, 363.75],
+          [1234.4, 75],
+          [1744.4, 65],
+          [2030, 363.75],
+          [2045, 883.5],
+          [1805.6, 1230],
+          [1234.4, 1230],
+          [995, 883.5]
+        ]
+      },
+      "history": {
+        "label": [165, 1610],
+        "outline": [
+          [130, 1148.75],
+          [288.4, 1015],
+          [648.4, 1005],
+          [850, 1148.75],
+          [865, 1389.5],
+          [691.6, 1550],
+          [288.4, 1550],
+          [115, 1389.5]
+        ]
+      }
+    }
+  }
+}

@@ -5,7 +5,7 @@ export class SettingsDeliveryError extends Error {
   constructor(mutating: boolean, options?: ErrorOptions) {
     super(
       mutating
-        ? 'The save outcome is unknown. Your draft is still here. Reload saved settings before saving again.'
+        ? 'The save outcome is unknown. Your draft is still here. Review latest settings before saving again.'
         : 'Could not load settings. Reload Saul and try again.',
       options,
     );

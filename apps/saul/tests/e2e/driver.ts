@@ -56,7 +56,15 @@ export async function configureFixtureProvider(page: Page, origin: string): Prom
 export async function explainSelection(page: Page, selector = '#concept'): Promise<void> {
   await expect(page.locator('saul-root')).toBeAttached();
   await page.locator(selector).click({ clickCount: 3 });
-  await page.getByRole('button', { name: 'Explain', exact: true }).click();
+  await page.getByRole('button', { name: 'Explain & open', exact: true }).click();
+}
+
+/** The keyboard entry deliberately leaves the page open without an answer card. */
+export async function queueSelection(page: Page, selector = '#concept'): Promise<void> {
+  await expect(page.locator('saul-root')).toBeAttached();
+  await page.locator(selector).click({ clickCount: 3 });
+  await expect(page.getByRole('button', { name: 'Explain & open', exact: true })).toBeVisible();
+  await page.keyboard.press('Alt+Shift+KeyE');
 }
 
 export async function openFirstPageExplanation(page: Page): Promise<void> {
