@@ -39,7 +39,8 @@ type Context = { generation: number; session?: string };
 export type BoardManualCommand =
   | [
       name: 'saul_workspace_edit',
-      args: Omit<AppArgs['saul_workspace_edit'], 'session' | 'interactionToken'>,
+      args: Omit<AppArgs['saul_workspace_edit'], 'session' | 'interactionToken' | 'revision'> &
+        Partial<Pick<AppArgs['saul_workspace_edit'], 'revision'>>,
     ]
   | [
       name: 'saul_workspace_undo' | 'saul_workspace_discard' | 'saul_workspace_summarize',

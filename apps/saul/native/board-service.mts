@@ -3,8 +3,7 @@ import { mcpTools } from '../shared/protocol/app-protocol.mts';
 import { createWorkspace } from './workspace.mts';
 import { callTool } from './client.mts';
 import { errorMessage } from './transport.mts';
-import { validate } from '../shared/protocol/protocol.mts';
-import { DIAGNOSTIC_TOOLS } from '../shared/protocol/diagnostic-protocol.mts';
+import { validateDiagnosticCall } from '../shared/protocol/diagnostic-protocol.mts';
 import { isRecord } from '../shared/model/value.mts';
 import { Recorder, eventSchema } from '../shared/protocol/diagnostic-events.mts';
 import { LogStore } from './diagnostic-store.mts';
@@ -19,9 +18,7 @@ export function createBoardService(options: {
   const log = new Recorder('server', (event) => store.append(event));
   const tools = mcpTools(options.resourceUri);
   function diagnostic(name: string, args: unknown) {
-    const definition = DIAGNOSTIC_TOOLS.find((tool) => tool.name === name);
-    if (!definition) throw new Error('Unknown diagnostic operation');
-    validate(definition.inputSchema, args, name);
+    validateDiagnosticCall(name, args);
     if (!isRecord(args)) throw new Error('Expected diagnostic arguments');
     switch (name) {
       case 'diagnostics_info':

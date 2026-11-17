@@ -308,9 +308,9 @@ export function createWorkspace({
         const current = await state(args.session);
         if (args.revision !== current.revision)
           throw new Error('Tabs changed. Review the refreshed board.');
-        const edit = { ...args };
-        delete edit.interactionToken;
-        delete edit.revision;
+        const { interactionToken, revision, ...edit } = args;
+        void interactionToken;
+        void revision;
         undos.delete(args.session);
         result = await call('saul_tabs_edit', {
           ...edit,

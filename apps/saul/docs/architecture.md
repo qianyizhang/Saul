@@ -38,6 +38,13 @@ The [component inventory](../native/installation/components.mts) maps source
 entrypoints to the installed names and drives packaging and verification. See
 the [artifact decision](../../../docs/adr/0005-separate-saul-helper-source-from-installed-artifacts.md).
 
+The [tool operation registry](../shared/protocol/protocol.mts) owns each tab/page
+tool's argument schema, result schema and catalog metadata. TypeScript types,
+CLI names and advertised schemas derive from that registry. Results retain extra
+browser metadata after validation; annotation results also match the requested
+operation. Workspace and diagnostic operations use their own typed registries
+and the same schema library, without a second JSON-schema interpreter.
+
 ## Trust boundaries
 
 Content messages are scoped to the sender's current main-frame HTTP(S) page;
