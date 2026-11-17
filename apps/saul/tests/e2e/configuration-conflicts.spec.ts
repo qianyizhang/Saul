@@ -4,29 +4,19 @@ import { test, expect } from './fixtures.ts';
 import { DEFAULT_CONFIGURATION } from '../../src/configuration/definition';
 import type { Configuration } from '../../src/configuration/definition';
 import { installDigestProvider } from './digest-fixture';
-import type { PlanControlRequest } from '../../native/plan-protocol.mts';
 import type { SharedPresets } from '../../native/shared-presets-contract.mts';
 
-test('bound plan inspection and model edits keep the standalone account separate', async ({
+test('bound plan inspection and preset edits preserve the saved account binding', async ({
   sandbox,
 }, info) => {
   const { popup, worker } = await sandbox.launch();
-  await installDigestProvider(
-    worker,
-    false,
-    undefined,
-    ['local-A', 'bound-B', 'explicit-C'].map((id) => ({
-      id,
-      label: id,
-      signedIn: true,
-      planEnabled: true,
-    })),
-  );
   await worker.evaluate(async (defaults) => {
-    let library: SharedPresets = {
+    const library: SharedPresets = {
       revision: 1,
       connections: [
-        ...defaults.connections,
+        ...defaults.connections.map((connection) =>
+          connection.key === 'gpt-plan' ? { ...connection, accountId: 'other-A' } : connection,
+        ),
         { key: 'bound-plan', name: 'Bound plan', kind: 'chatgpt-plan', accountId: 'bound-B' },
       ],
       presets: [
@@ -34,76 +24,73 @@ test('bound plan inspection and model edits keep the standalone account separate
           id: 'c14b29f3-3ec2-4efc-8bed-e05531aef2cb',
           name: 'Bound plan preset',
           connectionKey: 'bound-plan',
+          capability: 'write',
           model: 'gpt-6-luna',
           effort: '',
           fast: false,
         },
       ],
     };
-    let config: { revision: number; value?: Record<string, unknown> } = { revision: 0 };
     await chrome.storage.local.set({
       saul_user_settings: {
         ...defaults,
+        connections: library.connections,
+        sharedCredentials: 'saul',
         sharedPresetRevision: 1,
-        chatgptPlan: { accountId: 'local-A', model: 'saved-model' },
       },
+      digest_fixture_config: { library, sections: {} },
     });
-    chrome.runtime.sendNativeMessage = (async (
-      _host: string,
-      message: { id: string; request: PlanControlRequest },
-    ) => {
-      const r = message.request;
-      if (r.action === 'presets-read')
-        return { id: message.id, event: { type: 'result', library } };
-      if (r.action === 'config-save' || r.action === 'config-commit') {
-        if (
-          r.revision !== config.revision ||
-          (r.action === 'config-commit' && r.presetRevision !== library.revision)
-        )
-          throw new Error('Stale fixture revision');
-        config = { revision: config.revision + 1, value: r.value };
-        if (r.action === 'config-commit')
-          library = {
-            revision: library.revision + 1,
-            connections: r.connections ?? library.connections,
-            presets: r.presets,
-          };
-      } else if (r.action !== 'config-read') throw new Error('Unexpected fixture request');
-      return { id: message.id, event: { type: 'result', config, library } };
-    }) as typeof chrome.runtime.sendNativeMessage;
   }, DEFAULT_CONFIGURATION);
+  await installDigestProvider(worker, false, undefined, [
+    { id: 'other-A', label: 'Other account', signedIn: true, planEnabled: true },
+    { id: 'bound-B', label: 'Bound account', signedIn: true, planEnabled: true },
+  ]);
   await popup.reload();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await settingsSection(popup, 'Presets');
   await popup.getByRole('button', { name: 'Bound plan preset', exact: true }).click();
-  await expect(popup.getByLabel('ChatGPT model', { exact: true })).toBeEnabled();
+  const model = popup.getByLabel('ChatGPT model', { exact: true });
+  await expect(model).toHaveValue('gpt-6-luna');
+  await expect(popup.getByLabel('Connection', { exact: true })).toHaveValue('bound-plan');
   await expect(popup.getByText('Unsaved changes', { exact: true })).toHaveCount(0);
   await settingsSection(popup, 'Actions');
+  await popup.getByLabel('Edit actions', { exact: true }).click();
   await popup.getByLabel('Response language', { exact: true }).selectOption('Chinese');
   const save = async () => {
     await popup.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
   };
-  const account = () =>
-    worker.evaluate(
-      async () =>
-        ((await chrome.storage.local.get('saul_user_settings')).saul_user_settings as Configuration)
-          .chatgptPlan?.accountId,
-    );
+  const savedLibrary = () =>
+    worker.evaluate(async () => {
+      const saved = (await chrome.storage.local.get('digest_fixture_config'))
+        .digest_fixture_config as { library: SharedPresets };
+      return saved.library;
+    });
   await save();
-  expect(await account()).toBe('local-A');
+  expect((await savedLibrary()).connections).toContainEqual(
+    expect.objectContaining({ key: 'bound-plan', accountId: 'bound-B' }),
+  );
   await settingsSection(popup, 'Presets');
-  await popup.getByLabel('Model options', { exact: true }).click();
-  await popup.getByLabel('ChatGPT effort', { exact: true }).selectOption('medium');
+  await popup.getByRole('button', { name: 'Bound plan preset', exact: true }).click();
+  await model.selectOption('fixture-work-model');
+  await popup
+    .locator('summary')
+    .filter({ hasText: /^Options$/ })
+    .click();
+  await popup.getByRole('combobox', { name: /^Effort/ }).selectOption('high');
   await save();
-  expect(await account()).toBe('local-A');
-  await settingsSection(popup, 'Connections');
-  await expect(popup.getByLabel('ChatGPT account', { exact: true })).toHaveValue('local-A');
-  await popup.getByLabel('ChatGPT account', { exact: true }).selectOption('explicit-C');
-  await save();
-  expect(await account()).toBe('explicit-C');
-  await settingsSection(popup, 'Presets');
-  await expect(popup.getByLabel('ChatGPT effort', { exact: true })).toHaveValue('medium');
+  const library = await savedLibrary();
+  expect(library.connections).toContainEqual(
+    expect.objectContaining({ key: 'bound-plan', accountId: 'bound-B' }),
+  );
+  expect(library.presets).toContainEqual(
+    expect.objectContaining({
+      name: 'Bound plan preset',
+      connectionKey: 'bound-plan',
+      model: 'fixture-work-model',
+      effort: 'high',
+    }),
+  );
   if (reviewScreenshots)
     await popup.screenshot({ path: info.outputPath('bound-plan-inspection.png') });
 });

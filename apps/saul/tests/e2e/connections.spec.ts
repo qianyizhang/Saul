@@ -582,6 +582,7 @@ test('standalone endpoint Check stays separate from generation', async ({
   sandbox,
   fixtureServer,
 }) => {
+  const requestsBeforeCheck = fixtureServer.requests.length;
   const { popup } = await sandbox.launch();
   await configureFixtureProvider(popup, fixtureServer.origin);
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -589,5 +590,5 @@ test('standalone endpoint Check stays separate from generation', async ({
   await popup.getByLabel('Model options and tests', { exact: true }).click();
   await popup.getByRole('button', { name: 'Test Connection', exact: true }).click();
   await expect(popup.getByText(/Endpoint reachable/)).toBeVisible();
-  expect(fixtureServer.requests).toHaveLength(0);
+  expect(fixtureServer.requests).toHaveLength(requestsBeforeCheck);
 });

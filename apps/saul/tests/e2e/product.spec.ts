@@ -155,7 +155,7 @@ test('Window drag reorders immediately and Undo restores the previous order', as
   );
 });
 
-test('empty model output stays a failed attempt without a completed answer', async ({
+test('empty model output with a bare DONE stays interrupted without a completed answer', async ({
   sandbox,
 }) => {
   const server = await createFixtureServer('');
@@ -167,9 +167,13 @@ test('empty model output stays a failed attempt without a completed answer', asy
     await expect(article.locator('saul-root')).toBeAttached();
     await article.locator('#concept').click({ clickCount: 3 });
     await article.getByRole('button', { name: 'Explain & open', exact: true }).click();
-    await expect(article.getByRole('alert')).toContainText('The model returned no explanation');
+    await expect(article.getByRole('alert')).toContainText(
+      'The model completed without returning text.',
+    );
     await expect(article.getByText('Saved', { exact: true })).toHaveCount(0);
-    expect((await getFirstHistory(popup)).latest.status).toBe('failed');
+    const row = await getFirstHistory(popup);
+    expect(row.latest).toMatchObject({ status: 'interrupted', reason: 'incomplete' });
+    expect(row.completed).toBeUndefined();
   } finally {
     await server.close();
   }
