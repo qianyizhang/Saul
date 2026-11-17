@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { parseSummary } from '../src/digest/summary';
-import { digestHtml } from '../src/digest/html';
-import { validateDigest } from '../src/digest/contracts';
-import { DigestRunner } from '../src/digest/runner';
-import { createCallExecutor } from '../src/calls/execution';
+import { parseSummary } from '../src/calls/execution/summary';
+import { digestHtml } from '../src/calls/ui/summary-html';
+import { validateDigest } from '../src/calls/batch-messages';
+import { DigestRunner } from '../src/calls/execution/batch-runner';
+import { createCallExecutor } from '../src/calls/execution/module';
 import type { actionHost } from '../src/calls/host';
 import {
   activeItem,
@@ -12,9 +12,9 @@ import {
   retryableItem,
   type DigestBatch,
   type DigestSource,
-} from '../src/digest/types';
-import type { DbCall, DbRequest } from '../src/types/storage';
-import type { PlanEvent, PlanRequest } from '../native/plan-protocol.mts';
+} from '../shared/model/call-batch.ts';
+import type { DbCall, DbRequest } from '../shared/protocol/history-types.ts';
+import type { PlanEvent, PlanRequest } from '../shared/protocol/credential-plan.mts';
 const pair = { en: 'A concrete explanation.', zh: '具体解释。' };
 const summary = {
   lead: pair,
@@ -487,7 +487,7 @@ it('reuses saved output before inference, measures changed input, and keeps a ca
   const same = (await runner.request(
     { action: 'resolve', id: next.id, tabIds: [0, 1, 2] },
     next,
-  )) as import('../src/digest/types').DigestResolution;
+  )) as import('../shared/model/call-batch.ts').DigestResolution;
   expect(same.batch?.id).toBe('digest-test');
   expect(same.comparisons.every((c) => c.text?.kind === 'same')).toBe(true);
   f.capture.mockResolvedValue({
@@ -499,13 +499,13 @@ it('reuses saved output before inference, measures changed input, and keeps a ca
   const changed = (await runner.request(
     { action: 'resolve', id: next.id, tabIds: [0, 1, 2] },
     next,
-  )) as import('../src/digest/types').DigestResolution;
+  )) as import('../shared/model/call-batch.ts').DigestResolution;
   expect(changed.comparisons[0]?.text).toMatchObject({ kind: 'changed', added: 4 });
   f.capture.mockRejectedValue(new Error('Source tab unavailable'));
   const unavailable = (await runner.request(
     { action: 'resolve', id: next.id, tabIds: [0, 1, 2] },
     next,
-  )) as import('../src/digest/types').DigestResolution;
+  )) as import('../shared/model/call-batch.ts').DigestResolution;
   expect(unavailable.batch?.id).toBe('digest-test');
   expect(unavailable.comparisons[0]?.error).toContain('Source tab unavailable');
   const reused = (await runner.request(

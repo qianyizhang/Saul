@@ -1,11 +1,11 @@
 import { readCredentialRoute } from '../src/providers/credential-route';
 import { initAnnotations } from '../src/annotations/background';
 import { callStore } from '../src/calls/store';
-import { captureTab, verifyCaptureTab } from '../src/digest/capture';
-import { validateDigest } from '../src/digest/contracts';
+import { captureTab, verifyCaptureTab } from '../src/calls/capture/capture';
+import { validateDigest } from '../src/calls/batch-messages';
 import { createCallAdmission } from '../src/calls/admission';
-import { initSummaryActions } from '../src/digest/actions';
-import { initPlanBridge } from '../src/native/plan';
+import { initSummaryActions } from '../src/calls/summary-actions';
+import { initStorageBridge } from '../src/native/storage-bridge';
 import { initCredentialBridge } from '../src/native/credentials';
 import { nativeCredentialAccess } from '../src/configuration/credentials';
 import { initSpeechBridge } from '../src/speech/bridge';
@@ -29,21 +29,20 @@ import {
   minimumModeFromStorage,
   MINIMUM_MODE_STORAGE_KEY,
 } from '../src/storage/presentation';
-import { runnerRequest } from '../src/storage/client';
+import { runnerRequest } from '../src/platform/chrome/runner';
 import { configurationFor } from '../src/configuration/definition';
 import { createReadingAdmission, type ReadingAdmission } from '../src/reading/admission';
 import { initNativeBridge } from '../src/native/bridge';
 import { workspaceCall } from '../src/native/workspace';
+import { sourcePage, workspaceSender } from '../src/platform/chrome/sender';
 import {
-  sourcePage,
   validateReading,
-  workspaceSender,
   id,
   type ReadingRequest,
   type ReadingResult,
-} from '../src/contracts/reading';
+} from '../src/reading/contract';
 import { validateWorkspace } from '../src/contracts/workspace';
-import type { DbCall, DbRequest, Passage } from '../src/types/storage';
+import type { DbCall, DbRequest, Passage } from '../shared/protocol/history-types.ts';
 
 const db: DbCall = (message) => runnerRequest({ operation: 'db', message: message as DbRequest });
 const settingsOwner = createConfigurationStore(
@@ -181,7 +180,7 @@ export default defineBackground(() => {
   const settings = settingsOwner;
   initStorageSecurity();
   initNativeBridge();
-  initPlanBridge();
+  initStorageBridge();
   initCredentialBridge();
   initSpeechBridge(currentSettings);
   initActionBridge();

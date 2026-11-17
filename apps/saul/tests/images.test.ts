@@ -1,12 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
-import { generateImage, validateGeneratedImage } from '../src/providers/images';
+import { validateGeneratedImage } from '../shared/model/image.ts';
+import { generateImage } from '../src/providers/images';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 import { starterConfiguration } from '../src/configuration/definition';
 import { prepareRecipeRun, prepareFrozenRun } from '../src/reading/configuration';
-import type { GeneratedImage } from '../src/providers/images';
-import { executionModel, type ModelRequest } from '../src/providers/request';
-import { validateCredentialRequest } from '../native/credentials-contract.mts';
+import type { GeneratedImage } from '../shared/model/image.ts';
+import { executionModel, type ModelRequest } from '../shared/model/execution-route.ts';
+import { validateCredentialRequest } from '../shared/protocol/credentials-contract.mts';
 
 const gif = readFileSync(
   new URL('../../../contracts/fixtures/animation.gif', import.meta.url),

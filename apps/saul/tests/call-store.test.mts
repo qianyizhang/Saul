@@ -1,3 +1,4 @@
+import { storagePort } from './helpers/storage-port';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createCallStore } from '../src/calls/store';
 import { LEGACY_CALL_STATE_KEY } from '../src/calls/contract';
@@ -16,19 +17,21 @@ it('adopts the JSON call library and refuses helper loss or stale saves after ad
       },
     },
     runtime: {
-      sendNativeMessage: async (
-        _: string,
-        { request }: { request: { action: string; revision: number; value: unknown } },
-      ) => {
-        if (!available) throw new Error('Disconnected');
-        if (request.action === 'config-read')
-          return { event: { type: 'result', config: { revision, value: { library: [] } } } };
-        if (request.revision !== revision)
-          return { event: { type: 'error', message: 'Scoped settings changed. Reload.' } };
-        return {
-          event: { type: 'result', config: { revision: ++revision, value: request.value } },
-        };
-      },
+      connectNative: storagePort(
+        async (
+          _: string,
+          { request }: { request: { action: string; revision: number; value: unknown } },
+        ) => {
+          if (!available) throw new Error('Disconnected');
+          if (request.action === 'config-read')
+            return { event: { type: 'result', config: { revision, value: { library: [] } } } };
+          if (request.revision !== revision)
+            return { event: { type: 'error', message: 'Scoped settings changed. Reload.' } };
+          return {
+            event: { type: 'result', config: { revision: ++revision, value: request.value } },
+          };
+        },
+      ),
     },
   });
   const storage = createCallStore();
@@ -54,7 +57,7 @@ it('allows browser-only storage but rejects malformed replies rather than downgr
   });
   vi.stubGlobal('chrome', {
     storage: { local: { get: async () => ({}), set: vi.fn() } },
-    runtime: { sendNativeMessage },
+    runtime: { connectNative: storagePort(sendNativeMessage) },
   });
   expect(await createCallStore().readChoices()).toMatchObject({
     state: 'ready',

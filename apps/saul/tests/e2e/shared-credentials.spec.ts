@@ -1,6 +1,9 @@
 import { test, expect } from './fixtures.ts';
 import { settingsSection } from './driver.ts';
-import type { CredentialRequest, CredentialEvent } from '../../native/credentials-contract.mts';
+import type {
+  CredentialRequest,
+  CredentialEvent,
+} from '../../shared/protocol/credentials-contract.mts';
 import type { Configuration } from '../../src/configuration/definition';
 import { DEFAULT_CONFIGURATION } from '../../src/configuration/definition';
 

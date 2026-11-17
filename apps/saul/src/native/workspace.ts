@@ -4,8 +4,8 @@ import {
   type TabSnapshot,
   type ToolArgs,
   type ToolResults,
-} from '../../native/protocol.mts';
-import { record } from '../contracts/reading';
+} from '../../shared/protocol/protocol.mts';
+import { record } from '../reading/contract';
 type WorkspaceCommandTool =
   'saul_tabs_edit' | 'saul_tabs_undo' | 'saul_summary_open' | 'saul_summary_status';
 type WorkspaceCommandRequest = {

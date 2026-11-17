@@ -14,7 +14,7 @@ import {
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { eventSchema, type Event } from './diagnostic-events.mts';
+import { eventSchema, type Event } from '../shared/protocol/diagnostic-events.mts';
 
 const UUID = /^[a-f0-9-]{36}$/;
 export const MAX_FILE_BYTES = 2 * 1024 * 1024;

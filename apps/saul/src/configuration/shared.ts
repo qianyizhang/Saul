@@ -1,4 +1,4 @@
-import { validateScopedConfigValue } from '../../native/shared-presets-contract.mts';
+import { validateScopedConfigValue } from '../../shared/protocol/shared-presets-contract.mts';
 import { portableSettings, restoreSettings } from './scoped';
 import {
   ConfigUnavailableError,
@@ -6,8 +6,12 @@ import {
   sharedCall,
   commitSharedConfiguration,
 } from '../native/config-transport';
-import type { Configuration, ModelPreset } from './definition';
-import type { SharedPreset, SharedPresets } from '../../native/shared-presets-contract.mts';
+import type { ModelPreset } from '../../shared/model/presets.ts';
+import type { Configuration } from './definition';
+import type {
+  SharedPreset,
+  SharedPresets,
+} from '../../shared/protocol/shared-presets-contract.mts';
 import { configurationFor } from './definition';
 
 // Stable migration IDs leave saved attempts untouched and keep recipe references together.

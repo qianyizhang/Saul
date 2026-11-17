@@ -1,12 +1,15 @@
 import { expect, it, vi } from 'vitest';
 import { createCallAdmission } from '../src/calls/admission';
 import type { Configuration } from '../src/configuration/definition';
-import { summaryConnections, validateSummaryConnection } from '../src/digest/connection';
+import {
+  summaryConnections,
+  validateSummaryConnection,
+} from '../src/calls/execution/summary-connection';
 import { decodeConfiguration } from '../src/configuration/record';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 import { portableSettings, restoreSettings } from '../src/configuration/scoped';
-import { validateDigest } from '../src/digest/contracts';
-import type { DigestBatch } from '../src/digest/types';
+import { validateDigest } from '../src/calls/batch-messages';
+import type { DigestBatch } from '../shared/model/call-batch.ts';
 
 const accounts = ['bound', 'duplicate'].map((id) => ({
   id,

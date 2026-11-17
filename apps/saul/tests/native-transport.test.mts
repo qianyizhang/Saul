@@ -1,4 +1,4 @@
-import { isRecord } from '../native/value.mts';
+import { isRecord } from '../shared/model/value.mts';
 import { tab } from './fixtures.mts';
 import { verifyMcp } from '../scripts/verify-connection.mts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,10 +9,10 @@ import { mkdirSync, mkdtempSync, rmSync, statSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path';
 import { endianness } from 'node:os';
 import { encodeNative, nativeDecoder, lineDecoder } from '../native/transport.mts';
-import { mcpTools, MCP_TOOLS } from '../native/app-protocol.mts';
+import { mcpTools, MCP_TOOLS } from '../shared/protocol/app-protocol.mts';
 import { BOARD_URI } from '../.build/native/board-resource.mjs';
 import { callTool, sessions } from '../native/client.mts';
-import { installationPlan } from '../native/installation.mts';
+import { installationPlan } from '../native/installation/installer.mts';
 
 let directory: string;
 const children: ReturnType<typeof spawn>[] = [];

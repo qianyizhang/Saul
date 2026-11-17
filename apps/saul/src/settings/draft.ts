@@ -1,7 +1,8 @@
 import { inspectPreset } from '../configuration/inspect';
-import { validateConnections } from '../../native/shared-presets-contract.mts';
-import { officialOpenAI } from '../../native/credentials-contract.mts';
-import type { ModelPreset, ProviderType, Recipe, Configuration } from '../configuration/definition';
+import { validateConnections } from '../../shared/protocol/shared-presets-contract.mts';
+import { officialOpenAI } from '../../shared/protocol/credentials-contract.mts';
+import type { ModelPreset, ProviderType, Recipe } from '../../shared/model/presets.ts';
+import type { Configuration } from '../configuration/definition';
 import { DEFAULT_CONFIGURATION } from '../configuration/definition';
 import { validateSettingsConnections } from '../configuration/resolve';
 import {

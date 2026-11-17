@@ -1,5 +1,5 @@
 import type { Configuration } from './definition';
-import { validateSettingsRequest, type SettingsState } from '../contracts/settings';
+import { validateSettingsRequest, type SettingsState } from '../settings/contract';
 import { InvalidStoredSettingsError, decodeConfiguration, settingsFromStored } from './record';
 import { DEFAULT_CONFIGURATION } from './definition';
 import { validateSettingsConnections } from './resolve';

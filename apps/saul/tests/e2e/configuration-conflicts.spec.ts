@@ -4,7 +4,7 @@ import { test, expect } from './fixtures.ts';
 import { DEFAULT_CONFIGURATION } from '../../src/configuration/definition';
 import type { Configuration } from '../../src/configuration/definition';
 import { installDigestProvider } from './digest-fixture';
-import type { SharedPresets } from '../../native/shared-presets-contract.mts';
+import type { SharedPresets } from '../../shared/protocol/shared-presets-contract.mts';
 
 test('bound plan inspection and preset edits preserve the saved account binding', async ({
   sandbox,

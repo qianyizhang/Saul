@@ -1,6 +1,6 @@
 import { preparePreset } from '../src/configuration/resolve';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { ResolvedContext } from '../src/types';
+import type { ResolvedContext } from '../shared/model/reading.ts';
 import type { Configuration } from '../src/configuration/definition';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 import { decodeConfiguration } from '../src/configuration/record';

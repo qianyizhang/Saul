@@ -1,8 +1,14 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { ReadingRunner } from '../src/reading/runner';
-import { IncompleteGeneration } from '../src/providers/events';
-import type { DbCall, DbRequest, RunResult, Submission, RunStatus } from '../src/types/storage';
+import { IncompleteGeneration } from '../shared/model/model-events.ts';
+import type {
+  DbCall,
+  DbRequest,
+  RunResult,
+  Submission,
+  RunStatus,
+} from '../shared/protocol/history-types.ts';
 const mocks = vi.hoisted(() => ({ remote: vi.fn() }));
 
 const attemptContract = JSON.parse(

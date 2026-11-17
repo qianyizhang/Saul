@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { CLI_COMMANDS, TOOLS } from './protocol.mts';
+import { CLI_COMMANDS, TOOLS } from '../shared/protocol/protocol.mts';
 import { callTool } from './client.mts';
 import { errorMessage } from './transport.mts';
 

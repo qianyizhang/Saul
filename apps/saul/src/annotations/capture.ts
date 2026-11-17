@@ -1,5 +1,9 @@
 import { annotationMessage } from './client';
-import type { AnnotationTarget, Annotation, AnnotationSummary } from './contract';
+import type {
+  AnnotationTarget,
+  Annotation,
+  AnnotationSummary,
+} from '../../shared/protocol/annotations.ts';
 export const viewport = () => ({
   width: innerWidth,
   height: innerHeight,

@@ -1,14 +1,12 @@
 import { afterEach, expect, it, vi } from 'vitest';
 const mocked = vi.hoisted(() => ({ call: vi.fn() }));
-vi.mock('../src/providers/chatgpt-plan', async () => {
-  const actual = await vi.importActual<typeof import('../src/providers/chatgpt-plan')>(
-    '../src/providers/chatgpt-plan',
-  );
-  return { ...actual, planCall: mocked.call };
-});
-import { HistoryDisconnected } from '../src/providers/chatgpt-plan';
+vi.mock('../src/native/storage-client', () => ({ requestHistory: mocked.call }));
+import { StorageDisconnected } from '../src/native/storage-connection';
 import { historyCall } from '../src/storage/history';
-import { validateHistoryRequest, type HistoryRequest } from '../native/history-protocol.mts';
+import {
+  validateHistoryRequest,
+  type HistoryRequest,
+} from '../shared/protocol/history-protocol.mts';
 const request = (type: string): HistoryRequest => ({
   operation: 'db',
   owner: crypto.randomUUID(),
@@ -22,9 +20,9 @@ afterEach(() => {
 it('reconnects with the same operation identity and stops after three connection attempts', async () => {
   vi.useFakeTimers();
   mocked.call
-    .mockRejectedValueOnce(new HistoryDisconnected('lost'))
-    .mockRejectedValueOnce(new HistoryDisconnected('lost'))
-    .mockResolvedValue({ type: 'result', value: [] });
+    .mockRejectedValueOnce(new StorageDisconnected('lost'))
+    .mockRejectedValueOnce(new StorageDisconnected('lost'))
+    .mockResolvedValue([]);
   const original = request('DB_GET_HISTORY');
   const result = historyCall(original);
   await vi.runAllTimersAsync();
@@ -33,7 +31,7 @@ it('reconnects with the same operation identity and stops after three connection
   expect(mocked.call.mock.calls.every(([value]) => value.request === original)).toBe(true);
 });
 it('does not repeat an uncertain Clear or an ordinary storage failure', async () => {
-  mocked.call.mockRejectedValueOnce(new HistoryDisconnected('lost'));
+  mocked.call.mockRejectedValueOnce(new StorageDisconnected('lost'));
   await expect(historyCall(request('DB_CLEAR_HISTORY'))).rejects.toThrow('lost');
   expect(mocked.call).toHaveBeenCalledTimes(1);
   mocked.call.mockRejectedValueOnce(new Error('disk full'));
@@ -57,9 +55,7 @@ it.each([
   'reconnects safe operations but leaves explicit mutations uncertain: %s',
   async (operation, reconnect) => {
     vi.useFakeTimers();
-    mocked.call
-      .mockRejectedValueOnce(new HistoryDisconnected('lost'))
-      .mockResolvedValue({ type: 'result', value: null });
+    mocked.call.mockRejectedValueOnce(new StorageDisconnected('lost')).mockResolvedValue(null);
     const original = request(operation);
     validateHistoryRequest(original);
     const result = historyCall(original);
@@ -81,7 +77,7 @@ it('rejects unknown operations and never reconnects them or migration transfers'
     request('DB_FUTURE'),
     { operation: 'import-begin', id: crypto.randomUUID() } as const,
   ]) {
-    mocked.call.mockRejectedValueOnce(new HistoryDisconnected('lost'));
+    mocked.call.mockRejectedValueOnce(new StorageDisconnected('lost'));
     await expect(historyCall(message)).rejects.toThrow('lost');
   }
   expect(mocked.call).toHaveBeenCalledTimes(2);

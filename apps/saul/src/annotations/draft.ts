@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { annotationIdSchema } from './contract';
+import { annotationIdSchema } from '../../shared/protocol/annotations.ts';
 import { annotationDraftKey } from './routing';
 
 const mutationSchema = z.discriminatedUnion('action', [

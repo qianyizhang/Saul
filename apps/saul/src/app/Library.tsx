@@ -1,8 +1,8 @@
-import { HistoryEntry } from './HistoryEntry';
-import { ActionLabel } from '../surface/ActionLabel';
+import { HistoryEntry } from '../reading/ui/HistoryEntry';
+import { ActionLabel } from '../ui/ActionLabel';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bookmark, Download } from 'lucide-react';
-import { useRefreshOnFocus } from './useRefreshOnFocus';
+import { useRefreshOnFocus } from '../ui/useRefreshOnFocus';
 import {
   fetchHistory,
   deleteHistorySelection,
@@ -10,10 +10,10 @@ import {
   exportKnowledgeMarkdown,
   setHistoryBookmark,
   sendDbMessage,
-  openHistorySource,
-} from '../storage/client';
-import type { HistoryItem, RunResult } from '../types/storage';
-import { downloadMarkdown } from './format';
+} from '../storage/history-client';
+import { openHistorySource } from '../reading/client';
+import type { HistoryItem, RunResult } from '../../shared/protocol/history-types.ts';
+import { downloadMarkdown } from '../reading/ui/history-format';
 
 export function Library({
   compact = false,

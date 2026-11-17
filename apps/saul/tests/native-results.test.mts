@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
-import { workspaceState } from '../native/workspace-contract.mts';
-import { validateToolResult } from '../native/results.mts';
-import type { ToolArgs } from '../native/protocol.mts';
+import { workspaceState } from '../shared/protocol/workspace-contract.mts';
+import { validateToolResult } from '../shared/protocol/results.mts';
+import type { ToolArgs } from '../shared/protocol/protocol.mts';
 import { tab } from './fixtures.mts';
 
 const snapshot = {

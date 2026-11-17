@@ -1,5 +1,5 @@
-import type { TabEdit, TabEditResult, TabSnapshot } from '../../native/protocol.mts';
-import { tabLayoutRevision } from '../../native/tab-layout.mts';
+import type { TabEdit, TabEditResult, TabSnapshot } from '../../shared/protocol/protocol.mts';
+import { tabLayoutRevision } from '../../shared/model/tab-layout.mts';
 
 type List = () => Promise<TabSnapshot>;
 const undos = new Map<string, { before: TabSnapshot; after: string; windows: number[] }>();

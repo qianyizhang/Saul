@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
-import { inspectionInput } from '../src/reading/inspection';
-import type { RunInput } from '../src/types/storage';
+import { inspectionInput } from '../shared/model/inspection.ts';
+import type { RunInput } from '../shared/protocol/history-types.ts';
 
 test('reading inspection retains literal model text without projecting account or connection data', () => {
   const input: RunInput = {

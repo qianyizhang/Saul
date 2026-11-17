@@ -1,10 +1,10 @@
-import type { SaulDatabase } from '../src/storage/db';
-import type { SqlDatabase } from '../src/storage/sql';
+import type { SaulDatabase } from '../native/storage/db.ts';
+import type { SqlDatabase } from '../native/storage/sql.ts';
 type FixtureStore = { connection: SqlDatabase; browser: Pick<SaulDatabase, 'execute'> };
-import { HistoryConnection } from '../native/history.mts';
-import { migrate } from '../src/storage/schema';
-import { searchableResponse } from '../src/storage/search';
-import type { RunInput } from '../src/types/storage';
+import { HistoryConnection } from '../native/storage/history.mts';
+import { migrate } from '../native/storage/schema.ts';
+import { searchableResponse } from '../native/storage/search.ts';
+import type { RunInput } from '../shared/protocol/history-types.ts';
 import type { DatabaseFixtureRequest, HistorySeed } from './e2e/database-harness';
 async function seedHistory(repository: FixtureStore, { origin, count, options }: HistorySeed) {
   const db = repository.connection;

@@ -3,7 +3,7 @@ import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures';
 import { installDigestProvider, openDigestReader } from './digest-fixture';
 import { actionHelperFixture } from './action-helper-fixture';
-import type { ActionModule } from '../../native/action-protocol.mts';
+import type { ActionModule } from '../../shared/protocol/action-protocol.mts';
 import type { CallEditRequest, CallEditorState } from '../../src/calls/contract';
 import type { Page } from '@playwright/test';
 
@@ -151,22 +151,23 @@ test('Call Saul uses the saved shared selection when Chrome cannot mirror the ch
     await worker.evaluate(async () => {
       // Replace the shared config transport only. Module loading still uses the
       // real local action helper and page execution uses the real history path.
-      const native = chrome.runtime.sendNativeMessage.bind(chrome.runtime);
       const write = chrome.storage.local.set.bind(chrome.storage.local);
       await write({ saul_calls_unified: true, saul_summary_action_v1: {} });
       let value: unknown = { library: [] };
       let revision = 1;
-      chrome.runtime.sendNativeMessage = (async (
-        host: string,
-        message: { id: string; request: { action: string; section?: string; value?: unknown } },
-      ) => {
-        if (message.request.section !== 'calls') return native(host, message);
-        if (message.request.action === 'config-save') {
-          value = message.request.value;
-          revision++;
-        }
-        return { id: message.id, event: { type: 'result', config: { value, revision } } };
-      }) as typeof chrome.runtime.sendNativeMessage;
+      setStorageControlFixture(
+        async (
+          _host: string,
+          message: { id: string; request: { action: string; section?: string; value?: unknown } },
+        ) => {
+          if (message.request.section !== 'calls') return undefined;
+          if (message.request.action === 'config-save') {
+            value = message.request.value;
+            revision++;
+          }
+          return { id: message.id, event: { type: 'result', config: { value, revision } } };
+        },
+      );
       chrome.storage.local.set = (async (values: Record<string, unknown>) => {
         if (revision > 1 && ('saul_summary_action_v1' in values || 'saul_call_draft_v1' in values))
           throw new Error('Builder draft storage unavailable');

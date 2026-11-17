@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { compareText, changeLabel } from '../src/reading/input-change';
-import { textPages } from '../src/surface/InspectionText';
+import { textPages } from '../src/ui/InspectionText';
 
 it('distinguishes exact input, whitespace, word boundaries, reordering and Chinese additions', () => {
   expect(compareText('a b', 'a b').kind).toBe('same');

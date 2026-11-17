@@ -1,4 +1,5 @@
-import type { Configuration, ModelPreset, ProviderDefaults } from './definition';
+import type { ModelPreset } from '../../shared/model/presets.ts';
+import type { Configuration, ProviderDefaults } from './definition';
 
 /** An editable view of one choice. It is neither saved configuration nor permission to run. */
 export interface PresetInspection extends ProviderDefaults {

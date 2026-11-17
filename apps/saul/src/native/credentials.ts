@@ -6,9 +6,9 @@ import {
   validateCredentialRequest,
   type CredentialRequest,
   type CredentialEvent,
-} from '../../native/credentials-contract.mts';
-import { Fragments } from '../../native/fragments.mts';
-import { workspaceSender } from '../contracts/reading';
+} from '../../shared/protocol/credentials-contract.mts';
+import { Fragments } from '../../shared/protocol/fragments.mts';
+import { workspaceSender } from '../platform/chrome/sender';
 
 export async function* credentialEvents(
   request: CredentialRequest,

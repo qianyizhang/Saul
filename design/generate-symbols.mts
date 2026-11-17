@@ -86,7 +86,7 @@ const html = await format(
 );
 const outputs = [
   ['../apps/saul/src/design/control-symbols.ts', typescript],
-  ['../apps/saul/native/ui/control-symbols.ts', typescript],
+  ['../apps/saul/board/control-symbols.ts', typescript],
   ...(process.argv.includes('--web-only')
     ? []
     : [

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { errorCode } from '../apps/saul/native/value.mts';
+import { errorCode } from '../apps/saul/shared/model/value.mts';
 import { errorMessage } from '../apps/saul/native/transport.mts';
 import { spawn } from 'node:child_process';
 import {
@@ -18,7 +18,10 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createInterface } from 'node:readline/promises';
-import { installationPlan, verifyInstallation } from '../apps/saul/native/installation.mts';
+import {
+  installationPlan,
+  verifyInstallation,
+} from '../apps/saul/native/installation/installer.mts';
 import { verifyArtifactTree, verifyBuildInfo } from './build-identity.mts';
 import {
   nativeBuildCurrent,

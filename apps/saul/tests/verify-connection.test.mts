@@ -3,7 +3,7 @@ import { expect, it, vi } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { MCP_TOOLS } from '../native/app-protocol.mts';
+import { MCP_TOOLS } from '../shared/protocol/app-protocol.mts';
 import { verifyConnection, verifyMcp } from '../scripts/verify-connection.mts';
 
 it('checks the registered transport with its environment/cwd and returns honest connection status', async () => {

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { Fragments, packets } from '../native/fragments.mts';
+import { Fragments, packets } from '../shared/protocol/fragments.mts';
 import { encodeNative, nativeDecoder } from '../native/transport.mts';
 it('preserves large Unicode requests and results through real native frame encoding', () => {
   const value = { id: 'history', event: { type: 'result', value: '你好😀'.repeat(400_000) } };

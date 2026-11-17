@@ -1,7 +1,7 @@
 // Browser-only measurement harness; bundled solely in disposable test snapshots.
 import { PassageMarkers } from '../../src/reading/markers';
 import { buildTextMap, captureAnchor, resolveAnchor } from '../../src/reading/anchors';
-import type { Passage } from '../../src/types/storage';
+import type { Passage } from '../../shared/protocol/history-types.ts';
 export async function measureMarkers(count: number) {
   document.body.style.cssText = 'font:20px system-ui;line-height:1.7;padding:32px;';
   document.body.replaceChildren();

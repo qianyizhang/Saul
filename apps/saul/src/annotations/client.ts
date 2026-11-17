@@ -2,16 +2,16 @@ import type {
   AnnotationAttempt,
   AnnotationEditorStatus,
   AnnotationStatusRequest,
-} from './attempts';
+} from '../../shared/protocol/annotation-attempts.ts';
 import type {
   AnnotationCapture,
   AnnotationOperation,
   AnnotationResult,
   ReviewedAnnotation,
-} from './contract';
-import type { ModelPreset } from '../configuration/definition';
-import type { CallChoice } from '../calls/contract';
-import type { Reply } from '../types/storage';
+} from '../../shared/protocol/annotations.ts';
+import type { ModelPreset } from '../../shared/model/presets.ts';
+import type { CallChoice } from '../../shared/model/custom-call.ts';
+import { request } from '../platform/chrome/messages';
 import type { AnnotationDraftMutation } from './draft';
 
 type WorkspaceOperation<Q, R> = { input: Q; result: R };
@@ -47,12 +47,7 @@ type Operations = {
 export async function annotationMessage<K extends keyof Operations>(
   message: { action: K } & Operations[K]['input'],
 ): Promise<Operations[K]['result']> {
-  const result: Reply<Operations[K]['result']> | undefined = await chrome.runtime.sendMessage({
-    target: 'saul-annotation',
-    ...message,
-  });
-  if (!result?.success) throw new Error(result?.error || 'Annotation service did not respond.');
-  return result.result;
+  return request({ target: 'saul-annotation', ...message }, 'Annotation service did not respond.');
 }
 
 export const annotations = (url: string, operation: AnnotationOperation) =>

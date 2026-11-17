@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
-import { validatePlanRequest } from '../native/plan-protocol.mts';
-import { responsesBody, responseEvents } from '../native/responses.mts';
+import { validatePlanRequest } from '../shared/protocol/credential-plan.mts';
+import { responsesBody, responseEvents } from '../shared/protocol/responses.mts';
 
 const generate = {
   action: 'generate',
@@ -131,7 +131,7 @@ it('validates bounded PDF URL attachments and emits Responses file_url input wit
     expect(() => validatePlanRequest({ ...generate, attachments })).toThrow();
 });
 it('validates replies by operation instead of treating missing fields as empty results', async () => {
-  const { validatePlanResult } = await import('../native/plan-protocol.mts');
+  const { validatePlanResult } = await import('../shared/protocol/credential-plan.mts');
   expect(() => validatePlanResult({ action: 'accounts' }, { type: 'result' })).toThrow(
     'invalid reply',
   );
@@ -156,7 +156,7 @@ it('validates replies by operation instead of treating missing fields as empty r
   expect(() => validatePlanRequest({ action: 'toString' })).toThrow('Unsupported');
 });
 it('bounds whole SSE records across lines and chunks, not batches of complete records', async () => {
-  const { eventData } = await import('../native/sse.mts');
+  const { eventData } = await import('../shared/protocol/sse.mts');
   const body = new ReadableStream({
     start(c) {
       for (let i = 0; i < 8; i++) c.enqueue(new TextEncoder().encode('data: abcdef\n'));

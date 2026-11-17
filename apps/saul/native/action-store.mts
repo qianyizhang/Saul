@@ -2,7 +2,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, lstat, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
 import { basename, extname, isAbsolute, join } from 'node:path';
 import { checkAction } from './action-check.mts';
-import { type ActionModule, type ActionRevision, validRevision } from './action-protocol.mts';
+import {
+  type ActionModule,
+  type ActionRevision,
+  validRevision,
+} from '../shared/protocol/action-protocol.mts';
 
 const WEEK = 7 * 24 * 60 * 60 * 1000;
 export function actionHash(module: ActionModule) {

@@ -1,5 +1,9 @@
 import { nanoid } from 'nanoid';
-import type { SelectionSnapshot, ResolvedContext, ContextPolicy } from '../types';
+import type {
+  SelectionSnapshot,
+  ResolvedContext,
+  ContextPolicy,
+} from '../../shared/model/reading.ts';
 
 import { captureAnchor } from '../reading/anchors';
 

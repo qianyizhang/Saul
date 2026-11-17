@@ -1,7 +1,7 @@
 import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { revision } from '../../native/workspace.mts';
-import type { TabSnapshot } from '../../native/protocol.mts';
+import type { TabSnapshot } from '../../shared/protocol/protocol.mts';
 
 test.use({ browserToolsFixtures: true });
 

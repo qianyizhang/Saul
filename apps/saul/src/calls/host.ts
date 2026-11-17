@@ -1,11 +1,11 @@
-import type { AnnotationOperation, AnnotationResult } from '../annotations/contract';
+import type { AnnotationOperation, AnnotationResult } from '../../shared/protocol/annotations.ts';
 import {
   ACTION_PORT,
   validateActionGenerate,
   type ActionHostEvent,
   type ActionHostRequest,
   type ActionGenerate,
-} from '../../native/action-protocol.mts';
+} from '../../shared/protocol/action-protocol.mts';
 
 export async function actionHost(
   request: ActionHostRequest,

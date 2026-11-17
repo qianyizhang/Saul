@@ -1,4 +1,4 @@
-import type { ResolvedContext } from '../types';
+import type { ResolvedContext } from '../../shared/model/reading.ts';
 
 export const DEFAULT_SYSTEM_PROMPT = `You are Saul, an expert AI reading companion and concept explainer.
 Your goal is to provide a clear, concise, and insightful explanation of the selected text within its surrounding context.

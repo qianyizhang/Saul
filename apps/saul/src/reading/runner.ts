@@ -1,4 +1,4 @@
-import type { GeneratedImage } from '../providers/images';
+import type { GeneratedImage } from '../../shared/model/image.ts';
 import type {
   DbCall,
   DbOperations,
@@ -8,10 +8,14 @@ import type {
   RunResult,
   QueuedRun,
   Submission,
-} from '../types/storage';
+} from '../../shared/protocol/history-types.ts';
 import { streamModel } from '../providers/stream';
-import { type ModelActivity, type ModelEvent, IncompleteGeneration } from '../providers/events';
-import { TagStreamParser } from '../parser/tag-stream-parser';
+import {
+  type ModelActivity,
+  type ModelEvent,
+  IncompleteGeneration,
+} from '../../shared/model/model-events.ts';
+import { TagStreamParser } from '../../shared/model/tag-stream-parser.ts';
 
 type ReadingQuery =
   | 'DB_GET_HISTORY'

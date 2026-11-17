@@ -1,5 +1,5 @@
-import type { DbRequest } from '../types/storage';
-import { id, record, text } from './reading';
+import type { DbRequest } from '../../shared/protocol/history-types.ts';
+import { id, record, text } from '../reading/contract';
 export function validateWorkspace(v: unknown): asserts v is DbRequest {
   if (!record(v)) throw new Error('Invalid workspace request');
   const p = v.payload;

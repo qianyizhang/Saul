@@ -1,6 +1,6 @@
 import { tab } from './fixtures.mts';
-import { validateToolResult } from '../native/results.mts';
-import type { TabSnapshot } from '../native/protocol.mts';
+import { validateToolResult } from '../shared/protocol/results.mts';
+import type { TabSnapshot } from '../shared/protocol/protocol.mts';
 import { it, expect, vi } from 'vitest';
 import { createWindowNames, withWindowNames } from '../native/window-names.mts';
 

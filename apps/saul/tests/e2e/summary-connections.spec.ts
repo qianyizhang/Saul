@@ -1,3 +1,4 @@
+import type { StorageHelperRequest } from '../../shared/protocol/storage-protocol.mts';
 import { readFile } from 'node:fs/promises';
 import { test, expect } from './fixtures.ts';
 import { settingsSection, summaryMore } from './driver.ts';
@@ -7,8 +8,8 @@ import type {
   ConnectionDefinition,
   SharedPreset,
   SharedPresets,
-} from '../../native/shared-presets-contract.mts';
-import type { PlanControlRequest, PlanRequest } from '../../native/plan-protocol.mts';
+} from '../../shared/protocol/shared-presets-contract.mts';
+import type { PlanRequest } from '../../shared/protocol/credential-plan.mts';
 import type { Worker } from '@playwright/test';
 
 const accounts = ['bound', 'spare'].map((id) => ({
@@ -49,41 +50,40 @@ async function installSharedSummary(
           },
         });
       }
-      chrome.runtime.sendNativeMessage = (async (
-        _host: string,
-        packet: { id: string; request: PlanControlRequest },
-      ) => {
-        const r = packet.request;
-        let result: Record<string, unknown>;
-        if (r.action === 'presets-read') result = { library: state.library };
-        else if (r.action === 'config-read')
-          result = { config: state.sections[r.section] ?? { revision: 0 } };
-        else if (r.action === 'config-save' || r.action === 'config-commit') {
-          if (state.failCommit && r.action === 'config-commit')
-            return {
-              id: packet.id,
-              event: { type: 'error', message: 'Synthetic settings storage denied' },
+      setStorageControlFixture(
+        async (_host: string, packet: { id: string; request: StorageHelperRequest }) => {
+          const r = packet.request;
+          let result: Record<string, unknown>;
+          if (r.action === 'presets-read') result = { library: state.library };
+          else if (r.action === 'config-read')
+            result = { config: state.sections[r.section] ?? { revision: 0 } };
+          else if (r.action === 'config-save' || r.action === 'config-commit') {
+            if (state.failCommit && r.action === 'config-commit')
+              return {
+                id: packet.id,
+                event: { type: 'error', message: 'Synthetic settings storage denied' },
+              };
+            if ((state.sections[r.section]?.revision ?? 0) !== r.revision)
+              throw new Error('Scoped settings changed');
+            if (r.action === 'config-commit') {
+              if (r.presetRevision !== state.library.revision)
+                throw new Error('Shared settings changed');
+              state.library = {
+                revision: r.presetRevision + 1,
+                connections: r.connections ?? state.library.connections,
+                presets: r.presets,
+              };
+            }
+            state.sections[r.section] = { revision: r.revision + 1, value: r.value };
+            await chrome.storage.local.set({ summary_fixture_config: state });
+            result = {
+              config: state.sections[r.section],
+              ...(r.action === 'config-commit' ? { library: state.library } : {}),
             };
-          if ((state.sections[r.section]?.revision ?? 0) !== r.revision)
-            throw new Error('Scoped settings changed');
-          if (r.action === 'config-commit') {
-            if (r.presetRevision !== state.library.revision)
-              throw new Error('Shared settings changed');
-            state.library = {
-              revision: r.presetRevision + 1,
-              connections: r.connections ?? state.library.connections,
-              presets: r.presets,
-            };
-          }
-          state.sections[r.section] = { revision: r.revision + 1, value: r.value };
-          await chrome.storage.local.set({ summary_fixture_config: state });
-          result = {
-            config: state.sections[r.section],
-            ...(r.action === 'config-commit' ? { library: state.library } : {}),
-          };
-        } else throw new Error('Unexpected summary settings operation: ' + r.action);
-        return { id: packet.id, event: { type: 'result', ...result } };
-      }) as typeof chrome.runtime.sendNativeMessage;
+          } else throw new Error('Unexpected summary settings operation: ' + r.action);
+          return { id: packet.id, event: { type: 'result', ...result } };
+        },
+      );
     },
     { defaults: DEFAULT_CONFIGURATION, connections, presets },
   );

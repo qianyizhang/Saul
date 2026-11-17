@@ -1,11 +1,12 @@
-import { HistoryDisconnected, planCall } from '../providers/chatgpt-plan';
+import { requestHistory } from '../native/storage-client';
+import { StorageDisconnected } from '../native/storage-connection';
 import MigrationWorker from './migration-worker?worker';
-import type { DbCall, DbRequest, DbType } from '../types/storage';
+import type { DbCall, DbRequest, DbType } from '../../shared/protocol/history-types.ts';
 import {
   HISTORY_OPERATIONS,
   type HistoryOperationPolicy,
   type HistoryRequest,
-} from '../../native/history-protocol.mts';
+} from '../../shared/protocol/history-protocol.mts';
 const policies: Record<DbType, HistoryOperationPolicy> &
   Record<Exclude<keyof typeof HISTORY_OPERATIONS, DbType>, never> = HISTORY_OPERATIONS;
 function canReconnectHistory(operation: string): boolean {
@@ -16,10 +17,10 @@ let owner = '';
 export async function historyCall(request: HistoryRequest): Promise<unknown> {
   for (let attempt = 0; ; attempt++) {
     try {
-      return (await planCall({ action: 'history', request })).value;
+      return await requestHistory({ action: 'history', request });
     } catch (error) {
       if (
-        !(error instanceof HistoryDisconnected) ||
+        !(error instanceof StorageDisconnected) ||
         request.operation !== 'db' ||
         !canReconnectHistory(request.message.type) ||
         attempt >= 2

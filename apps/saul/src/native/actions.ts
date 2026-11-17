@@ -3,7 +3,7 @@ import {
   ACTION_PORT,
   validateActionHostRequest,
   type ActionHostEvent,
-} from '../../native/action-protocol.mts';
+} from '../../shared/protocol/action-protocol.mts';
 
 // Only the offscreen execution owner can talk to the action host. Source pages never can.
 export function initActionBridge() {

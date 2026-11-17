@@ -30,17 +30,19 @@ it('rebuilds a copied checkout instead of reusing another checkout data root', a
   }
 });
 
-it('invalidates helpers when imported browser sources or the shared schema change', async () => {
+it('invalidates helpers for Node storage or the shared schema, but not unrelated browser source', async () => {
   const repo = await mkdtemp(join(tmpdir(), 'saul-native-inputs-'));
   const root = join(repo, 'apps/saul');
   try {
-    await mkdir(join(root, 'src/storage'), { recursive: true });
+    await mkdir(join(root, 'native/storage'), { recursive: true });
+    await mkdir(join(root, 'src'));
     await mkdir(join(repo, 'contracts'));
-    const source = join(root, 'src/storage/db.ts');
+    const source = join(root, 'native/storage/db.ts');
     const schema = join(repo, 'contracts/history.sql');
     await writeFile(source, 'export const version = 1;');
     await writeFile(schema, 'CREATE TABLE attempts (id TEXT);');
     const initial = await nativeBuildFingerprint(root);
+    await writeFile(join(root, 'src/browser.ts'), 'export const browserOnly = true;');
     expect(await nativeBuildFingerprint(root)).toBe(initial);
     await writeFile(source, 'export const version = 2;');
     expect(await nativeBuildFingerprint(root)).not.toBe(initial);

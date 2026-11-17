@@ -13,7 +13,7 @@ import {
   restoreGeneration,
 } from '../.build/native/installation.mjs';
 import { encodeNative, nativeDecoder } from '../native/transport.mts';
-import type { ActionHostEvent, ActionHostRequest } from '../native/action-protocol.mts';
+import type { ActionHostEvent, ActionHostRequest } from '../shared/protocol/action-protocol.mts';
 
 const roots: string[] = [];
 const children: ChildProcessWithoutNullStreams[] = [];

@@ -39,12 +39,12 @@ implementation. The parent maps retain the post-change survey and its source anc
   shorthand for bypassing validation or blindly resending a current draft.
 - Saul's `apps/saul/src/app/useSettingsDraft.ts` (historical source at the recorded baseline),
   lines 104–156, blocks stale/uncertain saves and confirms replacement on Reload.
-  [Settings.tsx](../../../apps/saul/src/app/Settings.tsx), lines 1007–1025, exposes
+  `apps/saul/src/app/Settings.tsx` at that baseline, lines 1007–1025, exposes
   Reload while keeping Save disabled. Proposed read/review/reapply stays in this
   draft owner; the trusted commit still checks the current revision.
-- Saul's [SaulRoot.tsx](../../../apps/saul/src/surface/SaulRoot.tsx), lines 286–325,
+- Saul's `apps/saul/src/surface/SaulRoot.tsx` at baseline `0a949cf`, lines 286–325,
   opens reused work but shows Waiting for a new submission.
-  [FloatingTrigger.tsx](../../../apps/saul/src/surface/FloatingTrigger.tsx), lines
+  `apps/saul/src/surface/FloatingTrigger.tsx` at that baseline, lines
   63–71, labels the button Explain. The
   [reading contract](../../../apps/saul/docs/product.md#reading) explicitly chooses
   quiet queuing. Proposal 3 intentionally challenges only the pointer entry; it is

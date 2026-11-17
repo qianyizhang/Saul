@@ -1,15 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
+import { type CallSnapshot } from '../shared/model/call-output.ts';
 import {
   createCallExecutor,
   type CallExecutor,
-  type CallSnapshot,
   type FrozenCall,
-} from '../src/calls/execution';
+} from '../src/calls/execution/module';
 import type { actionHost } from '../src/calls/host';
 import type { streamModel } from '../src/providers/stream';
-import type { ModelEvent } from '../src/providers/events';
+import type { ModelEvent } from '../shared/model/model-events.ts';
 type TextEvent = Extract<ModelEvent, { type: 'delta' | 'complete' }>;
-import type { RunInput } from '../src/types/storage';
+import type { RunInput } from '../shared/protocol/history-types.ts';
 
 const pair = { en: 'A concrete explanation.', zh: '具体解释。' };
 const summary = {

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { isRecord } from './value.mts';
+import { isRecord } from '../shared/model/value.mts';
 import { createBoardService } from './board-service.mts';
 import { BOARD_HTML, BOARD_URI, BOARD_RESOURCE } from './board-resource.mts';
 import { errorMessage, lineDecoder } from './transport.mts';

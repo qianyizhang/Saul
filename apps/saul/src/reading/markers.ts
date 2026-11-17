@@ -1,5 +1,5 @@
 import { buildTextMap, resolveAnchor, type Attachment } from './anchors';
-import type { Passage } from '../types/storage';
+import type { Passage } from '../../shared/protocol/history-types.ts';
 import { designColors } from '../design/tokens';
 
 // The DOM library predates this native Chrome API. This declares its shape;

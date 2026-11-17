@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { streamModel } from '../src/providers/stream';
-import type { RunInput } from '../src/types/storage';
+import type { RunInput } from '../shared/protocol/history-types.ts';
 
 it('rejects a frozen retired-provider request without invoking a browser model or remote endpoint', async () => {
   const create = vi.fn();

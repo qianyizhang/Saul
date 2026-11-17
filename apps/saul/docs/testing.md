@@ -103,9 +103,9 @@ pnpm exec playwright show-trace ../../.artifacts/saul/e2e/latest/results/<case>/
 
 | Symptom                                             | Check first                                                                                                                                                                  |
 | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Shared history unavailable                          | Check `native/history.mts` and the history/configuration helper; persistence errors must reach callers without a separate local store.                                       |
+| Shared history unavailable                          | Check `native/storage/history.mts` and the history/configuration helper; persistence errors must reach callers without a separate local store.                               |
 | ChatGPT connection unavailable                      | Verify the installed [signed owner and client compatibility](../../../contracts/credentials.md#retirement-and-removal). The history helper cannot sign in.                   |
-| Receiving end missing on cold start                 | `src/storage/client.ts` must lock the offscreen existence check and creation together.                                                                                       |
+| Receiving end missing on cold start                 | `src/platform/chrome/offscreen.ts` must lock the offscreen existence check and creation together.                                                                            |
 | Background save gets no response                    | Popup/content route through background; background targets offscreen directly.                                                                                               |
 | Extension context invalidated after reload          | Page UI must check WXT context validity and dispose listeners/timers without calling a dead port.                                                                            |
 | Saved settings need repair                          | Use the explicit Settings recovery action. The latest invalid record is retained in trusted local storage under `saul_user_settings_recovery_backup`; history is unaffected. |
@@ -157,8 +157,8 @@ disposable automated suite does not establish this result.
 
 ## TypeScript and delivered helper checks
 
-`pnpm typecheck` checks the extension, Node helpers, browser board, JXA, tooling,
-unit tests and browser fixtures in their own compiler contexts. It prepares the
+`pnpm typecheck` checks the extension, shared protocols and models, Node helpers,
+browser board, JXA, tooling, unit tests and browser fixtures in their own compiler contexts. It prepares the
 emitted runtime needed by delivery tests. `pnpm test` also builds that runtime.
 Use `pnpm saul`, `pnpm mcp` and `pnpm native:install` for development entry points;
 they build first. Installed launchers keep their existing paths and need only Node.

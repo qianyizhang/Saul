@@ -1,9 +1,9 @@
 import { AnnotationPanel } from '../annotations/AnnotationPanel';
 import { annotationPanelKey } from '../annotations/routing';
 import { useCallback, useEffect, useState } from 'react';
-import { useMinimumMode } from './useMinimumMode';
-import { SummaryHistory, SummaryReader } from './Summaries';
-import { closeSummaryPanel, summaryPanelKey, summaryPanelRoute } from '../digest/panel';
+import { useMinimumMode } from '../ui/useMinimumMode';
+import { SummaryHistory, SummaryReader } from '../calls/ui/Summaries';
+import { closeSummaryPanel, summaryPanelKey, summaryPanelRoute } from '../calls/panel-route';
 
 export function SummaryPanel() {
   const [windowId, setWindowId] = useState<number>();

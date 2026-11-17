@@ -1,6 +1,6 @@
 import type { Mock } from 'vitest';
-import type { TabSnapshot, ToolCaller, ToolArgs } from '../native/protocol.mts';
-import type { WorkspaceResult, ProposalWindow } from '../native/workspace-contract.mts';
+import type { TabSnapshot, ToolCaller, ToolArgs } from '../shared/protocol/protocol.mts';
+import type { WorkspaceResult, ProposalWindow } from '../shared/protocol/workspace-contract.mts';
 import { tab } from './fixtures.mts';
 type FixtureArgs = ToolArgs['saul_windows_label'] &
   ToolArgs['saul_tabs_move'] &
@@ -15,7 +15,7 @@ import {
   tabMoves,
   movedSnapshot,
 } from '../native/workspace.mts';
-import { APP_TOOLS } from '../native/app-protocol.mts';
+import { APP_TOOLS } from '../shared/protocol/app-protocol.mts';
 import { createWindowLabels } from '../native/window-labels.mts';
 import { mkdtempSync, rmSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';

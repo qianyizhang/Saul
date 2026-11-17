@@ -1,8 +1,12 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { CREDENTIALS_PORT, type CredentialRequest } from '../native/credentials-contract.mts';
-import { DEFAULT_CONFIGURATION, type ModelPreset } from '../src/configuration/definition';
+import {
+  CREDENTIALS_PORT,
+  type CredentialRequest,
+} from '../shared/protocol/credentials-contract.mts';
+import { type ModelPreset } from '../shared/model/presets.ts';
+import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 import { prepareFrozenPreset, preparePreset } from '../src/configuration/resolve';
-import type { ModelRequest } from '../src/providers/request';
+import type { ModelRequest } from '../shared/model/execution-route.ts';
 import { streamModel } from '../src/providers/stream';
 
 const preset: ModelPreset = {

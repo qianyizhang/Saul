@@ -1,5 +1,8 @@
 import { SharedHistory } from '../../.build/native/history.mjs';
-import { validateHistoryRequest, type HistoryRequest } from '../../native/history-protocol.mts';
+import {
+  validateHistoryRequest,
+  type HistoryRequest,
+} from '../../shared/protocol/history-protocol.mts';
 import { randomUUID } from 'node:crypto';
 import { chromium, expect, type BrowserContext } from '@playwright/test';
 import { createServer } from 'node:http';
@@ -249,49 +252,58 @@ export async function createSandbox(options: SandboxOptions = {}) {
         path.join(extension, 'database-fixture.html'),
         '<!doctype html><title>Saul database fixture</title>',
       );
-    await build({
-      configFile: false,
-      define: { __SAUL_HISTORY_ENDPOINT__: JSON.stringify(historyEndpoint) },
-      publicDir: false,
-      logLevel: 'error',
-      build: {
-        lib: {
-          entry: {
-            'history-transport-fixture': fileURLToPath(
-              new URL('./history-transport-fixture.ts', import.meta.url),
-            ),
-            ...(options.legacyHistoryFixture
-              ? {
-                  'history-migration-fixture': fileURLToPath(
-                    new URL('./history-migration-fixture.ts', import.meta.url),
-                  ),
-                }
-              : {}),
-            ...(options.browserToolsFixtures
-              ? {
-                  'browser-tools-fixture': fileURLToPath(
-                    new URL('./browser-tools-fixture.ts', import.meta.url),
-                  ),
-                }
-              : {}),
-            ...(options.databaseFixtures
-              ? {
-                  'marker-fixture': fileURLToPath(new URL('./marker-fixture.ts', import.meta.url)),
-                }
-              : {}),
+    if (options.legacyHistoryFixture || options.browserToolsFixtures || options.databaseFixtures)
+      await build({
+        configFile: false,
+        publicDir: false,
+        logLevel: 'error',
+        build: {
+          lib: {
+            entry: {
+              ...(options.legacyHistoryFixture
+                ? {
+                    'history-migration-fixture': fileURLToPath(
+                      new URL('./history-migration-fixture.ts', import.meta.url),
+                    ),
+                  }
+                : {}),
+              ...(options.browserToolsFixtures
+                ? {
+                    'browser-tools-fixture': fileURLToPath(
+                      new URL('./browser-tools-fixture.ts', import.meta.url),
+                    ),
+                  }
+                : {}),
+              ...(options.databaseFixtures
+                ? {
+                    'marker-fixture': fileURLToPath(
+                      new URL('./marker-fixture.ts', import.meta.url),
+                    ),
+                  }
+                : {}),
+            },
+            formats: ['es'],
+            fileName: (_format: string, name: string) => name + '.js',
           },
-          formats: ['es'],
-          fileName: (_format: string, name: string) => name + '.js',
+          outDir: extension,
+          emptyOutDir: false,
+          minify: false,
         },
-        outDir: extension,
-        emptyOutDir: false,
-        minify: false,
-      },
+      });
+    const { build: bundleScript } = await import('esbuild');
+    // MV3 uses a classic worker here. Preloads imported via importScripts
+    // cannot contain ESM imports or share chunks with page fixtures.
+    await bundleScript({
+      entryPoints: [fileURLToPath(new URL('./history-transport-fixture.ts', import.meta.url))],
+      outfile: path.join(extension, 'history-transport-fixture.js'),
+      define: { __SAUL_HISTORY_ENDPOINT__: JSON.stringify(historyEndpoint) },
+      bundle: true,
+      format: 'iife',
+      platform: 'browser',
+      logLevel: 'silent',
     });
     if (options.browserToolsFixtures)
-      await (
-        await import('esbuild')
-      ).build({
+      await bundleScript({
         entryPoints: [fileURLToPath(new URL('./annotation-bridge-fixture.ts', import.meta.url))],
         outfile: path.join(extension, 'annotation-bridge-fixture.js'),
         bundle: true,

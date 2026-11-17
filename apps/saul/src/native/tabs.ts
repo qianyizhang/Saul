@@ -1,7 +1,7 @@
 import { agentAnnotations } from '../annotations/background';
 import { handlePageCall } from './pages';
 import { editTabs, undoTabEdit } from './interaction';
-import { openSummaryReader, summaryProgress } from '../digest/reader';
+import { openSummaryReader, summaryProgress } from '../calls/reader';
 import { getWindowLabels, saveWindowLabels } from './window-labels';
 import {
   validateCall,
@@ -9,7 +9,7 @@ import {
   type TabSnapshot,
   type ToolResults,
   type BrowserTool,
-} from '../../native/protocol.mts';
+} from '../../shared/protocol/protocol.mts';
 
 type Args = unknown;
 type Tab = chrome.tabs.Tab;

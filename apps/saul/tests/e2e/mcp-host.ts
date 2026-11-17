@@ -1,4 +1,4 @@
-import '../../native/ui/csp-validation.js';
+import '../../board/csp-validation.ts';
 import { AppBridge, PostMessageTransport } from '@modelcontextprotocol/ext-apps/app-bridge';
 import type { McpUiHostCapabilities } from '@modelcontextprotocol/ext-apps';
 

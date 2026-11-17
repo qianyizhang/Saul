@@ -5,7 +5,7 @@ import { App } from '@modelcontextprotocol/ext-apps';
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { InMemoryTransport } from '@modelcontextprotocol/client';
 import { z } from 'zod';
-import { createHostAdapter } from '../native/ui/host-adapter.ts';
+import { createHostAdapter } from '../board/host-adapter.ts';
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {

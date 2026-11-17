@@ -1,6 +1,12 @@
 import { DEFAULT_CONFIGURATION } from '../../src/configuration/definition.ts';
 import { expect, type Page } from '@playwright/test';
-import type { DbOperations, DbRequest, DbType, HistoryItem, Reply } from '../../src/types/storage';
+import type {
+  DbOperations,
+  DbRequest,
+  DbType,
+  HistoryItem,
+  Reply,
+} from '../../shared/protocol/history-types.ts';
 import type { WorkspaceRequest, WorkspaceResultFor } from '../../src/native/workspace';
 
 export async function sendDb<K extends DbType>(

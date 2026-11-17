@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { BOARD_HTML, BOARD_URI } from './board-resource.mts';
 import { createBoardService } from './board-service.mts';
-import { isRecord } from './value.mts';
+import { isRecord } from '../shared/model/value.mts';
 
 /** The same board and operation owner, with loopback + same-origin + bearer gates. */
 export async function startBoardWeb(

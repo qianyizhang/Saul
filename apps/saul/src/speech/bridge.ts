@@ -1,4 +1,4 @@
-import { workspaceSender } from '../contracts/reading';
+import { workspaceSender } from '../platform/chrome/sender';
 import type { Configuration } from '../configuration/definition';
 import { credentialCall } from '../native/credentials';
 import { generateSpeech, speechCredential, SPEECH_PORT, validateSpeechRequest } from './realtime';

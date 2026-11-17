@@ -2,9 +2,12 @@ import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider, settingsSection } from './driver.ts';
 import { DEFAULT_CONFIGURATION } from '../../src/configuration/definition';
 import type { Configuration } from '../../src/configuration/definition';
-import type { SharedPresets } from '../../native/shared-presets-contract.mts';
-import type { PlanControlRequest } from '../../native/plan-protocol.mts';
-import type { CredentialRequest, CredentialEvent } from '../../native/credentials-contract.mts';
+import type { SharedPresets } from '../../shared/protocol/shared-presets-contract.mts';
+import type { StorageHelperRequest } from '../../shared/protocol/storage-protocol.mts';
+import type {
+  CredentialRequest,
+  CredentialEvent,
+} from '../../shared/protocol/credentials-contract.mts';
 import type { Worker } from '@playwright/test';
 
 type ConnectionFixture = {
@@ -70,31 +73,30 @@ async function configureConnections(worker: Worker) {
     await chrome.storage.local.set({
       saul_user_settings: { ...defaults, sharedCredentials: 'saul' },
     });
-    chrome.runtime.sendNativeMessage = (async (
-      _host: string,
-      message: { id: string; request: PlanControlRequest },
-    ) => {
-      const r = message.request;
-      let result: Record<string, unknown>;
-      if (r.action === 'presets-read') result = { library: state.library };
-      else if (r.action === 'config-read')
-        result = { config: state.sections[r.section] ?? { revision: 0 } };
-      else if (r.action === 'config-save') {
-        state.sections[r.section] = { revision: r.revision + 1, value: r.value };
-        result = { config: state.sections[r.section] };
-      } else if (r.action === 'config-commit') {
-        if (r.presetRevision !== state.library.revision)
-          throw new Error('Settings changed. Reload.');
-        state.library = {
-          revision: r.presetRevision + 1,
-          connections: r.connections ?? state.library.connections,
-          presets: r.presets,
-        };
-        state.sections[r.section] = { revision: r.revision + 1, value: r.value };
-        result = { library: state.library, config: state.sections[r.section] };
-      } else throw new Error('Unexpected settings operation');
-      return { id: message.id, event: { type: 'result', ...result } };
-    }) as typeof chrome.runtime.sendNativeMessage;
+    setStorageControlFixture(
+      async (_host: string, message: { id: string; request: StorageHelperRequest }) => {
+        const r = message.request;
+        let result: Record<string, unknown>;
+        if (r.action === 'presets-read') result = { library: state.library };
+        else if (r.action === 'config-read')
+          result = { config: state.sections[r.section] ?? { revision: 0 } };
+        else if (r.action === 'config-save') {
+          state.sections[r.section] = { revision: r.revision + 1, value: r.value };
+          result = { config: state.sections[r.section] };
+        } else if (r.action === 'config-commit') {
+          if (r.presetRevision !== state.library.revision)
+            throw new Error('Settings changed. Reload.');
+          state.library = {
+            revision: r.presetRevision + 1,
+            connections: r.connections ?? state.library.connections,
+            presets: r.presets,
+          };
+          state.sections[r.section] = { revision: r.revision + 1, value: r.value };
+          result = { library: state.library, config: state.sections[r.section] };
+        } else throw new Error('Unexpected settings operation');
+        return { id: message.id, event: { type: 'result', ...result } };
+      },
+    );
     const original = chrome.runtime.connectNative.bind(chrome.runtime);
     chrome.runtime.connectNative = ((host: string) => {
       if (host !== 'com.saul.credentials') return original(host);

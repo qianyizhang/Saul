@@ -1,4 +1,4 @@
-import type { SelectionSnapshot } from '../types';
+import type { SelectionSnapshot } from '../../shared/model/reading.ts';
 
 const MAX_TEXT = 1_000_000;
 const MAX_NODES = 30_000;

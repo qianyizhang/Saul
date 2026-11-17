@@ -2,9 +2,9 @@ import { it, expect } from 'vitest';
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SharedPresetsStore } from '../native/shared-presets.mts';
-import { SharedHistory, HistoryConnection } from '../native/history.mts';
-import { DEFAULT_CONNECTIONS } from '../native/shared-presets-contract.mts';
+import { SharedPresetsStore } from '../native/storage/shared-presets.mts';
+import { SharedHistory, HistoryConnection } from '../native/storage/history.mts';
+import { DEFAULT_CONNECTIONS } from '../shared/protocol/shared-presets-contract.mts';
 
 it('upgrades shared connection names once and preserves IDs, scoped settings and original conflicts', () => {
   const dir = mkdtempSync(join(tmpdir(), 'connection-upgrade-'));

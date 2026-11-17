@@ -1,12 +1,12 @@
 import { prepareCallModel } from './configuration';
 import type { CallEditorStorage } from './contract';
 import type { Configuration } from '../configuration/definition';
-import type { SettingsState } from '../contracts/settings';
-import { snapshotSelection } from '../digest/capture';
-import { validateSummaryConnection } from '../digest/connection';
-import type { DigestBatch, DigestRequest } from '../digest/types';
+import type { SettingsState } from '../settings/contract';
+import { snapshotSelection } from './capture/capture';
+import { validateSummaryConnection } from './execution/summary-connection';
+import type { DigestBatch, DigestRequest } from '../../shared/model/call-batch.ts';
 import { prepareFrozenPreset } from '../configuration/resolve';
-import { originalSummaryPlan } from '../providers/request';
+import { originalSummaryPlan } from '../../shared/model/execution-route.ts';
 
 type StartCall = Extract<DigestRequest, { action: 'start' }>;
 type ResolveCall = Extract<DigestRequest, { action: 'resolve' }>;

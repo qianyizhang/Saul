@@ -1,20 +1,29 @@
-import type { TabSnapshot, TabView, ToolCaller, TabEditResult } from './protocol.mts';
+import type {
+  TabSnapshot,
+  TabView,
+  ToolCaller,
+  TabEditResult,
+} from '../shared/protocol/protocol.mts';
 import type {
   ProposalWindow,
   WorkspaceState,
   WorkspaceResult,
   WorkspaceProposal,
   ProjectedWindow,
-} from './workspace-contract.mts';
-export type { ProposalWindow, WorkspaceState, WorkspaceResult } from './workspace-contract.mts';
+} from '../shared/protocol/workspace-contract.mts';
+export type {
+  ProposalWindow,
+  WorkspaceState,
+  WorkspaceResult,
+} from '../shared/protocol/workspace-contract.mts';
 import { errorMessage } from './transport.mts';
 type PrivateProposal = WorkspaceProposal & { approvalToken?: string };
 type ConnectedState = WorkspaceState & { session: string; snapshot: TabSnapshot; revision: string };
 type TabMove = { tabId: number; destination: string | number; beforeId?: number };
 import { createHash, randomUUID } from 'node:crypto';
 import { callTool } from './client.mts';
-import { appRequest } from './app-protocol.mts';
-import { tabLayoutRevision } from './tab-layout.mts';
+import { appRequest } from '../shared/protocol/app-protocol.mts';
+import { tabLayoutRevision } from '../shared/model/tab-layout.mts';
 import { createWindowLabels } from './window-labels.mts';
 import { runtimeDirectory } from './transport.mts';
 

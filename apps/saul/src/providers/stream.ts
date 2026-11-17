@@ -1,11 +1,18 @@
 import { generateImage } from './images';
-import { executionModel, validateModelPrompts, type ModelRequest } from './request';
+import {
+  executionModel,
+  validateModelPrompts,
+  type ModelRequest,
+} from '../../shared/model/execution-route.ts';
 import { streamOpenAICompatible } from './openai-compatible';
 import { planEvents } from './chatgpt-plan';
-import type { ModelEvent } from './events';
+import type { ModelEvent } from '../../shared/model/model-events.ts';
 import { credentialCall } from '../native/credentials';
-import { catalogIssue, validConnectionCatalog } from '../../native/connections-contract.mts';
-import type { PdfUrlAttachment } from '../../native/plan-protocol.mts';
+import {
+  catalogIssue,
+  validConnectionCatalog,
+} from '../../shared/protocol/connections-contract.mts';
+import type { PdfUrlAttachment } from '../../shared/protocol/credential-plan.mts';
 
 export async function* streamModel(
   input: ModelRequest,

@@ -1,24 +1,17 @@
-export interface TextChange {
-  kind: 'same' | 'formatting' | 'changed';
-  before: number;
-  after: number;
-  added: number;
-  removed: number;
-  percent: number;
-}
+import type { TextChange } from '../../shared/model/text-change.ts';
 export interface InputComparison {
   text?: TextChange;
   fields: string[];
   error?: string;
 }
 export function compareRunInput(
-  before: import('../types/storage').RunInput,
-  after: import('../types/storage').RunInput,
+  before: import('../../shared/protocol/history-types.ts').RunInput,
+  after: import('../../shared/protocol/history-types.ts').RunInput,
 ): InputComparison {
   const fields: string[] = [];
   if (before.systemPrompt !== after.systemPrompt) fields.push('Instructions');
   if (JSON.stringify(before.context) !== JSON.stringify(after.context)) fields.push('Page context');
-  const profile = (input: import('../types/storage').RunInput) =>
+  const profile = (input: import('../../shared/protocol/history-types.ts').RunInput) =>
     JSON.stringify([
       input.provider,
       input.credentialOwner ?? input.remote.credentialOwner ?? 'local',

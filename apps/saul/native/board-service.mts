@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { mcpTools } from './app-protocol.mts';
+import { mcpTools } from '../shared/protocol/app-protocol.mts';
 import { createWorkspace } from './workspace.mts';
 import { callTool } from './client.mts';
 import { errorMessage } from './transport.mts';
-import { validate } from './protocol.mts';
-import { DIAGNOSTIC_TOOLS } from './diagnostic-protocol.mts';
-import { isRecord } from './value.mts';
-import { Recorder, eventSchema } from './diagnostic-events.mts';
+import { validate } from '../shared/protocol/protocol.mts';
+import { DIAGNOSTIC_TOOLS } from '../shared/protocol/diagnostic-protocol.mts';
+import { isRecord } from '../shared/model/value.mts';
+import { Recorder, eventSchema } from '../shared/protocol/diagnostic-events.mts';
 import { LogStore } from './diagnostic-store.mts';
 
 export function createBoardService(options: {

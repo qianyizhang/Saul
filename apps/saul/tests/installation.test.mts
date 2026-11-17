@@ -1,4 +1,4 @@
-import type { Component } from '../native/installation.mts';
+import type { Component } from '../native/installation/installer.mts';
 import * as fs from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir, hostname } from 'node:os';
@@ -7,7 +7,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { afterEach, expect, it } from 'vitest';
-import { chatgptDirectory } from '../native/installation-paths.mts';
+import { chatgptDirectory } from '../native/installation/paths.mts';
 import { encodeNative, nativeDecoder } from '../native/transport.mts';
 import {
   installHelpers,
@@ -557,7 +557,7 @@ it('explicit recovery selects a retained complete generation and restores its re
 
 it('preserves the development credential directory and refuses installation over authored sources', async () => {
   const emittedHost = new URL('../.build/native/plan-host.mjs', import.meta.url);
-  const sourceHost = new URL('../native/plan-host.mts', import.meta.url);
+  const sourceHost = new URL('../native/hosts/storage.mts', import.meta.url);
   expect(chatgptDirectory(emittedHost)).toBe(chatgptDirectory(sourceHost));
   await expect(
     installHelpers({

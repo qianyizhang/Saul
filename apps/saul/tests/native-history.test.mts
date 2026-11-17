@@ -4,11 +4,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
+import { helperPayloads } from '../native/installation/components.mts';
 
 it('a loaded history runtime retains its schema when a later build replaces its source files', async () => {
   const root = await mkdtemp(join(tmpdir(), 'history-runtime-'));
   try {
-    for (const name of ['history.mjs', 'history.sql'])
+    for (const name of helperPayloads.chatgpt)
       await copyFile(new URL('../.build/native/' + name, import.meta.url), join(root, name));
     const script = `
       import { unlinkSync } from 'node:fs';

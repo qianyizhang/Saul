@@ -23,14 +23,16 @@ export async function nativeBuildFingerprint(root: string): Promise<string> {
   const appRoot = await realpath(root);
   const sources = await fingerprintInputs(resolve(root, '../..'), [
     'apps/saul/native',
-    'apps/saul/src',
+    'apps/saul/shared',
+    'apps/saul/board',
     'apps/saul/scripts/build-native.mts',
     'apps/saul/scripts/native-build-state.mts',
     'apps/saul/tsconfig.native.json',
     'apps/saul/tsconfig.board.json',
     'apps/saul/tsconfig.jxa.json',
+    'apps/saul/tsconfig.shared.json',
     'apps/saul/package.json',
-    'contracts',
+    'contracts/history.sql',
     'scripts/build-identity.mts',
     'package.json',
     'pnpm-lock.yaml',

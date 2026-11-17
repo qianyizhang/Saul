@@ -6,18 +6,14 @@ import {
   validateCall,
   type ToolArgs,
   type ToolName,
-} from '../native/protocol.mts';
-import {
-  validateReading,
-  sourcePage,
-  workspaceSender,
-  backgroundSender,
-} from '../src/contracts/reading';
+} from '../shared/protocol/protocol.mts';
+import { validateReading } from '../src/reading/contract';
+import { sourcePage, workspaceSender, backgroundSender } from '../src/platform/chrome/sender';
 import { validateWorkspace } from '../src/contracts/workspace';
-import { validateActionModule } from '../native/action-protocol.mts';
-import { validateCredentialEvent } from '../native/credentials-contract.mts';
-import { validConnectionCatalog } from '../native/connections-contract.mts';
-import { validateSharedPresets } from '../native/shared-presets-contract.mts';
+import { validateActionModule } from '../shared/protocol/action-protocol.mts';
+import { validateCredentialEvent } from '../shared/protocol/credentials-contract.mts';
+import { validConnectionCatalog } from '../shared/protocol/connections-contract.mts';
+import { validateSharedPresets } from '../shared/protocol/shared-presets-contract.mts';
 
 it('rejects coercible enum values at the action, preset, catalog and credential interfaces', () => {
   for (const invalid of [(text: string) => [text], () => ({}), () => null, () => 0]) {

@@ -8,20 +8,20 @@ import {
   annotationAttempts,
   annotationImage,
   annotationStatus,
-} from '../native/annotation-store.mts';
+} from '../native/storage/annotations.mts';
 import {
   retentionMs,
   type AnnotationCapture,
   type AnnotationRequest,
-} from '../src/annotations/contract';
+} from '../shared/protocol/annotations.ts';
 import { AnnotationRunner } from '../src/annotations/runner';
 import { mutateAnnotationDraft } from '../src/annotations/draft';
 import { annotationDraftKey } from '../src/annotations/routing';
-import type { SqlDatabase, SqlValue } from '../src/storage/sql';
-import type { DbCall, RunInput, DbRequest } from '../src/types/storage';
-import { responsesBody } from '../native/responses.mts';
-import { validatePlanRequest } from '../native/plan-protocol.mts';
-import { validateCall } from '../native/protocol.mts';
+import type { SqlDatabase, SqlValue } from '../native/storage/sql.ts';
+import type { DbCall, RunInput, DbRequest } from '../shared/protocol/history-types.ts';
+import { responsesBody } from '../shared/protocol/responses.mts';
+import { validatePlanRequest } from '../shared/protocol/credential-plan.mts';
+import { validateCall } from '../shared/protocol/protocol.mts';
 const files: string[] = [];
 const connections: DatabaseSync[] = [];
 afterEach(() => {

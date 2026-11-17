@@ -1,6 +1,6 @@
-import type { DbCall } from '../types/storage';
+import type { DbCall } from '../../shared/protocol/history-types.ts';
 import type { PreparedModel } from '../configuration/resolve';
-import type { ModelRequest } from '../providers/request';
+import type { ModelRequest } from '../../shared/model/execution-route.ts';
 import { streamModel } from '../providers/stream';
 import { actionHost } from './host';
 import {
@@ -12,7 +12,7 @@ import {
   type CallEditorStorage,
   type SavedCallChoices,
 } from './contract';
-import { validateActionModule } from '../../native/action-protocol.mts';
+import { validateActionModule } from '../../shared/protocol/action-protocol.mts';
 
 export type CallPresetPreparation = (id: string) => Promise<PreparedModel>;
 type Build = { controller: AbortController; task: Promise<void>; draft: CallDraft };

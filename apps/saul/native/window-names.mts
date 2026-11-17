@@ -1,4 +1,4 @@
-import type { TabSnapshot } from './protocol.mts';
+import type { TabSnapshot } from '../shared/protocol/protocol.mts';
 export interface NativeWindowName {
   windowId: number;
   title: string;
@@ -12,9 +12,9 @@ export interface WindowNames {
   apply(snapshot: TabSnapshot, windows: NativeWindowName[], dryRun?: boolean): Promise<void>;
 }
 
-import { isRecord } from './value.mts';
-import { validateCall } from './protocol.mts';
-import { validateToolResult } from './results.mts';
+import { isRecord } from '../shared/model/value.mts';
+import { validateCall } from '../shared/protocol/protocol.mts';
+import { validateToolResult } from '../shared/protocol/results.mts';
 import { execFile as callbackExecFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';

@@ -1,6 +1,6 @@
 import { parentPort, workerData } from 'node:worker_threads';
-import type { ActionGenerate, ActionSource } from './action-protocol.mts';
-import { validateActionGenerate, ACTION_MAX_TEXT } from './action-protocol.mts';
+import type { ActionGenerate, ActionSource } from '../shared/protocol/action-protocol.mts';
+import { validateActionGenerate, ACTION_MAX_TEXT } from '../shared/protocol/action-protocol.mts';
 
 const port = parentPort!;
 const runs = new Map<string, AbortController>();

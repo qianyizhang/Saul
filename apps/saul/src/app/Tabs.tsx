@@ -1,12 +1,12 @@
-import { ControlIcon } from '../surface/ControlIcon';
-import { ActionLabel } from '../surface/ActionLabel';
+import { ControlIcon } from '../ui/ControlIcon';
+import { ActionLabel } from '../ui/ActionLabel';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MoreHorizontal } from 'lucide-react';
-import { ActiveSummary, openSummary } from './Summaries';
-import { sendWorkspaceMessage } from '../storage/client';
-import { tabLayoutRevision } from '../../native/tab-layout.mts';
-import type { TabEdit, TabSnapshot, TabView } from '../../native/protocol.mts';
-import { tabLabel, tabSite } from '../native/tab-label';
+import { ActiveSummary, openSummary } from '../calls/ui/Summaries';
+import { sendWorkspaceMessage } from '../native/workspace-client';
+import { tabLayoutRevision } from '../../shared/model/tab-layout.mts';
+import type { TabEdit, TabSnapshot, TabView } from '../../shared/protocol/protocol.mts';
+import { tabLabel, tabSite } from '../../shared/model/tab-label.ts';
 
 const empty: TabSnapshot = { windows: [], tabs: [], groups: [] };
 type Drag = { ids: number[]; groupId?: number; expected: string };

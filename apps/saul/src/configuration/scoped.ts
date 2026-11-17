@@ -1,4 +1,4 @@
-import type { ScopedConfig } from '../../native/shared-presets-contract.mts';
+import type { ScopedConfig } from '../../shared/protocol/shared-presets-contract.mts';
 import type { Configuration } from './definition';
 import { decodeConfiguration } from './record';
 

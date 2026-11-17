@@ -72,15 +72,16 @@ IDs and expected name, then reads back a rename. Legacy helper-only labels are
 imported on reviewed Apply. `saul_workspace_*` names remain wire identifiers,
 not names for the extension workspace or history operations.
 
-| File                                           | Responsibility                                                    |
-| ---------------------------------------------- | ----------------------------------------------------------------- |
-| [App protocol](../native/app-protocol.mts)     | Shared MCP-only schemas, visibility and resource metadata         |
-| [Workspace service](../native/workspace.mts)   | Validation, projection, expiring approvals and verified execution |
-| [MCP server](../native/mcp.mts)                | Resource delivery and serialized tool dispatch                    |
-| [UI](../native/ui/workspace.ts)                | Board state, rendering and user actions                           |
-| [Host adapter](../native/ui/host-adapter.ts)   | SDK lifecycle, capability checks, calls, messages and teardown    |
-| [Board resource](../native/board-resource.mts) | Process-frozen HTML and content-derived resource identity         |
-| [Native installer](../native/install.mts)      | Stages and activates a complete immutable helper generation       |
+| File                                                | Responsibility                                                            |
+| --------------------------------------------------- | ------------------------------------------------------------------------- |
+| [App protocol](../shared/protocol/app-protocol.mts) | Shared MCP-only schemas, visibility and resource metadata                 |
+| [Workspace service](../native/workspace.mts)        | Validation, projection, expiring approvals and verified execution         |
+| [MCP server](../native/mcp.mts)                     | Resource delivery and serialized tool dispatch                            |
+| [Board session](../board/board-session.ts)          | Session identity, refresh, draft proposals, approval and incoming results |
+| [UI](../board/workspace.ts)                         | Board rendering, focus, selection and gestures                            |
+| [Host adapter](../board/host-adapter.ts)            | SDK lifecycle, capability checks, calls, messages and teardown            |
+| [Board resource](../native/board-resource.mts)      | Process-frozen HTML and content-derived resource identity                 |
+| [Native installer](../native/installation/cli.mts)  | Stages and activates a complete immutable helper generation               |
 
 The native build bundles the pinned MCP Apps SDK in self-contained HTML.
 Each server freezes its hash-addressed resource at startup. Only

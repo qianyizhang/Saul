@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { ensureOffscreenDocument } from '../src/storage/client';
+import { ensureOffscreenDocument } from '../src/platform/chrome/offscreen';
 
 const hasDocument = vi.fn<() => Promise<boolean>>();
 const createDocument = vi.fn<() => Promise<void>>();

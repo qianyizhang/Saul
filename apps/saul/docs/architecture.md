@@ -11,22 +11,46 @@ describe what users can do.
 | Content script     | [Content](../entrypoints/content.tsx)         | Capture the main-frame selection, render the shadow-root UI and restore markers.     |
 | Service worker     | [Background](../entrypoints/background.ts)    | Validate callers; route reading and settings, badge, notification and native access. |
 | Offscreen document | [Offscreen](../entrypoints/offscreen/main.ts) | Run reading, Calls and annotation replies independently of views.                    |
-| Native helper      | [History](../native/history.mts)              | Access SQLite through native messaging; OPFS is migration input only.                |
+| Native helper      | [History](../native/storage/history.mts)      | Access SQLite through native messaging; OPFS is migration input only.                |
+
+### Source and build ownership
+
+[Shared protocols](../shared/protocol) and [pure models](../shared/model) run
+without Chrome or Node globals. The [Node storage owner](../native/storage)
+implements SQLite history, annotations, Call persistence, settings and presets.
+The [entrypoints](../native/hosts) bind those services to native messaging.
+The [Tab Board](../board) runs in a browser, with its own compiler project.
+Lint rejects imports across the runtime boundary; each environment also has a
+separate TypeScript check.
+
+Background settings and offscreen history use the same
+[framing and request correlation](../src/native/storage-connection.ts). Settings
+use a native connection directly from the background. Offscreen accesses history
+through a restricted bridge. The [signed credential client](../src/native/credentials.ts)
+has its own protocol and never carries storage operations. Provider adapters
+select the signed route or a browser-owned API route from the saved request.
+
+The [component inventory](../native/installation/components.mts) maps source
+entrypoints to the installed names and drives packaging and verification. See
+the [artifact decision](../../../docs/adr/0005-separate-saul-helper-source-from-installed-artifacts.md).
 
 ## Trust boundaries
 
 Content messages are scoped to the sender's current main-frame HTTP(S) page;
 the popup/workspace can request global history, settings and tab operations.
 The trusted background admits offscreen and database work; offscreen reports
-state back to it. Runtime messages do not return to their sender. Existence
-checks and offscreen creation share a lock while listeners become ready.
+state back to it. Runtime messages do not return to their sender.
+[Sender checks](../src/platform/chrome/sender.ts) authenticate extension views
+and current main-frame routes. [Offscreen creation](../src/platform/chrome/offscreen.ts)
+locks the existence check and creation together. Feature clients own typed
+requests; [Chrome messaging](../src/platform/chrome/messages.ts) unwraps replies.
 Content receives action names and safe choices, never storage or credentials.
 
 | Feature boundary                             | Owner                                                                                                                                                                                                |
 | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Reading                                      | [Admission](../src/reading/admission.ts), [configuration](../src/reading/configuration.ts) and [runner](../src/reading/runner.ts)                                                                    |
 | Configuration                                | [Definition](../src/configuration/definition.ts), [inspection](../src/configuration/inspect.ts), [execution resolution](../src/configuration/resolve.ts), and [store](../src/configuration/store.ts) |
-| Providers                                    | [Requests](../src/providers/request.ts), [model stream](../src/providers/stream.ts) and shared bounded [SSE framing](../native/sse.mts)                                                              |
+| Providers                                    | [Requests](../shared/model/execution-route.ts), [model stream](../src/providers/stream.ts) and shared bounded [SSE framing](../shared/protocol/sse.mts)                                              |
 | Call selection, capture, execution and saves | [Calls and summaries](calls.md#runtime-owners)                                                                                                                                                       |
 | Annotation captures, revisions and replies   | [Annotations](annotations.md#interface-and-ownership)                                                                                                                                                |
 | Optional native access and tab board         | [Native messaging](native-messaging.md) and [MCP board](mcp-app.md#implementation-and-verification)                                                                                                  |
@@ -38,7 +62,7 @@ A submitted action freezes context, choices and rendered prompts. Retry
 resolves only its original credential route; a changed owner or endpoint
 requires a new attempt. Credentials stay transient and origin-bound; the
 plan snapshot retains the non-secret registration ID. Admission and streaming
-interpret saved choices through one [route decoder](../src/providers/request.ts).
+interpret saved choices through one [route decoder](../shared/model/execution-route.ts).
 A signed plan keeps its account and binding; a managed API request keeps its
 connection and endpoint; a browser API request keeps its profile and endpoint.
 The original signed account-only Summary and official API routes remain
@@ -64,7 +88,7 @@ are on demand. Deletion invalidates late writes and cascades saved output.
 
 ### Persistence and anchors
 
-[History](../../../contracts/history.md) uses the [native operation catalogue](../native/history-protocol.mts)
+[History](../../../contracts/history.md) uses the [native operation catalogue](../shared/protocol/history-protocol.mts)
 for admission and reconnect. Eligible reads and repeatable writes try at most
 three connections with the same identity. Delete, Clear, Bookmark, migration
 transfers and unknown operations do not reconnect automatically. Request IDs
@@ -74,14 +98,17 @@ Reuse resolves in SQLite before credentials, including deleted-submission
 tombstones. Anchors use exact URL, quote context and offsets. Changed context may
 match only with the same text and offsets plus matching DOM location or unchanged
 leading context. Ambiguous or missing text remains available without a marker.
-Native CSS highlights do not wrap page text.
+Native CSS highlights do not wrap page text. The [content session](../src/reading/content-session.ts)
+owns route identity, passage reads, markers and port reconnection. Navigation
+detaches the old view from accepted work; late replies cannot reopen it on
+another route.
 
 ## Configuration and surfaces
 
 Inspection returns unavailable choices without mutation; resolution admits
 execution and returns frozen choices with a separate transient credential.
 [Settings editor](../src/settings/editor.ts) owns each draft/baseline/review
-session. [React adapter](../src/app/useSettingsEditor.ts) owns lifetime, unload
+session. [React adapter](../src/settings/ui/useSettingsEditor.ts) owns lifetime, unload
 warnings and confirmation; stale callbacks cannot replace a newer session.
 
 The background checks an opaque local fingerprint and serializes credential

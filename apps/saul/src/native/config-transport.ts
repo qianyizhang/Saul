@@ -1,47 +1,43 @@
+import { type StorageHelperRequest } from '../../shared/protocol/storage-protocol.mts';
+import { StorageConnection, StorageDisconnected } from './storage-connection';
 import {
-  PLAN_HOST,
-  validatePlanResult,
-  type PlanControlRequest,
-} from '../../native/plan-protocol.mts';
-import {
-  validateScopedConfigValue,
   type SharedPresets,
   type ScopedConfig,
-} from '../../native/shared-presets-contract.mts';
+} from '../../shared/protocol/shared-presets-contract.mts';
 
-type Request = Extract<PlanControlRequest, { action: 'config-read' | 'config-save' }>;
+type Request = Extract<StorageHelperRequest, { action: 'config-read' | 'config-save' }>;
 export class ConfigUnavailableError extends Error {}
-async function configReply(request: PlanControlRequest): Promise<unknown> {
-  let reply;
+// Configuration calls run in the service worker, which cannot connect to its
+// own extension port. Each call owns its native port until its fully framed reply.
+async function configReply<T extends StorageHelperRequest>(request: T) {
+  const connection = new StorageConnection();
   try {
-    reply = await chrome.runtime.sendNativeMessage(PLAN_HOST, { id: crypto.randomUUID(), request });
+    return await connection.request(request);
   } catch (cause) {
-    throw new ConfigUnavailableError('Unified config helper unavailable.', { cause });
+    if (cause instanceof StorageDisconnected)
+      throw new ConfigUnavailableError('Unified config helper unavailable.', { cause });
+    throw cause;
+  } finally {
+    connection.close();
   }
-  if (reply?.event?.type === 'error') throw new Error(reply.event.message);
-  return reply?.event;
 }
 export async function scopedCall(request: Request): Promise<ScopedConfig> {
-  if (request.action === 'config-save') validateScopedConfigValue(request.value);
   const event = await configReply(request);
-  validatePlanResult(request, event);
   return event.config;
 }
 
 type PresetRequest = Extract<
-  PlanControlRequest,
+  StorageHelperRequest,
   { action: 'presets-read' | 'presets-import' | 'presets-save' }
 >;
 export async function sharedCall(request: PresetRequest): Promise<SharedPresets> {
   const event = await configReply(request);
-  validatePlanResult(request, event);
   return event.library;
 }
 
 export async function commitSharedConfiguration(
-  request: Extract<PlanControlRequest, { action: 'config-commit' }>,
+  request: Extract<StorageHelperRequest, { action: 'config-commit' }>,
 ) {
   const event = await configReply(request);
-  validatePlanResult(request, event);
   return { library: event.library, config: event.config };
 }

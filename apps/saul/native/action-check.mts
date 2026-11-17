@@ -1,5 +1,5 @@
 import ts from 'typescript';
-import { type ActionModule, validateActionModule } from './action-protocol.mts';
+import { type ActionModule, validateActionModule } from '../shared/protocol/action-protocol.mts';
 
 // Parsing and compilation only. This function must NEVER import or evaluate the candidate.
 export function checkAction(value: unknown): { module: ActionModule; javascript: string } {

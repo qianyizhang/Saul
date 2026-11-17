@@ -1,8 +1,8 @@
 import { expect, it, vi } from 'vitest';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
-import type { ReadingRequest } from '../src/contracts/reading';
+import type { ReadingRequest } from '../src/reading/contract';
 import { createReadingAdmission } from '../src/reading/admission';
-import type { DbCall } from '../src/types/storage';
+import type { DbCall } from '../shared/protocol/history-types.ts';
 
 const url = 'https://example.test/article';
 const submit: ReadingRequest<'submit'> = {

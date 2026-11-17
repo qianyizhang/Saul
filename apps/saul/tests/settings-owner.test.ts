@@ -1,10 +1,10 @@
 import { expect, it, vi } from 'vitest';
 import { createConfigurationStore, SETTINGS_STORAGE_KEY } from '../src/configuration/store';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
-import { validateSettingsRequest, type SettingsState } from '../src/contracts/settings';
+import { validateSettingsRequest, type SettingsState } from '../src/settings/contract';
 import { requestSettings, SettingsDeliveryError } from '../src/configuration/client';
 import { createSettingsDraft, editSettingsDraft, settingsForSave } from '../src/settings/draft';
-import { summaryConnections } from '../src/digest/connection';
+import { summaryConnections } from '../src/calls/execution/summary-connection';
 import { preparePreset } from '../src/configuration/resolve';
 
 it('saves an explicit preset repair while retaining a retired legacy default', async () => {

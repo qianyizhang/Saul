@@ -1,8 +1,8 @@
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider } from './support.ts';
 import { summaryPanelDriver } from './summary-panel-driver.ts';
-import type { Annotation, AnnotationResult } from '../../src/annotations/contract';
-import type { AnnotationEditorStatus } from '../../src/annotations/attempts';
+import type { Annotation, AnnotationResult } from '../../shared/protocol/annotations.ts';
+import type { AnnotationEditorStatus } from '../../shared/protocol/annotation-attempts.ts';
 
 test.use({ browserToolsFixtures: true });
 test('annotation status recovers at startup and attaches an image at the same revision', async ({

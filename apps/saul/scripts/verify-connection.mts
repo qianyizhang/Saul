@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { isRecord } from '../native/value.mts';
-import { validateToolResult } from '../native/results.mts';
-import type { ToolName } from '../native/protocol.mts';
+import { isRecord } from '../shared/model/value.mts';
+import { validateToolResult } from '../shared/protocol/results.mts';
+import type { ToolName } from '../shared/protocol/protocol.mts';
 import { errorMessage } from '../native/transport.mts';
 export interface StdioTransport {
   type?: string;
@@ -41,7 +41,7 @@ import { parseArgs, promisify } from 'node:util';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createInterface as readLines } from 'node:readline';
-import { MCP_TOOLS } from '../native/app-protocol.mts';
+import { MCP_TOOLS } from '../shared/protocol/app-protocol.mts';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const exec = promisify(execFile);

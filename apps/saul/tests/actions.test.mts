@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { ActionStore } from '../.build/native/action-store.mjs';
 import { ActionRuntime } from '../.build/native/action-runtime.mjs';
 import { checkAction } from '../.build/native/action-check.mjs';
-import type { ActionModule } from '../native/action-protocol.mts';
+import type { ActionModule } from '../shared/protocol/action-protocol.mts';
 
 const roots: string[] = [];
 const runtimes: ActionRuntime[] = [];

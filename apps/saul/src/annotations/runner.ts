@@ -3,14 +3,14 @@ import {
   type AnnotationAttempt,
   type AnnotationDbOperations,
   type AnnotationStatusRequest,
-} from './attempts';
+} from '../../shared/protocol/annotation-attempts.ts';
 import {
   evidence,
   type Annotation,
   type AnnotationRequest,
   type ReviewedAnnotation,
-} from './contract';
-import type { DbCall } from '../types/storage';
+} from '../../shared/protocol/annotations.ts';
+import type { DbCall } from '../../shared/protocol/history-types.ts';
 import type { PreparedModel } from '../configuration/resolve';
 import { streamModel } from '../providers/stream';
 import { actionHost } from '../calls/host';

@@ -1,6 +1,6 @@
 import { readingMore, sendDb } from './driver.ts';
 import { runDatabaseFixture } from './database-harness.ts';
-import type { DbOperations, DbRequest, Submission } from '../../src/types/storage';
+import type { DbOperations, DbRequest, Submission } from '../../shared/protocol/history-types.ts';
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider, createFixtureServer } from './support.ts';
 import {

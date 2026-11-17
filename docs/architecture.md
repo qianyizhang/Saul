@@ -82,6 +82,7 @@ Keep authored code and types together; validate external JSON at the boundary.
 covers the different compiler and test scopes. The complete helper build lives
 outside WXT output so rebuilding the extension cannot erase it. Installed helpers
 use emitted modules and stable entry paths without a TypeScript loader.
+See the [Saul artifact decision](adr/0005-separate-saul-helper-source-from-installed-artifacts.md).
 
 ## Naming reminder
 

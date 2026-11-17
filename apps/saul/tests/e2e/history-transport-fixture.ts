@@ -1,6 +1,18 @@
+import { Fragments, packets } from '../../shared/protocol/fragments.mts';
+
+type Control = (host: string, envelope: { id: string; request: never }) => Promise<unknown>;
+
+declare global {
+  function setStorageControlFixture(handle: Control): void;
+}
+
 // Included only in disposable test extension snapshots, before the background starts.
 declare const __SAUL_HISTORY_ENDPOINT__: string;
 function installHistoryTransport(endpoint: string) {
+  let control: Control | undefined;
+  globalThis.setStorageControlFixture = (handle) => {
+    control = handle;
+  };
   void chrome.storage.local.set({ saul_test_history_url: endpoint });
   let fallback = chrome.runtime.connectNative.bind(chrome.runtime);
   Object.defineProperty(chrome.runtime, 'connectNative', {
@@ -11,9 +23,12 @@ function installHistoryTransport(endpoint: string) {
         if (host !== 'com.saul.chatgpt') return previous(host);
         const listeners: ((event: unknown) => void)[] = [];
         const disconnected: (() => void)[] = [];
-        let delegate: chrome.runtime.Port | undefined;
-        let fragments = '';
-        const emit = (event: unknown) => listeners.forEach((listener) => listener(event));
+        const fragments = new Fragments();
+        let closed = false;
+        const emit = (event: unknown) => {
+          if (!closed)
+            for (const frame of packets(event)) listeners.forEach((listener) => listener(frame));
+        };
         return {
           onMessage: {
             addListener: (listener: (event: unknown) => void) => listeners.push(listener),
@@ -21,20 +36,13 @@ function installHistoryTransport(endpoint: string) {
           onDisconnect: {
             addListener: (listener: () => void) => disconnected.push(listener),
           },
-          disconnect: () => delegate?.disconnect(),
-          postMessage: (packet: {
-            fragment?: string;
-            last?: boolean;
-            id?: string;
-            cancel?: boolean;
-            request?: { action: string; request: unknown };
-          }) => {
-            if (packet.fragment !== undefined) {
-              fragments += packet.fragment;
-              if (!packet.last) return;
-              packet = JSON.parse(fragments);
-              fragments = '';
-            }
+          disconnect: () => {
+            closed = true;
+          },
+          postMessage: (frame: unknown) => {
+            const packet = fragments.accept(frame) as
+              { id: string; request?: { action: string; request: unknown } } | undefined;
+            if (!packet?.request) return;
             if (packet.request?.action === 'history') {
               const id = packet.id;
               void fetch(endpoint, {
@@ -57,15 +65,24 @@ function installHistoryTransport(endpoint: string) {
                 .catch((error) => emit({ id, event: { type: 'error', message: String(error) } }));
               return;
             }
-            if (packet.cancel && !delegate) return;
-            if (!delegate) {
-              delegate = previous(host);
-              delegate.onMessage.addListener(emit);
-              delegate.onDisconnect.addListener(() =>
-                disconnected.forEach((listener) => listener()),
+            void Promise.resolve()
+              .then(async () => {
+                const reply = await control?.(host, {
+                  id: packet.id,
+                  request: packet.request as never,
+                });
+                if (reply !== undefined) emit(reply);
+                else if (!closed) disconnected.forEach((listener) => listener());
+              })
+              .catch((error) =>
+                emit({
+                  id: packet.id,
+                  event: {
+                    type: 'error',
+                    message: error instanceof Error ? error.message : String(error),
+                  },
+                }),
               );
-            }
-            delegate.postMessage(packet);
           },
         } as unknown as chrome.runtime.Port;
       };

@@ -3,7 +3,7 @@ import { createSettingsEditor } from '../src/settings/editor';
 import { createConfigurationStore, SETTINGS_STORAGE_KEY } from '../src/configuration/store';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 import { SettingsDeliveryError } from '../src/configuration/client';
-import type { SettingsRequest, SettingsState } from '../src/contracts/settings';
+import type { SettingsRequest, SettingsState } from '../src/settings/contract';
 
 function fixture(initial: unknown = DEFAULT_CONFIGURATION) {
   let values: Record<string, unknown> = { [SETTINGS_STORAGE_KEY]: structuredClone(initial) };

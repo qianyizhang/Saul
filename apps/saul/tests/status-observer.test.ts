@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createStatusObserver, type StatusSnapshot } from '../src/app/status-observer';
+import { createStatusObserver, type StatusSnapshot } from '../src/observation/status-observer';
 
 type Status = 'working' | 'done';
 

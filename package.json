@@ -8,7 +8,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "design:generate": "node design/generate.mts --symbols --css apps/saul/assets/design-tokens.css --css apps/saul/native/ui/design-tokens.css --typescript apps/saul/src/design/tokens.ts --swift apps/ez/Sources/EZ/DesignTokens.swift",
+    "design:generate": "node design/generate.mts --symbols --css apps/saul/assets/design-tokens.css --css apps/saul/board/design-tokens.css --typescript apps/saul/src/design/tokens.ts --swift apps/ez/Sources/EZ/DesignTokens.swift",
     "design:check": "pnpm design:generate --check",
     "design:check:web": "pnpm --dir apps/saul design:check",
     "format": "prettier --write .",

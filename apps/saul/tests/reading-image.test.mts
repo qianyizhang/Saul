@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
-import { SaulDatabase } from '../src/storage/db';
+import { SaulDatabase } from '../native/storage/db.ts';
 import { ReadingRunner } from '../src/reading/runner';
-import type { DbCall, DbRequest, Submission } from '../src/types/storage';
+import type { DbCall, DbRequest, Submission } from '../shared/protocol/history-types.ts';
 import { generateImage } from '../src/providers/images';
 import { HistoryConnection } from '../.build/native/history.mjs';
 vi.mock('../src/providers/images', async (original) => ({

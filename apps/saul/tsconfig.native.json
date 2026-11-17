@@ -6,14 +6,11 @@
     "moduleResolution": "Bundler",
     "strict": true,
     "verbatimModuleSyntax": true,
-    "rewriteRelativeImportExtensions": true,
     "erasableSyntaxOnly": true,
-    "types": ["node", "chrome"],
+    "types": ["node"],
     "skipLibCheck": true,
-    "rootDir": ".",
-    "outDir": ".build",
-    "noEmitOnError": true,
-    "declaration": true
+    "noEmit": true,
+    "allowImportingTsExtensions": true
   },
-  "include": ["native/*.mts"]
+  "include": ["native/**/*.mts", "native/storage/*.ts"]
 }

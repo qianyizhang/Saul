@@ -2,7 +2,7 @@ import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { openWorkspace, captureWorkspace, matchWorkspaceWindow } from './workspace-fixture.ts';
 import { installDigestProvider } from './digest-fixture.ts';
-import type { TabSnapshot } from '../../native/protocol.mts';
+import type { TabSnapshot } from '../../shared/protocol/protocol.mts';
 test.use({ browserToolsFixtures: true });
 
 test('both tab surfaces show readable titles while retaining original browser data', async ({

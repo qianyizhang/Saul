@@ -1,5 +1,5 @@
 import type { Page, Worker } from '@playwright/test';
-import type { DbRequest } from '../../src/types/storage';
+import type { DbRequest } from '../../shared/protocol/history-types.ts';
 
 export type DatabaseFixtureRequest =
   | { action: 'seed-native' }

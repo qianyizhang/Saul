@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SharedPresetsStore } from '../native/shared-presets.mts';
+import { SharedPresetsStore } from '../native/storage/shared-presets.mts';
 import { portableSettings, restoreSettings } from '../src/configuration/scoped';
 import { validateCallEditorState } from '../src/calls/contract';
 import { actionHash } from '../native/action-store.mts';

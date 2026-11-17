@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TagStreamParser } from '../src/parser/tag-stream-parser';
+import { TagStreamParser } from '../shared/model/tag-stream-parser.ts';
 
 describe('TagStreamParser', () => {
   it('parses plain text correctly', () => {

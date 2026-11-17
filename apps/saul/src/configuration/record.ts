@@ -1,4 +1,4 @@
-import { validateConnections } from '../../native/shared-presets-contract.mts';
+import { validateConnections } from '../../shared/protocol/shared-presets-contract.mts';
 import type { Configuration } from './definition';
 import { normalizeConfiguration, DEFAULT_CONFIGURATION } from './definition';
 

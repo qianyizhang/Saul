@@ -1,14 +1,14 @@
+import { type CallChoice } from '../../shared/model/custom-call.ts';
 import {
   LEGACY_CALL_STATE_KEY,
   validateCallEditorState,
-  type CallChoice,
   type CallChoices,
   type CallChoiceSource,
   type CallEditorStorage,
   type SavedCallChoices,
   type SavedCallDraft,
 } from './contract';
-import { record } from '../contracts/reading';
+import { record } from '../reading/contract';
 import { scopedCall, ConfigUnavailableError } from '../native/config-transport';
 
 const CHOICES_KEY = 'saul_call_choices_v1';

@@ -6,8 +6,8 @@ import { test, expect } from './fixtures.ts';
 import type { ExtensionSandbox } from './support.ts';
 import { installDigestProvider, openDigestReader as openReader } from './digest-fixture.ts';
 import { pdfFixture } from '../pdf-fixture.ts';
-import type { PlanRequest } from '../../native/plan-protocol.mts';
-import type { DigestBatch, DigestInspection } from '../../src/digest/types';
+import type { PlanRequest } from '../../shared/protocol/credential-plan.mts';
+import type { DigestBatch, DigestInspection } from '../../shared/model/call-batch.ts';
 
 // This suite remains the local-parser regression; server attachments have their
 // own suite and never opt into this preference implicitly.

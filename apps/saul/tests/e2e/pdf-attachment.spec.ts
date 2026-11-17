@@ -4,8 +4,8 @@ import type { Page, Worker } from '@playwright/test';
 import { test, expect } from './fixtures.ts';
 import { installDigestProvider, openDigestReader } from './digest-fixture.ts';
 import { pdfFixture } from '../pdf-fixture.ts';
-import type { PlanRequest } from '../../native/plan-protocol.mts';
-import type { DigestInspection } from '../../src/digest/types';
+import type { PlanRequest } from '../../shared/protocol/credential-plan.mts';
+import type { DigestInspection } from '../../shared/model/call-batch.ts';
 
 test.afterEach(({ fixtureServer }) => {
   fixtureServer.clearHandlers();

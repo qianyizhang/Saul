@@ -1,6 +1,6 @@
 import { installAnnotationCapture } from '../src/annotations/capture';
 import { createRoot, type Root } from 'react-dom/client';
-import { SaulRoot } from '../src/surface/SaulRoot';
+import { SaulRoot } from '../src/reading/ui/SaulRoot';
 import '../assets/tailwind.css';
 
 export default defineContentScript({

@@ -1,16 +1,17 @@
-import type { Configuration, ModelPreset } from './definition';
+import type { ModelPreset } from '../../shared/model/presets.ts';
+import type { Configuration } from './definition';
 import {
   executionModel,
   SELECT_NEW_PRESET,
   validateAPIPresetOptions,
   validateEndpoint,
   type FrozenModel,
-} from '../providers/request';
-import { officialOpenAI } from '../../native/credentials-contract.mts';
+} from '../../shared/model/execution-route.ts';
+import { officialOpenAI } from '../../shared/protocol/credentials-contract.mts';
 import { inspectPreset, type PresetInspection } from './inspect';
-import { CHROME_AI_RETIRED_MESSAGE } from '../providers/retired-provider';
+import { CHROME_AI_RETIRED_MESSAGE } from '../../shared/model/retired-provider.ts';
 
-export { SELECT_NEW_PRESET } from '../providers/request';
+export { SELECT_NEW_PRESET } from '../../shared/model/execution-route.ts';
 
 export interface PreparedModel {
   choices: FrozenModel;

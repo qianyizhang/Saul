@@ -1,5 +1,5 @@
-import type { ToolName, ToolArgs } from '../../native/protocol.mts';
-import { validateToolResult } from '../../native/results.mts';
+import type { ToolName, ToolArgs } from '../../shared/protocol/protocol.mts';
+import { validateToolResult } from '../../shared/protocol/results.mts';
 import { expect } from './fixtures.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import type { FrameLocator, Page } from '@playwright/test';
@@ -15,7 +15,7 @@ import {
   withWindowNames,
   type WindowNames,
 } from '../../native/window-names.mts';
-import type { TabSnapshot } from '../../native/protocol.mts';
+import type { TabSnapshot } from '../../shared/protocol/protocol.mts';
 import type { ExtensionSandbox, FixtureServer } from './support.ts';
 
 const hostBundle = build({

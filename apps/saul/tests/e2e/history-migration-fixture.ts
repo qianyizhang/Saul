@@ -1,8 +1,8 @@
 // One-time legacy input, compiled only into disposable migration-test snapshots.
 import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
 import wasmUrl from '@sqlite.org/sqlite-wasm/sqlite3.wasm?url';
-import type { SqlDatabase } from '../../src/storage/sql';
-import { migrate } from '../../src/storage/schema';
+import type { SqlDatabase } from '../../native/storage/sql.ts';
+import { migrate } from '../../native/storage/schema.ts';
 self.onmessage = async () => {
   try {
     const sqlite = await (

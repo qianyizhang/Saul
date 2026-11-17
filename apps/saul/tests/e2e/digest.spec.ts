@@ -2,8 +2,8 @@ import { summaryMore } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { installDigestProvider, openDigestReader } from './digest-fixture.ts';
-import type { PlanRequest } from '../../native/plan-protocol.mts';
-import type { DigestBatch } from '../../src/digest/types';
+import type { PlanRequest } from '../../shared/protocol/credential-plan.mts';
+import type { DigestBatch } from '../../shared/model/call-batch.ts';
 import { readFile } from 'node:fs/promises';
 
 test('summary status recovers from lost reads without repeating a start or inference', async ({

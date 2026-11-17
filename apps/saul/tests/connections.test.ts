@@ -1,13 +1,13 @@
 import { expect, it } from 'vitest';
-import { catalogIssue, validConnectionCatalog } from '../native/connections-contract.mts';
+import { catalogIssue, validConnectionCatalog } from '../shared/protocol/connections-contract.mts';
 import {
   validateCredentialEvent,
   validateCredentialRequest,
-} from '../native/credentials-contract.mts';
+} from '../shared/protocol/credentials-contract.mts';
 import {
   validateConnections,
   validateConnectionChanges,
-} from '../native/shared-presets-contract.mts';
+} from '../shared/protocol/shared-presets-contract.mts';
 import { preparePreset } from '../src/configuration/resolve';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 

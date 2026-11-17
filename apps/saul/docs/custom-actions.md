@@ -153,7 +153,7 @@ that annotation's evidence. Screenshot input stays attached to `ctx.generate`, e
 when the script supplies custom text. **Text evidence only** must be chosen explicitly.
 
 Within annotation invocations, `ctx.annotations(operation)` uses the shared
-[annotation operation contract](../src/annotations/contract.ts), limited to the assigned
+[annotation operation contract](../shared/protocol/annotations.ts), limited to the assigned
 annotation ID and at most 50 operations. Read/list and revision-checked changes use the
 same owner as the editor. A successful change returns the new revision; failures are
 per item. Ordinary page Calls cannot use this capability. Returning nonempty text

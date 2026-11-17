@@ -3,10 +3,10 @@ import { initCredentialBridge } from '../src/native/credentials';
 import {
   validateCredentialEvent,
   validateCredentialRequest,
-} from '../native/credentials-contract.mts';
+} from '../shared/protocol/credentials-contract.mts';
 import { nativeCredentialAccess } from '../src/configuration/credentials';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
-import { validImageOptions } from '../native/shared-presets-contract.mts';
+import { validImageOptions } from '../shared/protocol/shared-presets-contract.mts';
 
 const imageRequest = {
   action: 'api-image',

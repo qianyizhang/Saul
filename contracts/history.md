@@ -1,7 +1,7 @@
 # Shared history
 
 Saul and EZ store saved work in `~/Library/Application Support/Little Clarity/history.sqlite3`.
-[The schema](history.sql) is packaged with both the [Saul Node store](../apps/saul/native/history.mts)
+[The schema](history.sql) is packaged with both the [Saul Node store](../apps/saul/native/storage/history.mts)
 and the [EZ Swift store](../apps/ez/Sources/EZCore/HistoryStore.swift). SQLite
 transactions serialize writes; both adapters use owner-only files, a busy
 timeout, foreign keys and secure deletion. Loss of the store blocks access.

@@ -1,5 +1,5 @@
-import { workspaceSender } from '../contracts/reading';
-import { HOST_NAME, MAX_MESSAGE } from '../../native/protocol.mts';
+import { workspaceSender } from '../platform/chrome/sender';
+import { HOST_NAME, MAX_MESSAGE } from '../../shared/protocol/protocol.mts';
 import { handleTabCall } from './tabs';
 
 export const ENABLED_KEY = 'saul_native_enabled';

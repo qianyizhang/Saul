@@ -1,18 +1,13 @@
 import { readCredentialRoute } from './credential-route';
 import {
-  PLAN_PORT,
   validatePlanResult,
-  type PlanRequest,
   type PlanEvent,
+  type PlanRequest,
   type PlanControlRequest,
   type PlanResult,
-} from '../../native/plan-protocol.mts';
-import { IncompleteGeneration } from './events';
-import { isCredentialPlan } from '../../native/credentials-contract.mts';
+} from '../../shared/protocol/credential-plan.mts';
 import { credentialEvents } from '../native/credentials';
 import { SELECT_NEW_PRESET } from '../configuration/resolve';
-
-export class HistoryDisconnected extends Error {}
 
 export async function* planEvents(
   request: PlanRequest,
@@ -20,78 +15,12 @@ export async function* planEvents(
   expectedOwner?: 'local' | 'saul',
 ): AsyncGenerator<PlanEvent> {
   signal?.throwIfAborted();
-  if (isCredentialPlan(request)) {
-    const mode = await readCredentialRoute();
-    if (expectedOwner === 'local') throw new Error(SELECT_NEW_PRESET);
-    if (mode !== 'saul')
-      throw new Error('Connect this app to the signed Saul helper to use ChatGPT.');
-    for await (const event of credentialEvents(request, signal)) {
-      if (event.type === 'authorize') continue;
-      yield event as PlanEvent;
-    }
-    return;
-  }
-  const port = chrome.runtime.connect({ name: PLAN_PORT });
-  const queue: PlanEvent[] = [];
-  let wake = () => {},
-    ended = false;
-  const push = (event: PlanEvent) => {
-    queue.push(event);
-    wake();
-  };
-  const abort = () => {
-    ended = true;
-    wake();
-    try {
-      port.postMessage({ cancel: true });
-    } catch {
-      /* Already disconnected. */
-    }
-    port.disconnect();
-  };
-  port.onMessage.addListener((event: PlanEvent) => push(event));
-  port.onDisconnect.addListener(() => {
-    void chrome.runtime.lastError;
-    if (!ended)
-      push({
-        type: 'error',
-        message: 'ChatGPT helper connection closed. Retry from Settings.',
-        reason: 'bridge-lost',
-      });
-  });
-  signal?.addEventListener('abort', abort, { once: true });
-  try {
-    signal?.throwIfAborted();
-    port.postMessage(request);
-    while (!ended) {
-      if (!queue.length)
-        await new Promise<void>((resolve) => {
-          wake = resolve;
-        });
-      signal?.throwIfAborted();
-      const event = queue.shift();
-      if (!event) continue;
-      if (event.type === 'error') {
-        if (
-          request.action === 'history' &&
-          ['bridge-lost', 'history-disconnected'].includes(event.reason || '')
-        )
-          throw new HistoryDisconnected(event.message);
-        if (
-          ['unexpected-eof', 'truncated-event', 'incomplete', 'event-too-large'].includes(
-            event.reason || '',
-          )
-        )
-          throw new IncompleteGeneration(event.reason!, event.message);
-        throw new Error(event.message);
-      }
-      if (event.type === 'result' || event.type === 'complete') ended = true;
-      yield event;
-    }
-  } finally {
-    ended = true;
-    signal?.removeEventListener('abort', abort);
-    port.disconnect();
+  const mode = await readCredentialRoute();
+  if (expectedOwner === 'local') throw new Error(SELECT_NEW_PRESET);
+  if (mode !== 'saul')
+    throw new Error('Connect this app to the signed Saul helper to use ChatGPT.');
+  for await (const event of credentialEvents(request, signal)) {
+    if (event.type !== 'authorize') yield event as PlanEvent;
   }
 }
 export async function planCall<T extends PlanControlRequest>(

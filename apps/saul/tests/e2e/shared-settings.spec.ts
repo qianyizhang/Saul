@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs';
 import { test, expect } from './fixtures.ts';
 import { settingsSection } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
-import type { PlanControlRequest } from '../../native/plan-protocol.mts';
-import type { SharedPresets } from '../../native/shared-presets-contract.mts';
+import type { StorageHelperRequest } from '../../shared/protocol/storage-protocol.mts';
+import type { SharedPresets } from '../../shared/protocol/shared-presets-contract.mts';
 
 // Replace only the OS message transport. Production Settings, its write owner,
 // scoped projection and typed library validation stay in the actual extension.
@@ -38,58 +38,64 @@ test('shared provider edits keep stable preset bindings and preserve Draw throug
       sections: {} as Record<string, { revision: number; value?: Record<string, unknown> }>,
     };
     Object.assign(globalThis, { sharedSettingsFixture: state });
-    chrome.runtime.sendNativeMessage = (async (
-      _host: string,
-      message: { id: string; request: PlanControlRequest },
-    ) => {
-      const request = message.request;
-      if (request.action === 'config-commit') {
-        if (
-          (state.sections[request.section]?.revision || 0) !== request.revision ||
-          state.library.revision !== request.presetRevision
-        )
-          throw new Error('Settings changed. Reload before saving again.');
-        state.sections[request.section] = { revision: request.revision + 1, value: request.value };
-        state.library = {
-          revision: request.presetRevision + 1,
-          presets: request.presets,
-          connections: request.connections || state.library.connections,
-        };
-        return {
-          id: message.id,
-          event: {
-            type: 'result',
-            config: state.sections[request.section],
-            library: state.library,
-          },
-        };
-      }
-      if (request.action === 'config-read')
-        return {
-          id: message.id,
-          event: { type: 'result', config: state.sections[request.section] || { revision: 0 } },
-        };
-      if (request.action === 'config-save') {
-        if ((state.sections[request.section]?.revision || 0) !== request.revision)
-          throw new Error('Scoped settings changed.');
-        state.sections[request.section] = { revision: request.revision + 1, value: request.value };
-        return {
-          id: message.id,
-          event: { type: 'result', config: state.sections[request.section] },
-        };
-      }
-      if (request.action === 'presets-save') {
-        if (state.library.revision !== request.revision) throw new Error('Shared presets changed.');
-        state.library = {
-          revision: request.revision + 1,
-          presets: request.presets,
-          connections: request.connections || state.library.connections,
-        };
-      }
-      if (request.action === 'presets-read' || request.action === 'presets-save')
-        return { id: message.id, event: { type: 'result', library: state.library } };
-      throw new Error('Unexpected provider operation');
-    }) as typeof chrome.runtime.sendNativeMessage;
+    setStorageControlFixture(
+      async (_host: string, message: { id: string; request: StorageHelperRequest }) => {
+        const request = message.request;
+        if (request.action === 'config-commit') {
+          if (
+            (state.sections[request.section]?.revision || 0) !== request.revision ||
+            state.library.revision !== request.presetRevision
+          )
+            throw new Error('Settings changed. Reload before saving again.');
+          state.sections[request.section] = {
+            revision: request.revision + 1,
+            value: request.value,
+          };
+          state.library = {
+            revision: request.presetRevision + 1,
+            presets: request.presets,
+            connections: request.connections || state.library.connections,
+          };
+          return {
+            id: message.id,
+            event: {
+              type: 'result',
+              config: state.sections[request.section],
+              library: state.library,
+            },
+          };
+        }
+        if (request.action === 'config-read')
+          return {
+            id: message.id,
+            event: { type: 'result', config: state.sections[request.section] || { revision: 0 } },
+          };
+        if (request.action === 'config-save') {
+          if ((state.sections[request.section]?.revision || 0) !== request.revision)
+            throw new Error('Scoped settings changed.');
+          state.sections[request.section] = {
+            revision: request.revision + 1,
+            value: request.value,
+          };
+          return {
+            id: message.id,
+            event: { type: 'result', config: state.sections[request.section] },
+          };
+        }
+        if (request.action === 'presets-save') {
+          if (state.library.revision !== request.revision)
+            throw new Error('Shared presets changed.');
+          state.library = {
+            revision: request.revision + 1,
+            presets: request.presets,
+            connections: request.connections || state.library.connections,
+          };
+        }
+        if (request.action === 'presets-read' || request.action === 'presets-save')
+          return { id: message.id, event: { type: 'result', library: state.library } };
+        throw new Error('Unexpected provider operation');
+      },
+    );
   }, connections);
   const page = await context.newPage();
   await page.goto(popup.url().replace('popup.html', 'library.html'));

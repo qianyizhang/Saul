@@ -1,5 +1,5 @@
 import type { CallPresetPreparation } from './editor';
-import type { Reply } from '../types/storage';
+import type { Reply } from '../../shared/protocol/history-types.ts';
 import type {
   CallChoices,
   CallChoiceSource,

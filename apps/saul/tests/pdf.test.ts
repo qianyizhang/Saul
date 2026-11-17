@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { downloadPdf, PDF_LIMITS } from '../src/digest/pdf';
-import { captureSummarySource, CAPTURE_TIMEOUT_MS } from '../src/digest/source';
-import { captureTab, verifyCaptureTab } from '../src/digest/capture';
-import type { DigestItem } from '../src/digest/types';
+import { downloadPdf, PDF_LIMITS } from '../src/calls/capture/pdf';
+import { captureSummarySource, CAPTURE_TIMEOUT_MS } from '../src/calls/capture/source';
+import { captureTab, verifyCaptureTab } from '../src/calls/capture/capture';
+import type { DigestItem } from '../shared/model/call-batch.ts';
 
 const item: DigestItem = {
   index: 0,

@@ -67,7 +67,7 @@ The **Page reading and actions** switch controls capabilities; it does not start
 
 Closing all visible Chrome windows may leave Chrome running in the background; quitting the Chrome application closes the native connection.
 
-Implementation: [extension lifecycle](../src/native/bridge.ts), [host startup/shutdown](../native/host.mts), [installer](../native/install.mts), [MCP server](../native/mcp.mts). Chrome's [native-messaging documentation](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging) describes the process and port lifetime.
+Implementation: [extension lifecycle](../src/native/bridge.ts), [host startup/shutdown](../native/hosts/tabs.mts), [installer](../native/installation/cli.mts), [MCP server](../native/mcp.mts). Chrome's [native-messaging documentation](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging) describes the process and port lifetime.
 
 ## Register with Codex
 
@@ -162,7 +162,7 @@ Enable **Settings → Preferences → Integrations → Annotation access**, alon
 Codex tab access, to expose persistent annotations through `saul_annotations` (CLI:
 `annotations`). This does not enable unrelated page clicks/fills. The same existing
 helper and MCP server own transport. The [feature specification](annotations.md) owns
-product behavior; the [executable schema](../src/annotations/contract.ts) owns bounds.
+product behavior; the [executable schema](../shared/protocol/annotations.ts) owns bounds.
 
 An annotation agent follows this workflow:
 

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { Library } from './Library';
-import { Settings } from './Settings';
+import { Settings } from '../settings/ui/Settings';
 import { Tabs } from './Tabs';
-import { SummaryHistory, SummaryReader } from './Summaries';
-import { useMinimumMode } from './useMinimumMode';
-import { PresentationSettings } from './PresentationSettings';
-import { NotificationSettings } from './NotificationSettings';
-import { SETTINGS_SECTIONS, type SettingsSection } from './settings-sections';
+import { SummaryHistory, SummaryReader } from '../calls/ui/Summaries';
+import { useMinimumMode } from '../ui/useMinimumMode';
+import { PresentationSettings } from '../settings/ui/PresentationSettings';
+import { NotificationSettings } from '../settings/ui/NotificationSettings';
+import { SETTINGS_SECTIONS, type SettingsSection } from '../settings/ui/settings-sections';
 
 type View = 'history' | 'tabs' | 'settings' | 'summaries' | 'summary';
 function viewFromHash(): View {

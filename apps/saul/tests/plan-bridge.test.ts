@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { initPlanBridge } from '../src/native/plan';
+import { initStorageBridge } from '../src/native/storage-bridge';
 function harness() {
   let accept: (port: chrome.runtime.Port) => void = () => {};
   const nativeListeners: ((value: unknown) => void)[] = [];
@@ -22,7 +22,7 @@ function harness() {
       connectNative,
     },
   });
-  initPlanBridge();
+  initStorageBridge();
   function connect(url: string, tab = false) {
     let receive = (_value: unknown) => {},
       disconnect = () => {};
@@ -99,7 +99,7 @@ it('cancels a storage request after caller disconnection and ignores late result
   expect(ui.port.postMessage).not.toHaveBeenCalled();
 });
 
-it('allows trusted history operations and rejects invalid migration identities', () => {
+it('allows trusted history operations and rejects invalid migration identities', async () => {
   vi.useFakeTimers();
   const h = harness();
   const invalid = h.connect('chrome-extension://extension/offscreen.html');
@@ -119,10 +119,11 @@ it('allows trusted history operations and rejects invalid migration identities',
   const packet = h.native.postMessage.mock.calls[0]![0];
   expect(packet.request.action).toBe('history');
   h.emit({ id: packet.id, event: { type: 'result', value: [] } });
+  await vi.advanceTimersByTimeAsync(0);
   expect(runner.port.postMessage).toHaveBeenCalledWith({ type: 'result', value: [] });
 });
 
-it('settles a timed-out request even when its native connection cannot receive cancellation', () => {
+it('settles a timed-out request even when its native connection cannot receive cancellation', async () => {
   vi.useFakeTimers();
   const h = harness();
   const ui = h.connect('chrome-extension://extension/library.html');
@@ -131,7 +132,7 @@ it('settles a timed-out request even when its native connection cannot receive c
   h.native.postMessage.mockImplementationOnce(() => {
     throw new Error('Attempting to use a disconnected port');
   });
-  vi.advanceTimersByTime(190_000);
+  await vi.advanceTimersByTimeAsync(190_000);
   expect(ui.port.postMessage).toHaveBeenCalledExactlyOnceWith({
     type: 'error',
     message: 'Saul storage request timed out.',

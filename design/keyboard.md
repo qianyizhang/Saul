@@ -52,8 +52,8 @@ The open summary panel also handles Ctrl+W locally. Command+S and Command+W
 remain Chrome's on macOS. The [tab board](../apps/saul/docs/mcp-app.md) has its own
 keyboard controls.
 
-Owners: [follow-up](../apps/saul/src/surface/ExplanationCard.tsx),
-[page commands](../apps/saul/src/surface/SaulRoot.tsx),
+Owners: [follow-up](../apps/saul/src/reading/ui/ExplanationCard.tsx),
+[page commands](../apps/saul/src/reading/content-session.ts),
 [workspace](../apps/saul/src/app/Workspace.tsx),
 [browser defaults](../apps/saul/wxt.config.ts) and
 [summary panel](../apps/saul/src/app/SummaryPanel.tsx).

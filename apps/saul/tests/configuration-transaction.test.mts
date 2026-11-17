@@ -4,8 +4,11 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { expect, it } from 'vitest';
-import { SharedPresetsStore } from '../native/shared-presets.mts';
-import { validatePlanRequest, validatePlanResult } from '../native/plan-protocol.mts';
+import { SharedPresetsStore } from '../native/storage/shared-presets.mts';
+import {
+  validateStorageHelperRequest,
+  validateStorageResult,
+} from '../shared/protocol/storage-protocol.mts';
 
 it('commits both revisions together and leaves the exact document intact on rejection', () => {
   const directory = mkdtempSync(join(tmpdir(), 'configuration-transaction-'));
@@ -44,12 +47,14 @@ it('commits both revisions together and leaves the exact document intact on reje
       value: {},
       presets: [],
     } as const;
-    validatePlanRequest(request);
-    validatePlanResult(request, { type: 'result', ...saved });
-    expect(() => validatePlanRequest({ ...request, presetRevision: -1 })).toThrow('transaction');
-    expect(() => validatePlanResult(request, { type: 'result', library: saved.library })).toThrow(
-      'invalid reply',
+    validateStorageHelperRequest(request);
+    validateStorageResult(request, { type: 'result', ...saved });
+    expect(() => validateStorageHelperRequest({ ...request, presetRevision: -1 })).toThrow(
+      'transaction',
     );
+    expect(() =>
+      validateStorageResult(request, { type: 'result', library: saved.library }),
+    ).toThrow('invalid reply');
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -60,7 +65,7 @@ it('preserves sibling scopes under concurrent process writes and releases locks 
   try {
     const path = join(directory, 'settings.json');
     const execute = promisify(execFile);
-    const source = new URL('../native/shared-presets.mts', import.meta.url).href;
+    const source = new URL('../native/storage/shared-presets.mts', import.meta.url).href;
     const script = `import { SharedPresetsStore } from ${JSON.stringify(source)};
       const store = new SharedPresetsStore(process.argv[1]);
       for (let i=0; i<30; i++) store.saveScope(process.argv[2], i, { count: i+1 });`;

@@ -1,4 +1,4 @@
-import { validSpeechOptions } from '../../native/shared-presets-contract.mts';
+import { validSpeechOptions } from '../../shared/protocol/shared-presets-contract.mts';
 import type { Configuration } from '../configuration/definition';
 import { configurationFor } from '../configuration/definition';
 import { preparePreset } from '../configuration/resolve';

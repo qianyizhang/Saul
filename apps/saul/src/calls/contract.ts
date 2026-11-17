@@ -1,12 +1,8 @@
-import type { ActionRevision } from '../../native/action-protocol.mts';
-import { validRevision, validateActionModule } from '../../native/action-protocol.mts';
-import { record } from '../contracts/reading';
-import type { FrozenModel } from '../providers/request';
+import type { CallChoice } from '../../shared/model/custom-call.ts';
+import type { ActionRevision } from '../../shared/protocol/action-protocol.mts';
+import { validRevision, validateActionModule } from '../../shared/protocol/action-protocol.mts';
+import { record } from '../reading/contract';
 
-export interface CallChoice {
-  revision: ActionRevision;
-  presetId: string;
-}
 export interface CallChoices {
   library?: CallChoice[];
   selected?: CallChoice;
@@ -31,9 +27,6 @@ export interface CallEditorStorage {
   saveChoices(source: CallChoiceSource, choices: CallChoices): Promise<void>;
   readDraft(): Promise<SavedCallDraft>;
   saveDraft(draft: SavedCallDraft): Promise<void>;
-}
-export interface FrozenCustomCall extends CallChoice {
-  input?: FrozenModel;
 }
 export type CallEditRequest =
   | { action: 'status' }

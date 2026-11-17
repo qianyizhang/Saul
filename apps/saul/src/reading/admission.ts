@@ -1,6 +1,6 @@
 import { configurationFor, type Configuration } from '../configuration/definition';
-import type { ReadingRequest } from '../contracts/reading';
-import type { DbCall, Passage, Submission } from '../types/storage';
+import type { ReadingRequest } from './contract';
+import type { DbCall, Passage, Submission } from '../../shared/protocol/history-types.ts';
 import { compareRunInput } from './input-change';
 import { prepareFollowUpRun, prepareFrozenRun, prepareRecipeRun } from './configuration';
 

@@ -1,7 +1,7 @@
 import { annotationPanelKey } from '../src/annotations/routing';
 import { afterEach, expect, it, vi } from 'vitest';
-import { openSummaryPanel, summaryPanelKey, summaryPanelRoute } from '../src/digest/panel';
-import { workspaceSender } from '../src/contracts/reading';
+import { openSummaryPanel, summaryPanelKey, summaryPanelRoute } from '../src/calls/panel-route';
+import { workspaceSender } from '../src/platform/chrome/sender';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -74,7 +74,7 @@ it('trusts the packaged panel through the same workspace boundary and rejects we
 });
 
 it('closes only the selected window panel and reports unsupported browsers or failed closes', async () => {
-  const { closeSummaryPanel } = await import('../src/digest/panel');
+  const { closeSummaryPanel } = await import('../src/calls/panel-route');
   const close = vi.fn().mockResolvedValue(undefined);
   const remove = vi.fn();
   vi.stubGlobal('chrome', { sidePanel: { close }, tabs: { remove } });

@@ -1,5 +1,5 @@
-import type { SettingsRequest, SettingsState } from '../contracts/settings';
-import type { ConnectionDefinition } from '../../native/shared-presets-contract.mts';
+import type { SettingsRequest, SettingsState } from './contract';
+import type { ConnectionDefinition } from '../../shared/protocol/shared-presets-contract.mts';
 import { DEFAULT_CONFIGURATION } from '../configuration/definition';
 import {
   createSettingsDraft,

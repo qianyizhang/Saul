@@ -1,5 +1,5 @@
-import type { SettingsRequest, SettingsState } from '../contracts/settings';
-import type { Reply } from '../types/storage';
+import type { SettingsRequest, SettingsState } from '../settings/contract';
+import type { Reply } from '../../shared/protocol/history-types.ts';
 
 export class SettingsDeliveryError extends Error {
   constructor(mutating: boolean, options?: ErrorOptions) {

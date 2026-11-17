@@ -15,9 +15,9 @@ import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { createBoardService } from '../native/board-service.mts';
 import { startBoardWeb } from '../.build/native/board-http.mjs';
-import { Recorder, snapshot } from '../native/diagnostic-events.mts';
+import { Recorder, snapshot } from '../shared/protocol/diagnostic-events.mts';
 import { LogStore } from '../native/diagnostic-store.mts';
-import { MCP_TOOLS } from '../native/app-protocol.mts';
+import { MCP_TOOLS } from '../shared/protocol/app-protocol.mts';
 const roots: string[] = [];
 afterEach(() => {
   for (const path of roots.splice(0)) rmSync(path, { recursive: true, force: true });

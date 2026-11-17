@@ -1,6 +1,6 @@
-import { eventData } from '../../native/sse.mts';
-import { isRecord } from '../../native/value.mts';
-import { IncompleteGeneration, type ModelEvent } from './events';
+import { eventData } from '../../shared/protocol/sse.mts';
+import { isRecord } from '../../shared/model/value.mts';
+import { IncompleteGeneration, type ModelEvent } from '../../shared/model/model-events.ts';
 import { credentialEvents } from '../native/credentials';
 export interface OpenAICompatibleConfig {
   baseUrl: string;

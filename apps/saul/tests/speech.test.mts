@@ -7,7 +7,7 @@ import {
   type SpeechRequest,
 } from '../src/speech/realtime';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
-import { validatePlanRequest } from '../native/plan-protocol.mts';
+import { validatePlanRequest } from '../shared/protocol/credential-plan.mts';
 
 const request: SpeechRequest = {
   presetId: 'speak',

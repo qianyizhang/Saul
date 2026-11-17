@@ -3,10 +3,10 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { SharedHistory } from '../native/history.mts';
+import { SharedHistory } from '../native/storage/history.mts';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 import { prepareFrozenRun } from '../src/reading/configuration';
-import type { RunInput, Submission } from '../src/types/storage';
+import type { RunInput, Submission } from '../shared/protocol/history-types.ts';
 const roots: string[] = [];
 const open: SharedHistory[] = [];
 function history() {

@@ -1,4 +1,5 @@
-import type { ModelRequest } from '../src/providers/request';
+import { storagePort } from './helpers/storage-port';
+import type { ModelRequest } from '../shared/model/execution-route.ts';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,8 +11,8 @@ import { actionHost } from '../src/calls/host';
 import { LEGACY_CALL_STATE_KEY, type CallEditorState } from '../src/calls/contract';
 import { ActionStore } from '../.build/native/action-store.mjs';
 import { ActionRuntime } from '../.build/native/action-runtime.mjs';
-import type { DbCall, RunInput } from '../src/types/storage';
-import type { ModelEvent } from '../src/providers/events';
+import type { DbCall, RunInput } from '../shared/protocol/history-types.ts';
+import type { ModelEvent } from '../shared/model/model-events.ts';
 import { prepareCallModel } from '../src/calls/configuration';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 import { starterConfiguration } from '../src/configuration/definition';
@@ -236,16 +237,15 @@ it('keeps an acknowledged shared Call selected even when Chrome cannot save a dr
       },
     },
     runtime: {
-      sendNativeMessage: async (
-        _host: string,
-        { request }: { request: { action: string; value: object } },
-      ) => {
-        if (request.action === 'config-save') {
-          writes.push(request.value);
-          config = { revision: config.revision + 1, value: request.value };
-        }
-        return { event: { type: 'result', config } };
-      },
+      connectNative: storagePort(
+        async (_host: string, { request }: { request: { action: string; value: object } }) => {
+          if (request.action === 'config-save') {
+            writes.push(request.value);
+            config = { revision: config.revision + 1, value: request.value };
+          }
+          return { event: { type: 'result', config } };
+        },
+      ),
     },
   });
   const manager = editor();

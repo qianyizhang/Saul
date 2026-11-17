@@ -1,6 +1,9 @@
-import { sourcePage, workspaceSender } from '../contracts/reading';
-import { runnerRequest } from '../storage/client';
-import { annotationStatusSchema, type AnnotationEditorStatus } from './attempts';
+import { sourcePage, workspaceSender } from '../platform/chrome/sender';
+import { runnerRequest } from '../platform/chrome/runner';
+import {
+  annotationStatusSchema,
+  type AnnotationEditorStatus,
+} from '../../shared/protocol/annotation-attempts.ts';
 import { mutateAnnotationDraft } from './draft';
 import {
   requestSchema,
@@ -12,7 +15,7 @@ import {
   type AnnotationCapture,
   type AnnotationResult,
   type AnnotationRequest,
-} from './contract';
+} from '../../shared/protocol/annotations.ts';
 import { prepareCallModel } from '../calls/configuration';
 import { configurationFor } from '../configuration/definition';
 import { callStore } from '../calls/store';

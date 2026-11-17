@@ -1,3 +1,4 @@
+import type { StorageHelperRequest } from '../../shared/protocol/storage-protocol.mts';
 import { readingMore } from './driver.ts';
 import { settingsSection } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
@@ -8,10 +9,16 @@ import {
   getFirstHistory,
   openFirstPageExplanation,
 } from './driver.ts';
-import type { PlanRequest, PlanEvent } from '../../native/plan-protocol.mts';
+import type { PlanRequest, PlanEvent } from '../../shared/protocol/credential-plan.mts';
 import { DEFAULT_CONFIGURATION, type Configuration } from '../../src/configuration/definition';
-import type { CredentialRequest, CredentialEvent } from '../../native/credentials-contract.mts';
-import { DEFAULT_CONNECTIONS, type SharedPresets } from '../../native/shared-presets-contract.mts';
+import type {
+  CredentialRequest,
+  CredentialEvent,
+} from '../../shared/protocol/credentials-contract.mts';
+import {
+  DEFAULT_CONNECTIONS,
+  type SharedPresets,
+} from '../../shared/protocol/shared-presets-contract.mts';
 
 test('ChatGPT provider settings route signed-owner reading streams, preserve partial failures, and stop', async ({
   sandbox,
@@ -32,67 +39,66 @@ test('ChatGPT provider settings route signed-owner reading streams, preserve par
       });
       let library: SharedPresets = { revision: 0, presets: [], connections };
       const sections: Record<string, { revision: number; value?: Record<string, unknown> }> = {};
-      chrome.runtime.sendNativeMessage = (async (
-        host: string,
-        message: { id: string; request: PlanRequest },
-      ) => {
-        if (host !== 'com.saul.chatgpt')
-          throw new Error('Configuration must use the storage helper');
-        const request = message.request;
-        if (request.action === 'config-commit') {
-          if (
-            request.revision !== (sections[request.section]?.revision || 0) ||
-            request.presetRevision !== library.revision
-          )
+      setStorageControlFixture(
+        async (host: string, message: { id: string; request: StorageHelperRequest }) => {
+          if (host !== 'com.saul.chatgpt')
+            throw new Error('Configuration must use the storage helper');
+          const request = message.request;
+          if (request.action === 'config-commit') {
+            if (
+              request.revision !== (sections[request.section]?.revision || 0) ||
+              request.presetRevision !== library.revision
+            )
+              return {
+                id: message.id,
+                event: { type: 'error', message: 'Settings changed. Reload saved settings.' },
+              };
+            sections[request.section] = { revision: request.revision + 1, value: request.value };
+            library = {
+              revision: library.revision + 1,
+              presets: request.presets,
+              connections: request.connections || library.connections,
+            };
             return {
               id: message.id,
-              event: { type: 'error', message: 'Settings changed. Reload saved settings.' },
+              event: { type: 'result', config: sections[request.section], library },
             };
-          sections[request.section] = { revision: request.revision + 1, value: request.value };
-          library = {
-            revision: library.revision + 1,
-            presets: request.presets,
-            connections: request.connections || library.connections,
-          };
-          return {
-            id: message.id,
-            event: { type: 'result', config: sections[request.section], library },
-          };
-        }
-        if (request.action === 'config-read')
-          return {
-            id: message.id,
-            event: { type: 'result', config: sections[request.section] || { revision: 0 } },
-          };
-        if (request.action === 'config-save') {
-          if (request.revision !== (sections[request.section]?.revision || 0))
+          }
+          if (request.action === 'config-read')
             return {
               id: message.id,
-              event: { type: 'error', message: 'Scoped settings changed.' },
+              event: { type: 'result', config: sections[request.section] || { revision: 0 } },
             };
-          sections[request.section] = { revision: request.revision + 1, value: request.value };
-          return { id: message.id, event: { type: 'result', config: sections[request.section] } };
-        }
-        if (request.action === 'presets-save') {
-          if (request.revision !== library.revision)
-            return {
-              id: message.id,
-              event: { type: 'error', message: 'Shared presets changed. Reload saved settings.' },
+          if (request.action === 'config-save') {
+            if (request.revision !== (sections[request.section]?.revision || 0))
+              return {
+                id: message.id,
+                event: { type: 'error', message: 'Scoped settings changed.' },
+              };
+            sections[request.section] = { revision: request.revision + 1, value: request.value };
+            return { id: message.id, event: { type: 'result', config: sections[request.section] } };
+          }
+          if (request.action === 'presets-save') {
+            if (request.revision !== library.revision)
+              return {
+                id: message.id,
+                event: { type: 'error', message: 'Shared presets changed. Reload saved settings.' },
+              };
+            library = {
+              revision: library.revision + 1,
+              presets: request.presets,
+              connections: request.connections || library.connections,
             };
-          library = {
-            revision: library.revision + 1,
-            presets: request.presets,
-            connections: request.connections || library.connections,
-          };
-        } else if (request.action === 'presets-import') {
-          library = {
-            revision: library.revision + 1,
-            presets: [...library.presets, ...request.presets],
-            connections: library.connections,
-          };
-        }
-        return { id: message.id, event: { type: 'result', library } };
-      }) as typeof chrome.runtime.sendNativeMessage;
+          } else if (request.action === 'presets-import') {
+            library = {
+              revision: library.revision + 1,
+              presets: [...library.presets, ...request.presets],
+              connections: library.connections,
+            };
+          }
+          return { id: message.id, event: { type: 'result', library } };
+        },
+      );
       const state = {
         requests: [] as CredentialRequest[],
         fail: false,

@@ -1,10 +1,10 @@
 import { AnnotationRunner } from '../../src/annotations/runner';
-import { DigestRunner } from '../../src/digest/runner';
-import { captureSummarySource } from '../../src/digest/source';
+import { DigestRunner } from '../../src/calls/execution/batch-runner';
+import { captureSummarySource } from '../../src/calls/capture/source';
 import { sharedDb as db } from '../../src/storage/history';
-import type { RunnerRequest } from '../../src/storage/client';
+import type { RunnerRequest } from '../../src/platform/chrome/runner';
 import { ReadingRunner } from '../../src/reading/runner';
-import { backgroundSender } from '../../src/contracts/reading';
+import { backgroundSender } from '../../src/platform/chrome/sender';
 import { CallEditor } from '../../src/calls/editor';
 import { callEditorStorage, prepareCallPreset } from '../../src/calls/editor-client';
 

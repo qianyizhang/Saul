@@ -1,12 +1,7 @@
-import type { ContextPolicy } from '../types';
-import type {
-  ActionCapability,
-  SharedImageOptions,
-  SharedSpeechOptions,
-  ConnectionDefinition,
-} from '../../native/shared-presets-contract.mts';
-export type ProviderType = 'openai-compatible' | 'chrome-ai' | 'chatgpt-plan';
-
+import { EXPLAIN_RECIPE_ID } from '../../shared/model/action-ids.ts';
+import type { ModelPreset, Recipe, ProviderType } from '../../shared/model/presets.ts';
+import type { ContextPolicy } from '../../shared/model/reading.ts';
+import type { ConnectionDefinition } from '../../shared/protocol/shared-presets-contract.mts';
 /** Explicit defaults used when creating a new Preset or switching its provider. */
 export interface ProviderDefaults {
   provider: ProviderType;
@@ -20,32 +15,6 @@ export interface APIProfile {
   id: string;
   name: string;
   config: Configuration['openaiCompatible'];
-}
-
-export interface ModelPreset {
-  id: string;
-  name: string;
-  provider: ProviderType;
-  model: string;
-  profileId?: string;
-  temperature?: number;
-  topK?: number;
-  effort?: string;
-  fast?: boolean;
-  connectionKey?: string;
-  capability?: ActionCapability;
-  imageOptions?: SharedImageOptions;
-  speechOptions?: SharedSpeechOptions;
-  shared?: boolean;
-}
-
-export interface Recipe {
-  capability?: 'write' | 'draw';
-  id: string;
-  name: string;
-  presetId: string;
-  template: string;
-  systemPrompt: string;
 }
 
 export interface ReadingConfiguration {
@@ -93,11 +62,10 @@ import {
   DEFAULT_CONNECTIONS,
   validImageOptions,
   validSpeechOptions,
-} from '../../native/shared-presets-contract.mts';
-import type { ResolvedContext } from '../types';
+} from '../../shared/protocol/shared-presets-contract.mts';
+import type { ResolvedContext } from '../../shared/model/reading.ts';
 import { DEFAULT_SYSTEM_PROMPT, renderReadingContext } from '../reading/prompts.ts';
 
-export const EXPLAIN_RECIPE_ID = 'recipe-explain';
 export const TEMPLATE_FIELDS = [
   'text',
   'context',

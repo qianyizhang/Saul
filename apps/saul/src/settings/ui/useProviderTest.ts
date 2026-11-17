@@ -1,0 +1,104 @@
+import { useEffect, useRef, useState } from 'react';
+import type { Configuration } from '../../configuration/definition';
+import { streamModel } from '../../providers/stream';
+import { preparePreset } from '../../configuration/resolve';
+import { configurationFor } from '../../configuration/definition';
+export function useProviderTest() {
+  const [testing, setTesting] = useState(false),
+    [notice, setNotice] = useState(''),
+    [error, setError] = useState('');
+  const controller = useRef<AbortController | null>(null),
+    mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      controller.current?.abort();
+    };
+  }, []);
+  async function test(mode: 'endpoint' | 'generation', draft: Configuration, presetId?: string) {
+    if (controller.current) return;
+    const settings = structuredClone(draft);
+    const ac = new AbortController();
+    controller.current = ac;
+    setError('');
+    setNotice('');
+    setTesting(true);
+    const timeout = setTimeout(
+      () => ac.abort(),
+      configurationFor(settings).presets.find((p) => p.id === presetId)?.provider ===
+        'openai-compatible'
+        ? 20000
+        : 120000,
+    );
+    try {
+      const preset = presetId
+        ? configurationFor(settings).presets.find((p) => p.id === presetId)
+        : undefined;
+      if (!preset) throw new Error('Choose an existing preset.');
+      const prepared = preparePreset(settings, preset);
+      if (mode === 'endpoint' && prepared.choices.provider === 'openai-compatible') {
+        if (prepared.choices.remote.credentialOwner === 'saul')
+          throw new Error('Open Connections to check this connection.');
+        const base = prepared.choices.remote.baseUrl
+          .replace(/\/+$/, '')
+          .replace(/\/chat\/completions$/, '');
+        const res = await fetch(`${base}/models`, {
+          signal: ac.signal,
+          headers: prepared.credential ? { Authorization: `Bearer ${prepared.credential}` } : {},
+        });
+        if (!res.ok)
+          throw new Error(
+            `Endpoint returned ${res.status}. Generation may still work if this server does not expose a model list.`,
+          );
+        if (mounted.current)
+          setNotice('Endpoint reachable. Use Test generation to check the selected model.');
+      } else {
+        let answer = '';
+        let complete = false;
+        for await (const event of streamModel(
+          {
+            ...prepared.choices,
+            systemPrompt: 'Reply briefly.',
+            userPrompt: 'Say hello.',
+          },
+          prepared.credential,
+          ac.signal,
+          { maxTokens: 32 },
+        )) {
+          if (event.type === 'delta') answer += event.text;
+          else if (event.type === 'complete') complete = true;
+        }
+        ac.signal.throwIfAborted();
+        if (!complete) throw new Error('The model test ended before generation completed.');
+        if (!answer.trim())
+          throw new Error('The model returned no text. Check the model and endpoint.');
+        if (mounted.current) setNotice(`Generation succeeded: ${answer.slice(0, 120)}`);
+      }
+    } catch (e) {
+      if (mounted.current)
+        setError(
+          ac.signal.aborted
+            ? 'Test stopped or timed out. Try again when the provider is ready.'
+            : (e as Error).message,
+        );
+    } finally {
+      clearTimeout(timeout);
+      controller.current = null;
+      if (mounted.current) {
+        setTesting(false);
+      }
+    }
+  }
+  return {
+    testing,
+    notice,
+    error,
+    test,
+    stop: () => controller.current?.abort(),
+    clear: () => {
+      setError('');
+      setNotice('');
+    },
+  };
+}

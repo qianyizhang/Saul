@@ -1,8 +1,15 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { initSummaryActions, SUMMARY_ACTION_ID, SUMMARY_CLOSE_ID } from '../src/digest/actions';
-import { closeSummaryPanel, openSummaryPanel } from '../src/digest/panel';
+import {
+  initSummaryActions,
+  SUMMARY_ACTION_ID,
+  SUMMARY_CLOSE_ID,
+} from '../src/calls/summary-actions';
+import { closeSummaryPanel, openSummaryPanel } from '../src/calls/panel-route';
 
-vi.mock('../src/digest/panel', () => ({ openSummaryPanel: vi.fn(), closeSummaryPanel: vi.fn() }));
+vi.mock('../src/calls/panel-route', () => ({
+  openSummaryPanel: vi.fn(),
+  closeSummaryPanel: vi.fn(),
+}));
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();

@@ -1,7 +1,7 @@
 import { settingsSection } from './driver.ts';
 import { test, expect } from './fixtures.ts';
 import type { Page } from '@playwright/test';
-import type { ToolArgs, ToolName, ToolResults } from '../../native/protocol.mts';
+import type { ToolArgs, ToolName, ToolResults } from '../../shared/protocol/protocol.mts';
 
 test.use({ browserToolsFixtures: true });
 

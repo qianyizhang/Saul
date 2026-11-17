@@ -8,7 +8,7 @@ import {
   validateAnnotationOperation,
   type ActionHostEvent,
   type ActionSource,
-} from './action-protocol.mts';
+} from '../shared/protocol/action-protocol.mts';
 
 interface Running {
   emit: (event: ActionHostEvent) => void;

@@ -1,4 +1,4 @@
-import { errorCode } from './value.mts';
+import { errorCode } from '../shared/model/value.mts';
 import { readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';

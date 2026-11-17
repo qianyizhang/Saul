@@ -1,20 +1,21 @@
+import { storagePort } from './helpers/storage-port';
 import { it, expect, vi } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SharedPresetsStore } from '../native/shared-presets.mts';
+import { SharedPresetsStore } from '../native/storage/shared-presets.mts';
 import { sharedPresets } from '../src/configuration/shared';
-import { validatePlanResult } from '../native/plan-protocol.mts';
+import { validateStorageResult } from '../shared/protocol/storage-protocol.mts';
 import { createConfigurationStore, SETTINGS_STORAGE_KEY } from '../src/configuration/store';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 
 it('rejects incomplete old helper replies instead of synthesizing connections', () => {
   const request = { action: 'presets-read' } as const;
   expect(() =>
-    validatePlanResult(request, { type: 'result', library: { revision: 2, presets: [] } }),
+    validateStorageResult(request, { type: 'result', library: { revision: 2, presets: [] } }),
   ).toThrow('invalid reply');
   expect(() =>
-    validatePlanResult(request, {
+    validateStorageResult(request, {
       type: 'result',
       library: { revision: 2, presets: [], connections: [] },
     }),
@@ -28,53 +29,55 @@ it('shares edits, migrates once, keeps accounts outside presets, and refuses a s
     writeFileSync(store.path, JSON.stringify({ appearance: { theme: 'dark' } }));
     vi.stubGlobal('chrome', {
       runtime: {
-        sendNativeMessage: async (
-          _host: string,
-          {
+        connectNative: storagePort(
+          async (
+            _host: string,
+            {
+              id,
+              request,
+            }: {
+              id: string;
+              request: {
+                action: string;
+                section: string;
+                value: Record<string, unknown>;
+                revision: number;
+                presetRevision: number;
+                presets: Parameters<typeof store.import>[0];
+                connections?: Parameters<typeof store.save>[2];
+              };
+            },
+          ) => ({
             id,
-            request,
-          }: {
-            id: string;
-            request: {
-              action: string;
-              section: string;
-              value: Record<string, unknown>;
-              revision: number;
-              presetRevision: number;
-              presets: Parameters<typeof store.import>[0];
-              connections?: Parameters<typeof store.save>[2];
-            };
-          },
-        ) => ({
-          id,
-          event: {
-            type: 'result',
-            ...(request.action === 'config-commit'
-              ? store.commit(
-                  request.section,
-                  request.revision,
-                  request.value,
-                  request.presetRevision,
-                  request.presets,
-                  request.connections,
-                )
-              : request.action.startsWith('config-')
-                ? {
-                    config:
-                      request.action === 'config-read'
-                        ? store.readScope(request.section)
-                        : store.saveScope(request.section, request.revision, request.value),
-                  }
-                : {
-                    library:
-                      request.action === 'presets-read'
-                        ? store.read()
-                        : request.action === 'presets-import'
-                          ? store.import(request.presets)
-                          : store.save(request.revision, request.presets, request.connections),
-                  }),
-          },
-        }),
+            event: {
+              type: 'result',
+              ...(request.action === 'config-commit'
+                ? store.commit(
+                    request.section,
+                    request.revision,
+                    request.value,
+                    request.presetRevision,
+                    request.presets,
+                    request.connections,
+                  )
+                : request.action.startsWith('config-')
+                  ? {
+                      config:
+                        request.action === 'config-read'
+                          ? store.readScope(request.section)
+                          : store.saveScope(request.section, request.revision, request.value),
+                    }
+                  : {
+                      library:
+                        request.action === 'presets-read'
+                          ? store.read()
+                          : request.action === 'presets-import'
+                            ? store.import(request.presets)
+                            : store.save(request.revision, request.presets, request.connections),
+                    }),
+            },
+          }),
+        ),
       },
     });
     const source = structuredClone(DEFAULT_CONFIGURATION);
@@ -177,7 +180,7 @@ it('shares edits, migrates once, keeps accounts outside presets, and refuses a s
     ).toBe('ready');
     vi.stubGlobal('chrome', {
       runtime: {
-        sendNativeMessage: vi.fn(async () => {
+        connectNative: vi.fn(() => {
           throw new Error('Helper unavailable');
         }),
       },
@@ -230,8 +233,8 @@ it('preserves typed image definitions and rejects malformed image options', asyn
 });
 
 it('uses the shared provider fixture, preserves definitions on preset-only saves, and rejects invalid changes', async () => {
-  const { validateConnections } = await import('../native/shared-presets-contract.mts');
-  const { validatePlanRequest } = await import('../native/plan-protocol.mts');
+  const { validateConnections } = await import('../shared/protocol/shared-presets-contract.mts');
+  const { validateStorageHelperRequest } = await import('../shared/protocol/storage-protocol.mts');
   const fixture = JSON.parse(
     readFileSync(new URL('../../../contracts/fixtures/connections.json', import.meta.url), 'utf8'),
   );
@@ -264,7 +267,7 @@ it('uses the shared provider fixture, preserves definitions on preset-only saves
     for (const connections of fixture.invalid) {
       expect(() => validateConnections(connections)).toThrow();
       expect(() =>
-        validatePlanRequest({
+        validateStorageHelperRequest({
           action: 'presets-save',
           revision: saved.revision,
           presets: [],
@@ -280,7 +283,7 @@ it('uses the shared provider fixture, preserves definitions on preset-only saves
 });
 
 it('rejects malformed image options without coercion in shared and app-scoped presets', async () => {
-  const { validateSharedPresets } = await import('../native/shared-presets-contract.mts');
+  const { validateSharedPresets } = await import('../shared/protocol/shared-presets-contract.mts');
   const { normalizeConfiguration } = await import('../src/configuration/definition');
   const fixture = JSON.parse(
     readFileSync(
@@ -311,7 +314,7 @@ it('rejects malformed image options without coercion in shared and app-scoped pr
 });
 
 it('round trips Speak presets and rejects malformed speech options without changing saved bytes', async () => {
-  const { validateSharedPresets } = await import('../native/shared-presets-contract.mts');
+  const { validateSharedPresets } = await import('../shared/protocol/shared-presets-contract.mts');
   const { normalizeConfiguration } = await import('../src/configuration/definition');
   const fixture = JSON.parse(
     readFileSync(

@@ -1,9 +1,17 @@
+import type { StorageHelperRequest } from '../../shared/protocol/storage-protocol.mts';
 import { expect, type Worker, type BrowserContext, type Page } from '@playwright/test';
-import type { CredentialEvent, CredentialRequest } from '../../native/credentials-contract.mts';
+import type {
+  CredentialEvent,
+  CredentialRequest,
+} from '../../shared/protocol/credentials-contract.mts';
 import { DEFAULT_CONFIGURATION, type Configuration } from '../../src/configuration/definition';
-import type { SharedPresets } from '../../native/shared-presets-contract.mts';
-import type { PlanControlRequest } from '../../native/plan-protocol.mts';
-import type { PlanRequest, PlanEvent, PlanAccount } from '../../native/plan-protocol.mts';
+import type { SharedPresets } from '../../shared/protocol/shared-presets-contract.mts';
+
+import type {
+  PlanRequest,
+  PlanEvent,
+  PlanAccount,
+} from '../../shared/protocol/credential-plan.mts';
 export async function installDigestProvider(
   worker: Worker,
   hold = false,
@@ -39,37 +47,37 @@ export async function installDigestProvider(
         const sections: Record<string, { revision: number; value?: Record<string, unknown> }> =
           savedFixture?.sections ?? {};
         await chrome.storage.local.set({ digest_fixture_config: { library, sections } });
-        chrome.runtime.sendNativeMessage = (async (
-          host: string,
-          packet: { id: string; request: PlanControlRequest },
-        ) => {
-          if (host !== 'com.saul.chatgpt')
-            throw new Error('Configuration must use the storage helper');
-          const r = packet.request;
-          let result: Record<string, unknown>;
-          if (r.action === 'presets-read') result = { library };
-          else if (r.action === 'config-read')
-            result = { config: sections[r.section] ?? { revision: 0 } };
-          else if (r.action === 'config-save' || r.action === 'config-commit') {
-            if ((sections[r.section]?.revision ?? 0) !== r.revision)
-              throw new Error('Scoped settings changed');
-            if (r.action === 'config-commit') {
-              if (r.presetRevision !== library.revision) throw new Error('Shared settings changed');
-              library = {
-                revision: library.revision + 1,
-                connections: r.connections ?? library.connections,
-                presets: r.presets,
+        setStorageControlFixture(
+          async (host: string, packet: { id: string; request: StorageHelperRequest }) => {
+            if (host !== 'com.saul.chatgpt')
+              throw new Error('Configuration must use the storage helper');
+            const r = packet.request;
+            let result: Record<string, unknown>;
+            if (r.action === 'presets-read') result = { library };
+            else if (r.action === 'config-read')
+              result = { config: sections[r.section] ?? { revision: 0 } };
+            else if (r.action === 'config-save' || r.action === 'config-commit') {
+              if ((sections[r.section]?.revision ?? 0) !== r.revision)
+                throw new Error('Scoped settings changed');
+              if (r.action === 'config-commit') {
+                if (r.presetRevision !== library.revision)
+                  throw new Error('Shared settings changed');
+                library = {
+                  revision: library.revision + 1,
+                  connections: r.connections ?? library.connections,
+                  presets: r.presets,
+                };
+              }
+              sections[r.section] = { revision: r.revision + 1, value: r.value };
+              await chrome.storage.local.set({ digest_fixture_config: { library, sections } });
+              result = {
+                config: sections[r.section],
+                ...(r.action === 'config-commit' ? { library } : {}),
               };
-            }
-            sections[r.section] = { revision: r.revision + 1, value: r.value };
-            await chrome.storage.local.set({ digest_fixture_config: { library, sections } });
-            result = {
-              config: sections[r.section],
-              ...(r.action === 'config-commit' ? { library } : {}),
-            };
-          } else throw new Error('Unexpected summary settings operation: ' + r.action);
-          return { id: packet.id, event: { type: 'result', ...result } };
-        }) as typeof chrome.runtime.sendNativeMessage;
+            } else throw new Error('Unexpected summary settings operation: ' + r.action);
+            return { id: packet.id, event: { type: 'result', ...result } };
+          },
+        );
       }
       const state = {
         requests: [] as PlanRequest[],
