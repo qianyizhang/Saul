@@ -21,8 +21,11 @@ Run commands from `apps/saul`. Root `pnpm check` runs the combined gate; see
 # Browser app gate
 pnpm check
 
-# Browser setup and full suite
-pnpm exec playwright install chromium
+# Check pinned Chromium before starting a browser slice; install if missing
+pnpm test:e2e:check-browser
+pnpm test:e2e:install
+
+# Rebuild and test
 pnpm test:e2e
 pnpm test:e2e:headed
 
@@ -34,8 +37,16 @@ pnpm test:user
 pnpm test:user --smoke
 ```
 
-Run one or more specs from `tests/e2e/` with `pnpm exec playwright test <spec>`.
-They can reuse a built `.output/chrome-mv3` snapshot; rebuild for changed source.
+Use Playwright's default shared browser cache across runs and checkouts. It
+selects the Chromium revision from the installed Playwright version. If you set
+`PLAYWRIGHT_BROWSERS_PATH`, use the same absolute path for install, check, and
+test. Browser setup is separate from running tests. The browser cache contains
+binaries; the harness still creates disposable profiles.
+
+For fixture-only edits, run `pnpm test:e2e:reuse tests/e2e/<spec>` against the
+existing extension and native helper build. Use `pnpm test:e2e` when the built
+sources changed or you can't confirm which revision was built. Both accept
+Playwright filters and run the startup probe.
 Use `pnpm exec tsc -p tests/e2e/tsconfig.json` to check fixture types.
 
 Optional evidence runs:
