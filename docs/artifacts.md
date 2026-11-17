@@ -1,4 +1,4 @@
-# Disposable artifacts
+# Artifacts and retained references
 
 Root `.artifacts/` is the only home for disposable test diagnostics, screenshots,
 traces, logs and local review exports. Its contents may be deleted after the run
@@ -34,6 +34,30 @@ evidence into the relevant tracked app documentation with source revision,
 command, conditions and limitations. A temporary screenshot path is not a durable
 receipt. Scrub account identifiers and private content before retaining or sharing.
 CI retains failure diagnostics for seven days and installable bundles for fourteen.
+
+## Historical references
+
+The [behavior atlas](../design/behavior-atlas/README.md), its accepted comparisons,
+and [runtime explainer](explainers/runtime-lifecycle/README.md) are point-in-time
+references. Other point-in-time explainers follow the same rule. Preserve their
+unique evidence, source baseline, recorded checks and limitations. They are not
+maintained specifications or evidence of the current source or installed app.
+
+Do not refresh their states, source anchors, diagrams, comparisons, examples or
+technical details when the product changes. Put a short historical notice in each
+bundle README and direct reader entry page, linking to living documentation.
+Current behavior must be derived from current source and its
+[documentation owners](architecture.md#documentation-ownership). Reproducing an old
+rendering does not update its evidence. A future reconstruction may cautiously
+reuse the structure, but must establish its own current-source baseline.
+
+Retain dated records when they support a decision, recovery, comparison or useful
+reference. Compact repetition in place while keeping unique results, provenance,
+conditions and limits. Consolidate only when it makes related evidence easier to
+use; prefer its existing owner over a new append-only ledger. Remove spent material
+only after checking readers and preserving evidence still needed by a live claim.
+The atlas and explainer bundles remain tracked historical references; disposable
+captures around them still follow the finite retention rules above.
 
 ## Periodic cleanup
 

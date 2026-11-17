@@ -1,11 +1,17 @@
 import type { DbCall } from '../types/storage';
-import { planEvents } from '../models/chatgpt-plan';
-import { streamModel } from '../models/provider';
-import { parseSummary, SUMMARY_PROMPT, summaryRequestInput } from './summary';
+import {
+  createCallExecutor,
+  type CallExecutor,
+  type CallOutcome,
+  type CallSnapshot,
+  type FrozenCall,
+} from '../calls/execution';
+import { SUMMARY_PROMPT } from './summary';
 import { compareText } from '../reading/input-change';
-import { runCustomAction } from '../actions/run';
 import {
   activeItem,
+  interruptItem,
+  retryableItem,
   type DigestBatch,
   type DigestItem,
   type DigestRequest,
@@ -29,27 +35,40 @@ const sourceBusy =
   'A summary is already running for one of these pages. Stop it or wait for it to finish.';
 
 export class DigestRunner {
-  readonly ready: Promise<void>;
+  private recovery?: Promise<void>;
   private runs = new Map<string, DigestRun>();
-  // A failed save cannot record its own interruption in SQLite.
-  private interrupted = new Map<string, DigestBatch>();
+  // A storage outage can leave an active row behind after its task has stopped.
+  // Keep only its notice; the durable row remains the only saved result.
+  private writeFailures = new Map<string, string>();
   private controls: Promise<unknown> = Promise.resolve();
   constructor(
     private db: DbCall,
     private capture: Capture,
-    private generate = planEvents,
-    private custom = runCustomAction,
+    private executor: CallExecutor = createCallExecutor(),
   ) {
-    this.ready = db({ type: 'DB_DIGEST_RECOVER', payload: undefined });
+    void this.recover().catch(() => undefined);
+  }
+  private recover() {
+    this.recovery ??= this.db({ type: 'DB_DIGEST_RECOVER', payload: undefined }).catch((error) => {
+      this.recovery = undefined;
+      throw error;
+    });
+    return this.recovery;
   }
   // Serialize control actions; generation itself stays independent of popup lifetime.
   request(request: DigestRequest, snapshot?: DigestBatch, credential = ''): Promise<unknown> {
     // Read-only page comparisons must not delay Stop or other generation controls.
-    if (request.action === 'resolve' || request.action === 'inspect')
-      return this.ready.then(() => this.handle(request, snapshot));
+    if (
+      request.action === 'resolve' ||
+      request.action === 'inspect' ||
+      request.action === 'active' ||
+      request.action === 'list' ||
+      request.action === 'get'
+    )
+      return this.handle(request, snapshot);
     if (request.action === 'stop')
       return this.enqueue(async () => {
-        await this.ready;
+        await this.recover();
         return this.abort(request.id);
       }).then(async (run) => {
         // Settling one run must not delay control actions on unrelated sources.
@@ -74,7 +93,7 @@ export class DigestRunner {
     snapshot?: DigestBatch,
     credential = '',
   ): Promise<unknown> {
-    await this.ready;
+    await this.recover();
     if (r.action === 'active') return structuredClone([...this.runs.values()].at(-1)?.batch);
     if (r.action === 'inspect') {
       const batch = await this.db({ type: 'DB_DIGEST_GET', payload: { id: r.id } });
@@ -105,18 +124,23 @@ export class DigestRunner {
       return { batch: structuredClone(batch), comparisons };
     }
     if (r.action === 'list') return this.db({ type: 'DB_DIGEST_LIST', payload: undefined });
-    if (r.action === 'get')
-      return structuredClone(
-        this.runs.get(r.id)?.batch ??
-          this.interrupted.get(r.id) ??
-          (await this.db({ type: 'DB_DIGEST_GET', payload: { id: r.id } })),
-      );
+    if (r.action === 'get') {
+      const running = this.runs.get(r.id);
+      if (running) return structuredClone(running.batch);
+      const batch = await this.db({ type: 'DB_DIGEST_GET', payload: { id: r.id } });
+      const error = this.writeFailures.get(r.id);
+      if (!error || !batch.items.some(activeItem)) return batch;
+      return {
+        ...batch,
+        error,
+        items: batch.items.map((item) => (activeItem(item) ? interruptItem(item, error) : item)),
+      };
+    }
     if (r.action === 'delete') {
       const run = this.abort(r.id);
       if (run) await run.task;
-      else await this.handle({ action: 'get', id: r.id });
       await this.db({ type: 'DB_DIGEST_DELETE', payload: { id: r.id } });
-      this.interrupted.delete(r.id);
+      this.writeFailures.delete(r.id);
       return;
     }
     if (r.action === 'start' && !r.regenerate && snapshot) {
@@ -126,8 +150,9 @@ export class DigestRunner {
     let batch: DigestBatch;
     if (r.action === 'start') {
       if (!snapshot) throw new Error('Missing selection snapshot.');
-      const existing = this.runs.get(r.id)?.batch ?? this.interrupted.get(r.id);
+      const existing = this.runs.get(r.id)?.batch;
       if (existing) return structuredClone(existing);
+      if (this.writeFailures.has(r.id)) return this.handle({ action: 'get', id: r.id });
       this.checkSources(snapshot.items.filter(activeItem));
       batch = await this.db({ type: 'DB_DIGEST_CREATE', payload: snapshot });
       // Duplicate start IDs never regenerate completed or interrupted work.
@@ -135,36 +160,32 @@ export class DigestRunner {
     } else {
       if (this.runs.has(r.id)) throw new Error(sourceBusy);
       batch = await this.db({ type: 'DB_DIGEST_GET', payload: { id: r.id } });
-      const unfinished = batch.items.filter(
-        (item) => activeItem(item) || ['failed', 'interrupted', 'cancelled'].includes(item.status),
-      );
-      this.checkSources(unfinished);
-      for (const item of unfinished) {
-        item.status = 'queued';
-        item.raw = '';
-        delete item.error;
-        delete item.summary;
-        delete item.finalText;
-        delete item.calls;
-        delete item.progress;
-        await this.save(batch, item);
-      }
+      this.checkSources(batch.items.filter(retryableItem));
+      batch = await this.db({ type: 'DB_DIGEST_RETRY', payload: { id: r.id } });
     }
-    this.interrupted.delete(batch.id);
+    this.writeFailures.delete(batch.id);
     const controller = new AbortController();
     const task = this.run(batch, controller, credential)
-      .catch((error) => {
-        batch.error =
-          'Saving progress failed; processing stopped. ' +
-          String(error instanceof Error ? error.message : error);
-        for (const item of batch.items)
-          if (activeItem(item)) {
-            item.status = 'interrupted';
-            item.error = batch.error;
-            delete item.finalText;
-            delete item.summary;
-          }
-        this.interrupted.set(batch.id, batch);
+      .catch(async (cause: unknown) => {
+        const error =
+          'Could not save summary progress; processing stopped. ' +
+          (cause instanceof Error ? cause.message : String(cause));
+        try {
+          // Do not replace a completed row if the save committed but its reply was lost.
+          Object.assign(
+            batch,
+            await this.db({
+              type: 'DB_DIGEST_INTERRUPT',
+              payload: { id: batch.id, error },
+            }),
+          );
+        } catch {
+          this.writeFailures.set(batch.id, error);
+          batch.error = error;
+          batch.items = batch.items.map((item) =>
+            activeItem(item) ? interruptItem(item, error) : item,
+          );
+        }
       })
       .finally(() => {
         this.runs.delete(batch.id);
@@ -254,12 +275,6 @@ export class DigestRunner {
     return this.db({
       type: 'DB_DIGEST_ITEM',
       payload: { id: batch.id, item: { ...item }, source },
-    }).catch((error: unknown) => {
-      item.status = 'interrupted';
-      item.error = 'Progress could not be saved.';
-      delete item.finalText;
-      delete item.summary;
-      throw error;
     });
   }
   private async run(batch: DigestBatch, controller: AbortController, credential: string) {
@@ -324,92 +339,75 @@ export class DigestRunner {
     item.status = signal.aborted ? 'cancelled' : 'running';
     await this.save(batch, item, source);
     if (signal.aborted) return;
-    if (batch.action) {
-      const controller = new AbortController();
-      const actionSignal = AbortSignal.any([signal, controller.signal]);
-      let pending: Promise<void> | undefined;
-      let saveError: unknown;
-      const timer = setInterval(() => {
-        if (pending || saveError) return;
-        pending = this.save(batch, item)
-          .catch((error: unknown) => {
-            saveError = error;
-            controller.abort();
-          })
-          .finally(() => {
-            pending = undefined;
-          });
-      }, 500);
-      let text: string | undefined;
-      try {
-        text = await this.custom(batch, item, source, credential, actionSignal);
-        actionSignal.throwIfAborted();
-      } catch (error) {
-        item.status = signal.aborted ? 'cancelled' : 'failed';
-        item.error = error instanceof Error ? error.message : String(error);
-        if (!signal.aborted) pause();
-      } finally {
-        clearInterval(timer);
-        await pending;
-        delete item.progress;
-      }
-      if (saveError) throw saveError;
-      if (text !== undefined) {
-        item.finalText = text;
-        item.status = 'completed';
-      }
-      await this.save(batch, item);
-      return;
-    }
-    let providerFailed = true;
+    // Translate the existing saved representation; selection remains admission-owned.
+    const call: FrozenCall = batch.action
+      ? { kind: 'script', revision: batch.action.revision.revision, input: batch.action.input }
+      : {
+          kind: 'summarize',
+          instructions: batch.prompt,
+          model: batch.summaryInput
+            ? { kind: 'preset', input: batch.summaryInput }
+            : {
+                kind: 'plan',
+                accountId: batch.accountId,
+                model: batch.model,
+                effort: batch.effort,
+                credentialOwner: batch.credentialOwner ?? 'local',
+              },
+        };
+    const project = (output: CallSnapshot) => {
+      item.raw = output.raw;
+      if (output.calls) item.calls = output.calls;
+      else delete item.calls;
+      if (output.progress !== undefined) item.progress = output.progress;
+      else delete item.progress;
+    };
+    const controller = new AbortController();
+    const executionSignal = AbortSignal.any([signal, controller.signal]);
+    let pending: Promise<void> | undefined;
+    let saveError: unknown;
+    // Preserve custom Call checkpoints; built-in Summarize still saves only at completion.
+    const timer = batch.action
+      ? setInterval(() => {
+          if (pending || saveError) return;
+          pending = this.save(batch, item)
+            .catch((error: unknown) => {
+              saveError = error;
+              controller.abort();
+            })
+            .finally(() => {
+              pending = undefined;
+            });
+        }, 500)
+      : undefined;
+    let outcome: CallOutcome;
     try {
-      let complete = false;
-      const { userPrompt, attachments } = summaryRequestInput(item, source);
-      const events = batch.summaryInput
-        ? streamModel(
-            { ...batch.summaryInput, systemPrompt: batch.prompt, userPrompt },
-            credential,
-            signal,
-            { attachments },
-          )
-        : this.generate(
-            {
-              action: 'generate',
-              accountId: batch.accountId,
-              model: batch.model,
-              effort: batch.effort,
-              systemPrompt: batch.prompt,
-              userPrompt,
-              ...(attachments ? { attachments } : {}),
-            },
-            signal,
-            batch.credentialOwner ?? 'local',
-          );
-      for await (const event of events) {
-        if (event.type === 'delta') {
-          item.raw += event.text;
-          if (item.raw.length > 30000) throw new Error('Summary exceeded the output limit.');
-        }
-        if (event.type === 'complete') complete = true;
-      }
-      signal.throwIfAborted();
-      if (!complete) throw new Error('Generation ended without a completed response.');
-      providerFailed = false;
-      item.summary = parseSummary(item.raw);
-      item.status = 'completed';
-    } catch (error) {
-      item.status = signal.aborted ? 'cancelled' : 'failed';
-      item.error = String(error instanceof Error ? error.message : error);
-      if (
-        source.kind === 'pdf-url' &&
-        providerFailed &&
-        !signal.aborted &&
-        (!batch.summaryInput || batch.summaryInput.provider === 'chatgpt-plan')
-      )
-        item.error +=
-          ' PDF URL attachment failed; OpenAI must be able to fetch the URL and the model must support PDF input. No local fallback was used. Choose Local PDF processing in Settings and Run again to send extracted text instead.';
-      if (providerFailed && !signal.aborted) pause();
+      outcome = await this.executor.execute(
+        { call, page: { title: item.title, url: item.url, source } },
+        { credential, signal: executionSignal, onProgress: project },
+      );
+      // Keep the item in a live saving phase until the final row commits.
+      if (!saveError) item.status = 'saving';
+      // Stop admitting siblings before waiting for a slow outstanding checkpoint.
+      if (outcome.kind === 'failed' && outcome.failure === 'execution') pause();
+    } finally {
+      clearInterval(timer);
+      await pending;
+      delete item.progress;
     }
-    await this.save(batch, item);
+    if (saveError) throw saveError;
+    project(outcome.output);
+    const terminal = { ...item };
+    if (outcome.kind === 'completed') {
+      terminal.status = 'completed';
+      if (outcome.result.kind === 'summary') terminal.summary = outcome.result.summary;
+      else terminal.finalText = outcome.result.text;
+    } else {
+      terminal.status = outcome.kind === 'cancelled' ? 'cancelled' : 'failed';
+      terminal.error = outcome.message;
+    }
+    delete terminal.progress;
+    await this.save(batch, terminal);
+    Object.assign(item, terminal);
   }
 }

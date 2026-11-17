@@ -77,6 +77,10 @@ export default defineConfig({
     action: {},
     side_panel: { default_path: 'summary-panel.html' },
     commands: {
+      'saul-annotate': {
+        suggested_key: { default: 'Alt+Shift+A', mac: 'MacCtrl+A' },
+        description: 'Annotate this page',
+      },
       'saul-summary-close': {
         suggested_key: { default: 'Alt+Shift+W', mac: 'MacCtrl+W' },
         description: 'Close Saul summary panel',

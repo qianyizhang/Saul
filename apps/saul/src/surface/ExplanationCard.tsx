@@ -1,25 +1,16 @@
+import { runLabel } from './run-status';
+import { PastAttemptContent } from './PastAttemptContent';
 import { ControlIcon } from './ControlIcon';
-import { sendReadingMessage } from '../storage/client';
 import { GeneratedImageView } from './GeneratedImageView';
 import { useRef, useState } from 'react';
 import { X, Pin, Bookmark, Square } from 'lucide-react';
-import type { Passage, RunResult, RunStatus } from '../types/storage';
+import type { Passage, RunResult } from '../types/storage';
 import { TagStreamParser } from '../parser/tag-stream-parser';
 import { AnnotatedTextView } from './AnnotatedTextView';
 import { useAnchoredPosition } from './useAnchoredPosition';
 import { InputOutputInspector } from './InputOutputInspector';
 import { RunDetails } from './RunDetails';
 import { changeLabel, type InputComparison } from '../reading/input-change';
-export const runLabel = (status: RunStatus) =>
-  ({
-    queued: 'Waiting…',
-    running: 'Explaining…',
-    saving: 'Saving…',
-    completed: 'Saved',
-    failed: 'Incomplete',
-    interrupted: 'Interrupted',
-    cancelled: 'Stopped',
-  })[status];
 interface Props {
   reuse?: InputComparison;
   onRunCurrent?: () => void;
@@ -56,7 +47,6 @@ export function ExplanationCard({
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const moreButton = useRef<HTMLButtonElement>(null);
-  const [savingImage, setSavingImage] = useState(false);
   const anchored = useAnchoredPosition(range, ref);
   const style = range
     ? anchored
@@ -188,26 +178,6 @@ export function ExplanationCard({
             {latest.error}
           </p>
         )}
-        {latest.reason === 'save-failed' && latest.hasImage && (
-          <div>
-            {answer.id !== latest.id && (
-              <GeneratedImageView selectionId={passage.snapshot.id} runId={latest.id} />
-            )}
-            <button
-              className="px-2 py-1.5 text-sm rounded-control border border-line hover:bg-wash"
-              disabled={savingImage}
-              onClick={() => {
-                setSavingImage(true);
-                setError('');
-                void sendReadingMessage({ action: 'save-image', selectionId: passage.snapshot.id })
-                  .catch((e) => setError(String(e)))
-                  .finally(() => setSavingImage(false));
-              }}
-            >
-              {savingImage ? 'Saving…' : 'Retry saving image'}
-            </button>
-          </div>
-        )}
         {answer.id !== latest.id && <p className="text-xs text-muted mb-2">Previous answer</p>}
         {answer.inspection?.followUpQuestion && (
           <p className="text-sm font-medium mb-3 whitespace-pre-wrap">
@@ -296,17 +266,7 @@ export function ExplanationCard({
                 <summary>
                   {runLabel(run.status)} · {new Date(run.createdAt).toLocaleString()}
                 </summary>
-                {run.error && <p>{run.error}</p>}
-                {run.inspection?.followUpQuestion && (
-                  <p className="whitespace-pre-wrap">{run.inspection.followUpQuestion}</p>
-                )}
-                {run.hasImage ? (
-                  <GeneratedImageView selectionId={passage.snapshot.id} runId={run.id} />
-                ) : (
-                  <AnnotatedTextView segments={new TagStreamParser().feed(run.responseRaw)} />
-                )}
-                <RunDetails run={run} />
-                <InputOutputInspector run={run} />
+                <PastAttemptContent run={run} selectionId={passage.snapshot.id} />
               </details>
             ))}
           </div>

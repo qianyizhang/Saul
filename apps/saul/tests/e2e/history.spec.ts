@@ -1,5 +1,8 @@
 import { test, expect } from './fixtures.ts';
-import { configureFixtureProvider, seedHistory } from './support.ts';
+import { configureFixtureProvider } from './support.ts';
+import { seedPersistedHistory } from './database-harness.ts';
+
+test.use({ databaseFixtures: true });
 
 test('deleting a saved passage updates its page and clearing history survives restart', async ({
   sandbox,
@@ -13,10 +16,9 @@ test('deleting a saved passage updates its page and clearing history survives re
   await article.goto(fixtureServer.origin + '/article');
   await expect(article.locator('saul-root')).toBeAttached();
   await article.locator('#concept').click({ clickCount: 3 });
-  await article.getByRole('button', { name: 'Explain', exact: true }).click();
-  await expect(article.getByText('Explanation ready', { exact: true })).toBeVisible();
-  await article.getByRole('button', { name: 'View', exact: true }).click();
+  await article.getByRole('button', { name: 'Explain & open', exact: true }).click();
   await expect(article.getByRole('region', { name: 'Saul explanation' })).toBeVisible();
+  await expect(article.getByText('Saved', { exact: true })).toBeVisible();
 
   await popup.getByRole('button', { name: 'History', exact: true }).click();
   await popup.locator('.history-title').click();
@@ -25,7 +27,7 @@ test('deleting a saved passage updates its page and clearing history survives re
   await expect(popup.getByText('No highlights recorded yet.')).toBeVisible();
   await expect(article.getByRole('region', { name: 'Saul explanation' })).toHaveCount(0);
 
-  await seedHistory(browser, fixtureServer.origin, 2);
+  await seedPersistedHistory(browser, fixtureServer.origin + '/seeded-history', 2);
   await popup.reload();
   await popup.getByLabel('Export and manage history', { exact: true }).click();
   popup.once('dialog', (dialog) => dialog.accept());

@@ -1,10 +1,43 @@
 import { summaryMore } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
-import { installDigestProvider } from './digest-fixture.ts';
+import { installDigestProvider, openDigestReader } from './digest-fixture.ts';
 import type { PlanRequest } from '../../native/plan-protocol.mts';
 import type { DigestBatch } from '../../src/digest/types';
 import { readFile } from 'node:fs/promises';
+
+test('a rejected summary result remains unavailable until the user retries', async ({
+  sandbox,
+  fixtureServer,
+}) => {
+  const { worker, context, popup } = await sandbox.launch();
+  await installDigestProvider(worker);
+  const source = await context.newPage();
+  await source.goto(fixtureServer.origin + '/article');
+  const calls = () =>
+    worker.evaluate(
+      () =>
+        (
+          globalThis as unknown as { digestFixture: { requests: PlanRequest[] } }
+        ).digestFixture.requests.filter((request) => request.action === 'generate').length,
+    );
+  sandbox.rejectHistoryWriteOnce(
+    ({ type, payload }) =>
+      type === 'DB_DIGEST_ITEM' &&
+      (payload as { item: { status: string } }).item.status === 'completed',
+  );
+  const reader = await openDigestReader(context, popup, worker, source.url());
+  await expect(reader.getByRole('alert')).toContainText('Could not save summary progress');
+  await expect(reader.getByText('A concise source-backed finding.').first()).toHaveCount(0);
+  expect(await calls()).toBe(1);
+  await reader.reload();
+  await expect(reader.getByRole('alert')).toContainText('Could not save summary progress');
+  expect(await calls()).toBe(1);
+  await reader.getByRole('button', { name: 'Retry unfinished', exact: true }).click();
+  await expect(reader.getByRole('status')).toContainText('Summary ready');
+  await expect(reader.getByText('A concise source-backed finding.').first()).toBeVisible();
+  expect(await calls()).toBe(2);
+});
 
 test('programmatic summary opens immediately, runs two streams, survives closure and persists with export', async ({
   sandbox,

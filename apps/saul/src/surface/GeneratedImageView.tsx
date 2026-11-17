@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { GeneratedImage } from '../models/images';
-import { validateGeneratedImage } from '../models/images';
+import type { GeneratedImage } from '../providers/images';
+import { validateGeneratedImage } from '../providers/images';
 import { sendReadingMessage, sendDbMessage } from '../storage/client';
 
 const imageActionClass =

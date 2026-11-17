@@ -1,0 +1,257 @@
+{
+  "version": 1,
+  "title": "Proposal 1 · EZ retry",
+  "initial": "failed",
+  "source": {
+    "revision": "0a949cf12f226a63b0db6244f9fc2a1e3fef78d1 · 2026-11-15",
+    "description": "Accepted design comparison against baseline 0a949cf. The three changes are now implemented in the working tree with the agreed broader scope. These fixed previews record the design discussion; use the parent catalog for current behavior maps."
+  },
+  "coverage": {
+    "included": [
+      "Original and Proposed share the same start and outcome. New transitions are marked proposed and never become available in Exploration.",
+      "Only the affected route is shown. System checkpoints are simulated; no product effects occur.",
+      "Native failed Write request, Min Mode, unchanged valid connection and recoverable storage. The current compound More → Reuse edge is expanded into its actual controls.",
+      "The shortcut must preserve saved request choices, validate connection identity and keep prior output. It must not call Save again or retry automatically."
+    ],
+    "omitted": [
+      "This comparison is not an exhaustive UI or concurrency model. Open the parent atlas for other journeys.",
+      "No live app or usability testing, provider requests, account changes or automatic merging. This is the original design study, not the current app rendering.",
+      "Counts distinguish intentional controls from system events. Do not treat grouped transitions as measured clicks. Cancel/retry loops are retained as alternatives and excluded from the straightforward before/after route."
+    ]
+  },
+  "regions": [
+    {
+      "id": "main",
+      "label": "Lookup · main window"
+    }
+  ],
+  "states": [
+    {
+      "id": "starting",
+      "region": "main",
+      "label": "Run requested",
+      "detail": "A checkpoint inside Run: pending input must be saved before generation starts. This is not a separate native screen.",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:58",
+      "preview": {
+        "title": "Run requested",
+        "body": "A checkpoint inside Run: pending input must be saved before generation starts. This is not a separate native screen.",
+        "fields": []
+      }
+    },
+    {
+      "id": "active",
+      "region": "main",
+      "label": "Receiving answer",
+      "detail": "The attempt is pending. Input and preset changes are locked; Stop is available.",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:68",
+      "preview": {
+        "title": "Receiving answer",
+        "body": "The attempt is pending. Input and preset changes are locked; Stop is available.",
+        "fields": []
+      }
+    },
+    {
+      "id": "save-blocked",
+      "region": "main",
+      "label": "Not sent",
+      "detail": "The initial history write failed. The draft remains and no provider request started.",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:63",
+      "preview": {
+        "title": "Request not sent",
+        "body": "The initial history write failed. The draft remains and no provider request started.",
+        "fields": []
+      },
+      "terminal": true
+    },
+    {
+      "id": "saved",
+      "region": "main",
+      "label": "Saved answer",
+      "detail": "The provider completed and the terminal snapshot was saved. Copy and follow-up are available; More contains Reuse, Export and Delete.",
+      "source": "apps/ez/Sources/EZ/ContentView.swift:216",
+      "preview": {
+        "title": "Answer saved",
+        "body": "The provider completed and the terminal snapshot was saved. Copy and follow-up are available; More contains Reuse, Export and Delete.",
+        "fields": [
+          {
+            "label": "Answer",
+            "value": "Closing a view preserves work; cancellation is a separate action."
+          }
+        ]
+      },
+      "terminal": true
+    },
+    {
+      "id": "failed",
+      "region": "main",
+      "label": "Request failed",
+      "detail": "A provider failure or missing completion signal retains available output. A new attempt requires an explicit Run.",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:79",
+      "preview": {
+        "title": "Request failed",
+        "body": "The request failed. Your partial answer is still here. Starting another request is a separate action.",
+        "fields": [
+          {
+            "label": "Result",
+            "value": "Request failed · partial answer retained"
+          },
+          {
+            "label": "Next request",
+            "value": "Uses saved input and preset"
+          }
+        ]
+      }
+    },
+    {
+      "id": "restored",
+      "region": "main",
+      "label": "Restored draft",
+      "detail": "Reuse restores the saved action, input and preset as a draft. Nothing has been sent.",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:599",
+      "preview": {
+        "title": "Saved request restored",
+        "body": "Reuse restores the saved action, input and preset as a draft. Nothing has been sent.",
+        "fields": [
+          {
+            "label": "Preset",
+            "value": "Saved preset snapshot"
+          },
+          {
+            "label": "Question",
+            "value": "Explain why closing a view should not stop a request."
+          }
+        ]
+      }
+    },
+    {
+      "id": "retry-menu",
+      "region": "main",
+      "label": "More · failed request",
+      "detail": "In Min Mode, Reuse is inside More. It restores a draft without sending.",
+      "source": "apps/ez/Sources/EZ/ContentView.swift:247",
+      "preview": {
+        "title": "Failed request · More",
+        "body": "Reuse restores the saved request as an editable draft.",
+        "fields": []
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "id": "saved-input",
+      "from": "starting",
+      "to": "active",
+      "label": "Pending input saved",
+      "kind": "system",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:63"
+    },
+    {
+      "id": "initial-fails",
+      "from": "starting",
+      "to": "save-blocked",
+      "label": "History write fails",
+      "kind": "system",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:63"
+    },
+    {
+      "id": "finish",
+      "from": "active",
+      "to": "saved",
+      "label": "Completion and save succeed",
+      "kind": "system",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:135"
+    },
+    {
+      "id": "fail",
+      "from": "active",
+      "to": "failed",
+      "label": "Provider fails or ends early",
+      "kind": "system",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:79"
+    },
+    {
+      "id": "rerun",
+      "from": "restored",
+      "to": "starting",
+      "label": "Run saved request",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:508"
+    },
+    {
+      "id": "open-failed-menu",
+      "from": "failed",
+      "to": "retry-menu",
+      "label": "More",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/ContentView.swift:247"
+    },
+    {
+      "id": "restore-failed",
+      "from": "retry-menu",
+      "to": "restored",
+      "label": "Reuse",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:599"
+    },
+    {
+      "id": "retry-same",
+      "from": "failed",
+      "to": "starting",
+      "label": "Retry same request",
+      "kind": "user",
+      "proposed": true,
+      "source": "Design reference at baseline 0a949cf: apps/ez/Sources/EZ/AppModel.swift:508"
+    }
+  ],
+  "journeys": [
+    {
+      "id": "retry-current",
+      "label": "Current · More, Reuse, Run",
+      "description": "Failed native text request in Min Mode; three deliberate controls before another request can start.",
+      "start": "failed",
+      "steps": ["open-failed-menu", "restore-failed", "rerun", "saved-input", "finish"]
+    },
+    {
+      "id": "retry-proposed",
+      "label": "Proposed · Retry same request",
+      "description": "One explicit Retry with the saved input/action/preset and unchanged valid connection. More → Reuse remains the edit path.",
+      "start": "failed",
+      "steps": ["retry-same", "saved-input", "finish"]
+    }
+  ],
+  "comparisons": [
+    {
+      "id": "direct-retry",
+      "label": "EZ: put Retry beside the failure",
+      "before": "retry-current",
+      "after": "retry-proposed",
+      "detail": "Recommend first. Current: More → Reuse → Run. Proposed: Retry same request. Three intentional controls become one in this Min Mode fixture. A new request is still deliberate; the pending-history save remains. Reuse stays available for edits. Invalid saved model/account must block with setup guidance, never silently switch. Save again remains storage-only. Implemented in the working tree; native offline checks cover changed connections and missing input."
+    }
+  ],
+  "layout": {
+    "states": {
+      "failed": [180, 200],
+      "retry-menu": [450, 160],
+      "restored": [720, 200],
+      "starting": [1000, 250],
+      "active": [1240, 250],
+      "saved": [1480, 250],
+      "save-blocked": [1010, 620]
+    },
+    "regions": {
+      "main": {
+        "label": [75, -15],
+        "outline": [
+          [60, 110],
+          [140, 60],
+          [1520, 60],
+          [1600, 110],
+          [1620, 710],
+          [1520, 780],
+          [140, 780],
+          [40, 710]
+        ]
+      }
+    }
+  }
+}

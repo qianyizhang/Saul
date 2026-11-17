@@ -119,6 +119,18 @@ func rejects(_ operation: () throws -> Void) throws {
         ]), caller: caller)
     }
     try request(["action": "status"])
+    for action in ["api-chat", "generate"] {
+      var vision: [String: Any] = [
+        "action": action, "model": "gpt-6", "systemPrompt": "Instructions",
+        "userPrompt": "Saved annotation", "images": ["data:image/jpeg;base64,YQ=="],
+      ]
+      if action == "generate" { vision["accountId"] = "fixture" }
+      try request(vision)
+      vision["images"] = ["https://untrusted.test/image"]
+      try rejects { try request(vision) }
+      vision["images"] = [String(repeating: "x", count: 450_001)]
+      try rejects { try request(vision) }
+    }
     let imageRequest: [String: Any] = [
       "action": "api-image", "prompt": "Looping tree", "model": "gpt-image-2.6-flare",
       "size": "1024x1024", "quality": "low", "outputFormat": "gif",

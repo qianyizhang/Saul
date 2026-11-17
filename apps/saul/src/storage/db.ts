@@ -1,4 +1,9 @@
-import { validateGeneratedImage, type GeneratedImage } from '../models/images';
+import {
+  annotationStore,
+  annotationAttempts,
+  annotationImage,
+} from '../../native/annotation-store.mts';
+import { validateGeneratedImage, type GeneratedImage } from '../providers/images';
 import { digestStore } from '../digest/store';
 import type { SqlDatabase, SqlValue } from './sql';
 import { nanoid } from 'nanoid';
@@ -14,7 +19,7 @@ import type {
   RunInput,
   Submission,
 } from '../types/storage';
-import { EXPLAIN_RECIPE_ID } from '../models/configuration';
+import { EXPLAIN_RECIPE_ID } from '../configuration/definition';
 import { inspectionInput } from '../reading/inspection';
 import type { SelectionSnapshot } from '../types';
 
@@ -290,6 +295,12 @@ export class SaulDatabase {
   }
   private executeReady(message: DbRequest, operationId: string): unknown {
     switch (message.type) {
+      case 'DB_ANNOTATION_IMAGE':
+        return annotationImage(this.db, this.owner, message.payload);
+      case 'DB_ANNOTATION':
+        return annotationStore(this.db, this.owner, message.payload);
+      case 'DB_ANNOTATION_ATTEMPT':
+        return annotationAttempts(this.db, this.owner, message.payload);
       case 'DB_READING_RESOLVE': {
         const { snapshot, submissionId, recipeId } = message.payload;
         const submitted = this.submittedSelection(submissionId, snapshot.page.url);
@@ -315,6 +326,8 @@ export class SaulDatabase {
       case 'DB_DIGEST_ACTION_REVISIONS':
       case 'DB_DIGEST_CREATE':
       case 'DB_DIGEST_GET':
+      case 'DB_DIGEST_RETRY':
+      case 'DB_DIGEST_INTERRUPT':
       case 'DB_DIGEST_LIST':
       case 'DB_DIGEST_ITEM':
       case 'DB_DIGEST_SOURCE':
@@ -407,17 +420,23 @@ export class SaulDatabase {
               throw new Error('The generated image has not finished saving.');
           }
           this.write(
-            `UPDATE llm_run SET response_raw=?,status=?,error_message=?,reason=?,latency_ms=? WHERE id=? AND status IN (${p.status === 'completed' ? "'saving'" : "'queued','running','saving'"})`,
-            [p.raw, p.status, p.error || null, p.reason || null, p.latencyMs, p.runId],
+            `UPDATE llm_run SET response_raw=COALESCE(?,response_raw),status=?,error_message=?,reason=?,latency_ms=? WHERE id=? AND status IN (${p.status === 'completed' ? "'saving'" : "'queued','running','saving'"})`,
+            [p.raw ?? null, p.status, p.error || null, p.reason || null, p.latencyMs, p.runId],
           );
           changed = this.db.changes() === 1;
           if (changed && p.status !== 'completed')
             this.write('UPDATE llm_run SET response_structured=NULL WHERE id=?', [p.runId]);
-          if (changed)
+          if (changed) {
+            const raw =
+              p.raw ??
+              String(
+                this.db.selectValue('SELECT response_raw FROM llm_run WHERE id=?', [p.runId]) ?? '',
+              );
             this.write(
               'INSERT OR REPLACE INTO explanation_fts(rowid,body) SELECT rowid,? FROM llm_run WHERE id=?',
-              [searchableResponse(p.raw), p.runId],
+              [searchableResponse(raw), p.runId],
             );
+          }
         });
         return changed;
       }

@@ -54,7 +54,6 @@ export interface ReadingOperations {
     };
     result: { passageId: string; reused: boolean };
   };
-  'save-image': { request: { action: 'save-image'; selectionId: string }; result: EmptyResult };
   stop: { request: { action: 'stop'; selectionId: string }; result: EmptyResult };
   runs: {
     request: { action: 'runs'; selectionId: string };
@@ -162,7 +161,6 @@ export function validateReading(v: unknown): asserts v is ReadingRequest {
     case 'image':
       valid = id(v.selectionId) && id(v.runId);
       break;
-    case 'save-image':
     case 'stop':
     case 'runs':
       valid = id(v.selectionId);

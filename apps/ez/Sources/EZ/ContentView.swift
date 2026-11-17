@@ -3,9 +3,7 @@ import SwiftUI
 
 struct ContentView: View {
     @ObservedObject var model: AppModel
-    @Environment(\.openWindow) private var openWindow
     @State private var lookupToDelete: HistoryEntry?
-    @State private var showsComposer = false
     var body: some View {
         // Keep the system sidebar toolbar's own icon-only style outside the columns.
         NavigationSplitView {
@@ -18,7 +16,11 @@ struct ContentView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
                         if let entry = model.selectedEntry {
-                            answer(entry)
+                            if model.usesSketch && model.showsMainComposer {
+                                composer
+                            } else {
+                                answer(entry)
+                            }
                         } else {
                             welcome
                             composer
@@ -36,26 +38,27 @@ struct ContentView: View {
                 if let error = model.error {
                     banner(error, symbol: "exclamationmark.circle", color: .red) { model.error = nil }
                 }
-                if model.selectedEntry != nil && showsComposer {
+                if model.selectedEntry != nil && model.showsMainComposer && !model.usesSketch {
                     composer.padding(20)
-                } else if model.selectedEntry != nil {
-                    HStack {
-                        if !model.minimumMode {
-                            Text("New run starts fresh.").foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        if model.busy {
+                } else if model.selectedEntry != nil && !model.showsMainComposer {
+                    if model.busy {
+                        HStack {
+                            Spacer()
                             Button {
                                 model.stop()
                             } label: {
                                 ControlLabel(symbol: .stop, iconOnly: model.minimumMode)
                             }.help("Stop generating").accessibilityLabel("Stop generating")
-                        } else {
-                            Button(
-                                model.minimumMode ? "Edit" : "Edit draft", systemImage: "square.and.pencil"
-                            ) { showsComposer = true }.help("Edit draft").accessibilityLabel("Edit draft")
-                        }
-                    }.font(AppStyle.caption).padding(.horizontal, 24).padding(.vertical, 12)
+                        }.padding(.horizontal, 24).padding(.vertical, 12)
+                    } else if model.hasRetainedDraft && !model.launcherPending {
+                        Divider()
+                        HStack {
+                            Text("Retained draft").foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Edit") { model.showsMainComposer = true }
+                                .help("Edit retained draft").accessibilityLabel("Edit draft")
+                        }.font(AppStyle.caption).padding(.horizontal, 24).padding(.vertical, 10)
+                    }
                 }
                 if !model.minimumMode, let entry = model.selectedEntry {
                     Divider()
@@ -68,7 +71,6 @@ struct ContentView: View {
         }
         .tint(AppStyle.accent)
         .disclosureGroupStyle(FullRowDisclosureStyle())
-        .onChange(of: model.selection) { _, _ in showsComposer = false }
         .alert(
             "Delete lookup?",
             isPresented: Binding(
@@ -211,10 +213,10 @@ struct ContentView: View {
                     Text(entry.createdAt, style: .time).font(.caption).foregroundStyle(.secondary)
                 }
             }
-            UnsavedAttemptNotice(model: model, entry: entry)
             LookupAnswerText(
                 entry: entry, activity: model.selectedResponseActivity,
                 imageData: model.imageData(for: entry), imageLoading: model.imageLoading)
+            RetryAttemptNotice(model: model, entry: entry)
             if let parentID = entry.parentID, model.entries.contains(where: { $0.id == parentID }) {
                 Button("Previous answer") { model.selection = parentID }.buttonStyle(.borderless)
             }
@@ -224,58 +226,54 @@ struct ContentView: View {
                 Link(entry.sourceTitle?.isEmpty == false ? entry.sourceTitle! : source, destination: url)
                     .font(AppStyle.caption)
             }
-            FollowUpComposer(model: model, entry: entry).id(entry.id)
             if entry.status != "pending" {
-                HStack {
-                    if entry.capability == .draw {
-                        Button("Download") { model.downloadImage(entry) }
-                            .disabled(!entry.hasImage || model.imageLoading)
-                    } else {
-                        Button {
-                            model.copy(entry.citedResponse)
-                        } label: {
-                            ControlLabel(symbol: .copy)
-                        }.disabled(entry.response.isEmpty).help("Copy answer").accessibilityLabel(
-                            "Copy answer")
-                    }
-                    if !model.minimumMode && entry.sourceID == nil {
-                        Button("Reuse", systemImage: ControlSymbol.reuse.systemImage) { model.reuse(entry) }
-                            .disabled(model.busy || model.launcherPending)
-                    }
-                    Menu {
-                        if model.minimumMode && entry.sourceID == nil {
-                            Button("Reuse") { model.reuse(entry) }.disabled(
-                                model.busy || model.launcherPending
-                            )
-                            .help("Restore this saved request as a draft").accessibilityLabel("Reuse")
-                        }
-                        if entry.capability == .write {
-                            Button("Export…", systemImage: "square.and.arrow.up") { model.export(entry) }
-                        }
-                        deleteButton(entry)
-                    } label: {
-                        ControlLabel(symbol: .more, iconOnly: model.minimumMode)
-                    }.menuStyle(.borderlessButton).fixedSize().help("More").accessibilityLabel("More")
-                    Spacer()
-                    if entry.status != "completed" && entry.status != "unsaved" {
-                        Text(entry.status.capitalized).font(.caption).foregroundStyle(.orange)
-                    }
-                }.buttonStyle(.borderless).font(.caption)
+                if entry.status != "completed" {
+                    Text(entry.status.capitalized).font(.caption).foregroundStyle(.orange)
+                }
                 if let error = entry.error {
                     Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
                 }
-            }
-            if !model.minimumMode {
-                InputOutputInspector(entry: entry, minimum: model.minimumMode).id(entry.id)
+                answerActions(entry)
             }
             DisclosureGroup("Details") {
                 LookupDetails(entry: entry).padding(.top, 8)
-                if model.minimumMode {
-                    InputOutputInspector(entry: entry, minimum: model.minimumMode).id(entry.id)
-                }
-            }.font(AppStyle.caption).disclosureGroupStyle(FullRowDisclosureStyle())
+                InputOutputInspector(entry: entry, minimum: model.minimumMode)
+            }.font(AppStyle.caption).id(entry.id)
+            FollowUpComposer(model: model, entry: entry).id(entry.id)
         }
     }
+
+    @ViewBuilder private func answerActions(_ entry: HistoryEntry) -> some View {
+        let allowsDownload = entry.capability == .draw && model.imageData(for: entry) != nil
+        let allowsCopy = entry.capability == .write && !entry.response.isEmpty
+        let allowsReuse = model.canReuse(entry)
+        if allowsDownload || allowsCopy || allowsReuse || entry.capability == .write || model.canDeleteLookup
+        {
+            HStack(spacing: 12) {
+                if allowsDownload {
+                    Button("Download") { model.downloadImage(entry) }
+                }
+                if allowsCopy {
+                    Button {
+                        model.copy(entry.citedResponse)
+                    } label: {
+                        ControlLabel(symbol: .copy)
+                    }.help("Copy answer").accessibilityLabel("Copy answer")
+                }
+                if allowsReuse {
+                    Button("Reuse") { model.reuse(entry) }
+                        .help("Restore this saved request as an editable draft")
+                }
+                if entry.capability == .write {
+                    Button("Export…") { model.export(entry) }.help("Export this lookup as Markdown")
+                }
+                Spacer(minLength: 4)
+                if model.canDeleteLookup { deleteButton(entry).foregroundStyle(DesignTokens.danger) }
+            }
+            .buttonStyle(.borderless).font(AppStyle.caption)
+        }
+    }
+
     private func deleteButton(_ entry: HistoryEntry) -> some View {
         Button(role: .destructive) {
             lookupToDelete = entry
@@ -285,27 +283,22 @@ struct ContentView: View {
     }
     private var composer: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                if model.currentAction == nil {
-                    Text("No actions yet").font(.headline)
-                } else {
-                    ActionPicker(model: model)
-                }
-                if model.selectedEntry != nil {
-                    Button {
-                        showsComposer = false
-                    } label: {
-                        Image(systemName: "chevron.down")
-                    }
-                    .buttonStyle(.borderless).help("Hide draft").accessibilityLabel("Hide draft")
+            if model.selectedEntry != nil {
+                HStack {
+                    Text("Draft").font(AppStyle.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Hide") { model.showsMainComposer = false }
+                        .buttonStyle(.borderless).help("Hide draft").accessibilityLabel("Hide draft")
                 }
             }
+            LookupChoices(model: model)
             ActionInputs(model: model)
             if model.currentAction != nil {
                 Divider()
                 HStack(spacing: 8) {
-                    RequestControls(model: model)
+                    LookupBillingLabel(model: model)
                     Spacer(minLength: 2)
+                    NextLookupDetailsButton(model: model)
                     if model.busy {
                         Button {
                             model.stop()
@@ -325,12 +318,6 @@ struct ContentView: View {
                         .help("Run · \(model.shortcuts.binding(for: .send).display)")
                     }
                 }.controlSize(.small).disabled(model.needsPlan && model.connecting)
-                if model.currentConnection?.kind == .openAIAPI {
-                    Text(
-                        model.currentAction?.webSearch == true
-                            ? "OpenAI API · search charges apply" : "OpenAI API · billed separately"
-                    ).font(AppStyle.caption).foregroundStyle(.secondary)
-                }
                 if !composerHint.isEmpty {
                     Text(composerHint).font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)

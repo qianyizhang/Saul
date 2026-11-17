@@ -20,8 +20,7 @@ test('compact workspace supports reading, tab controls and reachable settings', 
   await article.emulateMedia({ colorScheme: 'light' });
   await expect(article.locator('saul-root')).toBeAttached();
   await article.locator('#concept').click({ clickCount: 3 });
-  await article.getByRole('button', { name: 'Explain', exact: true }).click();
-  await article.getByRole('button', { name: 'View', exact: true }).click();
+  await article.getByRole('button', { name: 'Explain & open', exact: true }).click();
   await expect(
     article.getByRole('region', { name: 'Saul explanation' }).getByRole('status'),
   ).toHaveText('Saved');
@@ -143,8 +142,7 @@ test('shared appearance supports concept notes, page lists, errors and reduced-m
     await article.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
     await article.goto(server.origin + '/article');
     await article.locator('#concept').click({ clickCount: 3 });
-    await article.getByRole('button', { name: 'Explain', exact: true }).click();
-    await article.getByRole('button', { name: 'View', exact: true }).click();
+    await article.getByRole('button', { name: 'Explain & open', exact: true }).click();
     await expect(article.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
     await expect(article.locator('.animate-pulse').first()).toBeAttached();
     expect(
@@ -188,7 +186,7 @@ test('shared appearance supports concept notes, page lists, errors and reduced-m
     await article.getByRole('button', { name: 'Page explanations', exact: true }).click();
     server.setEnding('eof');
     await article.locator('#second').click({ clickCount: 3 });
-    await article.getByRole('button', { name: 'Explain', exact: true }).click();
+    await article.getByRole('button', { name: 'Explain & open', exact: true }).click();
     await expect.poll(() => server.pendingCount()).toBe(1);
     server.releaseAll();
     await article.getByRole('button', { name: 'Page explanations', exact: true }).click();
@@ -205,7 +203,7 @@ test('shared appearance supports concept notes, page lists, errors and reduced-m
     // A missing remote key rejects at submission, before any network request.
     await configureFixtureProvider(popup, 'https://api.openai.com');
     await article.locator('#third').click({ clickCount: 3 });
-    await article.getByRole('button', { name: 'Explain', exact: true }).click();
+    await article.getByRole('button', { name: 'Explain & open', exact: true }).click();
     await expect(article.getByRole('alert')).toContainText('API key is missing');
     if (reviewScreenshots)
       await article.screenshot({ path: info.outputPath('12-error-notification-dark.png') });
@@ -235,8 +233,7 @@ test('answer metadata stays aligned and readable in cards and history at compact
   const article = await context.newPage();
   await article.goto(fixtureServer.origin + '/article');
   await article.locator('#concept').click({ clickCount: 3 });
-  await article.getByRole('button', { name: 'Explain', exact: true }).click();
-  await article.getByRole('button', { name: 'View', exact: true }).click();
+  await article.getByRole('button', { name: 'Explain & open', exact: true }).click();
   await expect(
     article.getByRole('region', { name: 'Saul explanation' }).getByRole('status'),
   ).toHaveText('Saved');

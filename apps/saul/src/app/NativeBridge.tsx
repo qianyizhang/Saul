@@ -1,3 +1,4 @@
+import { ANNOTATION_ACCESS_KEY } from '../annotations/routing';
 import { ControlIcon } from '../surface/ControlIcon';
 import { ActionLabel } from '../surface/ActionLabel';
 import { PAGE_ACCESS_KEY } from '../native/pages';
@@ -10,6 +11,12 @@ import {
 } from '../native/bridge';
 
 export function NativeBridge() {
+  const [annotationAccess, setAnnotationAccess] = useState(false);
+  useEffect(() => {
+    void chrome.storage.local
+      .get(ANNOTATION_ACCESS_KEY)
+      .then((v) => setAnnotationAccess(v[ANNOTATION_ACCESS_KEY] === true));
+  }, []);
   const [pageEnabled, setPageEnabled] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [status, setStatus] = useState<NativeBridgeStatus>({ state: 'disabled' });
@@ -46,6 +53,24 @@ export function NativeBridge() {
   const install = `node scripts/setup.mts --components tabs --extension-id ${chrome.runtime.id}`;
   return (
     <section className="panel stack">
+      <label className="toggle">
+        <strong>Annotation access</strong>
+        <input
+          type="checkbox"
+          checked={annotationAccess}
+          onChange={(e) => {
+            const next = e.target.checked;
+            void chrome.storage.local.set({ [ANNOTATION_ACCESS_KEY]: next }).then(
+              () => setAnnotationAccess(next),
+              (e) => setError(String(e)),
+            );
+          }}
+        />
+      </label>
+      <p className="small">
+        Allow connected local agents to read and edit annotations within assigned pages or IDs. This
+        includes saved screenshots when requested.
+      </p>
       <label
         className="toggle"
         title="Allow local tools to read tab titles and URLs and organize tabs."

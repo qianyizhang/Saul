@@ -1,7 +1,7 @@
 import { ActionLabel } from '../surface/ActionLabel';
-import type { ReadingConfiguration, Recipe } from '../types';
-import type { SettingsEdit } from '../models/settings-draft';
-import { parseTemplate, TEMPLATE_FIELDS } from '../models/configuration';
+import type { ReadingConfiguration, Recipe } from '../configuration/definition';
+import type { SettingsEdit } from '../settings/draft';
+import { parseTemplate, TEMPLATE_FIELDS } from '../configuration/definition';
 
 export function RecipeSettings({
   configuration,

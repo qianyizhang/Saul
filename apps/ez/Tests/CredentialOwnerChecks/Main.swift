@@ -99,6 +99,21 @@ private func denied(_ operation: () throws -> Void) throws {
             "Status exposed refresh token")
         try expect(
             !String(decoding: summary, as: UTF8.self).contains("fixture-new-key"), "Status exposed API key")
+        let image = "data:image/jpeg;base64,YQ=="
+        let content =
+            CredentialOwner.planContent([
+                "userPrompt": "Evidence", "images": [image],
+                "attachments": [["url": "https://example.test/paper.pdf"]],
+            ]) as? [[String: String]]
+        try expect(
+            content == [
+                ["type": "input_text", "text": "Evidence"],
+                ["type": "input_image", "image_url": image, "detail": "auto"],
+                ["type": "input_file", "file_url": "https://example.test/paper.pdf"],
+            ], "Image input silently removed the PDF attachment")
+        try expect(
+            CredentialOwner.planContent(["userPrompt": "Text"]) as? String == "Text",
+            "Text-only input changed")
         // Changed legacy input remains available for a deliberate clean-slate decision.
         let changedRoot = root.appendingPathComponent("changed")
         try FileManager.default.createDirectory(

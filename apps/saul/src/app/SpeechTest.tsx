@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { requestSpeech } from '../speech/client';
-import type { ModelPreset } from '../types';
+import type { ModelPreset } from '../configuration/definition';
 
 export function SpeechTest({
   preset,

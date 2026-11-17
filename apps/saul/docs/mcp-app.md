@@ -35,6 +35,10 @@ On 2026-10-13, Codex desktop 26.1007.30912 (20156) displayed Saul in its menu wh
 
 If Saul still fails after restart, inspect fresh desktop logs for the resource read and tool result separately. A completed tool transport can still contain an `isError` result. Do not infer successful UI delivery merely from tool discovery or “App tool call finished.” Keep browser titles, URLs, tokens and account identifiers out of diagnostic reports.
 
+Keep a compact review bar with the duplicate count. Normal rows do not show
+position numbers; show them for reviewed changes. Window cards fold and reorder
+locally; keep success to one line. Route connection management to Settings.
+
 ## Codex proposal scope
 
 - Every unpinned, ungrouped tab must appear exactly once in the proposal, with an explicit order and destination.
@@ -55,9 +59,18 @@ Preview validation reads one fresh inventory; it does not repeat that read to as
 
 The server consumes approval before the first mutation. It validates the starting layout and checks the expected state before and after every move, duplicate closure and label update. Chrome does not offer an atomic multi-window transaction: user actions can race a move, and a failed call may already have changed Chrome. On failure, the UI reports completed moves and refreshes the inventory if possible. It never retries or rolls back automatically. Make a new proposal from the current state.
 
-The board refreshes every ten seconds while visible, pausing during a drag, an open context menu, or proposal/group input. Manual refresh revalidates the preview. Refresh and rendering are read-only. Applying a Codex proposal requires the review button; sending a request to Codex does not authorize application. Reviewed window labels are kept in extension session storage; tab inventories, URLs, plans and tokens remain in memory. The MCP host can retain tool results in conversation history.
+The board refreshes every ten seconds while visible, pausing during a drag, an open context menu, or proposal/group input. Manual refresh revalidates the preview. Refresh and rendering are read-only. Applying a Codex proposal requires the review button; sending a request to Codex does not authorize application. Tab inventories, URLs, plans and tokens remain in memory. The MCP host can retain tool results in conversation history.
 
 ## Implementation and verification
+
+Window and Tab board use [direct interaction](../src/native/interaction.ts) for
+manual mutations and Undo under the extension's mutation lock; Undo validates
+only affected windows. [Window labels](../src/native/window-labels.ts) live in
+trusted session storage. On macOS Chrome the [name adapter](../native/window-names.mts)
+targets the connected PID, reads AppleScript `givenName`, validates the affected
+IDs and expected name, then reads back a rename. Legacy helper-only labels are
+imported on reviewed Apply. `saul_workspace_*` names remain wire identifiers,
+not names for the extension workspace or history operations.
 
 | File                                           | Responsibility                                                    |
 | ---------------------------------------------- | ----------------------------------------------------------------- |
@@ -69,41 +82,21 @@ The board refreshes every ten seconds while visible, pausing during a drag, an o
 | [Board resource](../native/board-resource.mts) | Process-frozen HTML and content-derived resource identity         |
 | [Native installer](../native/install.mts)      | Stages and activates a complete immutable helper generation       |
 
-`pnpm build:native` bundles the pinned official MCP Apps SDK locally; `pnpm mcp`
-builds the complete runtime before starting the emitted server. The delivered
-HTML contains all scripts and styles; it needs no CDN, package resolution or network
-connection. Its resource URI includes the document hash, and a server process
-freezes that document on startup. Only `saul_workspace_show` requests a rendered
-board. Proposal results update the existing board through the host's tool-result
-notification.
+The native build bundles the pinned MCP Apps SDK in self-contained HTML.
+Each server freezes its hash-addressed resource at startup. Only
+`saul_workspace_show` opens the board; proposal tools update it by notification.
+The adapter registers notifications before initialization, gates actions by
+host capability and stops polls/local requests on teardown. It keeps visible
+drafts and reports uncertain delivery without resend. The SDK owns request IDs.
 
-The verifier reads the resource URI advertised by the installed server. It does
-not import or compare checkout HTML, so checking an older retained generation
-does not require rebuilding the current board. Group creation uses local button
-and keyboard handlers and works when the host forbids HTML form submissions.
+`pnpm verify:connection` reads the installed catalog, advertised HTML and live
+inventory, without comparing against checkout HTML. The SDK test host loads the
+delivered HTML under CSP in an opaque frame, exercises app tools, timeout,
+teardown and real tab changes. Group creation uses buttons/keyboard without
+HTML form submission. Denied local storage yields a visible preference error.
+This does not prove rendering in the active desktop panel.
 
-The host adapter registers notifications before initialization and checks host
-capabilities before exposing actions. Teardown stops polling, aborts pending local
-requests and disables actions while retaining the visible draft. Timeouts and
-connection loss report an uncertain outcome; they never resend an action. The SDK
-owns request IDs and separates host requests from replies to app requests.
-
-`pnpm verify:connection` checks the installed tool catalog, HTML resource and live
-tab inventory. Unit tests use the independent SDK AppBridge with overlapping
-request IDs, rejected initialization, missing capabilities, tool errors, timeouts
-and teardown. The disposable-browser host renders the exact HTML returned by the
-MCP server in an opaque sandboxed frame under CSP. It exercises drag-and-drop,
-keyboard moves, filtering, pins/groups, stale previews and messages, and applies a
-plan against real Chromium tabs. Hosts that deny local storage show a useful
-preference-save error. These checks do not establish rendering in an installed
-Codex desktop connection; that acceptance remains a separate installed-host check.
-
-Validation timing on 2026-10-19: three isolated dry-run samples per version against
-175 live tabs in eight windows, with native names available in every sample.
-Commit `6e43593` took 2543/2545/2530 ms; the optimized path took 576/570/583 ms
-(77% lower median). The same single-tab move reported 29 index changes before and
-one required move after. These measurements exclude Codex UI transport time and
-never applied a layout or replaced the live app's draft.
+See [dated timing evidence](testing.md#tab-board-timing--2026-10-19).
 
 References: [OpenAI MCP App UI](https://developers.openai.com/plugins/build/chatgpt-ui), [conversation panels](https://developers.openai.com/plugins/build/extensions), [MCP Apps standard](https://modelcontextprotocol.io/extensions/apps/overview).
 

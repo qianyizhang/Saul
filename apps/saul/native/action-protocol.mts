@@ -1,3 +1,4 @@
+import { operationSchema, type AnnotationOperation } from '../src/annotations/contract.ts';
 import { isRecord } from './value.mts';
 
 export const ACTION_HOST = 'com.saul.actions';
@@ -25,6 +26,7 @@ export interface ActionSource {
   coverage: string;
   text?: string;
   pdfUrl?: string;
+  annotations?: { id: string; comment: string; evidence: string }[];
 }
 export interface ActionGenerate {
   instructions: string;
@@ -40,7 +42,9 @@ export type ActionHostEvent =
   | { type: 'result'; revision?: ActionRevision; text?: string }
   | { type: 'error'; message: string }
   | { type: 'progress'; text: string }
-  | { type: 'generate'; callId: number; request: ActionGenerate };
+  | { type: 'generate'; callId: number; request: ActionGenerate }
+  | { type: 'annotation'; callId: number; operation: AnnotationOperation };
+export const validateAnnotationOperation = (value: unknown) => operationSchema.parse(value);
 
 export function validRevision(v: unknown): v is string {
   return typeof v === 'string' && /^[a-f0-9]{64}$/.test(v);
@@ -104,6 +108,17 @@ export function validateActionHostRequest(v: unknown): asserts v is ActionHostRe
       !['title', 'url', 'coverage'].every(
         (key) => typeof (v.source as Record<string, unknown>)[key] === 'string',
       ) ||
+      (v.source.annotations !== undefined &&
+        (!Array.isArray(v.source.annotations) ||
+          v.source.annotations.length > 20 ||
+          v.source.annotations.some(
+            (a: unknown) =>
+              !isRecord(a) ||
+              typeof a.id !== 'string' ||
+              typeof a.comment !== 'string' ||
+              typeof a.evidence !== 'string' ||
+              a.evidence.length > 120000,
+          ))) ||
       (v.source.text !== undefined &&
         (typeof v.source.text !== 'string' || v.source.text.length > 150_000)) ||
       (v.source.pdfUrl !== undefined && typeof v.source.pdfUrl !== 'string'))

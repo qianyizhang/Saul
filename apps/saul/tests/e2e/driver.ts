@@ -1,3 +1,4 @@
+import { DEFAULT_CONFIGURATION } from '../../src/configuration/definition.ts';
 import { expect, type Page } from '@playwright/test';
 import type { DbOperations, DbRequest, DbType, HistoryItem, Reply } from '../../src/types/storage';
 import type { WorkspaceRequest, WorkspaceResultFor } from '../../src/native/workspace';
@@ -43,20 +44,39 @@ export async function sendWorkspace<T extends WorkspaceRequest>(
 }
 
 export async function configureFixtureProvider(page: Page, origin: string): Promise<void> {
-  await page.evaluate(async (origin) => {
-    await chrome.storage.local.set({
-      saul_user_settings: {
-        activeProvider: 'openai-compatible',
-        openaiCompatible: { baseUrl: origin + '/v1', apiKey: '', model: 'test-model' },
-      },
-    });
-  }, origin);
+  const settings = structuredClone(DEFAULT_CONFIGURATION);
+  settings.openaiCompatible = {
+    baseUrl: origin + '/v1',
+    apiKey: '',
+    model: 'test-model',
+    temperature: 0.3,
+  };
+  settings.activeProfileId = 'default';
+  settings.profiles = [
+    { id: 'default', name: 'Default', config: { ...settings.openaiCompatible } },
+  ];
+  settings.configuration!.presets[0] = {
+    ...settings.configuration!.presets[0]!,
+    model: 'test-model',
+    profileId: 'default',
+  };
+  await page.evaluate(async (settings) => {
+    await chrome.storage.local.set({ saul_user_settings: settings });
+  }, settings);
 }
 
 export async function explainSelection(page: Page, selector = '#concept'): Promise<void> {
   await expect(page.locator('saul-root')).toBeAttached();
   await page.locator(selector).click({ clickCount: 3 });
-  await page.getByRole('button', { name: 'Explain', exact: true }).click();
+  await page.getByRole('button', { name: 'Explain & open', exact: true }).click();
+}
+
+/** The keyboard entry deliberately leaves the page open without an answer card. */
+export async function queueSelection(page: Page, selector = '#concept'): Promise<void> {
+  await expect(page.locator('saul-root')).toBeAttached();
+  await page.locator(selector).click({ clickCount: 3 });
+  await expect(page.getByRole('button', { name: 'Explain & open', exact: true })).toBeVisible();
+  await page.keyboard.press('Alt+Shift+KeyE');
 }
 
 export async function openFirstPageExplanation(page: Page): Promise<void> {

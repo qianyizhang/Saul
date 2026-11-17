@@ -1,3 +1,4 @@
+import { validVisionImages } from './vision.mts';
 import { validateHistoryRequest, type HistoryRequest } from './history-protocol.mts';
 import { isRecord } from './value.mts';
 import {
@@ -83,6 +84,7 @@ export type PlanRequest =
       systemPrompt: string;
       userPrompt: string;
       attachments?: PdfUrlAttachment[];
+      images?: string[];
     };
 export type PlanControlRequest = Exclude<PlanRequest, { action: 'generate' }>;
 export interface PlanResults {
@@ -128,7 +130,16 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
     login: ['accountId', 'consent'],
     logout: ['accountId'],
     models: ['accountId'],
-    generate: ['accountId', 'model', 'effort', 'fast', 'systemPrompt', 'userPrompt', 'attachments'],
+    generate: [
+      'accountId',
+      'model',
+      'effort',
+      'fast',
+      'systemPrompt',
+      'userPrompt',
+      'attachments',
+      'images',
+    ],
   };
   const keys = typeof v.action === 'string' ? operations[v.action] : undefined;
   if (!Array.isArray(keys) || Object.keys(v).some((k) => k !== 'action' && !keys.includes(k)))
@@ -184,6 +195,7 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
       typeof v.systemPrompt !== 'string' ||
       v.systemPrompt.length > 100000 ||
       !text(v.userPrompt, 200000) ||
+      (v.images !== undefined && !validVisionImages(v.images)) ||
       (v.attachments !== undefined &&
         (!Array.isArray(v.attachments) ||
           v.attachments.length !== 1 ||

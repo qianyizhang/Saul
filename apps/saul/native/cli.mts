@@ -7,7 +7,7 @@ const [command, json, ...extra] = process.argv.slice(2);
 if (!command || ['help', '--help', '-h'].includes(command)) {
   const commands = [...Object.keys(CLI_COMMANDS), 'tools'].join(', ');
   console.log(
-    `Saul tab bridge\n\nUsage: saul <command> '[JSON arguments]'\n\nCommands: ${commands}\n\nExamples:\n  saul list\n  saul sort '{"windowId":123,"by":"domain"}'\n  saul group '{"tabIds":[12,34],"title":"Research","dryRun":false}'\n\nMutations preview by default. Set dryRun:false to apply. Use tools for schemas.`,
+    `Saul tab bridge\n\nUsage: saul <command> '[JSON arguments]'\n\nCommands: ${commands}\n\nExamples:\n  saul list\n  saul sort '{"windowId":123,"by":"domain"}'\n  saul group '{"tabIds":[12,34],"title":"Research","dryRun":false}'\n\nTab and page mutations preview by default. Set dryRun:false to apply. Annotation changes apply immediately within explicit scope, with revision and operationId checks. Use tools for schemas.`,
   );
 } else {
   try {

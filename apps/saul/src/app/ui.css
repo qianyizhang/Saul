@@ -326,6 +326,59 @@ a:hover {
   max-width: 680px;
   margin: auto;
 }
+.settings-recovery {
+  min-width: 0;
+  max-width: 760px;
+}
+.recovery-change {
+  min-inline-size: 0;
+  border: 0;
+  border-block-start: 1px solid var(--border);
+  padding: 16px 0;
+}
+.recovery-change legend {
+  font-weight: 600;
+  padding-inline-end: 12px;
+}
+.recovery-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 12px;
+}
+.recovery-choice {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--design-radius-control);
+}
+.recovery-choice:has(input:checked) {
+  border-color: var(--accent);
+}
+.recovery-choice label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-block: 4px;
+  cursor: pointer;
+}
+.recovery-choice input[type='radio'] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.recovery-value {
+  margin: 8px 0;
+  max-height: 14rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+.recovery-value:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
 @media (max-width: 600px) {
   .shell {
     padding: 18px;

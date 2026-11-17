@@ -3,10 +3,10 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SharedPresetsStore } from '../native/shared-presets.mts';
-import { portableSettings, restoreSettings } from '../src/storage/scoped-config';
-import { validateActionState } from '../src/actions/contract';
+import { portableSettings, restoreSettings } from '../src/configuration/scoped';
+import { validateCallEditorState } from '../src/calls/contract';
 import { actionHash } from '../native/action-store.mts';
-import { DEFAULT_SETTINGS } from '../src/storage/settings';
+import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 
 it('saves scoped settings without overwriting siblings and rejects stale or malformed sections', () => {
   const directory = mkdtempSync(join(tmpdir(), 'saul-config-'));
@@ -25,7 +25,7 @@ it('saves scoped settings without overwriting siblings and rejects stale or malf
   }
 });
 it('round trips preferences and recipes without account or key material, clearing keys on endpoint edits', () => {
-  const local = structuredClone(DEFAULT_SETTINGS);
+  const local = structuredClone(DEFAULT_CONFIGURATION);
   local.openaiCompatible.apiKey = 'PRIVATE';
   local.chatgptPlan = { accountId: 'LOCAL-ACCOUNT', model: 'fixture' };
   local.sharedPresetRevision = 1;
@@ -52,7 +52,7 @@ for (const name of [
       writeFileSync(path, original);
       const store = new SharedPresetsStore(path);
       const library = store.read();
-      const local = structuredClone(DEFAULT_SETTINGS);
+      const local = structuredClone(DEFAULT_CONFIGURATION);
       local.sharedPresetRevision = library.revision;
       local.configuration!.presets = library.presets.map((p) => ({
         ...p,
@@ -65,7 +65,7 @@ for (const name of [
         true,
       );
       const calls: unknown = store.readScope('calls').value;
-      validateActionState(calls);
+      validateCallEditorState(calls);
       for (const choice of calls.library || []) {
         expect(choice.revision.approved).not.toBe(true);
         expect(actionHash(choice.revision)).toBe(choice.revision.revision);

@@ -3,13 +3,10 @@ import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SharedPresetsStore } from '../native/shared-presets.mts';
-import { sharedPresets } from '../src/storage/shared-presets';
+import { sharedPresets } from '../src/configuration/shared';
 import { validatePlanResult } from '../native/plan-protocol.mts';
-import {
-  createSettingsOwner,
-  DEFAULT_SETTINGS,
-  SETTINGS_STORAGE_KEY,
-} from '../src/storage/settings';
+import { createConfigurationStore, SETTINGS_STORAGE_KEY } from '../src/configuration/store';
+import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 
 it('rejects incomplete old helper replies instead of synthesizing connections', () => {
   const request = { action: 'presets-read' } as const;
@@ -80,7 +77,7 @@ it('shares edits, migrates once, keeps accounts outside presets, and refuses a s
         }),
       },
     });
-    const source = structuredClone(DEFAULT_SETTINGS);
+    const source = structuredClone(DEFAULT_CONFIGURATION);
     source.configuration!.presets[0] = {
       id: 'preset-current',
       name: 'Current',
@@ -97,8 +94,9 @@ it('shares edits, migrates once, keeps accounts outside presets, and refuses a s
       fast: true,
     };
     let stored = source;
-    const owner = createSettingsOwner(
+    const owner = createConfigurationStore(
       {
+        readBackup: async () => undefined,
         read: async () => structuredClone(stored),
         write: async (values) => {
           stored = structuredClone(values[SETTINGS_STORAGE_KEY]) as typeof source;
@@ -185,9 +183,12 @@ it('shares edits, migrates once, keeps accounts outside presets, and refuses a s
         }),
       },
     });
-    const localOnly = await sharedPresets.load({ ...DEFAULT_SETTINGS, sharedPresetRevision: 7 });
+    const localOnly = await sharedPresets.load({
+      ...DEFAULT_CONFIGURATION,
+      sharedPresetRevision: 7,
+    });
     expect(localOnly.sharedPresetRevision).toBeUndefined();
-    await expect(sharedPresets.save(localOnly)).resolves.toEqual(DEFAULT_SETTINGS);
+    await expect(sharedPresets.save(localOnly)).resolves.toEqual(DEFAULT_CONFIGURATION);
   } finally {
     vi.unstubAllGlobals();
     rmSync(directory, { recursive: true, force: true });
@@ -281,7 +282,7 @@ it('uses the shared provider fixture, preserves definitions on preset-only saves
 
 it('rejects malformed image options without coercion in shared and app-scoped presets', async () => {
   const { validateSharedPresets } = await import('../native/shared-presets-contract.mts');
-  const { normalizeConfiguration } = await import('../src/models/configuration');
+  const { normalizeConfiguration } = await import('../src/configuration/definition');
   const fixture = JSON.parse(
     readFileSync(
       new URL('../../../contracts/fixtures/image-options.json', import.meta.url),
@@ -302,7 +303,7 @@ it('rejects malformed image options without coercion in shared and app-scoped pr
   }
   for (const imageOptions of fixture.invalid) {
     expect(() => validateSharedPresets([{ ...preset, imageOptions }])).toThrow();
-    const source = structuredClone(DEFAULT_SETTINGS);
+    const source = structuredClone(DEFAULT_CONFIGURATION);
     source.configuration!.presets[0] = { ...source.configuration!.presets[0]!, imageOptions };
     expect(() => normalizeConfiguration(source.configuration, source)).toThrow(
       'image preset options',
@@ -312,7 +313,7 @@ it('rejects malformed image options without coercion in shared and app-scoped pr
 
 it('round trips Speak presets and rejects malformed speech options without changing saved bytes', async () => {
   const { validateSharedPresets } = await import('../native/shared-presets-contract.mts');
-  const { normalizeConfiguration } = await import('../src/models/configuration');
+  const { normalizeConfiguration } = await import('../src/configuration/definition');
   const fixture = JSON.parse(
     readFileSync(
       new URL('../../../contracts/fixtures/speech-options.json', import.meta.url),
@@ -342,7 +343,7 @@ it('round trips Speak presets and rejects malformed speech options without chang
       expect(() => validateSharedPresets([{ ...preset, speechOptions }])).toThrow();
       expect(() => store.save(store.read().revision, [{ ...preset, speechOptions }])).toThrow();
       expect(readFileSync(store.path, 'utf8')).toBe(bytes);
-      const source = structuredClone(DEFAULT_SETTINGS);
+      const source = structuredClone(DEFAULT_CONFIGURATION);
       source.configuration!.presets[0] = { ...source.configuration!.presets[0]!, speechOptions };
       expect(() => normalizeConfiguration(source.configuration, source)).toThrow(
         'speech preset options',

@@ -12,6 +12,9 @@ export type HistoryRequest =
 export type HistoryOperationPolicy = 'read' | 'repeatable-write' | 'explicit-write';
 // One exhaustive catalogue owns admission and reconnect eligibility. Sender permissions stay separate.
 export const HISTORY_OPERATIONS = {
+  DB_ANNOTATION: 'explicit-write',
+  DB_ANNOTATION_IMAGE: 'repeatable-write',
+  DB_ANNOTATION_ATTEMPT: 'explicit-write',
   DB_IMAGE: 'read',
   DB_IMAGE_CHUNK: 'repeatable-write',
   DB_READING_RESOLVE: 'repeatable-write',
@@ -37,6 +40,8 @@ export const HISTORY_OPERATIONS = {
   DB_DIGEST_ACTION_REVISIONS: 'read',
   DB_DIGEST_CREATE: 'repeatable-write',
   DB_DIGEST_GET: 'read',
+  DB_DIGEST_RETRY: 'repeatable-write',
+  DB_DIGEST_INTERRUPT: 'repeatable-write',
   DB_DIGEST_LIST: 'read',
   DB_DIGEST_ITEM: 'repeatable-write',
   DB_DIGEST_SOURCE: 'read',

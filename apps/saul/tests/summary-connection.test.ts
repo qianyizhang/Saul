@@ -1,9 +1,12 @@
-import { expect, it } from 'vitest';
-import type { UserSettings } from '../src/types';
+import { expect, it, vi } from 'vitest';
+import { createCallAdmission } from '../src/calls/admission';
+import type { Configuration } from '../src/configuration/definition';
 import { summaryConnections, validateSummaryConnection } from '../src/digest/connection';
-import { DEFAULT_SETTINGS, normalizeSettings } from '../src/storage/settings';
-import { portableSettings, restoreSettings } from '../src/storage/scoped-config';
+import { decodeConfiguration } from '../src/configuration/record';
+import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
+import { portableSettings, restoreSettings } from '../src/configuration/scoped';
 import { validateDigest } from '../src/digest/contracts';
+import type { DigestBatch } from '../src/digest/types';
 
 const accounts = ['bound', 'duplicate'].map((id) => ({
   id,
@@ -11,9 +14,9 @@ const accounts = ['bound', 'duplicate'].map((id) => ({
   signedIn: true,
   planEnabled: true,
 }));
-function managed(): UserSettings {
+function managed(): Configuration {
   return {
-    ...structuredClone(DEFAULT_SETTINGS),
+    ...structuredClone(DEFAULT_CONFIGURATION),
     sharedCredentials: 'saul' as const,
     chatgptPlan: { accountId: 'duplicate', model: 'other' },
     connections: [
@@ -69,14 +72,14 @@ it('preserves the summary connection through portable settings and validates mal
     'gpt-plan',
   );
   for (const value of [null, 42, '', 'UPPER', 'secret/endpoint'])
-    expect(() => normalizeSettings({ ...settings, summaryConnectionKey: value })).toThrow();
+    expect(() => decodeConfiguration({ ...settings, summaryConnectionKey: value })).toThrow();
 });
 it('rejects stale account bindings and credential route changes at new-run admission', () => {
   const settings = managed();
   expect(() => validateSummaryConnection(settings, 'bound', 'gpt-plan')).not.toThrow();
   expect(() => validateSummaryConnection(settings, 'duplicate', 'gpt-plan')).toThrow('changed');
   expect(() => validateSummaryConnection(settings, 'bound')).toThrow('changed');
-  expect(() => validateSummaryConnection(DEFAULT_SETTINGS, 'bound', 'gpt-plan')).toThrow(
+  expect(() => validateSummaryConnection(DEFAULT_CONFIGURATION, 'bound', 'gpt-plan')).toThrow(
     'route changed',
   );
   expect(() =>
@@ -106,12 +109,48 @@ it('rejects stale account bindings and credential route changes at new-run admis
   ).toThrow();
 });
 it('retains standalone local account selection and does not borrow another account when signed out', () => {
-  expect(summaryConnections(DEFAULT_SETTINGS, accounts).chosen).toBe('');
+  expect(summaryConnections(DEFAULT_CONFIGURATION, accounts).chosen).toBe('');
   const settings = {
-    ...structuredClone(DEFAULT_SETTINGS),
+    ...structuredClone(DEFAULT_CONFIGURATION),
     chatgptPlan: { accountId: 'bound', model: '' },
   };
   expect(summaryConnections(settings, accounts).chosen).toBe('bound');
   expect(summaryConnections(settings, accounts.slice(1)).chosen).toBe('');
   expect(() => validateSummaryConnection(settings, 'bound')).not.toThrow();
+});
+
+it('validates the saved binding when retrying the original Summary route', async () => {
+  const settings = { ...managed(), summaryConnectionKey: 'other' };
+  const saved: DigestBatch = {
+    id: 'saved-summary',
+    windowId: 1,
+    windowTitle: 'Saved window',
+    createdAt: 1,
+    accountId: 'bound',
+    credentialOwner: 'saul',
+    connectionKey: 'gpt-plan',
+    model: 'gpt-6-luna',
+    effort: 'medium',
+    prompt: 'Summarize',
+    items: [],
+  };
+  const readSettings = vi.fn(async () => ({ state: 'ready' as const, settings, revision: '1' }));
+  const admit = createCallAdmission({
+    readSettings,
+    readChoices: async () => {
+      throw new Error('Retry must not read the current Call selection.');
+    },
+    readBatch: async () => saved,
+  });
+  const retry = { action: 'retry' as const, id: saved.id };
+  await expect(admit(retry)).resolves.toMatchObject({ message: retry });
+  settings.connections = [];
+  await expect(admit(retry)).rejects.toThrow('connection changed');
+
+  // An original unkeyed run still carries its local account, checked at transport.
+  delete saved.connectionKey;
+  saved.credentialOwner = 'local';
+  readSettings.mockClear();
+  await expect(admit(retry)).resolves.toMatchObject({ message: retry });
+  expect(readSettings).not.toHaveBeenCalled();
 });

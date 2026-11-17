@@ -1,22 +1,124 @@
 import { expect, it, vi } from 'vitest';
-import {
-  createSettingsOwner,
-  DEFAULT_SETTINGS,
-  SETTINGS_STORAGE_KEY,
-} from '../src/storage/settings';
+import { createConfigurationStore, SETTINGS_STORAGE_KEY } from '../src/configuration/store';
+import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 import { validateSettingsRequest, type SettingsState } from '../src/contracts/settings';
-import { requestSettings, SettingsDeliveryError } from '../src/storage/settings-client';
+import { requestSettings, SettingsDeliveryError } from '../src/configuration/client';
+import { createSettingsDraft, editSettingsDraft, settingsForSave } from '../src/settings/draft';
+import { summaryConnections } from '../src/digest/connection';
+import { preparePreset } from '../src/configuration/resolve';
+
+it('saves an explicit preset repair while retaining a retired legacy default', async () => {
+  const retiredConfiguration = structuredClone(DEFAULT_CONFIGURATION);
+  retiredConfiguration.activeProvider = 'chrome-ai';
+  retiredConfiguration.configuration!.presets[0]!.provider = 'chrome-ai';
+  const f = fixture(retiredConfiguration);
+  const before = ready(await f.owner({ action: 'read' }));
+  const original = createSettingsDraft(before.settings);
+  const retired = original.values.configuration.presets[0]!;
+  expect(() => preparePreset(before.settings, retired)).toThrow('has been retired');
+  let draft = editSettingsDraft(original, {
+    type: 'preset-local-provider',
+    provider: 'openai-compatible',
+  });
+  draft = editSettingsDraft(draft, { type: 'preset', patch: { model: 'fixture-model' } });
+  draft = editSettingsDraft(draft, {
+    type: 'connection',
+    id: 'default',
+    patch: { apiKey: 'fixture-key' },
+  });
+  const saved = ready(
+    await f.owner({
+      action: 'commit',
+      baseline: before.revision,
+      settings: settingsForSave(draft),
+    }),
+  );
+  expect(saved.settings.activeProvider).toBe('chrome-ai');
+  const repaired = saved.settings.configuration!.presets.find((p) => p.id === retired.id)!;
+  expect(preparePreset(saved.settings, repaired)).toMatchObject({
+    choices: { provider: 'openai-compatible', remote: { model: 'fixture-model' } },
+    credential: 'fixture-key',
+  });
+  expect(() => preparePreset(saved.settings, retired)).toThrow('has been retired');
+});
+
+it('commits an unrelated edit after inspection without retargeting Original summary or API defaults', async () => {
+  const source = structuredClone(DEFAULT_CONFIGURATION);
+  source.chatgptPlan = { accountId: 'local-A', model: 'saved-model' };
+  source.activeProfileId = 'default';
+  source.profiles = [
+    { id: 'default', name: 'Default', config: { ...source.openaiCompatible } },
+    {
+      id: 'other',
+      name: 'Other',
+      config: {
+        ...source.openaiCompatible,
+        baseUrl: 'https://other.example.test/v1',
+        apiKey: 'fixture-key',
+      },
+    },
+  ];
+  source.connections.push({
+    key: 'plan-b',
+    name: 'Plan B',
+    kind: 'chatgpt-plan',
+    accountId: 'bound-B',
+  });
+  source.configuration!.presets.push(
+    {
+      id: 'plan-b',
+      name: 'Plan B',
+      provider: 'chatgpt-plan',
+      connectionKey: 'plan-b',
+      model: 'bound-model',
+    },
+    {
+      id: 'other',
+      name: 'Other',
+      provider: 'openai-compatible',
+      profileId: 'other',
+      model: 'other-model',
+    },
+  );
+  const f = fixture(source);
+  const accounts = ['local-A', 'bound-B'].map((id) => ({
+    id,
+    label: id,
+    signedIn: true,
+    planEnabled: true,
+  }));
+  for (const id of ['plan-b', 'other']) {
+    const before = ready(await f.owner({ action: 'read' }));
+    let draft = editSettingsDraft(createSettingsDraft(before.settings), {
+      type: 'select-preset',
+      id,
+    });
+    draft = editSettingsDraft(draft, {
+      type: 'settings',
+      patch: { responseLanguage: id === 'plan-b' ? 'Chinese' : 'English' },
+    });
+    const payload = settingsForSave(draft);
+    const saved = ready(
+      await f.owner({ action: 'commit', baseline: before.revision, settings: payload }),
+    );
+    expect(saved.settings.openaiCompatible).toEqual(before.settings.openaiCompatible);
+    expect(saved.settings.activeProfileId).toBe('default');
+    expect(saved.settings.activeProvider).toBe(before.settings.activeProvider);
+    expect(summaryConnections(saved.settings, accounts).chosen).toBe('local-A');
+  }
+});
 
 function fixture(initial?: unknown) {
   const values: Record<string, unknown> =
     initial === undefined ? {} : { [SETTINGS_STORAGE_KEY]: initial };
   const storage = {
+    readBackup: async () => structuredClone(values.saul_user_settings_recovery_backup),
     read: vi.fn(async () => structuredClone(values[SETTINGS_STORAGE_KEY])),
     write: vi.fn(async (patch: Record<string, unknown>) => {
       Object.assign(values, structuredClone(patch));
     }),
   };
-  return { values, storage, owner: createSettingsOwner(storage) };
+  return { values, storage, owner: createConfigurationStore(storage) };
 }
 function ready(state: SettingsState) {
   expect(state.state).toBe('ready');
@@ -49,6 +151,39 @@ it('rejects a competing full draft without changing either draft or the first sa
   expect(latest.settings.configuration!.recipes[0]!.name).toBe('Saved in A');
   expect(latest.settings.responseLanguage).toBeUndefined();
   expect(f.storage.write).toHaveBeenCalledTimes(1);
+});
+
+it('uses the loaded shared revisions when saving an edit, even if the submitted draft omits them', async () => {
+  const f = fixture(DEFAULT_CONFIGURATION);
+  const shared = structuredClone({
+    ...DEFAULT_CONFIGURATION,
+    sharedPresetRevision: 5,
+    scopedConfigRevision: 9,
+  });
+  const save = vi.fn(async (next: typeof shared) => {
+    if (next.sharedPresetRevision !== 5 || next.scopedConfigRevision !== 9)
+      throw new Error('Wrong shared revisions');
+    Object.assign(shared, next);
+    return next;
+  });
+  const owner = createConfigurationStore(f.storage, {
+    load: async () => structuredClone(shared),
+    save,
+  });
+  const before = ready(await owner({ action: 'read' }));
+  const draft = structuredClone(before.settings);
+  delete draft.sharedPresetRevision;
+  delete draft.scopedConfigRevision;
+  const result = ready(
+    await owner({
+      action: 'commit',
+      baseline: before.revision,
+      settings: { ...draft, responseLanguage: 'Chinese' },
+    }),
+  );
+  expect(result.settings.responseLanguage).toBe('Chinese');
+  expect(shared.responseLanguage).toBe('Chinese');
+  expect(save).toHaveBeenCalledTimes(1);
 });
 
 it('serializes simultaneous commits and checks the baseline after an earlier write settles', async () => {
@@ -116,10 +251,10 @@ it('accepts subsequent saves after Chrome reorders nested storage object keys', 
 });
 
 it('keeps revisions useful after a background restart and excludes unrelated preferences', async () => {
-  const f = fixture({ responseLanguage: 'English' });
+  const f = fixture({ ...DEFAULT_CONFIGURATION, responseLanguage: 'English' });
   const baseline = ready(await f.owner({ action: 'read' }));
   f.values.saul_minimum_mode = false;
-  const restarted = createSettingsOwner(f.storage);
+  const restarted = createConfigurationStore(f.storage);
   expect(ready(await restarted({ action: 'read' })).revision).toBe(baseline.revision);
   ready(
     await restarted({
@@ -134,7 +269,7 @@ it('keeps revisions useful after a background restart and excludes unrelated pre
   ).resolves.toMatchObject({ state: 'conflict' });
 });
 
-it('never writes migrated or invalid records on read and keeps invalid recovery in the same lane', async () => {
+it('does not rewrite invalid records on read and keeps invalid recovery in the same lane', async () => {
   const malformed = { openaiCompatible: { temperature: 'hot' } };
   const f = fixture(malformed);
   const bad = await f.owner({ action: 'read' });
@@ -142,14 +277,14 @@ it('never writes migrated or invalid records on read and keeps invalid recovery 
   expect(f.values[SETTINGS_STORAGE_KEY]).toEqual(malformed);
   expect(f.storage.write).not.toHaveBeenCalled();
   await expect(
-    f.owner({ action: 'commit', baseline: bad.revision, settings: DEFAULT_SETTINGS }),
+    f.owner({ action: 'commit', baseline: bad.revision, settings: DEFAULT_CONFIGURATION }),
   ).rejects.toThrow('Saved settings need repair');
   const [reset, stale] = await Promise.all([
     f.owner({ action: 'reset', baseline: bad.revision }),
     f.owner({
       action: 'commit',
       baseline: bad.revision,
-      settings: { ...DEFAULT_SETTINGS, responseLanguage: 'Chinese' },
+      settings: { ...DEFAULT_CONFIGURATION, responseLanguage: 'Chinese' },
     }),
   ]);
   expect(reset).toMatchObject({ state: 'ready', reset: true });
@@ -158,11 +293,22 @@ it('never writes migrated or invalid records on read and keeps invalid recovery 
   expect(f.storage.write).toHaveBeenCalledTimes(1);
 });
 
+it('rejects obsolete aliases without rewriting the stored record', async () => {
+  const obsolete = { ...DEFAULT_CONFIGURATION, providers: DEFAULT_CONFIGURATION.connections };
+  const f = fixture(obsolete);
+  expect(await f.owner({ action: 'read' })).toMatchObject({
+    state: 'invalid',
+    error: expect.stringContaining('Obsolete'),
+  });
+  expect(f.storage.write).not.toHaveBeenCalled();
+  expect(f.values[SETTINGS_STORAGE_KEY]).toEqual(obsolete);
+});
+
 it('a stale recovery request cannot replace newly valid settings or its existing backup', async () => {
   const f = fixture({ activeProvider: 'unknown' });
   const bad = await f.owner({ action: 'read' });
   if (bad.state !== 'invalid') throw new Error('Expected invalid fixture');
-  f.values[SETTINGS_STORAGE_KEY] = DEFAULT_SETTINGS;
+  f.values[SETTINGS_STORAGE_KEY] = DEFAULT_CONFIGURATION;
   f.values.saul_user_settings_recovery_backup = { retained: true };
   await expect(f.owner({ action: 'reset', baseline: bad.revision })).resolves.toMatchObject({
     state: 'conflict',
@@ -186,10 +332,37 @@ it('preserves baseline and data after a failed write and does not poison later r
   expect(ready(await f.owner({ action: 'read' })).settings.responseLanguage).toBe('Chinese');
 });
 
+it('commits credential backup cleanup with local settings and does not retire credentials after a failed write', async () => {
+  const f = fixture();
+  f.values.saul_user_settings_recovery_backup = { apiKey: 'backup-secret' };
+  const credentials = {
+    prepare: vi.fn(async (settings: typeof DEFAULT_CONFIGURATION) => settings),
+    sanitizeBackup: vi.fn(() => ({ apiKey: '' })),
+    committed: vi.fn(async () => undefined),
+  };
+  const owner = createConfigurationStore(f.storage, undefined, credentials);
+  const before = ready(await owner({ action: 'read' }));
+  const request = {
+    action: 'commit',
+    baseline: before.revision,
+    settings: { ...before.settings, sharedCredentials: 'saul' },
+  };
+  f.storage.write.mockRejectedValueOnce(new Error('Local write failed'));
+  await expect(owner(request)).rejects.toThrow('Local write failed');
+  expect(f.values.saul_user_settings_recovery_backup).toEqual({ apiKey: 'backup-secret' });
+  expect(credentials.committed).not.toHaveBeenCalled();
+  await owner(request);
+  expect(f.storage.write).toHaveBeenLastCalledWith({
+    [SETTINGS_STORAGE_KEY]: request.settings,
+    saul_user_settings_recovery_backup: { apiKey: '' },
+  });
+  expect(credentials.committed).toHaveBeenCalledTimes(1);
+});
+
 it('validates incoming configuration and does not leak credentials into revision/error fields', async () => {
   const f = fixture({
-    ...DEFAULT_SETTINGS,
-    openaiCompatible: { ...DEFAULT_SETTINGS.openaiCompatible, apiKey: 'private-fixture' },
+    ...DEFAULT_CONFIGURATION,
+    openaiCompatible: { ...DEFAULT_CONFIGURATION.openaiCompatible, apiKey: 'private-fixture' },
   });
   const baseline = ready(await f.owner({ action: 'read' }));
   expect(baseline.revision).not.toContain('private-fixture');
@@ -232,7 +405,11 @@ it('reports uncertain delivery without retrying a lost commit response', async (
   vi.stubGlobal('chrome', { runtime: { sendMessage } });
   try {
     await expect(
-      requestSettings({ action: 'commit', baseline: 'a'.repeat(64), settings: DEFAULT_SETTINGS }),
+      requestSettings({
+        action: 'commit',
+        baseline: 'a'.repeat(64),
+        settings: DEFAULT_CONFIGURATION,
+      }),
     ).rejects.toBeInstanceOf(SettingsDeliveryError);
     expect(sendMessage).toHaveBeenCalledTimes(1);
     sendMessage.mockResolvedValueOnce(undefined);

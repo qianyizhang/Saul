@@ -104,73 +104,26 @@ test('provider profiles preserve their own credentials and clear keys across ori
   await expect(popup.getByText(/Generation succeeded:/)).toBeVisible();
 });
 
-test('missing and stale profile selections recover the current config and remain editable', async ({
-  sandbox,
-  fixtureServer,
-}) => {
+test('obsolete settings remain untouched until explicit backup and reset', async ({ sandbox }) => {
   const { popup } = await sandbox.launch();
-  for (const [storedActiveProfileId, recoveredId, model] of [
-    [undefined, 'recovered-current', 'recovered-missing'],
-    ['retired-profile', 'retired-profile', 'recovered-stale'],
-  ] as const) {
+  const obsolete = { providers: [], providerConnections: { old: 'profile' } };
+  await popup.evaluate(
+    async (value) => chrome.storage.local.set({ saul_user_settings: value }),
+    obsolete,
+  );
+  await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(popup.getByText(/Obsolete configuration fields/)).toBeVisible();
+  expect(
     await popup.evaluate(
-      async ({ origin, storedActiveProfileId }) => {
-        await chrome.storage.local.set({
-          saul_user_settings: {
-            activeProvider: 'openai-compatible',
-            openaiCompatible: {
-              baseUrl: origin + '/v1',
-              apiKey: 'current-key',
-              model: 'current-model',
-              temperature: 0.3,
-            },
-            profiles: [
-              {
-                id: 'legacy',
-                name: 'Legacy',
-                config: {
-                  baseUrl: origin + '/v1',
-                  apiKey: 'legacy-key',
-                  model: 'legacy-model',
-                  temperature: 0.3,
-                },
-              },
-            ],
-            ...(storedActiveProfileId === undefined
-              ? {}
-              : { activeProfileId: storedActiveProfileId }),
-          },
-        });
-      },
-      { origin: fixtureServer.origin, storedActiveProfileId },
-    );
-    if (popup.url().includes('#settings')) await popup.reload();
-    else await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-    await settingsSection(popup, 'Presets');
-
-    await expect(popup.getByLabel('Preset connection', { exact: true })).toHaveValue(recoveredId);
-    await expect(popup.getByLabel('Model name', { exact: true })).toHaveValue('current-model');
-    await settingsSection(popup, 'Presets');
-    await popup.getByLabel('Model name', { exact: true }).fill(model);
-    await popup.getByRole('button', { name: 'Save', exact: true }).click();
-    await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
-    const saved = await popup.evaluate(async () => {
-      const { saul_user_settings: settings } = await chrome.storage.local.get('saul_user_settings');
-      return settings as {
-        activeProfileId: string;
-        profiles: { id: string; config: { model: string } }[];
-        configuration: { presets: { model: string }[] };
-      };
-    });
-    expect(saved.activeProfileId).toBe(recoveredId);
-    expect(saved.configuration.presets[0]?.model).toBe(model);
-    expect(saved.profiles.find((profile) => profile.id === recoveredId)?.config.model).toBe(
-      'current-model',
-    );
-    expect(saved.profiles.find((profile) => profile.id === 'legacy')?.config.model).toBe(
-      'legacy-model',
-    );
-  }
+      async () => (await chrome.storage.local.get('saul_user_settings')).saul_user_settings,
+    ),
+  ).toEqual(obsolete);
+  await popup.getByRole('button', { name: 'Back up and reset settings', exact: true }).click();
+  const stored = await popup.evaluate(async () =>
+    chrome.storage.local.get(['saul_user_settings', 'saul_user_settings_recovery_backup']),
+  );
+  expect(stored.saul_user_settings_recovery_backup).toEqual(obsolete);
+  expect(stored.saul_user_settings).toHaveProperty('configuration.schemaVersion', 1);
 });
 
 test('Window drag reorders immediately and Undo restores the previous order', async ({
@@ -213,8 +166,7 @@ test('empty model output stays a failed attempt without a completed answer', asy
     await article.goto(server.origin + '/article');
     await expect(article.locator('saul-root')).toBeAttached();
     await article.locator('#concept').click({ clickCount: 3 });
-    await article.getByRole('button', { name: 'Explain', exact: true }).click();
-    await article.getByRole('button', { name: 'View', exact: true }).click();
+    await article.getByRole('button', { name: 'Explain & open', exact: true }).click();
     await expect(article.getByRole('alert')).toContainText('The model returned no explanation');
     await expect(article.getByText('Saved', { exact: true })).toHaveCount(0);
     expect((await getFirstHistory(popup)).latest.status).toBe('failed');
@@ -320,8 +272,7 @@ test('stopping a slow explanation retains partial text without saving a complete
     await article.goto(server.origin + '/article');
     await expect(article.locator('saul-root')).toBeAttached();
     await article.locator('#concept').click({ clickCount: 3 });
-    await article.getByRole('button', { name: 'Explain', exact: true }).click();
-    await article.getByRole('button', { name: 'View', exact: true }).click();
+    await article.getByRole('button', { name: 'Explain & open', exact: true }).click();
     await expect(article.getByText('A gradient describes how a', { exact: false })).toBeVisible();
     await article.getByRole('button', { name: 'Stop', exact: true }).click();
     await expect(article.getByText('Stopped', { exact: true })).toBeVisible();

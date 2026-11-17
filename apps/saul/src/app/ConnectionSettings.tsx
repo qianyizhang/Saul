@@ -9,7 +9,7 @@ import {
   type ConnectionStatus,
 } from '../../native/connections-contract.mts';
 import { credentialCall } from '../native/credentials';
-import type { ModelPreset, UserSettings } from '../types';
+import type { ModelPreset, Configuration } from '../configuration/definition';
 import { useConnectionCatalog } from './useConnectionCatalog';
 
 type Account = { id: string; label: string; signedIn: boolean; planEnabled: boolean };
@@ -148,7 +148,7 @@ export function ConnectionSettings({
   integrations,
   onDirty,
 }: {
-  settings: UserSettings;
+  settings: Configuration;
   visible: boolean;
   disabled: boolean;
   dirty: boolean;

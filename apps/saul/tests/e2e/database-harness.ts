@@ -42,7 +42,7 @@ export function runDatabaseFixture<T>(page: Page, request: DatabaseFixtureReques
   }, request);
 }
 
-// Prepare persisted rows in the existing test-only OPFS worker.
+// Prepare persisted rows through the isolated native SQLite fixture.
 // Only fresh sandboxes with databaseFixtures enabled may use this helper.
 export async function seedPersistedHistory(
   browser: { popup: Page; worker: Worker },
@@ -61,8 +61,8 @@ export async function seedPersistedHistory(
     });
     if (!reply.success) throw new Error(reply.error);
   });
-  // Unmount the reader and release the production owner's OPFS handles before
-  // the fixture worker opens that same database. Restore normal routing afterward.
+  // Unmount the reader and stop its runner before preparing fixture rows.
+  // Restore normal routing afterward.
   await browser.popup.goto(fixtureUrl.toString());
   await browser.worker.evaluate(() => chrome.offscreen.closeDocument());
   try {
