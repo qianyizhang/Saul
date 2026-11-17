@@ -12,24 +12,22 @@ import SwiftUI
 
                 let anchor = try await host.open()
                 let search = try await host.searchField()
-                try await host.key(6, "z", in: search.window)
-                try await host.key(6, "z", in: search.window)
+                try host.key(6, "z", in: search.window)
+                try host.key(6, "z", in: search.window)
                 try expectEqual(search.stringValue, "zz", "Typing did not reach chooser search")
-                try await host.key(36, "\r", in: search.window)
+                try host.key(36, "\r", in: search.window)
                 try expectEqual(selected, "current", "Return in empty results committed a choice")
                 try expect(ChoiceAnchor.hasOpenChooser, "Empty results dismissed the chooser")
-                try await host.key(53, "\u{1b}", in: search.window)
-                try expect(!ChoiceAnchor.hasOpenChooser, "Escape did not close just the chooser")
-                try expect(host.window.firstResponder === anchor, "Escape did not restore anchor focus")
+                try host.key(53, "\u{1b}", in: search.window)
+                try await host.expectDismissal(after: "Escape", returningFocusTo: anchor)
 
-                try await host.key(36, "\r", in: host.window)
+                try host.key(36, "\r", in: host.window)
                 let reopened = try await host.searchField()
                 try expectEqual(reopened.stringValue, "", "Reopening retained the last search")
-                try await host.key(125, "\u{f701}", in: reopened.window)
-                try await host.key(36, "\r", in: reopened.window)
+                try host.key(125, "\u{f701}", in: reopened.window)
+                try host.key(36, "\r", in: reopened.window)
                 try expectEqual(selected, "valid", "Keyboard did not skip the disabled row")
-                try expect(!ChoiceAnchor.hasOpenChooser, "Selection left the chooser open")
-                try expect(host.window.firstResponder === anchor, "Selection did not restore anchor focus")
+                try await host.expectDismissal(after: "Selection", returningFocusTo: anchor)
 
                 selected = "current"
                 guard
@@ -108,9 +106,7 @@ import SwiftUI
 
     func key(
         _ code: UInt16, _ characters: String, in destination: NSWindow?, flags: NSEvent.ModifierFlags = []
-    )
-        async throws
-    {
+    ) throws {
         guard let destination,
             let event = NSEvent.keyEvent(
                 with: .keyDown, location: .zero, modifierFlags: flags,
@@ -119,7 +115,20 @@ import SwiftUI
                 charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code)
         else { throw CheckFailure("Cannot create chooser key event") }
         destination.sendEvent(event)
-        try await settle()
+    }
+
+    func expectDismissal(after action: String, returningFocusTo anchor: ChoiceAnchor) async throws {
+        // The chooser restores focus in AppKit's close callback.
+        let clock = ContinuousClock()
+        let deadline = clock.now + .seconds(2)
+        while window.isVisible && (ChoiceAnchor.hasOpenChooser || window.firstResponder !== anchor)
+            && clock.now < deadline
+        {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        try expect(window.isVisible, "\(action) closed the host window")
+        try expect(!ChoiceAnchor.hasOpenChooser, "\(action) did not close the chooser")
+        try expect(window.firstResponder === anchor, "\(action) did not restore anchor focus")
     }
 
     private func settle() async throws { try await Task.sleep(for: .milliseconds(80)) }
