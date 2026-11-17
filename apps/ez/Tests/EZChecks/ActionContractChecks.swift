@@ -226,7 +226,7 @@ import Foundation
             let permissions =
                 try FileManager.default.attributesOfItem(atPath: store.url.path)[.posixPermissions] as? Int
             try expectEqual(permissions, 0o600, "History is not owner-only")
-            try store.delete(id: entry.id)
+            try store.delete(entry.recordID)
             try expect(try store.image(for: reloaded) == nil, "Deleted entry left its image")
         },
         CheckCase("action contract: history storage rejects database symlinks") {

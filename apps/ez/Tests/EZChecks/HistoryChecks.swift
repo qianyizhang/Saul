@@ -24,7 +24,7 @@ import Foundation
             let attributes = try FileManager.default.attributesOfItem(atPath: first.url.path)
             try expectEqual(
                 (attributes[.posixPermissions] as? NSNumber)?.intValue, 0o600, "History must be owner-only")
-            try second.delete(id: entry.id)
+            try second.delete(entry.recordID)
             try expect(try first.load().isEmpty, "Deletion must be shared")
         },
         CheckCase("history: migrates original snapshots once and removes the old files") { directory in
@@ -49,7 +49,7 @@ import Foundation
             try expect(
                 !FileManager.default.fileExists(atPath: legacy.appendingPathComponent("history.lock").path),
                 "Original lock was not retired")
-            try store.delete(id: entry.id)
+            try store.delete(entry.recordID)
             try original.write(to: source)
             let reopened = try HistoryStore(directory: shared, migrating: legacy)
             try expect(try reopened.load().isEmpty, "A cleanup retry resurrected a deleted record")
@@ -104,7 +104,7 @@ import Foundation
             try expectEqual(try store.image(for: entry), gif, "Browser output bytes changed")
             _ = try historySQL(store.url, "UPDATE llm_run SET id='new-run'")
             try expect(try store.image(for: entry) == nil, "Old answer loaded another attempt's image")
-            try store.delete(id: entry.id)
+            try store.delete(entry.recordID)
             try expect(try store.load().isEmpty, "Deleting browser image kept its history")
         },
         CheckCase("history: damaged original blocks migration without dropping records") { directory in
@@ -136,9 +136,9 @@ import Foundation
             let store = try HistoryStore(directory: directory)
             let entry = HistoryEntry(
                 mode: .ask, query: "only entry", model: "m", effort: "", requestedServiceTier: nil)
-            try store.delete(id: entry.id)
+            try store.delete(entry.recordID)
             try store.append(entry)
-            try store.delete(id: entry.id)
+            try store.delete(entry.recordID)
             try expect(try store.load().isEmpty, "Last deletion was not empty")
             try store.append(entry)
             try expectEqual(try store.load().count, 1, "Append after deletion failed")
@@ -167,16 +167,101 @@ import Foundation
             try expectEqual(
                 try HistoryStore(directory: directory).load()[0].id, entry.id,
                 "Browser identity changes on reload")
+            var native = HistoryEntry(
+                mode: .ask, query: "Native", model: "m", effort: "", requestedServiceTier: nil)
+            native.id = entry.id
+            try store.append(native)
+            _ = try historySQL(store.url, #"INSERT INTO ez_entry VALUES ('unrelated',0,'{}',NULL,NULL,0)"#)
+            try store.delete(native.recordID)
+            try expectEqual(
+                try historySQL(store.url, "SELECT count(*) FROM selection"), "1",
+                "A native ID deleted browser history")
+            try expectEqual(
+                try historySQL(store.url, "SELECT id FROM ez_entry"), "unrelated",
+                "An unrelated damaged row blocked or changed native deletion")
             _ = try historySQL(
                 store.url,
                 "INSERT INTO llm_run(id,selection_id,widget_id,provider,model,prompt_version,prompt_raw,context_json,status,created_at) VALUES ('active','selection','explain','openai-compatible','m','2','','{}','running',43)"
             )
-            try expectThrows(EZError.self) { try store.delete(id: entry.id) }
+            for status in ["queued", "running", "saving"] {
+                _ = try historySQL(store.url, "UPDATE llm_run SET status='\(status)' WHERE id='active'")
+                try expectThrows(EZError.self, matching: { $0.message.contains("Stop the running request") })
+                {
+                    try store.delete(entry.recordID)
+                }
+                try expectEqual(
+                    try historySQL(store.url, "SELECT count(*) FROM llm_run"), "2",
+                    "Delete removed runs during active browser ownership")
+            }
             _ = try historySQL(store.url, "UPDATE llm_run SET status='interrupted' WHERE id='active'")
-            try store.delete(id: entry.id)
+            try store.delete(entry.recordID)
             try expectEqual(
                 try historySQL(store.url, "SELECT count(*) FROM llm_run"), "0",
                 "Cross-app deletion left browser runs")
+            try expectEqual(
+                try historySQL(store.url, "SELECT id FROM ez_entry"), "unrelated",
+                "Browser deletion changed an unrelated damaged native row")
+        },
+        CheckCase("history: read snapshot shares a writer reservation and releases locks before projection") {
+            directory in
+            let store = try HistoryStore(directory: directory)
+            let entry = HistoryEntry(
+                mode: .ask, query: "Committed", model: "m", effort: "", requestedServiceTier: nil)
+            try store.append(entry)
+            let writer = try HistoryFixtureWriter(store.url, reservation: .immediate)
+            try writer.run("UPDATE ez_entry SET data=json_set(data,'$.query','Next')")
+            let history = HistoryReader(directory: directory)
+            let loaded = try await history.load()
+            try expectEqual(
+                loaded.first?.query, "Committed", "Reader took a writer reservation or read dirty data")
+            let reading = try HistoryStore(reading: directory)
+            let snapshot = try reading.snapshot()
+            try writer.run("COMMIT")
+            withExtendedLifetime(reading) {}
+            try expectEqual(
+                try snapshot.entries().first?.query, "Committed", "Projection observed a later transaction")
+            try expectEqual(
+                try await history.load().first?.query, "Next", "Refresh did not see committed data")
+        },
+        CheckCase("history: query-only refresh neither creates nor changes the database") { directory in
+            let history = HistoryReader(directory: directory)
+            try await expectAsyncThrows(EZError.self) { _ = try await history.load() }
+            let path = directory.appendingPathComponent("history.sqlite3")
+            try expect(!FileManager.default.fileExists(atPath: path.path), "A read created the database")
+            _ = try HistoryStore(directory: directory)
+            let reader = try HistoryStore(reading: directory)
+            let entry = HistoryEntry(
+                mode: .ask, query: "No write", model: "m", effort: "", requestedServiceTier: nil)
+            try expectThrows(EZError.self) { try reader.append(entry) }
+            try expectEqual(try historySQL(path, "SELECT count(*) FROM ez_entry"), "0", "Reader wrote a row")
+            _ = try historySQL(path, "PRAGMA user_version=3")
+            try await expectAsyncThrows(EZError.self) { _ = try await history.load() }
+            try expectEqual(try historySQL(path, "PRAGMA user_version"), "3", "A read upgraded the database")
+        },
+        CheckCase("history: off-main projection retains all 4,000 matching rows") { directory in
+            let store = try HistoryStore(directory: directory)
+            var example = HistoryEntry(
+                mode: .ask, query: "Find in history", model: "m", effort: "", requestedServiceTier: nil)
+            example.response = String(repeating: "Synthetic text for history search. ", count: 30)
+            try store.append(example)
+            _ = try historySQL(
+                store.url,
+                """
+                WITH RECURSIVE sample(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM sample WHERE n<3999),
+                records AS (SELECT printf('00000000-0000-4000-8000-%012d',n) AS id,n FROM sample)
+                INSERT INTO ez_entry(id,created_at,data)
+                SELECT records.id,n,json_set(ez_entry.data,'$.id',records.id,
+                    '$.createdAt',strftime('%Y-%m-%dT%H:%M:%SZ',n,'unixepoch'))
+                FROM records CROSS JOIN ez_entry
+                """)
+            let clock = ContinuousClock()
+            let start = clock.now
+            let entries = try await HistoryReader(directory: directory).load()
+            print("  Fixture: 4,000 history rows projected in \(start.duration(to: clock.now)).")
+            try expectEqual(entries.count, 4_000, "Large read omitted history rows")
+            try expectEqual(
+                entries.filter { $0.displayQuery.localizedCaseInsensitiveContains("find in history") }.count,
+                4_000, "Large read omitted searchable text")
         },
         CheckCase("history: one EZ process owns native runtime coordination") { directory in
             let lock = try SessionLock(directory: directory)

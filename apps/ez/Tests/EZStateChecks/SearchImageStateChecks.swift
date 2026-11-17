@@ -35,7 +35,7 @@ import ImageIO
                 received[1].inputImage?.data, received[0].inputImage?.data, "Retry used live sketch")
             try expectEqual(received[1].query, received[0].query, "Image prompt changed")
             try expect(!model.hasImageInput, "Image retry changed the draft")
-            try store.delete(id: failed.id)
+            try store.delete(failed.recordID)
             model.retry(failed.id)
             try expectEqual(received.count, 2, "Missing input reached image provider")
             try expect(
@@ -134,6 +134,7 @@ import ImageIO
             try store.append(entry)
             let model = AppModel(directory: local, historyDirectory: shared, offline: true)
             defer { model.shutdown() }
+            await model.refreshHistory()?.value
             model.selection = entry.id
             let loaded = CheckSignal()
             let observer = model.objectWillChange.filter { !model.imageLoading }.sink { _ in
@@ -244,7 +245,7 @@ import ImageIO
             try expectEqual(unsaved.status, "unsaved", "Failed save reported success")
             try expectEqual(unsaved.inputImage?.name, "source.png", "Source reference lost")
             try expectEqual(unsaved.imageData, fixturePNG, "Unsaved result lost")
-            model.refreshHistory()
+            await model.refreshHistory()?.value
             let saved = try store.load()[0]
             guard let reloaded = model.selectedEntry else { throw CheckFailure("Saved row lost on refresh") }
             try expect(model.imageData(for: reloaded) == nil, "History showed unsaved image bytes")

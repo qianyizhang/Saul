@@ -69,7 +69,13 @@ Its composition and undo history are draft-local; Reuse restores one frozen laye
 [Shared history](../../../contracts/history.md) owns storage and deletion guarantees.
 EZ upserts one snapshot per UUID; native `schemaVersion: 1` JSON and image blobs
 commit together. Startup under the session lock marks abandoned EZ rows interrupted;
-activation reloads history without changing Saul's execution.
+startup and activation reload History without changing Saul's execution. A serial
+reader uses a separate query-only connection and releases its SQLite snapshot
+before decoding rows. Image bytes load separately for the selected answer.
+The app discards a refresh overtaken by a later refresh or shutdown. Local
+deletion and attempt changes during a refresh supersede the affected rows.
+Deletion uses the selected native UUID or browser selection ID. The browser
+guard and deletion share a write transaction; neither delete decodes unrelated rows.
 
 `AttemptExecution` saves pending input before credentials or transmission.
 Cancellation invalidates callbacks; terminal save must succeed before saved

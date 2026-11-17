@@ -78,7 +78,7 @@ struct ContentView: View {
                 set: { if !$0 { lookupToDelete = nil } }
             ), presenting: lookupToDelete
         ) { entry in
-            Button("Delete", role: .destructive) { model.deleteLookup(entry.id) }
+            Button("Delete", role: .destructive) { model.deleteLookup(entry.recordID) }
                 .disabled(!model.canDeleteLookup)
             Button("Cancel", role: .cancel) {}
         } message: { entry in

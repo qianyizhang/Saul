@@ -298,14 +298,14 @@ import Foundation
             defer { Task { await startup.signal() } }
             let saved = try f.state.savedAnswer()
             try f.state.history.append(saved)
-            f.model.refreshHistory()
+            await f.model.refreshHistory()?.value
             try f.model.submitLauncher("A launcher question", after: ready)
             try expect(f.model.launcherPending && !f.model.busy, "Launcher did not wait for startup")
             try expectThrows(EZError.self) { try f.model.submitLauncher("Duplicate", after: ready) }
             try expectThrows(EZError.self) { try f.model.prepareSelectedText("Selected text") }
             f.model.performLookupCommand(.newLookup)
             f.model.chooseAction(f.state.multi.id)
-            f.model.deleteLookup(saved.id)
+            f.model.deleteLookup(saved.recordID)
             f.model.fillQuickLookupSelection("Late selection")
             try expectEqual(f.model.query, "A launcher question", "Competing action replaced launcher draft")
             try expectEqual(f.control.appends.count, 0, "Launcher transmitted before startup")
@@ -331,7 +331,7 @@ import Foundation
         attemptCase("active lookup owns command guards and activity while viewing another answer") { f in
             let saved = try f.state.savedAnswer()
             try f.state.history.append(saved)
-            f.model.refreshHistory()
+            await f.model.refreshHistory()?.value
             let held = HeldResponse()
             defer { held.finish(.failure(CancellationError())) }
             f.control.generate = { _, _, update in try await held.stream(update: update) }
@@ -347,7 +347,7 @@ import Foundation
                 f.model.selectedResponseActivity, .thinking, "No thinking activity for active lookup")
             f.model.selection = saved.id
             try expectEqual(f.model.selectedResponseActivity, nil, "Unrelated answer showed activity")
-            f.model.deleteLookup(saved.id)
+            f.model.deleteLookup(saved.recordID)
             try expect(
                 try f.state.history.load().contains { $0.id == saved.id }, "Busy deletion removed history")
             try expectThrows(EZError.self) { try f.model.prepareSelectedText("do not replace") }
@@ -386,7 +386,7 @@ import Foundation
             try expectEqual(f.control.appends.count, 2, "Failed save wrote again")
             f.model.newQuery()
             f.model.query = "A new question"
-            f.model.refreshHistory()
+            await f.model.refreshHistory()?.value
             try expectEqual(f.control.providerCalls, 1, "Reading history resubmitted")
             f.terminal = CheckSignal()
             f.model.send()
@@ -473,11 +473,11 @@ import Foundation
                 f.state.history.url,
                 "CREATE TRIGGER fail_delete BEFORE DELETE ON ez_entry BEGIN SELECT RAISE(ABORT,'Synthetic delete failure'); END"
             )
-            f.model.deleteLookup(id)
+            f.model.deleteLookup(.native(id))
             try expectEqual(f.model.selection, id, "Failed deletion changed selection")
             try expectEqual(f.model.selectedEntry?.status, "unsaved", "Failed deletion discarded the result")
             _ = try historySQL(f.state.history.url, "DROP TRIGGER fail_delete")
-            f.model.deleteLookup(id)
+            f.model.deleteLookup(.native(id))
             try expect(f.model.entries.isEmpty && f.model.selection == nil, "Deleted lookup still visible")
             try expect(try f.state.history.load().isEmpty, "Deleted lookup remained in storage")
             try expectEqual(f.control.appends.count, 2, "Deletion replayed a history write")

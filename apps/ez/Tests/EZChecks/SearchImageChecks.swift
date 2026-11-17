@@ -126,7 +126,7 @@ import Foundation
             let saved = try store.load()[0]
             try expect(saved.inputImage?.data == nil, "Metadata decoded bytes")
             try expectEqual(try store.inputImage(for: saved)?.data, fixturePNG, "Input image not restored")
-            try store.delete(id: entry.id)
+            try store.delete(entry.recordID)
             try expect(try store.load().isEmpty, "Deleted images left a history record")
             try expect(
                 !FileManager.default.fileExists(atPath: directory.appendingPathComponent("images").path),

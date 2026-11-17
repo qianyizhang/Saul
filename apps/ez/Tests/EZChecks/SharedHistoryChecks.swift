@@ -53,7 +53,7 @@ private struct HistoryContract: Decodable {
                         )
                     }
                     let saved = try store.load()[0]
-                    try expectThrows(EZError.self) { try store.delete(id: saved.id) }
+                    try expectThrows(EZError.self) { try store.delete(saved.recordID) }
                     try expectEqual(try store.load().count, expectedEntries, scenario.name)
                     continue
                 }
@@ -66,7 +66,7 @@ private struct HistoryContract: Decodable {
                 try store.append(entry)
                 switch scenario.kind {
                 case "repeat-save": try store.append(entry)
-                case "delete": try store.delete(id: entry.id)
+                case "delete": try store.delete(entry.recordID)
                 default: throw CheckFailure("Unknown History contract case: \(scenario.kind)")
                 }
                 let rows = try HistoryStore(directory: folder).load()

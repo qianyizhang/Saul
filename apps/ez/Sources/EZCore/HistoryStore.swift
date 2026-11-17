@@ -1,10 +1,14 @@
 import CSQLite
-import CryptoKit
 import Darwin
 import Foundation
 
 /// The shared database owns durable history. Execution stays app-local; credentials use the Saul owner.
 public final class HistoryStore {
+    public enum RecordID: Hashable, Sendable {
+        case native(UUID)
+        case browser(selectionID: String)
+    }
+
     public static var defaultDirectory: URL { SharedPresetsStore.defaultURL.deletingLastPathComponent() }
     public let url: URL
     private var database: OpaquePointer?
@@ -17,18 +21,8 @@ public final class HistoryStore {
             at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         url = directory.appendingPathComponent("history.sqlite3")
         try Self.regular(url)
-        guard
-            sqlite3_open_v2(
-                url.path, &database, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil)
-                == SQLITE_OK
-        else {
-            let message = failure()
-            sqlite3_close(database)
-            database = nil
-            throw message
-        }
+        try open(flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
         do {
-            sqlite3_busy_timeout(database, 5000)
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
             try execute("PRAGMA foreign_keys=ON; PRAGMA secure_delete=ON;")
             try transaction {
@@ -57,6 +51,31 @@ public final class HistoryStore {
             database = nil
             throw error
         }
+    }
+    init(reading directory: URL) throws {
+        try Self.regular(directory, directory: true)
+        url = directory.appendingPathComponent("history.sqlite3")
+        try Self.regular(url)
+        // Keep the same descriptor mode as peers. Mixed modes can give Apple's SQLite
+        // writer EBADF taking its reservation. SQL writes stay disabled on this connection.
+        try open(flags: SQLITE_OPEN_READWRITE)
+        do {
+            try execute("PRAGMA query_only=ON")
+            try requireCurrentSchema()
+        } catch {
+            sqlite3_close(database)
+            database = nil
+            throw error
+        }
+    }
+    private func open(flags: Int32) throws {
+        guard sqlite3_open_v2(url.path, &database, flags | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK else {
+            let error = failure()
+            sqlite3_close(database)
+            database = nil
+            throw error
+        }
+        sqlite3_busy_timeout(database, 5000)
     }
     deinit { sqlite3_close(database) }
 
@@ -110,81 +129,38 @@ public final class HistoryStore {
                 String(decoding: data, as: UTF8.self), image, input,
             ])
     }
-    public func delete(id: UUID) throws {
-        let foreign = try load().first { $0.id == id && $0.sourceID != nil }
-        if let source = foreign?.sourceID {
+    public func delete(_ id: RecordID) throws {
+        switch id {
+        case .native(let id): try execute("DELETE FROM ez_entry WHERE id=?", [id.uuidString.lowercased()])
+        case .browser(let selectionID):
             try transaction {
-                guard
-                    try rows(
-                        "SELECT id FROM llm_run WHERE selection_id=? AND status IN ('queued','running','saving')",
-                        [source]
-                    ).isEmpty
-                else { throw EZError("Stop the running request in Saul before deleting this history.") }
-                try execute("DELETE FROM selection WHERE id=?", [source])
+                let active = try rows(
+                    "SELECT 1 FROM llm_run WHERE selection_id=? AND status IN ('queued','running','saving') LIMIT 1",
+                    [selectionID])
+                guard active.isEmpty else {
+                    throw EZError("Stop the running request in Saul before deleting this history.")
+                }
+                try execute("DELETE FROM selection WHERE id=?", [selectionID])
             }
-        } else {
-            try execute("DELETE FROM ez_entry WHERE id=?", [id.uuidString.lowercased()])
         }
     }
-    public func load() throws -> [HistoryEntry] {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        var entries: [HistoryEntry] = []
-        try transaction {
-            for row in try rows(
-                "SELECT data,image IS NOT NULL AS has_image FROM ez_entry ORDER BY created_at DESC,id DESC")
-            {
-                guard let json = row["data"] as? String else {
-                    throw EZError("Invalid saved history record.")
-                }
-                var entry = try decoder.decode(HistoryEntry.self, from: Data(json.utf8))
-                guard entry.schemaVersion == 1 else { throw EZError("Unsupported history entry version.") }
-                entry.storedImage = row["has_image"] as? Int64 == 1
-                if entry.status == "pending" { entry.status = "interrupted" }
-                entries.append(entry)
-            }
-            for row in try rows(
-                "SELECT s.id,s.text,p.url,p.title,r.id AS run_id,r.response_structured IS NOT NULL AS has_image,r.input_json,r.prompt_raw,r.response_raw,r.model,r.status,r.error_message,r.created_at,r.latency_ms FROM selection s JOIN page p ON p.id=s.page_id JOIN llm_run r ON r.rowid=(SELECT rowid FROM llm_run WHERE selection_id=s.id AND status NOT IN ('queued','running','saving') ORDER BY created_at DESC,rowid DESC LIMIT 1)"
-            ) {
-                let source = row["id"] as? String ?? ""
-                let input = (row["input_json"] as? String).flatMap {
-                    try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any]
-                }
-                var entry = HistoryEntry(
-                    mode: .ask, query: input?["userPrompt"] as? String ?? row["text"] as? String ?? "",
-                    model: row["model"] as? String ?? "", effort: "", requestedServiceTier: nil)
-                entry.id = Self.browserID(source)
-                entry.sourceID = source
-                entry.sourceRunID = row["run_id"] as? String
-                if let preset = input?["preset"] as? [String: Any],
-                    let capability = preset["capability"] as? String
-                {
-                    entry.sourceCapability = ActionCapability(rawValue: capability)
-                    if let options = preset["imageOptions"] {
-                        entry.sourceImageOptions = try? JSONDecoder().decode(
-                            ImageOptions.self, from: JSONSerialization.data(withJSONObject: options))
-                    }
-                    if entry.sourceCapability == .draw {
-                        entry.connectionSnapshot = ConnectionDefinition(
-                            key: "openai-api", name: "OpenAI API", kind: .openAIAPI)
-                    }
-                }
-                entry.storedImage = row["has_image"] as? Int64 == 1 && row["status"] as? String == "completed"
-                entry.sourceText = row["text"] as? String
-                entry.sourceURL = row["url"] as? String
-                entry.sourceTitle = row["title"] as? String
-                entry.instructions = input?["systemPrompt"] as? String ?? row["prompt_raw"] as? String
-                entry.response = row["response_raw"] as? String ?? ""
-                entry.createdAt = Date(timeIntervalSince1970: Double(row["created_at"] as? Int64 ?? 0) / 1000)
-                let status = row["status"] as? String ?? "interrupted"
-                entry.status = ["queued", "running", "saving"].contains(status) ? "interrupted" : status
-                entry.error = row["error_message"] as? String
-                entry.durationSeconds = (row["latency_ms"] as? Int64).map { Double($0) / 1000 }
-                entries.append(entry)
-            }
+
+    public func load() throws -> [HistoryEntry] { try snapshot().entries() }
+
+    private func requireCurrentSchema() throws {
+        guard try rows("PRAGMA user_version").first?["user_version"] as? Int64 == 4 else {
+            throw EZError("Unsupported shared history version.")
         }
-        return entries.sorted {
-            $0.createdAt == $1.createdAt ? $0.id.uuidString > $1.id.uuidString : $0.createdAt > $1.createdAt
+    }
+
+    func snapshot() throws -> HistorySnapshot {
+        try transaction(.deferred) {
+            try requireCurrentSchema()
+            return HistorySnapshot(
+                native: try rows("SELECT data,image IS NOT NULL AS has_image FROM ez_entry"),
+                browser: try rows(
+                    "SELECT s.id,s.text,p.url,p.title,r.id AS run_id,r.response_structured IS NOT NULL AS has_image,r.input_json,r.prompt_raw,r.response_raw,r.model,r.status,r.error_message,r.created_at,r.latency_ms FROM selection s JOIN page p ON p.id=s.page_id JOIN llm_run r ON r.rowid=(SELECT rowid FROM llm_run WHERE selection_id=s.id AND status NOT IN ('queued','running','saving') ORDER BY created_at DESC,rowid DESC LIMIT 1)"
+                ))
         }
     }
     public func image(for entry: HistoryEntry) throws -> Data? {
@@ -323,14 +299,6 @@ public final class HistoryStore {
         try FileManager.default.removeItem(at: source)
         try FileManager.default.removeItem(at: lockURL)
     }
-    private static func browserID(_ id: String) -> UUID {
-        let bytes = Array(SHA256.hash(data: Data(("saul:" + id).utf8)).prefix(16))
-        return UUID(
-            uuid: (
-                bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7], bytes[8],
-                bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
-            ))
-    }
     private static func regular(_ url: URL, directory: Bool = false) throws {
         guard
             FileManager.default.fileExists(atPath: url.path)
@@ -344,8 +312,12 @@ public final class HistoryStore {
     private func failure() -> EZError {
         EZError("Shared history: " + String(cString: sqlite3_errmsg(database)))
     }
-    private func transaction<T>(_ body: () throws -> T) throws -> T {
-        try execute("BEGIN IMMEDIATE")
+    private enum Transaction: String {
+        case deferred = "DEFERRED"
+        case immediate = "IMMEDIATE"
+    }
+    private func transaction<T>(_ mode: Transaction = .immediate, _ body: () throws -> T) throws -> T {
+        try execute("BEGIN \(mode.rawValue)")
         do {
             let result = try body()
             try execute("COMMIT")

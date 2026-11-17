@@ -21,3 +21,32 @@ public func historySQL(_ url: URL, _ sql: String) throws -> String? {
     guard code == SQLITE_ROW, let text = sqlite3_column_text(statement, 0) else { return nil }
     return String(cString: text)
 }
+
+/// Holds an independent SQLite write transaction through a reader's operations.
+public final class HistoryFixtureWriter {
+    public enum Reservation: String {
+        case immediate = "IMMEDIATE"
+        case exclusive = "EXCLUSIVE"
+    }
+    private var database: OpaquePointer?
+
+    public init(_ url: URL, reservation: Reservation) throws {
+        do {
+            guard sqlite3_open_v2(url.path, &database, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK else {
+                throw CheckFailure("Cannot open fixture writer")
+            }
+            try run("BEGIN \(reservation.rawValue)")
+        } catch {
+            sqlite3_close(database)
+            database = nil
+            throw error
+        }
+    }
+    deinit { sqlite3_close(database) }
+
+    public func run(_ sql: String) throws {
+        guard sqlite3_exec(database, sql, nil, nil, nil) == SQLITE_OK else {
+            throw CheckFailure(String(cString: sqlite3_errmsg(database)))
+        }
+    }
+}

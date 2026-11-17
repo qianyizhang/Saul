@@ -33,6 +33,7 @@ import SwiftUI
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         quickLookup.start()
+        model.refreshHistory()
         _ = connectOnce()
         NSApp.servicesProvider = selectedTextService
         NSUpdateDynamicServices()

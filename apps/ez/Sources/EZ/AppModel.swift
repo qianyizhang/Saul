@@ -104,6 +104,13 @@ import SaulCredentialStorage
     let offline: Bool
     let auth: SaulConnection
     private var history: HistoryStore?
+    private let readHistory: @MainActor () async throws -> [HistoryEntry]
+    private var historyRead: Task<Void, Never>?
+    private enum HistoryChange {
+        case upsert(HistoryEntry)
+        case delete
+    }
+    private var historyChanges: [HistoryStore.RecordID: HistoryChange] = [:]
     private var lock: SessionLock?
     private var attemptExecution: AttemptExecution?
     private var configurationStore: ConfigurationStore?
@@ -112,7 +119,8 @@ import SaulCredentialStorage
     init(
         directory: URL? = nil, historyDirectory: URL? = nil, offline: Bool = false,
         attemptExecution: AttemptExecution? = nil, apiKeyStore: (any OpenAIKeyStorage)? = nil,
-        connectionChecks: ConnectionChecks? = nil
+        connectionChecks: ConnectionChecks? = nil,
+        readHistory: (@MainActor () async throws -> [HistoryEntry])? = nil
     ) {
         let auth = SaulConnection()
         self.auth = auth
@@ -147,14 +155,16 @@ import SaulCredentialStorage
             ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("EZ", isDirectory: true)
         self.historyDirectory = historyDirectory ?? (offline ? self.directory : HistoryStore.defaultDirectory)
+        let reader = HistoryReader(directory: self.historyDirectory)
+        self.readHistory = readHistory ?? { try await reader.load() }
         self.connectionChecks.onChange = { [weak self] in self?.objectWillChange.send() }
         do {
             lock = try SessionLock(directory: self.directory)
             let store = try HistoryStore(
                 directory: self.historyDirectory,
                 migrating: offline ? nil : self.directory)
-            history = store
             try store.recoverInterrupted()
+            history = store
             if !offline, attemptExecution == nil {
                 let provider = GenerationProvider.saul(.chatGPTPlan)
                 let api = GenerationProvider.saul(.openAIAPI)
@@ -180,8 +190,6 @@ import SaulCredentialStorage
                     },
                     append: { try store.append($0) })
             }
-            let loaded = try store.load()
-            entries = loaded
             let configStore = ConfigurationStore(
                 directory: self.directory, shared: offline ? nil : SharedPresetsStore())
             configurationStore = configStore
@@ -797,36 +805,74 @@ import SaulCredentialStorage
         launcherWork?.cancel()
         launcherWork = nil
         connectionChecks.reset()
+        cancelHistoryRead()
         lookupImage.select(nil)
         stop()
     }
     var canDeleteLookup: Bool { !busy && !launcherPending && history != nil && lock != nil }
-    func deleteLookup(_ id: UUID) {
-        guard canDeleteLookup, entries.contains(where: { $0.id == id }), let history else { return }
+    func deleteLookup(_ id: HistoryStore.RecordID) {
+        guard canDeleteLookup, let entry = entries.first(where: { $0.recordID == id }), let history
+        else { return }
         do {
-            try history.delete(id: id)
-            entries.removeAll { $0.id == id }
-            followUpDrafts[id] = nil
-            if selection == id { selection = nil }
+            try history.delete(id)
+            if historyRead != nil { historyChanges[id] = .delete }
+            entries.removeAll { $0.recordID == id }
+            followUpDrafts[entry.id] = nil
+            if selection == entry.id { selection = nil }
         } catch {
             self.error = "Lookup could not be deleted. \(error.localizedDescription)"
         }
     }
-    func refreshHistory() {
-        guard let history else { return }
-        do {
-            let retained = runningAttempt.map { [$0.entry] } ?? []
-            let ids = Set(retained.map(\.id))
-            entries = (retained + (try history.load()).filter { !ids.contains($0.id) }).sorted {
-                $0.createdAt > $1.createdAt
-            }
-            if let selection, !entries.contains(where: { $0.id == selection }) {
-                self.selection = nil
-            } else {
-                loadSelectedImage()
-            }
-        } catch { storageWarning = error.localizedDescription }
+
+    private func cancelHistoryRead() {
+        historyRead?.cancel()
+        historyRead = nil
+        historyChanges.removeAll()
     }
+
+    @discardableResult func refreshHistory() -> Task<Void, Never>? {
+        guard history != nil else { return nil }
+        cancelHistoryRead()
+        historyRead = Task { [weak self, readHistory] in
+            defer {
+                if !Task.isCancelled {
+                    self?.historyRead = nil
+                    self?.historyChanges.removeAll()
+                }
+            }
+            do {
+                var saved = try await readHistory()
+                guard !Task.isCancelled, let self else { return }
+                // A concurrent local write is newer than this snapshot. Retain it
+                // without dropping unrelated rows, including on the first startup load.
+                var changes = historyChanges
+                if let active = runningAttempt?.entry { changes[active.recordID] = .upsert(active) }
+                if !changes.isEmpty {
+                    saved.removeAll { changes[$0.recordID] != nil }
+                    for case .upsert(let entry) in changes.values {
+                        let position =
+                            saved.firstIndex {
+                                $0.createdAt < entry.createdAt
+                                    || ($0.createdAt == entry.createdAt
+                                        && $0.id.uuidString < entry.id.uuidString)
+                            } ?? saved.endIndex
+                        saved.insert(entry, at: position)
+                    }
+                }
+                entries = saved
+                storageWarning = nil
+                if let selection, !entries.contains(where: { $0.id == selection }) {
+                    self.selection = nil
+                } else {
+                    loadSelectedImage()
+                }
+            } catch {
+                if !Task.isCancelled { self?.storageWarning = error.localizedDescription }
+            }
+        }
+        return historyRead
+    }
+
     func revealHistory() { NSWorkspace.shared.activateFileViewerSelecting([history?.url ?? directory]) }
     func copy(_ text: String) {
         NSPasteboard.general.clearContents()
@@ -867,6 +913,7 @@ import SaulCredentialStorage
         }
         if selection == entry.id && entry.hasImage { loadSelectedImage() }
         if case .running = update { return }
+        if historyRead != nil { historyChanges[entry.recordID] = .upsert(entry) }
         runningAttempt = nil
     }
 }

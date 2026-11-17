@@ -27,11 +27,11 @@ extension AppModel {
     private var state: State = .empty {
         didSet { onChange() }
     }
-    private let directory: URL
+    private let reader: HistoryReader
     private let onChange: () -> Void
 
     init(directory: URL, onChange: @escaping () -> Void) {
-        self.directory = directory
+        reader = HistoryReader(directory: directory)
         self.onChange = onChange
     }
 
@@ -57,12 +57,9 @@ extension AppModel {
             state = .ready(entry.id, data)
             return
         }
-        let directory = self.directory
         state = .loading(
-            Task { [weak self] in
-                let data = await Task.detached {
-                    try? HistoryStore(directory: directory).image(for: entry)
-                }.value
+            Task { [weak self, reader] in
+                let data = try? await reader.image(for: entry)
                 guard !Task.isCancelled, let self else { return }
                 state = data.map { .ready(entry.id, $0) } ?? .empty
             })
