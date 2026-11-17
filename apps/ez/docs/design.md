@@ -1,9 +1,8 @@
 # Native design
 
-[DESIGN.md](../../../DESIGN.md) owns Little Clarity: green accent, serif subjects,
-system controls, quiet surfaces and reading space. Native system surfaces stay
-native. `AppStyle.swift` connects generated `DesignTokens.swift` roles to EZ;
-never hand-edit tokens. The generated file records its source SHA-256.
+[DESIGN.md](../../../DESIGN.md) owns shared presentation. Native system surfaces
+stay native. `AppStyle.swift` uses `DesignTokens.swift`, generated from the
+[canonical tokens](../../../design/tokens.md). Edit the source, not the generated Swift.
 
 ## Feature UI review
 
@@ -37,17 +36,14 @@ views and stages/verifies its bundle before replacement.
 
 Previews use disposable history, no real accounts/Keychain/network, and no global
 shortcut. `surface-preview` uses an in-memory API key store; `--unsaved-attempt`
-fails its first terminal save for recovery checks. It starts in Min Mode without
+fails its first terminal save to check the result and history failure states. It starts in Min Mode without
 reading/writing the personal preference. Fixture names and actions live in
 [UI QA](ui-qa.md); previews do not prove installed or live-service behavior.
 
 ## Min Mode and Settings
 
-Follow the shared [Min Mode policy](../../../DESIGN.md#min-mode). The local
-preference defaults on and is shared by both lookup surfaces. Short labels retain
-full accessible names/help. Hide routine hints, help-only disclosures, documentation
-links and pinned metric strips; retain errors, blocked choices, unsaved work and
-recovery. Omit the routine Standard preset suffix; Fast stays explicit.
+Follow the shared [Min Mode policy](../../../DESIGN.md#min-mode). Both lookup surfaces share the local preference. The Standard metrics footer
+and routine guidance stay out of Min Mode.
 
 Settings has Overview, Presets, Actions, Preferences, Connections and Shortcuts.
 Show one editor at a time, preserving drafts across sections and guarding item
@@ -56,8 +52,12 @@ changes/dismissal. Overview routes current choices to their editor. Use the shar
 
 ## Controls and metadata
 
-- Dropdowns keep a full-width click/scroll target regardless of label length.
-  Quick Lookup's footer preset selector is 250 points wide, with adjacent Details.
+- Both composers put equal Action and Preset choice buttons above the full-width
+  inputs. Each shows the role and current value. Open the button to search the
+  complete catalog in its configured order; current and unavailable rows are marked.
+  Long names and reasons remain available in tooltips and accessibility. Keep Fast
+  visible and show the connection and billing route while composing. Other native
+  dropdowns keep a full-width click/scroll target regardless of label length.
 - Disclosure headers use a full-width button at least 32 points high. Chevron,
   label and whitespace toggle once; expanded content remains interactive.
   Keyboard activation and an accessible Expanded/Collapsed value are required.
@@ -82,16 +82,31 @@ Original/Corrected: removed text has warm tint/strikethrough; additions green/un
 Labels make color nonessential. Wide layouts align paragraph rows in one scroll
 area; narrow layouts show Corrected first and disclose Original. Notes sit under
 Why these changes. Unrecognized formats keep ordinary reading with long original
-text collapsed. Literal output remains in Details → Inspect; Standard also exposes
-the main inspector directly. [Architecture](architecture.md#spelling-comparison-presentation)
-owns parsing and bounds.
+text collapsed. Literal output remains in Details → Inspect in both modes.
+[SpellingComparison](../Sources/EZCore/SpellingComparison.swift) compares only
+completed single-input results with recognized headings; long or ambiguous
+inputs keep readable fallback text. It removes Markdown decoration only for the
+comparison, aligns unchanged-word anchors across paragraphs/lists and leaves a
+cell empty where no matching block exists. Copy and export retain literal output.
 
-Search citations are clickable in both readers. Image fields show preview,
-Choose/Replace, Paste and Remove above instructions; errors stay beside the image.
-Quick Lookup reserves attachment space and keeps Run reachable. API/search charges
-remain visible in both modes. Details records search required/completed and source
-name. Reuse prepares a draft without sending.
+Show **Searching…** only from observed search-tool activity; search/API charges
+stay beside Run. Citations are clickable in both readers. Generic image fields show preview,
+Choose/Replace, Paste and Remove above instructions. Make meme uses a square
+Sketch canvas in the main window, with Draw, Select, Add text, undo and redo.
+The selected image shows a resize handle; the selected text shows its editor.
+Quick Lookup has a compact preview, Paste and Edit sketch. Errors stay beside the
+image; Run and API charges stay reachable. Details records search
+required/completed and source name. Reuse prepares a draft without sending.
 
 [Shared control symbols](../../../design/symbols.html) defines the glyphs and
 meanings used by both apps. Symbol-only controls retain full accessible names and
 tooltips in Min Mode and Standard view.
+
+## Speak preview
+
+Presets uses a saved Realtime model and strict voice choice. Show API billing
+and AI-generated audio with Generate/Stop and deliberate playback. The
+[client](../Sources/EZCore/SpeechPreviewClient.swift) receives only short-lived
+authorization, bounds the stream and creates WAV only after completion.
+Leaving the view cancels work and releases in-memory audio; preview text and
+audio never enter history.

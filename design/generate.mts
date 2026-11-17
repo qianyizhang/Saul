@@ -8,13 +8,11 @@ export interface CompiledDesign {
   css: string;
   typescript: string;
   swift: string | undefined;
-  hash: string;
   findings: Finding[];
 }
 import { lint } from '@google/design.md/linter';
 import { format } from 'prettier';
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile, stat, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -45,7 +43,7 @@ function dimension(value: { value: number; unit: string } | undefined, context: 
 }
 
 /** Consume Google's resolved model; never independently parse DESIGN.md or its references. */
-export function compileDesign(source: string, { native = false } = {}) {
+export function compileDesign(source: string, { native = false } = {}): CompiledDesign {
   const report = lint(source);
   const errors = report.findings.filter(
     (finding) => finding.severity === 'error' || finding.rule === 'contrast-ratio',
@@ -62,8 +60,7 @@ export function compileDesign(source: string, { native = false } = {}) {
     if (name.endsWith('-dark') && !model.colors.has(name.slice(0, -5)))
       throw new Error(`Dark token has no light partner: ${name}`);
 
-  const hash = createHash('sha256').update(source).digest('hex');
-  const stamp = `Generated from DESIGN.md · SHA-256 ${hash}. Do not edit.`;
+  const stamp = 'Generated design tokens. Do not edit.';
   const css = [`/* ${stamp} */`, ':root,', ':host {', '  color-scheme: light dark;'];
   const color = (value: { hex: string; a?: number }) => {
     if (!value || (value.a !== undefined && value.a !== 1))
@@ -172,7 +169,7 @@ export function compileDesign(source: string, { native = false } = {}) {
     lines.push('}', '');
     swift = lines.join('\n');
   }
-  return { css: css.join('\n'), typescript, swift, hash, findings: report.findings };
+  return { css: css.join('\n'), typescript, swift, findings: report.findings };
 }
 
 export async function generate({
@@ -245,19 +242,16 @@ export async function generate({
     })),
   );
   for (const output of formatted) {
-    const expected = output.expected;
-    if (check) {
-      let actual;
-      try {
-        actual = await readFile(output.path, 'utf8');
-      } catch (error) {
-        if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
-      }
-      if (actual !== expected) throw new Error(`Generated design is stale: ${output.path}`);
-    } else {
-      await mkdir(path.dirname(output.path), { recursive: true });
-      await writeFile(output.path, expected);
+    let actual;
+    try {
+      actual = await readFile(output.path, 'utf8');
+    } catch (error) {
+      if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
     }
+    if (actual === output.expected) continue;
+    if (check) throw new Error(`Generated design is stale: ${output.path}`);
+    await mkdir(path.dirname(output.path), { recursive: true });
+    await writeFile(output.path, output.expected);
   }
   return compiled;
 }
@@ -268,7 +262,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       options: {
         source: {
           type: 'string',
-          default: fileURLToPath(new URL('../DESIGN.md', import.meta.url)),
+          default: fileURLToPath(new URL('./tokens.md', import.meta.url)),
         },
         css: { type: 'string', multiple: true },
         swift: { type: 'string' },
@@ -284,9 +278,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     ];
     const result = await generate({ source: values.source, outputs, check: values.check });
     if (values.symbols) await import('./generate-symbols.mts');
-    console.log(
-      `${values.check ? 'Verified' : 'Generated'} ${outputs.length} design outputs · ${result.hash.slice(0, 12)}`,
-    );
+    console.log(`${values.check ? 'Verified' : 'Generated'} ${outputs.length} design outputs`);
     const warnings = result.findings.filter(
       (f) => f.severity === 'warning' && f.rule !== 'orphaned-tokens',
     );

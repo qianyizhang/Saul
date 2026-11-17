@@ -13,7 +13,7 @@ async function seedHistory(repository: FixtureStore, { origin, count, options }:
   const raw =
     options.response || 'A <term note="Steepest increase">gradient</term> explains velocity.';
   // This prepares persisted fixture data, not a submission/lifecycle test.
-  // One transaction avoids thousands of individual OPFS commits.
+  // One transaction avoids thousands of individual SQLite commits.
   db.transaction(() => {
     db.exec({
       sql: 'INSERT INTO page(id,url,title,first_seen_at,last_seen_at) VALUES (?,?,?,1,1)',

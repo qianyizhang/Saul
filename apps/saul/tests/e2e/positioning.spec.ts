@@ -28,7 +28,7 @@ test('Explain appears immediately without movement animations', async ({
   await article.goto(fixtureServer.origin + '/article');
   await expect(article.locator('saul-root')).toBeAttached();
   await article.locator('#concept').click({ clickCount: 3 });
-  const trigger = article.getByRole('button', { name: 'Explain', exact: true });
+  const trigger = article.getByRole('button', { name: 'Explain & open', exact: true });
   await expect(trigger).toBeVisible();
   const motion = await trigger.evaluate((element) => {
     const style = getComputedStyle(element);
@@ -52,7 +52,7 @@ test('Explain stays next to the selection on a long positioned page while scroll
   });
   await article.locator('#concept').scrollIntoViewIfNeeded();
   await article.locator('#concept').click({ clickCount: 3 });
-  const trigger = article.getByRole('button', { name: 'Explain', exact: true });
+  const trigger = article.getByRole('button', { name: 'Explain & open', exact: true });
   await expect(trigger).toBeVisible();
   await expectBelowSelection(article, trigger);
   const beforeScroll = await selectionBox(article);
@@ -60,7 +60,6 @@ test('Explain stays next to the selection on a long positioned page while scroll
   await expect.poll(async () => (await selectionBox(article)).y).toBeLessThan(beforeScroll.y - 60);
   await expectBelowSelection(article, trigger);
   await trigger.click();
-  await article.getByRole('button', { name: 'View', exact: true }).click();
   const card = article.getByRole('region', { name: 'Saul explanation' });
   await expect(card.getByText('Saved', { exact: true })).toBeVisible();
   const box = (await card.boundingBox())!;
@@ -82,7 +81,7 @@ test('Explain follows text layout changes inside an unchanged container', async 
   await expect(page.locator('saul-root')).toBeAttached();
   await page.addStyleTag({ content: '#concept { height: 320px; box-sizing: border-box }' });
   await page.locator('#concept').click({ clickCount: 3, position: { x: 80, y: 15 } });
-  const trigger = page.getByRole('button', { name: 'Explain', exact: true });
+  const trigger = page.getByRole('button', { name: 'Explain & open', exact: true });
   await expectBelowSelection(page, trigger);
   const before = await page.locator('#concept').boundingBox();
   await page.locator('#concept').evaluate((paragraph) => {
@@ -101,7 +100,7 @@ test('captured highlight stays anchored when the host changes the browser select
   await page.goto(fixtureServer.origin + '/article');
   await expect(page.locator('saul-root')).toBeAttached();
   await page.locator('#concept').click({ clickCount: 3 });
-  const trigger = page.getByRole('button', { name: 'Explain', exact: true });
+  const trigger = page.getByRole('button', { name: 'Explain & open', exact: true });
   await expectBelowSelection(page, trigger);
   const original = (await trigger.boundingBox())!;
   await page.evaluate(async () => {

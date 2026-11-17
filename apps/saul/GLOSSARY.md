@@ -6,6 +6,25 @@ See the [shared vocabulary](../../GLOSSARY.md) for actions, presets and inspecti
 
 ## Language
 
+**Call Saul**:
+The page-level command, named for _Better Call Saul_. It runs the selected Call
+over captured page context; a selection of tabs runs once per page.
+
+**Call**:
+A configurable operation over captured page context. Summarize is the first and
+default Call. A custom Call can prepare text and chain model requests within one
+page run, sharing cancellation and producing one final result. Page scope does
+not imply complete capture; coverage and truncation remain explicit.
+_Avoid_: Action (when referring to page-level Calls)
+
+**Action**:
+In Saul, an operation over local context, such as selected text. It uses the
+[shared Action model](../../GLOSSARY.md), distinct from a page-level Call.
+
+**Call preset**:
+A saved Call choice and its model preset. The model preset selects connection,
+model and options; the Call defines what to do with the page.
+
 **Window**:
 A Chrome window containing an ordered set of tabs and tab groups. In Saul's
 extension navigation, Window names the view of the window containing Saul.
@@ -24,13 +43,14 @@ The tabs explicitly chosen for an action.
 _Avoid_: Queue, batch
 
 **Summary**:
-A saved reading result based on captured tab content. Summaries is the shared
-name for these results on both surfaces.
+A bilingual reading result produced by the default Summarize Call. **Summaries**
+remains the existing name of the saved-results surface, which also holds custom
+Call text results.
 _Avoid_: Digest, window digest
 
 **Summary reader**:
-A disposable view of a saved summary and its progress. Closing the reader does
-not delete the summary.
+A disposable view of a saved Call result and its progress. Closing the reader
+does not delete the result.
 _Avoid_: Export preview, downloaded report
 
 **Proposal**:

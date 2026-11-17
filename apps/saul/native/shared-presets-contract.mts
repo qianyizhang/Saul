@@ -1,5 +1,10 @@
 import { isRecord } from './value.mts';
 export type ActionCapability = 'write' | 'draw' | 'speak';
+export const IMAGE_OPTIONS = {
+  size: ['1024x1024', '1536x1024', '1024x1536'],
+  quality: ['low', 'medium', 'high'],
+  outputFormat: ['png', 'gif'],
+} as const;
 export const SPEECH_VOICES = [
   'alloy',
   'ash',
@@ -12,18 +17,21 @@ export const SPEECH_VOICES = [
   'marin',
   'cedar',
 ] as const;
+function supportedOption<T extends string>(value: unknown, choices: readonly T[]): value is T {
+  return typeof value === 'string' && choices.some((choice) => choice === value);
+}
+export const validImageSize = (value: unknown) => supportedOption(value, IMAGE_OPTIONS.size);
+export const validImageQuality = (value: unknown) => supportedOption(value, IMAGE_OPTIONS.quality);
+export const validImageFormat = (value: unknown) =>
+  supportedOption(value, IMAGE_OPTIONS.outputFormat);
+export const validSpeechVoice = (value: unknown) => supportedOption(value, SPEECH_VOICES);
 export interface SharedSpeechOptions {
   voice: string;
 }
 export function validSpeechOptions(value: unknown): value is SharedSpeechOptions {
-  return (
-    isRecord(value) &&
-    Object.keys(value).length === 1 &&
-    typeof value.voice === 'string' &&
-    SPEECH_VOICES.some((voice) => voice === value.voice)
-  );
+  return isRecord(value) && Object.keys(value).length === 1 && validSpeechVoice(value.voice);
 }
-export type ImageFormat = 'png' | 'gif';
+export type ImageFormat = (typeof IMAGE_OPTIONS.outputFormat)[number];
 export interface SharedImageOptions {
   size: string;
   quality: string;
@@ -33,13 +41,9 @@ export function validImageOptions(value: unknown): value is SharedImageOptions {
   return (
     isRecord(value) &&
     Object.keys(value).every((key) => ['size', 'quality', 'outputFormat'].includes(key)) &&
-    typeof value.size === 'string' &&
-    ['1024x1024', '1536x1024', '1024x1536'].includes(value.size) &&
-    typeof value.quality === 'string' &&
-    ['low', 'medium', 'high'].includes(value.quality) &&
-    (value.outputFormat === undefined ||
-      value.outputFormat === 'png' ||
-      value.outputFormat === 'gif')
+    validImageSize(value.size) &&
+    validImageQuality(value.quality) &&
+    (value.outputFormat === undefined || validImageFormat(value.outputFormat))
   );
 }
 export interface SharedPreset {

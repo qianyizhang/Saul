@@ -1,12 +1,44 @@
-import { readingMore } from './driver.ts';
+import { readingMore, sendDb } from './driver.ts';
+import { runDatabaseFixture } from './database-harness.ts';
+import type { DbOperations, DbRequest, Submission } from '../../src/types/storage';
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider, createFixtureServer } from './support.ts';
 import {
   explainSelection as explain,
+  queueSelection,
   getFirstHistory,
   getHistory as history,
   openFirstPageExplanation as view,
 } from './driver.ts';
+
+test('pointer opens once; closing before completion stays closed and keyboard reuse stays quiet', async ({
+  sandbox,
+}) => {
+  const server = await createFixtureServer('An explicitly opened answer.', { gated: true });
+  try {
+    const { popup, context } = await sandbox.launch();
+    await configureFixtureProvider(popup, server.origin);
+    const page = await context.newPage();
+    await page.goto(server.origin + '/article');
+    await explain(page);
+    const card = page.getByRole('region', { name: 'Saul explanation' });
+    await expect(card).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Close explanation', exact: true }).click();
+    server.releaseAll();
+    await expect.poll(async () => (await getFirstHistory(popup)).latest.status).toBe('completed');
+    await expect(card).toHaveCount(0);
+    await queueSelection(page);
+    await expect(page.getByText('Request available', { exact: true })).toBeVisible();
+    await expect(card).toHaveCount(0);
+    expect(server.requests).toHaveLength(1);
+    await explain(page);
+    await expect(card).toBeVisible();
+    expect(server.requests).toHaveLength(1);
+  } finally {
+    await server.close();
+  }
+});
 test('quiet queue, underline view, refresh and persistent unread explanations', async ({
   sandbox,
   fixtureServer,
@@ -16,7 +48,7 @@ test('quiet queue, underline view, refresh and persistent unread explanations', 
   let page = await browser.context.newPage();
   await page.goto(fixtureServer.origin + '/article');
   const original = await page.locator('#concept').boundingBox();
-  await explain(page);
+  await queueSelection(page);
   await expect(page.getByRole('region', { name: 'Saul explanation' })).toHaveCount(0);
   await expect.poll(async () => (await history(browser.popup))[0]?.latest.status).toBe('completed');
   await expect(page.getByText('Explanation ready', { exact: true })).toBeVisible();
@@ -83,6 +115,39 @@ test('dismiss, refresh and closing the source do not cancel; actual runner loss 
   }
 });
 
+test('a failed terminal write preserves the saved answer and Retry starts one new attempt', async ({
+  sandbox,
+}) => {
+  const server = await createFixtureServer('An answer kept across failed writes.');
+  try {
+    const { popup, context } = await sandbox.launch();
+    await configureFixtureProvider(popup, server.origin);
+    const page = await context.newPage();
+    await page.goto(server.origin + '/article');
+    await explain(page);
+    await expect.poll(async () => (await history(popup))[0]?.latest.status).toBe('completed');
+    const saved = await getFirstHistory(popup);
+    sandbox.rejectHistoryWriteOnce(
+      ({ type, payload }) =>
+        type === 'DB_FINISH' && (payload as { status: string }).status === 'completed',
+    );
+    await readingMore(page);
+    await page.getByRole('button', { name: 'Regenerate', exact: true }).click();
+    await expect(
+      page.getByRole('region', { name: 'Saul explanation' }).getByRole('alert'),
+    ).toContainText('Could not save');
+    await expect.poll(async () => (await history(popup))[0]?.latest.status).toBe('failed');
+    expect((await getFirstHistory(popup)).completed?.id).toBe(saved.latest.id);
+    expect(server.requests).toHaveLength(2);
+    await page.getByRole('button', { name: 'Retry explanation', exact: true }).click();
+    await expect.poll(async () => (await history(popup))[0]?.latest.status).toBe('completed');
+    expect((await getFirstHistory(popup)).latest.id).not.toBe(saved.latest.id);
+    expect(server.requests).toHaveLength(3);
+  } finally {
+    await server.close();
+  }
+});
+
 test('queue limits, frozen configuration, repeated Explain, stop, and deletion during generation', async ({
   sandbox,
 }) => {
@@ -107,8 +172,10 @@ test('queue limits, frozen configuration, repeated Explain, stop, and deletion d
     ).toHaveLength(1);
     await popup.evaluate(async () => {
       const data = await chrome.storage.local.get('saul_user_settings');
-      (data.saul_user_settings as { openaiCompatible: { model: string } }).openaiCompatible.model =
-        'later-model';
+      const settings = data.saul_user_settings as {
+        configuration: { presets: { model: string }[] };
+      };
+      settings.configuration.presets[0]!.model = 'later-model';
       await chrome.storage.local.set(data);
     });
     server.releaseAll();
@@ -293,23 +360,17 @@ test('content capabilities reject global history, direct runner access and anoth
   expect((await history(popup)).length).toBe(1);
 });
 
-test('submission and completion are idempotent; deletion makes late writes inert', async ({
-  sandbox,
-  fixtureServer,
-}) => {
-  const { worker, popup } = await sandbox.launch();
-  await history(popup);
-  const results = await worker.evaluate(async (origin) => {
-    const db = async (type: string, payload?: unknown) => {
-      const result = await chrome.runtime.sendMessage({
-        target: 'saul-offscreen',
-        operation: 'db',
-        message: { type, payload },
-      });
-      if (!result.success) throw new Error(result.error);
-      return result.result;
-    };
-    const snapshot = {
+test.describe('reading persistence', () => {
+  test.use({ databaseFixtures: true });
+
+  test('submission and completion are idempotent; deletion makes late writes inert', async ({
+    sandbox,
+    fixtureServer,
+  }) => {
+    const { worker, popup } = await sandbox.launch();
+    await history(popup);
+    const origin = fixtureServer.origin;
+    const snapshot: Submission['snapshot'] = {
       id: 'idempotent',
       text: 'term',
       page: { url: origin + '/article', title: 'Fixture' },
@@ -317,7 +378,7 @@ test('submission and completion are idempotent; deletion makes late writes inert
       viewport: { x: 0, y: 0, width: 0, height: 0, scrollX: 0, scrollY: 0 },
       capturedAt: 1,
     };
-    const input = {
+    const input: Submission['input'] = {
       provider: 'openai-compatible',
       remote: { baseUrl: origin + '/v1', model: 'test-model', temperature: 0.3 },
       local: { temperature: 0.3, topK: 3 },
@@ -325,52 +386,65 @@ test('submission and completion are idempotent; deletion makes late writes inert
       systemPrompt: 'test',
       userPrompt: 'test',
     };
-    const submission = { snapshot, input, submissionId: 'request-a', regenerate: false };
-    const replies = await Promise.all([db('DB_SUBMIT', submission), db('DB_SUBMIT', submission)]);
-    const runId = replies.find((r) => r.run).run.id;
-    await db('DB_CLAIM', { runId });
-    await db('DB_SAVING', { runId });
-    const finish = { runId, raw: 'First committed answer', status: 'completed', latencyMs: 1 };
-    const commits = await Promise.all([
-      db('DB_FINISH', finish),
-      db('DB_FINISH', { ...finish, raw: 'Should not replace' }),
-    ]);
-    // A regenerate request reused while another run is active must stay reused later, too.
-    const attempt = await db('DB_SUBMIT', {
-      ...submission,
-      submissionId: 'request-b',
-      regenerate: true,
-    });
-    const reused = await db('DB_SUBMIT', {
-      ...submission,
-      submissionId: 'request-c',
-      regenerate: true,
-    });
-    await db('DB_FINISH', { runId: attempt.run.id, raw: '', status: 'cancelled', latencyMs: 0 });
-    const again = await db('DB_SUBMIT', {
-      ...submission,
-      submissionId: 'request-c',
-      regenerate: true,
-    });
-    const runs = await db('DB_RUNS', { selectionId: snapshot.id });
-    await db('DB_DELETE_SELECTION', { selectionId: snapshot.id });
-    const late = await db('DB_FINISH', finish);
-    return {
-      created: replies.filter((r) => r.run).length,
-      commits,
-      reused: !reused.run && !again.run,
-      runs,
-      late,
-      history: await db('DB_GET_HISTORY', {}),
+    const submission: Submission = {
+      snapshot,
+      input,
+      submissionId: 'request-a',
+      regenerate: false,
     };
-  }, fixtureServer.origin);
-  expect(results.created).toBe(1);
-  expect(results.commits).toEqual([true, false]);
-  expect(results.reused).toBe(true);
-  expect(results.runs).toHaveLength(2);
-  expect(results.runs[1].responseRaw).toBe('First committed answer');
-  expect(results.late).toBe(false);
-  expect(results.history).toEqual([]);
+    const request = { type: 'DB_SUBMIT', payload: submission } as const;
+    await expect(
+      worker.evaluate(
+        (message) =>
+          chrome.runtime.sendMessage({ target: 'saul-offscreen', operation: 'db', message }),
+        request,
+      ),
+    ).resolves.toMatchObject({ success: false, error: 'Unknown workspace storage operation' });
+
+    // Exercise private persistence transitions through the isolated native SQLite fixture.
+    const db = <M extends DbRequest>(message: M) =>
+      runDatabaseFixture<DbOperations[M['type']]['result']>(popup, { action: 'db', message });
+    const replies = await Promise.all([db(request), db(request)]);
+    const created = replies.filter((result) => result.run);
+    expect(created).toHaveLength(1);
+    const runId = created[0]!.run!.id;
+    await db({ type: 'DB_CLAIM', payload: { runId } });
+    await db({ type: 'DB_SAVING', payload: { runId } });
+    const finish = {
+      runId,
+      raw: 'First committed answer',
+      status: 'completed',
+      latencyMs: 1,
+    } as const;
+    expect(await db({ type: 'DB_FINISH', payload: finish })).toBe(true);
+    expect(await db({ type: 'DB_FINISH', payload: { ...finish, raw: 'Should not replace' } })).toBe(
+      false,
+    );
+
+    const attempt = await db({
+      type: 'DB_SUBMIT',
+      payload: { ...submission, submissionId: 'request-b', regenerate: true },
+    });
+    // A regenerate request reused while another run is active must stay reused later, too.
+    const reusing = {
+      type: 'DB_SUBMIT',
+      payload: { ...submission, submissionId: 'request-c', regenerate: true },
+    } as const;
+    expect((await db(reusing)).run).toBeUndefined();
+    await db({
+      type: 'DB_FINISH',
+      payload: { runId: attempt.run!.id, raw: '', status: 'cancelled', latencyMs: 0 },
+    });
+    expect((await db(reusing)).run).toBeUndefined();
+
+    const selection = { selectionId: snapshot.id };
+    const runs = await sendDb(popup, { type: 'DB_RUNS', payload: selection });
+    expect(runs).toHaveLength(2);
+    expect(runs[1]?.responseRaw).toBe('First committed answer');
+    await sendDb(popup, { type: 'DB_DELETE_SELECTION', payload: selection });
+    expect(await db({ type: 'DB_FINISH', payload: finish })).toBe(false);
+    expect(await history(popup)).toEqual([]);
+  });
 });
 
 test('an old in-flight page refresh cannot strand the subscription after SPA navigation', async ({
@@ -382,7 +456,7 @@ test('an old in-flight page refresh cannot strand the subscription after SPA nav
     await configureFixtureProvider(popup, server.origin);
     const page = await context.newPage();
     await page.goto(server.origin + '/article');
-    await explain(page);
+    await queueSelection(page);
     await expect(page.getByText('Explanation ready', { exact: true })).toBeVisible();
     const row = await getFirstHistory(popup);
     // Hold one background-to-offscreen page response across a same-document navigation.
@@ -429,7 +503,7 @@ test('an old in-flight page refresh cannot strand the subscription after SPA nav
     await expect(page.getByRole('button', { name: 'Page explanations', exact: true })).toHaveCount(
       0,
     );
-    await explain(page, '#third');
+    await queueSelection(page, '#third');
     await expect.poll(() => server.requests.length).toBe(2);
     await expect(page.getByText('Explanation ready', { exact: true })).toBeVisible();
     await expect(

@@ -123,7 +123,9 @@ function httpUrl(value: string) {
 export async function handlePageCall(name: string, input: unknown): Promise<PageResult> {
   const access = await chrome.storage.local.get(PAGE_ACCESS_KEY);
   if (access[PAGE_ACCESS_KEY] !== true)
-    throw new Error('Enable Page reading and actions in Saul → Tabs first');
+    throw new Error(
+      'Enable Page reading and actions in Saul → Settings → Preferences → Integrations first',
+    );
   const args = validateCall(name, input) as { tabId: number };
   const tab = await chrome.tabs.get(args.tabId);
   const window = await chrome.windows.get(tab.windowId);

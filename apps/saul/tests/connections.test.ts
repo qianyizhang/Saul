@@ -8,8 +8,8 @@ import {
   validateConnections,
   validateConnectionChanges,
 } from '../native/shared-presets-contract.mts';
-import { preparePreset } from '../src/models/preset-resolution';
-import { DEFAULT_SETTINGS } from '../src/storage/settings';
+import { preparePreset } from '../src/configuration/resolve';
+import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 
 const catalog = {
   fetchedAt: 123,
@@ -58,7 +58,7 @@ it('validates catalog and status through the actual credential wire without acce
   ).toThrow();
 });
 it('pins a plan connection regardless of another account selected by the app', () => {
-  const settings = structuredClone(DEFAULT_SETTINGS);
+  const settings = structuredClone(DEFAULT_CONFIGURATION);
   settings.sharedCredentials = 'saul';
   settings.connections = [
     { key: 'work', name: 'Work', kind: 'chatgpt-plan', accountId: 'work-account' },
@@ -84,7 +84,7 @@ it('pins a plan connection regardless of another account selected by the app', (
   expect(() => preparePreset(settings, preset)).toThrow('Choose an account');
 });
 it('keeps custom endpoint definitions secret-free and resolves their own credential owner', () => {
-  const settings = structuredClone(DEFAULT_SETTINGS);
+  const settings = structuredClone(DEFAULT_CONFIGURATION);
   settings.sharedCredentials = 'saul';
   settings.connections = [
     { key: 'local', name: 'Local', kind: 'openai-api', baseUrl: 'http://localhost:11434/v1' },

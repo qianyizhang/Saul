@@ -84,6 +84,12 @@ public final class SharedPresetsStore {
     public func readAppSection(_ section: String) throws -> (revision: Int, value: [String: Any]?) {
         try appSection(readDocument(), section)
     }
+    func configurationSnapshot() throws -> (revision: Int, value: [String: Any]?, library: SharedPresets) {
+        let document = try readDocument()
+        let scope = try appSection(document, "configuration")
+        return (scope.revision, scope.value, try library(document))
+    }
+
     private func appSection(_ document: [String: Any], _ section: String) throws -> (
         revision: Int, value: [String: Any]?
     ) {
@@ -246,17 +252,20 @@ public final class SharedPresetsStore {
             ? current
             : setPresets(&document, imported, revision: current.revision, connections: definitions)
     }
-    public func saveConfiguration(_ configuration: Configuration, scopedRevision: Int) throws -> Int {
+    func saveConfiguration(_ configuration: Configuration, scopedRevision: Int) throws -> (
+        scopedRevision: Int, library: SharedPresets
+    ) {
         try update { document in
             guard try appSection(document, "configuration").revision == scopedRevision else {
                 throw EZError("EZ settings changed. Reload before saving again.")
             }
+            let library: SharedPresets
             if let revision = configuration.sharedPresetRevision {
-                _ = try setPresets(
+                library = try setPresets(
                     &document, configuration.presets, revision: revision,
                     connections: configuration.connections)
             } else {
-                _ = try importPresets(
+                library = try importPresets(
                     &document, configuration.presets, connections: configuration.connections)
             }
             guard
@@ -266,7 +275,9 @@ public final class SharedPresetsStore {
                 throw EZError("Configuration must be an object.")
             }
             for key in ["presets", "connections", "sharedPresetRevision"] { value.removeValue(forKey: key) }
-            return try setAppSection(&document, "configuration", value: value, revision: scopedRevision)
+            let savedScope = try setAppSection(
+                &document, "configuration", value: value, revision: scopedRevision)
+            return (savedScope, library)
         }
     }
 }

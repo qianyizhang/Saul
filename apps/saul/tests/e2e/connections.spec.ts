@@ -1,6 +1,7 @@
 import { test, expect } from './fixtures.ts';
 import { settingsSection } from './driver.ts';
-import { DEFAULT_SETTINGS } from '../../src/storage/settings';
+import { DEFAULT_CONFIGURATION } from '../../src/configuration/definition';
+import type { Configuration } from '../../src/configuration/definition';
 import type { SharedPresets } from '../../native/shared-presets-contract.mts';
 import type { PlanControlRequest } from '../../native/plan-protocol.mts';
 import type { CredentialRequest, CredentialEvent } from '../../native/credentials-contract.mts';
@@ -153,10 +154,16 @@ test('managed connections preserve setup after failure and report removed models
         },
       } as unknown as chrome.runtime.Port;
     }) as typeof chrome.runtime.connectNative;
-  }, DEFAULT_SETTINGS);
+  }, DEFAULT_CONFIGURATION);
   await popup.reload();
   await popup.setViewportSize({ width: 640, height: 760 });
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  const savedBeforeInspection = await worker.evaluate(
+    async () =>
+      (await chrome.storage.local.get('saul_user_settings')).saul_user_settings as Configuration,
+  );
+  await settingsSection(popup, 'Presets');
+  await popup.getByRole('button', { name: 'Writing', exact: true }).click();
   await settingsSection(popup, 'Connections');
   const plan = popup.getByRole('article', { name: 'ChatGPT plan', exact: true });
   await expect(plan.getByText('alex@example.com', { exact: true })).toBeVisible();
@@ -229,7 +236,52 @@ test('managed connections preserve setup after failure and report removed models
     (globalThis as unknown as { connectionFixture: { denied: boolean } }).connectionFixture.denied =
       false;
   });
+  await popup.evaluate(() => {
+    const original = chrome.runtime.sendMessage.bind(chrome.runtime) as (
+      message: unknown,
+    ) => Promise<unknown>;
+    const state = globalThis as typeof globalThis & { connectionCommitCount: number };
+    state.connectionCommitCount = 0;
+    chrome.runtime.sendMessage = (async (message: {
+      target?: string;
+      message?: { action?: string };
+    }) => {
+      const reply = await original(message);
+      if (message.target === 'saul-settings' && message.message?.action === 'commit') {
+        state.connectionCommitCount++;
+        return { success: false, error: 'Synthetic failure after saving the connection.' };
+      }
+      return reply;
+    }) as typeof chrome.runtime.sendMessage;
+  });
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(
+    popup.getByRole('alert').filter({ hasText: 'Synthetic failure after saving' }),
+  ).toBeVisible();
+  await expect(
+    popup.getByRole('button', { name: 'Reload saved settings', exact: true }),
+  ).toBeVisible();
+  await expect(
+    popup
+      .getByRole('region', { name: 'Connections', exact: true })
+      .getByRole('button', { name: 'Save', exact: true }),
+  ).toBeDisabled();
+  await popup.screenshot({ path: info.outputPath('connection-recovery.png') });
+  await popup.setViewportSize({ width: 390, height: 850 });
+  await popup.emulateMedia({ colorScheme: 'dark' });
+  expect(await popup.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await popup.screenshot({ path: info.outputPath('connection-recovery-dark-narrow.png') });
+  await popup.setViewportSize({ width: 640, height: 760 });
+  await popup.emulateMedia({ colorScheme: 'light' });
+  await popup.getByRole('button', { name: 'Review latest', exact: true }).click();
+  await popup.getByRole('button', { name: 'Apply to draft', exact: true }).click();
+  await popup.getByRole('button', { name: 'Cancel', exact: true }).click();
+  expect(
+    await popup.evaluate(
+      () =>
+        (globalThis as typeof globalThis & { connectionCommitCount: number }).connectionCommitCount,
+    ),
+  ).toBe(1);
   const local = popup.getByRole('article', { name: 'Local development', exact: true });
   await expect(local.getByText('Write', { exact: true })).toBeVisible();
   await expect(local.getByText(/localhost:11434/)).toBeVisible();
@@ -238,6 +290,18 @@ test('managed connections preserve setup after failure and report removed models
   await popup.screenshot({ path: info.outputPath('connections-dark-narrow.png') });
   expect(await popup.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await settingsSection(popup, 'Presets');
+  await expect(popup.getByLabel('Preset', { exact: true })).toHaveValue(
+    'c14b29f3-3ec2-4efc-8bed-e05531aef2cb',
+  );
+  const savedAfterConnection = await worker.evaluate(
+    async () =>
+      (await chrome.storage.local.get('saul_user_settings')).saul_user_settings as Configuration,
+  );
+  expect(savedAfterConnection.openaiCompatible).toEqual({
+    ...savedBeforeInspection.openaiCompatible,
+    credentialOwner: 'saul', // The unchanged credential owner marks official routes on commit.
+  });
+  expect(savedAfterConnection.activeProvider).toBe(savedBeforeInspection.activeProvider);
   await popup
     .getByLabel('Preset', { exact: true })
     .selectOption('c14b29f3-3ec2-4efc-8bed-e05531aef2cb');

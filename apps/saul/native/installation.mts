@@ -148,6 +148,7 @@ export const payloadFiles: Record<string, string[]> = {
     'protocol.mjs',
     'transport.mjs',
     'plan-protocol.mjs',
+    'vision.mjs',
     'plan-host.mjs',
     'history.mjs',
     'history.sql',

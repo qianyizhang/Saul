@@ -8,7 +8,7 @@ import SwiftUI
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
         Task { @MainActor in
-            exit(await CheckRunner.run(cases()))
+            exit(await CheckRunner.run(cases() + DraftKeyboardChecks.cases() + LookupChoiceChecks.cases()))
         }
         app.run()
     }

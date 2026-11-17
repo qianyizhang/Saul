@@ -3,7 +3,16 @@ import { parseSummary } from '../src/digest/summary';
 import { digestHtml } from '../src/digest/html';
 import { validateDigest } from '../src/digest/contracts';
 import { DigestRunner } from '../src/digest/runner';
-import type { DigestBatch, DigestSource } from '../src/digest/types';
+import { createCallExecutor } from '../src/calls/execution';
+import type { actionHost } from '../src/calls/host';
+import {
+  activeItem,
+  interruptItem,
+  restartItem,
+  retryableItem,
+  type DigestBatch,
+  type DigestSource,
+} from '../src/digest/types';
 import type { DbCall, DbRequest } from '../src/types/storage';
 import type { PlanEvent, PlanRequest } from '../native/plan-protocol.mts';
 const pair = { en: 'A concrete explanation.', zh: '具体解释。' };
@@ -63,6 +72,21 @@ function fixture() {
         return structuredClone(get(r.payload.id));
       case 'DB_DIGEST_GET':
         return structuredClone(get(r.payload.id));
+      case 'DB_DIGEST_RETRY': {
+        const batch = get(r.payload.id);
+        batch.items = batch.items.map((item) => (retryableItem(item) ? restartItem(item) : item));
+        delete batch.error;
+        return structuredClone(batch);
+      }
+      case 'DB_DIGEST_INTERRUPT': {
+        const batch = get(r.payload.id);
+        if (batch.items.some(activeItem)) batch.error = r.payload.error;
+        const error = r.payload.error;
+        batch.items = batch.items.map((item) =>
+          activeItem(item) ? interruptItem(item, error) : item,
+        );
+        return structuredClone(batch);
+      }
       case 'DB_DIGEST_SOURCE':
         return sources.get(r.payload.id + ':' + r.payload.index);
       case 'DB_DIGEST_ITEM':
@@ -82,14 +106,14 @@ function fixture() {
   }));
   return { db: db as unknown as DbCall, mock: db, capture, get };
 }
-async function* success(): AsyncGenerator<PlanEvent> {
+async function* success(): AsyncGenerator<Extract<PlanEvent, { type: 'delta' | 'complete' }>> {
   yield { type: 'delta', text: raw };
   yield { type: 'complete' };
 }
 async function waitDone(r: DigestRunner) {
   await vi.waitFor(async () => {
     const b = (await r.request({ action: 'get', id: 'digest-test' })) as DigestBatch;
-    expect(b.items.some((i) => ['queued', 'capturing', 'running'].includes(i.status))).toBe(false);
+    expect(b.items.some(activeItem)).toBe(false);
   });
 }
 describe('window digests', () => {
@@ -106,7 +130,7 @@ describe('window digests', () => {
     const generate = vi.fn(async function* (_request: PlanRequest) {
       yield* success();
     });
-    const r = new DigestRunner(f.db, capture, generate);
+    const r = new DigestRunner(f.db, capture, createCallExecutor({ plan: generate }));
     const b = { ...batch(), pdfProcessing: 'attachment' as const };
     await r.request({ action: 'start', id: b.id, tabIds: [0, 1, 2], accountId: b.accountId }, b);
     await waitDone(r);
@@ -194,7 +218,7 @@ describe('window digests', () => {
   it('finishes in source order and duplicate IDs never regenerate', async () => {
     const f = fixture(),
       generate = vi.fn(success),
-      r = new DigestRunner(f.db, f.capture, generate);
+      r = new DigestRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
     await r.request(
       { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
       batch(),
@@ -223,7 +247,7 @@ describe('window digests', () => {
       }
       yield* success();
     });
-    const r = new DigestRunner(f.db, f.capture, generate);
+    const r = new DigestRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
     await r.request(
       { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
       batch(),
@@ -244,7 +268,7 @@ describe('window digests', () => {
       yield { type: 'delta', text: 'partial' };
       throw new Error('Usage limit reached');
     });
-    const r = new DigestRunner(f.db, f.capture, generate);
+    const r = new DigestRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
     await r.request(
       { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
       batch(),
@@ -264,7 +288,7 @@ describe('window digests', () => {
         }),
     );
     const generate = vi.fn(success);
-    const r = new DigestRunner(f.db, capture, generate);
+    const r = new DigestRunner(f.db, capture, createCallExecutor({ plan: generate }));
     await r.request(
       { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
       batch(),
@@ -289,7 +313,7 @@ describe('window digests', () => {
         yield { type: 'complete' };
       } else yield* success();
     });
-    const r = new DigestRunner(f.db, f.capture, generate);
+    const r = new DigestRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
     await r.request(
       { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
       batch(),
@@ -309,7 +333,7 @@ describe('window digests', () => {
       return original(r);
     });
     const generate = vi.fn(success),
-      r = new DigestRunner(f.db, f.capture, generate);
+      r = new DigestRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
     await r.request(
       { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
       batch(),
@@ -339,7 +363,7 @@ it('starts a different source while a stopped summary is still settling', async 
     }
     yield* success();
   });
-  const runner = new DigestRunner(f.db, f.capture, generate);
+  const runner = new DigestRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
   const start = (batch: DigestBatch) =>
     runner.request(
       { action: 'start', id: batch.id, tabIds: [0], accountId: batch.accountId },
@@ -377,7 +401,7 @@ it('bounds workers at two and retains source order when later items finish first
     completed.push(index);
     yield* success();
   };
-  const runner = new DigestRunner(f.db, f.capture, generate);
+  const runner = new DigestRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
   await runner.request(
     { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
     batch(),
@@ -433,7 +457,7 @@ it('a storage failure aborts a sibling stream before a new control can proceed',
     signal!.throwIfAborted();
     yield* success();
   };
-  const runner = new DigestRunner(f.db, f.capture, generate);
+  const runner = new DigestRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
   await runner.request(
     { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
     batch(),
@@ -451,7 +475,7 @@ it('a storage failure aborts a sibling stream before a new control can proceed',
 it('reuses saved output before inference, measures changed input, and keeps a cache when capture fails', async () => {
   const f = fixture(),
     generate = vi.fn(success);
-  const runner = new DigestRunner(f.db, f.capture, generate);
+  const runner = new DigestRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
   await runner.request(
     { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
     batch(),
@@ -522,9 +546,6 @@ function customBatch(revision = 'a'.repeat(64)): DigestBatch {
         plan: { accountId: 'frozen', model: 'chosen', effort: 'low' },
         remote: { baseUrl: '', model: '', temperature: 0.3 },
         local: { topK: 3, temperature: 0.3 },
-        systemPrompt: '',
-        userPrompt: '',
-        context: { selection: '', pageTitle: '', pageUrl: '' },
       },
     },
   };
@@ -535,16 +556,24 @@ it('runs custom actions per page with two-page concurrency and pins code and pre
   const calls: string[] = [];
   let active = 0,
     maximum = 0;
-  const custom = vi.fn(async (b: DigestBatch, item: DigestBatch['items'][number]) => {
-    calls.push(b.action!.revision.revision + ':' + b.action!.input!.plan!.model);
+  const custom = vi.fn<typeof actionHost>(async (request, options) => {
+    if (request.action !== 'run') throw new Error('Unexpected host request');
+    const index = Number(new URL(request.source.url).pathname.slice(1));
+    calls.push(request.revision);
     active++;
     maximum = Math.max(maximum, active);
-    await new Promise<void>((resolve) => releases.set(item.index, resolve));
+    await new Promise<void>((resolve) => releases.set(index, resolve));
+    await options!.generate!({ instructions: 'Custom instructions' }, options!.signal!);
     active--;
-    return 'Final ' + item.index;
+    return { type: 'result', text: 'Final ' + index };
   });
   const builtIn = vi.fn(success);
-  const runner = new DigestRunner(f.db, f.capture, builtIn, custom);
+  const model = vi.fn<typeof import('../src/providers/stream').streamModel>(success);
+  const runner = new DigestRunner(
+    f.db,
+    f.capture,
+    createCallExecutor({ plan: builtIn, model, script: custom }),
+  );
   const original = customBatch();
   await runner.request(
     { action: 'start', id: original.id, tabIds: [0, 1, 2], accountId: 'ignored' },
@@ -564,25 +593,25 @@ it('runs custom actions per page with two-page concurrency and pins code and pre
   await waitDone(runner);
   expect(maximum).toBe(2);
   expect(builtIn).not.toHaveBeenCalled();
-  expect(calls).toEqual(Array(3).fill('a'.repeat(64) + ':chosen'));
+  expect(calls).toEqual(Array(3).fill('a'.repeat(64)));
+  expect(model.mock.calls.every(([input]) => input.plan?.model === 'chosen')).toBe(true);
   expect(f.get().items.map((item) => item.finalText)).toEqual(['Final 0', 'Final 1', 'Final 2']);
   expect(f.get().items.every((item) => item.summary === undefined)).toBe(true);
 });
 it('keeps custom intermediate output separate from a failed final result without replay', async () => {
   const f = fixture();
-  const custom = vi.fn(async (_b: DigestBatch, item: DigestBatch['items'][number]) => {
-    item.raw = 'intermediate model response';
-    item.calls = [
-      {
-        instructions: 'Frozen instructions',
-        input: 'Captured source',
-        output: item.raw,
-        complete: true,
-      },
-    ];
+  const custom = vi.fn<typeof actionHost>(async (_request, options) => {
+    await options!.generate!(
+      { instructions: 'Frozen instructions', input: 'Captured source' },
+      options!.signal!,
+    );
     throw new Error('Module failed after model completion');
   });
-  const runner = new DigestRunner(f.db, f.capture, success, custom);
+  const model = async function* () {
+    yield { type: 'delta' as const, text: 'intermediate model response' };
+    yield { type: 'complete' as const };
+  };
+  const runner = new DigestRunner(f.db, f.capture, createCallExecutor({ model, script: custom }));
   await runner.request(
     { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'unused' },
     customBatch(),
@@ -601,23 +630,17 @@ it('a custom terminal save failure aborts its sibling and removes the unsaved fi
       throw new Error('disk full');
     return db(r);
   });
-  const custom = vi.fn(
-    async (
-      _b: DigestBatch,
-      item: DigestBatch['items'][number],
-      _source: DigestSource,
-      _key: string,
-      signal: AbortSignal,
-    ) => {
-      if (item.index === 0) return 'Unsaved final';
-      await new Promise<void>((resolve) =>
-        signal.addEventListener('abort', () => resolve(), { once: true }),
-      );
-      signal.throwIfAborted();
-      return 'unreachable';
-    },
-  );
-  const runner = new DigestRunner(f.db, f.capture, success, custom);
+  const custom = vi.fn<typeof actionHost>(async (request, options) => {
+    if (request.action !== 'run') throw new Error('Unexpected host request');
+    if (request.source.url.endsWith('/0')) return { type: 'result', text: 'Unsaved final' };
+    const signal = options!.signal!;
+    await new Promise<void>((resolve) =>
+      signal.addEventListener('abort', () => resolve(), { once: true }),
+    );
+    signal.throwIfAborted();
+    return { type: 'result', text: 'unreachable' };
+  });
+  const runner = new DigestRunner(f.db, f.capture, createCallExecutor({ script: custom }));
   await runner.request(
     { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'unused' },
     customBatch(),
@@ -638,3 +661,190 @@ it('exports custom final text safely with its actual action and preset labels', 
   expect(html).toContain('Custom · Saved preset');
   expect(html).not.toContain('GPT-6 Luna');
 });
+
+it.each(['preset', 'script'] as const)(
+  '%s Stop retains partial output; Retry uses frozen input without recapture',
+  async (kind) => {
+    const f = fixture();
+    let hold = true;
+    const model = vi.fn<typeof import('../src/providers/stream').streamModel>(
+      async function* (_input, _credential, signal) {
+        if (hold) {
+          yield { type: 'delta', text: 'partial' };
+          await new Promise<void>((resolve) =>
+            signal!.addEventListener('abort', () => resolve(), { once: true }),
+          );
+          signal!.throwIfAborted();
+        }
+        yield* success();
+      },
+    );
+    const host: typeof actionHost = async (_request, options) => ({
+      type: 'result',
+      text: await options!.generate!({ instructions: 'Frozen instructions' }, options!.signal!),
+    });
+    const selected = customBatch();
+    const saved =
+      kind === 'script' ? selected : { ...batch(), summaryInput: selected.action!.input };
+    const runner = new DigestRunner(f.db, f.capture, createCallExecutor({ model, script: host }));
+    await runner.request({ action: 'start', id: saved.id, tabIds: [0, 1, 2] }, saved, 'credential');
+    await vi.waitFor(() => expect(model).toHaveBeenCalledTimes(2));
+    await runner.request({ action: 'stop', id: saved.id });
+    expect(f.get().items.map((item) => item.status)).toEqual([
+      'cancelled',
+      'cancelled',
+      'cancelled',
+    ]);
+    expect(f.get().items[0]?.raw).toBe('partial');
+    selected.action!.input!.plan!.model = 'Changed selection';
+    hold = false;
+    await runner.request({ action: 'retry', id: saved.id }, undefined, 'credential');
+    await waitDone(runner);
+    expect(f.capture).toHaveBeenCalledTimes(3);
+    expect(model).toHaveBeenCalledTimes(5);
+    expect(model.mock.calls.every(([input]) => input.plan?.model === 'chosen')).toBe(true);
+    expect(f.get().items.every((item) => item.status === 'completed')).toBe(true);
+  },
+);
+
+it('a custom checkpoint failure cancels execution and siblings without saving a final result', async () => {
+  const f = fixture();
+  const db = f.mock.getMockImplementation()!;
+  f.mock.mockImplementation(async (request) => {
+    if (
+      request.type === 'DB_DIGEST_ITEM' &&
+      request.payload.item.status === 'running' &&
+      request.payload.item.raw
+    )
+      throw new Error('checkpoint disk full');
+    return db(request);
+  });
+  const model = vi.fn<typeof import('../src/providers/stream').streamModel>(
+    async function* (_input, _credential, signal) {
+      yield { type: 'delta', text: 'partial' };
+      await new Promise<void>((resolve) =>
+        signal!.addEventListener('abort', () => resolve(), { once: true }),
+      );
+      signal!.throwIfAborted();
+    },
+  );
+  const host: typeof actionHost = async (_request, options) => ({
+    type: 'result',
+    text: await options!.generate!({ instructions: 'Work' }, options!.signal!),
+  });
+  const runner = new DigestRunner(f.db, f.capture, createCallExecutor({ model, script: host }));
+  await runner.request({ action: 'start', id: 'digest-test', tabIds: [0, 1, 2] }, customBatch());
+  await vi.waitFor(
+    async () => {
+      const current = (await runner.request({ action: 'get', id: 'digest-test' })) as DigestBatch;
+      expect(current.error).toContain('checkpoint disk full');
+      expect(current.items.every((item) => !item.finalText && !item.summary)).toBe(true);
+    },
+    { timeout: 2000 },
+  );
+  expect(model).toHaveBeenCalledTimes(2);
+  expect(model.mock.calls.every(([, , signal]) => signal?.aborted)).toBe(true);
+  expect(f.capture).toHaveBeenCalledTimes(2);
+});
+
+it('pauses unstarted pages on a Call failure before a pending checkpoint settles', async () => {
+  const f = fixture();
+  const db = f.mock.getMockImplementation()!;
+  let releaseCheckpoint!: () => void;
+  f.mock.mockImplementation(async (request) => {
+    if (
+      request.type === 'DB_DIGEST_ITEM' &&
+      request.payload.item.index === 0 &&
+      request.payload.item.progress === 'Waiting'
+    ) {
+      await new Promise<void>((resolve) => {
+        releaseCheckpoint = resolve;
+      });
+    }
+    return db(request);
+  });
+  let failFirst!: () => void;
+  let finishSecond!: () => void;
+  const host = vi.fn<typeof actionHost>(async (request, options) => {
+    if (request.action !== 'run') throw new Error('Unexpected request');
+    if (request.source.url.endsWith('/0')) {
+      options!.progress!('Waiting');
+      await new Promise<void>((_resolve, reject) => {
+        failFirst = () => reject(new Error('Call failed'));
+      });
+    } else {
+      await new Promise<void>((resolve) => {
+        finishSecond = resolve;
+      });
+    }
+    return { type: 'result', text: 'Completed sibling' };
+  });
+  const runner = new DigestRunner(f.db, f.capture, createCallExecutor({ script: host }));
+  await runner.request({ action: 'start', id: 'digest-test', tabIds: [0, 1, 2] }, customBatch());
+  try {
+    await vi.waitFor(() => expect(releaseCheckpoint).toBeTypeOf('function'), { timeout: 2000 });
+    failFirst();
+    // Let the failure reach the runner while its checkpoint remains held.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    finishSecond();
+    await vi.waitFor(() => expect(f.get().items[1]?.status).toBe('completed'));
+    expect(host).toHaveBeenCalledTimes(2);
+    expect(f.capture).toHaveBeenCalledTimes(2);
+  } finally {
+    releaseCheckpoint?.();
+    finishSecond?.();
+    failFirst?.();
+  }
+  await waitDone(runner);
+  expect(f.get().items.map((item) => item.status)).toEqual(['failed', 'completed', 'interrupted']);
+});
+
+it.each(['failed', 'cancelled'] as const)(
+  'does not settle a %s Call while its last checkpoint is still pending',
+  async (status) => {
+    const f = fixture();
+    const db = f.mock.getMockImplementation()!;
+    let releaseCheckpoint!: () => void;
+    f.mock.mockImplementation(async (request) => {
+      if (request.type === 'DB_DIGEST_ITEM' && request.payload.item.progress === 'Waiting') {
+        await new Promise<void>((resolve) => {
+          releaseCheckpoint = resolve;
+        });
+      }
+      return db(request);
+    });
+    let fail!: () => void;
+    const host: typeof actionHost = async (_request, options) => {
+      options!.progress!('Waiting');
+      await new Promise<void>((_resolve, reject) => {
+        fail = () => reject(new Error('Call failed'));
+        options!.signal!.addEventListener('abort', () => reject(new Error('Stopped.')), {
+          once: true,
+        });
+      });
+      return { type: 'result', text: 'unreachable' };
+    };
+    const runner = new DigestRunner(f.db, f.capture, createCallExecutor({ script: host }));
+    const saved = customBatch();
+    saved.items = saved.items.slice(0, 1);
+    let stopping: Promise<unknown> | undefined;
+    await runner.request({ action: 'start', id: saved.id, tabIds: [0] }, saved);
+    try {
+      await vi.waitFor(() => expect(releaseCheckpoint).toBeTypeOf('function'), { timeout: 2000 });
+      if (status === 'cancelled') stopping = runner.request({ action: 'stop', id: saved.id });
+      else fail();
+      await vi.waitFor(async () => {
+        const current = (await runner.request({ action: 'get', id: saved.id })) as DigestBatch;
+        expect(current.items[0]?.status).toBe('saving');
+        expect(current.items[0]?.finalText).toBeUndefined();
+      });
+      expect(f.get().items[0]?.status).toBe('running');
+    } finally {
+      releaseCheckpoint?.();
+      fail?.();
+      await stopping;
+      await waitDone(runner);
+    }
+    await vi.waitFor(() => expect(f.get().items[0]?.status).toBe(status));
+  },
+);

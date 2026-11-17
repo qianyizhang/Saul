@@ -1,0 +1,98 @@
+.annotations {
+  overflow-wrap: anywhere;
+}
+.annotations h1 {
+  font-size: 1.4rem;
+  margin: 0;
+}
+.annotations h2 {
+  font-size: 1.1rem;
+}
+.annotations label {
+  display: grid;
+  gap: 0.35rem;
+}
+.annotations label.row {
+  display: flex;
+  align-items: center;
+}
+.annotations select,
+.annotations textarea {
+  width: 100%;
+  font: inherit;
+  min-width: 0;
+}
+.annotations textarea {
+  resize: vertical;
+}
+.annotations .row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.annotation-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.annotation-list li {
+  display: flex;
+  align-items: start;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--border);
+  padding: 0.5rem 0;
+}
+.annotation-item {
+  display: grid;
+  text-align: start;
+  gap: 0.25rem;
+  width: 100%;
+  background: transparent;
+  color: inherit;
+  border: none;
+  padding: 0.35rem;
+}
+.annotation-list .selected {
+  border-inline-start: 3px solid var(--accent);
+}
+.annotation-editor {
+  border-block-start: 1px solid var(--border);
+  padding-block: 1rem;
+}
+.annotations figure {
+  margin: 0;
+}
+.annotations img {
+  width: 100%;
+  height: auto;
+  border-radius: 0.4rem;
+}
+.annotations pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 24rem;
+  overflow: auto;
+  font-size: 0.8rem;
+}
+.annotation-replies {
+  padding-inline-start: 1.25rem;
+}
+.annotation-replies p {
+  white-space: pre-wrap;
+}
+.annotations button:focus-visible,
+.annotations input:focus-visible,
+.annotations textarea:focus-visible,
+.annotations select:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.annotations textarea,
+.annotations select {
+  background: var(--design-color-surface);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: var(--design-radius-control);
+  padding: 9px 11px;
+}

@@ -6,7 +6,7 @@ import {
   validateSpeechRequest,
   type SpeechRequest,
 } from '../src/speech/realtime';
-import { DEFAULT_SETTINGS } from '../src/storage/settings';
+import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 import { validatePlanRequest } from '../native/plan-protocol.mts';
 
 const request: SpeechRequest = {
@@ -17,7 +17,7 @@ const request: SpeechRequest = {
   input: 'Hello.',
 };
 function connection() {
-  const settings = structuredClone(DEFAULT_SETTINGS);
+  const settings = structuredClone(DEFAULT_CONFIGURATION);
   settings.connectionProfiles = { 'openai-api': 'official' };
   settings.profiles = [
     {

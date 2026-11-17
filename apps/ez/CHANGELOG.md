@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 — 2026-11-16
+
+- Search the Action and Preset catalogs from both lookup composers.
+- Main answers expose Reuse, Export and Delete, with recorded details below.
+  Edit opens the retained draft separately.
+- Draw includes an editable Sketch canvas for Make meme and can return GIFs
+  for supported image generation presets.
+
 ## 0.2.2 — 2026-11-06
 
 - Keep the native sidebar toggle symbol-only in both display modes by applying

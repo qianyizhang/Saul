@@ -2,7 +2,9 @@
 
 The root coordinator installs only selected components. It is a local command,
 not a published npm package. Run `node scripts/setup.mts --help` for all options.
-EZ can also be built/installed directly with Make and Apple tools without Node.
+EZ requires macOS 14+ and Apple Command Line Tools with Swift 6.3+
+(`xcode-select --install`). It can also be built/installed directly with Make and
+Apple tools without Node.
 
 | Selection   | Requires                                                                     | Does not require                  |
 | ----------- | ---------------------------------------------------------------------------- | --------------------------------- |
@@ -28,11 +30,12 @@ node scripts/setup.mts --components extension
 ```
 
 Load the printed directory explicitly in `chrome://extensions` (Developer mode,
-Load unpacked). Copy its actual ID. Then install wanted helpers:
+Load unpacked). Copy its actual ID. Then install the required ChatGPT/history helper; add `tabs`
+only for optional tab access:
 
 ```sh
-node scripts/setup.mts --components chatgpt,tabs --extension-id YOUR_ID
-# Add --codex only if you want Codex MCP registration.
+node scripts/setup.mts --components chatgpt --extension-id YOUR_ID
+# Add tabs to --components and --codex only if you want Codex MCP registration.
 ```
 
 `--prepare` builds without installing. `--skip-build` uses prepared browser
@@ -124,13 +127,22 @@ the credential migration explicitly replaces the legacy self-signed pin with the
 Apple Development fingerprint, retaining the old pin without exporting any private key.
 Other machines must perform their own explicit signing setup. Keep bundle ID,
 URL scheme and `~/Applications/EZ.app` stable. The separate
-[credential migration](../contracts/credentials.md) retires only verified old records. On first launch, history migrates to the shared
-SQLite store and verified old JSONL/images are removed.
+[credential migration](../contracts/credentials.md) retires only verified old records.
 
 The coordinator refuses to overwrite an existing `saul-tabs` Codex registration.
 Omit `--codex` to preserve it. The browser application's advanced
 [read-only connection checker](../apps/saul/docs/native-messaging.md) can verify a matching existing
 connection with a read-only live inventory; this is separate from artifact checks.
+
+### Shared history upgrade
+
+Upgrade both apps and Saul's history helper together before reopening shared
+history when a release changes the schema. On first history access, Saul imports
+its browser profile's OPFS history; EZ imports its old JSONL and images at launch.
+Keep the original data and reopen History or relaunch EZ if cleanup is interrupted.
+If validation blocks import, preserve the source and resolve the reported error
+before retrying. The [history contract](../contracts/history.md) defines what must
+commit before legacy data can be removed.
 
 ## Verify and remove
 
@@ -142,12 +154,10 @@ compatible features, major for intentional breaking product changes. Bump each
 affected app for its next delivered version; a shared change bumps both only when
 both apps change. Versions do not replace history-schema or transport versions.
 
-Both Settings overviews show **Version · Build**, including in Min Mode. The
-generated Build ID hashes selected source bytes and the build toolchain; dirty
-and untracked source files inside the selected trees count. Input selections live
-in each app's `build-inputs.json`; extend that owner when introducing a new build
-input. Build IDs distinguish builds without changing installed app identities.
-Missing build metadata is shown as **Unavailable**.
+Each app's `build-inputs.json` owns the sources used for Build ID; dirty and
+untracked inputs count. Hash selected source bytes and build tools without
+changing installed identity. Extend that list for new build inputs.
+[Design](../DESIGN.md#settings) owns Version · Build presentation.
 
 ```sh
 node scripts/setup.mts --components extension --verify
@@ -173,13 +183,10 @@ only a file/registration check, with an explicit generation-integrity limitation
 read-only verification does not migrate them. Verification never claims browser connectivity, live authentication, inference or running-version
 acceptance. Use disposable profiles for development browser tests.
 
-After verified migration, removing the extension or its profile does not remove
-the shared history. Delete shared records through either app when needed. Native helpers are separately removable using the documented
-[helper lifecycle](../apps/saul/docs/native-messaging.md) and
-[ChatGPT helper guide](../apps/saul/docs/chatgpt-plan.md).
-Removing EZ.app does not remove its history or Keychain credentials; handle those
-through the app's documented account/history actions first. No coordinator uninstall
-command silently erases user records, accounts, shared runtimes or registrations.
+Removing EZ, Saul or its profile leaves shared history and credentials intact.
+Delete records or sign out explicitly. Remove native hosts through the
+[tab helper](../apps/saul/docs/native-messaging.md) and
+[ChatGPT helper](../apps/saul/docs/chatgpt-plan.md) procedures.
 
 ## Shared Saul credentials on macOS
 

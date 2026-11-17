@@ -21,7 +21,6 @@ test('Min Mode defaults on, updates open surfaces, and persists independently of
   const article = await context.newPage();
   await article.goto(fixtureServer.origin + '/article');
   await explainSelection(article);
-  await article.getByRole('button', { name: 'View', exact: true }).click();
   const card = article.getByRole('region', { name: 'Saul explanation' });
   await expect(card.getByRole('status')).toHaveText('Saved');
   await expect(card.getByRole('button', { name: 'Copy explanation' })).toBeVisible();
@@ -136,7 +135,6 @@ test('Escape closes a concept note, then the reading card', async ({ sandbox }) 
     const article = await context.newPage();
     await article.goto(server.origin + '/article');
     await explainSelection(article);
-    await article.getByRole('button', { name: 'View', exact: true }).click();
     const card = article.getByRole('region', { name: 'Saul explanation' });
     const concept = card.getByRole('button', { name: 'gradient', exact: true });
     await concept.focus();

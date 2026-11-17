@@ -1,7 +1,8 @@
 # Offline checks
 
-EZ keeps Apple Command Line Tools support: `EZChecks` and `EZStateChecks` are
-native Swift executables, without XCTest, Swift Testing, or third-party packages.
+`EZChecks` and `EZStateChecks` are offline Swift executables without XCTest,
+Swift Testing or third-party packages. App builds and previews need SwiftUI's
+compiler plug-ins; select Xcode if the installed Command Line Tools lack them.
 `EZCheckSupport` is linked only into checks, not the application.
 
 | Directory | Owner |
@@ -19,7 +20,7 @@ make test-core CHECK_ARGS='--list'
 make test CHECK_ARGS='--reverse'
 make test-install
 make test-services  # Host-native callback/pasteboard checks, separate from the offline gate
-make test-ui        # Host-native row hit targets; requires a macOS graphical session
+make test-ui        # Native rows, lookup choosers and draft keyboard editing
 ```
 
 `test-install` checks the real build and installation scripts with disposable app
@@ -31,7 +32,7 @@ these checks. Real certificate continuity and native launch are separate checks
 recorded in [verification](../docs/verification.md).
 
 Use `EZ_SWIFTPM_DISABLE_SANDBOX=1` in an outer agent sandbox that rejects
-SwiftPM's nested sandbox. All checks remain offline and use disposable storage.
+SwiftPM’s nested manifest sandbox. All checks remain offline and use disposable storage.
 
 Register a `CheckCase` in the appropriate behavior file. Its runner-supplied
 directory is unique and removed after success or failure. Construct each fixture
@@ -39,8 +40,8 @@ inside the case and close HTTP sessions / shut down models with `defer`.
 AppModel fixtures seed configuration before initialization to avoid personal
 UserDefaults. Never use real account credentials, Keychain, or app history.
 Attempt cases explicitly supply the production `AttemptExecution` module with
-controlled credential, stream and append adapters, then call AppModel Send, Stop,
-Save again and deletion actions. Ordinary offline models still refuse Send.
+controlled credential, stream and append adapters, then exercise AppModel Send,
+Stop, Retry, Follow-up, launcher submission, terminal-save failure and deletion. Ordinary offline models still refuse Send.
 The shared `contracts/fixtures/attempts.json` scenarios exercise both apps' common
 saved-outcome rules without harmonizing their storage or status types.
 
@@ -63,8 +64,9 @@ unknown options fail rather than pretending to run checks. Cases run serially;
 its executable once with the case name: a non-cooperative task cannot safely be
 abandoned and allowed to leak into later cases.
 
-`scripts/check.sh state` builds the normal app and compiles its `AppModel.swift` and
-`GenerationState.swift` alongside the state cases, linking SwiftPM's core/support objects. This keeps
+`scripts/check.sh state` builds the normal app and compiles its app-owned lifecycle
+modules alongside the state cases, linking SwiftPM's core/support objects. The
+script's `state_sources` array owns the source list. This keeps
 app-only state out of EZCore and requires no Xcode test host. These checks do not
 launch the native interface or prove focus, layout, shortcuts, or live inference;
 those remain separate acceptance checks in `docs/verification.md`.
@@ -73,13 +75,12 @@ Native layout and keyboard regression journeys are maintained in
 [docs/ui-qa.md](../docs/ui-qa.md). They run against the disposable surface preview,
 using actual production views; they are separate from this offline executable suite.
 
-`make test-ui` hosts the production `FullRowButton` in native windows and sends
-window-local mouse events. It checks short/longer labels, selected/unselected rows,
-blank space, padding, corners, outside bounds, disabled controls, and native keyboard
-activation. No global input, Accessibility permission, account, or personal storage
-is used. It is separate from `make check` because it needs a graphical session;
-run it for row interaction changes, then replay the
-[row click journey](../docs/ui-qa.md#row-click-targets).
+`make test-ui` hosts production controls and sends window-local input events.
+It checks row hit targets, native chooser search, keyboard selection and focus
+return in a window and a panel, plus [draft editing](../../../design/keyboard.md#editing-a-draft)
+in a window and a panel. It uses no global input, Accessibility permission,
+account, or personal storage. It is separate from `make check` because it needs a
+graphical session. For row changes, replay the [row click journey](../docs/ui-qa.md#row-click-targets).
 
 `make test-services` checks the Services plist/Objective-C selector and exercises
 the production callback with private named pasteboards and a disposable offline
@@ -92,7 +93,7 @@ Services menu discovery, cold launch, focus return, or live inference.
 Typed-action checks cover legacy Write defaults, shared Draw preset preservation,
 exact compiled prompts, explicit API tiers, owner-only PNG persistence/deletion,
 path/symlink rejection, unavailable provider/type/key blockers, Stop/late-result
-isolation and save-only recovery with the original bytes and no second request.
+isolation and honest terminal-save failure without another request.
 
 ## Tooling and previews
 

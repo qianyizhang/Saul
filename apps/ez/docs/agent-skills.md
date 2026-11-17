@@ -17,6 +17,6 @@ root `.artifacts/ez/`; follow [retention](../../../docs/artifacts.md).
 | Generic skill owner   | EZ owner                                                                      |
 | --------------------- | ----------------------------------------------------------------------------- |
 | `GLOSSARY.md`         | [Glossary](../GLOSSARY.md), [architecture](architecture.md)                   |
-| `docs/adr/`           | [Architecture](architecture.md); add ADRs only when needed                    |
+| `docs/adr/`           | [Root ADR rule](../../../AGENTS.md#architecture-decisions)                     |
 | `CODING_STANDARDS.md` | [AGENTS](../AGENTS.md), [CONTRIBUTING](../CONTRIBUTING.md), executable checks |
 | Plans / readiness     | [Roadmap](roadmap.md), [verification](verification.md)                        |

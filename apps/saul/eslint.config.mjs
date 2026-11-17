@@ -50,6 +50,42 @@ export default ts.config(
     },
   },
   {
+    files: [
+      'src/settings/{draft,recovery}.ts',
+      'src/configuration/{definition,inspect,record,resolve}.ts',
+    ],
+    rules: {
+      'no-restricted-globals': [
+        'error',
+        'chrome',
+        'fetch',
+        'process',
+        'Buffer',
+        '__dirname',
+        '__filename',
+        'require',
+        'module',
+        'exports',
+      ],
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            'node:*',
+            '../storage/*',
+            '../native/*',
+            './store',
+            './chrome-storage',
+            './client',
+            '../configuration/store',
+            '../configuration/chrome-storage',
+            '../configuration/client',
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['native/**/*.mts', 'scripts/**/*.mts', 'design/**/*.mts', '*.mjs', '*.ts'],
     languageOptions: { globals: globals.node },
   },

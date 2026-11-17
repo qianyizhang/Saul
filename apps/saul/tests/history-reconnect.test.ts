@@ -1,12 +1,12 @@
 import { afterEach, expect, it, vi } from 'vitest';
 const mocked = vi.hoisted(() => ({ call: vi.fn() }));
-vi.mock('../src/models/chatgpt-plan', async () => {
-  const actual = await vi.importActual<typeof import('../src/models/chatgpt-plan')>(
-    '../src/models/chatgpt-plan',
+vi.mock('../src/providers/chatgpt-plan', async () => {
+  const actual = await vi.importActual<typeof import('../src/providers/chatgpt-plan')>(
+    '../src/providers/chatgpt-plan',
   );
   return { ...actual, planCall: mocked.call };
 });
-import { HistoryDisconnected } from '../src/models/chatgpt-plan';
+import { HistoryDisconnected } from '../src/providers/chatgpt-plan';
 import { historyCall } from '../src/storage/history';
 import { validateHistoryRequest, type HistoryRequest } from '../native/history-protocol.mts';
 const request = (type: string): HistoryRequest => ({

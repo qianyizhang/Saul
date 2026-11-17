@@ -3,14 +3,15 @@ import SwiftUI
 
 struct ConfigurationView: View {
     @ObservedObject var model: AppModel
-    @Binding var hasUnsavedChanges: Bool
-    @Binding var viewingPresetID: UUID?
-    @State private var confirmSelection = false
-    @State private var pendingSelection: (() -> Void)?
-    @State private var preset: ModelPreset?
-    @State private var action: Action?
-    @State private var presetMessage: String?
-    @State private var actionMessage: String?
+    @Binding var edits: ConfigurationEditor
+    private var preset: ModelPreset? {
+        get { edits.preset }
+        nonmutating set { edits.preset = newValue }
+    }
+    private var action: Action? {
+        get { edits.action }
+        nonmutating set { edits.action = newValue }
+    }
 
     var body: some View {
         ScrollView {
@@ -29,17 +30,7 @@ struct ConfigurationView: View {
                     }
                     Spacer()
                     Button {
-                        let reload = {
-                            model.refreshConfiguration()
-                            preset = model.configuration.presets.first
-                            action = model.configuration.actions.first
-                        }
-                        if presetIsDirty || actionIsDirty {
-                            pendingSelection = reload
-                            confirmSelection = true
-                        } else {
-                            reload()
-                        }
+                        edits.request(.reload, model: model)
                     } label: {
                         if model.minimumMode {
                             ControlLabel(symbol: .reload, title: "Reload saved settings")
@@ -57,8 +48,7 @@ struct ConfigurationView: View {
                 }
             }.padding(24)
         }.onAppear {
-            if preset == nil { preset = model.configuration.presets.first }
-            if action == nil { action = model.configuration.actions.first }
+            edits.open(model.configuration)
         }
         .task(id: "\(model.settingsSection.rawValue):\(preset?.connectionKey ?? "")") {
             if model.settingsSection == .configuration,
@@ -69,27 +59,22 @@ struct ConfigurationView: View {
                 await model.refreshConnection(connection)
             }
         }
-        .onChange(of: preset?.id, initial: true) { _, id in viewingPresetID = id }
-        .onChange(of: presetIsDirty || actionIsDirty, initial: true) { _, dirty in
-            hasUnsavedChanges = dirty
-        }
         .onChange(of: model.settingsPresetID, initial: true) { _, id in
             if let chosen = model.configuration.presets.first(where: { $0.id == id }) { selectPreset(chosen) }
         }
-        .alert("Discard unsaved edits?", isPresented: $confirmSelection) {
-            Button("Keep", role: .cancel) { pendingSelection = nil }
-            Button("Discard", role: .destructive) {
-                let change = pendingSelection
-                pendingSelection = nil
-                change?()
-            }
+        .alert(
+            "Discard unsaved edits?",
+            isPresented: Binding(get: { edits.needsDiscard }, set: { if !$0 { edits.keepEditing() } })
+        ) {
+            Button("Keep", role: .cancel) { edits.keepEditing() }
+            Button("Discard", role: .destructive) { edits.discardAndContinue(model: model) }
         } message: {
             Text("Save this item before switching, or discard its edits.")
         }
     }
 
     private var catalogModels: [ConnectionModel] {
-        if let catalog = model.connectionCatalogs[preset?.connectionKey ?? ""] { return catalog.models }
+        if let catalog = model.connectionCatalog(preset?.connectionKey ?? "") { return catalog.models }
         guard model.offline else { return [] }
         var options = model.models.map {
             ConnectionModel(
@@ -141,7 +126,7 @@ struct ConfigurationView: View {
                         Text("Add a preset to choose a model, effort, and speed.").foregroundStyle(.secondary)
                     }
                 }
-                if let message = presetMessage {
+                if let message = edits.presetMessage {
                     Text(message).font(AppStyle.caption).textSelection(.enabled)
                 }
             }.padding(10)
@@ -232,7 +217,7 @@ struct ConfigurationView: View {
                     options: SpeechOptions.voices.map {
                         .init(value: $0, title: $0.capitalized)
                     }, selection: speechVoiceBinding)
-                if let preset { SpeakPreview(model: model, preset: preset, saved: !presetIsDirty) }
+                if let preset { SpeakPreview(model: model, preset: preset, saved: !edits.presetIsDirty) }
             } else {
                 DisclosureGroup("Options") {
                     let selected = catalogModels.first { $0.id == preset?.model }
@@ -263,14 +248,18 @@ struct ConfigurationView: View {
                 Text(issue).font(AppStyle.caption).foregroundStyle(.orange)
             }
             HStack {
-                Button(model.minimumMode ? "Save" : "Save preset") { savePreset() }.help("Save preset")
-                    .accessibilityLabel("Save preset").buttonStyle(.borderedProminent).disabled(
-                        !presetIsDirty)
-                if presetIsDirty { Text("Unsaved edits").font(AppStyle.caption).foregroundStyle(.secondary) }
+                Button(model.minimumMode ? "Save" : "Save preset") { edits.savePreset(model: model) }.help(
+                    "Save preset"
+                )
+                .accessibilityLabel("Save preset").buttonStyle(.borderedProminent).disabled(
+                    !edits.presetIsDirty)
+                if edits.presetIsDirty {
+                    Text("Unsaved edits").font(AppStyle.caption).foregroundStyle(.secondary)
+                }
                 Spacer()
                 if model.configuration.presets.contains(where: { $0.id == preset?.id }) {
                     Button(model.minimumMode ? "Remove" : "Remove preset", role: .destructive) {
-                        removePreset()
+                        edits.removePreset(model: model)
                     }.help("Remove preset").accessibilityLabel("Remove preset")
                 }
             }
@@ -314,7 +303,7 @@ struct ConfigurationView: View {
                         Text("Add an action with a prompt and a default preset.").foregroundStyle(.secondary)
                     }
                 }
-                if let message = actionMessage {
+                if let message = edits.actionMessage {
                     Text(message).font(AppStyle.caption).textSelection(.enabled)
                 }
             }.padding(10)
@@ -394,14 +383,18 @@ struct ConfigurationView: View {
                 Text(templateError).font(AppStyle.caption).foregroundStyle(.orange)
             }
             HStack {
-                Button(model.minimumMode ? "Save" : "Save action") { saveAction() }.help("Save action")
-                    .accessibilityLabel("Save action").buttonStyle(.borderedProminent).disabled(
-                        !actionIsDirty)
-                if actionIsDirty { Text("Unsaved edits").font(AppStyle.caption).foregroundStyle(.secondary) }
+                Button(model.minimumMode ? "Save" : "Save action") { edits.saveAction(model: model) }.help(
+                    "Save action"
+                )
+                .accessibilityLabel("Save action").buttonStyle(.borderedProminent).disabled(
+                    !edits.actionIsDirty)
+                if edits.actionIsDirty {
+                    Text("Unsaved edits").font(AppStyle.caption).foregroundStyle(.secondary)
+                }
                 Spacer()
                 if model.configuration.actions.contains(where: { $0.id == action?.id }) {
                     Button(model.minimumMode ? "Remove" : "Remove action", role: .destructive) {
-                        removeAction()
+                        edits.removeAction(model: model)
                     }.help("Remove action").accessibilityLabel("Remove action")
                 }
             }
@@ -413,40 +406,8 @@ struct ConfigurationView: View {
             .font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
     }
 
-    private var presetIsDirty: Bool {
-        guard let preset else { return false }
-        return preset != model.configuration.presets.first { $0.id == preset.id }
-    }
-    private var actionIsDirty: Bool {
-        guard let action else { return false }
-        return action != model.configuration.actions.first { $0.id == action.id }
-    }
-    private func selectPreset(_ item: ModelPreset) {
-        guard item.id != preset?.id else { return }
-        let change = {
-            preset = item
-            presetMessage = nil
-        }
-        if presetIsDirty {
-            pendingSelection = change
-            confirmSelection = true
-        } else {
-            change()
-        }
-    }
-    private func selectAction(_ item: Action) {
-        guard item.id != action?.id else { return }
-        let change = {
-            action = item
-            actionMessage = nil
-        }
-        if actionIsDirty {
-            pendingSelection = change
-            confirmSelection = true
-        } else {
-            change()
-        }
-    }
+    private func selectPreset(_ item: ModelPreset) { edits.request(.preset(item), model: model) }
+    private func selectAction(_ item: Action) { edits.request(.action(item), model: model) }
 
     private var templateError: String {
         do {
@@ -488,75 +449,5 @@ struct ConfigurationView: View {
                 options[keyPath: path] = value
                 preset?.imageOptions = options
             })
-    }
-    private func savePreset() {
-        guard var item = preset else { return }
-        item.name = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !item.model.isEmpty else {
-            presetMessage = "Connect ChatGPT and choose a model first."
-            return
-        }
-        var updated = model.configuration
-        if let index = updated.presets.firstIndex(where: { $0.id == item.id }) {
-            updated.presets[index] = item
-        } else {
-            updated.presets.append(item)
-        }
-        do {
-            try model.saveConfiguration(updated)
-            preset = model.configuration.presets.first { $0.id == item.id }
-            presetMessage = "Preset saved."
-        } catch { presetMessage = error.localizedDescription }
-    }
-    private func saveAction() {
-        guard var item = action else { return }
-        guard
-            model.configuration.presets.contains(where: {
-                $0.id == item.presetID && $0.capability == item.capability
-            })
-        else {
-            actionMessage = "Choose an available default preset before saving this action."
-            return
-        }
-        item.name = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if item.capability != .write { item.webSearch = false }
-        if item.capability != .draw { item.imageInput = nil }
-        var updated = model.configuration
-        if let index = updated.actions.firstIndex(where: { $0.id == item.id }) {
-            updated.actions[index] = item
-        } else {
-            updated.actions.append(item)
-        }
-        do {
-            try model.saveConfiguration(updated)
-            action = item
-            actionMessage = "Action saved."
-        } catch { actionMessage = error.localizedDescription }
-    }
-    private func removePreset() {
-        guard let item = preset else { return }
-        let references = model.configuration.actions.filter { $0.presetID == item.id }.map(\.name)
-        guard references.isEmpty else {
-            presetMessage =
-                "Change the default preset of \(references.joined(separator: ", ")) before removing this preset."
-            return
-        }
-        var updated = model.configuration
-        updated.presets.removeAll { $0.id == item.id }
-        do {
-            try model.saveConfiguration(updated)
-            preset = updated.presets.first
-            presetMessage = "Preset removed."
-        } catch { presetMessage = error.localizedDescription }
-    }
-    private func removeAction() {
-        guard let item = action else { return }
-        var updated = model.configuration
-        updated.actions.removeAll { $0.id == item.id }
-        do {
-            try model.saveConfiguration(updated)
-            action = updated.actions.first
-            actionMessage = "Action removed."
-        } catch { actionMessage = error.localizedDescription }
     }
 }

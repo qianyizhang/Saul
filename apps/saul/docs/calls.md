@@ -1,0 +1,112 @@
+# Calls and summaries
+
+**Call Saul** is the page command; a **Call preset** selects the work and its
+**Model preset** supplies the connection, model and options. Selected-text
+[Actions](product.md#reading) are distinct. The [custom Call guide](custom-actions.md)
+owns the optional builder, module API and host trust rules.
+
+## Start, stop and reopen
+
+Right-click a page, use the Call Saul shortcut, or select tabs in **Window**
+and choose **Summarize**. The clicked page is the source even over a link or
+selection. A batch preserves tab order and source-window labels. Saul opens
+the side panel on Chrome gestures, keeps the source tab active and retains
+the selected result across tab switches. Native and Tab board commands use
+the full reader because they lack that gesture; existing reader URLs still work.
+
+Settings → Calls puts the Call preset first. **Summarize (default)** uses the
+selected Write preset for new runs and Run again. **Original summary setup**
+keeps the prior plan binding or standalone account (GPT-6 Luna, medium effort)
+until a preset is chosen. A missing or incompatible saved preset stays visible
+for repair; there is no fallback, account switch or billing change. Custom Call
+presets display both their approved revision's name and runtime model preset;
+switching to Summarize preserves them.
+
+Different page URLs can run concurrently, including on the same site. Start
+and Retry exclude exact URLs already queued, capturing, generating or saving
+in another batch. Each batch runs up to two pages at a time. Provider and
+custom-script failures pause unstarted pages; capture failures or a malformed
+built-in summary affect only that page. Stop cancels active streams and retains
+saved or partial output when possible. Save failure stops the batch without
+overwriting completed rows or replaying inference.
+
+The reader is disposable; closing it does not Stop, delete or regenerate.
+Restart marks unfinished work interrupted. History separates **Passages** and
+**Summaries**; passage Clear all does not delete summaries. Keep progress, Stop,
+Retry unfinished, coverage, errors and Export HTML available in the reader;
+deletion is under Details. The export is self-contained and includes incomplete
+states. Tab surfaces show a compact active link. Completion never moves focus.
+
+For one page, lead with its title, source link and plain progress; omit repeated
+titles and batch counts. For batches, distinguish successful and processed counts.
+Show the saved preset/model in reader and export. Built-in output gives English
+then equivalent Simplified Chinese, with one lead, two to four points and visible
+limitations; disclose deeper material and intermediate output on demand.
+
+## Source capture and PDFs
+
+Loaded HTTP(S) capture limits text to 120,000 characters and does not focus or
+reload the tab. It does not read video, audio, images, frames, linked pages or
+collapsed/unloaded content. Unavailable, changed or restricted sources report
+their limits; the original tab/URL is checked across capture.
+
+Settings → Calls → **PDF processing** is independent of model presets. Saving
+changes the default for new runs and Run again; Retry retains the saved method.
+
+| Mode                                      | Input and limits                                                                                                                                                                                                                                                                                                                                                                |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **PDF URL attachment (server)** · default | Use an eligible ChatGPT plan preset. Saul saves a validated URL without viewer fragment and sends it as `input_file.file_url` alongside text; it does not download, upload or store PDF bytes. OpenAI must be able to reach it without the browser's cookies. Local cutoffs do not apply. Private, expired, password-protected or unsupported inputs may fail without fallback. |
+| **Local parsing · send text**             | Download the current document using available cookies and extract text with bundled PDF.js. Stop at 20 MiB, 200 pages, 120,000 characters or 30 seconds. No OCR, image interpretation, linked traversal, local files or automatic retry. Downloaded bytes are temporary; saved text can be retried.                                                                             |
+
+Local parsing counts pages read, pages without text and truncation under
+**Source coverage**. Order can be imperfect and the last page partial; the
+download may differ from Chrome's open copy. Password, invalid-file, access
+and OCR-required errors are explicit. Stop or source changes reject late capture.
+Where injection is denied, only local mode may identify an extensionless PDF
+via a bounded signature-checked download. HTML is not a PDF fallback.
+
+An attachment's prepared time and exact URL are inspectable; text, character
+counts, or page coverage are unavailable. The saved URL freezes the request,
+not the document. Retry may read a newer file. Existing text-mode batches keep
+their local capture and retry behavior. Attachment mode asks OpenAI to process text and page images,
+subject to model and provider limits. See the [plan request contract](chatgpt-plan.md#pdf-url-attachments)
+and [PDF checks](testing.md#pdf-summaries).
+
+## Reuse, Retry and Run again
+
+A repeated exact ordered URL selection reopens its active or latest saved
+result. For custom Calls, the lookup also matches approved revision and preset ID.
+Changed built-in choices are disclosed without silently rerunning. Before any model call,
+show **Saved summary reused**, the original date and current-input comparison.
+Distinguish exact matches, whitespace changes, token additions/removals,
+changed request fields and unavailable input. A lexical estimate says nothing
+about meaning or content outside the capture. Attachment URLs compare metadata
+only; no “Text unchanged” verdict. Comparing or reopening does not call a model.
+
+**Compare current page** may download a local PDF; temporary current captures
+are discarded. Inspection shows saved source, coverage, prepared instructions,
+the exact assembled prompt and raw output. Large blocks are displayed in bounded
+sections with search and full-text Copy. **Run again** creates a fresh capture
+and saved identity; **Retry unfinished** keeps completed results and uses frozen
+choices and captured input. No age or change threshold starts generation.
+
+## Runtime owners
+
+| Boundary                       | Owner                                                                                                                                                                                                                                                                     |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Saved choice and builder draft | [Call editor](../src/calls/editor.ts) and [store](../src/calls/store.ts); draft writes do not resave choices                                                                                                                                                              |
+| Admission                      | [Call admission](../src/calls/admission.ts) freezes current or saved retry input before running; execution does not read current Settings                                                                                                                                 |
+| One page                       | [Call executor](../src/calls/execution.ts) consumes a frozen Call, captured page and transient credential; detached progress never exposes DB state or secrets. It settles with validated output, failure or cancellation and publishes no later progress.                |
+| Capture                        | [Tab validation](../src/digest/capture.ts), [source dispatch](../src/digest/source.ts) and [local PDF](../src/digest/pdf.ts). The explicit bundled PDF worker avoids blob/fake-worker fallback under CSP and terminates on completion or Stop.                            |
+| Scheduling and durable results | [Runner](../src/digest/runner.ts) owns exclusion, cancellation and saves. Custom Calls checkpoint every 500 ms; built-in summaries save terminal output. Stop releases the control queue while workers settle. Save acknowledgments and interrupted rows remain distinct. |
+| Reader                         | [Panel routing](../src/digest/panel.ts) opens during the initiating gesture, keeps a trusted per-window route and preserves the resolved saved ID. [Summaries](../src/app/Summaries.tsx) shares reader/result rendering and polls only the mounted result or live batch.  |
+
+If site-based selection is ever added, freeze it at admission; site-specific DOM
+extraction belongs to capture. Neither is an implicit URL rule today.
+
+Only the trusted background snapshots selected tabs; only the offscreen runner
+requests their captures. Content scripts cannot start or inspect summaries.
+Built-in Summarize uses the selected provider or the original plan path; neither
+PDF mode requires the optional action host. Source text and credentials never
+pass through the Tab board. Keep the persisted `digest` and `action` names and
+host identities stable without an explicit upgrade.

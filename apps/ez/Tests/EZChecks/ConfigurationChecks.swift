@@ -11,8 +11,16 @@ import Foundation
             try Data("{\"future\":7,\"apps\":{\"saul\":{\"future\":true}}}".utf8).write(to: shared.url)
             let store = ConfigurationStore(directory: directory.appendingPathComponent("ez"), shared: shared)
             let initial = Configuration.starters(model: "fixture", effort: "low", fast: false)
-            try store.save(initial)
-            var draft = try store.load()!
+            let saved = try store.save(initial)
+            try expectEqual(try store.load(), saved, "Save did not return the acknowledged settings")
+            var updated = saved
+            updated.actions[0].name = "Rename without reloading"
+            let committed = try store.save(updated)
+            try expectEqual(
+                committed.sharedPresetRevision, (saved.sharedPresetRevision ?? 0) + 1,
+                "Save did not advance library revision")
+            try expectEqual(try store.load(), committed, "Acknowledged revision cannot serve the next edit")
+            var draft = committed
             let original = try Data(contentsOf: shared.url)
             draft.sharedPresetRevision = 0
             try expectThrows(EZError.self) { try store.save(draft) }
