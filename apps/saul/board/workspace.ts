@@ -3,7 +3,7 @@ import { createBoardDrag } from './board-drag.ts';
 import type { McpUiHostCapabilities } from '@modelcontextprotocol/ext-apps';
 import type { TabSnapshot, TabView } from '../shared/protocol/protocol.mts';
 import type { ProjectedWindow } from '../shared/protocol/workspace-contract.mts';
-import { tabLabel, tabSite } from '../shared/model/tab-label.ts';
+import { tabLabel, tabSite } from '../browser/tab-label.ts';
 import { createBoardConnection, diagnostics, standalone } from './board-connection.ts';
 import {
   createBoardSession,

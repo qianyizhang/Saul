@@ -20,8 +20,12 @@ without Chrome or Node globals. The [Node storage owner](../native/storage)
 implements SQLite history, annotations, Call persistence, settings and presets.
 The [entrypoints](../native/hosts) bind those services to native messaging.
 The [Tab Board](../board) runs in a browser, with its own compiler project.
-Lint rejects imports across the runtime boundary; each environment also has a
-separate TypeScript check.
+[Browser presentation helpers](../browser) can be used by both the extension and
+board. Shared modules cannot import either browser implementation or use
+host-only globals, including through `globalThis`. Shared imports are static so
+lint can enforce their ownership. Each environment also has a separate TypeScript
+check; shared code retains DOM typings for portable Web APIs such as `URL` and
+`TextEncoder`, while lint rejects browser-only globals.
 
 Background settings and offscreen history use the same
 [framing and request correlation](../src/native/storage-connection.ts). Settings

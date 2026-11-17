@@ -6,7 +6,7 @@ import { ActiveSummary, openSummary } from '../calls/ui/Summaries';
 import { sendWorkspaceMessage } from '../native/workspace-client';
 import { tabLayoutRevision } from '../../shared/model/tab-layout.mts';
 import type { TabEdit, TabSnapshot, TabView } from '../../shared/protocol/protocol.mts';
-import { tabLabel, tabSite } from '../../shared/model/tab-label.ts';
+import { tabLabel, tabSite } from '../../browser/tab-label.ts';
 
 const empty: TabSnapshot = { windows: [], tabs: [], groups: [] };
 type Drag = { ids: number[]; groupId?: number; expected: string };

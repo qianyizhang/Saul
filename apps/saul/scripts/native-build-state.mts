@@ -25,6 +25,7 @@ export async function nativeBuildFingerprint(root: string): Promise<string> {
     'apps/saul/native',
     'apps/saul/shared',
     'apps/saul/board',
+    'apps/saul/browser',
     'apps/saul/scripts/build-native.mts',
     'apps/saul/scripts/native-build-state.mts',
     'apps/saul/tsconfig.native.json',

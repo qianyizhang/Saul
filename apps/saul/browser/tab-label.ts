@@ -1,3 +1,4 @@
+/** Browser presentation shared by the extension and standalone board. */
 export function tabSite(url: string): string {
   try {
     const parsed = new URL(url);

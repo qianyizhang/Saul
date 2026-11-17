@@ -36,6 +36,7 @@ it('invalidates helpers for Node storage or the shared schema, but not unrelated
   try {
     await mkdir(join(root, 'native/storage'), { recursive: true });
     await mkdir(join(root, 'src'));
+    await mkdir(join(root, 'browser'));
     await mkdir(join(repo, 'contracts'));
     const source = join(root, 'native/storage/db.ts');
     const schema = join(repo, 'contracts/history.sql');
@@ -43,6 +44,11 @@ it('invalidates helpers for Node storage or the shared schema, but not unrelated
     await writeFile(schema, 'CREATE TABLE attempts (id TEXT);');
     const initial = await nativeBuildFingerprint(root);
     await writeFile(join(root, 'src/browser.ts'), 'export const browserOnly = true;');
+    expect(await nativeBuildFingerprint(root)).toBe(initial);
+    const presentation = join(root, 'browser/tab-label.ts');
+    await writeFile(presentation, 'export const label = () => document.title;');
+    expect(await nativeBuildFingerprint(root)).not.toBe(initial);
+    await rm(presentation);
     expect(await nativeBuildFingerprint(root)).toBe(initial);
     await writeFile(source, 'export const version = 2;');
     expect(await nativeBuildFingerprint(root)).not.toBe(initial);

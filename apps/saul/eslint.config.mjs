@@ -1,6 +1,29 @@
 import js from '@eslint/js';
 import globals from 'globals';
 import ts from 'typescript-eslint';
+import { builtinModules } from 'node:module';
+
+const hostGlobals = [
+  'chrome',
+  'process',
+  'Buffer',
+  'require',
+  'module',
+  'exports',
+  '__dirname',
+  '__filename',
+];
+// Shared code can use portable Web APIs, but not host identity or ambient storage.
+const sharedHostGlobals = [
+  ...new Set([
+    ...hostGlobals,
+    'navigator',
+    'localStorage',
+    'sessionStorage',
+    ...Object.keys(globals.browser).filter((name) => !Object.hasOwn(globals.node, name)),
+    ...Object.keys(globals.node).filter((name) => !Object.hasOwn(globals.browser, name)),
+  ]),
+];
 
 export default ts.config(
   {
@@ -100,31 +123,48 @@ export default ts.config(
       'no-restricted-globals': ['error', 'chrome', 'window', 'document'],
       'no-restricted-imports': [
         'error',
-        { patterns: ['**/src/**', '**/entrypoints/**', '**/board/**'] },
+        { patterns: ['**/src/**', '**/entrypoints/**', '**/board/**', '**/browser/**'] },
       ],
     },
   },
   {
-    files: ['board/*.ts', 'shared/**/*.{mts,ts}'],
+    files: ['board/**/*.ts', 'browser/**/*.ts'],
     rules: {
-      'no-restricted-globals': [
-        'error',
-        'chrome',
-        'process',
-        'Buffer',
-        'require',
-        'module',
-        'exports',
-        '__dirname',
-        '__filename',
-      ],
+      'no-restricted-globals': ['error', ...hostGlobals],
       'no-restricted-imports': [
         'error',
         { patterns: ['node:*', '**/src/**', '**/entrypoints/**', '**/native/**'] },
       ],
     },
   },
-  { files: ['board/*.ts'], languageOptions: { globals: globals.browser } },
+  { files: ['board/**/*.ts', 'browser/**/*.ts'], languageOptions: { globals: globals.browser } },
+  {
+    files: ['shared/**/*.{mts,ts}'],
+    rules: {
+      'no-restricted-globals': ['error', { globals: sharedHostGlobals, checkGlobalObject: true }],
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            'node:*',
+            ...builtinModules,
+            '**/src/**',
+            '**/entrypoints/**',
+            '**/native/**',
+            '**/board/**',
+            '**/browser/**',
+          ],
+        },
+      ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'ImportExpression',
+          message: 'Shared modules use static imports so runtime ownership is checked.',
+        },
+      ],
+    },
+  },
   {
     files: ['tests/**/*.{ts,mts}'],
     languageOptions: { globals: { ...globals.node, ...globals.browser, chrome: 'readonly' } },
