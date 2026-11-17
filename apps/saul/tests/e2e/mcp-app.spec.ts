@@ -203,7 +203,7 @@ test('macOS native Chrome names import initially and apply through the reviewed 
   await captureWorkspace(host, ui, info.outputPath('native-name-import-apply.png'));
 });
 
-test('MCP App renders real tabs, sends a Codex request and applies only after its review button', async ({
+test('MCP App renders real tabs, sends a Codex request and applies only after its review button @smoke', async ({
   sandbox,
   fixtureServer,
 }, info) => {

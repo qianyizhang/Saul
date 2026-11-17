@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures.ts';
 
-test('extension invalidation removes stale page UI without reconnect errors', async ({
+test('extension invalidation removes stale page UI without reconnect errors @smoke', async ({
   sandbox,
   fixtureServer,
 }) => {

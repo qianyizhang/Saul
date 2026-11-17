@@ -39,7 +39,7 @@ test('a rejected summary result remains unavailable until the user retries', asy
   expect(await calls()).toBe(2);
 });
 
-test('programmatic summary opens immediately, runs two streams, survives closure and persists with export', async ({
+test('programmatic summary opens immediately, runs two streams, survives closure and persists with export @smoke', async ({
   sandbox,
   fixtureServer,
 }, info) => {
