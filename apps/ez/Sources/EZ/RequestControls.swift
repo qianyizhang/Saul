@@ -19,7 +19,7 @@ struct LookupChoices: View {
                 role: "Preset", options: presets, selection: presetSelection
             ) { model.chooseLookupPreset(UUID(uuidString: $0)) }
             .frame(maxWidth: .infinity)
-            .disabled(model.busy || model.connecting || model.signingIn || model.launcherPending)
+            .disabled(model.busy || model.credentialBusy || model.launcherPending)
         }.frame(height: 44)
     }
 

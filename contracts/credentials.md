@@ -103,12 +103,26 @@ the same cross-process lease as refresh. HTTP redirects are refused. Custom HTTP
 endpoints and HTTP loopback endpoints use stored destinations, never a caller's
 arbitrary generation URL. Catalogue and status calls time out after 30 seconds.
 
-The shared owner serializes discovery with refresh, caching one validated
-snapshot per connection for five minutes. Settings entry, setup and stale request
-preparation can refresh it; Check forces refresh. A complete empty catalog means
-no models; malformed or incomplete replies retain the last good models with a
-separate error. There is no background polling or catalog history. Presets are
-never rewritten to a different model.
+The shared owner checks the credential and route before using a cached catalog
+and caches one validated snapshot per ChatGPT registration or API connection
+key and endpoint. Plan execution requires an unpaused registration and fresh
+evidence (under five minutes, with no refresh error) for the requested model,
+reasoning effort and service tier. API execution keeps its last-good membership
+policy. A complete empty catalog means no models; malformed or incomplete
+replies retain the last good models for display with a separate error. There is
+no background polling or catalog history. Presets are never rewritten to a
+different model.
+
+The version 2 `connection-catalog` request accepts `intent: "display"` (use a
+fresh cache or refresh), `"refresh"` (force discovery, including during setup),
+or `"check"` (explicit Connections Check). Among these operations, only Check
+clears a plan usage pause. It fetches, validates and persists a complete catalog
+before clearing the bound registration’s pause under the same lease. A failed or cancelled Check leaves
+the pause in place. Check never starts generation or confirms quota. Older
+requests without `intent` keep their original model fields; legacy `force: true`
+only refreshes. An explicit `intent` opts into optional `isDefault`; EZ uses it
+when choosing the unassigned starter. Update the signed owner with clients that
+send these fields.
 
 [Browser Speak](../apps/saul/docs/chatgpt-plan.md#speech-preview) and
 [EZ Speak](../apps/ez/docs/design.md#speak-preview) use short-lived Realtime

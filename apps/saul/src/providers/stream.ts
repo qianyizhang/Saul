@@ -19,6 +19,7 @@ export async function* streamModel(
       'PDF URL attachments need a ChatGPT plan preset. Choose Local parsing in Settings → Calls and Run again to send text.',
     );
   if (
+    input.provider !== 'chatgpt-plan' &&
     input.preset?.connectionKey &&
     (input.credentialOwner === 'saul' || input.remote.credentialOwner === 'saul')
   ) {
@@ -61,6 +62,7 @@ export async function* streamModel(
         {
           action: 'generate',
           ...input.plan,
+          ...(input.preset?.connectionKey ? { connectionKey: input.preset.connectionKey } : {}),
           systemPrompt: input.systemPrompt,
           userPrompt: input.userPrompt,
           ...(options.attachments ? { attachments: options.attachments } : {}),

@@ -248,13 +248,15 @@ export function ApiPresetFields({
   selectProfile,
   fallbackTemperature,
   testing,
-  test,
+  checkEndpoint,
+  testGeneration,
 }: ModelFields & {
   profiles: Configuration['profiles'];
   selectProfile: (id: string) => void;
   fallbackTemperature: number;
   testing: boolean;
-  test: (mode: 'endpoint' | 'generation') => void;
+  checkEndpoint?: () => void;
+  testGeneration: () => void;
 }) {
   return (
     <>
@@ -313,18 +315,20 @@ export function ApiPresetFields({
             />
           </label>
           <div className="row">
+            {checkEndpoint && (
+              <button
+                className="btn"
+                disabled={testing}
+                onClick={checkEndpoint}
+                aria-label="Test Connection"
+              >
+                <ActionLabel short="Check" full="Test Connection" />
+              </button>
+            )}
             <button
               className="btn"
               disabled={testing}
-              onClick={() => test('endpoint')}
-              aria-label="Test Connection"
-            >
-              <ActionLabel short="Check" full="Test Connection" />
-            </button>
-            <button
-              className="btn"
-              disabled={testing}
-              onClick={() => test('generation')}
+              onClick={testGeneration}
               aria-label="Test generation"
             >
               <ActionLabel short="Test" full="Test generation" />

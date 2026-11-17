@@ -189,7 +189,11 @@ export function initCredentialBridge() {
         validateCredentialRequest(message);
         if (
           offscreen &&
-          !['generate', 'api-chat', 'api-image', 'connection-catalog'].includes(message.action)
+          !(
+            ['generate', 'api-chat', 'api-image'].includes(message.action) ||
+            (message.action === 'connection-catalog' &&
+              (message.intent === 'display' || (message.intent === undefined && !message.force)))
+          )
         )
           throw new Error('The runner may only generate text or images.');
         login = message.action === 'login';

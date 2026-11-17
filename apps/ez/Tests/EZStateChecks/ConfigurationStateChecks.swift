@@ -65,6 +65,112 @@ import Foundation
                 "Old catalog overwrote new models")
             try expectEqual(catalogAccounts, ["new"], "Invalidated status started another catalog request")
         },
+        CheckCase("connection: explicit Check supersedes a pending passive catalog") { _ in
+            let started = CheckSignal()
+            let gate = CheckSignal()
+            let first = ConnectionDefinition(
+                key: "plan-first", name: "First", kind: .chatGPTPlan, accountId: "first")
+            let second = ConnectionDefinition(
+                key: "plan-second", name: "Second", kind: .chatGPTPlan, accountId: "second")
+            let checks = ConnectionChecks(
+                status: { ConnectionStatus(connected: true, identity: $0.accountId) },
+                catalog: { connection, intent in
+                    if connection.key == first.key, intent == .passive {
+                        await started.signal()
+                        try await gate.wait()
+                    }
+                    return ConnectionCatalog(
+                        models: [ConnectionModel(id: "\(connection.key)-\(intent.rawValue)")],
+                        fetchedAt: Date().timeIntervalSince1970)
+                })
+            let pending = Task { await checks.refresh(first) }
+            defer { pending.cancel() }
+            try await started.wait()
+            try expect(!checks.isCheckingExplicitly(first.key), "Passive fetch disabled Check")
+            await checks.refresh(second, intent: .setup)
+            await checks.refresh(first, intent: .check)
+            await gate.signal()
+            await pending.value
+            try expectEqual(
+                checks.report(first.key)?.catalog?.models.first?.id, "plan-first-check",
+                "Passive result replaced or swallowed explicit Check")
+            try expectEqual(
+                checks.report(second.key)?.catalog?.models.first?.id, "plan-second-refresh",
+                "Check changed another connection or treated setup as Check")
+        },
+        CheckCase("connection: logout warning survives failed and successful status refresh") { _ in
+            let first = ConnectionDefinition(
+                key: "plan-first", name: "First", kind: .chatGPTPlan, accountId: "first")
+            let alias = ConnectionDefinition(
+                key: "plan-alias", name: "Alias", kind: .chatGPTPlan, accountId: "first")
+            let second = ConnectionDefinition(
+                key: "plan-second", name: "Second", kind: .chatGPTPlan, accountId: "second")
+            let started = CheckSignal()
+            let gate = CheckSignal()
+            var signedOut = false
+            var failStatus = false
+            let checks = ConnectionChecks(
+                status: { connection in
+                    if failStatus && connection.key == first.key {
+                        throw EZError("Status refresh failed.")
+                    }
+                    let connected = connection.key != first.key || !signedOut
+                    return ConnectionStatus(connected: connected, signedIn: connected)
+                },
+                catalog: { connection, intent in
+                    if connection.key == alias.key, intent == .check {
+                        await started.signal()
+                        try await gate.wait()
+                    }
+                    return ConnectionCatalog(models: [ConnectionModel(id: "previous")])
+                })
+            await checks.refresh(first)
+            await checks.refresh(alias)
+            await checks.refresh(second)
+            let pending = Task { await checks.refresh(alias, intent: .check) }
+            defer { pending.cancel() }
+            try await started.wait()
+            let reply = Data(
+                #"{"account":{"id":"first","label":"First","signedIn":false,"planEnabled":false},"warning":"Remote sign-out could not be confirmed."}"#
+                    .utf8)
+            let outcome = try JSONDecoder().decode(ConnectionChecks.LogoutOutcome.self, from: reply)
+            signedOut = true
+            try checks.didSignOut(outcome, from: first)
+            await gate.signal()
+            await pending.value
+            try expect(checks.report(first.key)?.catalog == nil, "Logout retained the old catalog")
+            try expectEqual(checks.report(alias.key)?.status?.signedIn, false, "Alias still showed signed in")
+            try expect(checks.report(alias.key)?.catalog == nil, "Late Check overwrote sign-out for an alias")
+            failStatus = true
+            await checks.refresh(first)
+            try expectEqual(checks.report(first.key)?.status?.signedIn, false, "Failed refresh hid sign-out")
+            try expectEqual(checks.report(first.key)?.error, "Status refresh failed.", "Failure was hidden")
+            failStatus = false
+            await checks.refresh(first)
+            try expectEqual(checks.report(first.key)?.status?.signedIn, false, "Sign-out was lost")
+            try expectEqual(
+                checks.logoutWarning(for: first), outcome.warning, "Refresh hid revocation warning")
+            try expect(
+                checks.logoutWarning(for: second) == nil
+                    && checks.report(second.key)?.status?.connected == true,
+                "Logout affected another account")
+        },
+        CheckCase("connection: provider default seeds only the unassigned starter") { directory in
+            var config = Configuration.starters(model: "", effort: "low", fast: false)
+            let saved = ModelPreset(name: "Saved", model: "first", effort: "medium", fast: true)
+            config.presets.append(saved)
+            try ConfigurationStore(directory: directory).save(config)
+            let model = AppModel(directory: directory, offline: true)
+            defer { model.shutdown() }
+            model.models = [
+                ConnectionModel(id: "first", efforts: ["low", "medium"]),
+                ConnectionModel(id: "z-default", efforts: ["low", "medium"], isDefault: true),
+            ].map(ModelOption.init(connectionModel:))
+            model.initializeStarterPreset()
+            try expectEqual(model.configuration.presets.first?.model, "z-default", "Default marker was lost")
+            try expectEqual(model.configuration.presets.last, saved, "Saved preset was normalized")
+            try expect(model.configuration.unassignedStarterID == nil, "Starter remained unassigned")
+        },
         stateCase("settings keeps the edited item through failed Save and confirms discard before switching")
         { f in
             var editor = ConfigurationEditor()

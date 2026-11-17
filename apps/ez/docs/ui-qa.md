@@ -42,6 +42,17 @@ Capture the native window and fresh accessibility tree after relevant actions.
 Record fixture, appearance and size under root `.artifacts/ez/`. Rebind the visible
 main window after a hide/close capture error; never reuse stale AX indices.
 
+## Bound connection status
+
+Use isolated account and endpoint fixtures when checking authenticated states.
+Assign different connections to two Write presets and switch between them
+while a status or catalog request is pending. Main and Quick Lookup must show
+the selected preset's connection; Presets must keep a last good list visible
+with its refresh error. In Connections, start Check while a passive refresh is
+pending. Check remains available until the explicit request starts. Verify
+that it never sends a lookup. Confirm sign-out and verify that a remote
+revocation warning stays on that row after its status refresh.
+
 ## Draw, search and source images
 
 Use Draw / Draw result / Draw waiting / Draw error. Run, inspect PNG and animated GIF output in both

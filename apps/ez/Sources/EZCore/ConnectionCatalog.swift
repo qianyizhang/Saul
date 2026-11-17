@@ -25,9 +25,10 @@ public struct ConnectionModel: Codable, Equatable, Sendable, Identifiable {
     public var efforts: [String]
     public var defaultEffort: String
     public var fastTier: String?
+    public var isDefault: Bool?
     public init(
         id: String, name: String? = nil, capabilities: [ActionCapability] = [],
-        efforts: [String] = [], defaultEffort: String = "", fastTier: String? = nil
+        efforts: [String] = [], defaultEffort: String = "", fastTier: String? = nil, isDefault: Bool? = nil
     ) {
         self.id = id
         self.name = name ?? id
@@ -35,6 +36,7 @@ public struct ConnectionModel: Codable, Equatable, Sendable, Identifiable {
         self.efforts = efforts
         self.defaultEffort = defaultEffort
         self.fastTier = fastTier
+        self.isDefault = isDefault
     }
 }
 

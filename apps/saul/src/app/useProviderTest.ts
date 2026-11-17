@@ -38,6 +38,8 @@ export function useProviderTest() {
       if (!preset) throw new Error('Choose an existing preset.');
       const prepared = preparePreset(settings, preset);
       if (mode === 'endpoint' && prepared.choices.provider === 'openai-compatible') {
+        if (prepared.choices.remote.credentialOwner === 'saul')
+          throw new Error('Open Connections to check this connection.');
         const base = prepared.choices.remote.baseUrl
           .replace(/\/+$/, '')
           .replace(/\/chat\/completions$/, '');

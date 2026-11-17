@@ -95,12 +95,17 @@ struct ConfigurationView: View {
                     Text("Presets").font(.headline)
                     Spacer()
                     Button(model.minimumMode ? "Add" : "Add preset", systemImage: "plus") {
-                        let option = model.currentModel ?? model.models.first
-                        selectPreset(
-                            ModelPreset(
-                                name: "New preset", model: option?.model ?? "",
-                                effort: option?.supportedReasoningEfforts.isEmpty == false
-                                    ? option!.quickEffort : "", fast: false))
+                        var draft = ModelPreset(name: "New preset", model: "", effort: "", fast: false)
+                        let options = model.modelsForPreset(draft)
+                        let current = model.currentPreset.flatMap {
+                            $0.connectionKey == draft.connectionKey ? $0.model : nil
+                        }
+                        let option = options.first { $0.model == current } ?? options.first
+                        if let option {
+                            draft.model = option.model
+                            draft.effort = option.quickEffort
+                        }
+                        selectPreset(draft)
                     }.help("Add preset").accessibilityLabel("Add preset")
                 }
                 HStack(alignment: .top, spacing: 18) {
@@ -244,7 +249,10 @@ struct ConfigurationView: View {
                         ], selection: presetBinding(\.fast))
                 }
             }
-            if let preset, let issue = model.presetIssue(preset) {
+            if let preset,
+                let issue = model.connectionIssue(for: preset)
+                    ?? model.connectionError(preset.connectionKey) ?? model.presetIssue(preset)
+            {
                 Text(issue).font(AppStyle.caption).foregroundStyle(.orange)
             }
             HStack {

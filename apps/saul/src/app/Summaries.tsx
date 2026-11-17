@@ -206,7 +206,7 @@ export function SummaryReader({
             )
           )
             throw new Error(
-              'GPT-6 Luna with medium effort is unavailable. Refresh models in Settings.',
+              'GPT-6 Luna with medium effort is unavailable. Check models in Connections.',
             );
         }
         const selected = tabIds || batch?.items.map((item) => item.tabId);

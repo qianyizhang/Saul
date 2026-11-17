@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   connectionCapabilities,
   validConnectionEndpoint,
@@ -9,16 +9,22 @@ import {
   type ConnectionStatus,
 } from '../../native/connections-contract.mts';
 import { credentialCall } from '../native/credentials';
+import { planCall } from '../providers/chatgpt-plan';
 import type { ModelPreset, Configuration } from '../configuration/definition';
+import type { PlanAccount, PlanResults } from '../../native/plan-protocol.mts';
 import { useConnectionCatalog } from './useConnectionCatalog';
 
-type Account = { id: string; label: string; signedIn: boolean; planEnabled: boolean };
+type Logout = PlanResults['logout'];
 const message = (cause: unknown) => (cause instanceof Error ? cause.message : 'Connection failed.');
 
 function ConnectionRow({
   connection,
   enabled,
   locked,
+  dirty,
+  logout,
+  reveal,
+  onRevealed,
   setup,
   remove,
   integrations,
@@ -26,52 +32,75 @@ function ConnectionRow({
   connection: ConnectionDefinition;
   enabled: boolean;
   locked: boolean;
+  dirty: boolean;
+  logout?: Logout;
+  reveal: boolean;
+  onRevealed: () => void;
   setup: () => void;
   remove: () => void;
   integrations: () => void;
 }) {
   const [status, setStatus] = useState<ConnectionStatus>();
   const [error, setError] = useState('');
-  const [checking, setChecking] = useState(false);
-  const [revision, setRevision] = useState(0);
+  const [readingStatus, setReadingStatus] = useState(false);
+  const statusRequest = useRef<AbortController | null>(null);
+  const row = useRef<HTMLElement>(null);
   const ready = enabled && (connection.kind !== 'chatgpt-plan' || !!connection.accountId);
-  const { catalog, loading, refresh } = useConnectionCatalog(connection.key, ready);
+  const signedOut = ready && !!logout && status?.signedIn !== true;
+  const { catalog, loading, checking, check } = useConnectionCatalog(
+    connection.key,
+    ready && !signedOut,
+  );
   useEffect(() => {
-    if (!ready) return;
+    if (reveal) {
+      row.current?.focus();
+      onRevealed();
+    }
+  }, [reveal, onRevealed]);
+  const readStatus = useCallback(async () => {
+    statusRequest.current?.abort();
     const ac = new AbortController();
-    setChecking(true);
-    void credentialCall(
-      { action: 'connection-status', connectionKey: connection.key },
-      AbortSignal.any([ac.signal, AbortSignal.timeout(20_000)]),
-    )
-      .then((reply) => {
-        if (!validConnectionStatus(reply.connection)) throw new Error('Invalid connection status.');
-        if (!ac.signal.aborted) {
-          setStatus(reply.connection);
-          setError('');
-        }
-      })
-      .catch((cause) => {
-        if (!ac.signal.aborted) setError(message(cause));
-      })
-      .finally(() => {
-        if (!ac.signal.aborted) setChecking(false);
-      });
-    return () => ac.abort();
-  }, [ready, connection.key, connection.accountId, revision]);
+    statusRequest.current = ac;
+    setReadingStatus(true);
+    try {
+      const reply = await credentialCall(
+        { action: 'connection-status', connectionKey: connection.key },
+        AbortSignal.any([ac.signal, AbortSignal.timeout(20_000)]),
+      );
+      if (!validConnectionStatus(reply.connection)) throw new Error('Invalid connection status.');
+      if (!ac.signal.aborted) {
+        setStatus(reply.connection);
+        setError('');
+      }
+    } catch (cause) {
+      if (!ac.signal.aborted) setError(message(cause));
+    } finally {
+      if (!ac.signal.aborted) setReadingStatus(false);
+    }
+  }, [connection.key]);
+  useEffect(() => {
+    if (ready) void readStatus();
+    return () => statusRequest.current?.abort();
+  }, [ready, readStatus]);
   const failure = error || catalog?.error;
   const identity =
     connection.kind === 'chatgpt-plan'
-      ? status?.identity || (connection.accountId ? 'Loading account…' : 'No account selected')
+      ? (status?.identity ?? logout?.account.label) ||
+        (connection.accountId ? 'Loading account…' : 'No account selected')
       : `${connection.baseUrl ?? 'https://api.openai.com/v1'}${status?.keySuffix ? ` · sk-***${status.keySuffix}` : ''}`;
   return (
-    <article className="connection-row" aria-label={connection.name}>
+    <article ref={row} tabIndex={-1} className="connection-row" aria-label={connection.name}>
       <div className="row between">
         <strong>{connection.name}</strong>
         <details className="connection-more">
           <summary aria-label={`More for ${connection.name}`}>···</summary>
           <div className="stack">
-            <button type="button" className="btn" disabled={!enabled || locked} onClick={setup}>
+            <button
+              type="button"
+              className="btn"
+              disabled={!enabled || locked || dirty}
+              onClick={setup}
+            >
               {connection.kind === 'chatgpt-plan' ? 'Sign in again' : 'Replace key'}
             </button>
             {connection.kind === 'chatgpt-plan' && (
@@ -82,7 +111,7 @@ function ConnectionRow({
             <button
               type="button"
               className="btn danger"
-              disabled={!enabled || locked}
+              disabled={!enabled || locked || dirty}
               onClick={remove}
             >
               {connection.kind === 'chatgpt-plan' ? 'Sign out' : 'Remove key'}
@@ -100,36 +129,43 @@ function ConnectionRow({
         <span role="status">
           {!enabled
             ? 'Helper disconnected'
-            : checking || loading
-              ? 'Checking…'
-              : failure
-                ? 'Needs attention'
-                : status?.connected
-                  ? '✓ Connected'
-                  : 'Not set up'}
+            : signedOut || status?.signedIn === false
+              ? 'Signed out'
+              : readingStatus || loading
+                ? 'Checking…'
+                : failure
+                  ? 'Needs attention'
+                  : status?.connected
+                    ? '✓ Connected'
+                    : 'Not set up'}
         </span>
         {!enabled ? (
           <button type="button" className="btn" onClick={integrations}>
             Open Integrations
           </button>
-        ) : !ready || status?.connected === false ? (
-          <button type="button" className="btn" disabled={locked} onClick={setup}>
+        ) : !ready || signedOut || status?.connected === false ? (
+          <button type="button" className="btn" disabled={locked || dirty} onClick={setup}>
             Set up
           </button>
         ) : (
           <button
             type="button"
             className="btn"
-            disabled={checking || loading}
+            disabled={locked || checking}
             onClick={() => {
-              setRevision((v) => v + 1);
-              refresh();
+              void readStatus();
+              check();
             }}
           >
             Check
           </button>
         )}
       </div>
+      {signedOut && logout?.warning && (
+        <p className="notice" role="status">
+          {logout.warning}
+        </p>
+      )}
       {failure && (
         <p className="notice error" role="alert">
           {failure}
@@ -147,6 +183,8 @@ export function ConnectionSettings({
   commit,
   integrations,
   onDirty,
+  focusConnection,
+  onConnectionFocused,
 }: {
   settings: Configuration;
   visible: boolean;
@@ -155,6 +193,8 @@ export function ConnectionSettings({
   commit: (connections: ConnectionDefinition[]) => Promise<void>;
   integrations: () => void;
   onDirty: (dirty: boolean) => void;
+  focusConnection?: string;
+  onConnectionFocused: () => void;
 }) {
   const [target, setTarget] = useState<ConnectionDefinition>();
   const [adding, setAdding] = useState(false);
@@ -163,7 +203,8 @@ export function ConnectionSettings({
   const [endpoint, setEndpoint] = useState('https://api.openai.com/v1');
   const [key, setKey] = useState('');
   const [accountId, setAccountId] = useState('');
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [accounts, setAccounts] = useState<PlanAccount[]>([]);
+  const [logouts, setLogouts] = useState<ReadonlyMap<string, Logout>>(() => new Map());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
@@ -172,10 +213,8 @@ export function ConnectionSettings({
   useEffect(() => () => loginController.current?.abort(), []);
   const enabled = settings.sharedCredentials === 'saul';
   const loadAccounts = async () => {
-    const reply = await credentialCall({ action: 'accounts' }, AbortSignal.timeout(20_000));
-    if (!Array.isArray(reply.accounts)) throw new Error('Invalid account list.');
-    // Credential transport validates every account field before returning it.
-    setAccounts(reply.accounts as Account[]);
+    const reply = await planCall({ action: 'accounts' }, AbortSignal.timeout(20_000));
+    setAccounts(reply.accounts);
   };
   const open = (connection?: ConnectionDefinition) => {
     setTarget(connection);
@@ -258,7 +297,7 @@ export function ConnectionSettings({
     try {
       const selected = target?.accountId ?? accountId;
       if (!addingAccount && !selected) throw new Error('Choose an account to sign in again.');
-      const result = await credentialCall(
+      const result = await planCall(
         {
           action: 'login',
           ...(!addingAccount ? { accountId: selected } : {}),
@@ -266,9 +305,14 @@ export function ConnectionSettings({
         },
         AbortSignal.any([ac.signal, AbortSignal.timeout(320_000)]),
       );
+      if (result.account.signedIn)
+        setLogouts((previous) => {
+          const next = new Map(previous);
+          next.delete(result.account.id);
+          return next;
+        });
       await loadAccounts();
-      const account = result.account as Account | undefined;
-      if (account) setAccountId(account.id);
+      setAccountId(result.account.id);
     } catch (cause) {
       setError(message(cause));
     } finally {
@@ -290,7 +334,10 @@ export function ConnectionSettings({
     try {
       if (connection.kind === 'chatgpt-plan') {
         if (!connection.accountId) throw new Error('This connection has no account.');
-        await credentialCall({ action: 'logout', accountId: connection.accountId });
+        const result = await planCall({ action: 'logout', accountId: connection.accountId });
+        if (result.account.id !== connection.accountId || result.account.signedIn)
+          throw new Error('The helper did not confirm local sign-out.');
+        setLogouts((previous) => new Map(previous).set(result.account.id, result));
       } else
         await credentialCall({
           action: 'connection-key-remove',
@@ -439,10 +486,19 @@ export function ConnectionSettings({
         visible &&
         settings.connections.map((connection) => (
           <ConnectionRow
-            key={`${connection.key}:${revision}`}
+            key={JSON.stringify([
+              connection.key,
+              connection.accountId,
+              connection.baseUrl,
+              revision,
+            ])}
             connection={connection}
             enabled={enabled}
-            locked={busy || dirty || disabled}
+            locked={busy || disabled}
+            dirty={dirty}
+            logout={connection.accountId ? logouts.get(connection.accountId) : undefined}
+            reveal={focusConnection === connection.key}
+            onRevealed={onConnectionFocused}
             setup={() => {
               if (!dirty && !disabled) open(connection);
             }}

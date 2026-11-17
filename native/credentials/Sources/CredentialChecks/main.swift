@@ -92,6 +92,25 @@ func rejects(_ operation: () throws -> Void) throws {
     try request(["action": "status"])
     try request(["action": "status"], version: CredentialRequest.version)
     try rejects { try request(["action": "status"], version: 3) }
+    try request(["action": "connection-catalog", "connectionKey": "plan-a", "force": true])
+    for intent in ["display", "refresh", "check"] {
+      try request(
+        ["action": "connection-catalog", "connectionKey": "plan-a", "intent": intent],
+        version: CredentialRequest.version)
+    }
+    try rejects {
+      try request(["action": "connection-catalog", "connectionKey": "plan-a", "intent": "check"])
+    }
+    for fields in [
+      ["intent": ["check"]], ["intent": "execution"], ["intent": "check", "force": false],
+    ]
+      as [[String: Any]]
+    {
+      let catalog: [String: Any] = ["action": "connection-catalog", "connectionKey": "plan-a"]
+      try rejects {
+        try request(catalog.merging(fields) { _, new in new }, version: CredentialRequest.version)
+      }
+    }
     for version in [1, CredentialRequest.version] {
       try rejects { try request(["action": "migration-verified"], version: version) }
       try rejects { try request(["action": "api-key-import", "key": "fixture"], version: version) }

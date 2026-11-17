@@ -22,10 +22,14 @@ export type CredentialPlanRequest = Extract<
   PlanRequest,
   { action: 'accounts' | 'login' | 'logout' | 'models' | 'generate' }
 >;
+export type ConnectionCatalogIntent = 'display' | 'refresh' | 'check';
 export type CredentialRequest =
   | CredentialPlanRequest
   | { action: 'connection-status'; connectionKey: string }
-  | { action: 'connection-catalog'; connectionKey: string; force?: boolean }
+  | ({
+      action: 'connection-catalog';
+      connectionKey: string;
+    } & ({ intent: ConnectionCatalogIntent; force?: never } | { intent?: never; force?: boolean }))
   | { action: 'connection-key-save'; connectionKey: string; endpoint: string; key: string }
   | { action: 'connection-key-remove'; connectionKey: string; endpoint: string }
   | { action: 'status' | 'api-key-status' | 'api-key-remove' }
@@ -78,7 +82,7 @@ export function validateCredentialRequest(value: unknown): asserts value is Cred
     'api-key-remove': [],
     'api-key-save': ['key'],
     'connection-status': ['connectionKey'],
-    'connection-catalog': ['connectionKey', 'force'],
+    'connection-catalog': ['connectionKey', 'force', 'intent'],
     'connection-key-save': ['connectionKey', 'endpoint', 'key'],
     'connection-key-remove': ['connectionKey', 'endpoint'],
     'api-chat': [
@@ -103,6 +107,12 @@ export function validateCredentialRequest(value: unknown): asserts value is Cred
     throw new Error('Choose a saved connection.');
   if (value.force !== undefined && typeof value.force !== 'boolean')
     throw new Error('Invalid refresh request.');
+  if (
+    value.intent !== undefined &&
+    (value.force !== undefined ||
+      (value.intent !== 'display' && value.intent !== 'refresh' && value.intent !== 'check'))
+  )
+    throw new Error('Invalid catalog intent.');
   if (value.action === 'connection-key-save' || value.action === 'connection-key-remove') {
     if (
       !validConnectionEndpoint(value.endpoint) ||

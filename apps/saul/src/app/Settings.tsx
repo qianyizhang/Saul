@@ -7,7 +7,7 @@ import { NativeBridge } from './NativeBridge';
 import { StandaloneConnectionSettings } from './StandaloneConnectionSettings';
 import { SharedCredentialSettings } from './SharedCredentialSettings';
 import { ActionLabel } from '../surface/ActionLabel';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSettingsEditor } from './useSettingsEditor';
 import { useProviderTest } from './useProviderTest';
 import { configurationFor } from '../configuration/definition';
@@ -39,6 +39,8 @@ export function Settings({
   const providerTest = useProviderTest();
   const { testing, notice } = providerTest;
   const [presetSearch, setPresetSearch] = useState('');
+  const [focusConnection, setFocusConnection] = useState<string>();
+  const connectionFocused = useCallback(() => setFocusConnection(undefined), []);
   const [speechBusy, setSpeechBusy] = useState(false);
   const [actionBuilding, setActionBuilding] = useState(false);
   const configuration = configurationFor(settings);
@@ -130,6 +132,8 @@ export function Settings({
             visible={section === 'connections'}
             dirty={dirty}
             commit={draft.commitConnections}
+            focusConnection={focusConnection}
+            onConnectionFocused={connectionFocused}
             onDirty={(value) => {
               setConnectionDirty(value);
               onDirty?.(value || dirty);
@@ -157,7 +161,10 @@ export function Settings({
           clearTest={providerTest.clear}
           test={test}
           onSpeechBusy={setSpeechBusy}
-          openConnections={() => onSectionChange('connections')}
+          openConnections={(connectionKey) => {
+            setFocusConnection(settings.sharedCredentials === 'saul' ? connectionKey : undefined);
+            onSectionChange('connections');
+          }}
         />
         <section hidden={section !== 'calls'} className="settings-section" aria-label="Calls">
           <h2 className="view-title">Calls</h2>

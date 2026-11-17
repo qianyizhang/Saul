@@ -3,41 +3,39 @@ import EZCore
 import Foundation
 
 extension AppModel {
+    struct ConnectionGuidance {
+        let message: String
+        let section: SettingsSection?
+    }
+
+    static func setupLabel(for section: SettingsSection) -> String {
+        section == .preferences ? "Open Integrations" : "Open \(section.title)"
+    }
+
     func refreshActiveConnection(preferred: ConnectionDefinition? = nil) {
         guard !offline, sharedCredentialsConnected else { return }
         let historyConnection = selectedEntry.flatMap { entry in
             configuration.connections.first { $0.key == entry.presetSnapshot?.connectionKey }
         }
         connectionChecks.focus(preferred ?? historyConnection ?? currentConnection) { [weak self] in
-            self?.adoptSelectedModels()
+            self?.initializeStarterPreset()
         }
     }
 
-    func refreshConnection(_ connection: ConnectionDefinition, force: Bool = false) async {
+    func refreshConnection(_ connection: ConnectionDefinition, intent: ConnectionChecks.Intent = .passive)
+        async
+    {
         guard !offline, sharedCredentialsConnected,
             configuration.connections.contains(where: { $0.matchesRoute(connection) })
         else { return }
-        await connectionChecks.refresh(connection, force: force)
-        if !Task.isCancelled && sharedCredentialsConnected { adoptSelectedModels() }
+        await connectionChecks.refresh(connection, intent: intent)
+        if !Task.isCancelled && sharedCredentialsConnected { initializeStarterPreset() }
     }
 
-    private func adoptSelectedModels() {
-        guard currentConnection?.kind == .chatGPTPlan, let currentPreset,
-            connectionCatalog(currentPreset.connectionKey) != nil
-        else { return }
-        models = modelsForPreset(currentPreset)
-        initializeStarterPreset()
-    }
     func modelsForPreset(_ preset: ModelPreset) -> [ModelOption] {
         if offline { return models }
-        return (connectionCatalog(preset.connectionKey)?.models ?? []).compactMap { model in
-            ModelOption(catalog: [
-                "visibility": "list", "slug": model.id, "display_name": model.name,
-                "default_reasoning_level": model.defaultEffort,
-                "supported_reasoning_levels": model.efforts.map { ["effort": $0] },
-                "additional_speed_tiers": model.fastTier.map { [$0] } ?? [],
-            ])
-        }
+        return (connectionCatalog(preset.connectionKey)?.options(for: preset.capability) ?? [])
+            .map(ModelOption.init(connectionModel:))
     }
     func presetIssue(_ preset: ModelPreset) -> String? {
         if offline {
@@ -93,41 +91,69 @@ extension AppModel {
         if offline || connectionCatalog(preset.connectionKey)?.isFresh == true { return presetIssue(preset) }
         return nil
     }
-    var needsPlan: Bool { currentConnection?.kind == .chatGPTPlan }
     var connectionIssue: String? {
         connectionIssue(for: currentPreset)
     }
     func connectionIssue(for preset: ModelPreset?) -> String? {
+        connectionGuidance(for: preset)?.message
+    }
+    func connectionGuidance(for preset: ModelPreset?) -> ConnectionGuidance? {
+        func setup(_ message: String) -> ConnectionGuidance {
+            ConnectionGuidance(message: message, section: .connections)
+        }
         if !offline, !sharedCredentialsConnected {
-            return "Connect to Saul in Settings → Preferences → Integrations."
+            return ConnectionGuidance(
+                message: "Connect to Saul in Settings → Preferences → Integrations.",
+                section: .preferences)
         }
         guard let preset else { return nil }
         guard let connection = configuration.connections.first(where: { $0.key == preset.connectionKey })
         else {
-            return "The selected preset's connection is unavailable. Open Connections."
+            return setup("The selected preset's connection is unavailable. Open Connections.")
         }
         guard connection.capabilities.contains(preset.capability) else {
-            return
-                "Connection ‘\(connection.name)’ cannot \(preset.capability.rawValue). Choose a compatible preset."
+            return ConnectionGuidance(
+                message:
+                    "Connection ‘\(connection.name)’ cannot \(preset.capability.rawValue). Choose a compatible preset.",
+                section: .configuration)
         }
         if !offline {
             if connection.kind == .chatGPTPlan && connection.accountId == nil {
-                return "Choose an account for this connection in Settings → Connections."
+                return setup("Choose an account for this connection in Settings → Connections.")
             }
-            if let error = connectionError(connection.key), connectionStatus(connection.key) == nil {
-                return error
+            guard let status = connectionStatus(connection.key) else {
+                if let error = connectionError(connection.key) { return setup(error) }
+                return ConnectionGuidance(
+                    message: "Checking ‘\(connection.name)’…", section: nil)
             }
-            if connectionStatus(connection.key)?.connected != true {
-                return "Set up ‘\(connection.name)’ in Connections."
+            if status.connected { return nil }
+            if connection.kind == .chatGPTPlan {
+                if status.signedIn == false {
+                    return setup("Sign in to ‘\(connection.name)’ in Connections.")
+                }
+                if status.signedIn == true {
+                    return setup("Allow plan use for ‘\(connection.name)’ in Connections.")
+                }
             }
-            return nil
+            return setup("Set up ‘\(connection.name)’ in Connections.")
         }
         if connection.kind == .chatGPTPlan {
-            if !signedIn { return "Connect ‘\(connection.name)’ in Connections." }
-            if !planEnabled { return "Enable plan usage in Connections." }
+            if !signedIn { return setup("Connect ‘\(connection.name)’ in Connections.") }
+            if !planEnabled { return setup("Enable plan usage in Connections.") }
         } else if !apiConnected {
-            return "Save an API key for ‘\(connection.name)’ in Connections."
+            return setup("Save an API key for ‘\(connection.name)’ in Connections.")
         }
         return nil
+    }
+    var currentConnectionWarning: String? {
+        guard let key = currentPreset?.connectionKey, connectionStatus(key)?.connected == true else {
+            return nil
+        }
+        return connectionError(key)
+    }
+
+    var currentConnectionSetupSection: SettingsSection? {
+        if let guidance = connectionGuidance(for: currentPreset) { return guidance.section }
+        return currentConnectionWarning == nil ? nil : .connections
     }
 }

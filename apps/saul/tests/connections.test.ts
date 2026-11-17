@@ -57,6 +57,29 @@ it('validates catalog and status through the actual credential wire without acce
     }),
   ).toThrow();
 });
+it('opts new catalog callers into provider defaults while retaining old request and reply shapes', () => {
+  const request = { action: 'connection-catalog', connectionKey: 'plan-a' };
+  for (const fields of [
+    {},
+    { force: true },
+    { intent: 'check' },
+    { intent: 'display' },
+    { intent: 'refresh' },
+  ])
+    expect(() => validateCredentialRequest({ ...request, ...fields })).not.toThrow();
+  for (const fields of [
+    { intent: 'execution' },
+    { intent: ['check'] },
+    { intent: 'check', force: false },
+  ])
+    expect(() => validateCredentialRequest({ ...request, ...fields })).toThrow();
+
+  const model = catalog.models[0]!;
+  expect(validConnectionCatalog({ ...catalog, models: [{ ...model, isDefault: true }] })).toBe(
+    true,
+  );
+  expect(validConnectionCatalog({ ...catalog, models: [{ ...model, isDefault: 1 }] })).toBe(false);
+});
 it('pins a plan connection regardless of another account selected by the app', () => {
   const settings = structuredClone(DEFAULT_CONFIGURATION);
   settings.sharedCredentials = 'saul';

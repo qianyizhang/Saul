@@ -167,6 +167,13 @@ it('denies page callers and credential operations from the offscreen runner', ()
     action: 'api-key-save',
     key: 'fixture',
   });
+  for (const fields of [{ intent: 'check' }, { intent: 'refresh' }, { force: true }]) {
+    h.connect('chrome-extension://extension/offscreen.html').receive({
+      action: 'connection-catalog',
+      connectionKey: 'plan-alias',
+      ...fields,
+    });
+  }
   expect(h.connectNative).not.toHaveBeenCalled();
 });
 it('rejects arbitrary endpoints and token-shaped results', () => {

@@ -156,7 +156,7 @@ struct ContentView: View {
             Spacer(minLength: 0)
             Divider()
             FullRowButton {
-                model.openSettings(model.signedIn ? .overview : .connections)
+                model.openSettings(model.connectionGuidance(for: model.currentPreset)?.section ?? .overview)
             } label: {
                 HStack {
                     if !model.minimumMode { Image(systemName: "person.crop.circle").font(.title3) }
@@ -186,20 +186,6 @@ struct ContentView: View {
                         : "Choose an action, fill in its inputs, and run it."
                 )
                 .font(AppStyle.body).foregroundStyle(.secondary)
-            }
-            if model.needsPlan && !model.signedIn {
-                Button {
-                    model.openSettings(.connections)
-                } label: {
-                    Label(
-                        model.minimumMode ? "Connect" : "Continue with ChatGPT",
-                        systemImage: "person.crop.circle")
-                }.help("Continue with ChatGPT").accessibilityLabel("Continue with ChatGPT")
-                    .buttonStyle(.borderedProminent).padding(.top, 4)
-                if !model.minimumMode {
-                    Text("Uses your eligible ChatGPT plan. No API key needed.")
-                        .font(AppStyle.caption).foregroundStyle(.secondary)
-                }
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -317,12 +303,19 @@ struct ContentView: View {
                         )
                         .help("Run · \(model.shortcuts.binding(for: .send).display)")
                     }
-                }.controlSize(.small).disabled(model.needsPlan && model.connecting)
+                }.controlSize(.small)
                 if !composerHint.isEmpty {
                     Text(composerHint).font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                if let preset = model.currentPreset, model.presetIssue(preset) != nil {
+                if let section = model.currentConnectionSetupSection {
+                    Button(AppModel.setupLabel(for: section)) {
+                        if section == .configuration { model.settingsPresetID = model.currentPreset?.id }
+                        model.openSettings(section)
+                    }
+                } else if model.connectionIssue == nil, let preset = model.currentPreset,
+                    model.presetIssue(preset) != nil
+                {
                     Button("Edit preset") {
                         model.settingsPresetID = preset.id
                         model.openSettings(.configuration)
@@ -336,8 +329,8 @@ struct ContentView: View {
         .overlay(RoundedRectangle(cornerRadius: AppStyle.composerRadius).stroke(.quaternary, lineWidth: 1))
     }
     private var composerHint: String {
-        if model.needsPlan && model.connecting { return "Connecting to ChatGPT…" }
         if let issue = model.connectionIssue { return issue }
+        if let warning = model.currentConnectionWarning { return warning }
         return model.requestIssue
             ?? (model.minimumMode
                 ? "" : "\(model.shortcuts.binding(for: .send).display) to send · Each lookup starts fresh.")

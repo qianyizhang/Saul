@@ -60,14 +60,18 @@ export function PresetSettings({
   clearTest: () => void;
   test: (mode: 'endpoint' | 'generation') => void;
   onSpeechBusy: (busy: boolean) => void;
-  openConnections: () => void;
+  openConnections: (connectionKey?: string) => void;
 }) {
   const { value: presetSearch, change: setPresetSearch } = search;
   const selectedConnection = settings.connections.find(
     (p) => p.key === selectedPreset?.connectionKey,
   );
+  const managedCheck =
+    remote.credentialOwner === 'saul' ||
+    (!!selectedPreset?.connectionKey && settings.sharedCredentials !== undefined);
   const localConnection =
     selectedPreset?.provider === 'openai-compatible' &&
+    !managedCheck &&
     (settings.sharedCredentials === undefined ||
       (settings.sharedCredentials === 'disconnected' && !selectedConnection))
       ? (settings.profiles?.find(
@@ -320,11 +324,15 @@ export function PresetSettings({
                   selectProfile={(id) => edit({ type: 'preset-profile', id })}
                   fallbackTemperature={remote.temperature}
                   testing={testing}
-                  test={test}
+                  checkEndpoint={managedCheck ? undefined : () => test('endpoint')}
+                  testGeneration={() => test('generation')}
                 />
               )}
               <div className="row between">
-                <button className="btn quiet" onClick={() => openConnections()}>
+                <button
+                  className="btn quiet"
+                  onClick={() => openConnections(currentConnection?.key)}
+                >
                   Connections
                 </button>
                 <button

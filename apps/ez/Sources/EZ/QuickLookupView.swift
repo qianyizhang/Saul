@@ -22,7 +22,7 @@ struct QuickLookupView: View {
                     })
             }
             actions
-            if !notices.isEmpty || needsSetup || (model.needsPlan && model.connecting) {
+            if !notices.isEmpty || setupSection != nil {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(notices, id: \.self) { message in
@@ -33,18 +33,12 @@ struct QuickLookupView: View {
                                 )
                                 .textSelection(.enabled)
                         }
-                        if model.needsPlan && model.connecting {
-                            Text("Connecting to ChatGPT…").font(AppStyle.caption).foregroundStyle(.secondary)
-                        } else if needsSetup {
-                            Button(
-                                model.minimumMode
-                                    ? (needsAccount ? "Connect" : "Settings")
-                                    : (!model.signedIn
-                                        ? "Connect ChatGPT"
-                                        : !model.planEnabled ? "Enable plan access" : "Open Configuration")
-                            ) {
-                                controller.showMain(
-                                    settings: true, section: needsAccount ? .connections : .configuration)
+                        if let section = setupSection {
+                            Button(AppModel.setupLabel(for: section)) {
+                                if section == .configuration {
+                                    model.settingsPresetID = model.currentPreset?.id
+                                }
+                                controller.showMain(settings: true, section: section)
                             }.controlSize(.small)
                         }
                     }.frame(maxWidth: .infinity, alignment: .leading)
@@ -229,24 +223,30 @@ struct QuickLookupView: View {
         let presetIssue = model.currentPreset.flatMap { model.presetIssue($0) }
         for message in [
             controller.shortcutError, controller.launcherError, model.storageWarning, model.connectionIssue,
-            model.configurationError, model.error, presetIssue,
+            model.currentConnectionWarning, model.configurationError, model.error,
+            model.connectionIssue == nil ? presetIssue : nil,
         ].compactMap({ $0 }) {
             if !messages.contains(message) { messages.append(message) }
         }
         return messages
     }
-    private var needsAccount: Bool { model.connectionIssue != nil }
-    private var needsSetup: Bool {
-        needsAccount
-            || (model.currentAction != nil
-                && (model.currentPreset == nil || model.currentPreset.flatMap { model.presetIssue($0) } != nil
-                    || model.configurationError != nil))
+    private var setupSection: AppModel.SettingsSection? {
+        if model.connectionIssue != nil || model.currentConnectionWarning != nil {
+            return model.currentConnectionSetupSection
+        }
+        if model.currentAction != nil,
+            model.currentPreset == nil || model.currentPreset.flatMap({ model.presetIssue($0) }) != nil
+                || model.configurationError != nil
+        {
+            return .configuration
+        }
+        return nil
     }
     private var layout: QuickLookupLayout {
         QuickLookupLayout(
             showsChoices: showsInputs,
             fieldCount: showsInputs ? model.inputFields.count : 0,
-            showsNotice: !notices.isEmpty || needsSetup || (model.needsPlan && model.connecting),
+            showsNotice: !notices.isEmpty || setupSection != nil,
             showsAnswer: model.selectedEntry != nil,
             showsFollowUp: model.selectedEntry?.status == "completed"
                 && model.selectedEntry?.capability == .write,

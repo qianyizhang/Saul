@@ -1,3 +1,4 @@
+import CoreFoundation
 import Foundation
 
 public enum QueryMode: String, Codable, CaseIterable, Identifiable, Sendable {
@@ -58,6 +59,18 @@ public struct ModelOption: Identifiable {
             ?? (supportedReasoningEfforts.contains { $0.reasoningEffort == defaultReasoningEffort }
                 ? defaultReasoningEffort : supportedReasoningEfforts.first?.reasoningEffort ?? "")
     }
+    public init(connectionModel: ConnectionModel) {
+        id = connectionModel.id
+        model = connectionModel.id
+        displayName = connectionModel.name
+        defaultReasoningEffort = connectionModel.defaultEffort
+        supportedReasoningEfforts = connectionModel.efforts.map {
+            Effort(reasoningEffort: $0, description: "")
+        }
+        isDefault = connectionModel.isDefault == true
+        serviceTiers = connectionModel.fastTier.map { [Tier(id: $0, name: "Fast", description: "")] }
+        additionalSpeedTiers = nil
+    }
     public init?(catalog: [String: Any]) {
         func text(_ value: Any?, max: Int = 256) -> String? {
             guard let value = value as? String,
@@ -71,29 +84,69 @@ public struct ModelOption: Identifiable {
         }
         id = slug
         model = slug
-        displayName = text(catalog["display_name"], max: 1000) ?? slug
-        defaultReasoningEffort =
-            text(catalog["default_reasoning_level"] ?? catalog["default_reasoning_effort"], max: 64) ?? ""
-        let values =
-            (catalog["supported_reasoning_levels"] ?? catalog["supported_reasoning_efforts"]) as? [Any] ?? []
+        // A null optional provider field means it was not advertised. A malformed value
+        // must fail the refresh rather than silently change a preset's available options.
+        func optional(_ key: String) -> Any? {
+            let value = catalog[key]
+            return value is NSNull ? nil : value
+        }
+        let display = optional("display_name")
+        let defaultEffort = optional("default_reasoning_level") ?? optional("default_reasoning_effort")
+        guard display == nil || text(display, max: 1000) != nil,
+            defaultEffort == nil || text(defaultEffort, max: 64) != nil
+        else { return nil }
+        displayName = text(display, max: 1000) ?? slug
+        defaultReasoningEffort = text(defaultEffort, max: 64) ?? ""
+
+        let efforts = optional("supported_reasoning_levels") ?? optional("supported_reasoning_efforts") ?? []
+        guard let values = efforts as? [[String: Any]], values.count <= 100 else { return nil }
         var seen = Set<String>()
-        supportedReasoningEfforts = values.compactMap { raw in
-            guard let value = raw as? [String: Any],
-                let effort = text(value["effort"] ?? value["reasoning_effort"], max: 64),
+        var options: [Effort] = []
+        for value in values {
+            guard let effort = text(value["effort"] ?? value["reasoning_effort"], max: 64),
                 seen.insert(effort).inserted
-            else {
-                return nil
+            else { return nil }
+            options.append(
+                Effort(reasoningEffort: effort, description: value["description"] as? String ?? ""))
+        }
+        supportedReasoningEfforts = options
+
+        func tierID(_ value: Any?) -> String? {
+            guard let id = text(value, max: 64),
+                id.range(of: "^[a-z][a-z0-9_-]{0,63}$", options: .regularExpression) != nil
+            else { return nil }
+            return id
+        }
+        if let raw = optional("service_tiers") {
+            guard let values = raw as? [[String: Any]], values.count <= 100 else { return nil }
+            var tiers: [Tier] = []
+            seen.removeAll()
+            for value in values {
+                guard let id = tierID(value["id"]), seen.insert(id).inserted else { return nil }
+                tiers.append(
+                    Tier(
+                        id: id, name: value["name"] as? String ?? id,
+                        description: value["description"] as? String ?? ""))
             }
-            return Effort(reasoningEffort: effort, description: value["description"] as? String ?? "")
+            serviceTiers = tiers
+        } else {
+            serviceTiers = nil
         }
-        serviceTiers = (catalog["service_tiers"] as? [Any])?.compactMap { raw in
-            guard let value = raw as? [String: Any], let id = text(value["id"]) else { return nil }
-            return Tier(
-                id: id, name: value["name"] as? String ?? id,
-                description: value["description"] as? String ?? "")
+        if let raw = optional("additional_speed_tiers") {
+            guard let tiers = raw as? [String], tiers.count <= 100,
+                tiers.allSatisfy({ tierID($0) != nil }), Set(tiers).count == tiers.count
+            else { return nil }
+            additionalSpeedTiers = tiers
+        } else {
+            additionalSpeedTiers = nil
         }
-        additionalSpeedTiers = (catalog["additional_speed_tiers"] as? [Any])?.compactMap { $0 as? String }
-        isDefault = catalog["is_default"] as? Bool ?? false
+        if let raw = optional("is_default") {
+            guard let value = raw as? NSNumber, CFGetTypeID(value) == CFBooleanGetTypeID()
+            else { return nil }
+            isDefault = value.boolValue
+        } else {
+            isDefault = false
+        }
     }
 }
 

@@ -8,6 +8,7 @@ export interface ConnectionModel {
   efforts: string[];
   defaultEffort: string;
   fastTier?: string;
+  isDefault?: boolean;
 }
 export interface ConnectionCatalog {
   models: ConnectionModel[];
@@ -51,7 +52,15 @@ export function validConnectionCatalog(value: unknown): value is ConnectionCatal
       (m) =>
         isRecord(m) &&
         Object.keys(m).every((k) =>
-          ['id', 'name', 'capabilities', 'efforts', 'defaultEffort', 'fastTier'].includes(k),
+          [
+            'id',
+            'name',
+            'capabilities',
+            'efforts',
+            'defaultEffort',
+            'fastTier',
+            'isDefault',
+          ].includes(k),
         ) &&
         typeof m.id === 'string' &&
         m.id.length > 0 &&
@@ -65,7 +74,9 @@ export function validConnectionCatalog(value: unknown): value is ConnectionCatal
         m.efforts.every((e) => typeof e === 'string' && e.length <= 64) &&
         typeof m.defaultEffort === 'string' &&
         m.defaultEffort.length <= 64 &&
-        (m.fastTier === undefined || typeof m.fastTier === 'string'),
+        (m.fastTier === undefined ||
+          (typeof m.fastTier === 'string' && /^[a-z][a-z0-9_-]{0,63}$/.test(m.fastTier))) &&
+        (m.isDefault === undefined || typeof m.isDefault === 'boolean'),
     ) &&
     new Set(value.models.map((m) => (m as ConnectionModel).id)).size === value.models.length
   );

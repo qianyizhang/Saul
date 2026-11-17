@@ -46,6 +46,7 @@ import SaulCredentialStorage
     var draftRevision: Int { draft.revision }
     var replayEntry: HistoryEntry? { draft.reusedEntry }
     @Published var configurationError: String?
+    /// Fixtures supply models locally; installed lookups use the bound connection's catalog.
     @Published var models: [ModelOption] = []
     let connectionChecks: ConnectionChecks
     func connectionStatus(_ key: String) -> ConnectionStatus? { connectionChecks.report(key)?.status }
@@ -73,6 +74,7 @@ import SaulCredentialStorage
     @Published var signedIn = false
     @Published var planEnabled = false
     @Published var profiles: [SaulAccount] = []
+    private var accountRevision = 0
     private enum CredentialOperation {
         case signIn, save, disconnect
     }
@@ -125,9 +127,10 @@ import SaulCredentialStorage
                     return try JSONDecoder().decode(
                         ConnectionStatus.self, from: JSONSerialization.data(withJSONObject: raw))
                 },
-                catalog: { [auth] connection, force in
+                catalog: { [auth] connection, intent in
                     let reply = try await auth.call([
-                        "action": "connection-catalog", "connectionKey": connection.key, "force": force,
+                        "action": "connection-catalog", "connectionKey": connection.key,
+                        "intent": intent.rawValue,
                     ])
                     guard let raw = reply["catalog"] else { throw EZError("Invalid model catalog.") }
                     return try JSONDecoder().decode(
@@ -366,7 +369,6 @@ import SaulCredentialStorage
             source: usesSketch ? .sketch(sketch.scene) : .attachment(inputImage),
             outputFormat: outputFormat)
     }
-    var currentModel: ModelOption? { models.first { $0.model == selectedModel } }
     var selectedEntry: HistoryEntry? { entries.first { $0.id == selection } }
     var selectedResponseActivity: ResponseActivity? {
         guard let runningAttempt, runningAttempt.entry.id == selection else { return nil }
@@ -386,7 +388,7 @@ import SaulCredentialStorage
     }
 
     var canSend: Bool {
-        canStartLookup && !(needsPlan && connecting) && connectionIssue == nil && requestIssue == nil
+        canStartLookup && connectionIssue == nil && requestIssue == nil
     }
 
     private func startLookup(_ entry: HistoryEntry) throws {
@@ -403,11 +405,10 @@ import SaulCredentialStorage
         error = nil
         defer { connecting = false }
         if let connection = currentConnection { await refreshConnection(connection) }
-        guard needsPlan || loadAccounts else { return }
+        guard loadAccounts else { return }
         do {
             try await loadConnectionAccounts()
         } catch {
-            syncAccount()
             self.error = error.localizedDescription
         }
     }
@@ -421,20 +422,18 @@ import SaulCredentialStorage
         guard !offline, !busy, !connecting, !credentialBusy, !launcherPending else { return }
         sharedCredentialsConnected = false
         connectionChecks.reset()
+        accountRevision += 1
         UserDefaults.standard.set(true, forKey: "saulCredentialsDisconnected")
         profiles = []
-        signedIn = false
-        planEnabled = false
-        apiConnected = false
-        models = []
         error = nil
     }
     func loadConnectionAccounts() async throws {
         guard !offline, sharedCredentialsConnected else { return }
+        let revision = accountRevision
         try await auth.load()
         try Task.checkCancellation()
-        guard sharedCredentialsConnected else { return }
-        syncAccount()
+        guard sharedCredentialsConnected, accountRevision == revision else { return }
+        profiles = auth.accounts
     }
 
     func signInConnection(accountID: String, addingAccount: Bool) async throws -> String? {
@@ -446,13 +445,16 @@ import SaulCredentialStorage
         let reply = try await auth.signIn(
             accountID: accountID, addingAccount: addingAccount,
             authorize: { NSWorkspace.shared.open($0) })
+        accountRevision += 1
+        let signedInID = (reply["account"] as? [String: Any])?["id"] as? String
+        if let signedInID {
+            connectionChecks.clearLogoutWarning(accountID: signedInID)
+            for connection in configuration.connections where connection.accountId == signedInID {
+                connectionChecks.invalidate(connection.key)
+            }
+        }
         try Task.checkCancellation()
         try await loadConnectionAccounts()
-        let signedInID = (reply["account"] as? [String: Any])?["id"] as? String
-        for connection in configuration.connections
-        where connection.accountId == signedInID && signedInID != nil {
-            connectionChecks.invalidate(connection.key)
-        }
         return signedInID
     }
 
@@ -466,18 +468,15 @@ import SaulCredentialStorage
         credentialOperation = operation
     }
 
-    private func syncAccount() {
-        profiles = auth.accounts
-        signedIn = auth.selected?.signedIn == true
-        planEnabled = auth.selected?.planEnabled == true
-    }
     func initializeStarterPreset() {
         // Only initialize the unassigned starter. Saved choices never silently normalize.
         guard let starterID = configuration.unassignedStarterID,
-            let index = configuration.presets.firstIndex(where: { $0.id == starterID && $0.model.isEmpty }),
-            offline || configuration.presets[index].connectionKey == currentPreset?.connectionKey,
-            let option = models.first(where: { $0.isDefault }) ?? models.first
+            let index = configuration.presets.firstIndex(where: { $0.id == starterID && $0.model.isEmpty })
         else { return }
+        let starter = configuration.presets[index]
+        guard offline || connectionCatalog(starter.connectionKey)?.isFresh == true else { return }
+        let options = modelsForPreset(starter)
+        guard let option = options.first(where: \.isDefault) ?? options.first else { return }
         var updated = configuration
         updated.presets[index].model = option.model
         updated.presets[index].effort = option.supportedReasoningEfforts.isEmpty ? "" : option.quickEffort
@@ -496,7 +495,7 @@ import SaulCredentialStorage
         resetDraft(actionID: id)
     }
     func chooseLookupPreset(_ id: UUID?) {
-        guard !busy, !launcherPending, !connecting, !credentialBusy else { return }
+        guard !busy, !launcherPending, !credentialBusy else { return }
         let preset =
             id.flatMap { id in configuration.presets.first { $0.id == id } }
             ?? (id == nil ? replayEntry?.presetSnapshot : nil)
@@ -572,7 +571,7 @@ import SaulCredentialStorage
             }
             throw error
         }
-        await refreshConnection(connection, force: true)
+        await refreshConnection(connection, intent: .setup)
     }
 
     func removeConnectionCredential(_ connection: ConnectionDefinition) async throws {
@@ -588,14 +587,21 @@ import SaulCredentialStorage
         }
         if connection.kind == .chatGPTPlan {
             guard let account = connection.accountId else { throw EZError("This connection has no account.") }
-            _ = try await auth.call(["action": "logout", "accountId": account])
+            let reply = try await auth.call(["action": "logout", "accountId": account])
+            let outcome = try JSONDecoder().decode(
+                ConnectionChecks.LogoutOutcome.self, from: JSONSerialization.data(withJSONObject: reply))
+            try connectionChecks.didSignOut(outcome, from: connection)
+            accountRevision += 1
+            if let index = profiles.firstIndex(where: { $0.id == account }) {
+                profiles[index] = outcome.account
+            }
         } else {
             _ = try await auth.call([
                 "action": "connection-key-remove", "connectionKey": connection.key,
                 "endpoint": connection.endpoint,
             ])
+            connectionChecks.invalidate(connection.key)
         }
-        connectionChecks.invalidate(connection.key)
         await refreshConnection(connection)
     }
 
@@ -677,7 +683,7 @@ import SaulCredentialStorage
         }
     }
     func send() {
-        guard canStartLookup, !(needsPlan && connecting) else { return }
+        guard canStartLookup else { return }
         let shownAction = currentAction
         let shownPreset = currentPreset
         let shownConnection = currentConnection
@@ -862,7 +868,6 @@ import SaulCredentialStorage
         if selection == entry.id && entry.hasImage { loadSelectedImage() }
         if case .running = update { return }
         runningAttempt = nil
-        if !offline { syncAccount() }
     }
 }
 

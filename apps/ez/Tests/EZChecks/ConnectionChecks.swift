@@ -185,6 +185,34 @@ import SaulCredentialStorage
             }
             try expectEqual(http.requests.count, 1, "Setup or removal unexpectedly contacted a provider")
         },
+        CheckCase("connections: replacing a saved API key invalidates cached model membership") { directory in
+            let http = HTTPFixture { request in
+                let token = request.value(forHTTPHeaderField: "Authorization")
+                let model = token == "Bearer replacement" ? "gpt-replacement" : "gpt-original"
+                return HTTPReply("{\"data\":[{\"id\":\"\(model)\"}]}")
+            }
+            defer { http.close() }
+            let connection = try credentialConnection(directory: directory, http: http)
+            let request = ["action": "connection-catalog", "connectionKey": "openai-api"]
+            _ = try await connection.call(request)
+            _ = try await connection.call(["action": "api-key-save", "key": "replacement"])
+            let reply = try await connection.call(request)
+            let catalog = try JSONDecoder().decode(
+                ConnectionCatalog.self, from: JSONSerialization.data(withJSONObject: reply["catalog"]!))
+            try expectEqual(
+                catalog.models.map(\.id), ["gpt-replacement"], "Key replacement kept stale models")
+            let path = directory.appendingPathComponent("connection-catalogs.json")
+            let corrupt = Data("unreadable catalog".utf8)
+            try corrupt.write(to: path)
+            let removed = try await connection.call(["action": "api-key-remove"])
+            try expectEqual(
+                removed["apiConnected"] as? Bool, false, "Damaged catalog blocked API key removal")
+            try expectEqual(try Data(contentsOf: path), corrupt, "Removal rewrote an unrecognized cache")
+            try await expectAsyncThrows(CredentialStorageError.self) {
+                _ = try await connection.call(request)
+            }
+            try expectEqual(http.requests.count, 2, "A removed key reached discovery")
+        },
         CheckCase("connections: presets keep fixed account identity across rename and reject retargeting") {
             directory in
             let store = SharedPresetsStore(url: directory.appendingPathComponent("settings.json"))

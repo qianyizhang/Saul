@@ -69,6 +69,10 @@ latency. There is no fallback API billing.
 Settings has Overview, Presets, Actions, Preferences, Connections and Shortcuts.
 Connections shows capability, account or endpoint/key suffix, status and Check.
 Add a connection for another identity; More holds sign-in/key replacement.
+Run and preset guidance use the connection saved on that preset. Check forces
+discovery for its connection; a successful plan Check clears only that
+account's pause and leaves Retry to the user. A sign-out warning about remote
+revocation stays beside the locally signed-out account.
 Helper and app-binding controls live in Preferences → Integrations. See the
 [shared contract](../../../contracts/configuration.md#connections-and-presets) for identity,
 catalog and preset guarantees.

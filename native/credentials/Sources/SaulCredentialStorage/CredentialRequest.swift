@@ -1,12 +1,19 @@
 import CoreFoundation
 import Foundation
 
+public enum CredentialCatalogIntent: String, Sendable {
+  case display, refresh, check
+}
+
 /// No token-read operation. Setup binds endpoints; generation cannot choose another destination.
 public struct CredentialRequest {
   public static let version = 2
   public let id: String
   public let action: String
   public let value: [String: Any]
+  public var catalogIntent: CredentialCatalogIntent? {
+    (value["intent"] as? String).flatMap(CredentialCatalogIntent.init(rawValue:))
+  }
 
   public static func decode(_ data: Data, caller: CredentialCaller) throws -> CredentialRequest {
     guard data.count <= NativeFrames.maximumInputBytes,
@@ -23,11 +30,11 @@ public struct CredentialRequest {
       "models": ["accountId"],
       "generate": [
         "accountId", "model", "effort", "fast", "systemPrompt", "userPrompt", "attachments",
-        "images",
+        "images", "connectionKey",
       ],
       "api-key-status": [], "api-key-save": ["key"], "api-key-remove": [],
       "connection-status": ["connectionKey"],
-      "connection-catalog": ["connectionKey", "force"],
+      "connection-catalog": ["connectionKey", "force", "intent"],
       "connection-key-save": ["connectionKey", "endpoint", "key"],
       "connection-key-remove": ["connectionKey", "endpoint"],
       "api-chat": [
@@ -57,6 +64,11 @@ public struct CredentialRequest {
       guard let number = value[flag] as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID()
       else { throw invalid() }
 
+    }
+    if let intent = value["intent"] {
+      guard version.doubleValue == Double(Self.version), value["force"] == nil,
+        let intent = intent as? String, CredentialCatalogIntent(rawValue: intent) != nil
+      else { throw invalid() }
     }
     if action.hasPrefix("connection-") || value["connectionKey"] != nil {
       guard text("connectionKey", max: 64),

@@ -67,6 +67,7 @@ struct ConnectionsView: View {
             Button("Disconnect", role: .destructive) {
                 guard let connection = removing else { return }
                 removing = nil
+                error = nil
                 Task {
                     do { try await model.removeConnectionCredential(connection) } catch {
                         self.error = error.localizedDescription
@@ -82,11 +83,17 @@ struct ConnectionsView: View {
     private func connectionRow(_ connection: ConnectionDefinition) -> some View {
         let status = model.connectionStatus(connection.key)
         let checking = model.checkingConnections.contains(connection.key)
+        let checkingExplicitly = model.connectionChecks.isCheckingExplicitly(connection.key)
         let problem = model.connectionError(connection.key)
+        let warning = model.connectionChecks.logoutWarning(for: connection)
         let connected =
             model.offline
             ? (connection.kind == .chatGPTPlan ? model.signedIn : model.apiConnected)
             : status?.connected == true
+        let canCheck =
+            !model.offline
+            && (connected
+                || (status == nil && (connection.kind == .openAIAPI || connection.accountId != nil)))
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(connection.name).font(.headline)
@@ -122,23 +129,29 @@ struct ConnectionsView: View {
                 Text(
                     !model.sharedCredentialsConnected
                         ? "Helper disconnected"
-                        : checking
-                            ? "Checking…"
-                            : problem != nil ? "Needs attention" : connected ? "✓ Connected" : "Not set up"
+                        : status?.signedIn == false
+                            ? "Signed out"
+                            : checking
+                                ? "Checking…"
+                                : problem != nil
+                                    ? "Needs attention" : connected ? "✓ Connected" : "Not set up"
                 )
                 .font(.callout).foregroundStyle(problem != nil ? Color.red : .primary)
                 Spacer()
                 if !model.sharedCredentialsConnected {
                     Button("Open Integrations") { model.settingsSection = .preferences }
-                } else if connected {
-                    Button("Check") { Task { await model.refreshConnection(connection, force: true) } }
-                        .disabled(checking || busy)
+                } else if canCheck {
+                    Button("Check") { Task { await model.refreshConnection(connection, intent: .check) } }
+                        .disabled(checkingExplicitly || busy)
                 } else {
                     Button("Set up") { open(connection) }.disabled(busy)
                 }
             }
             if let problem {
                 Text(problem).font(AppStyle.caption).foregroundStyle(.red).textSelection(.enabled)
+            }
+            if let warning {
+                Text(warning).font(AppStyle.caption).foregroundStyle(.orange).textSelection(.enabled)
             }
         }.padding(.vertical, 8)
     }

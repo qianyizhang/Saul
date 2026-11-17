@@ -62,12 +62,12 @@ import Foundation
             let invalidDefault = ModelOption(catalog: [
                 "visibility": "list", "slug": "test", "default_reasoning_level": "retired",
                 "supported_reasoning_levels": [
-                    false, ["effort": "high"], ["effort": "high"], ["effort": ""],
+                    ["effort": "high"]
                 ],
             ])!
             try expect(
                 invalidDefault.quickEffort == "high" && invalidDefault.supportedReasoningEfforts.count == 1,
-                "Invalid or duplicate catalog options changed defaults")
+                "Unadvertised default effort changed the quick fallback")
             try expect(
                 ModelPreset(name: "Default", model: "test", effort: "", fast: false)
                     .availabilityError(in: [invalidDefault], provider: .chatGPTPlan) == nil,

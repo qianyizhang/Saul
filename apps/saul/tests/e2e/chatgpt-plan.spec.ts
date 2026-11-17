@@ -287,6 +287,7 @@ test('ChatGPT provider settings route signed-owner reading streams, preserve par
         .at(-1),
     ),
   ).toMatchObject({
+    connectionKey: 'gpt-plan',
     model: 'plan-fixture-model',
     effort: 'high',
     fast: true,
@@ -326,7 +327,7 @@ test('ChatGPT provider settings route signed-owner reading streams, preserve par
   await connection.getByLabel('More for ChatGPT plan').click();
   popup.once('dialog', (dialog) => dialog.accept());
   await connection.getByRole('button', { name: 'Sign out', exact: true }).click();
-  await expect(connection.getByRole('status')).toHaveText('Not set up');
+  await expect(connection.getByRole('status')).toHaveText('Signed out');
   expect(fixtureServer.requests).toHaveLength(initialApiRequests); // No API-key fallback.
 });
 

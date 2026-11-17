@@ -80,6 +80,7 @@ export type PlanRequest =
   | {
       action: 'generate';
       accountId: string;
+      connectionKey?: string;
       model: string;
       effort?: string;
       fast?: boolean;
@@ -134,6 +135,7 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
     models: ['accountId'],
     generate: [
       'accountId',
+      'connectionKey',
       'model',
       'effort',
       'fast',
@@ -194,6 +196,8 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
   if (
     v.action === 'generate' &&
     (!text(v.model, 256) ||
+      (v.connectionKey !== undefined &&
+        (!text(v.connectionKey, 64) || !/^[a-z][a-z0-9-]{0,63}$/.test(v.connectionKey))) ||
       typeof v.systemPrompt !== 'string' ||
       v.systemPrompt.length > 100000 ||
       !text(v.userPrompt, 200000) ||
