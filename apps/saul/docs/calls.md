@@ -37,6 +37,12 @@ Retry unfinished, coverage, errors and Export HTML available in the reader;
 deletion is under Details. The export is self-contained and includes incomplete
 states. Tab surfaces show a compact active link. Completion never moves focus.
 
+If a reader or the Call builder temporarily loses status, it keeps the last
+known result and shows a separate read error. The view retries that read with
+a delay, or you can select **Refresh status** to read immediately. Neither
+starts, stops, or repeats inference. Checks end when the attempt settles or
+the view closes.
+
 For one page, lead with its title, source link and plain progress; omit repeated
 titles and batch counts. For batches, distinguish successful and processed counts.
 Show the saved preset/model in reader and export. Built-in output gives English

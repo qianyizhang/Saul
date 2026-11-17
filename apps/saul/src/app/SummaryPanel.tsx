@@ -149,6 +149,7 @@ export function SummaryPanel() {
             key={route.split('?')[0]}
             route={route}
             sidePanel
+            visible={!annotationView}
             onClose={close}
             onResolved={resolved}
           />

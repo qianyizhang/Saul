@@ -66,7 +66,10 @@ export class CallEditor {
   }
 
   request(request: CallEditRequest): Promise<CallEditorState> {
-    if (request.action === 'status') return this.ready.then(() => this.snapshot());
+    // Read failure is retryable; a successfully read but invalid record still
+    // returns a blocked snapshot and its explicit repair actions.
+    if (request.action === 'status')
+      return this.ready.then(async () => this.snapshot(await this.storage.readChoices()));
     if (request.action === 'stop') {
       return this.enqueue(() => {
         const build = this.active;

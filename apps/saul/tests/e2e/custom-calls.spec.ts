@@ -61,6 +61,83 @@ async function request(page: Page, message: CallEditRequest): Promise<CallEditor
   }, message);
 }
 
+test('call status recovers before and during a build, preserving the draft', async ({
+  sandbox,
+  fixtureServer,
+}) => {
+  const helper = await actionHelperFixture(fixtureServer);
+  let modelCalls = 0;
+  let complete: (() => void) | undefined;
+  fixtureServer.setHandler('/v1/chat/completions', (req, res) => {
+    modelCalls++;
+    req.resume();
+    complete = () => {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.end(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: JSON.stringify(candidate) } }] })}\n\ndata: [DONE]\n\n`,
+      );
+    };
+  });
+  try {
+    const { worker, popup } = await sandbox.launch();
+    await helper.install(worker);
+    await configureFixtureProvider(popup, fixtureServer.origin);
+    await popup.evaluate(() => {
+      const original = chrome.runtime.sendMessage.bind(chrome.runtime) as (
+        input: unknown,
+      ) => Promise<unknown>;
+      const probe = { builds: 0, failedInitialRead: false, failedActiveRead: false };
+      Object.assign(globalThis, { callStatusProbe: probe });
+      chrome.runtime.sendMessage = (async (input: {
+        target?: string;
+        message?: { action?: string };
+      }) => {
+        if (input.target !== 'saul-action') return original(input);
+        if (input.message?.action === 'build') probe.builds++;
+        if (input.message?.action === 'status') {
+          if (!probe.failedInitialRead) {
+            probe.failedInitialRead = true;
+            return { success: false, error: 'Could not read the initial fixture status.' };
+          }
+          if (probe.builds && !probe.failedActiveRead) {
+            probe.failedActiveRead = true;
+            return { success: false, error: 'Could not read the active fixture status.' };
+          }
+        }
+        return original(input);
+      }) as typeof chrome.runtime.sendMessage;
+    });
+    await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+    await settingsSection(popup, 'Calls');
+    const initial = popup.getByRole('alert').filter({ hasText: 'initial fixture status' });
+    await expect(initial).toBeVisible();
+    await expect(initial).toHaveCount(0);
+    await popup.getByLabel('Customize Call Saul', { exact: true }).click();
+    const form = popup.getByLabel('Call request', { exact: true });
+    await form.fill('Build this call.');
+    await popup.getByRole('button', { name: 'Create call', exact: true }).click();
+    await expect.poll(() => modelCalls).toBe(1);
+    const active = popup.getByRole('alert').filter({ hasText: 'active fixture status' });
+    await expect(active).toBeVisible();
+    await expect(popup.getByRole('button', { name: 'Stop creation', exact: true })).toBeVisible();
+    await form.fill('Preserve my later edits.');
+    complete!();
+    await expect(popup.getByLabel('Checked candidate')).toContainText('Evidence summary');
+    await expect(active).toHaveCount(0);
+    await expect(form).toHaveValue('Preserve my later edits.');
+    expect(modelCalls).toBe(1);
+    expect(
+      await popup.evaluate(
+        () =>
+          (globalThis as typeof globalThis & { callStatusProbe: { builds: number } })
+            .callStatusProbe.builds,
+      ),
+    ).toBe(1);
+  } finally {
+    await helper.close();
+  }
+});
+
 test('Call Saul uses the saved shared selection when Chrome cannot mirror the choice', async ({
   sandbox,
   fixtureServer,
@@ -330,9 +407,9 @@ test('Run again after restoring the built-in action uses its eligible account ra
   const helper = await actionHelperFixture(fixtureServer);
   try {
     const { worker, context, popup } = await sandbox.launch();
+    await configureFixtureProvider(popup, fixtureServer.origin);
     await installDigestProvider(worker);
     await helper.install(worker);
-    await configureFixtureProvider(popup, fixtureServer.origin);
     const staged = await request(popup, {
       action: 'stage',
       json: JSON.stringify({ ...candidate, source: 'export default () => "Custom answer";' }),

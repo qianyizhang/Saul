@@ -6,6 +6,89 @@ import type { PlanRequest } from '../../native/plan-protocol.mts';
 import type { DigestBatch } from '../../src/digest/types';
 import { readFile } from 'node:fs/promises';
 
+test('summary status recovers from lost reads without repeating a start or inference', async ({
+  sandbox,
+  fixtureServer,
+}) => {
+  const { worker, context, popup } = await sandbox.launch();
+  await installDigestProvider(worker, true);
+  await context.addInitScript(() => {
+    if (location.protocol !== 'chrome-extension:') return;
+    const original = chrome.runtime.sendMessage.bind(chrome.runtime) as (
+      input: unknown,
+    ) => Promise<unknown>;
+    const gate = Promise.withResolvers<void>();
+    const probe = { starts: 0, reads: 0, inFlight: 0, maxInFlight: 0, release: gate.resolve };
+    Object.assign(globalThis, { summaryStatusProbe: probe });
+    chrome.runtime.sendMessage = (async (input: {
+      target?: string;
+      message?: { action?: string };
+    }) => {
+      if (input.target !== 'saul-digest') return original(input);
+      if (input.message?.action === 'start') probe.starts++;
+      if (input.message?.action !== 'get') return original(input);
+      const read = ++probe.reads;
+      probe.inFlight++;
+      probe.maxInFlight = Math.max(probe.inFlight, probe.maxInFlight);
+      try {
+        if (read === 1 || read === 3)
+          return { success: false, error: 'Fixture temporarily lost the summary status read.' };
+        if (read === 4) await gate.promise;
+        return await original(input);
+      } finally {
+        probe.inFlight--;
+      }
+    }) as typeof chrome.runtime.sendMessage;
+  });
+  const source = await context.newPage();
+  await source.goto(fixtureServer.origin + '/article');
+  const reader = await openDigestReader(context, popup, worker, source.url());
+  const failure = reader.getByRole('alert').filter({ hasText: 'Could not read summary status' });
+  await expect(failure).toBeVisible();
+  const refresh = reader.getByRole('button', { name: 'Refresh status', exact: true });
+  await refresh.click();
+  await expect(reader.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
+  await expect(failure).toBeVisible();
+  await refresh.click();
+  await refresh.click();
+  const beforeRecovery = await reader.evaluate(() => {
+    const probe = (
+      globalThis as typeof globalThis & {
+        summaryStatusProbe: { starts: number; reads: number; maxInFlight: number };
+      }
+    ).summaryStatusProbe;
+    return { starts: probe.starts, reads: probe.reads, maxInFlight: probe.maxInFlight };
+  });
+  expect(beforeRecovery).toEqual({ starts: 1, reads: 4, maxInFlight: 1 });
+  await expect
+    .poll(() =>
+      worker.evaluate(
+        () =>
+          (globalThis as typeof globalThis & { digestFixture: { active: number } }).digestFixture
+            .active,
+      ),
+    )
+    .toBe(1);
+  const inference = await worker.evaluate(() => {
+    const state = (
+      globalThis as typeof globalThis & {
+        digestFixture: { requests: PlanRequest[]; finishes: Map<string, () => void> };
+      }
+    ).digestFixture;
+    for (const finish of state.finishes.values()) finish();
+    return state.requests.filter((request) => request.action === 'generate').length;
+  });
+  expect(inference).toBe(1);
+  await reader.evaluate(() => {
+    (
+      globalThis as typeof globalThis & { summaryStatusProbe: { release: () => void } }
+    ).summaryStatusProbe.release();
+  });
+  await expect(reader.getByRole('status')).toHaveText('Summary ready');
+  await expect(failure).toHaveCount(0);
+  await expect(reader.getByText('A concise source-backed finding.').first()).toBeVisible();
+});
+
 test('a rejected summary result remains unavailable until the user retries', async ({
   sandbox,
   fixtureServer,

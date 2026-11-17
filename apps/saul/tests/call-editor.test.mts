@@ -95,6 +95,24 @@ async function settle(manager: CallEditor) {
   );
   return manager.request({ action: 'status' });
 }
+
+it('distinguishes a lost status read from a saved record that needs repair', async () => {
+  const manager = editor();
+  await manager.request({ action: 'status' });
+  vi.mocked(chrome.storage.local.get).mockRejectedValueOnce(new Error('Choice storage offline'));
+  await expect(manager.request({ action: 'status' })).rejects.toThrow('Choice storage offline');
+  await expect(manager.request({ action: 'status' })).resolves.toMatchObject({ building: false });
+
+  const damaged = { selected: 7 };
+  local.saul_call_choices_v1 = damaged;
+  await expect(manager.request({ action: 'status' })).resolves.toMatchObject({
+    blocked: true,
+    building: false,
+    error: 'Invalid action preset reference.',
+  });
+  expect(local.saul_call_choices_v1).toEqual(damaged);
+});
+
 it('creates, checks, previews, explicitly loads and revises without invoking the handler', async () => {
   const generate = vi.fn(async function* (): AsyncGenerator<ModelEvent> {
     yield { type: 'delta', text: JSON.stringify(module) };

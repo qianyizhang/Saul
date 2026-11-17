@@ -12,6 +12,7 @@ import { openSummaryPanel } from '../digest/panel';
 import type { DigestComparison } from '../digest/types';
 import { ComparisonNote } from './SummaryInspection';
 import { CallResults } from './CallResults';
+import { createStatusObserver, type StatusObserver } from './status-observer';
 
 async function summaryAccounts(settings: Configuration) {
   if (settings.sharedCredentials !== 'saul')
@@ -43,27 +44,23 @@ export function ActiveSummary() {
   const windowId = useSummaryWindow();
   const [active, setActive] = useState<SummaryProgress | null>(null);
   useEffect(() => {
-    let disposed = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const refresh = async () => {
-      try {
-        const next = await sendWorkspaceMessage({
+    const observer = createStatusObserver({
+      read: () =>
+        sendWorkspaceMessage({
           action: 'command',
           method: 'saul_summary_status',
           args: {},
-        });
-        if (!disposed) setActive(next);
-      } catch {
-        /* Action and reader errors have their own recovery surfaces. */
-      } finally {
-        if (!disposed) timer = setTimeout(() => void refresh(), 2000);
-      }
-    };
-    void refresh();
-    return () => {
-      disposed = true;
-      clearTimeout(timer);
-    };
+        }),
+      // This indicator discovers new work while Window is open. The reader owns
+      // the lifecycle and error display for an individual summary.
+      shouldPoll: () => true,
+      onSnapshot: ({ value }) => {
+        if (value !== undefined) setActive(value);
+      },
+      intervalMs: 2000,
+    });
+    void observer.refresh();
+    return () => observer.dispose();
   }, []);
   return (
     active && (
@@ -130,14 +127,27 @@ export function SummaryHistory({ onOpen }: { onOpen?: (id: string) => void } = {
     </section>
   );
 }
+type SummaryLookup = { kind: 'found'; batch: DigestBatch } | { kind: 'missing' };
+const missingSummary = 'This digest no longer exists.';
+async function readSummary(id: string): Promise<SummaryLookup> {
+  try {
+    return { kind: 'found', batch: await sendDigestMessage({ action: 'get', id }) };
+  } catch (cause) {
+    if (cause instanceof Error && cause.message === missingSummary) return { kind: 'missing' };
+    throw cause;
+  }
+}
+
 export function SummaryReader({
   route,
   sidePanel = false,
+  visible = true,
   onClose,
   onResolved,
 }: {
   route: string;
   sidePanel?: boolean;
+  visible?: boolean;
   onClose?: () => void;
   onResolved?: (id: string) => Promise<void>;
 }) {
@@ -154,14 +164,29 @@ export function SummaryReader({
   const [accounts, setAccounts] = useState<SummaryConnection[]>([]);
   const [account, setAccount] = useState('');
   const [error, setError] = useState('');
+  const [readError, setReadError] = useState('');
+  const [initialMissing, setInitialMissing] = useState(false);
   const [busy, setBusy] = useState(false);
   const initialized = useRef(false);
+  const status = useRef<{ id: string; observer: StatusObserver<SummaryLookup> } | null>(null);
   const live = useRef(true);
   useEffect(() => {
     live.current = true;
     return () => {
       live.current = false;
     };
+  }, []);
+  const adoptBatch = useCallback((next: DigestBatch) => {
+    const current = status.current;
+    if (current?.id === next.id) {
+      void current.observer.invalidate({ kind: 'found', batch: next });
+    } else {
+      current?.observer.dispose();
+      status.current = null;
+      setId(next.id);
+      setBatch(next);
+      setReadError('');
+    }
   }, []);
   const start = useCallback(
     async (choiceKey?: string, regenerate = false) => {
@@ -230,8 +255,7 @@ export function SummaryReader({
           ...(regenerate ? { regenerate: true } : {}),
         });
         if (!live.current) return;
-        setId(result.id);
-        setBatch(result);
+        adoptBatch(result);
         setReused(result.id !== targetId);
         setComparisons([]);
         history.replaceState(null, '', '#summary/' + encodeURIComponent(result.id));
@@ -242,82 +266,90 @@ export function SummaryReader({
         setBusy(false);
       }
     },
-    [id, tabIds, batch, onResolved],
+    [adoptBatch, id, tabIds, batch, onResolved],
   );
   useEffect(() => {
-    if (initialized.current) return;
+    if (!visible) return;
+    const observer = createStatusObserver({
+      read: () => readSummary(id),
+      shouldPoll: (next) => next.kind === 'found' && next.batch.items.some(activeItem),
+      onSnapshot: ({ value, error }) => {
+        setReadError(error ?? '');
+        if (error || !value) return;
+        if (value.kind === 'missing') {
+          if (!initialized.current && tabIds?.length) setInitialMissing(true);
+          else setError(missingSummary);
+          return;
+        }
+        setBatch(value.batch);
+        if (!initialized.current) {
+          initialized.current = true;
+          if (onResolved)
+            void onResolved(value.batch.id).catch((cause: Error) => {
+              if (status.current?.observer === observer) setError(cause.message);
+            });
+        }
+      },
+    });
+    status.current = { id, observer };
+    void observer.refresh();
+    return () => {
+      observer.dispose();
+      if (status.current?.observer === observer) status.current = null;
+    };
+  }, [id, visible, tabIds, onResolved]);
+  useEffect(() => {
+    if (!visible || !initialMissing || initialized.current || !tabIds?.length) return;
     initialized.current = true;
     void (async () => {
       try {
-        try {
-          const existing = await sendDigestMessage({ action: 'get', id });
-          if (!live.current) return;
-          setBatch(existing);
-          await onResolved?.(existing.id);
+        setBusy(true);
+        const resolved = await sendDigestMessage({ action: 'resolve', id, tabIds });
+        if (!live.current) return;
+        setBusy(false);
+        if (resolved.batch) {
+          adoptBatch(resolved.batch);
+          setReused(true);
+          setComparisons(resolved.comparisons);
+          history.replaceState(null, '', '#summary/' + encodeURIComponent(resolved.batch.id));
+          await onResolved?.(resolved.batch.id);
           return;
-        } catch (e) {
-          if (!tabIds || !(e as Error).message.includes('no longer exists')) throw e;
         }
-        if (tabIds?.length) {
-          setBusy(true);
-          const resolved = await sendDigestMessage({ action: 'resolve', id, tabIds });
-          if (!live.current) return;
-          setBusy(false);
-          if (resolved.batch) {
-            setId(resolved.batch.id);
-            setBatch(resolved.batch);
-            setReused(true);
-            setComparisons(resolved.comparisons);
-            history.replaceState(null, '', '#summary/' + encodeURIComponent(resolved.batch.id));
-            await onResolved?.(resolved.batch.id);
-            return;
-          }
-        }
-        if (tabIds?.length === 1) {
+        if (tabIds.length === 1) {
           const tab = await chrome.tabs.get(tabIds[0]!);
+          if (!live.current) return;
           setSource({ title: tab.title || 'Untitled page', url: tab.url || '' });
         }
         await start();
       } catch (e) {
-        setError((e as Error).message);
-        setBusy(false);
+        if (live.current) {
+          setError((e as Error).message);
+          setBusy(false);
+        }
       }
     })();
-  }, [id, start, tabIds, onResolved]);
+  }, [adoptBatch, id, initialMissing, onResolved, start, tabIds, visible]);
   const running = Boolean(batch?.items.some(activeItem));
-  useEffect(() => {
-    if (!running) return;
-    let disposed = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const refresh = async () => {
-      try {
-        const next = await sendDigestMessage({ action: 'get', id });
-        if (!disposed) {
-          setBatch(next);
-          if (next.items.some(activeItem)) timer = setTimeout(() => void refresh(), 700);
-        }
-      } catch (e) {
-        if (!disposed) setError((e as Error).message);
-      }
-    };
-    timer = setTimeout(() => void refresh(), 700);
-    return () => {
-      disposed = true;
-      clearTimeout(timer);
-    };
-  }, [id, running]);
   async function control(action: 'stop' | 'retry' | 'delete') {
     setBusy(true);
     setError('');
     try {
       if (action === 'delete') {
         await sendDigestMessage({ action, id });
+        if (!live.current) return;
+        status.current?.observer.dispose();
         location.hash = 'summaries';
-      } else setBatch(await sendDigestMessage({ action, id }));
+      } else {
+        const next = await sendDigestMessage({ action, id });
+        if (live.current) adoptBatch(next);
+      }
     } catch (e) {
-      setError((e as Error).message);
+      if (live.current) {
+        setError((e as Error).message);
+        void status.current?.observer.invalidate();
+      }
     } finally {
-      setBusy(false);
+      if (live.current) setBusy(false);
     }
   }
   function download() {
@@ -338,7 +370,7 @@ export function SummaryReader({
   const page = singleItem || source;
   const pageUrl = page && sourceUrl(page.url);
   const custom = Boolean(batch?.action);
-  const status = singleItem
+  const statusLabel = singleItem
     ? {
         queued: custom ? 'Waiting to run…' : 'Waiting to summarize…',
         capturing: 'Reading page…',
@@ -423,6 +455,18 @@ export function SummaryReader({
           {error}
         </p>
       )}
+      {readError && (
+        <div className="row between notice error">
+          <span role="alert">Could not read summary status: {readError}</span>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => void status.current?.observer.refresh()}
+          >
+            Refresh status
+          </button>
+        </div>
+      )}
       {!batch && tabIds && (
         <div className="stack">
           {accounts.length > 0 && (
@@ -490,7 +534,7 @@ export function SummaryReader({
             </aside>
           )}
           <div className="row between">
-            <p role="status">{status}</p>
+            <p role="status">{statusLabel}</p>
             {running && (
               <button className="btn" disabled={busy} onClick={() => void control('stop')}>
                 Stop

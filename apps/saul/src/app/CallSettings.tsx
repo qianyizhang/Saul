@@ -4,6 +4,7 @@ import type { ModelPreset } from '../configuration/definition';
 import { CALL_FORM_LIMITS, type CallEditRequest, type CallEditorState } from '../calls/contract';
 import { editCall } from '../storage/client';
 import { InspectionText } from '../surface/InspectionText';
+import { createStatusObserver, type StatusObserver, type StatusSnapshot } from './status-observer';
 
 const FORM_KEY = 'saul_summary_action_editor_v1';
 interface ActionForm {
@@ -91,12 +92,14 @@ export function CallSettings({
   const writePresets = presets.filter(
     (p) => (p.capability ?? 'write') === 'write' && p.provider !== 'chrome-ai',
   );
-  const [state, setState] = useState<CallEditorState>();
+  const [status, setStatus] = useState<StatusSnapshot<CallEditorState>>({});
+  const { value: state, error: readError } = status;
   const [form, setForm] = useState(readForm);
   const { prompt = '', builderPreset = '', actionPreset = '', path = '' } = form;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const live = useRef(true);
+  const observer = useRef<StatusObserver<CallEditorState> | null>(null);
+  const formSeeded = useRef(false);
   useEffect(() => {
     try {
       sessionStorage.setItem(FORM_KEY, JSON.stringify(form));
@@ -108,32 +111,43 @@ export function CallSettings({
     setForm((current) => ({ ...current, ...patch }));
   }
   useEffect(() => {
-    void request({ action: 'status' });
-    live.current = true;
+    const current = createStatusObserver({
+      read: () => editCall({ action: 'status' }),
+      shouldPoll: (next) => !!next.building,
+      onSnapshot: setStatus,
+    });
+    observer.current = current;
+    void current.refresh();
     return () => {
-      live.current = false;
+      observer.current = null;
+      current.dispose();
     };
   }, []);
-  async function request(message: CallEditRequest) {
+  useEffect(() => {
+    if (!state || formSeeded.current) return;
+    formSeeded.current = true;
+    setForm((current) => ({
+      prompt: state.prompt || '',
+      actionPreset: state.selected?.presetId || summaryPresetId || writePresets[0]?.id || '',
+      builderPreset: summaryPresetId || writePresets[0]?.id || '',
+      ...current,
+    }));
+  }, [state, summaryPresetId, writePresets]);
+  async function request(message: Exclude<CallEditRequest, { action: 'status' }>) {
+    const current = observer.current;
+    if (!current) return;
     setBusy(true);
     setError('');
     try {
       const next = await editCall(message);
-      if (live.current) {
-        setState(next);
-        if (message.action === 'status' && !state) {
-          setForm((current) => ({
-            prompt: next.prompt || '',
-            actionPreset: next.selected?.presetId || summaryPresetId || writePresets[0]?.id || '',
-            builderPreset: summaryPresetId || writePresets[0]?.id || '',
-            ...current,
-          }));
-        }
-      }
+      if (observer.current === current) void current.invalidate(next);
     } catch (e) {
-      if (live.current) setError((e as Error).message);
+      if (observer.current === current) {
+        setError((e as Error).message);
+        void current.invalidate();
+      }
     } finally {
-      if (live.current) setBusy(false);
+      if (observer.current === current) setBusy(false);
     }
   }
   const building = state?.building;
@@ -141,27 +155,6 @@ export function CallSettings({
     onBuildingChange?.(!!building);
     return () => onBuildingChange?.(false);
   }, [building, onBuildingChange]);
-  useEffect(() => {
-    if (!building) return;
-    let disposed = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const refresh = async () => {
-      try {
-        const next = await editCall({ action: 'status' });
-        if (!disposed) {
-          setState(next);
-          if (next.building) timer = setTimeout(() => void refresh(), 700);
-        }
-      } catch (e) {
-        if (!disposed) setError((e as Error).message);
-      }
-    };
-    timer = setTimeout(() => void refresh(), 700);
-    return () => {
-      disposed = true;
-      clearTimeout(timer);
-    };
-  }, [building]);
   const disabled = busy || building || settingsDirty;
   const candidate = state?.candidate;
   const canEditCall = state && !state.blocked && !disabled;
@@ -228,11 +221,15 @@ export function CallSettings({
           {error || state?.error}
         </p>
       )}
-      <details
-        onToggle={(event) => {
-          if (event.currentTarget.open && !state && !busy) void request({ action: 'status' });
-        }}
-      >
+      {readError && (
+        <div className="row between notice error">
+          <span role="alert">Could not read call status: {readError}</span>
+          <button type="button" className="btn" onClick={() => void observer.current?.refresh()}>
+            Refresh status
+          </button>
+        </div>
+      )}
+      <details>
         <summary aria-label="Customize Call Saul" title="Customize Call Saul">
           <ActionLabel short="Customize" full="Customize Call Saul" />
         </summary>
