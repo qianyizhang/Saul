@@ -269,10 +269,11 @@ import SaulCredentialStorage
                 CredentialStorageError.self,
                 matching: { $0.localizedDescription.contains("before response.completed") }
             ) {
-                _ = try await credentialProvider(directory: directory, http: fixture).streamText(
+                _ = try await credentialText(
+                    directory: directory, http: fixture,
                     entry: HistoryEntry(
                         mode: .ask, query: "hi", model: "test", effort: "", requestedServiceTier: nil
-                    ).withAPIProvider()
+                    ).withConnection()
                 ) { last = $0 }
             }
             try expect(last?.text == "partial" && last?.completed == false, "Interrupted answer lost")
@@ -295,10 +296,11 @@ import SaulCredentialStorage
             }
             defer { fixture.close() }
             var updates: [String] = []
-            let result = try await credentialProvider(directory: directory, http: fixture).streamText(
+            let result = try await credentialText(
+                directory: directory, http: fixture,
                 entry: HistoryEntry(
                     mode: .ask, query: "hello", model: "test", effort: "low", requestedServiceTier: nil
-                ).withAPIProvider()
+                ).withConnection()
             ) { updates.append($0.text) }
             try expect(result.completed && result.text == "Hello 你好", "URLSession SSE completion failed")
             try expect(

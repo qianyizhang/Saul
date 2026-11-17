@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { ReadingRunner } from '../src/reading/runner';
+import { IncompleteGeneration } from '../src/providers/events';
 import type { DbCall, DbRequest, RunResult, Submission, RunStatus } from '../src/types/storage';
 const mocks = vi.hoisted(() => ({ remote: vi.fn() }));
 
@@ -11,13 +12,14 @@ const attemptContract = JSON.parse(
   cases: {
     id: string;
     text: string;
-    providerOutcome: 'complete' | 'error' | 'eof' | 'cancel';
+    providerOutcome: 'complete' | 'error' | 'eof' | 'cancel' | 'interrupted';
     initialSaveFails: boolean;
     finalSaveFails: boolean;
     expected: {
       providerCalls: number;
       output: 'present' | 'absent' | 'optional';
       savedSuccess: boolean;
+      terminationCause?: 'stopped' | 'interrupted';
     };
   }[];
 };
@@ -44,6 +46,7 @@ const submission = (id: string): Submission => ({
 });
 function store() {
   const rows = new Map<string, { status: RunStatus; raw: string }>();
+  const reasons = new Map<string, string>();
   let finishFailures = 0,
     submitFailure = false;
   const call = vi.fn(async (message: DbRequest) => {
@@ -73,6 +76,7 @@ function store() {
         return true;
       case 'DB_FINISH':
         if (finishFailures-- > 0) throw new Error('Temporary disk failure');
+        if (message.payload.reason) reasons.set(message.payload.runId, message.payload.reason);
         rows.set(message.payload.runId, {
           status: message.payload.status,
           raw: message.payload.raw ?? rows.get(message.payload.runId)!.raw,
@@ -94,6 +98,7 @@ function store() {
   return {
     call,
     rows,
+    reasons,
     failFinish: (n: number) => {
       finishFailures = n;
     },
@@ -110,7 +115,7 @@ beforeEach(() => {
 });
 for (const scenario of attemptContract.cases) {
   it(`satisfies shared Attempt contract: ${scenario.id}`, async () => {
-    expect(attemptContract.version).toBe(2);
+    expect(attemptContract.version).toBe(3);
     const db = store();
     if (scenario.initialSaveFails) db.failSubmit();
     if (scenario.finalSaveFails) db.failFinish(2);
@@ -123,6 +128,8 @@ for (const scenario of attemptContract.cases) {
         });
       } else if (scenario.providerOutcome === 'error') {
         throw new Error('Provider disconnected');
+      } else if (scenario.providerOutcome === 'interrupted') {
+        throw new IncompleteGeneration('unexpected-eof', 'Interrupted transport');
       } else if (scenario.providerOutcome === 'complete') {
         yield { type: 'complete' };
       }
@@ -156,6 +163,13 @@ for (const scenario of attemptContract.cases) {
     if (scenario.expected.output === 'optional') expect(['', scenario.text]).toContain(raw);
     else expect(raw).toBe(scenario.expected.output === 'present' ? scenario.text : '');
     expect(db.rows.get(scenario.id)?.status === 'completed').toBe(scenario.expected.savedSuccess);
+    if (scenario.expected.terminationCause === 'stopped') {
+      expect(db.rows.get(scenario.id)?.status).toBe('cancelled');
+      expect(db.reasons.get(scenario.id)).toBe('stopped');
+    } else if (scenario.expected.terminationCause === 'interrupted') {
+      expect(db.rows.get(scenario.id)?.status).toBe('interrupted');
+      expect(db.reasons.get(scenario.id)).toBe('unexpected-eof');
+    }
   });
 }
 it('never starts a provider when durable submission fails', async () => {

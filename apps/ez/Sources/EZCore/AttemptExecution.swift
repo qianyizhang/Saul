@@ -6,10 +6,6 @@ import Foundation
         case text(ResponseAccumulator)
         case image(Data)
     }
-    public typealias Stream =
-        @MainActor (
-            HistoryEntry, String, @escaping @MainActor (ResponseAccumulator) -> Void
-        ) async throws -> ResponseAccumulator
     public typealias Generation =
         @MainActor (
             HistoryEntry, @escaping @MainActor (ResponseAccumulator) -> Void
@@ -32,12 +28,13 @@ import Foundation
     }
 
     private enum Outcome {
-        case completed, interrupted
+        case completed, stopped, interrupted
         case failed(String)
 
         func record(in entry: inout HistoryEntry) {
             switch self {
             case .completed: entry.status = "completed"
+            case .stopped: entry.status = "cancelled"
             case .interrupted: entry.status = "interrupted"
             case .failed(let message):
                 entry.status = "failed"
@@ -50,19 +47,6 @@ import Foundation
     private let generate: Generation
     private let append: @MainActor (HistoryEntry) throws -> Void
     private var running: Running?
-
-    public convenience init(
-        accessToken: @escaping @MainActor () async throws -> String,
-        stream: @escaping Stream,
-        append: @escaping @MainActor (HistoryEntry) throws -> Void
-    ) {
-        self.init(
-            generate: { entry, update in
-                let token = try await accessToken()
-                try Task.checkCancellation()
-                return .text(try await stream(entry, token, update))
-            }, append: append)
-    }
 
     public init(
         generate: @escaping Generation, append: @escaping @MainActor (HistoryEntry) throws -> Void
@@ -84,10 +68,13 @@ import Foundation
         onChange?(.running(Progress(entry: entry, activity: .waiting)))
     }
 
-    public func stop() {
+    public func stop() { cancel(.stopped) }
+    public func interrupt() { cancel(.interrupted) }
+
+    private func cancel(_ outcome: Outcome) {
         guard let running else { return }
         running.task.cancel()
-        finish(running.entry.id, outcome: .interrupted)
+        finish(running.entry.id, outcome: outcome)
     }
 
     private func run(_ entry: HistoryEntry) async {

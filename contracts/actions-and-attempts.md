@@ -27,7 +27,10 @@ account, model and billing route; an unavailable or changed route blocks without
 fallback. Restoring a draft does not send, and dismissing a view does not Stop.
 
 Publish saved success only after provider completion and a successful local
-commit. Distinguish interruption, cancellation and provider or storage failure.
+commit. Explicit Stop records cancellation; loss or recovery of an active
+attempt records interruption. Both may retain partial output and allow an
+explicit retry. Older interrupted records retain their saved status because
+their cause is unknown. Provider and storage failures remain separate.
 Keep partial output when it can be saved. A failed save can lose unsaved output;
 report it as unsaved. There is no save-only recovery queue or automatic
 inference replay after import, restart or uncertain loss. Another generation
@@ -36,8 +39,9 @@ explicitly deleted or reset.
 
 [Attempt fixtures](fixtures/attempts.json) exercise Saul's ReadingRunner and EZ's
 AttemptExecution through AppModel. They check send counts, output and saved
-success across initial/terminal save failure, provider error, missing completion,
-cancellation and success. A terminal save failure can omit transient output.
+success across initial/terminal save failure, provider error, missing completion
+and success. The fixtures assert the saved cause for Stop and interruption.
+A terminal save failure can omit transient output.
 [History](history.md) covers shared persistence; capture, anchors and scheduling
 are app-specific.
 

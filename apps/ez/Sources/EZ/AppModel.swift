@@ -166,29 +166,9 @@ import SaulCredentialStorage
             try store.recoverInterrupted()
             history = store
             if !offline, attemptExecution == nil {
-                let provider = GenerationProvider.saul(.chatGPTPlan)
-                let api = GenerationProvider.saul(.openAIAPI)
+                let generation = SaulGeneration(connection: auth)
                 self.attemptExecution = AttemptExecution(
-                    generate: { entry, update in
-                        guard let preset = entry.presetSnapshot, let connection = entry.connectionSnapshot
-                        else { throw EZError("The action's connection snapshot is missing.") }
-                        let selected = connection.kind == .chatGPTPlan ? provider : api
-                        guard preset.capability != .speak else {
-                            throw EZError("Speak previews run in Settings → Presets.")
-                        }
-                        if preset.capability == .draw {
-                            let options = preset.imageOptions ?? ImageOptions()
-                            let output = try await selected.generateImage(
-                                ImageGenerationRequest(
-                                    prompt: entry.query,
-                                    model: preset.model, size: options.size, quality: options.quality,
-                                    outputFormat: options.outputFormat,
-                                    image: entry.inputImage, connectionKey: connection.key))
-                            return .image(output)
-                        }
-                        return .text(try await selected.streamText(entry: entry, onUpdate: update))
-                    },
-                    append: { try store.append($0) })
+                    generate: generation.generate(entry:onUpdate:), append: { try store.append($0) })
             }
             let configStore = ConfigurationStore(
                 directory: self.directory, shared: offline ? nil : SharedPresetsStore())
@@ -807,7 +787,7 @@ import SaulCredentialStorage
         connectionChecks.reset()
         cancelHistoryRead()
         lookupImage.select(nil)
-        stop()
+        attemptExecution?.interrupt()
     }
     var canDeleteLookup: Bool { !busy && !launcherPending && history != nil && lock != nil }
     func deleteLookup(_ id: HistoryStore.RecordID) {

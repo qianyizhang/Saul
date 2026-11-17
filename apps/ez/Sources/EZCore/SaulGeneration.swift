@@ -1,35 +1,59 @@
 import Foundation
 import SaulCredentialStorage
 
-extension GenerationProvider {
-    public static func saul(
-        _ id: GenerationProviderID, connection: SaulConnection = SaulConnection()
-    ) -> GenerationProvider {
-        let client = SaulGeneration(connection: connection)
-        let text: TextOperation = { entry, update in
-            try await client.stream(entry: entry, onUpdate: update)
-        }
-        let image: ImageOperation?
-        if id == .openAIAPI { image = { request in try await client.image(request) } } else { image = nil }
-        return GenerationProvider(
-            id: id,
-            text: text, image: image)
-    }
-}
+/// Sends a frozen EZ request through the signed owner. The adapter never reads
+/// current preset choices or resolves an account or credential on its own.
+@MainActor public struct SaulGeneration {
+    private let owner: SaulConnection
+    public init(connection: SaulConnection) { owner = connection }
 
-@MainActor private struct SaulGeneration {
-    let connection: SaulConnection
-    func stream(entry: HistoryEntry, onUpdate: @escaping @MainActor (ResponseAccumulator) -> Void)
-        async throws -> ResponseAccumulator
-    {
-        let plan = entry.connectionSnapshot?.kind != .openAIAPI
+    public func generate(
+        entry: HistoryEntry, onUpdate: @escaping @MainActor (ResponseAccumulator) -> Void
+    ) async throws -> AttemptExecution.Output {
+        try Task.checkCancellation()
+        guard entry.sourceID == nil, let preset = entry.presetSnapshot,
+            let connection = entry.connectionSnapshot
+        else { throw EZError("The action's connection snapshot is missing.") }
+        guard connection.key == preset.connectionKey, entry.matchesFrozenPreset(preset)
+        else { throw EZError("The saved request no longer matches its preset and connection.") }
+
+        switch preset.capability {
+        case .speak:
+            throw EZError("Speak previews run in Settings → Presets.")
+        case .write:
+            if entry.usesWebSearch,
+                connection.kind != .openAIAPI || connection.endpoint != "https://api.openai.com/v1"
+            {
+                throw EZError("Web search requires an official OpenAI API connection.")
+            }
+            return .text(try await write(entry, connection: connection, onUpdate: onUpdate))
+        case .draw:
+            guard connection.capabilities.contains(.draw) else {
+                throw EZError("Draw requires an official OpenAI API connection.")
+            }
+            guard entry.actionSnapshot?.imageInput == nil || entry.inputImage != nil else {
+                throw EZError("The saved request is missing its input image.")
+            }
+            let options = entry.imageOptions
+            return .image(
+                try await draw(
+                    ImageGenerationRequest(
+                        prompt: entry.query, model: entry.model, size: options.size, quality: options.quality,
+                        outputFormat: options.outputFormat, image: entry.inputImage,
+                        connectionKey: connection.key)))
+        }
+    }
+
+    private func write(
+        _ entry: HistoryEntry, connection: ConnectionDefinition,
+        onUpdate: @escaping @MainActor (ResponseAccumulator) -> Void
+    ) async throws -> ResponseAccumulator {
         var request: [String: Any] = [
-            "action": "native-responses", "provider": plan ? "chatgpt-plan" : "openai-api",
-            "body": ResponsesRequest.body(entry: entry),
+            "action": "native-responses", "provider": connection.kind.rawValue,
+            "connectionKey": connection.key, "body": ResponsesRequest.body(entry: entry),
         ]
-        if let key = entry.connectionSnapshot?.key { request["connectionKey"] = key }
-        if plan {
-            guard let account = entry.connectionSnapshot?.accountId, !account.isEmpty else {
+        if connection.kind == .chatGPTPlan {
+            guard let account = connection.accountId, !account.isEmpty else {
                 throw EZError("Choose a Saul ChatGPT account before running.")
             }
             request["accountId"] = account
@@ -44,7 +68,7 @@ extension GenerationProvider {
             }
             onUpdate(result)
         }
-        _ = try await connection.call(
+        _ = try await owner.call(
             request,
             onEvent: { event in
                 guard event["type"] as? String == "response-event", let text = event["data"] as? String,
@@ -53,10 +77,9 @@ extension GenerationProvider {
                 try result.consume(Data(text.utf8), elapsedSeconds: elapsed)
                 onUpdate(result)
             })
-        try result.requireCompleted(webSearchRequired: entry.usesWebSearch)
         return result
     }
-    func image(_ input: ImageGenerationRequest) async throws -> Data {
+    private func draw(_ input: ImageGenerationRequest) async throws -> Data {
         try input.validate()
         var request: [String: Any] = [
             "action": "native-image", "prompt": input.prompt, "model": input.model,
@@ -67,7 +90,7 @@ extension GenerationProvider {
             request["imageBase64"] = try image.validatedData().base64EncodedString()
             request["imageName"] = image.name
         }
-        let result = try await connection.call(request)
+        let result = try await owner.call(request)
         guard let encoded = result["imageBase64"] as? String, let data = Data(base64Encoded: encoded),
             !data.isEmpty
         else {

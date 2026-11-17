@@ -1,15 +1,23 @@
 import Foundation
 
 extension HistoryEntry {
+    func matchesFrozenPreset(_ preset: ModelPreset) -> Bool {
+        let fast = requestedServiceTier.map { !$0.isEmpty && $0 != "default" } ?? false
+        return model == preset.model && effort == preset.effort && capability == preset.capability
+            && fast == (preset.capability == .write && preset.fast)
+    }
+
     public var isRetryable: Bool {
-        sourceID == nil && ["failed", "interrupted"].contains(status)
+        sourceID == nil && ["failed", "cancelled", "interrupted"].contains(status)
     }
 
     /// A new attempt repeats the frozen request, never the current editor or old output.
     public func prepareRetry(connection: ConnectionDefinition, image: ImageAttachment?) throws
         -> HistoryEntry
     {
-        guard isRetryable else { throw EZError("Only failed or stopped requests can be retried.") }
+        guard isRetryable else {
+            throw EZError("Only failed, stopped or interrupted requests can be retried.")
+        }
         guard let preset = presetSnapshot, let saved = connectionSnapshot,
             saved.key == preset.connectionKey, saved.matchesRoute(connection)
         else {
@@ -17,7 +25,7 @@ extension HistoryEntry {
                 "The saved connection is unavailable or changed. Review the saved request and choose a connection."
             )
         }
-        guard preset.capability == capability, connection.capabilities.contains(capability),
+        guard matchesFrozenPreset(preset), connection.capabilities.contains(capability),
             !usesWebSearch || connection.kind == .openAIAPI
         else {
             throw EZError("The saved request is incompatible with this connection. Review the saved request.")

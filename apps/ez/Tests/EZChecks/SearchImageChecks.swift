@@ -29,8 +29,8 @@ import Foundation
             }
             defer { fixture.close() }
             var activity: [ResponseActivity] = []
-            let response = try await credentialProvider(directory: directory, http: fixture).streamText(
-                entry: entry
+            let response = try await credentialText(
+                directory: directory, http: fixture, entry: entry
             ) {
                 activity.append($0.activity)
             }

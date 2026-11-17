@@ -57,16 +57,17 @@ import Foundation
 
     @MainActor final class Control {
         let history: HistoryStore
-        var tokenCalls = 0
         var providerCalls = 0
         var appends: [HistoryEntry] = []
         var failedWrites: Set<Int> = []
         var beforeAppend: ((HistoryEntry) -> Void)?
-        var generate: AttemptExecution.Stream = { _, _, update in
-            let result = try response("Frozen answer")
-            update(result)
-            return result
-        }
+        var generate:
+            @MainActor (HistoryEntry, @escaping @MainActor (ResponseAccumulator) -> Void) async throws
+                -> ResponseAccumulator = { _, update in
+                    let result = try response("Frozen answer")
+                    update(result)
+                    return result
+                }
         init(history: HistoryStore) { self.history = history }
         func append(_ entry: HistoryEntry) throws {
             appends.append(entry)
@@ -82,13 +83,9 @@ import Foundation
         let control = Control(history: try HistoryStore(directory: directory))
         self.control = control
         execution = AttemptExecution(
-            accessToken: {
-                control.tokenCalls += 1
-                return "synthetic-token"
-            },
-            stream: { entry, token, update in
+            generate: { entry, update in
                 control.providerCalls += 1
-                return try await control.generate(entry, token, update)
+                return .text(try await control.generate(entry, update))
             },
             append: { try control.append($0) })
         state = try StateFixture(directory: directory, attemptExecution: execution)
@@ -123,7 +120,7 @@ import Foundation
 @MainActor func attemptStateChecks() -> [CheckCase] {
     [
         attemptCase("retry freezes the request and keeps the failed result and unrelated draft") { f in
-            f.control.generate = { _, _, _ in throw EZError("Provider unavailable") }
+            f.control.generate = { _, _ in throw EZError("Provider unavailable") }
             f.model.send()
             try await f.terminal.wait()
             let failed = f.model.selectedEntry!
@@ -133,7 +130,7 @@ import Foundation
             f.model.setInput("current draft", for: "fuzzy context")
             let draft = f.model.inputValues
             var seen: HistoryEntry?
-            f.control.generate = { entry, _, _ in
+            f.control.generate = { entry, _ in
                 seen = entry
                 return try response("Recovered")
             }
@@ -155,7 +152,7 @@ import Foundation
             try expectEqual(f.control.providerCalls, 2, "Completed answer offered a retry")
         },
         attemptCase("retry blocks changed routes and failed initial saves without losing the result") { f in
-            f.control.generate = { _, _, _ in throw EZError("Provider unavailable") }
+            f.control.generate = { _, _ in throw EZError("Provider unavailable") }
             f.model.send()
             try await f.terminal.wait()
             let failed = f.model.selectedEntry!
@@ -274,7 +271,6 @@ import Foundation
             f.control.failedWrites = [1]
             try expect(f.model.canSend, "Controlled execution should be available")
             f.model.send()
-            try expectEqual(f.control.tokenCalls, 0, "Credentials requested before initial save")
             try expectEqual(f.control.providerCalls, 0, "Provider started before initial save")
             try expect(!f.model.busy && f.model.entries.isEmpty, "Failed submission changed attempt state")
             try expect(f.model.error?.contains("Query not sent") == true, "Missing submission failure")
@@ -334,7 +330,7 @@ import Foundation
             await f.model.refreshHistory()?.value
             let held = HeldResponse()
             defer { held.finish(.failure(CancellationError())) }
-            f.control.generate = { _, _, update in try await held.stream(update: update) }
+            f.control.generate = { _, update in try await held.stream(update: update) }
             f.model.send()
             try await held.started.wait()
             let id = f.model.selection
@@ -368,9 +364,25 @@ import Foundation
             f.model.send()
             f.model.stop()
             try await f.terminal.wait()
-            try expectEqual(f.control.tokenCalls, 0, "Stopped attempt requested credentials")
             try expectEqual(f.control.providerCalls, 0, "Stopped attempt reached provider")
-            try expectEqual(f.model.selectedEntry?.status, "interrupted", "Stop did not publish interruption")
+            try expectEqual(f.model.selectedEntry?.status, "cancelled", "Stop did not publish cancellation")
+            let saved = try f.state.history.load().first
+            try expectEqual(saved?.status, "cancelled", "Stop was not saved")
+            try expect(saved?.isRetryable == true, "Stopped request could no longer be retried")
+        },
+        attemptCase("application shutdown interrupts rather than recording explicit Stop") { f in
+            let held = HeldResponse()
+            defer { held.finish(.failure(CancellationError())) }
+            f.control.generate = { _, update in try await held.stream(update: update) }
+            f.model.send()
+            try await held.started.wait()
+            held.progress(try response("Retain this", completed: false))
+            f.model.shutdown()
+            try await f.terminal.wait()
+            try expectEqual(f.model.selectedEntry?.status, "interrupted", "Shutdown recorded a Stop")
+            let saved = try f.state.history.load().first
+            try expectEqual(saved?.status, "interrupted", "Shutdown cause did not persist")
+            try expectEqual(saved?.response, "Retain this", "Shutdown lost partial output")
         },
         attemptCase("failed terminal save reports unsaved and a new Run saves a separate attempt") { f in
             f.control.failedWrites = [2]
@@ -404,7 +416,7 @@ import Foundation
         },
         attemptCase("provider failure and partial output survive failed terminal save") { f in
             f.control.failedWrites = [2]
-            f.control.generate = { _, _, update in
+            f.control.generate = { _, update in
                 update(try response("Partial answer", completed: false))
                 throw EZError("Synthetic provider failure")
             }
@@ -426,16 +438,16 @@ import Foundation
                 first.finish(.failure(CancellationError()))
                 second.finish(.failure(CancellationError()))
             }
-            f.control.generate = { _, _, update in try await first.stream(update: update) }
+            f.control.generate = { _, update in try await first.stream(update: update) }
             f.model.send()
             try await first.started.wait()
             first.progress(try response("Stopped partial", completed: false))
             let firstID = f.model.selection!
             f.model.stop()
-            try expectEqual(f.model.selectedEntry?.status, "interrupted", "Stop did not finish")
+            try expectEqual(f.model.selectedEntry?.status, "cancelled", "Stop did not finish")
             try expectEqual(f.model.selectedEntry?.response, "Stopped partial", "Stop lost partial text")
             f.terminal = CheckSignal()
-            f.control.generate = { _, _, update in try await second.stream(update: update) }
+            f.control.generate = { _, update in try await second.stream(update: update) }
             f.model.newQuery()
             f.model.query = "Second question"
             f.model.send()
@@ -455,7 +467,7 @@ import Foundation
                 "Late callbacks rewrote stopped answer")
         },
         attemptCase("stream ending without completion is not a successful answer") { f in
-            f.control.generate = { _, _, _ in
+            f.control.generate = { _, _ in
                 let partial = try response("Only partial", completed: false)
                 return partial
             }
@@ -497,12 +509,14 @@ import Foundation
 
 private struct AttemptContract: Decodable {
     struct Scenario: Decodable {
-        enum Outcome: String, Decodable { case complete, error, eof, cancel }
+        enum Outcome: String, Decodable { case complete, error, eof, cancel, interrupted }
         struct Expected: Decodable {
             let providerCalls: Int
             enum Output: String, Decodable { case present, absent, optional }
             let output: Output
             let savedSuccess: Bool
+            enum TerminationCause: String, Decodable { case stopped, interrupted }
+            let terminationCause: TerminationCause?
         }
         let id: String
         let text: String
@@ -521,7 +535,7 @@ private struct AttemptContract: Decodable {
             .appendingPathComponent("../../../../contracts/fixtures/attempts.json")
             .standardizedFileURL
         let contract = try JSONDecoder().decode(AttemptContract.self, from: Data(contentsOf: fixture))
-        guard contract.version == 2, !contract.cases.isEmpty,
+        guard contract.version == 3, !contract.cases.isEmpty,
             Set(contract.cases.map(\.id)).count == contract.cases.count
         else { throw CheckFailure("Invalid shared attempt contract") }
         return contract.cases.map { scenario in
@@ -529,11 +543,12 @@ private struct AttemptContract: Decodable {
                 f.control.failedWrites = scenario.initialSaveFails ? [1] : scenario.finalSaveFails ? [2] : []
                 let held = HeldResponse()
                 defer { held.finish(.failure(CancellationError())) }
-                f.control.generate = { _, _, update in
+                f.control.generate = { _, update in
                     if scenario.providerOutcome == .cancel { return try await held.stream(update: update) }
                     let result = try response(scenario.text, completed: scenario.providerOutcome == .complete)
                     update(result)
                     if scenario.providerOutcome == .error { throw EZError("Synthetic provider failure") }
+                    if scenario.providerOutcome == .interrupted { throw CancellationError() }
                     return result
                 }
                 f.model.send()
@@ -558,6 +573,11 @@ private struct AttemptContract: Decodable {
                 try expectEqual(
                     entry?.status == "completed" && saved?.status == "completed",
                     scenario.expected.savedSuccess, "Saved success")
+                if let cause = scenario.expected.terminationCause {
+                    let status = cause == .stopped ? "cancelled" : "interrupted"
+                    try expectEqual(entry?.status, status, "Visible termination cause")
+                    try expectEqual(saved?.status, status, "Saved termination cause")
+                }
             }
         }
     } catch {
