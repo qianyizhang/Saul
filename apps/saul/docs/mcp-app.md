@@ -59,7 +59,7 @@ Preview validation reads one fresh inventory; it does not repeat that read to as
 
 The server consumes approval before the first mutation. It validates the starting layout and checks the expected state before and after every move, duplicate closure and label update. Chrome does not offer an atomic multi-window transaction: user actions can race a move, and a failed call may already have changed Chrome. On failure, the UI reports completed moves and refreshes the inventory if possible. It never retries or rolls back automatically. Make a new proposal from the current state.
 
-The board refreshes every ten seconds while visible, pausing during a drag, an open context menu, or proposal/group input. Manual refresh revalidates the preview. Refresh and rendering are read-only. Applying a Codex proposal requires the review button; sending a request to Codex does not authorize application. Tab inventories, URLs, plans and tokens remain in memory. The MCP host can retain tool results in conversation history.
+The board refreshes every ten seconds while visible, pausing during a drag, an open context menu, or proposal/group input. Manual refresh revalidates the preview. If the selected browser session has disappeared, refresh clears its preview and approval and shows the current session choices. Refresh never edits Chrome. Applying a Codex proposal requires the review button; sending a request to Codex does not authorize application. Tab inventories, URLs, plans and tokens remain in memory. The MCP host can retain tool results in conversation history.
 
 ## Implementation and verification
 

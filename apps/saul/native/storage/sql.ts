@@ -5,6 +5,6 @@ export interface SqlDatabase {
   selectObjects(sql: string, bind?: SqlValue[]): Record<string, SqlValue>[];
   selectObject(sql: string, bind?: SqlValue[]): Record<string, SqlValue> | undefined;
   selectValue(sql: string, bind?: SqlValue[]): SqlValue | undefined;
-  transaction<T>(operation: () => T): T;
+  transaction<T>(operation: () => T, mode?: 'deferred' | 'immediate'): T;
   changes(): number;
 }

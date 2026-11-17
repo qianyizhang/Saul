@@ -1,13 +1,4 @@
 import { TOOL_OPERATIONS, type ToolArgs, type ToolName, type ToolResults } from './protocol.mts';
-import { tabSnapshot, browserSession } from './tool-values.mts';
-import type { z } from 'zod';
-
-export function isSnapshot(value: unknown): value is z.infer<typeof tabSnapshot> {
-  return tabSnapshot.safeParse(value).success;
-}
-export function isSession(value: unknown): value is z.infer<typeof browserSession> {
-  return browserSession.safeParse(value).success;
-}
 
 export function validateToolResult<K extends ToolName>(
   name: K,

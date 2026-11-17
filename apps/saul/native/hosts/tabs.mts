@@ -12,7 +12,8 @@ import {
   secureDirectory,
   errorMessage,
 } from '../transport.mts';
-import { validateCall, MAX_MESSAGE } from '../../shared/protocol/protocol.mts';
+import { validateCall } from '../../shared/protocol/protocol.mts';
+import { MAX_MESSAGE } from '../../shared/protocol/native-messaging.mts';
 
 const origin = process.argv[2];
 if (!/^chrome-extension:\/\/[a-p]{32}\/$/.test(origin ?? '')) {

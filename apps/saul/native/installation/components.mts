@@ -26,7 +26,6 @@ export const helperComponents = {
     modules: {
       'value.mjs': 'shared/model/value.mts',
       'transport.mjs': 'native/transport.mts',
-      'protocol.mjs': 'shared/protocol/protocol.mts',
       'history.mjs': 'native/storage/history.mts',
     },
     assets: { 'history.sql': '../../contracts/history.sql' },
@@ -37,7 +36,6 @@ export const helperComponents = {
     modules: {
       'value.mjs': 'shared/model/value.mts',
       'transport.mjs': 'native/transport.mts',
-      'protocol.mjs': 'shared/protocol/protocol.mts',
       'installation-paths.mjs': 'native/installation/paths.mts',
       'action-protocol.mjs': 'shared/protocol/action-protocol.mts',
       'action-check.mjs': 'native/action-check.mts',

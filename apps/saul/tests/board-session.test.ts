@@ -72,3 +72,28 @@ it('starts a new refresh for the selected session and discards the previous sess
   });
   expect(status).not.toHaveBeenCalledWith(expect.anything(), true);
 });
+
+it('accepts a late host result only for a discovered browser when no browser is selected', async () => {
+  const board = createBoardSession({
+    call: async () => ({
+      content: [],
+      structuredContent: { sessions, snapshot: null, proposal: null },
+    }),
+    changed: vi.fn(),
+    status: vi.fn(),
+    onSessionChange: vi.fn(),
+    onPreview: vi.fn(),
+    dragActive: () => false,
+    tabDragActive: () => false,
+  });
+  board.setReady(true);
+  await board.refresh();
+
+  board.hostResult(response('gone', 'stale'));
+  expect(board.state.data?.session).toBeUndefined();
+  expect(board.state.approvalToken).toBeUndefined();
+
+  board.hostResult(response('page-b', 'fresh'));
+  expect(board.state.data?.session).toBe('page-b');
+  expect(board.state.approvalToken).toBe('fresh');
+});

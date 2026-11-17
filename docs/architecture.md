@@ -32,6 +32,8 @@ establish a saved result. The [Attempt contract](../contracts/actions-and-attemp
 owns save failures and replay rules; the app architecture pages identify runtime
 owners. Use the storage owner's transactions and constraints directly.
 
+Saul and EZ use [bounded local recovery](adr/0006-bound-local-recovery.md).
+
 ## Data ownership
 
 - [Configuration](../contracts/configuration.md#unified-configuration-scopes) shares a

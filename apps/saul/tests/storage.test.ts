@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -154,6 +154,35 @@ it('shares browser history across connections with exact frozen prompts, full-te
     payload: { selectionId: 'selection' },
   });
   expect(await first.browser.execute({ type: 'DB_GET_HISTORY', payload: {} })).toEqual([]);
+});
+it('returns one history snapshot when another connection deletes a listed passage', async () => {
+  const reading = history();
+  reading.connection.exec('PRAGMA journal_mode=WAL');
+  await complete(reading);
+  const writing = new SharedHistory(reading.directory);
+  open.push(writing);
+  const select = reading.connection.selectObjects.bind(reading.connection);
+  let deleted = false;
+  const interleave = vi
+    .spyOn(reading.connection, 'selectObjects')
+    .mockImplementation((sql, bind) => {
+      const rows = select(sql, bind);
+      if (!deleted && rows[0]?.app === 'saul') {
+        writing.connection.exec("DELETE FROM selection WHERE id='selection'");
+        deleted = true;
+      }
+      return rows;
+    });
+  const request = { type: 'DB_GET_HISTORY', payload: {} } as const;
+  try {
+    expect((await reading.browser.execute(request)).map((row) => row.selectionId)).toEqual([
+      'selection',
+    ]);
+    expect(deleted).toBe(true);
+    expect(await reading.browser.execute(request)).toEqual([]);
+  } finally {
+    interleave.mockRestore();
+  }
 });
 it('projects native entries into the same ordered/searchable library, including images, bookmarks and deletion', async () => {
   const store = history();

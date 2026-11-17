@@ -39,7 +39,7 @@ export type WorkspaceProposal = NonNullable<WorkspaceState['proposal']>;
 export type ProjectedWindow = WorkspaceProposal['projected'][number];
 
 import { isRecord } from '../model/value.mts';
-import { isSnapshot } from './results.mts';
+import { isSnapshot } from './tool-values.mts';
 const number = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const ids = (v: unknown): v is number[] => Array.isArray(v) && v.every(Number.isSafeInteger);
 const optionalText = (v: unknown) => v === undefined || typeof v === 'string';

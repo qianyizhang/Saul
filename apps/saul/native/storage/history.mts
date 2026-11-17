@@ -50,8 +50,8 @@ export class HistoryConnection implements SqlDatabase {
   changes() {
     return this.changed;
   }
-  transaction<T>(operation: () => T): T {
-    this.sqlite.exec('BEGIN IMMEDIATE');
+  transaction<T>(operation: () => T, mode: 'deferred' | 'immediate' = 'immediate'): T {
+    this.sqlite.exec(mode === 'deferred' ? 'BEGIN DEFERRED' : 'BEGIN IMMEDIATE');
     try {
       const result = operation();
       this.sqlite.exec('COMMIT');

@@ -1,5 +1,6 @@
 import { isRecord } from '../shared/model/value.mts';
-import { isSession, validateToolResult } from '../shared/protocol/results.mts';
+import { validateToolResult } from '../shared/protocol/results.mts';
+import { isSession } from '../shared/protocol/tool-values.mts';
 import type { ToolName, ToolArgs, ToolResults } from '../shared/protocol/protocol.mts';
 import type { WindowNames } from './window-names.mts';
 import { errorCode } from '../shared/model/value.mts';
@@ -8,7 +9,8 @@ import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { runtimeDirectory, lineDecoder } from './transport.mts';
-import { validateCall, MAX_MESSAGE } from '../shared/protocol/protocol.mts';
+import { validateCall } from '../shared/protocol/protocol.mts';
+import { MAX_MESSAGE } from '../shared/protocol/native-messaging.mts';
 import { createWindowNames, withWindowNames } from './window-names.mts';
 
 const nativeNames = new Map<string, WindowNames>();

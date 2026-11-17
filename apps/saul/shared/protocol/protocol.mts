@@ -32,8 +32,6 @@ export type {
 } from './tool-values.mts';
 export { validAnnotationResult } from './annotations.ts';
 
-export const HOST_NAME = 'com.saul.tabs';
-export const MAX_MESSAGE = 1024 * 1024;
 const browserSession = session.describe(
   'Session from saul_sessions. Required when multiple profiles are connected.',
 );

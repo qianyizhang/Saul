@@ -175,7 +175,9 @@ function AnnotationEditor({
     capture,
     draft,
     reply,
+    replyPending,
     setReply,
+    submitReply,
     error,
     readError,
     missing,
@@ -325,7 +327,7 @@ function AnnotationEditor({
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            act('append', reply);
+            submitReply();
           }}
         >
           <label htmlFor="annotation-reply">Add a reply</label>
@@ -336,7 +338,7 @@ function AnnotationEditor({
             maxLength={16000}
             rows={2}
           />
-          <button className="btn" disabled={!reply.trim()}>
+          <button className="btn" disabled={replyPending || !reply.trim()}>
             Append reply
           </button>
         </form>

@@ -89,3 +89,10 @@ export type TabSnapshot = z.infer<typeof tabSnapshot>;
 export type PageSnapshot = z.infer<typeof pageSnapshot>;
 export type TabEditResult = z.infer<typeof tabEditResult>;
 export type SummaryProgress = z.infer<typeof summaryProgress>;
+
+export function isSnapshot(value: unknown): value is z.infer<typeof tabSnapshot> {
+  return tabSnapshot.safeParse(value).success;
+}
+export function isSession(value: unknown): value is z.infer<typeof browserSession> {
+  return browserSession.safeParse(value).success;
+}

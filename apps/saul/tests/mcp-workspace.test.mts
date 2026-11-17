@@ -1,6 +1,7 @@
 import type { Mock } from 'vitest';
 import type { TabSnapshot, ToolCaller, ToolArgs } from '../shared/protocol/protocol.mts';
 import type { WorkspaceResult, ProposalWindow } from '../shared/protocol/workspace-contract.mts';
+import { createBoardSession } from '../board/board-session';
 import { tab } from './fixtures.mts';
 type FixtureArgs = ToolArgs['saul_windows_label'] &
   ToolArgs['saul_tabs_move'] &
@@ -25,9 +26,11 @@ const session = 'a'.repeat(16);
 let snapshot: TabSnapshot,
   call: Mock<(name: string, args: FixtureArgs) => Promise<unknown>>,
   workspace: ReturnType<typeof createWorkspace>,
+  connectedSession: string,
   now: number;
 beforeEach(() => {
   now = 1000;
+  connectedSession = session;
   snapshot = {
     windows: [
       { id: 1, focused: false },
@@ -57,7 +60,8 @@ beforeEach(() => {
     ],
   };
   call = vi.fn(async (name, args) => {
-    if (name === 'saul_sessions') return { sessions: [{ session, extensionId: 'b'.repeat(32) }] };
+    if (name === 'saul_sessions')
+      return { sessions: [{ session: connectedSession, extensionId: 'b'.repeat(32) }] };
     if (name === 'saul_tabs_list') return structuredClone(snapshot);
     if (name === 'saul_summary_status') return null;
     expect(args.dryRun).toBe(false);
@@ -108,6 +112,39 @@ async function propose(
     windows,
   });
 }
+
+it('refresh discovers a replacement browser without carrying over the old approval', async () => {
+  const toolResult = (result: WorkspaceResult) => ({
+    ...result,
+    structuredContent: { ...result.structuredContent },
+  });
+  const board = createBoardSession({
+    call: async (name, args) => toolResult(await workspace(name, args)),
+    changed: vi.fn(),
+    status: vi.fn(),
+    onSessionChange: vi.fn(),
+    onPreview: vi.fn(),
+    dragActive: () => false,
+    tabDragActive: () => false,
+  });
+  board.setReady(true);
+  board.hostResult(toolResult(await propose()));
+  expect(board.state.approvalToken).toBeDefined();
+
+  connectedSession = 'c'.repeat(16);
+  await board.refresh();
+  expect(board.state.data).toMatchObject({
+    sessions: [{ session: connectedSession }],
+    snapshot: null,
+    proposal: null,
+  });
+  expect(board.state.data?.session).toBeUndefined();
+  expect(board.state.approvalToken).toBeUndefined();
+
+  await board.selectSession(connectedSession);
+  expect(board.state.data).toMatchObject({ session: connectedSession, snapshot, proposal: null });
+  expect(board.state.approvalToken).toBeUndefined();
+});
 const mutations = () =>
   call.mock.calls.filter(
     ([name]) =>

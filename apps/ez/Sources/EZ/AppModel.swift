@@ -64,10 +64,9 @@ import SaulNativeValues
         didSet {
             if selection != oldValue { showsMainComposer = false }
             historyCollection.select(selection)
-            loadSelectedImage()
-            refreshActiveConnection()
         }
     }
+    private var selectedHistoryConnectionKey: String?
     private lazy var lookupImage = LookupImageLoader(directory: historyDirectory) { [weak self] in
         self?.objectWillChange.send()
     }
@@ -142,8 +141,16 @@ import SaulNativeValues
         historyCollection = HistoryCollection(
             read: readHistory, count: countHistory, entry: readHistoryEntry, delete: deleteHistory)
         historyCollection.onChange = { [weak self] in
-            self?.objectWillChange.send()
-            self?.loadSelectedImage()
+            guard let self else { return }
+            objectWillChange.send()
+            loadSelectedImage()
+            // Selection can precede hydration. Only change focus when the
+            // selected detail reveals a different saved connection.
+            let key = selectedEntry?.presetSnapshot?.connectionKey
+            if selectedHistoryConnectionKey != key {
+                selectedHistoryConnectionKey = key
+                refreshActiveConnection()
+            }
         }
         historyCollection.onMissingSelection = { [weak self] in self?.selection = nil }
         session.onChange = { [weak self] in self?.objectWillChange.send() }

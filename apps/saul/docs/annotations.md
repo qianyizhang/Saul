@@ -29,6 +29,8 @@ Full attempt input and output are read only when you select **Inspect input/outp
 
 Autosave preserves empty and unfinished comments, including across tab switches.
 An older save in another editor cannot erase newer draft text for the same annotation.
+The editor sends one manual reply at a time. You can type the next reply while
+the first saves; confirmation clears only the submitted draft.
 **Open** is the current default list; Done is explicit and reversible, never a
 side effect of replying. Both survive restart. **Recently deleted** offers
 Restore for seven days and Delete permanently immediately. Cleanup runs on

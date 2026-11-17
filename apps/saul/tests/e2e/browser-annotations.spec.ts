@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures.ts';
-import { configureFixtureProvider } from './support.ts';
+import { configureFixtureProvider, type ExtensionSandbox, type FixtureServer } from './support.ts';
 import { summaryPanelDriver } from './summary-panel-driver.ts';
 import type { Annotation, AnnotationResult } from '../../shared/protocol/annotations.ts';
 import type { AnnotationEditorStatus } from '../../shared/protocol/annotation-attempts.ts';
@@ -107,7 +107,9 @@ test('annotation status recovers at startup and attaches an image at the same re
       .poll(() => panel.evaluate(() => document.querySelectorAll('.annotation-item').length))
       .toBe(2);
     await panel.evaluate(() =>
-      document.querySelector<HTMLButtonElement>('.annotation-item')!.click(),
+      Array.from(document.querySelectorAll<HTMLButtonElement>('.annotation-item'))
+        .find((item) => item.textContent?.includes('Synthetic late image'))!
+        .click(),
     );
     await expect
       .poll(() => panel.evaluate(() => document.querySelector('[role="alert"]')?.textContent))
@@ -180,10 +182,7 @@ test('annotation status recovers at startup and attaches an image at the same re
   }
 });
 
-test('queued edits preserve a concurrent comment and an older save cannot erase another editor’s draft', async ({
-  sandbox,
-  fixtureServer,
-}) => {
+async function openSelectionEditor(sandbox: ExtensionSandbox, fixtureServer: FixtureServer) {
   const { context, popup, worker } = await sandbox.launch();
   const source = await context.newPage();
   await source.goto(fixtureServer.origin + '/article');
@@ -211,15 +210,89 @@ test('queued edits preserve a concurrent comment and an older save cannot erase 
     )
     .toBe(1);
   const panel = await summaryPanelDriver(context);
+  await expect
+    .poll(() => panel.evaluate(() => document.querySelector('.annotation-editor h2')?.textContent))
+    .toBe('Annotation 1');
+  return { panel, popup, source };
+}
+
+test('reply submission admits one append and keeps the next draft', async ({
+  sandbox,
+  fixtureServer,
+}) => {
+  const { panel } = await openSelectionEditor(sandbox, fixtureServer);
+  const typeReply = (value: string) =>
+    panel.evaluate((value) => {
+      const field = document.querySelector<HTMLTextAreaElement>('#annotation-reply')!;
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+        field,
+        value,
+      );
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    }, value);
   try {
+    await panel.evaluate(() => {
+      const original = chrome.runtime.sendMessage.bind(chrome.runtime);
+      const hold = Promise.withResolvers<void>();
+      Object.assign(globalThis, { releaseAnnotationReply: hold.resolve });
+      chrome.runtime.sendMessage = (async (message: {
+        action?: string;
+        operation?: { changes?: { action: string }[] };
+      }) => {
+        if (message.action === 'operate' && message.operation?.changes?.[0]?.action === 'append')
+          await hold.promise;
+        return original(message);
+      }) as typeof chrome.runtime.sendMessage;
+    });
+    await typeReply('First reply');
+    await panel.evaluate(() => {
+      const form = document.querySelector<HTMLTextAreaElement>('#annotation-reply')!.form!;
+      for (let i = 0; i < 2; i++)
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
     await expect
       .poll(() =>
-        panel.evaluate(() => document.querySelector('.annotation-editor h2')?.textContent),
+        panel.evaluate(
+          () => document.querySelector<HTMLButtonElement>('#annotation-reply + button')?.disabled,
+        ),
       )
-      .toBe('Annotation 1');
+      .toBe(true);
+    await typeReply('Next reply');
+    await panel.evaluate(() => {
+      (
+        globalThis as typeof globalThis & { releaseAnnotationReply: () => void }
+      ).releaseAnnotationReply();
+    });
+    await expect
+      .poll(() =>
+        panel.evaluate(() => ({
+          replies: Array.from(
+            document.querySelectorAll('.annotation-replies p'),
+            (p) => p.textContent,
+          ),
+          draft: document.querySelector<HTMLTextAreaElement>('#annotation-reply')?.value,
+          pending: document.querySelector<HTMLButtonElement>('#annotation-reply + button')
+            ?.disabled,
+        })),
+      )
+      .toEqual({ replies: ['First reply'], draft: 'Next reply', pending: false });
+  } finally {
+    await panel.detach();
+  }
+});
+
+test('queued edits preserve a concurrent comment and an older save cannot erase another editor’s draft', async ({
+  sandbox,
+  fixtureServer,
+}) => {
+  const { panel, popup, source } = await openSelectionEditor(sandbox, fixtureServer);
+  try {
     // Deliver another writer's edit between the editor's first accepted write and its read-back.
     await panel.evaluate(() => {
       const original = chrome.runtime.sendMessage.bind(chrome.runtime);
+      const held = Promise.withResolvers<void>();
+      const conflict = { injected: false, release: held.resolve };
+      Object.assign(globalThis, { annotationConflict: conflict });
       let inject = true;
       chrome.runtime.sendMessage = (async (message: {
         action?: string;
@@ -251,17 +324,37 @@ test('queued edits preserve a concurrent comment and an older save cannot erase 
               ],
             },
           });
+          conflict.injected = true;
+          await held.promise;
         }
         return result;
       }) as typeof chrome.runtime.sendMessage;
       const el = document.querySelector<HTMLTextAreaElement>('#annotation-comment')!;
-      for (const value of ['First local draft', 'Newest local draft']) {
-        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
-          el,
-          value,
-        );
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-      }
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+        el,
+        'First local draft',
+      );
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await expect
+      .poll(() =>
+        panel.evaluate(
+          () =>
+            (globalThis as typeof globalThis & { annotationConflict: { injected: boolean } })
+              .annotationConflict.injected,
+        ),
+      )
+      .toBe(true);
+    await panel.evaluate(() => {
+      const el = document.querySelector<HTMLTextAreaElement>('#annotation-comment')!;
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+        el,
+        'Newest local draft',
+      );
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      (
+        globalThis as typeof globalThis & { annotationConflict: { release: () => void } }
+      ).annotationConflict.release();
     });
     await expect
       .poll(() =>

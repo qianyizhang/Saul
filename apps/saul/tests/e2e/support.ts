@@ -329,6 +329,7 @@ export async function createSandbox(options: SandboxOptions = {}) {
   let launchNumber = 0;
   let tracing = false;
   const logs: string[] = [];
+  const browserDrains: (() => Promise<void>)[] = [];
 
   async function closeBrowser() {
     if (!context) return;
@@ -342,12 +343,19 @@ export async function createSandbox(options: SandboxOptions = {}) {
       }
     } finally {
       tracing = false;
-      await closing.close();
+      try {
+        await closing.close();
+      } finally {
+        await Promise.all(browserDrains.splice(0).map((drain) => drain()));
+      }
     }
   }
 
   return {
     profile,
+    drainOnBrowserClose(drain: () => Promise<void>) {
+      browserDrains.push(drain);
+    },
     rejectHistoryWriteOnce(match: NonNullable<typeof rejectWrite>) {
       rejectWrite = match;
     },

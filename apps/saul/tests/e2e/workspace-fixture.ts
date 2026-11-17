@@ -229,11 +229,25 @@ export async function openWorkspace(
   });
   const messages: unknown[] = [];
   const workspaceCalls: string[] = [];
-  await host.exposeFunction('workspaceCall', async (name: string, args: unknown) => {
-    workspaceCalls.push(name);
-    if (name === 'saul_workspace_propose' && proposalDelay)
-      await new Promise((resolve) => setTimeout(resolve, proposalDelay));
-    return service.call(name, args);
+  const pending = new Set<Promise<unknown>>();
+  sandbox.drainOnBrowserClose(async () => {
+    // The browser has stopped admitting requests, but Node callbacks can
+    // still write diagnostics after their initiating page has closed.
+    await Promise.allSettled(pending);
+  });
+  await host.exposeFunction('workspaceCall', (name: string, args: unknown) => {
+    const request = (async () => {
+      workspaceCalls.push(name);
+      if (name === 'saul_workspace_propose' && proposalDelay)
+        await new Promise((resolve) => setTimeout(resolve, proposalDelay));
+      return service.call(name, args);
+    })();
+    pending.add(request);
+    void request.then(
+      () => pending.delete(request),
+      () => pending.delete(request),
+    );
+    return request;
   });
   await host.exposeFunction('recordMessage', (message: unknown) => {
     messages.push(message);

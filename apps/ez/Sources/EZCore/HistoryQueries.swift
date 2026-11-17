@@ -52,23 +52,22 @@ extension HistoryStore {
     }
 
     public func entry(_ id: RecordID) throws -> HistoryEntry? {
-        try transaction(.deferred) {
+        let snapshot = try transaction(.deferred) {
             try requireCurrentSchema()
-            let snapshot: HistorySnapshot
             switch id {
             case .native(let uuid):
-                snapshot = HistorySnapshot(
+                return HistorySnapshot(
                     native: try rows(
                         "SELECT data,image IS NOT NULL AS has_image FROM ez_entry WHERE id=?",
                         [uuid.uuidString.lowercased()]), browser: [])
             case .browser(let key):
-                snapshot = HistorySnapshot(
+                return HistorySnapshot(
                     native: [],
                     browser: try rows(
                         "SELECT \(Self.browserColumns) FROM \(Self.browserFrom) WHERE s.id=?", [key]))
             }
-            return try snapshot.entries().first
         }
+        return try snapshot.entries().first
     }
 
     public func page(search: String = "", after cursor: HistoryCursor? = nil) throws -> HistoryPage {

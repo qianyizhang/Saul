@@ -520,7 +520,7 @@ export class SaulDatabase {
           ),
         );
       case 'DB_GET_HISTORY':
-        return this.history(message.payload);
+        return this.db.transaction(() => this.history(message.payload), 'deferred');
       case 'DB_SET_BOOKMARK':
         if (message.payload.selectionId.startsWith('ez:')) {
           this.write('UPDATE ez_entry SET bookmarked=? WHERE id=?', [

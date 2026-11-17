@@ -247,6 +247,14 @@ import SaulNativeValues
         let search = query
         loading = true
         let task = Task {
+            defer {
+                if token == generation {
+                    reading = nil
+                    loading = false
+                    changes.removeAll()
+                    onChange?()
+                }
+            }
             await waitForPreparation()
             guard ready, !Task.isCancelled, token == generation else { return }
             do {
@@ -307,12 +315,6 @@ import SaulNativeValues
                 guard token == generation else { return }
                 settled(.success(()))
             } catch { if !Task.isCancelled, token == generation { settled(.failure(error)) } }
-            if token == generation {
-                reading = nil
-                loading = false
-                changes.removeAll()
-                onChange?()
-            }
         }
         reading = task
         onChange?()

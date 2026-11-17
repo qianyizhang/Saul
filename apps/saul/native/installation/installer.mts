@@ -82,7 +82,7 @@ import { homedir, hostname } from 'node:os';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { STORAGE_HOST } from '../../shared/protocol/storage-protocol.mts';
-import { HOST_NAME } from '../../shared/protocol/protocol.mts';
+import { HOST_NAME } from '../../shared/protocol/native-messaging.mts';
 import { ACTION_HOST } from '../../shared/protocol/action-protocol.mts';
 
 export const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;

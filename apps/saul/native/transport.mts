@@ -1,7 +1,7 @@
 import { endianness, homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { mkdirSync, lstatSync, chmodSync } from 'node:fs';
-import { MAX_MESSAGE } from '../shared/protocol/protocol.mts';
+import { MAX_MESSAGE } from '../shared/protocol/native-messaging.mts';
 
 export function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);

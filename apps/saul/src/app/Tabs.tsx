@@ -21,6 +21,7 @@ export function Tabs() {
   const [undo, setUndo] = useState<string>();
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
+  const readVersion = useRef(0);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [dropTarget, setDropTarget] = useState<string>();
@@ -28,22 +29,29 @@ export function Tabs() {
   const anchor = useRef<number | undefined>(undefined);
   const refresh = useCallback(async () => {
     if (busyRef.current || drag.current) return;
-    const [result, current] = await Promise.all([
-      sendWorkspaceMessage({ action: 'list' }),
-      chrome.windows.getCurrent(),
-    ]);
-    setSnapshot(result.snapshot);
-    setWindowId(current.id);
-    setSelected((ids) =>
-      ids.filter((id) =>
-        result.snapshot.tabs.some((t) => t.id === id && t.windowId === current.id),
-      ),
-    );
+    const version = ++readVersion.current;
+    try {
+      const [result, current] = await Promise.all([
+        sendWorkspaceMessage({ action: 'list' }),
+        chrome.windows.getCurrent(),
+      ]);
+      if (version !== readVersion.current || drag.current) return;
+      setSnapshot(result.snapshot);
+      setWindowId(current.id);
+      setSelected((ids) =>
+        ids.filter((id) =>
+          result.snapshot.tabs.some((t) => t.id === id && t.windowId === current.id),
+        ),
+      );
+    } catch (e) {
+      if (version === readVersion.current) setError(e instanceof Error ? e.message : String(e));
+    }
   }, []);
   useEffect(() => {
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
     const update = () => {
+      readVersion.current++;
       clearTimeout(timer);
       timer = setTimeout(() => {
         if (disposed) return;
@@ -51,10 +59,10 @@ export function Tabs() {
           update();
           return;
         }
-        void refresh().catch((e: Error) => setError(e.message));
+        void refresh();
       }, 150);
     };
-    void refresh().catch((e: Error) => setError(e.message));
+    void refresh();
     const events = [
       chrome.tabs.onCreated,
       chrome.tabs.onRemoved,
@@ -73,6 +81,7 @@ export function Tabs() {
     chrome.storage.onChanged.addListener(update);
     return () => {
       disposed = true;
+      readVersion.current++;
       clearTimeout(timer);
       for (const event of events) event.removeListener(update);
       chrome.storage.onChanged.removeListener(update);
@@ -91,6 +100,7 @@ export function Tabs() {
   async function edit(value: Omit<TabEdit, 'expected'>, expected = tabLayoutRevision(snapshot)) {
     if (busyRef.current) return;
     busyRef.current = true;
+    readVersion.current++;
     setBusy(true);
     setError('');
     setNotice('');
@@ -115,12 +125,13 @@ export function Tabs() {
     } finally {
       busyRef.current = false;
       setBusy(false);
-      await refresh().catch((e: Error) => setError(e.message));
+      await refresh();
     }
   }
   async function restore() {
     if (!undo || busyRef.current) return;
     busyRef.current = true;
+    readVersion.current++;
     setBusy(true);
     setError('');
     try {
@@ -137,7 +148,7 @@ export function Tabs() {
       setUndo(undefined);
       busyRef.current = false;
       setBusy(false);
-      await refresh().catch((e: Error) => setError(e.message));
+      await refresh();
     }
   }
   function toggle(tab: TabView, shift: boolean) {
@@ -231,7 +242,7 @@ export function Tabs() {
           disabled={busy}
           aria-label="Refresh tabs"
           title="Refresh tabs"
-          onClick={() => void refresh().catch((e: Error) => setError(e.message))}
+          onClick={() => void refresh()}
         >
           <ControlIcon symbol="refresh" />
         </button>

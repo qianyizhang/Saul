@@ -64,6 +64,54 @@ import SaulTestSupport
             let stored = try historySQL(store.url, "SELECT json_extract(data, '$.status') FROM ez_entry")
             try expectEqual(stored, "interrupted", "Recovery appeared in the read but never committed")
         },
+        CheckCase("state: failed history preparation settles a waiting refresh") { directory in
+            let started = CheckSignal()
+            let release = CheckSignal()
+            let model = fixtureModel(
+                directory: directory,
+                historyPreparation: .open {
+                    await started.signal()
+                    try await release.wait()
+                    throw EZError("History cannot open.")
+                })
+            defer {
+                model.shutdown()
+                Task { await release.signal() }
+            }
+            try await started.wait()
+            guard let refresh = model.refreshHistory() else { throw CheckFailure("No history refresh") }
+            try expect(model.historyLoading, "Refresh did not wait for preparation")
+            await release.signal()
+            await refresh.value
+            try expect(!model.historyLoading, "Failed preparation left the history loading")
+            try expectEqual(model.storageWarning, "History cannot open.", "Preparation error was lost")
+        },
+        CheckCase("state: loading saved history checks its previously unopened connection") { directory in
+            let store = try HistoryStore(directory: directory)
+            let preset = ModelPreset(
+                name: "Saved API", model: "fixture", effort: "", fast: false, connectionKey: "openai-api")
+            var entry = HistoryEntry(
+                mode: .ask, query: "Historical API lookup", model: preset.model, effort: "",
+                requestedServiceTier: nil)
+            entry.presetSnapshot = preset
+            try store.append(entry)
+            let requested = CheckSignal()
+            let fixture = FixtureConnections()
+            let checks = ConnectionChecks(
+                status: { fixture.status($0) },
+                catalog: { connection, _ in
+                    if connection.key == preset.connectionKey { await requested.signal() }
+                    return fixture.catalog(connection)
+                })
+            let model = fixtureModel(directory: directory, connectionChecks: checks)
+            defer { model.shutdown() }
+            await model.refreshHistory()?.value
+            try expect(model.connectionCatalog(preset.connectionKey) == nil, "Fixture warmed the connection")
+            model.selection = entry.id
+            await model.waitForHistorySelection()
+            try expectEqual(model.selectedEntry?.presetSnapshot, preset, "Saved detail did not load")
+            try await requested.wait()
+        },
         CheckCase("state: delete waits off the UI actor for SQLite write access") { directory in
             let f = try StateFixture(directory: directory)
             defer { f.model.shutdown() }

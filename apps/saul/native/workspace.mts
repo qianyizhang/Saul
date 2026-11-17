@@ -229,12 +229,11 @@ export function createWorkspace({
     if (proposal) delete proposal.approvalToken;
     return { ...current, proposal };
   };
-  async function state(session: string): Promise<ConnectedState>;
-  async function state(session?: string): Promise<WorkspaceState>;
-  async function state(session?: string): Promise<WorkspaceState> {
-    const { sessions } = await call('saul_sessions');
-    if (!session && sessions.length === 1) session = sessions[0]!.session;
-    if (!session) return { sessions, snapshot: null, proposal: null };
+  async function state(
+    session: string,
+    discovered?: WorkspaceState['sessions'],
+  ): Promise<ConnectedState> {
+    const sessions = discovered ?? (await call('saul_sessions')).sessions;
     if (!sessions.some((s) => s.session === session))
       throw new Error('Browser session disconnected; refresh and select a connected session');
     const snapshot = withLabels(await call('saul_tabs_list', { session }), session);
@@ -254,6 +253,21 @@ export function createWorkspace({
       canUndo: undos.has(session),
       summary,
     });
+  }
+  async function observe(session?: string): Promise<WorkspaceState> {
+    const { sessions } = await call('saul_sessions');
+    if (!session && sessions.length === 1) session = sessions[0]!.session;
+    if (!session) return { sessions, snapshot: null, proposal: null };
+    if (sessions.some((item) => item.session === session)) return state(session, sessions);
+    plans.delete(session);
+    interactions.delete(session);
+    undos.delete(session);
+    return {
+      sessions,
+      snapshot: null,
+      proposal: null,
+      error: 'Browser session disconnected. Select a connected session.',
+    };
   }
   function interactionToken(session: string) {
     if (!interactions.has(session) || interactions.get(session)!.expiresAt < now()) {
@@ -275,7 +289,7 @@ export function createWorkspace({
   return async (toolName: string, input: unknown = {}): Promise<WorkspaceResult> => {
     const { name, args } = appRequest(toolName, input);
     if (name === 'saul_workspace_show' || name === 'saul_workspace_state')
-      return response(await state(args.session));
+      return response(await observe(args.session));
     if (
       name === 'saul_workspace_edit' ||
       name === 'saul_workspace_undo' ||

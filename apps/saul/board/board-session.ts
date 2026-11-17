@@ -35,7 +35,7 @@ type BoardState = {
   busy: boolean;
   staging: boolean;
 };
-type Context = { generation: number; session?: string };
+type Context = { generation: number; session?: string; observing?: boolean };
 export type BoardManualCommand =
   | [
       name: 'saul_workspace_edit',
@@ -81,10 +81,32 @@ export function createBoardSession(deps: {
       return false;
     const next = workspaceState(result.structuredContent);
     const session = owner.session ?? state.data?.session;
-    if (session !== undefined && next.session !== session) return false;
+    // A late host result can select a discovered session, but cannot revive
+    // a session that discovery has already dropped.
+    if (
+      !owner.observing &&
+      session === undefined &&
+      next.session !== undefined &&
+      state.data &&
+      !state.data.sessions.some((item) => item.session === next.session)
+    )
+      return false;
+    const lostSession =
+      owner.observing &&
+      session !== undefined &&
+      next.session === undefined &&
+      !next.snapshot &&
+      !next.sessions.some((item) => item.session === session);
+    if (session !== undefined && next.session !== session && !lostSession) return false;
     if (deps.dragActive()) {
       deferred = { result, context: owner, sequence };
       return false;
+    }
+    if (lostSession) {
+      deferred = queuedEdit = interactionToken = undefined;
+      deps.onSessionChange();
+      publish({ data: next, draftLayout: undefined, approvalToken: undefined });
+      return true;
     }
     const approvalToken =
       typeof result._meta?.approvalToken === 'string' ? result._meta.approvalToken : undefined;
@@ -104,7 +126,7 @@ export function createBoardSession(deps: {
   async function refresh() {
     if (state.busy || state.staging || state.refreshing || !state.ready || deps.dragActive())
       return;
-    const owner = context();
+    const owner = { ...context(), observing: true };
     publish({ refreshing: true });
     try {
       const result = await deps.call(
@@ -177,7 +199,10 @@ export function createBoardSession(deps: {
       if (!current(owner)) return false;
       deps.status(boardError(cause), true);
       try {
-        receive(await deps.call('saul_workspace_state', { session: owner.session }), owner);
+        receive(await deps.call('saul_workspace_state', { session: owner.session }), {
+          ...owner,
+          observing: true,
+        });
       } catch {
         /* Keep original error. */
       }
