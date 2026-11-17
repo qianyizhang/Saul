@@ -65,6 +65,7 @@ describe.each(['plan', 'preset'] as const)('%s Summarize execution', (route) => 
             model: 'frozen-model',
             effort: 'low',
             credentialOwner: 'saul',
+            connectionKey: 'gpt-plan',
           },
   };
   it('uses the frozen route, reports detached output and validates completion', async () => {
@@ -84,6 +85,12 @@ describe.each(['plan', 'preset'] as const)('%s Summarize execution', (route) => 
       result: { kind: 'summary', summary },
     });
     expect(generate).toHaveBeenCalledTimes(1);
+    if (route === 'plan')
+      expect(generate).toHaveBeenCalledWith(
+        expect.objectContaining({ accountId: 'frozen-account', connectionKey: 'gpt-plan' }),
+        progress.signal,
+        'saul',
+      );
     expect(unused).not.toHaveBeenCalled();
     expect(progress.onProgress).toHaveBeenCalled();
   });

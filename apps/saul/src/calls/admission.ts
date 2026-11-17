@@ -6,6 +6,7 @@ import { snapshotSelection } from '../digest/capture';
 import { validateSummaryConnection } from '../digest/connection';
 import type { DigestBatch, DigestRequest } from '../digest/types';
 import { prepareFrozenPreset } from '../configuration/resolve';
+import { originalSummaryPlan } from '../providers/request';
 
 type StartCall = Extract<DigestRequest, { action: 'start' }>;
 type ResolveCall = Extract<DigestRequest, { action: 'resolve' }>;
@@ -43,8 +44,14 @@ export function createCallAdmission({
       const saved = await readBatch(request.id);
       const input = saved.action ? saved.action.input : saved.summaryInput;
       if (saved.action && !input) throw new Error('The saved action preset is unavailable.');
-      if (!input && saved.connectionKey)
-        validateSummaryConnection(await settings(), saved.accountId, saved.connectionKey);
+      if (!input) {
+        const route = originalSummaryPlan(saved);
+        const current = await settings();
+        if (route.binding.kind === 'connection')
+          validateSummaryConnection(current, route.plan.accountId, route.binding.key);
+        else if (current.sharedCredentials !== 'saul')
+          throw new Error('Connect this app in Settings → Preferences → Integrations.');
+      }
       return {
         message: request,
         credential: input ? prepareFrozenPreset(await settings(), input).credential : undefined,

@@ -3,7 +3,7 @@ import { planEvents } from '../providers/chatgpt-plan';
 import { streamModel } from '../providers/stream';
 import { parseSummary, summaryRequestInput } from '../digest/summary';
 import type { DigestSource, Summary } from '../digest/types';
-import type { FrozenModel } from '../providers/request';
+import { originalSummaryPlan, type FrozenModel } from '../providers/request';
 
 export type FrozenCall =
   | {
@@ -17,6 +17,7 @@ export type FrozenCall =
             model: string;
             effort?: string;
             credentialOwner: 'local' | 'saul';
+            connectionKey?: string;
           };
     }
   | { kind: 'script'; revision: string; input?: FrozenModel };
@@ -152,27 +153,28 @@ export function createCallExecutor(
         }
 
         const { userPrompt, attachments } = summaryRequestInput(page, source);
-        const events =
-          call.model.kind === 'preset'
-            ? model(
-                { ...call.model.input, systemPrompt: call.instructions, userPrompt },
-                credential,
-                signal,
-                { attachments },
-              )
-            : plan(
-                {
-                  action: 'generate',
-                  accountId: call.model.accountId,
-                  model: call.model.model,
-                  effort: call.model.effort,
-                  systemPrompt: call.instructions,
-                  userPrompt,
-                  ...(attachments ? { attachments } : {}),
-                },
-                signal,
-                call.model.credentialOwner,
-              );
+        const events = (() => {
+          if (call.model.kind === 'preset')
+            return model(
+              { ...call.model.input, systemPrompt: call.instructions, userPrompt },
+              credential,
+              signal,
+              { attachments },
+            );
+          const route = originalSummaryPlan(call.model);
+          return plan(
+            {
+              action: 'generate',
+              ...route.plan,
+              ...(route.binding.kind === 'connection' ? { connectionKey: route.binding.key } : {}),
+              systemPrompt: call.instructions,
+              userPrompt,
+              ...(attachments ? { attachments } : {}),
+            },
+            signal,
+            route.owner,
+          );
+        })();
         let complete = false;
         for await (const event of events) {
           if (event.type === 'delta') {

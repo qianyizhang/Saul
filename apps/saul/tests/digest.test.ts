@@ -31,6 +31,7 @@ function batch(): DigestBatch {
     windowId: 1,
     windowTitle: 'Research',
     accountId: 'account',
+    credentialOwner: 'saul',
     createdAt: 1,
     model: 'gpt-6-luna',
     effort: 'medium',

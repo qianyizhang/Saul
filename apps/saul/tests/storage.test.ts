@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { SharedHistory } from '../native/history.mts';
+import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
+import { prepareFrozenRun } from '../src/reading/configuration';
 import type { RunInput, Submission } from '../src/types/storage';
 const roots: string[] = [];
 const open: SharedHistory[] = [];
@@ -199,6 +201,12 @@ it('projects native entries into the same ordered/searchable library, including 
 it('imports old SQLite records once, verifies them before acknowledging, and removes temporary imports', async () => {
   const source = history();
   await complete(source);
+  const input = submission().input;
+  const imported = JSON.stringify({
+    ...input,
+    remote: { ...input.remote, apiKey: 'synthetic legacy inline credential' },
+  });
+  source.connection.exec({ sql: 'UPDATE llm_run SET input_json=?', bind: [imported] });
   source.connection.exec('DROP TABLE ez_entry;DROP TABLE history_migration;PRAGMA user_version=2;');
   const bytes = readFileSync(join(source.directory, 'history.sqlite3'));
   const target = history();
@@ -211,6 +219,14 @@ it('imports old SQLite records once, verifies them before acknowledging, and rem
   expect(
     await target.browser.execute({ type: 'DB_GET_HISTORY', payload: { searchQuery: 'Slope' } }),
   ).toHaveLength(1);
+  const frozen = await target.browser.execute({
+    type: 'DB_INPUT',
+    payload: { selectionId: 'selection' },
+  });
+  expect(() => prepareFrozenRun(DEFAULT_CONFIGURATION, frozen!)).toThrow(
+    'Invalid saved API choices',
+  );
+  expect(target.connection.selectValue('SELECT input_json FROM llm_run')).toBe(imported);
   await target.browser.execute({ type: 'DB_CLEAR_HISTORY', payload: undefined });
   expect(await target.run({ operation: 'import-begin', id })).toEqual({ imported: true });
   expect(readdirSync(target.directory).some((x) => x.startsWith('.history-import-'))).toBe(false);

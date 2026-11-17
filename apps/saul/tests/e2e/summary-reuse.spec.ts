@@ -202,6 +202,7 @@ test('different pages summarize together while repeated actions reopen the match
           id: crypto.randomUUID(),
           tabIds: [tabId],
           accountId: 'fixture',
+          connectionKey: 'gpt-plan',
           regenerate: true,
         },
       }),

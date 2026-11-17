@@ -3,6 +3,8 @@ import type { Configuration } from '../configuration/definition';
 import type { RunInput } from '../types/storage';
 import { configurationFor, renderRecipePrompt } from '../configuration/definition';
 import { preparePreset, prepareFrozenPreset } from '../configuration/resolve';
+import { validateModelPrompts } from '../providers/request';
+import { isRecord } from '../../native/value.mts';
 
 export function prepareRecipeRun(
   settings: Configuration,
@@ -35,6 +37,30 @@ export function prepareFrozenRun(
   settings: Configuration,
   original: RunInput,
 ): { input: RunInput; credential: string } {
+  validateModelPrompts(original);
+  const context: unknown = original.context;
+  const recipe: unknown = original.recipe;
+  const required = ['selection', 'pageTitle', 'pageUrl'];
+  const contextFields = [...required, 'surroundingText', 'paragraph', 'heading'];
+  const recipeFields = ['id', 'name', 'presetId', 'systemPrompt', 'template'];
+  if (
+    !isRecord(context) ||
+    required.some((key) => typeof context[key] !== 'string') ||
+    Object.keys(context).some(
+      (key) =>
+        !contextFields.includes(key) ||
+        (context[key] !== undefined && typeof context[key] !== 'string'),
+    ) ||
+    (recipe !== undefined &&
+      (!isRecord(recipe) ||
+        recipeFields.some((key) => typeof recipe[key] !== 'string') ||
+        Object.keys(recipe).some((key) => key !== 'capability' && !recipeFields.includes(key)) ||
+        (recipe.capability !== undefined &&
+          recipe.capability !== 'write' &&
+          recipe.capability !== 'draw'))) ||
+    (original.followUpQuestion !== undefined && typeof original.followUpQuestion !== 'string')
+  )
+    throw new Error('Invalid saved reading input. Start a new explanation.');
   return prepareFrozenPreset(settings, original);
 }
 

@@ -22,6 +22,8 @@ export function compareRunInput(
     JSON.stringify([
       input.provider,
       input.credentialOwner ?? input.remote.credentialOwner ?? 'local',
+      input.preset?.connectionKey,
+      input.preset?.profileId,
       input.preset?.imageOptions,
       input.provider === 'chatgpt-plan'
         ? input.plan

@@ -353,6 +353,7 @@ export class DigestRunner {
                 model: batch.model,
                 effort: batch.effort,
                 credentialOwner: batch.credentialOwner ?? 'local',
+                connectionKey: batch.connectionKey,
               },
         };
     const project = (output: CallSnapshot) => {

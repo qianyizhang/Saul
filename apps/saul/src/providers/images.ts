@@ -1,6 +1,6 @@
 import { credentialCall } from '../native/credentials';
 import { validateCredentialRequest } from '../../native/credentials-contract.mts';
-import type { ModelRequest } from './request';
+import type { APIExecution, ModelRequest } from './request';
 
 export interface GeneratedImage {
   data: string;
@@ -27,20 +27,17 @@ export function validateGeneratedImage(image: GeneratedImage): void {
     throw new Error('The provider returned an invalid or oversized image.');
 }
 export async function generateImage(
-  input: ModelRequest,
+  route: APIExecution,
+  input: Pick<ModelRequest, 'systemPrompt' | 'userPrompt'>,
   key: string,
   signal?: AbortSignal,
 ): Promise<GeneratedImage> {
-  if (
-    input.provider !== 'openai-compatible' ||
-    input.remote.baseUrl.replace(/\/+$/, '') !== 'https://api.openai.com/v1'
-  )
-    throw new Error('Draw requires the official OpenAI API connection.');
-  const options = input.preset?.imageOptions;
+  if (route.capability !== 'draw') throw new Error('Choose a Draw preset.');
+  const options = route.imageOptions;
   const request = {
     action: 'api-image',
-    ...(input.preset?.connectionKey ? { connectionKey: input.preset.connectionKey } : {}),
-    model: input.remote.model,
+    ...(route.binding.kind === 'connection' ? { connectionKey: route.binding.key } : {}),
+    model: route.model,
     prompt: [input.systemPrompt, input.userPrompt].filter(Boolean).join('\n\n'),
     size: options?.size ?? '1024x1024',
     quality: options?.quality ?? 'low',
@@ -52,7 +49,7 @@ export async function generateImage(
     : AbortSignal.timeout(180_000);
   signal.throwIfAborted();
   let encoded: unknown;
-  if (input.remote.credentialOwner === 'saul') {
+  if (route.owner === 'saul') {
     encoded = (await credentialCall(request, signal)).imageBase64;
   } else {
     const response = await fetch('https://api.openai.com/v1/images/generations', {

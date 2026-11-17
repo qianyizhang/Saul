@@ -5,6 +5,7 @@ import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 import { starterConfiguration } from '../src/configuration/definition';
 import { prepareRecipeRun, prepareFrozenRun } from '../src/reading/configuration';
 import type { GeneratedImage } from '../src/providers/images';
+import { executionModel, type ModelRequest } from '../src/providers/request';
 import { validateCredentialRequest } from '../native/credentials-contract.mts';
 
 const gif = readFileSync(
@@ -34,6 +35,11 @@ function prepared() {
   };
 }
 afterEach(() => vi.unstubAllGlobals());
+async function draw(input: ModelRequest, key: string, signal?: AbortSignal) {
+  const route = executionModel(input);
+  if (route.provider !== 'openai-compatible') throw new Error('Not an API image fixture.');
+  return generateImage(route, input, key, signal);
+}
 it('Illustrate freezes its Draw model, format and connection without storing credentials', () => {
   const { settings, input, credential } = prepared();
   expect(input.remote.model).toBe('gpt-image-2.6-flare');
@@ -53,7 +59,7 @@ it('sends one nonstreaming GIF request and returns the exact animation bytes', a
   vi.stubGlobal('fetch', fetch);
   const close = vi.fn();
   vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue({ width: 16, height: 16, close }));
-  expect(await generateImage(input, 'fixture-key')).toEqual({ data: gif, mediaType: 'image/gif' });
+  expect(await draw(input, 'fixture-key')).toEqual({ data: gif, mediaType: 'image/gif' });
   expect(fetch).toHaveBeenCalledTimes(1);
   expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({
     model: 'gpt-image-2.6-flare',
@@ -69,18 +75,19 @@ it('rejects old-model GIFs, wrong endpoints, malformed output and cancelled requ
   vi.stubGlobal('fetch', fetch);
   const old = structuredClone(input);
   old.remote.model = 'gpt-image-2.5-flare';
-  await expect(generateImage(old, 'fixture')).rejects.toThrow('GIF requires');
+  old.preset!.model = old.remote.model;
+  await expect(draw(old, 'fixture')).rejects.toThrow('GIF requires');
   const other = structuredClone(input);
   other.remote.baseUrl = 'https://other.test/v1';
-  await expect(generateImage(other, 'fixture')).rejects.toThrow('official');
+  await expect(draw(other, 'fixture')).rejects.toThrow('official');
   const abort = new AbortController();
   abort.abort();
-  await expect(generateImage(input, 'fixture', abort.signal)).rejects.toThrow();
+  await expect(draw(input, 'fixture', abort.signal)).rejects.toThrow();
   expect(fetch).not.toHaveBeenCalled();
   fetch.mockResolvedValue(
     new Response(JSON.stringify({ data: [{ b64_json: btoa('not a GIF') }] })),
   );
-  await expect(generateImage(input, 'fixture')).rejects.toThrow('invalid');
+  await expect(draw(input, 'fixture')).rejects.toThrow('invalid');
   expect(fetch).toHaveBeenCalledTimes(1);
   for (const image of [
     { data: gif, mediaType: 'image/png' },

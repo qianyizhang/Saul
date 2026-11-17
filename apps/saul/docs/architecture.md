@@ -37,7 +37,13 @@ Content receives action names and safe choices, never storage or credentials.
 A submitted action freezes context, choices and rendered prompts. Retry
 resolves only its original credential route; a changed owner or endpoint
 requires a new attempt. Credentials stay transient and origin-bound; the
-plan snapshot retains the non-secret registration ID. Inspection projects saved
+plan snapshot retains the non-secret registration ID. Admission and streaming
+interpret saved choices through one [route decoder](../src/providers/request.ts).
+A signed plan keeps its account and binding; a managed API request keeps its
+connection and endpoint; a browser API request keeps its profile and endpoint.
+The original signed account-only Summary and official API routes remain
+available to their own saved requests. Contradictory route data cannot send.
+Inspection projects saved
 instruction, context and prompt fields, not credentials, account identifiers or
 raw HTTP/SSE traffic.
 

@@ -161,10 +161,17 @@ it('validates the saved binding when retrying the original Summary route', async
   settings.connections = [];
   await expect(admit(retry)).rejects.toThrow('connection changed');
 
-  // An original unkeyed run still carries its local account, checked at transport.
+  // Never infer signed ownership from the current mode or a matching account label.
   delete saved.connectionKey;
   saved.credentialOwner = 'local';
   readSettings.mockClear();
-  await expect(admit(retry)).resolves.toMatchObject({ message: retry });
+  await expect(admit(retry)).rejects.toThrow('Select a new preset');
+  delete saved.credentialOwner;
+  await expect(admit(retry)).rejects.toThrow('Select a new preset');
   expect(readSettings).not.toHaveBeenCalled();
+  // A signed original Summary can retry its exact old registration without finding a new binding.
+  saved.credentialOwner = 'saul';
+  await expect(admit(retry)).resolves.toMatchObject({ message: retry });
+  settings.sharedCredentials = 'disconnected';
+  await expect(admit(retry)).rejects.toThrow('Integrations');
 });
