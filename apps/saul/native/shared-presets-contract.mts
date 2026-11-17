@@ -1,5 +1,6 @@
 import { isRecord } from './value.mts';
-export type ActionCapability = 'write' | 'draw' | 'speak';
+const actionCapabilities = ['write', 'draw', 'speak'] as const;
+export type ActionCapability = (typeof actionCapabilities)[number];
 export const IMAGE_OPTIONS = {
   size: ['1024x1024', '1536x1024', '1024x1536'],
   quality: ['low', 'medium', 'high'],
@@ -25,6 +26,7 @@ export const validImageQuality = (value: unknown) => supportedOption(value, IMAG
 export const validImageFormat = (value: unknown) =>
   supportedOption(value, IMAGE_OPTIONS.outputFormat);
 export const validSpeechVoice = (value: unknown) => supportedOption(value, SPEECH_VOICES);
+export const validActionCapability = (value: unknown) => supportedOption(value, actionCapabilities);
 export interface SharedSpeechOptions {
   voice: string;
 }
@@ -179,7 +181,7 @@ export function validateSharedPresets(value: unknown): asserts value is SharedPr
         (p.connectionKey === undefined ||
           (typeof p.connectionKey === 'string' &&
             /^[a-z][a-z0-9-]{0,63}$/.test(p.connectionKey))) &&
-        (p.capability === undefined || ['write', 'draw', 'speak'].includes(String(p.capability))) &&
+        (p.capability === undefined || validActionCapability(p.capability)) &&
         (p.imageOptions === undefined || validImageOptions(p.imageOptions)) &&
         (p.speechOptions === undefined || validSpeechOptions(p.speechOptions)),
     ) ||

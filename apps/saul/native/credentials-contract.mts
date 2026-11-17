@@ -207,7 +207,7 @@ export function validateCredentialEvent(value: unknown): asserts value is Creden
       text(m.display_name, 1000) &&
       text(m.defaultReasoningEffort, 64, true) &&
       typeof m.isDefault === 'boolean' &&
-      (m.fastTier === undefined || ['fast', 'priority'].includes(String(m.fastTier))) &&
+      (m.fastTier === undefined || m.fastTier === 'fast' || m.fastTier === 'priority') &&
       Array.isArray(m.supportedReasoningEfforts) &&
       m.supportedReasoningEfforts.length <= 100 &&
       m.supportedReasoningEfforts.every(
@@ -259,7 +259,7 @@ export function validateCredentialEvent(value: unknown): asserts value is Creden
     throw new Error('Saul returned unexpected credential event fields.');
   if (
     value.type === 'complete' ||
-    (value.type === 'activity' && ['waiting', 'thinking'].includes(String(value.phase))) ||
+    (value.type === 'activity' && (value.phase === 'waiting' || value.phase === 'thinking')) ||
     (value.type === 'delta' && text(value.text, 2_000_000, true)) ||
     (value.type === 'authorize' && text(value.url, 32_000)) ||
     (value.type === 'error' &&

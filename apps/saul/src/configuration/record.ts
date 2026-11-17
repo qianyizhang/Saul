@@ -62,7 +62,8 @@ export function decodeConfiguration(value: unknown): Configuration {
     throw new Error('Obsolete configuration fields are not supported.');
   if (
     stored.sharedCredentials !== undefined &&
-    !['saul', 'disconnected'].includes(String(stored.sharedCredentials))
+    stored.sharedCredentials !== 'saul' &&
+    stored.sharedCredentials !== 'disconnected'
   )
     throw new Error('Saved credential connection is not supported.');
   const activeProvider = stored.activeProvider ?? DEFAULT_CONFIGURATION.activeProvider;

@@ -14,6 +14,65 @@ import {
   backgroundSender,
 } from '../src/contracts/reading';
 import { validateWorkspace } from '../src/contracts/workspace';
+import { validateActionModule } from '../native/action-protocol.mts';
+import { validateCredentialEvent } from '../native/credentials-contract.mts';
+import { validConnectionCatalog } from '../native/connections-contract.mts';
+import { validateSharedPresets } from '../native/shared-presets-contract.mts';
+
+it('rejects coercible enum values at the action, preset, catalog and credential interfaces', () => {
+  for (const invalid of [(text: string) => [text], () => ({}), () => null, () => 0]) {
+    expect(() =>
+      validateActionModule({
+        contractVersion: 1,
+        name: 'Example',
+        description: '',
+        language: invalid('typescript'),
+        source: 'export default () => "reply";',
+      }),
+    ).toThrow();
+    expect(() =>
+      validateSharedPresets([
+        {
+          id: 'fceceeba-edcf-473d-a270-d88f36fabc00',
+          name: 'Draw',
+          model: 'image',
+          effort: '',
+          fast: false,
+          capability: invalid('draw'),
+        },
+      ]),
+    ).toThrow();
+    expect(
+      validConnectionCatalog({
+        fetchedAt: 1,
+        models: [
+          { id: 'm', name: 'M', capabilities: [invalid('write')], efforts: [], defaultEffort: '' },
+        ],
+      }),
+    ).toBe(false);
+    expect(() =>
+      validateCredentialEvent({
+        type: 'activity',
+        phase: invalid('thinking'),
+      }),
+    ).toThrow();
+    expect(() =>
+      validateCredentialEvent({
+        type: 'result',
+        models: [
+          {
+            slug: 'm',
+            display_name: 'M',
+            defaultReasoningEffort: '',
+            isDefault: false,
+            fastTier: invalid('fast'),
+            supportedReasoningEfforts: [],
+          },
+        ],
+      }),
+    ).toThrow();
+  }
+});
 const fields = {
   saul_annotations: ['session', 'scope', 'author', 'operation'],
   saul_tabs_edit: [

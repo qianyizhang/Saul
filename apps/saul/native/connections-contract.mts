@@ -1,5 +1,5 @@
 import { isRecord } from './value.mts';
-import type { ActionCapability } from './shared-presets-contract.mts';
+import { validActionCapability, type ActionCapability } from './shared-presets-contract.mts';
 
 export interface ConnectionModel {
   id: string;
@@ -60,7 +60,7 @@ export function validConnectionCatalog(value: unknown): value is ConnectionCatal
         m.name.length > 0 &&
         m.name.length <= 1000 &&
         Array.isArray(m.capabilities) &&
-        m.capabilities.every((c) => ['write', 'draw', 'speak'].includes(String(c))) &&
+        m.capabilities.every(validActionCapability) &&
         Array.isArray(m.efforts) &&
         m.efforts.every((e) => typeof e === 'string' && e.length <= 64) &&
         typeof m.defaultEffort === 'string' &&

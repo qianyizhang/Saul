@@ -162,7 +162,7 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
     return;
   }
   if (v.action === 'config-read' || v.action === 'config-save') {
-    if (!['settings', 'calls'].includes(String(v.section)))
+    if (v.section !== 'settings' && v.section !== 'calls')
       throw new Error('Invalid config section.');
     if (v.action === 'config-save') {
       if (!validScopedConfig(v)) throw new Error('Invalid config revision.');

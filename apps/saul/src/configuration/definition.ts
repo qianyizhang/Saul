@@ -325,7 +325,11 @@ export function normalizeConfiguration(
     presets: stored.presets.map((entry) => {
       const preset = record(entry, 'Preset');
       if ('providerKey' in preset) throw new Error('Obsolete preset fields are not supported.');
-      if (!['openai-compatible', 'chatgpt-plan', 'chrome-ai'].includes(String(preset.provider)))
+      if (
+        preset.provider !== 'openai-compatible' &&
+        preset.provider !== 'chatgpt-plan' &&
+        preset.provider !== 'chrome-ai'
+      )
         throw new Error('Preset provider is not supported.');
       if (preset.fast !== undefined && typeof preset.fast !== 'boolean')
         throw new Error('Preset Fast must be true or false.');
@@ -345,7 +349,7 @@ export function normalizeConfiguration(
       return {
         id: string(preset.id, 'Preset ID', 128),
         name: string(preset.name, 'Preset name', 80),
-        provider: preset.provider as ModelPreset['provider'],
+        provider: preset.provider,
         model: string(preset.model, 'Preset model', 256),
         profileId: optionalText(preset.profileId, 'Preset profile'),
         temperature: optionalNumber(preset.temperature, 'Preset temperature'),
@@ -365,12 +369,14 @@ export function normalizeConfiguration(
     }),
     recipes: stored.recipes.map((entry) => {
       const recipe = record(entry, 'Action');
-      if (recipe.capability !== undefined && !['write', 'draw'].includes(String(recipe.capability)))
+      if (
+        recipe.capability !== undefined &&
+        recipe.capability !== 'write' &&
+        recipe.capability !== 'draw'
+      )
         throw new Error('Invalid action capability.');
       return {
-        ...(recipe.capability === undefined
-          ? {}
-          : { capability: recipe.capability as 'write' | 'draw' }),
+        ...(recipe.capability === undefined ? {} : { capability: recipe.capability }),
         id: string(recipe.id, 'Action ID', 128),
         name: string(recipe.name, 'Action name', 80),
         presetId: string(recipe.presetId, 'Default preset ID', 128),

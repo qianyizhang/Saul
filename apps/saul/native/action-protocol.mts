@@ -61,7 +61,7 @@ export function validateActionModule(v: unknown): asserts v is ActionModule {
     v.name.length > 80 ||
     typeof v.description !== 'string' ||
     v.description.length > 1000 ||
-    !['javascript', 'typescript'].includes(String(v.language)) ||
+    (v.language !== 'javascript' && v.language !== 'typescript') ||
     typeof v.source !== 'string' ||
     !v.source.trim() ||
     v.source.length > ACTION_MAX_TEXT
