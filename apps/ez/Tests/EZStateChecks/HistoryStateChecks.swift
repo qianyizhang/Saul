@@ -1,31 +1,85 @@
 import EZCheckSupport
 import EZCore
 import Foundation
+import SaulNativeValues
+import SaulTestSupport
+
+@testable import EZApplication
 
 @MainActor func historyStateChecks() -> [CheckCase] {
     [
-        stateCase("deletion persists clears selection and preserves composer draft") { f in
+        CheckCase("state: deletion persists clears selection and preserves composer draft") { directory in
+            let f = try StateFixture(directory: directory)
+            defer { f.model.shutdown() }
             let entry = try f.selectLookup()
             let draft = f.model.inputValues
-            f.model.deleteLookup(entry.recordID)
+            await f.model.deleteLookup(entry.recordID)?.value
             try expect(
                 f.model.entries.isEmpty && f.model.selection == nil,
                 "Successful deletion left lookup selected")
             try expect(f.model.inputValues == draft, "Deletion discarded draft")
             try expect(try f.history.load().isEmpty, "Deletion did not persist")
         },
-        stateCase("failed deletion keeps lookup selection and draft and displays error") { f in
+        CheckCase("state: failed deletion keeps lookup selection and draft and displays error") { directory in
+            let f = try StateFixture(directory: directory)
+            defer { f.model.shutdown() }
             let entry = try f.selectLookup()
             let draft = f.model.inputValues
             try FileManager.default.removeItem(at: f.history.url)
             try FileManager.default.createDirectory(at: f.history.url, withIntermediateDirectories: true)
-            f.model.deleteLookup(entry.recordID)
+            await f.model.deleteLookup(entry.recordID)?.value
             try expect(
                 f.model.entries == [entry] && f.model.selection == entry.id,
                 "Failed deletion removed visible lookup")
             try expect(
                 f.model.inputValues == draft && f.model.error != nil,
                 "Failed deletion hid error or discarded draft")
+        },
+        CheckCase("state: preparing history gates Run and refresh, then recovers pending rows") { directory in
+            let original = HistoryEntry(
+                mode: .ask, query: "Before quit", model: "m", effort: "", requestedServiceTier: nil)
+            let store = try HistoryStore(directory: directory)
+            try store.append(original)
+            let openStarted = CheckSignal()
+            let release = CheckSignal()
+            let writer = HistoryWriter(directory: directory)
+            let model = fixtureModel(
+                directory: directory,
+                historyPreparation: .open {
+                    await openStarted.signal()
+                    try await release.wait()
+                    try await writer.prepare(migrating: nil)
+                })
+            defer {
+                model.shutdown()
+                Task { await release.signal() }
+            }
+            try await openStarted.wait()
+            let refresh = model.refreshHistory()
+            try expect(refresh != nil && model.entries.isEmpty, "Read did not wait for history preparation")
+            try expect(!model.canDeleteLookup, "History mutation was enabled before preparation")
+            await release.signal()
+            await refresh?.value
+            try expectEqual(model.entries.map(\.status), ["interrupted"], "Old pending row did not recover")
+            let stored = try historySQL(store.url, "SELECT json_extract(data, '$.status') FROM ez_entry")
+            try expectEqual(stored, "interrupted", "Recovery appeared in the read but never committed")
+        },
+        CheckCase("state: delete waits off the UI actor for SQLite write access") { directory in
+            let f = try StateFixture(directory: directory)
+            defer { f.model.shutdown() }
+            let saved = try f.selectLookup()
+            let blocker = try HistoryFixtureWriter(f.history.url, reservation: .exclusive)
+            guard let deleting = f.model.deleteLookup(saved.recordID) else {
+                throw CheckFailure("Delete was not admitted")
+            }
+            await Task.yield()
+            try expect(!f.model.canDeleteLookup, "Delete did not keep ownership until SQLite settled")
+            try expectEqual(f.model.selection, saved.id, "Delete changed selection before commit")
+            try blocker.run("ROLLBACK")
+            await deleting.value
+            try expect(
+                f.model.entries.isEmpty && f.model.selection == nil, "Acknowledged delete was not applied")
+            try expect(try f.history.load().isEmpty, "Delete was not committed")
         },
         CheckCase("state: locked history refresh yields, preserves selection and recovers on the next focus")
         {
@@ -36,8 +90,8 @@ import Foundation
             try store.append(entry)
             let reader = HistoryReader(directory: directory)
             let readStarted = CheckSignal()
-            let model = AppModel(
-                directory: directory, offline: true,
+            let model = fixtureModel(
+                directory: directory,
                 readHistory: {
                     let reading = Task.detached {
                         await readStarted.signal()
@@ -70,8 +124,8 @@ import Foundation
             try store.append(saved)
             let readStarted = CheckSignal()
             var release: CheckedContinuation<[HistoryEntry], Never>?
-            let model = AppModel(
-                directory: directory, offline: true,
+            let model = fixtureModel(
+                directory: directory,
                 readHistory: {
                     await withCheckedContinuation {
                         release = $0
@@ -86,7 +140,7 @@ import Foundation
             model.selection = saved.id
             guard let pending = model.refreshHistory() else { throw CheckFailure("No history refresh") }
             try await readStarted.wait()
-            model.deleteLookup(saved.recordID)
+            await model.deleteLookup(saved.recordID)?.value
             release?.resume(returning: [saved])
             release = nil
             await pending.value
@@ -118,8 +172,8 @@ import Foundation
                     })
                 let readStarted = CheckSignal()
                 var release: CheckedContinuation<[HistoryEntry], Never>?
-                let model = AppModel(
-                    directory: fixture, offline: true, attemptExecution: execution,
+                let model = fixtureModel(
+                    directory: fixture, attemptExecution: execution,
                     readHistory: {
                         await withCheckedContinuation {
                             release = $0

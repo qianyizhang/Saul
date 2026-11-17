@@ -1,41 +1,31 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
+let credentials = Target.Dependency.product(name: "SaulCredentialClient", package: "credentials")
+let values = Target.Dependency.product(name: "SaulNativeValues", package: "credentials")
+let tests = Target.Dependency.product(name: "SaulTestSupport", package: "credentials")
+let ownerTests = Target.Dependency.product(name: "SaulCredentialTestSupport", package: "credentials")
+
 let package = Package(
     name: "EZ",
     platforms: [.macOS(.v14)],
-    products: [
-        .executable(name: "EZ", targets: ["EZ"]),
-        .executable(name: "SaulCredentials", targets: ["SaulCredentials"]),
-    ],
+    products: [.executable(name: "EZ", targets: ["EZ"])],
     dependencies: [.package(path: "../../native/credentials")],
     targets: [
         .systemLibrary(name: "CSQLite"),
         .target(
-            name: "EZCore",
-            dependencies: ["CSQLite", .product(name: "SaulCredentialStorage", package: "credentials")],
+            name: "EZCore", dependencies: ["CSQLite", values, credentials],
             resources: [.copy("Resources/history.sql")]),
+        .target(name: "EZApplication", dependencies: ["EZCore", credentials, values], path: "Sources/EZ"),
+        .executableTarget(name: "EZ", dependencies: ["EZApplication"], path: "Sources/EZEntry"),
         .executableTarget(
-            name: "EZ",
-            dependencies: ["EZCore", .product(name: "SaulCredentialStorage", package: "credentials")]),
+            name: "EZStateChecks",
+            dependencies: ["EZApplication", "EZCore", "EZCheckSupport", values, credentials, tests],
+            path: "Tests/EZStateChecks"),
+        .target(name: "EZCheckSupport", dependencies: ["CSQLite", tests], path: "Tests/Support"),
         .executableTarget(
-            name: "SaulCredentials",
-            dependencies: [
-                "EZCore", "SaulCredentialOwner",
-                .product(name: "SaulCredentialStorage", package: "credentials"),
-            ]),
-        .target(
-            name: "SaulCredentialOwner",
-            dependencies: ["EZCore", .product(name: "SaulCredentialStorage", package: "credentials")]),
-        .executableTarget(
-            name: "CredentialOwnerChecks",
-            dependencies: [
-                "SaulCredentialOwner", "EZCore",
-                .product(name: "SaulCredentialStorage", package: "credentials"),
-            ], path: "Tests/CredentialOwnerChecks"),
-        .target(name: "EZCheckSupport", dependencies: ["CSQLite"], path: "Tests/Support"),
-        .executableTarget(
-            name: "EZChecks", dependencies: ["EZCore", "EZCheckSupport", "SaulCredentialOwner"],
+            name: "EZChecks",
+            dependencies: ["EZCore", "EZCheckSupport", values, credentials, tests, ownerTests],
             path: "Tests/EZChecks"),
     ],
     swiftLanguageModes: [.v5]

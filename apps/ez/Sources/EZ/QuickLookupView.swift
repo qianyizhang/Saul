@@ -1,4 +1,5 @@
 import EZCore
+import SaulNativeValues
 import SwiftUI
 
 struct QuickLookupView: View {
@@ -136,12 +137,7 @@ struct QuickLookupView: View {
             if model.launcherPending {
                 Text("Preparing…").font(AppStyle.caption).foregroundStyle(.secondary)
             } else if model.busy {
-                Button {
-                    model.stop()
-                } label: {
-                    ControlLabel(symbol: .stop, iconOnly: model.minimumMode)
-                }.help(
-                    "Stop generating · \(model.shortcuts.binding(for: .stop).display)")
+                AttemptControls(model: model)
             } else if showsInputs {
                 Button {
                     model.send()

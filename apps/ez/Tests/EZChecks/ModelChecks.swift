@@ -1,5 +1,6 @@
-import EZCheckSupport
 import Foundation
+import SaulNativeValues
+import SaulTestSupport
 
 @testable import EZCore
 
@@ -47,30 +48,16 @@ import Foundation
             entry.sourceID = "saul-origin"
             try expect(!entry.isRetryable, "Saul-origin request offered native Retry")
         },
-        CheckCase("model: live-catalog-only model capabilities") { _ in
-            let model = ModelOption(catalog: [
-                "visibility": "list", "slug": "test", "display_name": "Test",
-                "supported_reasoning_levels": [["effort": "low", "description": "Quick"]],
-                "additional_speed_tiers": ["fast"],
-            ])!
-            try expect(model.quickEffort == "low" && model.fastTier == "fast", "Catalog capability decode")
+        CheckCase("model: preset defaults omit unadvertised effort and Fast options") { _ in
+            let model = ModelOption(
+                connectionModel: ConnectionModel(
+                    id: "test", efforts: ["high"], defaultEffort: "retired"))
             try expect(
-                ModelOption(catalog: ["visibility": "hidden", "slug": "test"]) == nil, "Hidden model shown")
-            try expect(
-                ModelOption(catalog: ["visibility": "list", "slug": "test"])?.fastTier == nil,
-                "Invented Fast capability")
-            let invalidDefault = ModelOption(catalog: [
-                "visibility": "list", "slug": "test", "default_reasoning_level": "retired",
-                "supported_reasoning_levels": [
-                    ["effort": "high"]
-                ],
-            ])!
-            try expect(
-                invalidDefault.quickEffort == "high" && invalidDefault.supportedReasoningEfforts.count == 1,
-                "Unadvertised default effort changed the quick fallback")
+                model.quickEffort == "high" && model.fastTier == nil,
+                "Unadvertised defaults changed the quick fallback")
             try expect(
                 ModelPreset(name: "Default", model: "test", effort: "", fast: false)
-                    .availabilityError(in: [invalidDefault], provider: .chatGPTPlan) == nil,
+                    .availabilityError(in: [model], provider: .chatGPTPlan) == nil,
                 "Default effort should omit the request option")
         },
         CheckCase("preset: presets refuse unavailable models, effort, and Fast without fallback") {
@@ -93,10 +80,7 @@ import Foundation
             try expect(
                 changed.availabilityError(in: [option], provider: .chatGPTPlan) != nil,
                 "Unsupported effort accepted")
-            let noFast = ModelOption(catalog: [
-                "visibility": "list", "slug": "fixture",
-                "supported_reasoning_levels": [["effort": "medium"]],
-            ])!
+            let noFast = ModelOption(connectionModel: ConnectionModel(id: "fixture", efforts: ["medium"]))
             try expect(
                 preset.availabilityError(in: [noFast], provider: .chatGPTPlan) != nil,
                 "Fast silently downgraded")
@@ -114,10 +98,9 @@ import Foundation
             try expect(
                 preset.availabilityError(in: [], provider: .chatGPTPlan) != nil,
                 "Added account bypassed model validation")
-            let option = ModelOption(catalog: [
-                "visibility": "list", "slug": preset.model,
-                "supported_reasoning_levels": [["effort": preset.effort]], "additional_speed_tiers": ["fast"],
-            ])!
+            let option = ModelOption(
+                connectionModel: ConnectionModel(
+                    id: preset.model, efforts: [preset.effort], fastTier: "fast"))
             let entry = try fixture.action.prepare(
                 values: ["fuzzy term": "word", "fuzzy context": "context"], preset: preset, models: [option],
                 provider: .chatGPTPlan)

@@ -2,17 +2,6 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source scripts/lib/swift-build.sh
-state_sources=(
-    Sources/EZ/AppModel.swift
-    Sources/EZ/ConfigurationEditor.swift
-    Sources/EZ/ConnectionAvailability.swift
-    Sources/EZ/ConnectionChecks.swift
-    Sources/EZ/LookupDraft.swift
-    Sources/EZ/LookupImageLoader.swift
-    Sources/EZ/LookupRequest.swift
-    Sources/EZ/SketchDraft.swift
-    Sources/EZ/TextClipboard.swift
-)
 kind="${1:-all}"
 if [[ $# -gt 0 ]]; then shift; fi
 case "$kind" in
@@ -23,25 +12,18 @@ case "$kind" in
         exit "$status"
         ;;
     core) exec ./scripts/swift.sh run EZChecks "$@" ;;
-    state)
-        ./scripts/swift.sh build --product EZ
-        ez_build_product EZChecks
-        ez_link_modules EZChecks EZCore SaulCredentialStorage EZCheckSupport
-        ez_compile_library "${state_sources[@]}" \
-            Tests/EZStateChecks/*.swift "${ez_objects[@]}" -o "$ez_bin_dir/EZStateChecks"
-        exec "$ez_bin_dir/EZStateChecks" "$@"
-        ;;
+    state) exec ./scripts/swift.sh run EZStateChecks "$@" ;;
     services)
-        ez_build_product EZChecks
-        ez_link_modules EZChecks EZCore SaulCredentialStorage EZCheckSupport
-        ez_compile_library "${state_sources[@]}" \
-            Sources/EZ/SelectedTextService.swift Tests/EZStateChecks/StateFixture.swift \
+        ez_build_product EZ
+        ez_build_product EZStateChecks
+        ez_link_modules EZStateChecks EZApplication EZCore SaulCredentialClient SaulNativeValues SaulTestSupport EZCheckSupport
+        ez_compile_library Tests/EZStateChecks/{FixtureComposition,StateFixture}.swift \
             Tests/Services/check.swift "${ez_objects[@]}" -o "$ez_bin_dir/EZServicesChecks"
         exec "$ez_bin_dir/EZServicesChecks" "$@"
         ;;
     ui)
         ez_build_product EZChecks
-        ez_link_modules EZChecks EZCheckSupport
+        ez_link_modules EZChecks SaulTestSupport
         ez_compile_library Sources/EZ/AppStyle.swift Sources/EZ/DesignTokens.swift Sources/EZ/MultilineDraftReturn.swift \
             Sources/EZ/LookupChoiceButton.swift Sources/EZ/SelectorPicker.swift \
             Tests/EZUIChecks/*.swift "${ez_objects[@]}" -o "$ez_bin_dir/EZUIChecks"
@@ -52,9 +34,8 @@ case "$kind" in
         ez_build_product EZ
         xcrun swiftc -typecheck "${ez_swift_flags[@]}" scripts/icon.swift
         xcrun swiftc -typecheck "${ez_swift_flags[@]}" scripts/build-identity.swift
-        ez_application_sources
         for preview in Tests/Previews/*.swift; do
-            ez_compile_library -typecheck "$preview" "${ez_app_sources[@]}"
+            ez_compile_library -typecheck "$preview" Tests/EZStateChecks/FixtureComposition.swift
         done
         ;;
     *) printf 'Usage: bash scripts/check.sh {all|core|state|services|ui|scripts} [check arguments]\n' >&2; exit 1 ;;

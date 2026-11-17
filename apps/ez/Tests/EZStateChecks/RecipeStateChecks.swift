@@ -1,6 +1,9 @@
-import EZCheckSupport
 import EZCore
 import Foundation
+import SaulNativeValues
+import SaulTestSupport
+
+@testable import EZApplication
 
 @MainActor func recipeStateChecks() -> [CheckCase] {
     [
@@ -39,7 +42,8 @@ import Foundation
                 "Launcher sent incomplete action")
             f.model.setInput("draw out", for: "fuzzy context")
             let snapshot = try f.multi.prepare(
-                values: f.model.inputValues, preset: f.alternate, models: f.model.models,
+                values: f.model.inputValues, preset: f.alternate,
+                models: f.model.modelsForPreset(f.alternate),
                 provider: .chatGPTPlan)
             try expect(snapshot.inputValues == f.model.inputValues, "Completed launcher inputs lost")
         },
@@ -136,8 +140,6 @@ import Foundation
             try expectEqual(f.model.currentPreset, f.alternate, "A supported preset could not be selected")
         },
         stateCase("offline model refuses sending despite ready account and valid draft") { f in
-            f.model.signedIn = true
-            f.model.planEnabled = true
             f.model.chooseAction(f.single.id)
             f.model.query = "synthetic"
             try expect(!f.model.canSend, "Offline fixture allowed live request")

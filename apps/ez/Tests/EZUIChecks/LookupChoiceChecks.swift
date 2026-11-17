@@ -1,5 +1,5 @@
 import AppKit
-import EZCheckSupport
+import SaulTestSupport
 import SwiftUI
 
 @MainActor enum LookupChoiceChecks {

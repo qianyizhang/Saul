@@ -1,4 +1,5 @@
 import Foundation
+import SaulNativeValues
 
 extension HistoryEntry {
     func matchesFrozenPreset(_ preset: ModelPreset) -> Bool {

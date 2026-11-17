@@ -17,15 +17,14 @@ if [[ -n "$extension_id" && ! "$extension_id" =~ ^[a-p]{32}$ ]]; then
     printf 'Invalid Saul extension ID.\n' >&2
     exit 1
 fi
-./scripts/swift.sh build -c release --product SaulCredentials
-bin_dir=$(./scripts/swift.sh build -c release --show-bin-path)
+./scripts/credentials-swift.sh build -c release --product SaulCredentials
+bin_dir=$(./scripts/credentials-swift.sh build -c release --show-bin-path)
 mkdir -p dist
 staging=$(mktemp -d "$PWD/dist/.saul-credentials-build.XXXXXX")
 trap 'rm -rf "$staging"' EXIT
 app="$staging/Saul.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$bin_dir/SaulCredentials" "$app/Contents/MacOS/Saul"
-cp -R "$bin_dir/EZ_EZCore.bundle" "$app/Contents/Resources/"
 info="$app/Contents/Info.plist"
 plutil -create xml1 "$info"
 plutil -insert CFBundleIdentifier -string local.saul.credentials "$info"

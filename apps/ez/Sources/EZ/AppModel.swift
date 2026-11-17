@@ -1,7 +1,8 @@
 import AppKit
 import Combine
 import EZCore
-import SaulCredentialStorage
+import SaulCredentialClient
+import SaulNativeValues
 
 @MainActor final class AppModel: ObservableObject {
     enum SettingsSection: String, CaseIterable {
@@ -46,14 +47,16 @@ import SaulCredentialStorage
     var draftRevision: Int { draft.revision }
     var replayEntry: HistoryEntry? { draft.reusedEntry }
     @Published var configurationError: String?
-    /// Fixtures supply models locally; installed lookups use the bound connection's catalog.
-    @Published var models: [ModelOption] = []
-    let connectionChecks: ConnectionChecks
+    private let session: ConnectionSession
+    var connectionChecks: ConnectionChecks { session.checks }
     func connectionStatus(_ key: String) -> ConnectionStatus? { connectionChecks.report(key)?.status }
     func connectionCatalog(_ key: String) -> ConnectionCatalog? { connectionChecks.report(key)?.catalog }
     func connectionError(_ key: String) -> String? { connectionChecks.report(key)?.error }
     var checkingConnections: Set<String> { connectionChecks.checkingKeys }
-    @Published var entries: [HistoryEntry] = []
+    var entries: [HistoryEntry] {
+        get { historyCollection.entries }
+        set { historyCollection.show(newValue) }
+    }
     @Published var selection: UUID? {
         didSet {
             if selection != oldValue { showsMainComposer = false }
@@ -70,126 +73,81 @@ import SaulCredentialStorage
     @Published var followUpDrafts: [UUID: String] = [:]
     @Published var followUpTargetID: UUID?
     @Published var search = ""
-    @Published var connecting = false
-    @Published var signedIn = false
-    @Published var planEnabled = false
-    @Published var profiles: [SaulAccount] = []
-    private var accountRevision = 0
-    private enum CredentialOperation {
-        case signIn, save, disconnect
-    }
-    @Published private var credentialOperation: CredentialOperation?
-    var signingIn: Bool { credentialOperation == .signIn }
-    var credentialBusy: Bool { credentialOperation != nil }
+    var connecting: Bool { session.connecting }
+    var profiles: [SaulAccount] { session.profiles }
+    var signingIn: Bool { session.operation == .signIn }
+    var credentialBusy: Bool { session.operation != nil }
     @Published private(set) var runningAttempt: AttemptExecution.Progress?
     var busy: Bool { runningAttempt != nil }
+    var canStop: Bool { runningAttempt.map { $0.phase != .saving } == true && !quitting }
+    var preparingAttempt: Bool { runningAttempt?.phase == .preparing }
+    var savingAttempt: Bool { runningAttempt?.phase == .saving }
+    private(set) var quitting = false
     @Published private var launcherWork: Task<Void, Never>?
     var launcherPending: Bool { launcherWork != nil }
     @Published var error: String?
     @Published var storageWarning: String?
-    @Published var apiConnected = false
-    @Published private(set) var sharedCredentialsConnected = true
-    let apiKeyStore: any OpenAIKeyStorage
+    var sharedCredentialsConnected: Bool { session.connected }
     @Published var showSettings = false
-    @Published var minimumMode = true {
-        didSet {
-            if !offline { UserDefaults.standard.set(minimumMode, forKey: "minimumMode") }
-        }
+    @Published var minimumMode: Bool {
+        didSet { setMinimumMode(minimumMode) }
     }
+    private let setMinimumMode: @MainActor (Bool) -> Void
     @Published private(set) var shortcuts = LookupShortcuts()
     @Published var shortcutSettingsError: String?
     private var shortcutsLoaded = false
     let directory: URL
     let historyDirectory: URL
-    let offline: Bool
-    let auth: SaulConnection
-    private var history: HistoryStore?
-    private let readHistory: @MainActor () async throws -> [HistoryEntry]
-    private var historyRead: Task<Void, Never>?
-    private enum HistoryChange {
-        case upsert(HistoryEntry)
-        case delete
+    let allowsExternalServices: Bool
+    let speak: (@MainActor (ModelPreset, String) async throws -> Data)?
+    private let historyCollection: HistoryCollection
+    private enum Submission {
+        case lookup
+        case retry(UUID)
+        case followUp(UUID)
     }
-    private var historyChanges: [HistoryStore.RecordID: HistoryChange] = [:]
+    private var submitting: (id: UUID, previousSelection: UUID?, source: Submission)?
     private var lock: SessionLock?
     private var attemptExecution: AttemptExecution?
     private var configurationStore: ConfigurationStore?
     private var configurationLoaded = false
 
     init(
-        directory: URL? = nil, historyDirectory: URL? = nil, offline: Bool = false,
-        attemptExecution: AttemptExecution? = nil, apiKeyStore: (any OpenAIKeyStorage)? = nil,
-        connectionChecks: ConnectionChecks? = nil,
-        readHistory: (@MainActor () async throws -> [HistoryEntry])? = nil
+        directory: URL, historyDirectory: URL, session: ConnectionSession,
+        configurationStore configStore: ConfigurationStore, initialConfiguration: Configuration,
+        historyPreparation: HistoryCollection.Preparation, upgradeActions: Bool = false,
+        minimumMode: Bool = true, setMinimumMode: @escaping @MainActor (Bool) -> Void = { _ in },
+        attemptExecution: AttemptExecution? = nil,
+        readHistory: @escaping @MainActor () async throws -> [HistoryEntry],
+        deleteHistory: @escaping @MainActor (HistoryStore.RecordID) async throws -> Void,
+        speak: (@MainActor (ModelPreset, String) async throws -> Data)? = nil,
+        allowsExternalServices: Bool = false
     ) {
-        let auth = SaulConnection()
-        self.auth = auth
-        self.connectionChecks =
-            connectionChecks
-            ?? ConnectionChecks(
-                status: { [auth] connection in
-                    let reply = try await auth.call([
-                        "action": "connection-status", "connectionKey": connection.key,
-                    ])
-                    guard let raw = reply["connection"] else { throw EZError("Invalid connection status.") }
-                    return try JSONDecoder().decode(
-                        ConnectionStatus.self, from: JSONSerialization.data(withJSONObject: raw))
-                },
-                catalog: { [auth] connection, intent in
-                    let reply = try await auth.call([
-                        "action": "connection-catalog", "connectionKey": connection.key,
-                        "intent": intent.rawValue,
-                    ])
-                    guard let raw = reply["catalog"] else { throw EZError("Invalid model catalog.") }
-                    return try JSONDecoder().decode(
-                        ConnectionCatalog.self, from: JSONSerialization.data(withJSONObject: raw))
-                })
-        self.offline = offline
-        sharedCredentialsConnected =
-            offline || !UserDefaults.standard.bool(forKey: "saulCredentialsDisconnected")
-        self.apiKeyStore = apiKeyStore ?? TemporaryAPIKeyStore()
+        self.session = session
+        self.allowsExternalServices = allowsExternalServices
+        self.speak = speak
         self.attemptExecution = attemptExecution
-        minimumMode = offline ? true : UserDefaults.standard.object(forKey: "minimumMode") as? Bool ?? true
-        self.directory =
-            directory
-            ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("EZ", isDirectory: true)
-        self.historyDirectory = historyDirectory ?? (offline ? self.directory : HistoryStore.defaultDirectory)
-        let reader = HistoryReader(directory: self.historyDirectory)
-        self.readHistory = readHistory ?? { try await reader.load() }
-        self.connectionChecks.onChange = { [weak self] in self?.objectWillChange.send() }
+        self.minimumMode = minimumMode
+        self.setMinimumMode = setMinimumMode
+        self.directory = directory
+        self.historyDirectory = historyDirectory
+        historyCollection = HistoryCollection(read: readHistory, delete: deleteHistory)
+        historyCollection.onChange = { [weak self] in self?.objectWillChange.send() }
+        session.onChange = { [weak self] in self?.objectWillChange.send() }
+        connectionChecks.onChange = { [weak self] in self?.objectWillChange.send() }
         do {
-            lock = try SessionLock(directory: self.directory)
-            let store = try HistoryStore(
-                directory: self.historyDirectory,
-                migrating: offline ? nil : self.directory)
-            try store.recoverInterrupted()
-            history = store
-            if !offline, attemptExecution == nil {
-                let generation = SaulGeneration(connection: auth)
-                self.attemptExecution = AttemptExecution(
-                    generate: generation.generate(entry:onUpdate:), append: { try store.append($0) })
-            }
-            let configStore = ConfigurationStore(
-                directory: self.directory, shared: offline ? nil : SharedPresetsStore())
+            lock = try SessionLock(directory: directory)
+            historyCollection.prepare(historyPreparation) { [weak self] in self?.storageWarning = $0 }
             configurationStore = configStore
             do {
-                if let saved = try configStore.load() {
-                    configuration = saved
-                } else {
-                    let oldModel = offline ? "" : UserDefaults.standard.string(forKey: "model") ?? ""
-                    configuration = .starters(
-                        model: oldModel,
-                        effort: offline ? "low" : UserDefaults.standard.string(forKey: "effort") ?? "low",
-                        fast: !offline && UserDefaults.standard.bool(forKey: "fast"))
-                    configuration = try configStore.save(configuration)
-                }
+                configuration = try configStore.load() ?? configStore.save(initialConfiguration)
                 configurationLoaded = true
-                if !offline, (configuration.actionTypesVersion ?? 0) < 2 {
+                if upgradeActions, (configuration.actionTypesVersion ?? 0) < 2 {
                     var upgraded = configuration
                     upgraded.addSearchAndMeme()
                     configuration = try configStore.save(upgraded)
                 }
+                connectionChecks.reconcile(configuration.connections)
                 draft.reset(actionID: configuration.actions.first?.id)
             } catch {
                 configurationError =
@@ -242,7 +200,7 @@ import SaulCredentialStorage
                     && draft.utf16.count <= 2_000
             }
             return canSend
-        case .stop: return busy
+        case .stop: return canStop
         case .newLookup: return !busy && !launcherPending
         case .nextRecipe, .previousRecipe, .lastRecipe:
             return !busy && !launcherPending && !configuration.actions.isEmpty
@@ -359,7 +317,9 @@ import SaulCredentialStorage
     }
     var selectedEntry: HistoryEntry? { entries.first { $0.id == selection } }
     var selectedResponseActivity: ResponseActivity? {
-        guard let runningAttempt, runningAttempt.entry.id == selection else { return nil }
+        guard let runningAttempt, runningAttempt.phase == .generating,
+            runningAttempt.entry.id == selection
+        else { return nil }
         return runningAttempt.activity
     }
     var filteredEntries: [HistoryEntry] {
@@ -371,89 +331,58 @@ import SaulCredentialStorage
             }
     }
     private var canStartLookup: Bool {
-        attemptExecution != nil && history != nil && lock != nil
-            && !busy && !launcherPending && !credentialBusy
+        attemptExecution != nil && historyCollection.ready && lock != nil && historyCollection.deleting == nil
+            && !quitting && !busy && !launcherPending && !credentialBusy
     }
 
     var canSend: Bool {
         canStartLookup && connectionIssue == nil && requestIssue == nil
     }
 
-    private func startLookup(_ entry: HistoryEntry) throws {
+    private func startLookup(_ entry: HistoryEntry, source: Submission = .lookup) throws {
         guard canStartLookup, let attemptExecution else { return }
-        try attemptExecution.start(entry)
-        selection = entry.id
-        error = nil
+        submitting = (entry.id, selection, source)
+        do {
+            try attemptExecution.start(entry)
+            error = nil
+        } catch {
+            submitting = nil
+            throw error
+        }
     }
     func connect(loadAccounts: Bool = false) async {
-        guard !offline, sharedCredentialsConnected, !connecting, !busy, !credentialBusy, lock != nil else {
-            return
-        }
-        connecting = true
-        error = nil
-        defer { connecting = false }
-        if let connection = currentConnection { await refreshConnection(connection) }
-        guard loadAccounts else { return }
-        do {
-            try await loadConnectionAccounts()
-        } catch {
-            self.error = error.localizedDescription
-        }
-    }
-    func connectCredentials() async {
-        guard !offline, !busy, !credentialBusy, !launcherPending else { return }
-        sharedCredentialsConnected = true
-        UserDefaults.standard.set(false, forKey: "saulCredentialsDisconnected")
-        await connect(loadAccounts: true)
-    }
-    func disconnectCredentials() {
-        guard !offline, !busy, !connecting, !credentialBusy, !launcherPending else { return }
-        sharedCredentialsConnected = false
-        connectionChecks.reset()
-        accountRevision += 1
-        UserDefaults.standard.set(true, forKey: "saulCredentialsDisconnected")
-        profiles = []
-        error = nil
-    }
-    func loadConnectionAccounts() async throws {
-        guard !offline, sharedCredentialsConnected else { return }
-        let revision = accountRevision
-        try await auth.load()
-        try Task.checkCancellation()
-        guard sharedCredentialsConnected, accountRevision == revision else { return }
-        profiles = auth.accounts
-    }
-
-    func signInConnection(accountID: String, addingAccount: Bool) async throws -> String? {
-        guard !offline, sharedCredentialsConnected else {
-            throw EZError("Connect to Saul before signing in.")
-        }
-        try beginCredentialOperation(.signIn)
-        defer { credentialOperation = nil }
-        let reply = try await auth.signIn(
-            accountID: accountID, addingAccount: addingAccount,
-            authorize: { NSWorkspace.shared.open($0) })
-        accountRevision += 1
-        let signedInID = (reply["account"] as? [String: Any])?["id"] as? String
-        if let signedInID {
-            connectionChecks.clearLogoutWarning(accountID: signedInID)
-            for connection in configuration.connections where connection.accountId == signedInID {
-                connectionChecks.invalidate(connection.key)
+        guard !quitting, !busy, lock != nil else { return }
+        await session.connect {
+            error = nil
+            if let connection = currentConnection { await refreshConnection(connection) }
+            guard loadAccounts else { return }
+            do { try await session.loadAccounts() } catch {
+                if !quitting && !Task.isCancelled { self.error = error.localizedDescription }
             }
         }
-        try Task.checkCancellation()
-        try await loadConnectionAccounts()
-        return signedInID
     }
 
-    private func beginCredentialOperation(_ operation: CredentialOperation) throws {
-        guard sharedCredentialsConnected else {
-            throw EZError("Connect to Saul before changing credentials.")
+    func connectCredentials() async {
+        guard allowsExternalServices, !quitting, !busy, !credentialBusy, !launcherPending else { return }
+        session.setConnected(true)
+        await connect(loadAccounts: true)
+    }
+
+    func disconnectCredentials() {
+        guard allowsExternalServices, !quitting, !busy, !connecting, !credentialBusy, !launcherPending else {
+            return
         }
-        guard !credentialBusy, !busy, !launcherPending, !connecting else {
-            throw EZError("Wait for the current operation before changing connections.")
-        }
-        credentialOperation = operation
+        session.setConnected(false)
+        error = nil
+    }
+
+    func loadConnectionAccounts() async throws { try await session.loadAccounts() }
+
+    func signInConnection(accountID: String, addingAccount: Bool) async throws -> String? {
+        try session.begin(.signIn, blocked: busy || launcherPending)
+        defer { session.endOperation() }
+        return try await session.signIn(
+            accountID, adding: addingAccount, connections: configuration.connections)
     }
 
     func initializeStarterPreset() {
@@ -462,7 +391,7 @@ import SaulCredentialStorage
             let index = configuration.presets.firstIndex(where: { $0.id == starterID && $0.model.isEmpty })
         else { return }
         let starter = configuration.presets[index]
-        guard offline || connectionCatalog(starter.connectionKey)?.isFresh == true else { return }
+        guard connectionCatalog(starter.connectionKey)?.isFresh == true else { return }
         let options = modelsForPreset(starter)
         guard let option = options.first(where: \.isDefault) ?? options.first else { return }
         var updated = configuration
@@ -521,8 +450,8 @@ import SaulCredentialStorage
         guard configurationLoaded, let store = configurationStore else {
             throw EZError("Configuration is unavailable. Reload saved settings first.")
         }
-        try beginCredentialOperation(.save)
-        defer { credentialOperation = nil }
+        try session.begin(.save, blocked: busy || launcherPending)
+        defer { session.endOperation() }
         var updated = configuration
         if let index = updated.connections.firstIndex(where: { $0.key == connection.key }) {
             let existing = updated.connections[index]
@@ -539,17 +468,7 @@ import SaulCredentialStorage
         {
             throw EZError("This account already has a connection.")
         }
-        if let key {
-            if offline {
-                try await apiKeyStore.write(key)
-                apiConnected = !key.isEmpty
-            } else {
-                _ = try await auth.call([
-                    "action": "connection-key-save", "connectionKey": connection.key,
-                    "endpoint": connection.endpoint, "key": key,
-                ])
-            }
-        }
+        if let key { try await session.client.saveKey(connection, key) }
         connectionChecks.invalidate(connection.key)
         do { try persistConfiguration(updated, store: store) } catch {
             if key != nil {
@@ -566,30 +485,9 @@ import SaulCredentialStorage
         guard configuration.connections.contains(where: { $0.matchesRoute(connection) }) else {
             throw EZError("The connection changed. Reload saved settings.")
         }
-        try beginCredentialOperation(.disconnect)
-        defer { credentialOperation = nil }
-        if offline {
-            try await apiKeyStore.write(nil)
-            apiConnected = false
-            return
-        }
-        if connection.kind == .chatGPTPlan {
-            guard let account = connection.accountId else { throw EZError("This connection has no account.") }
-            let reply = try await auth.call(["action": "logout", "accountId": account])
-            let outcome = try JSONDecoder().decode(
-                ConnectionChecks.LogoutOutcome.self, from: JSONSerialization.data(withJSONObject: reply))
-            try connectionChecks.didSignOut(outcome, from: connection)
-            accountRevision += 1
-            if let index = profiles.firstIndex(where: { $0.id == account }) {
-                profiles[index] = outcome.account
-            }
-        } else {
-            _ = try await auth.call([
-                "action": "connection-key-remove", "connectionKey": connection.key,
-                "endpoint": connection.endpoint,
-            ])
-            connectionChecks.invalidate(connection.key)
-        }
+        try session.begin(.disconnect, blocked: busy || launcherPending)
+        defer { session.endOperation() }
+        try await session.removeCredential(connection)
         await refreshConnection(connection)
     }
 
@@ -647,7 +545,7 @@ import SaulCredentialStorage
 
     /// Launcher inputs use the normal draft; only complete actions wait for the initial connection.
     func submitLauncher(_ text: String, after connection: Task<Void, Never>) throws {
-        guard !busy, !launcherPending, !credentialBusy, !showSettings else {
+        guard !quitting, !busy, !launcherPending, !credentialBusy, !showSettings else {
             throw EZError("EZ is already preparing or generating a lookup, signing in, or editing Settings.")
         }
         let action = configuration.actions.first { $0.id == selectedActionID } ?? configuration.actions.first
@@ -689,7 +587,7 @@ import SaulCredentialStorage
         } catch { self.error = error.localizedDescription }
     }
 
-    func stop() { attemptExecution?.stop() }
+    func stop() { if canStop { attemptExecution?.stop() } }
 
     var canFollowUp: Bool {
         canStartLookup && !connecting && selectedEntry?.capability == .write
@@ -710,9 +608,8 @@ import SaulCredentialStorage
                     fast: parent.requestedServiceTier != nil)
             let route = try resolveRoute(preset)
             if let issue = connectionIssue(for: preset) { throw EZError(issue) }
-            try startLookup(route.followUp(to: parent, question: followUpDrafts[id] ?? ""))
-            followUpDrafts[id] = nil
-            if followUpTargetID == id { followUpTargetID = nil }
+            try startLookup(
+                route.followUp(to: parent, question: followUpDrafts[id] ?? ""), source: .followUp(id))
         } catch { self.error = error.localizedDescription }
     }
     func canRetry(_ entry: HistoryEntry) -> Bool {
@@ -720,7 +617,7 @@ import SaulCredentialStorage
     }
     func retry(_ id: UUID) {
         guard let original = entries.first(where: { $0.id == id }), canRetry(original),
-            let history
+            historyCollection.ready
         else { return }
         retryFailure = nil
         refreshConfiguration()
@@ -735,7 +632,9 @@ import SaulCredentialStorage
             if let issue = connectionIssue(for: preset) { throw EZError(issue) }
             try startLookup(
                 original.prepareRetry(
-                    connection: route.connection, image: history.inputImage(for: original)))
+                    connection: route.connection,
+                    image: HistoryStore.readInputImage(for: original, directory: historyDirectory)),
+                source: .retry(id))
         } catch {
             retryFailure = RetryFailure(entryID: id, message: error.localizedDescription)
         }
@@ -774,86 +673,75 @@ import SaulCredentialStorage
         draft.reuse(saved)
         inputImageError = nil
         do {
-            let attachment = try history?.inputImage(for: saved)
+            let attachment = try HistoryStore.readInputImage(for: saved, directory: historyDirectory)
             try draft.attach(attachment, asSketch: usesSketch, restoring: true)
         } catch {
             inputImageError = "The saved input image is unavailable. Attach it again."
         }
         selection = nil
     }
-    func shutdown() {
-        launcherWork?.cancel()
-        launcherWork = nil
-        connectionChecks.reset()
-        cancelHistoryRead()
-        lookupImage.select(nil)
-        attemptExecution?.interrupt()
+    /// Cancels producers immediately and leaves any decided storage outcome to settle.
+    @discardableResult func shutdown() -> Bool {
+        if !quitting {
+            quitting = true
+            launcherWork?.cancel()
+            launcherWork = nil
+            session.close()
+            historyCollection.cancelRead()
+            lookupImage.select(nil)
+            attemptExecution?.beginShutdown()
+        }
+        return busy || historyCollection.settling
     }
-    var canDeleteLookup: Bool { !busy && !launcherPending && history != nil && lock != nil }
-    func deleteLookup(_ id: HistoryStore.RecordID) {
-        guard canDeleteLookup, let entry = entries.first(where: { $0.recordID == id }), let history
-        else { return }
-        do {
-            try history.delete(id)
-            if historyRead != nil { historyChanges[id] = .delete }
-            entries.removeAll { $0.recordID == id }
-            followUpDrafts[entry.id] = nil
-            if selection == entry.id { selection = nil }
-        } catch {
-            self.error = "Lookup could not be deleted. \(error.localizedDescription)"
+
+    func waitForPersistence() async {
+        await attemptExecution?.waitForSettlement()
+        await historyCollection.waitForSettlement()
+    }
+
+    var canDeleteLookup: Bool {
+        !quitting && !busy && !launcherPending && historyCollection.ready && lock != nil
+            && historyCollection.deleting == nil
+    }
+    @discardableResult func deleteLookup(_ id: HistoryStore.RecordID) -> Task<Void, Never>? {
+        guard canDeleteLookup, let entry = entries.first(where: { $0.recordID == id }) else { return nil }
+        return historyCollection.remove(id) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success:
+                followUpDrafts[entry.id] = nil
+                if selection == entry.id { selection = nil }
+            case .failure(let error):
+                self.error = "Lookup could not be deleted. \(error.localizedDescription)"
+            }
         }
     }
 
-    private func cancelHistoryRead() {
-        historyRead?.cancel()
-        historyRead = nil
-        historyChanges.removeAll()
-    }
-
     @discardableResult func refreshHistory() -> Task<Void, Never>? {
-        guard history != nil else { return nil }
-        cancelHistoryRead()
-        historyRead = Task { [weak self, readHistory] in
-            defer {
-                if !Task.isCancelled {
-                    self?.historyRead = nil
-                    self?.historyChanges.removeAll()
-                }
-            }
-            do {
-                var saved = try await readHistory()
-                guard !Task.isCancelled, let self else { return }
-                // A concurrent local write is newer than this snapshot. Retain it
-                // without dropping unrelated rows, including on the first startup load.
-                var changes = historyChanges
-                if let active = runningAttempt?.entry { changes[active.recordID] = .upsert(active) }
-                if !changes.isEmpty {
-                    saved.removeAll { changes[$0.recordID] != nil }
-                    for case .upsert(let entry) in changes.values {
-                        let position =
-                            saved.firstIndex {
-                                $0.createdAt < entry.createdAt
-                                    || ($0.createdAt == entry.createdAt
-                                        && $0.id.uuidString < entry.id.uuidString)
-                            } ?? saved.endIndex
-                        saved.insert(entry, at: position)
-                    }
-                }
-                entries = saved
+        guard !quitting else { return nil }
+        return historyCollection.refresh { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success:
                 storageWarning = nil
                 if let selection, !entries.contains(where: { $0.id == selection }) {
                     self.selection = nil
                 } else {
                     loadSelectedImage()
                 }
-            } catch {
-                if !Task.isCancelled { self?.storageWarning = error.localizedDescription }
+            case .failure(let error):
+                storageWarning = error.localizedDescription
             }
         }
-        return historyRead
     }
 
-    func revealHistory() { NSWorkspace.shared.activateFileViewerSelecting([history?.url ?? directory]) }
+    func waitForHistory() async { await historyCollection.waitForPreparation() }
+
+    func revealHistory() {
+        NSWorkspace.shared.activateFileViewerSelecting([
+            historyCollection.ready ? historyDirectory.appendingPathComponent("history.sqlite3") : directory
+        ])
+    }
     func copy(_ text: String, using write: @MainActor (String) -> Bool = { TextClipboard.write($0) }) {
         if !write(text) { error = TextClipboard.failure }
     }
@@ -871,28 +759,45 @@ import SaulCredentialStorage
         }
     }
     private func receiveAttempt(_ update: AttemptExecution.Update) {
-        let entry: HistoryEntry
         switch update {
         case .running(let progress):
             runningAttempt = progress
-            entry = progress.entry
+            guard progress.phase != .preparing else { return }
+            historyCollection.record(progress.entry, active: true)
+            if let submission = submitting, submission.id == progress.entry.id {
+                submitting = nil
+                if selection == submission.previousSelection { selection = submission.id }
+                if progress.phase == .generating, case .followUp(let parent) = submission.source {
+                    followUpDrafts[parent] = nil
+                    if followUpTargetID == parent { followUpTargetID = nil }
+                }
+            }
+        case .notSent(let id, let message):
+            if let submission = submitting, submission.id == id {
+                if case .retry(let original) = submission.source {
+                    retryFailure = RetryFailure(entryID: original, message: message)
+                } else {
+                    error = message
+                }
+                submitting = nil
+            } else {
+                error = message
+            }
+            runningAttempt = nil
         case .saved(let saved):
-            entry = saved
+            receiveTerminal(saved)
         case .saveFailed(var unsaved, let message):
             unsaved.status = "unsaved"
             let failure = "Could not save this lookup. \(message)"
             unsaved.error = unsaved.error.map { "\($0)\n\(failure)" } ?? failure
             if selection != unsaved.id { error = failure }
-            entry = unsaved
+            receiveTerminal(unsaved)
         }
-        if let index = entries.firstIndex(where: { $0.id == entry.id }) {
-            entries[index] = entry
-        } else {
-            entries.insert(entry, at: 0)
-        }
-        if selection == entry.id && entry.hasImage { loadSelectedImage() }
-        if case .running = update { return }
-        if historyRead != nil { historyChanges[entry.recordID] = .upsert(entry) }
+    }
+
+    private func receiveTerminal(_ entry: HistoryEntry) {
+        historyCollection.record(entry, active: false)
+        if !quitting && selection == entry.id && entry.hasImage { loadSelectedImage() }
         runningAttempt = nil
     }
 }

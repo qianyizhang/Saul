@@ -1,5 +1,7 @@
-import EZCheckSupport
 import Foundation
+import SaulTestSupport
+
+@testable import EZApplication
 
 @main struct StateChecks {
     @MainActor static func main() async {

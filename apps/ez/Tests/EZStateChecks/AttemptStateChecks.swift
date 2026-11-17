@@ -1,6 +1,10 @@
 import EZCheckSupport
 import EZCore
 import Foundation
+import SaulNativeValues
+import SaulTestSupport
+
+@testable import EZApplication
 
 @MainActor private func response(_ text: String, completed: Bool = true) throws -> ResponseAccumulator {
     var result = ResponseAccumulator()
@@ -60,7 +64,7 @@ import Foundation
         var providerCalls = 0
         var appends: [HistoryEntry] = []
         var failedWrites: Set<Int> = []
-        var beforeAppend: ((HistoryEntry) -> Void)?
+        var beforeAppend: ((HistoryEntry) async throws -> Void)?
         var generate:
             @MainActor (HistoryEntry, @escaping @MainActor (ResponseAccumulator) -> Void) async throws
                 -> ResponseAccumulator = { _, update in
@@ -69,9 +73,9 @@ import Foundation
                     return result
                 }
         init(history: HistoryStore) { self.history = history }
-        func append(_ entry: HistoryEntry) throws {
+        func append(_ entry: HistoryEntry) async throws {
             appends.append(entry)
-            beforeAppend?(entry)
+            try await beforeAppend?(entry)
             if failedWrites.contains(appends.count) {
                 throw EZError("Synthetic history write failure")
             }
@@ -87,10 +91,8 @@ import Foundation
                 control.providerCalls += 1
                 return .text(try await control.generate(entry, update))
             },
-            append: { try control.append($0) })
+            append: { try await control.append($0) })
         state = try StateFixture(directory: directory, attemptExecution: execution)
-        model.signedIn = true
-        model.planEnabled = true
         model.chooseAction(state.single.id)
         model.query = "Frozen question"
         let receive = execution.onChange
@@ -164,7 +166,9 @@ import Foundation
             try expectEqual(f.control.providerCalls, 1, "Changed route reached provider")
             try f.model.saveConfiguration(f.state.configuration)
             f.control.failedWrites = [3]
+            f.terminal = CheckSignal()
             f.model.retry(failed.id)
+            try await f.terminal.wait()
             try expect(
                 f.model.retryFailure?.message.contains("history could not be saved") == true,
                 "Initial-save failure was not explained")
@@ -213,7 +217,9 @@ import Foundation
             }
             f.model.followUpDrafts[first.id] = "Keep this question"
             f.control.failedWrites = [3]
+            f.terminal = CheckSignal()
             f.model.followUp(first.id)
+            try await f.terminal.wait()
             try expectEqual(f.model.selection, first.id, "Failed submission changed answer")
             try expectEqual(
                 f.model.followUpDrafts[first.id], "Keep this question", "Failed submission lost draft")
@@ -222,7 +228,7 @@ import Foundation
             unsaved.status = "unsaved"
             try expectThrows(EZError.self) {
                 _ = try unsaved.prepareFollowUp(
-                    "Why?", models: f.model.models, provider: .chatGPTPlan)
+                    "Why?", models: f.model.modelsForPreset(f.state.alternate), provider: .chatGPTPlan)
             }
             try expectThrows(EZError.self) {
                 _ = try first.prepareFollowUp("Why?", models: [], provider: .chatGPTPlan)
@@ -231,7 +237,7 @@ import Foundation
             long.query = String(repeating: "x", count: 120_000)
             try expectThrows(EZError.self) {
                 _ = try long.prepareFollowUp(
-                    "Why?", models: f.model.models, provider: .chatGPTPlan)
+                    "Why?", models: f.model.modelsForPreset(f.state.alternate), provider: .chatGPTPlan)
             }
             try expectEqual(f.model.selectedEntry?.response, first.response, "Failure lost original answer")
         },
@@ -272,20 +278,106 @@ import Foundation
             try expect(f.model.canSend, "Controlled execution should be available")
             f.model.send()
             try expectEqual(f.control.providerCalls, 0, "Provider started before initial save")
+            try await f.terminal.wait()
             try expect(!f.model.busy && f.model.entries.isEmpty, "Failed submission changed attempt state")
             try expect(f.model.error?.contains("Query not sent") == true, "Missing submission failure")
         },
-        attemptCase("saved completion publishes only after terminal persistence") { f in
-            var visibleDuringWrite: String?
+        attemptCase("unacknowledged initial and terminal commits never replay or report saved success") { f in
             f.control.beforeAppend = { entry in
-                if entry.status == "completed" { visibleDuringWrite = f.model.selectedEntry?.status }
+                try f.state.history.append(entry)
+                throw EZError("Lost acknowledgement")
             }
             f.model.send()
             try await f.terminal.wait()
-            try expectEqual(visibleDuringWrite, "pending", "Completion published before save")
+            try expect(
+                f.model.error?.contains("Query not sent") == true, "Lost initial reply did not block Run")
+            try expectEqual(f.control.providerCalls, 0, "Unacknowledged initial write reached provider")
+            try expectEqual(f.control.appends.count, 1, "Unacknowledged initial write was replayed")
+            try expect(f.model.entries.isEmpty, "Unacknowledged initial result was published")
+            try expectEqual(
+                try f.state.history.load().first?.status, "interrupted", "Pending row is unrecoverable")
+
+            f.terminal = CheckSignal()
+            f.control.beforeAppend = { entry in
+                if entry.status == "completed" {
+                    try f.state.history.append(entry)
+                    throw EZError("Lost acknowledgement")
+                }
+            }
+            f.model.send()
+            try await f.terminal.wait()
+            try expectEqual(f.model.selectedEntry?.status, "unsaved", "Unacknowledged write claimed success")
+            try expectEqual(f.control.providerCalls, 1, "Unacknowledged terminal write resent the request")
+            try expectEqual(
+                f.control.appends.map(\.status), ["pending", "pending", "completed"], "Save was replayed")
+            await f.model.refreshHistory()?.value
+            try expectEqual(
+                f.model.selectedEntry?.status, "completed", "Fresh read could not establish saved success")
+        },
+        attemptCase("Stop during the initial save prevents a send and settles cancellation once") { f in
+            let writing = CheckSignal()
+            let release = CheckSignal()
+            defer { Task { await release.signal() } }
+            f.control.beforeAppend = { entry in
+                if entry.status == "pending" {
+                    await writing.signal()
+                    try await release.wait()
+                }
+            }
+            f.model.send()
+            try await writing.wait()
+            try expect(f.model.preparingAttempt && f.model.commandEnabled(.stop), "Stop hidden before send")
+            f.model.stop()
+            f.model.stop()
+            try expectEqual(f.control.appends.map(\.status), ["pending"], "Stop raced the initial write")
+            try expect(f.model.selectedEntry == nil, "Uncommitted request appeared in history")
+            await release.signal()
+            try await f.terminal.wait()
+            try expectEqual(f.control.providerCalls, 0, "Stopped request reached the provider")
+            try expectEqual(
+                f.control.appends.map(\.status), ["pending", "cancelled"], "Stop did not settle once")
+            try expectEqual(try f.state.history.load().first?.status, "cancelled", "Stop was not saved")
+        },
+        attemptCase("terminal save disables Stop and defers saved success through Quit") { f in
+            let writing = CheckSignal()
+            let release = CheckSignal()
+            defer { Task { await release.signal() } }
+            f.control.beforeAppend = { entry in
+                if entry.status == "completed" {
+                    await writing.signal()
+                    try await release.wait()
+                }
+            }
+            f.model.send()
+            try await writing.wait()
+            try expect(f.model.savingAttempt && !f.model.commandEnabled(.stop), "Saving still allows Stop")
+            try expectEqual(f.model.selectedEntry?.status, "pending", "Completion published before save")
+            f.model.stop()
+            try expect(f.model.shutdown(), "Quit did not wait for terminal persistence")
+            try expectEqual(
+                f.control.appends.map(\.status), ["pending", "completed"], "Quit changed the outcome")
+            await release.signal()
+            await f.model.waitForPersistence()
             try expectEqual(f.model.selectedEntry?.status, "completed", "Saved outcome missing")
             try expectEqual(f.model.selectedEntry?.response, "Frozen answer", "Answer lost")
             try expectEqual(try f.state.history.load().count, 1, "One attempt became multiple rows")
+        },
+        attemptCase("Quit settles interruption without waiting for late provider callbacks") { f in
+            let held = HeldResponse()
+            defer { held.finish(.failure(CancellationError())) }
+            f.control.generate = { _, update in try await held.stream(update: update) }
+            f.model.send()
+            try await held.started.wait()
+            held.progress(try response("Keep partial", completed: false))
+            try expect(f.model.shutdown(), "Quit skipped its interruption save")
+            await f.model.waitForPersistence()
+            held.progress(try response("Late answer"))
+            held.finish(.success(try response("Late answer")))
+            try await held.returned.wait()
+            let saved = try f.state.history.load().first
+            try expectEqual(saved?.status, "interrupted", "Quit did not save interruption")
+            try expectEqual(saved?.response, "Keep partial", "Late output rewrote the interruption")
+            try expectEqual(f.control.appends.map(\.status), ["pending", "interrupted"], "Quit saved twice")
         },
         attemptCase("launcher waits once for startup, locks competing actions and sends the exact draft") {
             f in
@@ -444,6 +536,7 @@ import Foundation
             first.progress(try response("Stopped partial", completed: false))
             let firstID = f.model.selection!
             f.model.stop()
+            try await f.terminal.wait()
             try expectEqual(f.model.selectedEntry?.status, "cancelled", "Stop did not finish")
             try expectEqual(f.model.selectedEntry?.response, "Stopped partial", "Stop lost partial text")
             f.terminal = CheckSignal()
@@ -485,11 +578,11 @@ import Foundation
                 f.state.history.url,
                 "CREATE TRIGGER fail_delete BEFORE DELETE ON ez_entry BEGIN SELECT RAISE(ABORT,'Synthetic delete failure'); END"
             )
-            f.model.deleteLookup(.native(id))
+            await f.model.deleteLookup(.native(id))?.value
             try expectEqual(f.model.selection, id, "Failed deletion changed selection")
             try expectEqual(f.model.selectedEntry?.status, "unsaved", "Failed deletion discarded the result")
             _ = try historySQL(f.state.history.url, "DROP TRIGGER fail_delete")
-            f.model.deleteLookup(.native(id))
+            await f.model.deleteLookup(.native(id))?.value
             try expect(f.model.entries.isEmpty && f.model.selection == nil, "Deleted lookup still visible")
             try expect(try f.state.history.load().isEmpty, "Deleted lookup remained in storage")
             try expectEqual(f.control.appends.count, 2, "Deletion replayed a history write")
@@ -552,16 +645,14 @@ private struct AttemptContract: Decodable {
                     return result
                 }
                 f.model.send()
-                if !scenario.initialSaveFails {
-                    if scenario.providerOutcome == .cancel {
-                        try await held.started.wait()
-                        held.progress(try response(scenario.text, completed: false))
-                        f.model.stop()
-                        held.finish(.failure(CancellationError()))
-                        try await held.returned.wait()
-                    }
-                    try await f.terminal.wait()
+                if !scenario.initialSaveFails, scenario.providerOutcome == .cancel {
+                    try await held.started.wait()
+                    held.progress(try response(scenario.text, completed: false))
+                    f.model.stop()
+                    held.finish(.failure(CancellationError()))
+                    try await held.returned.wait()
                 }
+                try await f.terminal.wait()
                 let entry = f.model.selectedEntry
                 let saved = try f.state.history.load().first
                 try expectEqual(f.control.providerCalls, scenario.expected.providerCalls, "Provider count")

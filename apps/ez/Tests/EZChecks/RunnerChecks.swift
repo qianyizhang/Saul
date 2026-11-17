@@ -1,5 +1,5 @@
-import EZCheckSupport
 import Foundation
+import SaulTestSupport
 
 @MainActor func runnerChecks() -> [CheckCase] {
     [

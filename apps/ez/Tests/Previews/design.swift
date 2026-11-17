@@ -1,5 +1,8 @@
 import EZCore
+import SaulNativeValues
 import SwiftUI
+
+@testable import EZApplication
 
 // Renders production views with isolated fixture history. No authentication connection.
 @main struct EZDesignPreview: App {
@@ -8,7 +11,7 @@ import SwiftUI
     init() {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ez-design-preview-\(UUID().uuidString)", isDirectory: true)
-        let model = AppModel(directory: directory, offline: true)
+        let model = fixtureModel(directory: directory)
         var entry = HistoryEntry(
             mode: .dictionary, query: "Equanimity", model: "Preview model", effort: "low",
             requestedServiceTier: nil)

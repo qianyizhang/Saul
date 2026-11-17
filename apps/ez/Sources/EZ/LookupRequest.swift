@@ -1,5 +1,6 @@
 import EZCore
 import Foundation
+import SaulNativeValues
 
 /// Resolves the choices for one request. Saved requests must still use their original route.
 struct LookupRoute {

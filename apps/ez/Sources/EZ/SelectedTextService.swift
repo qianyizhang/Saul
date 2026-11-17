@@ -1,5 +1,6 @@
 import AppKit
 import EZCore
+import SaulNativeValues
 
 /// Services supplies its own pasteboard; never read or write the general clipboard.
 @MainActor final class SelectedTextService: NSObject {

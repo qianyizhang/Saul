@@ -1,5 +1,5 @@
 import AppKit
-import EZCheckSupport
+import SaulTestSupport
 import SwiftUI
 
 /// Real SwiftUI row buttons, window-local mouse events, and no global input or personal data.

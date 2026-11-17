@@ -1,6 +1,7 @@
-import EZCheckSupport
 import EZCore
 import Foundation
+import SaulNativeValues
+import SaulTestSupport
 
 func spellingComparisonChecks() -> [CheckCase] {
     func entry(_ query: String, _ response: String) -> HistoryEntry {

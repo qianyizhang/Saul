@@ -53,14 +53,6 @@ ez_link_modules() {
     done
 }
 
-ez_application_sources() {
-    local file
-    ez_app_sources=()
-    for file in "$ez_app_root"/Sources/EZ/*.swift; do
-        case "$file" in */EZApp.swift) ;; *) ez_app_sources+=("$file");; esac
-    done
-}
-
 ez_compile_library() {
     xcrun swiftc "${ez_swift_flags[@]}" -parse-as-library "${ez_include_flags[@]}" \
         -I "$ez_app_root/Sources/CSQLite" -lsqlite3 "$@"

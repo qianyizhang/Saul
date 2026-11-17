@@ -1,6 +1,9 @@
 import AppKit
-import EZCheckSupport
 import EZCore
+import SaulNativeValues
+import SaulTestSupport
+
+@testable import EZApplication
 
 /// A host-native check: uses private pasteboards and never modifies the clipboard.
 @main struct ServicesCheck {

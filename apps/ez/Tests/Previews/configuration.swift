@@ -1,7 +1,10 @@
 import EZCore
+import SaulNativeValues
 import SwiftUI
 
-// Editable production views; all account and inference actions are blocked by AppModel.offline.
+@testable import EZApplication
+
+// Editable production views; the composition supplies no live account or inference adapter.
 @main struct EZConfigurationPreview: App {
     @StateObject private var model: AppModel
     private let controller: QuickLookupController
@@ -29,19 +32,10 @@ import SwiftUI
                     ]
                 return ConnectionCatalog(models: models, fetchedAt: Date().timeIntervalSince1970)
             })
-        let model = AppModel(directory: directory, offline: true, connectionChecks: checks)
-        model.models = [
-            ModelOption(catalog: [
-                "visibility": "list", "slug": "fixture-luna", "display_name": "Luna (offline fixture)",
-                "supported_reasoning_levels": [["effort": "low"], ["effort": "medium"], ["effort": "high"]],
-                "additional_speed_tiers": ["priority"],
-            ])!
-        ]
+        let model = fixtureModel(directory: directory, connectionChecks: checks)
         var config = Configuration.starters(model: "fixture-luna", effort: "medium", fast: true)
         config.connections[0].accountId = "fixture-account"
         config.connections[1].baseUrl = "https://api.openai.com/v1"
-        model.signedIn = true
-        model.apiConnected = true
         config.presets.append(
             ModelPreset(
                 name: "Speak", model: "gpt-realtime-fixture", effort: "", fast: false,

@@ -3,6 +3,10 @@ import EZCheckSupport
 import EZCore
 import Foundation
 import ImageIO
+import SaulNativeValues
+import SaulTestSupport
+
+@testable import EZApplication
 
 @MainActor func searchImageStateChecks() -> [CheckCase] {
     [
@@ -132,7 +136,7 @@ import ImageIO
             entry.status = "completed"
             let store = try HistoryStore(directory: shared)
             try store.append(entry)
-            let model = AppModel(directory: local, historyDirectory: shared, offline: true)
+            let model = fixtureModel(directory: local, historyDirectory: shared)
             defer { model.shutdown() }
             await model.refreshHistory()?.value
             model.selection = entry.id
@@ -211,6 +215,7 @@ import ImageIO
                 "CREATE TRIGGER fail_save BEFORE INSERT ON ez_entry BEGIN SELECT RAISE(ABORT,'Synthetic initial save failure'); END"
             )
             model.send()
+            await execution.waitForSettlement()
             try expectEqual(calls, 0, "Source-save failure sent a request")
             try expect(!model.busy && model.error?.contains("not sent") == true, "Source-save failure hidden")
             try expect(
@@ -271,15 +276,14 @@ import ImageIO
             config.addSearchAndMeme()
             for index in config.presets.indices where config.presets[index].model.isEmpty {
                 config.presets[index].model =
-                    config.presets[index].capability == .draw ? "gpt-image-2.6-flare" : "test"
+                    config.presets[index].capability == .draw ? "gpt-image-2.6-flare" : "fixture"
             }
             for index in config.presets.indices where config.presets[index].capability == .draw {
                 config.presets[index].model = "gpt-image-2.6-flare"
             }
             try ConfigurationStore(directory: directory).save(config)
-            let model = AppModel(directory: directory, offline: true, attemptExecution: execution)
+            let model = fixtureModel(directory: directory, attemptExecution: execution)
             defer { model.shutdown() }
-            model.apiConnected = true
             model.chooseAction(config.actions.first { $0.webSearch }!.id)
             model.query = "Question"
             let plan = config.presets.first { $0.connectionKey == "gpt-plan" }!
@@ -322,8 +326,7 @@ private func sketchDarkPixels(_ image: CGImage, at rect: CGRect) throws -> Int {
         config.presets[index].model = "gpt-image-2.6-flare"
     }
     try ConfigurationStore(directory: directory).save(config)
-    let model = AppModel(directory: directory, offline: true, attemptExecution: execution)
-    model.apiConnected = true
+    let model = fixtureModel(directory: directory, attemptExecution: execution)
     model.chooseAction(config.actions.first { $0.imageInput != nil }!.id)
     model.query = "Make a Monday meme"
     return model

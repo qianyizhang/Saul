@@ -75,9 +75,13 @@ pauses. Live sign-in, model discovery and inference are separate observations.
 See [dated installed evidence](../apps/ez/docs/verification.md#installed-baseline--2026-11-04)
 for the earlier migration baseline.
 
-Implementation: `native/credentials` owns the pipe, caller checks, framing and
-Keychain access; `apps/ez/Sources/SaulCredentialOwner` owns authentication and
-official OpenAI and bound custom-endpoint operations. The signed
+Implementation: [the native credentials package](../native/credentials/Package.swift)
+owns the signed executable. Its client target owns the public pipe and framing;
+its owner target owns authentication, catalog admission, Keychain access and
+provider operations. Both the owner and EZ consume the same native settings
+values; only EZ adapts and writes its app scope. See the
+[independent build decision](../docs/adr/0004-build-credential-owner-independently.md).
+The signed
 `com.saul.credentials` host is separate from `com.saul.chatgpt`, which keeps
 its installed identity and handles browser history, configuration and presets.
 Browser-owned API connections continue to use their local profiles.
@@ -111,8 +115,18 @@ evidence (under five minutes, with no refresh error) for the requested model,
 reasoning effort and service tier. API execution keeps its last-good membership
 policy. A complete empty catalog means no models; malformed or incomplete
 replies retain the last good models for display with a separate error. There is
-no background polling or catalog history. Presets are never rewritten to a
-different model.
+no background polling or catalog history. A corrupt cache entry is discarded
+while valid entries are retained. An undecodable cache starts empty. Permission
+and write failures are reported; repair never rewrites credentials, settings or
+registrations and does not clear pauses. No raw cache archive is kept.
+
+Browser-local and managed API discovery use the same capability policy.
+A compatible endpoint's models are Write models regardless of their IDs.
+For the official endpoint, `gpt-image-` is Draw, `gpt-realtime` is Speak, other
+`gpt-` and `o` followed by a digit are Write; unknown IDs imply no capability.
+[Shared fixtures](fixtures/api-model-capabilities.json) check this policy. An
+unsupported saved selection remains visible for repair. Presets are never
+rewritten to a different model.
 
 The version 2 `connection-catalog` request accepts `intent: "display"` (use a
 fresh cache or refresh), `"refresh"` (force discovery, including during setup),

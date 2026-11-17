@@ -1,4 +1,5 @@
 import EZCore
+import SaulNativeValues
 import SwiftUI
 
 struct ConfigurationView: View {
@@ -74,18 +75,7 @@ struct ConfigurationView: View {
     }
 
     private var catalogModels: [ConnectionModel] {
-        if let catalog = model.connectionCatalog(preset?.connectionKey ?? "") { return catalog.models }
-        guard model.offline else { return [] }
-        var options = model.models.map {
-            ConnectionModel(
-                id: $0.model, name: $0.displayName,
-                capabilities: [.write], efforts: $0.supportedReasoningEfforts.map(\.reasoningEffort),
-                defaultEffort: $0.defaultReasoningEffort, fastTier: $0.fastTier)
-        }
-        if let preset, !options.contains(where: { $0.id == preset.model }) {
-            options.append(ConnectionModel(id: preset.model, capabilities: [preset.capability]))
-        }
-        return options
+        model.connectionCatalog(preset?.connectionKey ?? "")?.models ?? []
     }
 
     private var presetSection: some View {

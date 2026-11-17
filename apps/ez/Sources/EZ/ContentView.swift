@@ -1,4 +1,5 @@
 import EZCore
+import SaulNativeValues
 import SwiftUI
 
 struct ContentView: View {
@@ -44,11 +45,7 @@ struct ContentView: View {
                     if model.busy {
                         HStack {
                             Spacer()
-                            Button {
-                                model.stop()
-                            } label: {
-                                ControlLabel(symbol: .stop, iconOnly: model.minimumMode)
-                            }.help("Stop generating").accessibilityLabel("Stop generating")
+                            AttemptControls(model: model)
                         }.padding(.horizontal, 24).padding(.vertical, 12)
                     } else if model.hasRetainedDraft && !model.launcherPending {
                         Divider()
@@ -286,12 +283,7 @@ struct ContentView: View {
                     Spacer(minLength: 2)
                     NextLookupDetailsButton(model: model)
                     if model.busy {
-                        Button {
-                            model.stop()
-                        } label: {
-                            ControlLabel(symbol: .stop, iconOnly: model.minimumMode)
-                        }.accessibilityLabel("Stop generating").help(
-                            "Stop generating · \(model.shortcuts.binding(for: .stop).display)")
+                        AttemptControls(model: model)
                     } else {
                         Button {
                             model.send()

@@ -3,18 +3,19 @@
 `EZChecks` and `EZStateChecks` are offline Swift executables without XCTest,
 Swift Testing or third-party packages. App builds and previews need SwiftUI's
 compiler plug-ins; select Xcode if the installed Command Line Tools lack them.
-`EZCheckSupport` is linked only into checks, not the application.
+`EZCheckSupport` and `SaulTestSupport` are linked only into checks.
 
 | Directory | Owner |
 | --- | --- |
-| `EZChecks/` | Core behavior: templates, presets, configuration, history, launcher, identity, Responses, Images, typed actions, authentication |
-| `EZChecks/Fixtures/` | Synthetic credentials, signed identities, per-session HTTP fixtures |
+| `EZChecks/` | Core behavior: templates, presets, configuration, history, launcher, Responses projection and the credential client adapter |
+| [Credential checks](../../../native/credentials/Tests) | Caller protocol, signed owner authorization, catalog repair, provider operations |
+| [Shared fixture support](../../../native/credentials/Tests/Support) | Case runner, assertions, bounded signals, per-session HTTP fixtures |
 | `EZStateChecks/` | AppModel actions with fresh offline storage and controlled execution adapters where needed |
-| `Support/` | Named-case runner, source-location assertions, bounded fixture signals |
+| `Support/` | Disposable SQLite history fixture |
 
 ```sh
 make test
-make test-core CHECK_ARGS='--filter "auth: overlapping"'
+make test-credentials CHECK_ARGS='--filter "auth: overlapping"'
 make test-state CHECK_ARGS='--filter "deletion"'
 make test-core CHECK_ARGS='--list'
 make test CHECK_ARGS='--reverse'
@@ -39,9 +40,13 @@ directory is unique and removed after success or failure. Construct each fixture
 inside the case and close HTTP sessions / shut down models with `defer`.
 AppModel fixtures seed configuration before initialization to avoid personal
 UserDefaults. Never use real account credentials, Keychain, or app history.
+State checks import the compiled `EZApplication` target and run production
+connection admission against injected status and catalog evidence.
 Attempt cases explicitly supply the production `AttemptExecution` module with
 controlled credential, stream and append adapters, then exercise AppModel Send,
-Stop, Retry, Follow-up, launcher submission, terminal-save failure and deletion. Ordinary offline models still refuse Send.
+Stop, Retry, Follow-up, launcher submission, terminal-save failure and deletion.
+Controlled writes cover initial-save Stop, uncertain acknowledgement and Quit.
+Models without a generation adapter refuse Send.
 The shared `contracts/fixtures/attempts.json` scenarios exercise both apps' common
 saved-outcome rules without harmonizing their storage or status types.
 

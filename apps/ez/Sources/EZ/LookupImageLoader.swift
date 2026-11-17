@@ -1,5 +1,6 @@
 import AppKit
 import EZCore
+import SaulNativeValues
 
 extension AppModel {
     func downloadImage(_ entry: HistoryEntry) {

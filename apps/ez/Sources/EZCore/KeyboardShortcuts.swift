@@ -1,5 +1,5 @@
-import Darwin
 import Foundation
+import SaulNativeValues
 
 public enum LookupCommand: String, Codable, CaseIterable {
     case newLookup, send, stop, nextRecipe, previousRecipe
@@ -127,26 +127,11 @@ public final class LookupShortcutsStore {
     public func save(_ shortcuts: LookupShortcuts) throws {
         try shortcuts.validate()
         let data = try JSONEncoder().encode(shortcuts)
-        try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
-            attributes: [.posixPermissions: 0o700])
-        let temporary = url.deletingLastPathComponent().appendingPathComponent(".shortcuts-\(UUID()).tmp")
-        defer { try? FileManager.default.removeItem(at: temporary) }
-        guard
-            FileManager.default.createFile(
-                atPath: temporary.path, contents: data, attributes: [.posixPermissions: 0o600])
-        else {
-            throw EZError("Cannot write shortcuts. Previous shortcuts are preserved.")
-        }
-        let handle = try FileHandle(forWritingTo: temporary)
         do {
-            try handle.synchronize()
-            try handle.close()
-        } catch {
-            try? handle.close()
-            throw error
-        }
-        guard Darwin.rename(temporary.path, url.path) == 0 else {
+            try AtomicFile.write(data, to: url)
+        } catch AtomicFile.Failure.staging {
+            throw EZError("Cannot write shortcuts. Previous shortcuts are preserved.")
+        } catch AtomicFile.Failure.replacing {
             throw EZError("Cannot replace shortcuts. Previous shortcuts are preserved.")
         }
     }

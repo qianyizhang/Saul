@@ -2,6 +2,10 @@ import Combine
 import EZCheckSupport
 import EZCore
 import Foundation
+import SaulNativeValues
+import SaulTestSupport
+
+@testable import EZApplication
 
 private actor IllustrationKeyFixture: OpenAIKeyStorage {
     var key: String? = "sk-offline-fixture"
@@ -40,10 +44,13 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
     return (signal, observer)
 }
 
-@MainActor private func imageModel(_ directory: URL, generate: @escaping AttemptExecution.Generation) throws
+@MainActor private func imageModel(
+    _ directory: URL, connections: FixtureConnections? = nil, generate: @escaping AttemptExecution.Generation
+) throws
     -> AppModel
 {
     var config = Configuration.starters(model: "fixture", effort: "low", fast: false)
+    config.bindFixtureAccount()
     config.addIllustration()
     for index in config.presets.indices where config.presets[index].capability == .draw {
         config.presets[index].model = "gpt-image-2.6-flare"
@@ -51,8 +58,7 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
     try ConfigurationStore(directory: directory).save(config)
     let store = try HistoryStore(directory: directory)
     let execution = AttemptExecution(generate: generate, append: { try store.append($0) })
-    let model = AppModel(directory: directory, offline: true, attemptExecution: execution)
-    model.apiConnected = true
+    let model = fixtureModel(directory: directory, attemptExecution: execution, connections: connections)
     model.chooseAction(config.actions.first { $0.capability == .draw }!.id)
     model.query = "Trees share nutrients. 中文\n"
     return model
@@ -64,9 +70,19 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
         {
             directory in
             let keys = IllustrationKeyFixture()
-            let model = AppModel(directory: directory, offline: true, apiKeyStore: keys)
+            let fixtures = FixtureConnections()
+            let model = fixtureModel(
+                directory: directory, connections: fixtures,
+                client: .init(
+                    saveKey: { _, key in
+                        try await keys.write(key)
+                        fixtures.apiConnected = true
+                    },
+                    removeKey: { _ in
+                        try await keys.write(nil)
+                        fixtures.apiConnected = false
+                    }))
             defer { model.shutdown() }
-            model.apiConnected = true
             let existingKey = await keys.read()
             try expectEqual(existingKey, "sk-offline-fixture", "Fixture has no existing key")
             let connection = ConnectionDefinition.defaults[1]
@@ -74,15 +90,21 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
             try await expectAsyncThrows(EZError.self) {
                 try await model.saveConnection(connection, key: "sk-replacement")
             }
-            try expect(model.apiConnected, "Failed save lost the existing connection")
+            try expect(
+                model.connectionStatus(connection.key)?.connected == true,
+                "Failed save lost the existing connection")
             try await expectAsyncThrows(EZError.self) {
                 try await model.removeConnectionCredential(connection)
             }
-            try expect(model.apiConnected, "Failed removal disconnected the credential")
+            try expect(
+                model.connectionStatus(connection.key)?.connected == true,
+                "Failed removal disconnected the credential")
             await keys.setFailure(false)
             try await model.saveConnection(connection, key: "sk-replacement")
             try await model.removeConnectionCredential(connection)
-            try expect(!model.apiConnected && model.entries.isEmpty, "Connection setup generated work")
+            try expect(
+                model.connectionStatus(connection.key)?.connected == false && model.entries.isEmpty,
+                "Connection setup generated work")
         },
         CheckCase("action: runtime GIF format freezes in history and reuse without changing preset defaults")
         { directory in
@@ -194,7 +216,10 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
             model.send()
             try await first.started.wait()
             let oldID = model.selection!
+            let (stopped, stopObserver) = completionSignal(model)
             model.stop()
+            try await stopped.wait()
+            stopObserver.cancel()
             model.newQuery()
             model.query = "Second"
             let (done, observer) = completionSignal(model)
@@ -217,17 +242,18 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
         CheckCase("action: incompatible presets connections and missing API keys block before execution") {
             directory in
             var calls = 0
+            let fixtures = FixtureConnections()
             let model = try imageModel(
-                directory,
+                directory, connections: fixtures,
                 generate: { _, _ in
                     calls += 1
                     return .image(fixturePNG)
                 })
             defer { model.shutdown() }
-            model.apiConnected = false
+            fixtures.apiConnected = false
             model.send()
             try expect(!model.canSend && calls == 0, "Missing API key sent a request")
-            model.apiConnected = true
+            fixtures.apiConnected = true
             let write = model.configuration.presets.first { $0.capability == .write }!
             model.chooseLookupPreset(write.id)
             try expectEqual(model.currentPreset?.capability, .draw, "Chooser selected Write for Draw")

@@ -1,13 +1,14 @@
-import EZCheckSupport
 import EZCore
 import Foundation
+import SaulNativeValues
+import SaulTestSupport
+
+@testable import EZApplication
 
 @MainActor func selectedTextChecks() -> [CheckCase] {
     [
         stateCase("selected text preserves Unicode and waits for Send in a single-field action") { f in
             f.model.chooseAction(f.single.id)
-            f.model.signedIn = true
-            f.model.planEnabled = true
             let text = "  café 中文 🧪\nsecond line + % &  "
             try f.model.prepareSelectedText(text)
             try expect(f.model.query == text, "Selection was trimmed or decoded")

@@ -52,6 +52,18 @@ describe('PR check scope', () => {
     }
   });
 
+  it('selects the extracted credential checks and their EZ consumers', () => {
+    expect(
+      selectChecks(['native/credentials/Sources/SaulCredentialOwner/ConnectionCatalogOwner.swift']),
+    ).toMatchObject({ credentials: true, core: true, state: false });
+    expect(
+      selectChecks(['native/credentials/Sources/SaulNativeValues/ConnectionCatalog.swift']),
+    ).toMatchObject({ credentials: true, core: true, state: true });
+    expect(
+      selectChecks(['native/credentials/Tests/CredentialOwnerChecks/PlanCatalogChecks.swift']),
+    ).toMatchObject({ credentials: true, core: false, state: false });
+  });
+
   it('keeps both paths when production code is renamed out to a docs directory', () => {
     const cwd = mkdtempSync(join(tmpdir(), 'saul-ci-scope-'));
     const git = (...args: string[]) =>

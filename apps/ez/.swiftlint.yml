@@ -8,6 +8,7 @@ included:
   - scripts
   - Package.swift
   - ../../native/credentials/Sources
+  - ../../native/credentials/Tests
   - ../../native/credentials/Package.swift
 only_rules:
   - blanket_disable_command

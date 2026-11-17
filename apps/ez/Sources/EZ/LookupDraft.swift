@@ -1,6 +1,7 @@
 import AppKit
 import EZCore
 import Foundation
+import SaulNativeValues
 
 /// One draft shared by the main window and Quick Lookup. Reading history is independent.
 struct LookupDraft {

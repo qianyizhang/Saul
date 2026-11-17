@@ -19,7 +19,7 @@ test-install:
 lint: lint-swift lint-shell lint-workflows
 	plutil -lint Resources/Info.plist
 lint-swift:
-	xcrun swift-format lint --strict --recursive ../../native/credentials/Sources ../../native/credentials/Package.swift
+	xcrun swift-format lint --strict --recursive ../../native/credentials/Sources ../../native/credentials/Tests ../../native/credentials/Package.swift
 	xcrun swift-format lint --strict --recursive Sources Tests scripts Package.swift
 	@test -x .build/tools/swiftlint || { echo 'Run make tools first.' >&2; exit 1; }
 	.build/tools/swiftlint lint --strict --quiet --no-cache --disable-sourcekit
@@ -32,11 +32,12 @@ lint-workflows:
 	.build/tools/actionlint -shellcheck "$$(pwd)/.build/tools/shellcheck" ../../.github/workflows/*.yml
 format:
 	xcrun swift-format format --in-place --recursive Sources Tests scripts Package.swift
-	xcrun swift-format format --in-place --recursive ../../native/credentials/Sources ../../native/credentials/Package.swift
+	xcrun swift-format format --in-place --recursive ../../native/credentials/Sources ../../native/credentials/Tests ../../native/credentials/Package.swift
 check: lint build test test-install test-tooling check-scripts test-credentials
 test-credentials:
-	bash scripts/check-credentials.sh
-	./scripts/swift.sh run CredentialOwnerChecks
+	./scripts/credentials-swift.sh build --product SaulCredentials
+	./scripts/credentials-swift.sh run CredentialChecks
+	./scripts/credentials-swift.sh run CredentialOwnerChecks $(CHECK_ARGS)
 check-scripts: build
 	bash scripts/check.sh scripts
 tools:

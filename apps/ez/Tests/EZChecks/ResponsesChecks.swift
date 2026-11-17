@@ -1,6 +1,7 @@
-import EZCheckSupport
 import Foundation
-import SaulCredentialStorage
+import SaulCredentialClient
+import SaulNativeValues
+import SaulTestSupport
 
 @testable import EZCore
 
@@ -8,7 +9,7 @@ import SaulCredentialStorage
     [
         CheckCase("responses: Responses request stays within plan preview contract") { _ in
             let entry = HistoryEntry(
-                mode: .ask, query: "hi", model: "test", effort: "low", requestedServiceTier: "fast")
+                mode: .ask, query: "hi", model: "gpt-test", effort: "low", requestedServiceTier: "fast")
             let body = ResponsesRequest.body(entry: entry)
             try expect(
                 body["store"] as? Bool == false && body["stream"] as? Bool == true,
@@ -21,20 +22,14 @@ import SaulCredentialStorage
                 try expect(body[key] == nil, "Unsupported field: \(key)")
             }
         },
-        CheckCase("responses: SSE framing and completed text") { _ in
-            var parser = CredentialSSE()
+        CheckCase("responses: completed text replaces streamed text and keeps tier") { _ in
             var result = ResponseAccumulator()
             let events = [
                 #"{"type":"response.output_text.delta","delta":"你好"}"#,
                 #"{"type":"response.completed","response":{"status":"completed","service_tier":"default","output":[{"content":[{"type":"output_text","text":"你好!"}]}]}}"#,
             ]
             for event in events {
-                var payload: Data?
-                for byte in Data(("data: " + event + "\n\n").utf8) {
-                    if let event = try parser.append(byte) { payload = event }
-                }
-                guard let payload else { throw CheckFailure("Missing SSE event") }
-                try result.consume(payload)
+                try result.consume(Data(event.utf8))
             }
             try result.requireCompleted()
             try expect(
@@ -272,7 +267,7 @@ import SaulCredentialStorage
                 _ = try await credentialText(
                     directory: directory, http: fixture,
                     entry: HistoryEntry(
-                        mode: .ask, query: "hi", model: "test", effort: "", requestedServiceTier: nil
+                        mode: .ask, query: "hi", model: "gpt-test", effort: "", requestedServiceTier: nil
                     ).withConnection()
                 ) { last = $0 }
             }
@@ -299,7 +294,7 @@ import SaulCredentialStorage
             let result = try await credentialText(
                 directory: directory, http: fixture,
                 entry: HistoryEntry(
-                    mode: .ask, query: "hello", model: "test", effort: "low", requestedServiceTier: nil
+                    mode: .ask, query: "hello", model: "gpt-test", effort: "low", requestedServiceTier: nil
                 ).withConnection()
             ) { updates.append($0.text) }
             try expect(result.completed && result.text == "Hello 你好", "URLSession SSE completion failed")

@@ -1,6 +1,6 @@
-import EZCheckSupport
 import EZCore
 import Foundation
+import SaulTestSupport
 
 @MainActor func shortcutChecks() -> [CheckCase] {
     [

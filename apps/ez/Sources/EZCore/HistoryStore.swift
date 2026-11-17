@@ -1,6 +1,7 @@
 import CSQLite
 import Darwin
 import Foundation
+import SaulNativeValues
 
 /// The shared database owns durable history. Execution stays app-local; credentials use the Saul owner.
 public final class HistoryStore {
@@ -9,7 +10,7 @@ public final class HistoryStore {
         case browser(selectionID: String)
     }
 
-    public static var defaultDirectory: URL { SharedPresetsStore.defaultURL.deletingLastPathComponent() }
+    public static var defaultDirectory: URL { SharedSettingsDocument.defaultURL.deletingLastPathComponent() }
     public let url: URL
     private var database: OpaquePointer?
     private let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
@@ -52,7 +53,15 @@ public final class HistoryStore {
             throw error
         }
     }
-    init(reading directory: URL) throws {
+    convenience init(reading directory: URL) throws {
+        try self.init(opening: directory, readOnly: true)
+    }
+
+    convenience init(writing directory: URL) throws {
+        try self.init(opening: directory, readOnly: false)
+    }
+
+    private init(opening directory: URL, readOnly: Bool) throws {
         try Self.regular(directory, directory: true)
         url = directory.appendingPathComponent("history.sqlite3")
         try Self.regular(url)
@@ -60,7 +69,8 @@ public final class HistoryStore {
         // writer EBADF taking its reservation. SQL writes stay disabled on this connection.
         try open(flags: SQLITE_OPEN_READWRITE)
         do {
-            try execute("PRAGMA query_only=ON")
+            try execute(
+                readOnly ? "PRAGMA query_only=ON" : "PRAGMA foreign_keys=ON; PRAGMA secure_delete=ON;")
             try requireCurrentSchema()
         } catch {
             sqlite3_close(database)
@@ -81,8 +91,8 @@ public final class HistoryStore {
 
     private func upgradeConnectionNames() throws {
         for (table, field, upgrade) in [
-            ("ez_entry", "data", ConnectionMigration.history),
-            ("llm_run", "input_json", ConnectionMigration.run),
+            ("ez_entry", "data", HistoryConnectionMigration.history),
+            ("llm_run", "input_json", HistoryConnectionMigration.run),
         ] {
             for row in try rows("SELECT id,\(field) AS value FROM \(table) WHERE \(field) IS NOT NULL") {
                 guard let json = row["value"] as? String,
@@ -99,7 +109,7 @@ public final class HistoryStore {
                 var value = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
             else { throw EZError("Invalid stored summary. Original data preserved.") }
             if var action = value["action"] as? [String: Any], let input = action["input"] as? [String: Any] {
-                action["input"] = try ConnectionMigration.run(input)
+                action["input"] = try HistoryConnectionMigration.run(input)
                 value["action"] = action
             }
             let data = try JSONSerialization.data(withJSONObject: value)
@@ -182,6 +192,11 @@ public final class HistoryStore {
         return try rows("SELECT image FROM ez_entry WHERE id=?", [entry.id.uuidString.lowercased()]).first?[
             "image"] as? Data
     }
+    public static func readInputImage(for entry: HistoryEntry, directory: URL) throws -> ImageAttachment? {
+        guard entry.inputImage != nil else { return nil }
+        return try HistoryStore(reading: directory).inputImage(for: entry)
+    }
+
     public func inputImage(for entry: HistoryEntry) throws -> ImageAttachment? {
         guard let metadata = entry.inputImage else { return nil }
         if metadata.data != nil {
@@ -226,7 +241,7 @@ public final class HistoryStore {
                     else {
                         throw EZError("Invalid original history record.")
                     }
-                    let upgraded = try ConnectionMigration.history(raw)
+                    let upgraded = try HistoryConnectionMigration.history(raw)
                     let entry = try decoder.decode(
                         HistoryEntry.self, from: JSONSerialization.data(withJSONObject: upgraded))
                     guard entry.schemaVersion == 1 else {

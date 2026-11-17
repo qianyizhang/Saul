@@ -1,5 +1,6 @@
 import AVFoundation
 import EZCore
+import SaulNativeValues
 import SwiftUI
 
 struct SpeakPreview: View {
@@ -23,7 +24,7 @@ struct SpeakPreview: View {
     }
 
     private var canGenerate: Bool {
-        saved && !model.offline && !phase.isGenerating
+        saved && model.allowsExternalServices && !phase.isGenerating
             && model.presetIssue(preset) == nil && model.connectionIssue(for: preset) == nil
             && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && text.utf16.count <= 512
     }
@@ -57,7 +58,7 @@ struct SpeakPreview: View {
             case .failed(let error):
                 Text(error).font(AppStyle.caption).foregroundStyle(.red).textSelection(.enabled)
             }
-            if model.offline {
+            if !model.allowsExternalServices {
                 Text("Speech generation is unavailable in the offline preview.").font(AppStyle.caption)
             } else if let issue = model.connectionIssue(for: preset) {
                 Text(issue).font(AppStyle.caption).foregroundStyle(.red)
@@ -86,8 +87,8 @@ struct SpeakPreview: View {
         phase = .generating(
             Task {
                 do {
-                    let data = try await SpeechPreviewClient(connection: model.auth).generate(
-                        preset: preset, text: input)
+                    guard let speak = model.speak else { throw EZError("Speech preview is unavailable.") }
+                    let data = try await speak(preset, input)
                     try Task.checkCancellation()
                     let player = try AVAudioPlayer(data: data)
                     player.prepareToPlay()

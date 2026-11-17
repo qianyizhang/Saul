@@ -1,5 +1,7 @@
 import EZCheckSupport
 import Foundation
+import SaulNativeValues
+import SaulTestSupport
 
 @testable import EZCore
 
@@ -11,7 +13,7 @@ import Foundation
             config.addSearchAndMeme()
             for index in config.presets.indices where config.presets[index].model.isEmpty {
                 config.presets[index].model =
-                    config.presets[index].capability == .draw ? "gpt-image-2.6-flare" : "test"
+                    config.presets[index].capability == .draw ? "gpt-image-2.6-flare" : "gpt-test"
             }
             let action = config.actions.first { $0.webSearch }!
             let preset = config.presets.first { $0.id == action.presetID }!
@@ -89,28 +91,17 @@ import Foundation
                 WebCitation.markdown("Short", citations: [citation]).contains(
                     "[Source](https://example.com/)"), "Invalid offset hid source")
         },
-        CheckCase("image input: edit transport carries exact bytes and normal Draw stays generation") { _ in
-            let image = try ImageAttachment(data: fixturePNG, name: "sketch.png")
-            let fixture = HTTPFixture { request in
-                try expectEqual(request.url?.path, "/v1/images/edits", "Input image used generation endpoint")
-                try expect(
-                    request.value(forHTTPHeaderField: "Content-Type")?.hasPrefix(
-                        "multipart/form-data; boundary=") == true, "Edit is not multipart")
-                let body = requestData(request)
-                try expect(body.range(of: fixturePNG) != nil, "Image bytes changed")
-                let header = String(decoding: body, as: UTF8.self)
-                try expect(
-                    header.contains("name=\"image[]\"; filename=\"input\"")
-                        && header.contains("Content-Type: image/png"), "Image part missing")
-                try expect(header.contains("caption 中文"), "Instructions lost")
-                return HTTPReply("{\"data\":[{\"b64_json\":\"\(fixturePNG.base64EncodedString())\"}]}")
-            }
-            defer { fixture.close() }
-            let result = try await ImagesClient(session: fixture.session).generate(
-                ImageGenerationRequest(prompt: "caption 中文", model: "gpt-image-2.6-flare", image: image),
-                apiKey: "sk-synthetic")
-            try expectEqual(result, fixturePNG, "Edited PNG changed")
-            try expectEqual(fixture.requests.count, 1, "Edit automatically retried")
+        CheckCase("image output: history saves exact returned GIF bytes") { directory in
+            let gif = try Data(
+                contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+                    .appendingPathComponent("../../../../contracts/fixtures/animation.gif"))
+            let store = try HistoryStore(directory: directory)
+            var entry = HistoryEntry(
+                mode: .ask, query: "Tree", model: "gpt-image-2.6-flare", effort: "", requestedServiceTier: nil
+            )
+            entry.imageData = gif
+            try store.append(entry)
+            try expectEqual(try store.image(for: store.load()[0]), gif, "Saved GIF changed")
         },
         CheckCase("image input: history saves source separately, restores it and deletes both images") {
             directory in
@@ -134,10 +125,10 @@ import Foundation
         },
         CheckCase("image input: invalid and oversized inputs fail locally and missing blobs are rejected") {
             directory in
-            try expectThrows(EZError.self) {
+            try expectThrows(NativeValueError.self) {
                 _ = try ImageAttachment(data: Data("not an image".utf8), name: "fake.png")
             }
-            try expectThrows(EZError.self) {
+            try expectThrows(NativeValueError.self) {
                 _ = try ImageAttachment(
                     data: Data(repeating: 0, count: ImageAttachment.byteLimit + 1), name: "huge.png")
             }
@@ -156,7 +147,7 @@ import Foundation
             config.addSearchAndMeme()
             for index in config.presets.indices where config.presets[index].model.isEmpty {
                 config.presets[index].model =
-                    config.presets[index].capability == .draw ? "gpt-image-2.6-flare" : "test"
+                    config.presets[index].capability == .draw ? "gpt-image-2.6-flare" : "gpt-test"
             }
             try expect(config.actions.starts(with: originals), "Existing actions replaced")
             config.actions.removeAll { $0.webSearch }
@@ -177,18 +168,3 @@ private let searchEvents = """
 
 
     """
-
-private func requestData(_ request: URLRequest) -> Data {
-    if let body = request.httpBody { return body }
-    guard let stream = request.httpBodyStream else { return Data() }
-    stream.open()
-    defer { stream.close() }
-    var result = Data()
-    var buffer = [UInt8](repeating: 0, count: 4096)
-    while stream.hasBytesAvailable {
-        let count = stream.read(&buffer, maxLength: buffer.count)
-        guard count > 0 else { break }
-        result.append(contentsOf: buffer.prefix(count))
-    }
-    return result
-}

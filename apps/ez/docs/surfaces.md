@@ -48,7 +48,10 @@ and persistence; [design](design.md) owns presentation.
 Shortcut/menu invocation preserves running requests and pending launcher work;
 the shortcut hides an already focused panel. Hiding preserves active work,
 history and clipboard.
-Closing the main window leaves menu-bar access; Quit exits.
+Closing the main window leaves menu-bar access. Stop is available while the
+request is being saved or generated. When the outcome is decided, both surfaces
+show Saving until history confirms it. Quit interrupts generation and gives the
+app a short time to finish writing history before exiting.
 
 The [Quick Lookup controller](../Sources/EZ/QuickLookupController.swift)
 owns a nonactivating panel on the pointer's display, including full-screen Spaces

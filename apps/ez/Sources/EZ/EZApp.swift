@@ -1,10 +1,12 @@
 import EZCore
+import SaulNativeValues
 import SwiftUI
 
-@main struct EZApp: App {
+public struct EZApp: App {
+    public init() {}
     @NSApplicationDelegateAdaptor(EZAppDelegate.self) private var delegate
 
-    var body: some Scene {
+    public var body: some Scene {
         Window("EZ", id: "main") {
             MainWindowView(model: delegate.model, quickLookup: delegate.quickLookup)
                 .frame(minWidth: 760, minHeight: 560)
@@ -22,7 +24,7 @@ import SwiftUI
 }
 
 @MainActor final class EZAppDelegate: NSObject, NSApplicationDelegate {
-    let model = AppModel()
+    let model = EZComposition.installed()
     lazy var quickLookup = QuickLookupController(model: model)
     private lazy var selectedTextService = SelectedTextService { [unowned self] text in
         try model.prepareSelectedText(text)
@@ -30,6 +32,8 @@ import SwiftUI
         quickLookup.show()
     }
     private var connectionTask: Task<Void, Never>?
+    private var settlement: Task<Void, Never>?
+    private var quitDeadline: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         quickLookup.start()
@@ -41,7 +45,10 @@ import SwiftUI
 
     private func connectOnce() -> Task<Void, Never> {
         if let connectionTask { return connectionTask }
-        let task = Task { await model.connect() }
+        let task = Task {
+            await model.waitForHistory()
+            if !Task.isCancelled { await model.connect() }
+        }
         connectionTask = task
         return task
     }
@@ -61,6 +68,32 @@ import SwiftUI
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         quickLookup.showMain()
         return false
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if settlement != nil { return .terminateLater }
+        connectionTask?.cancel()
+        quickLookup.shutdown()
+        guard model.shutdown() else { return .terminateNow }
+        settlement = Task {
+            await model.waitForPersistence()
+            if !Task.isCancelled { finishQuit(sender) }
+        }
+        quitDeadline = Task {
+            // Allow a SQLite busy wait to finish; do not hold Quit open indefinitely.
+            do { try await Task.sleep(for: .seconds(6)) } catch { return }
+            finishQuit(sender)
+        }
+        return .terminateLater
+    }
+
+    private func finishQuit(_ sender: NSApplication) {
+        guard settlement != nil else { return }
+        settlement?.cancel()
+        settlement = nil
+        quitDeadline?.cancel()
+        quitDeadline = nil
+        sender.reply(toApplicationShouldTerminate: true)
     }
 
     func applicationWillTerminate(_ notification: Notification) {

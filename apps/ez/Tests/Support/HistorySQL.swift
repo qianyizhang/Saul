@@ -1,5 +1,6 @@
 import CSQLite
 import Foundation
+import SaulTestSupport
 
 /// Inject real SQLite failures and inspect durable bytes without changing app routes.
 public func historySQL(_ url: URL, _ sql: String) throws -> String? {

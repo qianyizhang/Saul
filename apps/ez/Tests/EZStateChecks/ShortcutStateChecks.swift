@@ -1,6 +1,9 @@
-import EZCheckSupport
 import EZCore
 import Foundation
+import SaulNativeValues
+import SaulTestSupport
+
+@testable import EZApplication
 
 @MainActor func shortcutStateChecks() -> [CheckCase] {
     [

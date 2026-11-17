@@ -46,9 +46,22 @@ export function selectChecks(paths: readonly string[] | undefined): Plan {
       plan.smoke = true;
       continue;
     }
-    if (/^(?:native\/credentials\/|apps\/ez\/Sources\/SaulCredential)/u.test(path)) {
+    if (path.startsWith('native/credentials/')) {
       // These boundaries are consumed by both applications.
       plan.smoke = plan.native = plan.credentials = true;
+      if (
+        /^native\/credentials\/(?:Package\.swift|Sources\/Saul(?:NativeValues|CredentialClient)\/|Tests\/Support\/)/u.test(
+          path,
+        )
+      ) {
+        plan.core = plan.state = true;
+      }
+      // Core's provider adapter integration tests drive the real owner from EZ.
+      if (
+        /^native\/credentials\/(?:Sources\/SaulCredentialOwner\/|Tests\/OwnerSupport\/)/u.test(path)
+      ) {
+        plan.core = true;
+      }
       continue;
     }
     const rule = nativePaths.find(([pattern]) => pattern.test(path));

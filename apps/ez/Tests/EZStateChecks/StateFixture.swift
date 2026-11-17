@@ -1,6 +1,9 @@
-import EZCheckSupport
 import EZCore
 import Foundation
+import SaulNativeValues
+import SaulTestSupport
+
+@testable import EZApplication
 
 @MainActor struct StateFixture {
     let directory: URL
@@ -13,12 +16,8 @@ import Foundation
 
     init(directory: URL, attemptExecution: AttemptExecution? = nil) throws {
         self.directory = directory
-        let option = ModelOption(catalog: [
-            "visibility": "list", "slug": "fixture",
-            "supported_reasoning_levels": [["effort": "low"], ["effort": "medium"]],
-            "additional_speed_tiers": ["priority"],
-        ])!
         var config = Configuration.starters(model: "fixture", effort: "low", fast: false)
+        config.bindFixtureAccount()
         alternate = ModelPreset(name: "lit", model: "fixture", effort: "medium", fast: true)
         config.presets.append(alternate)
         guard let multiIndex = config.actions.firstIndex(where: { $0.legacyMode == nil }),
@@ -31,13 +30,12 @@ import Foundation
         // Seed before AppModel init so tests never read personal UserDefaults.
         try ConfigurationStore(directory: directory).save(config)
         history = try HistoryStore(directory: directory)
-        model = AppModel(directory: directory, offline: true, attemptExecution: attemptExecution)
-        model.models = [option]
+        model = fixtureModel(directory: directory, attemptExecution: attemptExecution)
     }
     func snapshot() throws -> HistoryEntry {
         try multi.prepare(
             values: ["fuzzy term": "elicit", "fuzzy context": "draw out"],
-            preset: alternate, models: model.models, provider: .chatGPTPlan)
+            preset: alternate, models: model.modelsForPreset(alternate), provider: .chatGPTPlan)
     }
     func savedAnswer() throws -> HistoryEntry {
         var entry = try snapshot()

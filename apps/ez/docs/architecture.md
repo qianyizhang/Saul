@@ -1,17 +1,19 @@
 # Architecture
 
-EZ is native SwiftUI/AppKit. `Sources/EZ` owns UI and app orchestration;
-`Sources/EZCore` owns request, protocol and persistence logic. The installed app
+EZ is native SwiftUI/AppKit. `EZApplication` in `Sources/EZ` owns UI and app
+orchestration. `EZCore` owns lookup, request and SQLite logic. Shared
+configuration values, the credential client and the signed owner build under
+[`native/credentials`](../../../native/credentials/Package.swift). The installed app
 needs no Codex, Node, Python, Electron or webview runtime.
 
 | Boundary | Owner |
 | --- | --- |
 | Windows, menu bar, Services and launcher | `EZApp`, [Quick Lookup controller](../Sources/EZ/QuickLookupController.swift) and [Services](../Sources/EZ/SelectedTextService.swift) |
-| Shared actions and draft | [AppModel](../Sources/EZ/AppModel.swift) and [LookupDraft](../Sources/EZ/LookupDraft.swift) |
+| App composition and draft | [EZComposition](../Sources/EZ/EZComposition.swift) assembles installed adapters; [AppModel](../Sources/EZ/AppModel.swift) coordinates [LookupDraft](../Sources/EZ/LookupDraft.swift) and the workspace |
 | Frozen submission | `LookupRequest` / `LookupRoute` |
-| Settings editing | [ConfigurationEditor](../Sources/EZ/ConfigurationEditor.swift), `ConnectionChecks` and `ConfigurationStore` |
-| Attempt and terminal save | [AttemptExecution](../Sources/EZCore/AttemptExecution.swift) and [HistoryStore](../Sources/EZCore/HistoryStore.swift) |
-| Provider calls | [SaulGeneration](../Sources/EZCore/SaulGeneration.swift), `ResponsesRequest`, `ResponseAccumulator` and `ImagesClient` |
+| Settings and connection session | [ConfigurationEditor](../Sources/EZ/ConfigurationEditor.swift), `ConfigurationStore`, [ConnectionSession](../Sources/EZ/ConnectionSession.swift) and `ConnectionChecks` |
+| Attempt and history | [AttemptExecution](../Sources/EZCore/AttemptExecution.swift) decides when to send and what to save. [HistoryCollection](../Sources/EZ/HistoryCollection.swift) owns refresh and deletion; [HistoryWriter](../Sources/EZCore/HistoryWriter.swift) serializes SQLite changes. |
+| Provider calls | [SaulGeneration](../Sources/EZCore/SaulGeneration.swift) maps the frozen request to the [signed credential owner](../../../contracts/credentials.md). `ResponsesRequest` and `ResponseAccumulator` encode requests and interpret stream evidence. |
 | Signed caller, OAuth and Keychain | [Saul credential contract](../../../contracts/credentials.md); [Keychain diagnosis](keychain.md) |
 
 [Surfaces](surfaces.md) owns use and lifecycle at the UI boundary; [design](design.md)
@@ -68,8 +70,9 @@ Its composition and undo history are draft-local; Reuse restores one frozen laye
 
 [Shared history](../../../contracts/history.md) owns storage and deletion guarantees.
 EZ upserts one snapshot per UUID; native `schemaVersion: 1` JSON and image blobs
-commit together. Startup under the session lock marks abandoned EZ rows interrupted;
-startup and activation reload History without changing Saul's execution. A serial
+commit together. On launch, the writer prepares or migrates the database under the session lock
+and marks abandoned EZ rows interrupted. Run and deletion wait for preparation
+to finish. Startup and activation reload History without changing Saul's execution. A serial
 reader uses a separate query-only connection and releases its SQLite snapshot
 before decoding rows. Image bytes load separately for the selected answer.
 The app discards a refresh overtaken by a later refresh or shutdown. Local
@@ -77,11 +80,23 @@ deletion and attempt changes during a refresh supersede the affected rows.
 Deletion uses the selected native UUID or browser selection ID. The browser
 guard and deletion share a write transaction; neither delete decodes unrelated rows.
 
-`AttemptExecution` saves pending input before credentials or transmission.
-Cancellation invalidates callbacks; terminal save must succeed before saved
-success. Unsaved output may remain copyable until history is reloaded; the
-pending row reads as interrupted when inactive. Successful deletion alone clears
+`AttemptExecution` waits for the writer to acknowledge pending input before
+credentials or transmission. Stop during that initial save prevents the send. If
+the pending write finishes, EZ settles it as cancelled. Stop during generation
+rejects later callbacks and saves the partial outcome. Once the terminal write
+starts, the attempt shows Saving and Stop is unavailable. Only acknowledgment
+of that write shows saved success. After an unacknowledged write, EZ does not
+retry the write or send. Unsaved output stays copyable until history is reloaded;
+an inactive pending row reads as interrupted. Successful deletion alone clears
 the visible result.
+
+Normal Quit stops admission, cancels generation and rejects late callbacks. It
+waits up to six seconds for history preparation, deletion or the attempt's
+decided terminal write, then exits. An already accepted completion remains the
+outcome during this wait; active generation settles as interrupted. A forced
+exit or expired deadline can leave a pending row for the next launch to recover.
+No request is replayed. See the
+[decision record](adr/0003-settle-attempts-with-async-history.md).
 
 **Retry same request** creates a new attempt from the frozen prompt, action,
 preset, connection and image. Revalidate saved bytes and immutable route through

@@ -1,6 +1,8 @@
 import EZCheckSupport
 import EZCore
 import Foundation
+import SaulNativeValues
+import SaulTestSupport
 
 @MainActor func actionContractChecks() -> [CheckCase] {
     [
@@ -37,7 +39,7 @@ import Foundation
             for raw in invalidValues {
                 let data = try JSONSerialization.data(withJSONObject: raw)
                 if let invalid = try? JSONDecoder().decode([ConnectionDefinition].self, from: data) {
-                    try expectThrows(EZError.self) {
+                    try expectThrows(NativeValueError.self) {
                         _ = try shared.save(saved.presets, revision: saved.revision, connections: invalid)
                     }
                 } else {
@@ -84,7 +86,7 @@ import Foundation
                 let data = try JSONSerialization.data(withJSONObject: value)
                 if let decoded = try? JSONDecoder().decode(ModelPreset.self, from: data) {
                     try expect(decoded.imageOptions != nil, "Malformed options silently became defaults")
-                    try expectThrows(EZError.self) { _ = try store.read() }
+                    try expectThrows(NativeValueError.self) { _ = try store.read() }
                 } else {
                     try expectThrows(DecodingError.self) { _ = try store.read() }
                 }
@@ -134,7 +136,7 @@ import Foundation
                 do {
                     _ = try store.read()
                     throw CheckFailure("Malformed speech options accepted")
-                } catch is DecodingError {} catch is EZError {}
+                } catch is DecodingError {} catch is NativeValueError {}
                 try expectEqual(
                     try Data(contentsOf: store.url), data, "Rejected speech options rewrote the file")
             }

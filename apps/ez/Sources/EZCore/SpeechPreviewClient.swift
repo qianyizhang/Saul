@@ -1,5 +1,6 @@
 import Foundation
-import SaulCredentialStorage
+import SaulCredentialClient
+import SaulNativeValues
 
 /// One bounded text-to-audio Realtime response. Preview content is never persisted.
 public struct SpeechAudio {

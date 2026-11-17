@@ -1,82 +1,5 @@
-import Darwin
 import Foundation
-
-public struct ModelPreset: Codable, Equatable, Identifiable, Sendable {
-    public var id: UUID
-    public var name: String
-    public var model: String
-    public var effort: String
-    public var fast: Bool
-    public var connectionKey: String
-    public var capability: ActionCapability
-    public var imageOptions: ImageOptions?
-    public var speechOptions: SpeechOptions?
-
-    public init(
-        id: UUID = UUID(), name: String, model: String, effort: String, fast: Bool,
-        connectionKey: String = "gpt-plan", capability: ActionCapability = .write,
-        imageOptions: ImageOptions? = nil, speechOptions: SpeechOptions? = nil
-    ) {
-        self.id = id
-        self.name = name
-        self.model = model
-        self.effort = effort
-        self.fast = fast
-        self.connectionKey = connectionKey
-        self.capability = capability
-        self.imageOptions = imageOptions
-        self.speechOptions = speechOptions
-    }
-
-    private enum CodingKeys: String, CodingKey, CaseIterable {
-        case id, name, model, effort, fast, connectionKey, capability, imageOptions, speechOptions
-    }
-    public init(from decoder: Decoder) throws {
-        let c = try contractFields(decoder, keys: CodingKeys.self)
-        id = try c.decode(UUID.self, forKey: .id)
-        name = try c.decode(String.self, forKey: .name)
-        model = try c.decode(String.self, forKey: .model)
-        effort = try c.decode(String.self, forKey: .effort)
-        fast = try c.decode(Bool.self, forKey: .fast)
-        connectionKey =
-            c.contains(.connectionKey) ? try c.decode(String.self, forKey: .connectionKey) : "gpt-plan"
-        capability =
-            c.contains(.capability) ? try c.decode(ActionCapability.self, forKey: .capability) : .write
-        imageOptions =
-            c.contains(.imageOptions) ? try c.decode(ImageOptions.self, forKey: .imageOptions) : nil
-        speechOptions =
-            c.contains(.speechOptions) ? try c.decode(SpeechOptions.self, forKey: .speechOptions) : nil
-    }
-
-    public func availabilityError(in models: [ModelOption], provider: GenerationProviderID) -> String? {
-        if capability == .speak { return "Speak previews run in Settings → Presets." }
-        if capability == .draw {
-            guard !model.isEmpty else {
-                return "Preset ‘\(name)’ needs an available Draw model. Edit it in Presets."
-            }
-            do { try (imageOptions ?? ImageOptions()).validate() } catch { return error.localizedDescription }
-            return nil
-        }
-        if provider != .chatGPTPlan {
-            return model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ? "Choose a model in Presets." : nil
-        }
-        guard let option = models.first(where: { $0.model == model }) else {
-            return
-                "Preset ‘\(name)’ needs \(model.isEmpty ? "a model" : model). Choose an available model in Presets."
-        }
-        if !effort.isEmpty
-            && !option.supportedReasoningEfforts.contains(where: { $0.reasoningEffort == effort })
-        {
-            return "Preset ‘\(name)’ requests unsupported effort ‘\(effort)’. Edit it in Presets."
-        }
-        if fast && option.fastTier == nil {
-            return
-                "Preset ‘\(name)’ requests Fast, but this model does not advertise Fast. Edit it in Presets."
-        }
-        return nil
-    }
-}
+import SaulNativeValues
 
 public struct Action: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
@@ -460,7 +383,7 @@ public final class ConfigurationStore {
                     debugDescription: "Invalid configuration JSON. Original file is preserved.",
                     underlyingError: error))
         }
-        let upgraded = try ConnectionMigration.configuration(original)
+        let upgraded = try ConnectionSettingsMigration.configuration(original)
         var result = try JSONDecoder().decode(
             Configuration.self, from: JSONSerialization.data(withJSONObject: upgraded))
         try result.validate()
@@ -508,27 +431,13 @@ public final class ConfigurationStore {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         let data = try encoder.encode(configuration)
         guard data.count <= 1_048_576 else { throw EZError("Configuration exceeds the 1 MB storage limit.") }
-        try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
-            attributes: [.posixPermissions: 0o700])
-        let temporary = url.deletingLastPathComponent().appendingPathComponent(".configuration-\(UUID()).tmp")
-        defer { try? FileManager.default.removeItem(at: temporary) }
-        guard
-            FileManager.default.createFile(
-                atPath: temporary.path, contents: data,
-                attributes: [.posixPermissions: 0o600])
-        else { throw EZError("Cannot write configuration. Previous configuration is preserved.") }
-        let handle = try FileHandle(forWritingTo: temporary)
         do {
-            try handle.synchronize()
-            try handle.close()
-        } catch {
-            try? handle.close()
-            throw error
-        }
-        guard Darwin.rename(temporary.path, url.path) == 0 else {
+            try AtomicFile.write(data, to: url)
+        } catch AtomicFile.Failure.staging {
+            throw EZError("Cannot write configuration. Previous configuration is preserved.")
+        } catch AtomicFile.Failure.replacing(let error) {
             throw EZError(
-                "Cannot replace configuration: \(String(cString: strerror(errno))). Previous configuration is preserved."
+                "Cannot replace configuration: \(error.localizedDescription). Previous configuration is preserved."
             )
         }
     }

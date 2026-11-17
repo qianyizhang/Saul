@@ -3,9 +3,11 @@
 ## Scope and architecture
 
 EZ is a native macOS language utility. Read `README.md` and `docs/architecture.md`
-before changing behavior. Keep SwiftUI in `Sources/EZ` and reusable authentication,
-networking, protocol, and storage code in `Sources/EZCore`. Do not add a Codex,
-Node, Python, Electron, or webview runtime dependency to the app.
+before changing behavior. Keep SwiftUI and app orchestration in `Sources/EZ`
+and native lookup and storage logic in `Sources/EZCore`. For signed authentication,
+catalog and provider operations, follow the
+[credential contract](../../contracts/credentials.md).
+Keep the installed EZ runtime native.
 
 For feature UI, forms, metadata, actions, or disclosure changes, read `docs/design.md`
 and follow its feature UI review before implementation and completion. Keep native semantic controls and backgrounds,

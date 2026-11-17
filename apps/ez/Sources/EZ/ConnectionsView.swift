@@ -1,5 +1,6 @@
 import AppKit
 import EZCore
+import SaulNativeValues
 import SwiftUI
 
 struct ConnectionsView: View {
@@ -86,12 +87,9 @@ struct ConnectionsView: View {
         let checkingExplicitly = model.connectionChecks.isCheckingExplicitly(connection.key)
         let problem = model.connectionError(connection.key)
         let warning = model.connectionChecks.logoutWarning(for: connection)
-        let connected =
-            model.offline
-            ? (connection.kind == .chatGPTPlan ? model.signedIn : model.apiConnected)
-            : status?.connected == true
+        let connected = status?.connected == true
         let canCheck =
-            !model.offline
+            model.allowsExternalServices
             && (connected
                 || (status == nil && (connection.kind == .openAIAPI || connection.accountId != nil)))
         return VStack(alignment: .leading, spacing: 8) {
@@ -174,7 +172,7 @@ struct ConnectionsView: View {
             connection?.kind == .openAIAPI
             ? (endpoint == "https://api.openai.com/v1" ? "api" : "custom") : "plan"
         newID = "connection-" + UUID().uuidString.lowercased()
-        guard !model.offline else { return }
+        guard model.allowsExternalServices else { return }
         Task {
             do {
                 try await model.loadConnectionAccounts()
@@ -198,9 +196,11 @@ struct ConnectionsView: View {
                     Text("Choose an account").tag("")
                     ForEach(model.profiles) { profile in Text(profile.label).tag(profile.id) }
                 }.disabled(target?.accountId != nil)
-                Button("Sign in and allow plan use") { signIn() }.disabled(model.offline || account.isEmpty)
+                Button("Sign in and allow plan use") { signIn() }.disabled(
+                    !model.allowsExternalServices || account.isEmpty)
                 if target?.accountId == nil {
-                    Button("Add another account") { signIn(addingAccount: true) }.disabled(model.offline)
+                    Button("Add another account") { signIn(addingAccount: true) }.disabled(
+                        !model.allowsExternalServices)
                 }
             } else {
                 if kind == "custom" {

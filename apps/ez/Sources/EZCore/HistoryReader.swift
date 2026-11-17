@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import SaulNativeValues
 
 /// The refresh owner serializes database reads off the main actor. Each request
 /// opens a query-only connection to the current database and owns it through the snapshot.

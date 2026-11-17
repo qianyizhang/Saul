@@ -10,8 +10,7 @@ esac
 kind="$1"
 source scripts/lib/swift-build.sh
 ez_build_product EZ
-ez_link_modules EZ EZCore SaulCredentialStorage
-ez_application_sources
+ez_link_modules EZ EZApplication EZCore SaulCredentialClient SaulNativeValues
 mkdir -p dist
 preview="$PWD/dist/$label.app"
 staging=$(mktemp -d "$PWD/dist/.ez-preview.XXXXXX")
@@ -30,7 +29,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 mkdir -p "$staged_app/Contents/MacOS" "$staged_app/Contents/Resources"
 cp -R "$ez_bin_dir/EZ_EZCore.bundle" "$staged_app/Contents/Resources/"
-ez_compile_library "Tests/Previews/$kind.swift" "${ez_app_sources[@]}" "${ez_objects[@]}" \
+ez_compile_library "Tests/Previews/$kind.swift" Tests/EZStateChecks/FixtureComposition.swift "${ez_objects[@]}" \
     -o "$staged_app/Contents/MacOS/$executable"
 cat > "$staged_app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

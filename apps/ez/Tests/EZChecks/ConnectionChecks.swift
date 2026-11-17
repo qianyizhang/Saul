@@ -1,7 +1,10 @@
 import EZCheckSupport
 import EZCore
 import Foundation
-import SaulCredentialStorage
+import SaulCredentialClient
+import SaulCredentialTestSupport
+import SaulNativeValues
+import SaulTestSupport
 
 @MainActor func connectionChecks() -> [CheckCase] {
     [
@@ -45,7 +48,12 @@ import SaulCredentialStorage
                     .utf8)
             try original.write(to: url)
             let store = SharedPresetsStore(url: url)
+            let ownerView = try SharedSettingsDocument.readLibrary(at: url)
+            try expectEqual(
+                try Data(contentsOf: url), original, "Credential owner projection rewrote settings")
             let saved = try store.read()
+            try expectEqual(
+                saved.connections, ownerView.connections, "Owner and store decoded different routes")
             try expectEqual(saved.revision, 7, "Upgrade changed the editor revision")
             try expectEqual(saved.presets[0].connectionKey, "personal", "Upgrade lost the preset binding")
             try expectEqual(saved.connections[0].accountId, "account-one", "Upgrade lost the account")
@@ -61,12 +69,12 @@ import SaulCredentialStorage
             conflict["modelPresets"] = library
             let conflicting = try JSONSerialization.data(withJSONObject: conflict)
             try conflicting.write(to: url)
-            try expectThrows(EZError.self) { _ = try store.read() }
+            try expectThrows(NativeValueError.self) { _ = try store.read() }
             try expectEqual(try Data(contentsOf: url), conflicting, "Conflicting original was overwritten")
             let malformed = Data(
                 #"{"apps":"invalid","modelPresets":{"revision":0,"presets":[],"providers":[]}}"#.utf8)
             try malformed.write(to: url)
-            try expectThrows(EZError.self) { _ = try store.read() }
+            try expectThrows(NativeValueError.self) { _ = try store.read() }
             try expectEqual(try Data(contentsOf: url), malformed, "Malformed app scope was discarded")
         },
         CheckCase("connections: history upgrades only connection fields and rolls back conflicting snapshots")
@@ -129,14 +137,16 @@ import SaulCredentialStorage
             let stale = try await catalog(force: true)
             try expect(stale.error != nil, "Failed refresh was hidden")
             try expectEqual(stale.models, first.models, "Failed refresh erased valid models")
-            try expect(stale.issue(model: "gpt-future") == nil, "Network failure implied removal")
+            try expect(
+                stale.issue(model: "gpt-future", capability: .write) == nil, "Network failure implied removal"
+            )
             response = "{\"data\":[]}"
             let empty = try await catalog(force: true)
             try expect(
                 empty.error == nil && empty.fetchedAt > 0,
                 "Valid empty catalog was treated as a fetch failure")
             try expect(
-                empty.issue(model: "gpt-future")?.contains("no longer available") == true,
+                empty.issue(model: "gpt-future", capability: .write)?.contains("no longer available") == true,
                 "Removed model stayed available")
             let requestsBeforeRun = http.requests.count
             try await expectAsyncThrows(CredentialStorageError.self) {
@@ -207,7 +217,8 @@ import SaulCredentialStorage
             let removed = try await connection.call(["action": "api-key-remove"])
             try expectEqual(
                 removed["apiConnected"] as? Bool, false, "Damaged catalog blocked API key removal")
-            try expectEqual(try Data(contentsOf: path), corrupt, "Removal rewrote an unrecognized cache")
+            let repaired = try JSONSerialization.jsonObject(with: Data(contentsOf: path)) as? [String: Any]
+            try expect(repaired?.isEmpty == true, "Removal did not discard the corrupt derived cache")
             try await expectAsyncThrows(CredentialStorageError.self) {
                 _ = try await connection.call(request)
             }

@@ -1,4 +1,5 @@
 import EZCore
+import SaulNativeValues
 import SwiftUI
 
 extension LookupKeyBinding {
@@ -100,7 +101,7 @@ struct ShortcutSettingsView: View {
                         Button(model.minimumMode ? "Permissions" : "Accessibility settings…") {
                             SelectedTextCapture.openPermissionSettings()
                         }.help("Accessibility settings…").accessibilityLabel("Accessibility settings…")
-                            .disabled(model.offline)
+                            .disabled(!model.allowsExternalServices)
                     }.font(AppStyle.caption)
                 }
                 HStack {

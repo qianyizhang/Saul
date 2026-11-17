@@ -1,6 +1,7 @@
 import AppKit
 import Carbon
 import EZCore
+import SaulNativeValues
 import SwiftUI
 
 @MainActor final class QuickLookupController: ObservableObject {
@@ -65,7 +66,7 @@ import SwiftUI
         let source = NSWorkspace.shared.frontmostApplication
         newQuery()
         show()
-        guard !model.offline, !model.busy, !model.launcherPending, !model.signingIn,
+        guard model.allowsExternalServices, !model.busy, !model.launcherPending, !model.signingIn,
             !model.showSettings, SelectedTextCapture.isAllowed,
             let source, source.processIdentifier != ProcessInfo.processInfo.processIdentifier
         else { return }

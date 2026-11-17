@@ -1,11 +1,14 @@
-import EZCheckSupport
 import EZCore
 import Foundation
+import SaulNativeValues
+import SaulTestSupport
+
+@testable import EZApplication
 
 @MainActor func configurationStateChecks() -> [CheckCase] {
     [
         CheckCase("clipboard: the answer action reports a rejected write") { directory in
-            let model = AppModel(directory: directory, offline: true)
+            let model = fixtureModel(directory: directory)
             defer { model.shutdown() }
             var attempted: String?
             model.copy("Fixture answer") { text in
@@ -19,7 +22,7 @@ import Foundation
             let configURL = directory.appendingPathComponent("configuration.json")
             let bytes = Data("{broken".utf8)
             try bytes.write(to: configURL)
-            let model = AppModel(directory: directory, offline: true)
+            let model = fixtureModel(directory: directory)
             defer { model.shutdown() }
             try expect(model.configurationError != nil && !model.canSend, "Corruption silently reset")
             let revision = model.draftRevision
@@ -171,12 +174,14 @@ import Foundation
             let saved = ModelPreset(name: "Saved", model: "first", effort: "medium", fast: true)
             config.presets.append(saved)
             try ConfigurationStore(directory: directory).save(config)
-            let model = AppModel(directory: directory, offline: true)
+            let fixtures = FixtureConnections()
+            fixtures.models = [
+                ConnectionModel(id: "first", capabilities: [.write], efforts: ["low", "medium"]),
+                ConnectionModel(
+                    id: "z-default", capabilities: [.write], efforts: ["low", "medium"], isDefault: true),
+            ]
+            let model = fixtureModel(directory: directory, connections: fixtures)
             defer { model.shutdown() }
-            model.models = [
-                ConnectionModel(id: "first", efforts: ["low", "medium"]),
-                ConnectionModel(id: "z-default", efforts: ["low", "medium"], isDefault: true),
-            ].map(ModelOption.init(connectionModel:))
             model.initializeStarterPreset()
             try expectEqual(model.configuration.presets.first?.model, "z-default", "Default marker was lost")
             try expectEqual(model.configuration.presets.last, saved, "Saved preset was normalized")

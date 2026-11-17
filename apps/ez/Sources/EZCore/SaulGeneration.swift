@@ -1,5 +1,6 @@
 import Foundation
-import SaulCredentialStorage
+import SaulCredentialClient
+import SaulNativeValues
 
 /// Sends a frozen EZ request through the signed owner. The adapter never reads
 /// current preset choices or resolves an account or credential on its own.

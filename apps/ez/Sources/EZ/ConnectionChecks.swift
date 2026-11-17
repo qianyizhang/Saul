@@ -1,6 +1,7 @@
 import EZCore
 import Foundation
-import SaulCredentialStorage
+import SaulCredentialClient
+import SaulNativeValues
 
 /// Owns each connection's current check and the evidence it is allowed to publish.
 @MainActor final class ConnectionChecks {
@@ -45,6 +46,8 @@ import SaulCredentialStorage
         }
     }
 
+    private var routes: [String: ConnectionDefinition] = [:]
+    private let cached: @MainActor (ConnectionDefinition) -> Report?
     private var checks: [String: Check] = [:]
     private var logoutWarnings: [String: String] = [:]
     private var focusedCheck: Task<Void, Never>?
@@ -54,10 +57,12 @@ import SaulCredentialStorage
 
     init(
         status: @escaping @MainActor (ConnectionDefinition) async throws -> ConnectionStatus,
-        catalog: @escaping @MainActor (ConnectionDefinition, Intent) async throws -> ConnectionCatalog
+        catalog: @escaping @MainActor (ConnectionDefinition, Intent) async throws -> ConnectionCatalog,
+        cached: @escaping @MainActor (ConnectionDefinition) -> Report? = { _ in nil }
     ) {
         self.status = status
         self.catalog = catalog
+        self.cached = cached
     }
 
     var checkingKeys: Set<String> {
@@ -68,7 +73,10 @@ import SaulCredentialStorage
             })
     }
 
-    func report(_ key: String) -> Report? { checks[key]?.report }
+    func report(_ key: String) -> Report? {
+        if let check = checks[key] { return check.report }
+        return routes[key].flatMap(cached)
+    }
 
     func isCheckingExplicitly(_ key: String) -> Bool {
         if case .checking(_, _, .check, _) = checks[key] { return true }
@@ -112,6 +120,7 @@ import SaulCredentialStorage
     }
 
     func reconcile(_ connections: [ConnectionDefinition]) {
+        routes = Dictionary(connections.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
         let keys = checks.keys.filter { key in
             guard let check = checks[key] else { return false }
             return !connections.contains { $0.matchesRoute(check.connection) }
@@ -141,7 +150,12 @@ import SaulCredentialStorage
         {
             return
         }
-        let previous = checks[key].flatMap { $0.connection.matchesRoute(connection) ? $0.report : nil }
+        let previous: Report?
+        if let check = checks[key] {
+            previous = check.connection.matchesRoute(connection) ? check.report : nil
+        } else {
+            previous = routes[key]?.matchesRoute(connection) == true ? report(key) : nil
+        }
         let ticket = UUID()
         checks[key] = .checking(ticket, connection, intent: intent, previous: previous)
         onChange?()

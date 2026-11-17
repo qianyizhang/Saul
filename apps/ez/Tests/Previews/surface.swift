@@ -1,11 +1,15 @@
 import EZCore
+import SaulNativeValues
 import SwiftUI
+
+@testable import EZApplication
 
 // Production surfaces, disposable storage, no auth connection or global shortcut.
 @main struct EZSurfacePreview: App {
     @StateObject private var model: AppModel
     private let controller: QuickLookupController
     private let syntheticAttempt: Bool
+    private let fixtures = FixtureConnections()
 
     init() {
         let directory = FileManager.default.temporaryDirectory
@@ -14,7 +18,7 @@ import SwiftUI
         syntheticAttempt = failFirstSave || CommandLine.arguments.contains("--actions")
         let execution: AttemptExecution?
         do {
-            let history = try? HistoryStore(directory: directory)
+            let writer = HistoryWriter(directory: directory)
             var failedTerminal = false
             execution = AttemptExecution(
                 generate: { entry, update in
@@ -111,24 +115,30 @@ import SwiftUI
                     return .text(result)
                 },
                 append: { entry in
-                    guard let history else { throw EZError("Preview history is unavailable.") }
-                    if entry.status != "pending", !failedTerminal, failFirstSave {
+                    if entry.status != "pending", entry.query.contains("[saving]") {
+                        try await Task.sleep(for: .seconds(10))
+                    }
+                    if entry.status != "pending", !failedTerminal, failFirstSave,
+                        !entry.query.contains("[saving]")
+                    {
                         failedTerminal = true
                         throw EZError("Synthetic final-save failure.")
                     }
-                    try history.append(entry)
+                    try await writer.append(entry)
                 })
         }
-        let model = AppModel(directory: directory, offline: true, attemptExecution: execution)
+        let model = fixtureModel(directory: directory, attemptExecution: execution, connections: fixtures)
         _model = StateObject(wrappedValue: model)
         controller = QuickLookupController(model: model)
     }
 
     var body: some Scene {
         Window("EZ Surface Preview", id: "main") {
-            SurfacePreviewControls(model: model, controller: controller, syntheticAttempt: syntheticAttempt)
-                .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification))
-            { _ in
+            SurfacePreviewControls(
+                model: model, controller: controller, syntheticAttempt: syntheticAttempt, fixtures: fixtures
+            )
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) {
+                _ in
                 controller.shutdown()
                 model.shutdown()
                 try? FileManager.default.removeItem(at: model.directory)
@@ -142,13 +152,18 @@ private struct SurfacePreviewControls: View {
     @ObservedObject var controller: QuickLookupController
     @Environment(\.openWindow) private var openWindow
     let syntheticAttempt: Bool
+    let fixtures: FixtureConnections
     @State private var scenario = "Empty"
     @State private var dark = false
     @State private var reduceMotion = false
-    init(model: AppModel, controller: QuickLookupController, syntheticAttempt: Bool) {
+    init(
+        model: AppModel, controller: QuickLookupController, syntheticAttempt: Bool,
+        fixtures: FixtureConnections
+    ) {
         self.model = model
         self.controller = controller
         self.syntheticAttempt = syntheticAttempt
+        self.fixtures = fixtures
         _scenario = State(
             initialValue: CommandLine.arguments.contains("--meme")
                 ? "Meme blank"
@@ -169,7 +184,7 @@ private struct SurfacePreviewControls: View {
                             "Draw", "Draw result", "Draw GIF", "Draw waiting", "Draw error",
                             "Research", "Research result", "Research waiting", "Research error",
                             "Meme blank", "Meme", "Meme result", "Meme invalid",
-                        ] + (syntheticAttempt ? ["Unsaved"] : []), id: \.self
+                        ] + (syntheticAttempt ? ["Saving", "Unsaved"] : []), id: \.self
                     ) {
                         Text($0)
                     }
@@ -202,28 +217,30 @@ private struct SurfacePreviewControls: View {
         .onAppear {
             controller.setOpenMain { openWindow(id: "main") }
             NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
-            loadFixture()
         }
-        .onChange(of: scenario) { _, _ in loadFixture() }
+        .task(id: scenario) {
+            model.stop()
+            await model.waitForPersistence()
+            if !Task.isCancelled { loadFixture() }
+        }
         .onChange(of: dark) { _, value in
             NSApp.appearance = NSAppearance(named: value ? .darkAqua : .aqua)
         }
     }
 
     private func loadFixture() {
-        model.stop()
         model.newQuery()
         model.storageWarning = nil
         model.error = nil
         model.search = ""
-        model.models = [
-            ModelOption(catalog: [
-                "visibility": "list", "slug": "fixture-luna", "display_name": "Luna (offline fixture)",
-                "supported_reasoning_levels": [["effort": "medium"], ["effort": "high"]],
-                "additional_speed_tiers": ["priority"],
-            ])!
-        ]
+        fixtures.models.removeAll { $0.id == "fixture-luna" }
+        fixtures.models.append(
+            ConnectionModel(
+                id: "fixture-luna", name: "Luna (offline fixture)", efforts: ["medium", "high"],
+                fastTier: "priority"))
+        fixtures.planConnected = scenario != "Signed out"
         var config = Configuration.starters(model: "fixture-luna", effort: "medium", fast: true)
+        config.bindFixtureAccount()
         config.presets[0].name = "lit"
         config.presets.append(ModelPreset(name: "steady", model: "fixture-luna", effort: "high", fast: false))
         if scenario == "Selector hitboxes" {
@@ -268,10 +285,7 @@ private struct SurfacePreviewControls: View {
             action = config.actions.first
         }
         model.chooseAction(action?.id)
-        model.signedIn = scenario != "Signed out"
-        model.planEnabled = scenario != "Signed out"
         model.entries = []
-        model.apiConnected = true
         if scenario.hasPrefix("Meme") {
             model.query = "Make this a Monday meme. Caption: already?"
             if scenario == "Meme invalid" {
@@ -310,7 +324,8 @@ private struct SurfacePreviewControls: View {
             let preset = model.currentPreset
         {
             if var entry = try? action.prepare(
-                values: model.inputValues, preset: preset, models: model.models, provider: .chatGPTPlan)
+                values: model.inputValues, preset: preset, models: model.modelsForPreset(preset),
+                provider: .chatGPTPlan)
             {
                 entry.response =
                     "**Serendipity** means finding something valuable or pleasant by chance.\n\nExample: finding a book you love while searching for something else."
@@ -363,10 +378,14 @@ private struct SurfacePreviewControls: View {
             model.selection = entry.id
         }
         if scenario == "Blocked" {
-            model.models = []
+            fixtures.models.removeAll { $0.id == "fixture-luna" }
             model.error =
                 "The selected preset is unavailable. Open Configuration to choose a supported model."
             model.storageWarning = "Answer could not be saved. Copy it before quitting."
+        }
+        if scenario == "Saving" {
+            model.query = "Serendipity [saving]"
+            model.send()
         }
         if scenario == "Unsaved" {
             model.query = "Serendipity"

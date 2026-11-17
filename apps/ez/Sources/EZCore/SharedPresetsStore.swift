@@ -1,36 +1,12 @@
 import CSQLite
 import Darwin
 import Foundation
-
-public struct SharedPresets: Codable {
-    public let revision: Int
-    public var presets: [ModelPreset]
-    public var connections: [ConnectionDefinition]
-    public init(
-        revision: Int, presets: [ModelPreset],
-        connections: [ConnectionDefinition] = ConnectionDefinition.defaults
-    ) {
-        self.revision = revision
-        self.presets = presets
-        self.connections = connections
-    }
-    private enum CodingKeys: String, CodingKey { case revision, presets, connections }
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        revision = try c.decode(Int.self, forKey: .revision)
-        presets = try c.decode([ModelPreset].self, forKey: .presets)
-        connections = try c.decode([ConnectionDefinition].self, forKey: .connections)
-    }
-}
+import SaulNativeValues
 
 /// Shared connection/preset configuration. Secrets stay with their credential owner.
 public final class SharedPresetsStore {
-    public static var defaultURL: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Little Clarity/settings.json")
-    }
     public let url: URL
-    public init(url: URL = SharedPresetsStore.defaultURL) { self.url = url }
+    public init(url: URL = SharedSettingsDocument.defaultURL) { self.url = url }
 
     private func update<T>(_ change: (inout [String: Any]) throws -> T) throws -> T {
         try FileManager.default.createDirectory(
@@ -58,26 +34,16 @@ public final class SharedPresetsStore {
             throw EZError("Configuration is busy. Try Save again.")
         }
         defer { sqlite3_exec(lock, "ROLLBACK", nil, nil, nil) }
-        var document = try ConnectionMigration.document(document())
-        _ = try library(document)
+        var document = try ConnectionSettingsMigration.document(SharedSettingsDocument.load(at: url))
+        _ = try SharedSettingsDocument.library(document)
         let result = try change(&document)
         try writeDocument(document)
         return result
     }
 
-    private func document() throws -> [String: Any] {
-        let data: Data
-        do { data = try Data(contentsOf: url) } catch CocoaError.fileReadNoSuchFile {
-            return [:]
-        }
-        guard let value = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw EZError("Shared settings must be a JSON object.")
-        }
-        return value
-    }
     private func readDocument() throws -> [String: Any] {
-        let original = try document()
-        let upgraded = try ConnectionMigration.document(original)
+        let original = try SharedSettingsDocument.load(at: url)
+        let upgraded = try ConnectionSettingsMigration.document(original)
         if NSDictionary(dictionary: original).isEqual(to: upgraded) { return original }
         return try update { $0 }
     }
@@ -87,7 +53,7 @@ public final class SharedPresetsStore {
     func configurationSnapshot() throws -> (revision: Int, value: [String: Any]?, library: SharedPresets) {
         let document = try readDocument()
         let scope = try appSection(document, "configuration")
-        return (scope.revision, scope.value, try library(document))
+        return (scope.revision, scope.value, try SharedSettingsDocument.library(document))
     }
 
     private func appSection(_ document: [String: Any], _ section: String) throws -> (
@@ -126,65 +92,16 @@ public final class SharedPresetsStore {
     private func writeDocument(_ document: [String: Any]) throws {
         let data = try JSONSerialization.data(
             withJSONObject: document, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
-        try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
-            attributes: [.posixPermissions: 0o700])
-        let temporary = url.deletingLastPathComponent().appendingPathComponent(".settings-\(UUID()).tmp")
-        defer { try? FileManager.default.removeItem(at: temporary) }
-        guard
-            FileManager.default.createFile(
-                atPath: temporary.path, contents: data, attributes: [.posixPermissions: 0o600])
-        else {
-            throw EZError("Cannot stage configuration. Previous settings are preserved.")
-        }
-        let handle = try FileHandle(forWritingTo: temporary)
         do {
-            try handle.synchronize()
-            try handle.close()
-        } catch {
-            try? handle.close()
-            throw error
-        }
-        guard Darwin.rename(temporary.path, url.path) == 0 else {
+            try AtomicFile.write(data, to: url)
+        } catch AtomicFile.Failure.staging {
+            throw EZError("Cannot stage configuration. Previous settings are preserved.")
+        } catch AtomicFile.Failure.replacing {
             throw EZError("Cannot replace configuration. Previous settings are preserved.")
         }
     }
     public func read() throws -> SharedPresets {
-        try library(readDocument())
-    }
-    private func library(_ document: [String: Any]) throws -> SharedPresets {
-        var section: [String: Any]
-        if let raw = document["modelPresets"] {
-            guard let value = raw as? [String: Any] else {
-                throw EZError("Model presets must be a JSON object.")
-            }
-            section = value
-        } else {
-            return SharedPresets(revision: 0, presets: [])
-        }
-        let result = try JSONDecoder().decode(
-            SharedPresets.self,
-            from: JSONSerialization.data(withJSONObject: section))
-        guard result.revision >= 0 else { throw EZError("Invalid shared preset revision.") }
-        try validate(result.presets)
-        try ConnectionDefinition.validate(result.connections)
-        return result
-    }
-    private func validate(_ presets: [ModelPreset]) throws {
-        guard presets.count <= 128, Set(presets.map(\.id)).count == presets.count,
-            Set(presets.map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }).count
-                == presets.count,
-            presets.allSatisfy({
-                !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.name.utf16.count <= 80
-                    && $0.model.utf16.count <= 256 && $0.effort.utf16.count <= 64
-            })
-        else { throw EZError("Shared presets need unique IDs and names, a model, effort, and speed.") }
-        for preset in presets {
-            guard preset.connectionKey.range(of: "^[a-z][a-z0-9-]{0,63}$", options: .regularExpression) != nil
-            else { throw EZError("Invalid connection key in shared presets.") }
-            if let options = preset.imageOptions { try options.validate() }
-            if let options = preset.speechOptions { try options.validate() }
-        }
+        try SharedSettingsDocument.library(readDocument())
     }
     public func save(_ presets: [ModelPreset], revision: Int, connections: [ConnectionDefinition]? = nil)
         throws
@@ -198,8 +115,8 @@ public final class SharedPresetsStore {
         _ document: inout [String: Any], _ presets: [ModelPreset], revision: Int,
         connections: [ConnectionDefinition]?
     ) throws -> SharedPresets {
-        try validate(presets)
-        let current = try library(document)
+        try SharedSettingsDocument.validate(presets)
+        let current = try SharedSettingsDocument.library(document)
         guard current.revision == revision else {
             throw EZError(
                 "Shared presets changed in the other app. Reload saved settings before saving again.")
@@ -231,7 +148,7 @@ public final class SharedPresetsStore {
     private func importPresets(
         _ document: inout [String: Any], _ presets: [ModelPreset], connections: [ConnectionDefinition]?
     ) throws -> SharedPresets {
-        let current = try library(document)
+        let current = try SharedSettingsDocument.library(document)
         var imported = current.presets
         for var preset in presets where !imported.contains(where: { $0.id == preset.id }) {
             let original = preset.name
