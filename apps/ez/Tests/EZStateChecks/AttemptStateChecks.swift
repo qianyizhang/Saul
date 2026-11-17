@@ -556,7 +556,7 @@ import SaulTestSupport
             try await f.terminal.wait()
             try expectEqual(f.model.selectedEntry?.response, "Second answer", "New attempt did not complete")
             try expectEqual(
-                f.model.entries.first(where: { $0.id == firstID })?.response, "Stopped partial",
+                try f.state.history.entry(.native(firstID))?.response, "Stopped partial",
                 "Late callbacks rewrote stopped answer")
         },
         attemptCase("stream ending without completion is not a successful answer") { f in

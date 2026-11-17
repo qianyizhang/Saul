@@ -12,7 +12,7 @@ public final class HistoryStore {
 
     public static var defaultDirectory: URL { SharedSettingsDocument.defaultURL.deletingLastPathComponent() }
     public let url: URL
-    private var database: OpaquePointer?
+    var database: OpaquePointer?
     private let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
     public init(directory: URL = HistoryStore.defaultDirectory, migrating legacyDirectory: URL? = nil) throws
@@ -86,6 +86,7 @@ public final class HistoryStore {
             throw error
         }
         sqlite3_busy_timeout(database, 5000)
+        try installHistoryFunctions()
     }
     deinit { sqlite3_close(database) }
 
@@ -157,7 +158,7 @@ public final class HistoryStore {
 
     public func load() throws -> [HistoryEntry] { try snapshot().entries() }
 
-    private func requireCurrentSchema() throws {
+    func requireCurrentSchema() throws {
         guard try rows("PRAGMA user_version").first?["user_version"] as? Int64 == 4 else {
             throw EZError("Unsupported shared history version.")
         }
@@ -327,11 +328,11 @@ public final class HistoryStore {
     private func failure() -> EZError {
         EZError("Shared history: " + String(cString: sqlite3_errmsg(database)))
     }
-    private enum Transaction: String {
+    enum Transaction: String {
         case deferred = "DEFERRED"
         case immediate = "IMMEDIATE"
     }
-    private func transaction<T>(_ mode: Transaction = .immediate, _ body: () throws -> T) throws -> T {
+    func transaction<T>(_ mode: Transaction = .immediate, _ body: () throws -> T) throws -> T {
         try execute("BEGIN \(mode.rawValue)")
         do {
             let result = try body()
@@ -379,7 +380,7 @@ public final class HistoryStore {
         defer { sqlite3_finalize(statement) }
         guard sqlite3_step(statement) == SQLITE_DONE else { throw failure() }
     }
-    private func rows(_ sql: String, _ values: [Any?] = []) throws -> [[String: Any]] {
+    func rows(_ sql: String, _ values: [Any?] = []) throws -> [[String: Any]] {
         let statement = try statement(sql, values)
         defer { sqlite3_finalize(statement) }
         var result: [[String: Any]] = []

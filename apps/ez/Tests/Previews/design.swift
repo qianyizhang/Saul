@@ -20,7 +20,7 @@ import SwiftUI
         entry.status = "completed"
         entry.actualServiceTier = "default"
         entry.durationSeconds = 1.2
-        model.entries = [entry]
+        model.showHistory([entry])
         model.selection = entry.id
         model.query = entry.query
         model.storageWarning = nil

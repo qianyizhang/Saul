@@ -53,13 +53,17 @@ import SaulNativeValues
     func connectionCatalog(_ key: String) -> ConnectionCatalog? { connectionChecks.report(key)?.catalog }
     func connectionError(_ key: String) -> String? { connectionChecks.report(key)?.error }
     var checkingConnections: Set<String> { connectionChecks.checkingKeys }
-    var entries: [HistoryEntry] {
-        get { historyCollection.entries }
-        set { historyCollection.show(newValue) }
-    }
+    var entries: [HistoryRow] { historyCollection.entries }
+    func showHistory(_ entries: [HistoryEntry]) { historyCollection.show(entries) }
+    var historyLoading: Bool { historyCollection.loading }
+    var historyHasMore: Bool { historyCollection.hasMore }
+    var historyTotal: Int { historyCollection.total }
+    var historyDetailLoading: Bool { historyCollection.detailLoading }
+    var historyDetailError: String? { historyCollection.detailError }
     @Published var selection: UUID? {
         didSet {
             if selection != oldValue { showsMainComposer = false }
+            historyCollection.select(selection)
             loadSelectedImage()
             refreshActiveConnection()
         }
@@ -72,7 +76,9 @@ import SaulNativeValues
     private func loadSelectedImage() { lookupImage.select(selectedEntry) }
     @Published var followUpDrafts: [UUID: String] = [:]
     @Published var followUpTargetID: UUID?
-    @Published var search = ""
+    @Published var search = "" {
+        didSet { if search != oldValue { refreshHistory() } }
+    }
     var connecting: Bool { session.connecting }
     var profiles: [SaulAccount] { session.profiles }
     var signingIn: Bool { session.operation == .signIn }
@@ -118,7 +124,9 @@ import SaulNativeValues
         historyPreparation: HistoryCollection.Preparation, upgradeActions: Bool = false,
         minimumMode: Bool = true, setMinimumMode: @escaping @MainActor (Bool) -> Void = { _ in },
         attemptExecution: AttemptExecution? = nil,
-        readHistory: @escaping @MainActor () async throws -> [HistoryEntry],
+        readHistory: @escaping @MainActor (String, HistoryCursor?) async throws -> HistoryPage,
+        countHistory: @escaping @MainActor (String, [HistoryStore.RecordID]) async throws -> Int,
+        readHistoryEntry: @escaping @MainActor (HistoryStore.RecordID) async throws -> HistoryEntry?,
         deleteHistory: @escaping @MainActor (HistoryStore.RecordID) async throws -> Void,
         speak: (@MainActor (ModelPreset, String) async throws -> Data)? = nil,
         allowsExternalServices: Bool = false
@@ -131,8 +139,13 @@ import SaulNativeValues
         self.setMinimumMode = setMinimumMode
         self.directory = directory
         self.historyDirectory = historyDirectory
-        historyCollection = HistoryCollection(read: readHistory, delete: deleteHistory)
-        historyCollection.onChange = { [weak self] in self?.objectWillChange.send() }
+        historyCollection = HistoryCollection(
+            read: readHistory, count: countHistory, entry: readHistoryEntry, delete: deleteHistory)
+        historyCollection.onChange = { [weak self] in
+            self?.objectWillChange.send()
+            self?.loadSelectedImage()
+        }
+        historyCollection.onMissingSelection = { [weak self] in self?.selection = nil }
         session.onChange = { [weak self] in self?.objectWillChange.send() }
         connectionChecks.onChange = { [weak self] in self?.objectWillChange.send() }
         do {
@@ -315,21 +328,23 @@ import SaulNativeValues
             source: usesSketch ? .sketch(sketch.scene) : .attachment(inputImage),
             outputFormat: outputFormat)
     }
-    var selectedEntry: HistoryEntry? { entries.first { $0.id == selection } }
+    var selectedEntry: HistoryEntry? { historyCollection.selected }
     var selectedResponseActivity: ResponseActivity? {
         guard let runningAttempt, runningAttempt.phase == .generating,
             runningAttempt.entry.id == selection
         else { return nil }
         return runningAttempt.activity
     }
-    var filteredEntries: [HistoryEntry] {
-        search.isEmpty
-            ? entries
-            : entries.filter {
-                $0.query.localizedCaseInsensitiveContains(search)
-                    || $0.response.localizedCaseInsensitiveContains(search)
-            }
+    var filteredEntries: [HistoryRow] { entries }
+    @discardableResult func loadMoreHistory() -> Task<Void, Never>? {
+        guard !quitting else { return nil }
+        return historyCollection.more { [weak self] result in
+            if case .failure(let error) = result { self?.storageWarning = error.localizedDescription }
+        }
     }
+    func waitForHistorySelection() async { await historyCollection.waitForSelection() }
+    func reloadHistorySelection() { historyCollection.select(selection, force: true) }
+
     private var canStartLookup: Bool {
         attemptExecution != nil && historyCollection.ready && lock != nil && historyCollection.deleting == nil
             && !quitting && !busy && !launcherPending && !credentialBusy
@@ -616,7 +631,7 @@ import SaulNativeValues
         entry.isRetryable && canStartLookup && !connecting
     }
     func retry(_ id: UUID) {
-        guard let original = entries.first(where: { $0.id == id }), canRetry(original),
+        guard let original = historyCollection.knownDetail(id), canRetry(original),
             historyCollection.ready
         else { return }
         retryFailure = nil
@@ -704,7 +719,10 @@ import SaulNativeValues
             && historyCollection.deleting == nil
     }
     @discardableResult func deleteLookup(_ id: HistoryStore.RecordID) -> Task<Void, Never>? {
-        guard canDeleteLookup, let entry = entries.first(where: { $0.recordID == id }) else { return nil }
+        guard canDeleteLookup,
+            let entry = entries.first(where: { $0.recordID == id })
+                ?? selectedEntry.flatMap({ $0.recordID == id ? HistoryRow($0) : nil })
+        else { return nil }
         return historyCollection.remove(id) { [weak self] result in
             guard let self else { return }
             switch result {
@@ -719,16 +737,12 @@ import SaulNativeValues
 
     @discardableResult func refreshHistory() -> Task<Void, Never>? {
         guard !quitting else { return nil }
-        return historyCollection.refresh { [weak self] result in
+        return historyCollection.refresh(search: search) { [weak self] result in
             guard let self else { return }
             switch result {
             case .success:
                 storageWarning = nil
-                if let selection, !entries.contains(where: { $0.id == selection }) {
-                    self.selection = nil
-                } else {
-                    loadSelectedImage()
-                }
+                loadSelectedImage()
             case .failure(let error):
                 storageWarning = error.localizedDescription
             }

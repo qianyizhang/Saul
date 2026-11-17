@@ -74,7 +74,9 @@ import SaulNativeValues
             setMinimumMode: { prefs.set($0, forKey: "minimumMode") },
             attemptExecution: AttemptExecution(
                 generate: generation.generate(entry:onUpdate:), append: { try await writer.append($0) }),
-            readHistory: { try await reader.load() },
+            readHistory: { try await reader.page(search: $0, after: $1) },
+            countHistory: { try await reader.count(search: $0, excluding: $1) },
+            readHistoryEntry: { try await reader.entry($0) },
             deleteHistory: { try await writer.delete($0) },
             speak: speech.generate(preset:text:), allowsExternalServices: true)
     }

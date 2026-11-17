@@ -4,7 +4,7 @@ import SwiftUI
 
 struct ContentView: View {
     @ObservedObject var model: AppModel
-    @State private var lookupToDelete: HistoryEntry?
+    @State private var lookupToDelete: HistoryRow?
     var body: some View {
         // Keep the system sidebar toolbar's own icon-only style outside the columns.
         NavigationSplitView {
@@ -22,9 +22,26 @@ struct ContentView: View {
                             } else {
                                 answer(entry)
                             }
+                        } else if model.selection != nil {
+                            if model.historyDetailLoading {
+                                ProgressView("Loading saved lookup…")
+                            } else {
+                                Text(model.historyDetailError ?? "This saved lookup is unavailable.")
+                                    .foregroundStyle(.secondary)
+                                Button("Retry") { model.reloadHistorySelection() }
+                            }
                         } else {
                             welcome
                             composer
+                        }
+                        if model.selectedEntry != nil {
+                            if let error = model.historyDetailError {
+                                Text("Could not refresh this saved lookup. \(error)")
+                                    .foregroundStyle(.secondary)
+                                Button("Retry") { model.reloadHistorySelection() }
+                            } else if model.historyDetailLoading {
+                                ProgressView("Refreshing saved lookup…")
+                            }
                         }
                     }
                     .padding(30)
@@ -111,7 +128,7 @@ struct ContentView: View {
                 Text("History").font(AppStyle.caption)
                 Spacer()
                 if !model.minimumMode {
-                    Text("\(model.filteredEntries.count)").font(.caption.monospacedDigit())
+                    Text("\(model.historyTotal)").font(.caption.monospacedDigit())
                 }
             }.foregroundStyle(.secondary).padding(.horizontal, 18)
             List(selection: $model.selection) {
@@ -132,13 +149,22 @@ struct ContentView: View {
                             }
                         }.font(.system(size: 10)).foregroundStyle(.secondary)
                     }.padding(.vertical, 5).tag(entry.id)
+                        .onAppear {
+                            if entry.id == model.entries.last?.id { model.loadMoreHistory() }
+                        }
                         .contextMenu {
                             deleteButton(entry)
                         }
                 }
+                if model.historyHasMore {
+                    Button(model.historyLoading ? "Loading…" : "Load more") { model.loadMoreHistory() }
+                        .disabled(model.historyLoading)
+                }
             }.listStyle(.sidebar)
                 .overlay {
-                    if model.filteredEntries.isEmpty {
+                    if model.filteredEntries.isEmpty && model.historyLoading {
+                        ProgressView("Loading history…")
+                    } else if model.filteredEntries.isEmpty {
                         VStack(spacing: 8) {
                             Text(model.search.isEmpty ? "No runs yet" : "No matching runs")
                                 .font(AppStyle.caption).foregroundStyle(.secondary)
@@ -200,7 +226,7 @@ struct ContentView: View {
                 entry: entry, activity: model.selectedResponseActivity,
                 imageData: model.imageData(for: entry), imageLoading: model.imageLoading)
             RetryAttemptNotice(model: model, entry: entry)
-            if let parentID = entry.parentID, model.entries.contains(where: { $0.id == parentID }) {
+            if let parentID = entry.parentID {
                 Button("Previous answer") { model.selection = parentID }.buttonStyle(.borderless)
             }
             if let source = entry.sourceURL, let url = URL(string: source),
@@ -251,13 +277,15 @@ struct ContentView: View {
                     Button("Export…") { model.export(entry) }.help("Export this lookup as Markdown")
                 }
                 Spacer(minLength: 4)
-                if model.canDeleteLookup { deleteButton(entry).foregroundStyle(DesignTokens.danger) }
+                if model.canDeleteLookup {
+                    deleteButton(HistoryRow(entry)).foregroundStyle(DesignTokens.danger)
+                }
             }
             .buttonStyle(.borderless).font(AppStyle.caption)
         }
     }
 
-    private func deleteButton(_ entry: HistoryEntry) -> some View {
+    private func deleteButton(_ entry: HistoryRow) -> some View {
         Button(role: .destructive) {
             lookupToDelete = entry
         } label: {

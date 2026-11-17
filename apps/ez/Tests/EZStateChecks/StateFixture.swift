@@ -46,7 +46,7 @@ import SaulTestSupport
     func selectLookup() throws -> HistoryEntry {
         let entry = try snapshot()
         try history.append(entry)
-        model.entries = [entry]
+        model.showHistory([entry])
         model.selection = entry.id
         model.query = "draft to preserve"
         return entry

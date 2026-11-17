@@ -15,6 +15,21 @@ public actor HistoryReader {
         return try snapshot.entries()
     }
 
+    public func page(search: String = "", after cursor: HistoryCursor? = nil) throws -> HistoryPage {
+        try Task.checkCancellation()
+        return try HistoryStore(reading: directory).page(search: search, after: cursor)
+    }
+
+    public func count(search: String, excluding identities: [HistoryStore.RecordID]) throws -> Int {
+        try Task.checkCancellation()
+        return try HistoryStore(reading: directory).count(search: search, excluding: identities)
+    }
+
+    public func entry(_ id: HistoryStore.RecordID) throws -> HistoryEntry? {
+        try Task.checkCancellation()
+        return try HistoryStore(reading: directory).entry(id)
+    }
+
     public func image(for entry: HistoryEntry) throws -> Data? {
         try Task.checkCancellation()
         return try HistoryStore(reading: directory).image(for: entry)
@@ -89,7 +104,7 @@ struct HistorySnapshot {
         return entry
     }
 
-    private static func browserID(_ id: String) -> UUID {
+    static func browserID(_ id: String) -> UUID {
         let bytes = Array(SHA256.hash(data: Data(("saul:" + id).utf8)).prefix(16))
         return UUID(
             uuid: (

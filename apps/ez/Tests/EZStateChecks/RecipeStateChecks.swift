@@ -87,7 +87,7 @@ import SaulTestSupport
         stateCase("history selection keeps an independent draft until explicit Reuse") { f in
             let answer = try f.savedAnswer()
             try f.history.append(answer)
-            f.model.entries = [answer]
+            f.model.showHistory([answer])
             f.model.selection = answer.id
             try expect(!f.model.hasRetainedDraft, "History selection was mistaken for a draft")
 

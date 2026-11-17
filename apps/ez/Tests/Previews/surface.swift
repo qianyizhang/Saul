@@ -285,7 +285,7 @@ private struct SurfacePreviewControls: View {
             action = config.actions.first
         }
         model.chooseAction(action?.id)
-        model.entries = []
+        model.showHistory([])
         if scenario.hasPrefix("Meme") {
             model.query = "Make this a Monday meme. Caption: already?"
             if scenario == "Meme invalid" {
@@ -345,7 +345,7 @@ private struct SurfacePreviewControls: View {
                     entry.actualServiceTier = nil
                 }
                 model.query = scenario == "Retained draft" ? "An unrelated question I have not run yet." : ""
-                model.entries = [entry]
+                model.showHistory([entry])
                 model.selection = entry.id
             }
         }
@@ -374,7 +374,7 @@ private struct SurfacePreviewControls: View {
                 Changes: Fixed spelling, agreement, capitalization, and punctuation.
                 """
             entry.status = "completed"
-            model.entries = [entry]
+            model.showHistory([entry])
             model.selection = entry.id
         }
         if scenario == "Blocked" {

@@ -240,7 +240,8 @@ import SaulTestSupport
             try await expectAsyncThrows(EZError.self) { _ = try await history.load() }
             try expectEqual(try historySQL(path, "PRAGMA user_version"), "3", "A read upgraded the database")
         },
-        CheckCase("history: off-main projection retains all 4,000 matching rows") { directory in
+        CheckCase("history: bounded list searches all 4,000 records without loading their answers") {
+            directory in
             let store = try HistoryStore(directory: directory)
             var example = HistoryEntry(
                 mode: .ask, query: "Find in history", model: "m", effort: "", requestedServiceTier: nil)
@@ -258,12 +259,17 @@ import SaulTestSupport
                 """)
             let clock = ContinuousClock()
             let start = clock.now
-            let entries = try await HistoryReader(directory: directory).load()
-            print("  Fixture: 4,000 history rows projected in \(start.duration(to: clock.now)).")
-            try expectEqual(entries.count, 4_000, "Large read omitted history rows")
-            try expectEqual(
-                entries.filter { $0.displayQuery.localizedCaseInsensitiveContains("find in history") }.count,
-                4_000, "Large read omitted searchable text")
+            let page = try await HistoryReader(directory: directory).page(search: "synthetic text")
+            print(
+                "  Fixture: 4,000 rows searched; 100 list rows projected in \(start.duration(to: clock.now))."
+            )
+            try expectEqual(page.rows.count, 100, "List decoded the complete collection")
+            try expectEqual(page.total, 4_000, "Search omitted answers outside the loaded page")
+            try expect(page.next != nil, "Large collection has no next page")
+            let visibleCharacters = page.rows.reduce(0) { $0 + $1.displayQuery.utf8.count }
+            print(
+                "  List title bytes: \(visibleCharacters); stored answer bytes omitted: \(example.response.utf8.count * 4_000)."
+            )
         },
         CheckCase("history: one EZ process owns native runtime coordination") { directory in
             let lock = try SessionLock(directory: directory)

@@ -10,6 +10,10 @@ Both apps can read, search, copy and delete saved passages and native lookups.
 Only Saul runs browser work and presents saved summaries. Active execution and
 drafts remain app-owned; browser recovery is scoped to the originating profile.
 History reloads on focus or activation without periodic polling.
+EZ loads list projections in 100-row cursor pages and fetches full saved details
+on selection. Search covers all saved query/answer text, not only loaded rows,
+and retains localized case-insensitive substring matching. Pagination does not
+change frozen Retry/Reuse/Follow-up inputs or saved record identities.
 
 | Operation             | Guarantee                                                                                                                                                                                                                           |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

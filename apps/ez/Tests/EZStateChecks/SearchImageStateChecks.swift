@@ -140,6 +140,7 @@ import SaulTestSupport
             defer { model.shutdown() }
             await model.refreshHistory()?.value
             model.selection = entry.id
+            await model.waitForHistorySelection()
             let loaded = CheckSignal()
             let observer = model.objectWillChange.filter { !model.imageLoading }.sink { _ in
                 Task { await loaded.signal() }

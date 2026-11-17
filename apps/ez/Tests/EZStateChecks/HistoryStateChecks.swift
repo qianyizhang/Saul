@@ -29,7 +29,7 @@ import SaulTestSupport
             try FileManager.default.createDirectory(at: f.history.url, withIntermediateDirectories: true)
             await f.model.deleteLookup(entry.recordID)?.value
             try expect(
-                f.model.entries == [entry] && f.model.selection == entry.id,
+                f.model.entries == [HistoryRow(entry)] && f.model.selection == entry.id,
                 "Failed deletion removed visible lookup")
             try expect(
                 f.model.inputValues == draft && f.model.error != nil,
@@ -100,7 +100,7 @@ import SaulTestSupport
                     return try await reading.value
                 })
             defer { model.shutdown() }
-            model.entries = [entry]
+            model.showHistory([entry])
             model.selection = entry.id
             let writer = try HistoryFixtureWriter(store.url, reservation: .exclusive)
             guard let refresh = model.refreshHistory() else { throw CheckFailure("No history refresh") }
@@ -136,7 +136,7 @@ import SaulTestSupport
                 release?.resume(returning: [])
                 model.shutdown()
             }
-            model.entries = [saved]
+            model.showHistory([saved])
             model.selection = saved.id
             guard let pending = model.refreshHistory() else { throw CheckFailure("No history refresh") }
             try await readStarted.wait()
@@ -147,6 +147,7 @@ import SaulTestSupport
             try expect(
                 model.entries.isEmpty && model.selection == nil, "A stale reply resurrected a deletion")
             try expect(try store.load().isEmpty, "Deletion did not persist")
+            try expectEqual(model.historyTotal, 0, "Stale page resurrected the deleted count")
         },
         CheckCase("state: terminal lookup preserves the first history load and newer attempt state") {
             directory in
@@ -205,6 +206,7 @@ import SaulTestSupport
                 await loading.value
                 try expectEqual(
                     Set(model.entries.map(\.id)), [old.id, current.id], "Startup lost history rows")
+                try expectEqual(model.historyTotal, 2, "Startup count ignored the new outcome")
                 try expectEqual(
                     model.selectedEntry?.status, failsSave ? "unsaved" : "completed",
                     "Startup replaced the newer terminal result")

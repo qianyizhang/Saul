@@ -73,10 +73,25 @@ EZ upserts one snapshot per UUID; native `schemaVersion: 1` JSON and image blobs
 commit together. On launch, the writer prepares or migrates the database under the session lock
 and marks abandoned EZ rows interrupted. Run and deletion wait for preparation
 to finish. Startup and activation reload History without changing Saul's execution. A serial
-reader uses a separate query-only connection and releases its SQLite snapshot
-before decoding rows. Image bytes load separately for the selected answer.
+reader uses a separate query-only connection. Full-detail snapshots release their
+SQLite transaction before decoding saved JSON; list queries project bounded row
+values. Image bytes load separately for the selected answer.
 The app discards a refresh overtaken by a later refresh or shutdown. Local
 deletion and attempt changes during a refresh supersede the affected rows.
+History lists use 100-row cursor pages with bounded titles and no answer or replay
+payload. Scrolling loads the next page; Load more also retries a failed page.
+Search matches all stored query and answer text using the same Foundation
+localized case-insensitive substring comparison as before. The count is all
+matches, not loaded rows. Native timestamps retain saved JSON precision; browser
+rows retain the latest eligible attempt's timestamp and stable identity.
+
+Selecting a row loads its exact saved record separately. The selected answer
+survives list refresh and filtering, including Previous answer links outside the
+loaded pages. Detail failures stay visible with Retry. Superseded page/detail
+reads cannot replace newer state. The detail cache retains at most 20 recent
+records plus selected, active and unsaved outcomes; history refresh discards
+transient unsaved data according to the attempt contract.
+
 Deletion uses the selected native UUID or browser selection ID. The browser
 guard and deletion share a write transaction; neither delete decodes unrelated rows.
 

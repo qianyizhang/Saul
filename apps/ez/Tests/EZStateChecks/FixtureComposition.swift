@@ -45,6 +45,8 @@ import SaulNativeValues
     connections: FixtureConnections? = nil, connectionChecks: ConnectionChecks? = nil,
     client: ConnectionSession.Client? = nil,
     readHistory: (@MainActor () async throws -> [HistoryEntry])? = nil,
+    readHistoryPage: (@MainActor (String, HistoryCursor?) async throws -> HistoryPage)? = nil,
+    readHistoryEntry: (@MainActor (HistoryStore.RecordID) async throws -> HistoryEntry?)? = nil,
     historyPreparation: HistoryCollection.Preparation? = nil
 ) -> AppModel {
     let historyDirectory = historyDirectory ?? directory
@@ -68,7 +70,16 @@ import SaulNativeValues
             client: client ?? .init()),
         configurationStore: ConfigurationStore(directory: directory), initialConfiguration: config,
         historyPreparation: preparation, attemptExecution: attemptExecution,
-        readHistory: readHistory ?? { try await reader.load() },
+        readHistory: { search, cursor in
+            if let readHistoryPage { return try await readHistoryPage(search, cursor) }
+            if let readHistory {
+                let values = try await readHistory()
+                return HistoryPage(rows: values.map(HistoryRow.init))
+            }
+            return try await reader.page(search: search, after: cursor)
+        },
+        countHistory: { try await reader.count(search: $0, excluding: $1) },
+        readHistoryEntry: readHistoryEntry ?? { try await reader.entry($0) },
         deleteHistory: { try await writer.delete($0) })
 }
 
