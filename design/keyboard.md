@@ -58,3 +58,6 @@ Owners: [follow-up](../apps/saul/src/surface/ExplanationCard.tsx),
 [browser defaults](../apps/saul/wxt.config.ts) and
 [summary panel](../apps/saul/src/app/SummaryPanel.tsx).
 Check follow-up editing and sending in the [browser journey](../apps/saul/tests/e2e/follow-up.spec.ts).
+
+The follow-up send shortcut accepts exactly one of Command or Ctrl. Extra
+modifiers, held keys and composition do not submit a draft.

@@ -4,6 +4,17 @@ import Foundation
 
 @MainActor func configurationStateChecks() -> [CheckCase] {
     [
+        CheckCase("clipboard: the answer action reports a rejected write") { directory in
+            let model = AppModel(directory: directory, offline: true)
+            defer { model.shutdown() }
+            var attempted: String?
+            model.copy("Fixture answer") { text in
+                attempted = text
+                return false
+            }
+            try expectEqual(attempted, "Fixture answer", "Wrong text reached the clipboard")
+            try expectEqual(model.error, TextClipboard.failure, "Rejected copy was presented as success")
+        },
         CheckCase("state: corrupt configuration blocks sending and preserves original bytes") { directory in
             let configURL = directory.appendingPathComponent("configuration.json")
             let bytes = Data("{broken".utf8)

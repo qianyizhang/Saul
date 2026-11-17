@@ -119,6 +119,8 @@ export async function* responseEvents(response: Response): AsyncGenerator<PlanEv
         'incomplete',
       );
     } else if (event.type === 'response.completed') {
+      if (!isRecord(event.response) || event.response.status !== 'completed')
+        throw new ResponseFailure('Responses did not complete successfully.', 'incomplete');
       yield { type: 'complete' };
       return;
     }

@@ -854,9 +854,8 @@ import SaulCredentialStorage
     }
 
     func revealHistory() { NSWorkspace.shared.activateFileViewerSelecting([history?.url ?? directory]) }
-    func copy(_ text: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+    func copy(_ text: String, using write: @MainActor (String) -> Bool = { TextClipboard.write($0) }) {
+        if !write(text) { error = TextClipboard.failure }
     }
     func export(_ entry: HistoryEntry) {
         if entry.capability == .draw {

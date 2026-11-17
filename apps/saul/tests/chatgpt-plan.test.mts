@@ -31,7 +31,10 @@ it('uses only allowed Responses fields and requires a terminal completed event',
   expect(
     await collect(
       responseEvents(
-        sse({ type: 'response.output_text.delta', delta: 'Hello' }, { type: 'response.completed' }),
+        sse(
+          { type: 'response.output_text.delta', delta: 'Hello' },
+          { type: 'response.completed', response: { status: 'completed' } },
+        ),
       ),
     ),
   ).toEqual([{ type: 'delta', text: 'Hello' }, { type: 'complete' }]);
@@ -42,9 +45,15 @@ it('uses only allowed Responses fields and requires a terminal completed event',
     { reason: 'incomplete' },
   );
 });
+it('does not treat a Responses completed event without successful status as success', async () => {
+  for (const response of [undefined, {}, { status: 'failed' }])
+    await expect(
+      collect(responseEvents(sse({ type: 'response.completed', response }))),
+    ).rejects.toMatchObject({ reason: 'incomplete' });
+});
 it('handles byte-split UTF-8, CRLF and terminal errors after partial text', async () => {
   const bytes = new TextEncoder().encode(
-    'data: {"type":"response.output_text.delta","delta":"研究"}\r\n\r\ndata: {"type":"response.completed"}\r\n\r\n',
+    'data: {"type":"response.output_text.delta","delta":"研究"}\r\n\r\ndata: {"type":"response.completed","response":{"status":"completed"}}\r\n\r\n',
   );
   const body = new ReadableStream({
     start(c) {
@@ -170,7 +179,7 @@ it('reports reasoning activity without exposing its content and includes refusal
             item: { type: 'reasoning', content: 'not retained' },
           },
           { type: 'response.refusal.delta', delta: 'I cannot help with that.' },
-          { type: 'response.completed' },
+          { type: 'response.completed', response: { status: 'completed' } },
         ),
       ),
     ),
@@ -188,7 +197,7 @@ it('finishes at response.completed even while the HTTP connection stays open', a
       controller.enqueue(
         new TextEncoder().encode(
           'data: {"type":"response.output_text.delta","delta":"Done"}\n\n' +
-            'data: {"type":"response.completed"}\n\n',
+            'data: {"type":"response.completed","response":{"status":"completed"}}\n\n',
         ),
       );
     },

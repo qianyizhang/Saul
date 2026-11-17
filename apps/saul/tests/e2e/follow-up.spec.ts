@@ -63,6 +63,21 @@ test('widget follow-ups preserve drafts, context, failures and saved history', a
     await expect(question).toBeFocused();
     expect(fixtureServer.requests).toHaveLength(2);
     await question.fill('Can you give a concrete example?');
+    const ignored = await question.evaluate((input) =>
+      [
+        { metaKey: true, shiftKey: true },
+        { ctrlKey: true, altKey: true },
+        { ctrlKey: true, metaKey: true },
+        { metaKey: true, repeat: true },
+        { metaKey: true, isComposing: true },
+      ].map((flags) =>
+        input.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...flags }),
+        ),
+      ),
+    );
+    expect(ignored).toEqual([true, true, true, true, true]);
+    await expect(question).toHaveValue('Can you give a concrete example?');
     await question.press('ControlOrMeta+Enter');
     await expect.poll(async () => fixtureServer.requests.length).toBe(3);
     await expect

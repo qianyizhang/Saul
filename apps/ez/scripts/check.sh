@@ -11,6 +11,7 @@ state_sources=(
     Sources/EZ/LookupImageLoader.swift
     Sources/EZ/LookupRequest.swift
     Sources/EZ/SketchDraft.swift
+    Sources/EZ/TextClipboard.swift
 )
 kind="${1:-all}"
 if [[ $# -gt 0 ]]; then shift; fi

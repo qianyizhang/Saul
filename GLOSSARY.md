@@ -22,8 +22,10 @@ Saul distinguishes local-context Actions from page-level **Calls**; its
 restrict EZ's Action inputs or change the shared Action model.
 
 Use Settings, History, Details, More, Save, Cancel, Copy and Stop consistently.
-Explain submits a captured passage; Run executes an EZ action; Send submits a message or follow-up. Reuse restores a
-draft; Regenerate starts another attempt. Shared words do not imply shared storage.
+Explain submits a captured passage; Run executes an EZ action; Send submits a
+message or follow-up. Reuse restores an editable draft. Run again starts a fresh
+attempt from current input. Regenerate starts another attempt from the recorded
+input. Retry uses the recorded input of an unsuccessful attempt.
 
 **Min Mode** is the compact everyday presentation with routine guidance omitted.
 **Refresh** reads current state; **Reload** reads saved settings. Neither generates.

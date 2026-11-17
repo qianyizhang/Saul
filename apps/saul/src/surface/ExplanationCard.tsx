@@ -167,7 +167,7 @@ export function ExplanationCard({
                 aria-label="Run again with current input"
                 title="Run again with current input"
               >
-                {minimum ? 'Regenerate' : 'Run again with current input'}
+                {minimum ? 'Run again' : 'Run again with current input'}
               </button>
             )}
           </aside>
@@ -299,7 +299,10 @@ export function ExplanationCard({
               onKeyDown={(event) => {
                 if (
                   event.key === 'Enter' &&
-                  (event.metaKey || event.ctrlKey) &&
+                  event.metaKey !== event.ctrlKey &&
+                  !event.altKey &&
+                  !event.shiftKey &&
+                  !event.repeat &&
                   !event.nativeEvent.isComposing
                 ) {
                   event.preventDefault();

@@ -146,7 +146,12 @@ test('repeated reading actions disclose reuse and input drift, then explicitly r
   await expect(notice).toContainText('Text changed');
   expect(fixtureServer.requests.length).toBe(initial + 1);
   if (reviewScreenshots) await source.screenshot({ path: info.outputPath('reading-reuse.png') });
-  await notice.getByRole('button', { name: 'Run again with current input', exact: true }).click();
+  const runAgain = notice.getByRole('button', {
+    name: 'Run again with current input',
+    exact: true,
+  });
+  await expect(runAgain).toHaveText('Run again');
+  await runAgain.click();
   await expect.poll(() => fixtureServer.requests.length).toBe(initial + 2);
   await expect.poll(async () => (await getHistory(popup))[0]?.latest.status).toBe('completed');
   expect(fixtureServer.requests.at(-1)!.body).toContain(

@@ -11,6 +11,8 @@ inputs, substitution and preparation.
 
 [Attempt execution](actions-and-attempts.md#execution) owns completion, Stop,
 saved success and retry.
+[Stream completion](actions-and-attempts.md#stream-completion) records the
+terminal signals and common fixtures for compatible chat and Responses.
 
 ## History operations
 
@@ -32,4 +34,6 @@ See [scope and revision rules](configuration.md#unified-configuration-scopes).
 
 ## Presentation
 
-[Design](../DESIGN.md) owns shared visual and interaction rules.
+[Design](../DESIGN.md) owns shared visual and interaction rules. See the
+[glossary](../GLOSSARY.md), [keyboard reference](../design/keyboard.md), and
+[symbol registry](../design/symbols.json) for the corresponding controls.

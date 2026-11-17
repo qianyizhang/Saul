@@ -78,10 +78,7 @@ private struct InspectionTextBlock: View {
                 Spacer()
                 Button {
                     copiedText = text
-                    NSPasteboard.general.clearContents()
-                    notice =
-                        NSPasteboard.general.setString(text, forType: .string)
-                        ? "Copied" : "Could not copy. Select the text and copy it manually."
+                    notice = TextClipboard.write(text) ? "Copied" : TextClipboard.failure
                 } label: {
                     ControlLabel(symbol: .copy, title: "Copy \(label)")
                 }

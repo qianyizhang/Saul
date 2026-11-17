@@ -53,15 +53,17 @@ names, tooltips and focus cues.
 
 Use sentence case and concrete names from the [glossary](GLOSSARY.md). Keep
 **History**, **Settings**, **Details**, **More**, **Save**, **Cancel** and **Stop**
-consistent. Show status only when observed. **Reuse** restores an editable draft;
-**Regenerate** or **Run again** starts a new attempt. **Refresh** reads current
+consistent. Show status only when observed. **Reuse** restores an editable draft.
+**Run again**, **Regenerate** and **Retry** start attempts with the input defined
+in the glossary. **Refresh** reads current
 state; **Reload** reads saved settings and guards dirty drafts. Closing a view
 does not Stop. Fast requests a speed tier; it does not promise latency or prove
 the returned tier.
 
 Use one clear word or familiar symbol. Copy, Send, Refresh and sidebar toggles
 use symbols in both modes with accessible names. Keep text when consequential
-actions need scope. Use native sidebar controls on macOS. See the
+actions need scope. Copy reports a failed clipboard write; show confirmation
+only after the clipboard accepts the write. Use native sidebar controls on macOS. See the
 [generated symbol sheet](design/symbols.html) and [owning registry](design/symbols.json).
 
 ## Settings
