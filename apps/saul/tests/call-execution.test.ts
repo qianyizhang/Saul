@@ -88,7 +88,7 @@ describe.each(['plan', 'preset'] as const)('%s Summarize execution', (route) => 
     if (route === 'plan')
       expect(generate).toHaveBeenCalledWith(
         expect.objectContaining({ accountId: 'frozen-account', connectionKey: 'gpt-plan' }),
-        progress.signal,
+        expect.any(AbortSignal),
         'saul',
       );
     expect(unused).not.toHaveBeenCalled();
@@ -231,9 +231,8 @@ it('runs text cleanup and chained requests as one Call with frozen inputs and de
   });
   expect(outcome.output.progress).toBeUndefined();
   expect(model.mock.calls.every(([request]) => request.plan?.model === 'frozen-model')).toBe(true);
-  expect(seen.find((snapshot) => snapshot.calls?.[0]?.output === '')?.calls?.[0]?.complete).toBe(
-    false,
-  );
+  expect(seen[0]).toEqual({ raw: '', progress: 'Cleaning' });
+  expect(seen.at(-1)?.calls?.map(({ complete }) => complete)).toEqual([true, true]);
   expect(host.mock.calls[0]?.[0]).toMatchObject({ source: { text: before.page.source.text } });
   expect(JSON.stringify(outcome)).not.toContain('transient-key');
 });
@@ -338,4 +337,136 @@ it('preserves PDF attachment with custom explicit input and allows a text-only s
     await createCallExecutor({ script: local, model }).execute({ call: script, page }, options()),
   ).toMatchObject({ kind: 'completed', result: { kind: 'text', text: 'Locally prepared text' } });
   expect(model).not.toHaveBeenCalled();
+});
+
+it.each(['completed', 'failed', 'cancelled'] as const)(
+  'coalesces token bursts and flushes the complete %s transcript without retained timers',
+  async (ending) => {
+    vi.useFakeTimers();
+    try {
+      const firstBurst = Promise.withResolvers<void>();
+      const nextBurst = Promise.withResolvers<void>();
+      const secondBurst = Promise.withResolvers<void>();
+      const finish = Promise.withResolvers<void>();
+      const model: typeof streamModel = async function* (_input, _credential, signal) {
+        for (let n = 0; n < 1000; n++) yield { type: 'delta', text: 'x' };
+        firstBurst.resolve();
+        await nextBurst.promise;
+        for (let n = 0; n < 500; n++) yield { type: 'delta', text: 'y' };
+        secondBurst.resolve();
+        await finish.promise;
+        signal!.throwIfAborted();
+        if (ending === 'failed') throw new Error('Provider failed after output');
+        yield { type: 'complete' };
+      };
+      const host: typeof actionHost = async (_request, opts) => ({
+        type: 'result',
+        text: await opts!.generate!({ instructions: 'Process' }, opts!.signal!),
+      });
+      const controller = new AbortController();
+      const progress = { ...options(), signal: controller.signal };
+      const execution = createCallExecutor({ model, script: host }).execute(
+        { call: script, page },
+        progress,
+      );
+      await firstBurst.promise;
+      expect(progress.onProgress).toHaveBeenCalledTimes(1);
+      const first = progress.onProgress.mock.calls[0]![0];
+      expect(first.calls?.[0]?.output).toBe('');
+      await vi.advanceTimersByTimeAsync(49);
+      expect(progress.onProgress).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(progress.onProgress).toHaveBeenCalledTimes(2);
+      const observed = progress.onProgress.mock.calls[1]![0];
+      expect(observed.raw).toBe('x'.repeat(1000));
+      // A consumer may mutate its copy without corrupting execution or later checkpoints.
+      observed.calls![0]!.output = 'consumer edit';
+      nextBurst.resolve();
+      await secondBurst.promise;
+      await vi.advanceTimersByTimeAsync(49);
+      expect(progress.onProgress).toHaveBeenCalledTimes(2);
+      if (ending === 'cancelled') controller.abort();
+      finish.resolve();
+      const result = await execution;
+      const text = 'x'.repeat(1000) + 'y'.repeat(500);
+      expect(result).toMatchObject({ kind: ending, output: { raw: text } });
+      expect(progress.onProgress).toHaveBeenCalledTimes(3);
+      expect(progress.onProgress.mock.calls[2]![0].raw).toBe(text);
+      expect(first.calls?.[0]?.output).toBe('');
+      expect(observed.calls![0]!.output).toBe('consumer edit');
+      expect(vi.getTimerCount()).toBe(0);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(progress.onProgress).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
+
+it('settles a timed publication failure even when the adapter ignores cancellation', async () => {
+  vi.useFakeTimers();
+  try {
+    const waiting = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    let receivedSignal: AbortSignal | undefined;
+    const model: typeof streamModel = async function* (_input, _key, signal) {
+      receivedSignal = signal;
+      yield { type: 'delta', text: 'partial' };
+      waiting.resolve();
+      await release.promise;
+      yield { type: 'delta', text: ' late' };
+      yield { type: 'complete' };
+    };
+    const host: typeof actionHost = async (_request, opts) => ({
+      type: 'result',
+      text: await opts!.generate!({ instructions: 'Process' }, opts!.signal!),
+    });
+    const progress = options();
+    progress.onProgress
+      .mockImplementationOnce(() => {})
+      .mockImplementation(() => {
+        throw new Error('Progress consumer failed');
+      });
+    const execution = createCallExecutor({ model, script: host }).execute(
+      { call: script, page },
+      progress,
+    );
+    await waiting.promise;
+    await vi.advanceTimersByTimeAsync(50);
+    const outcome = await execution;
+    expect(outcome).toMatchObject({
+      kind: 'failed',
+      failure: 'execution',
+      message: 'Progress consumer failed',
+      output: { raw: 'partial' },
+    });
+    expect(receivedSignal?.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    release.resolve();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(outcome.output.raw).toBe('partial');
+    expect(progress.onProgress).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('a throwing final publication returns a failed outcome with all buffered output', async () => {
+  const model: typeof streamModel = async function* () {
+    yield { type: 'delta', text: 'partial' };
+    throw new Error('Provider failed');
+  };
+  const host: typeof actionHost = async (_request, opts) => ({
+    type: 'result',
+    text: await opts!.generate!({ instructions: 'Process' }, opts!.signal!),
+  });
+  const progress = options();
+  progress.onProgress
+    .mockImplementationOnce(() => {})
+    .mockImplementation(() => {
+      throw new Error('Final progress failed');
+    });
+  await expect(
+    createCallExecutor({ model, script: host }).execute({ call: script, page }, progress),
+  ).resolves.toMatchObject({ kind: 'failed', output: { raw: 'partial' } });
 });

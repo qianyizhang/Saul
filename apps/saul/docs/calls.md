@@ -43,6 +43,11 @@ a delay, or you can select **Refresh status** to read immediately. Neither
 starts, stops, or repeats inference. Checks end when the attempt settles or
 the view closes.
 
+The executor retains every output delta and publishes regular detached progress
+at most every 50 ms, with an immediate final flush on success, failure or Stop. It rebuilds combined
+transcripts only when publishing or settling. This does not change the runner's
+500 ms custom-Call checkpoints or the requirement to save before reporting success.
+
 For one page, lead with its title, source link and plain progress; omit repeated
 titles and batch counts. For batches, distinguish successful and processed counts.
 Show the saved preset/model in reader and export. Built-in output gives English
