@@ -1,8 +1,28 @@
 name: Native checks and artifact
 on:
   push:
-  pull_request:
+    branches: [main]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      fast:
+        type: boolean
+        default: false
+      design:
+        type: boolean
+        default: false
+      core:
+        type: boolean
+        default: false
+      state:
+        type: boolean
+        default: false
+      credentials:
+        type: boolean
+        default: false
+      install:
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -18,32 +38,50 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-        with:
-          enable-cache: false
-          version: '0.11.8'
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - if: '!inputs.fast || inputs.design'
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - if: '!inputs.fast || inputs.design'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - if: '!inputs.fast || inputs.design'
+        run: pnpm install --frozen-lockfile --config.recursive-install=false
       - name: Toolchain
         run: |
           swift --version
           xcrun swift-format --version
-          uv --version
       - name: Install verified development tools
         run: make -C apps/ez tools
-      - name: Commit hooks (all tracked files)
-        run: bash scripts/pre-commit.sh run --all-files
-      - name: Push gate (build, static checks, offline contracts)
+      - name: Fast native checks
+        if: inputs.fast
+        env:
+          VERIFY_DESIGN: ${{ inputs.design }}
+          VERIFY_CORE: ${{ inputs.core }}
+          VERIFY_STATE: ${{ inputs.state }}
+          VERIFY_CREDENTIALS: ${{ inputs.credentials }}
+          VERIFY_INSTALL: ${{ inputs.install }}
+        run: |
+          make -C apps/ez lint
+          if [[ "$VERIFY_DESIGN" == true ]]; then pnpm design:check; fi
+          if [[ "$VERIFY_STATE" == true ]]; then
+            make -C apps/ez test-state
+          else
+            make -C apps/ez build
+          fi
+          if [[ "$VERIFY_CORE" == true ]]; then make -C apps/ez test-core; fi
+          if [[ "$VERIFY_CREDENTIALS" == true ]]; then make -C apps/ez test-credentials; fi
+          if [[ "$VERIFY_INSTALL" == true ]]; then make -C apps/ez test-install test-tooling; fi
+      - name: Full native checks
+        if: '!inputs.fast'
         run: pnpm check:ez
       - name: Package development app
+        if: '!inputs.fast'
         run: |
           make -C apps/ez app
           ditto -c -k --sequesterRsrc --keepParent apps/ez/dist/EZ.app apps/ez/dist/EZ-macos.zip
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - if: '!inputs.fast'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: macos-development-app
           path: apps/ez/dist/EZ-macos.zip

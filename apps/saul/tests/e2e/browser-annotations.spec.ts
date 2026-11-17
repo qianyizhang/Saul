@@ -148,7 +148,7 @@ test('queued comment edits preserve a concurrent edit and recover the local draf
   }
 });
 
-test('captures text before opening the native panel, saves drafts, replies through a Call, and restores after restart', async ({
+test('captures text before opening the native panel, saves drafts, replies through a Call, and restores after restart @smoke', async ({
   sandbox,
   fixtureServer,
 }, info) => {

@@ -1,0 +1,125 @@
+name: Pull request checks
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      docs: ${{ steps.plan.outputs.docs }}
+      smoke: ${{ steps.plan.outputs.smoke }}
+      native: ${{ steps.plan.outputs.native }}
+      design: ${{ steps.plan.outputs.design }}
+      core: ${{ steps.plan.outputs.core }}
+      state: ${{ steps.plan.outputs.state }}
+      credentials: ${{ steps.plan.outputs.credentials }}
+      install: ${{ steps.plan.outputs.install }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - id: plan
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/ci-scope.mts
+
+  checks:
+    needs: scope
+    name: Linux checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: false
+          version: '0.11.8'
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: bash scripts/pre-commit.sh run --all-files --hook-stage manual
+      - if: needs.scope.outputs.docs == 'true'
+        run: |
+          pnpm install --frozen-lockfile --config.recursive-install=false
+          pnpm format:check
+          pnpm check:links
+      - if: needs.scope.outputs.docs != 'true'
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm check:shared
+          pnpm check:saul
+
+  smoke:
+    needs: scope
+    if: needs.scope.outputs.smoke == 'true'
+    name: Browser smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir apps/saul exec playwright install --with-deps --no-shell chromium
+      - run: pnpm test:e2e --grep @smoke
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: smoke-diagnostics
+          path: .artifacts/saul/
+          include-hidden-files: true
+          retention-days: 7
+
+  native:
+    needs: scope
+    if: needs.scope.outputs.native == 'true'
+    name: macOS checks
+    uses: ./.github/workflows/native.yml
+    with:
+      fast: true
+      design: ${{ needs.scope.outputs.design == 'true' }}
+      core: ${{ needs.scope.outputs.core == 'true' }}
+      state: ${{ needs.scope.outputs.state == 'true' }}
+      credentials: ${{ needs.scope.outputs.credentials == 'true' }}
+      install: ${{ needs.scope.outputs.install == 'true' }}
+
+  verdict:
+    needs: [scope, checks, smoke, native]
+    if: always()
+    name: PR verdict
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: bash scripts/ci-verdict.sh
+        env:
+          SCOPE_RESULT: ${{ needs.scope.result }}
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          SMOKE_SELECTED: ${{ needs.scope.outputs.smoke }}
+          SMOKE_RESULT: ${{ needs.smoke.result }}
+          NATIVE_SELECTED: ${{ needs.scope.outputs.native }}
+          NATIVE_RESULT: ${{ needs.native.result }}

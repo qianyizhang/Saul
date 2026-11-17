@@ -47,7 +47,7 @@ async function generations(worker: Worker) {
   );
 }
 
-test('PDF viewer capture supports query strings and extensionless documents, with a real packaged worker', async ({
+test('PDF viewer capture supports query strings and extensionless documents, with a real packaged worker @smoke', async ({
   sandbox,
   fixtureServer,
 }, info) => {

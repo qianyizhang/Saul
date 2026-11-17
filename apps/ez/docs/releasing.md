@@ -64,8 +64,8 @@ acceptance. Never work around prompts by allowing all applications.
 ## CI artifact
 
 [Native CI](../../../.github/workflows/native.yml) owns runner/toolchain pins and
-packages `EZ-macos.zip` for 14 days. It preserves the bundle and targets the runner's
-architecture. The ad-hoc artifact is for development, not a notarized release.
+packages `EZ-macos.zip` for 14 days on `main` or manual runs. It preserves the bundle
+and targets the runner's architecture. The ad-hoc artifact is for development, not a notarized release.
 
 ## Distribution
 
