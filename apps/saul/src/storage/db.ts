@@ -2,6 +2,7 @@ import {
   annotationStore,
   annotationAttempts,
   annotationImage,
+  annotationStatus,
 } from '../../native/annotation-store.mts';
 import { validateGeneratedImage, type GeneratedImage } from '../providers/images';
 import { digestStore } from '../digest/store';
@@ -301,6 +302,8 @@ export class SaulDatabase {
         return annotationStore(this.db, this.owner, message.payload);
       case 'DB_ANNOTATION_ATTEMPT':
         return annotationAttempts(this.db, this.owner, message.payload);
+      case 'DB_ANNOTATION_STATUS':
+        return annotationStatus(this.db, this.owner, message.payload);
       case 'DB_READING_RESOLVE': {
         const { snapshot, submissionId, recipeId } = message.payload;
         const submitted = this.submittedSelection(submissionId, snapshot.page.url);

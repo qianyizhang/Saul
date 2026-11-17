@@ -1,5 +1,7 @@
 import { sourcePage, workspaceSender } from '../contracts/reading';
 import { runnerRequest } from '../storage/client';
+import { annotationStatusSchema, type AnnotationEditorStatus } from './attempts';
+import { mutateAnnotationDraft } from './draft';
 import {
   requestSchema,
   captureSchema,
@@ -256,11 +258,24 @@ export function initAnnotations(settings: () => Promise<Configuration>) {
         return openPanel(sender.tab!.windowId, annotationIdSchema.optional().parse(request.id));
       }
       if (!workspaceSender(sender)) throw new Error('Annotation editor only.');
+      if (request.action === 'draft') return mutateAnnotationDraft(request.mutation);
       if (request.action === 'operate')
         return operateAnnotations({
           scope: { urls: [request.url], ids: [] },
           author: { kind: 'user', name: 'You' },
           operation: request.operation,
+        });
+      if (request.action === 'status')
+        return runnerRequest<AnnotationEditorStatus>({
+          operation: 'db',
+          message: {
+            type: 'DB_ANNOTATION_STATUS',
+            payload: annotationStatusSchema.parse({
+              url: request.url,
+              id: request.id,
+              known: request.known,
+            }),
+          },
         });
       if (request.action === 'start-capture') {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -323,14 +338,12 @@ export function initAnnotations(settings: () => Promise<Configuration>) {
           prepared,
         });
       }
-      if (request.action === 'inspect' || request.action === 'attempts') {
+      if (request.action === 'inspect') {
         const result = await runnerRequest<{ attempts: unknown[] }>({
           operation: 'annotation',
           message: {
             action: 'attempts',
-            ...(request.action === 'inspect'
-              ? { id: annotationIdSchema.parse(request.id) }
-              : { annotationId: annotationIdSchema.parse(request.annotationId) }),
+            id: annotationIdSchema.parse(request.id),
           },
         });
         return result.attempts;

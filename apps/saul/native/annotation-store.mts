@@ -1,8 +1,13 @@
 import { createHash } from 'node:crypto';
 import {
   activeAnnotationAttempt,
+  annotationStatusSchema,
   type AnnotationAttempt,
+  type AnnotationAttemptStatus,
   type AnnotationDbOperations,
+  type AnnotationEditorRecord,
+  type AnnotationEditorStatus,
+  type AnnotationStatusKey,
 } from '../src/annotations/attempts.ts';
 import type { SqlDatabase } from '../src/storage/sql.ts';
 import {
@@ -16,6 +21,7 @@ import {
   type AnnotationRequest,
   type AnnotationResult,
   type AnnotationScope,
+  type AnnotationSummary,
 } from '../src/annotations/contract.ts';
 
 /** Additive, browser-owned tables in the existing shared database; EZ does not project these records. */
@@ -71,22 +77,40 @@ function applyAnnotationOperation(
   if (op.action === 'list') {
     if (!scope.urls.includes(op.url) && !scope.ids.length)
       throw new Error('Page is outside the assigned scope.');
-    const rows = db
-      .selectObjects('SELECT body FROM browser_annotation WHERE owner=? AND url=? ORDER BY rowid', [
+    const scopedPage = scope.urls.includes(op.url);
+    const rows = db.selectObjects(
+      `SELECT json_remove(body,'$.image','$.operations','$.replies') AS summary,
+          json_type(body,'$.image')='text' AS has_image,
+          json_array_length(body,'$.replies') AS reply_count
+        FROM browser_annotation WHERE owner=? AND url=?
+          AND (? OR id IN (SELECT value FROM json_each(?)))
+          AND ${op.filter === 'deleted' ? 'deleted_at IS NOT NULL' : 'deleted_at IS NULL'}
+          AND (? IN ('all','deleted') OR json_extract(body,'$.state')=?)
+        ORDER BY rowid LIMIT 26 OFFSET ?`,
+      [
         owner,
         op.url,
-      ])
-      .map((r) => JSON.parse(String(r.body)) as Annotation)
-      .filter(
-        (a) =>
-          allowed(a, scope) &&
-          (op.filter === 'deleted'
-            ? a.deletedAt !== undefined
-            : a.deletedAt === undefined && (op.filter === 'all' || a.state === op.filter)),
-      );
+        Number(scopedPage),
+        JSON.stringify(scope.ids),
+        op.filter,
+        op.filter,
+        op.offset,
+      ],
+    );
     return {
-      records: rows.slice(op.offset, op.offset + 25).map(summary),
-      ...(rows.length > op.offset + 25 ? { nextOffset: op.offset + 25 } : {}),
+      records: rows.slice(0, 25).map((row) => {
+        const item = JSON.parse(String(row.summary)) as Omit<
+          AnnotationSummary,
+          'hasImage' | 'replyCount'
+        >;
+        return {
+          ...item,
+          comment: item.comment.slice(0, 500),
+          hasImage: Boolean(row.has_image),
+          replyCount: Number(row.reply_count),
+        };
+      }),
+      ...(rows.length > 25 ? { nextOffset: op.offset + 25 } : {}),
     };
   }
   if (op.action === 'read') {
@@ -198,6 +222,85 @@ function applyAnnotationOperation(
         return { id: change.id, error: (e as Error).message };
       }
     }),
+  };
+}
+
+export function annotationStatus(
+  db: SqlDatabase,
+  owner: string,
+  input: AnnotationDbOperations['DB_ANNOTATION_STATUS']['payload'],
+  now = Date.now(),
+): AnnotationEditorStatus {
+  const { id, url, known } = annotationStatusSchema.parse(input);
+  // An unused workspace may not have initialized its annotation tables.
+  if (
+    !db.selectValue(
+      "SELECT 1 FROM sqlite_schema WHERE type='table' AND name='browser_annotation_attempt'",
+    )
+  )
+    return { kind: 'missing' };
+  // A single SELECT gives the record, capture and attempts the same SQLite snapshot.
+  // Do not prune old rows or take a writer reservation while observing.
+  const row = db.selectObject(
+    `WITH selected AS (
+      SELECT owner,id,body,json_extract(body,'$.revision') AS revision,
+        CASE WHEN json_type(body,'$.image')='text' THEN 'available'
+             WHEN json_type(body,'$.imageError')='text' THEN 'unavailable' ELSE 'none' END AS capture
+      FROM browser_annotation WHERE owner=? AND id=? AND url=?
+        AND (deleted_at IS NULL OR deleted_at>?)
+    )
+    SELECT revision,capture,
+      CASE WHEN revision IS NOT ? THEN json_remove(body,'$.image','$.imageError','$.operations') END AS record,
+      CASE WHEN capture='available' AND capture IS NOT ? THEN json_extract(body,'$.image') END AS image,
+      CASE WHEN capture='unavailable' AND (capture IS NOT ? OR revision IS NOT ?)
+        THEN json_extract(body,'$.imageError') END AS image_error,
+      (SELECT json_group_array(json_object('id',id,'status',status,'presetName',preset_name,'error',error))
+        FROM (SELECT t.id,json_extract(t.body,'$.status') AS status,
+           json_extract(t.body,'$.input.preset.name') AS preset_name,
+           substr(json_extract(t.body,'$.error'),1,2000) AS error
+          FROM browser_annotation_attempt t
+          WHERE t.owner=selected.owner AND t.annotation_id=selected.id
+          ORDER BY t.rowid DESC LIMIT 10)) AS attempts
+    FROM selected`,
+    [
+      owner,
+      id,
+      url,
+      now - retentionMs,
+      known?.revision ?? null,
+      known?.capture ?? null,
+      known?.capture ?? null,
+      known?.revision ?? null,
+    ],
+  );
+  if (!row) return { kind: 'missing' };
+  const key = {
+    revision: Number(row.revision),
+    capture: row.capture as AnnotationStatusKey['capture'],
+  };
+  const attempts = (
+    JSON.parse(String(row.attempts)) as (Pick<AnnotationAttemptStatus, 'id' | 'status'> & {
+      presetName: string | null;
+      error: string | null;
+    })[]
+  ).map(({ id, status, presetName, error }) => ({
+    id,
+    status,
+    ...(presetName !== null ? { presetName } : {}),
+    ...(error !== null ? { error } : {}),
+  }));
+  return {
+    kind: 'found',
+    key,
+    attempts,
+    ...(row.record ? { record: JSON.parse(String(row.record)) as AnnotationEditorRecord } : {}),
+    ...(typeof row.image === 'string'
+      ? { capture: { kind: 'available', image: row.image } }
+      : typeof row.image_error === 'string'
+        ? { capture: { kind: 'unavailable', error: row.image_error } }
+        : key.capture === 'none' && key.capture !== known?.capture
+          ? { capture: { kind: 'none' } }
+          : {}),
   };
 }
 

@@ -1,15 +1,22 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { annotationStore, annotationAttempts } from '../native/annotation-store.mts';
+import {
+  annotationStore,
+  annotationAttempts,
+  annotationImage,
+  annotationStatus,
+} from '../native/annotation-store.mts';
 import {
   retentionMs,
   type AnnotationCapture,
   type AnnotationRequest,
 } from '../src/annotations/contract';
 import { AnnotationRunner } from '../src/annotations/runner';
+import { mutateAnnotationDraft } from '../src/annotations/draft';
+import { annotationDraftKey } from '../src/annotations/routing';
 import type { SqlDatabase, SqlValue } from '../src/storage/sql';
 import type { DbCall, RunInput, DbRequest } from '../src/types/storage';
 import { responsesBody } from '../native/responses.mts';
@@ -66,6 +73,201 @@ const request = (operation: AnnotationRequest['operation']): AnnotationRequest =
   author: { kind: 'user', name: 'You' },
   operation,
 });
+
+it('serializes checking a draft token with a write from another editor', async () => {
+  const id = 'shared-draft';
+  const key = annotationDraftKey(id);
+  const old = { token: crypto.randomUUID(), text: 'old', revision: 1 };
+  const newer = { token: crypto.randomUUID(), text: 'new', revision: 2 };
+  const values: Record<string, unknown> = { [key]: old };
+  const checkStarted = Promise.withResolvers<void>();
+  const releaseCheck = Promise.withResolvers<void>();
+  vi.stubGlobal('chrome', {
+    storage: {
+      local: {
+        async get(key: string) {
+          const record = values[key];
+          checkStarted.resolve();
+          await releaseCheck.promise;
+          return { [key]: record };
+        },
+        async set(input: Record<string, unknown>) {
+          Object.assign(values, input);
+        },
+        async remove(key: string) {
+          delete values[key];
+        },
+      },
+    },
+  });
+  try {
+    const clear = mutateAnnotationDraft({ action: 'clear', id, token: old.token });
+    await checkStarted.promise;
+    const write = mutateAnnotationDraft({ action: 'write', id, ...newer });
+    // Let any concurrently dispatched storage write run before releasing get.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(values[key]).toEqual(old);
+    releaseCheck.resolve();
+    await Promise.all([clear, write]);
+    expect(values[key]).toEqual(newer);
+    await mutateAnnotationDraft({ action: 'clear', id, token: old.token });
+    expect(values[key]).toEqual(newer);
+  } finally {
+    releaseCheck.resolve();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('projects annotation status without writes, repeated image bytes, or attempt transcripts', () => {
+  const db = database();
+  const readOnly: SqlDatabase = {
+    ...db,
+    exec: () => {
+      throw new Error('Status must not write');
+    },
+    transaction: () => {
+      throw new Error('Status must not reserve the writer');
+    },
+  };
+  const target = { id: capture.id, url };
+  expect(annotationStatus(readOnly, 'p', target)).toEqual({ kind: 'missing' });
+  annotationStore(
+    db,
+    'p',
+    request({ action: 'create', capture: { ...capture, image: undefined } }),
+  );
+  annotationAttempts(db, 'p', {
+    action: 'admit',
+    attempts: [
+      {
+        id: 'large-attempt',
+        annotationId: capture.id,
+        url,
+        revision: 1,
+        status: 'queued',
+        createdAt: Date.now(),
+        input: { preset: { name: 'Fixture' }, remote: { model: 'gpt-6' } } as RunInput,
+        evidence: 'Synthetic evidence '.repeat(15_000),
+        raw: 'Private raw output'.repeat(3000),
+        image: 'data:image/jpeg;base64,' + 'Z'.repeat(100_000),
+      },
+    ],
+  });
+  const initial = annotationStatus(readOnly, 'p', target);
+  expect(initial).toMatchObject({
+    kind: 'found',
+    key: { revision: 1, capture: 'none' },
+    capture: { kind: 'none' },
+    record: { comment: capture.comment },
+    attempts: [{ id: 'large-attempt', status: 'queued', presetName: 'Fixture' }],
+  });
+  expect(JSON.stringify(initial).length).toBeLessThan(2_000);
+  expect(annotationStatus(readOnly, 'other', target)).toEqual({ kind: 'missing' });
+  expect(
+    annotationStatus(readOnly, 'p', { ...target, url: 'https://example.com/page?q=2#section' }),
+  ).toEqual({ kind: 'missing' });
+  expect(initial.kind).toBe('found');
+  if (initial.kind !== 'found') throw new Error('Expected initial annotation');
+
+  const image = 'data:image/jpeg;base64,' + 'A'.repeat(400_000);
+  annotationImage(db, 'p', { id: capture.id, image });
+  const attached = annotationStatus(readOnly, 'p', { ...target, known: initial.key });
+  expect(attached).toEqual({
+    kind: 'found',
+    key: { revision: 1, capture: 'available' },
+    capture: { kind: 'available', image },
+    attempts: initial.attempts,
+  });
+  if (attached.kind !== 'found') throw new Error('Expected attached annotation');
+  expect(annotationStatus(readOnly, 'p', { ...target, known: attached.key })).toEqual({
+    kind: 'found',
+    key: attached.key,
+    attempts: initial.attempts,
+  });
+  annotationStore(
+    db,
+    'p',
+    request({
+      action: 'change',
+      changes: [
+        {
+          id: capture.id,
+          revision: 1,
+          operationId: 'edit-after-image',
+          action: 'edit',
+          text: 'A new comment',
+        },
+      ],
+    }),
+  );
+  const edited = annotationStatus(readOnly, 'p', { ...target, known: attached.key });
+  expect(edited).toMatchObject({
+    kind: 'found',
+    key: { revision: 2, capture: 'available' },
+    record: { comment: 'A new comment' },
+  });
+  expect(JSON.stringify(edited).length).toBeLessThan(2_000);
+  annotationStore(
+    db,
+    'p',
+    request({
+      action: 'change',
+      changes: [
+        { id: capture.id, revision: 2, operationId: 'remove-test-image', action: 'remove-image' },
+      ],
+    }),
+  );
+  expect(annotationStatus(readOnly, 'p', { ...target, known: attached.key })).toMatchObject({
+    kind: 'found',
+    key: { revision: 3, capture: 'unavailable' },
+    capture: { kind: 'unavailable', error: 'Image removed.' },
+  });
+});
+
+it('applies page, scope, state, and pagination before projecting annotation list results', () => {
+  const db = database();
+  for (let i = 0; i < 30; i++)
+    annotationStore(
+      db,
+      'p',
+      request({ action: 'create', capture: { ...capture, id: `item-${i}` } }),
+    );
+  annotationStore(db, 'other', request({ action: 'create', capture: { ...capture, id: 'other' } }));
+  annotationStore(
+    db,
+    'p',
+    request({
+      action: 'change',
+      changes: [
+        { id: 'item-0', revision: 1, operationId: 'done', action: 'complete' },
+        { id: 'item-1', revision: 1, operationId: 'delete', action: 'delete' },
+      ],
+    }),
+  );
+  const first = annotationStore(
+    db,
+    'p',
+    request({ action: 'list', url, filter: 'open', offset: 0 }),
+  );
+  expect(first.records?.map((item) => item.id)).toEqual(
+    Array.from({ length: 25 }, (_, i) => `item-${i + 2}`),
+  );
+  expect(first.nextOffset).toBe(25);
+  const next = annotationStore(
+    db,
+    'p',
+    request({ action: 'list', url, filter: 'open', offset: 25 }),
+  );
+  expect(next.records?.map((item) => item.id)).toEqual(['item-27', 'item-28', 'item-29']);
+  expect(next.nextOffset).toBeUndefined();
+  const scoped = annotationStore(db, 'p', {
+    ...request({ action: 'list', url, filter: 'all', offset: 0 }),
+    scope: { urls: [], ids: ['item-0', 'item-1', 'item-9'] },
+  });
+  expect(scoped.records?.map((item) => item.id)).toEqual(['item-0', 'item-9']);
+  expect(scoped.records?.every((item) => item.hasImage && item.replyCount === 0)).toBe(true);
+});
+
 it('rejects oversized external reads and change acknowledgements without losing saved annotations', () => {
   const sql = database();
   const longTarget = { ...capture.target, text: '\u0001'.repeat(16000) };
@@ -273,9 +475,13 @@ it('requires an explicit new reply after a terminal write fails and preserves a 
     const message = requestMessage as DbRequest;
     if (message.type === 'DB_ANNOTATION')
       return annotationStore(sql, 'p', message.payload) as never;
+    if (message.type === 'DB_ANNOTATION_STATUS')
+      return annotationStatus(sql, 'p', message.payload) as never;
     if (message.type === 'DB_ANNOTATION_ATTEMPT') {
       if (message.payload.action === 'complete' && rejectCompletion)
         throw new Error('Result storage unavailable');
+      if (message.payload.action === 'save' && message.payload.attempt.status === 'failed')
+        throw new Error('Failure status storage unavailable');
       const result = annotationAttempts(sql, 'p', message.payload);
       if (message.payload.action === 'complete') throw new Error('Lost acknowledgement');
       return result as never;
@@ -310,18 +516,31 @@ it('requires an explicit new reply after a terminal write fails and preserves a 
   const replies = () =>
     annotationStore(sql, 'p', request({ action: 'read', id: capture.id, image: false })).record!
       .replies;
+  const status = () => runner.observedStatus({ id: capture.id, url });
   const first = (await respond()).ids![0]!;
-  await expect
-    .poll(() => annotationAttempts(sql, 'p', { action: 'read', id: first })[0]?.status)
-    .toBe('failed');
+  await expect.poll(status).toMatchObject({
+    kind: 'found',
+    attempts: [
+      {
+        id: first,
+        status: 'failed',
+        error: expect.stringContaining('Failure status storage unavailable'),
+      },
+    ],
+  });
+  expect(annotationAttempts(sql, 'p', { action: 'read', id: first })[0]?.status).toBe('running');
   expect(replies()).toEqual([]);
   expect(calls).toBe(1);
   rejectCompletion = false;
   const second = (await respond()).ids![0]!;
   expect(second).not.toBe(first);
-  await expect
-    .poll(() => annotationAttempts(sql, 'p', { action: 'read', id: second })[0]?.status)
-    .toBe('completed');
+  await expect.poll(status).toMatchObject({
+    kind: 'found',
+    attempts: [
+      { id: second, status: 'completed' },
+      { id: first, status: 'failed' },
+    ],
+  });
   expect(replies()).toEqual([expect.objectContaining({ id: second, text: 'Reviewed reply' })]);
   expect(calls).toBe(2);
 });
@@ -516,6 +735,7 @@ it('shares the two-invocation limit across separately admitted annotation batche
   const db: DbCall = async (message) => {
     const m = message as DbRequest;
     if (m.type === 'DB_ANNOTATION') return annotationStore(sql, 'p', m.payload) as never;
+    if (m.type === 'DB_ANNOTATION_STATUS') return annotationStatus(sql, 'p', m.payload) as never;
     if (m.type === 'DB_ANNOTATION_ATTEMPT') return annotationAttempts(sql, 'p', m.payload) as never;
     throw new Error('Unexpected operation');
   };
@@ -549,8 +769,8 @@ it('shares the two-invocation limit across separately admitted annotation batche
   })[0]!;
   await runner.request({ action: 'stop', id: queued.id });
   await expect
-    .poll(() => annotationAttempts(sql, 'p', { action: 'read', id: queued.id })[0]!.status)
-    .toBe('cancelled');
+    .poll(() => runner.observedStatus({ id: 'cancel-queued', url }))
+    .toMatchObject({ kind: 'found', attempts: [{ id: queued.id, status: 'cancelled' }] });
   releases[0]!();
   await expect.poll(() => releases.length).toBe(3);
   releases[1]!();

@@ -46,6 +46,8 @@ chrome.runtime.onMessage.addListener(
           switch (request.type) {
             case 'DB_ANNOTATION':
               return annotations.operate(request.payload);
+            case 'DB_ANNOTATION_STATUS':
+              return annotations.observedStatus(request.payload);
             case 'DB_ANNOTATION_IMAGE':
               return db(request);
             case 'DB_DIGEST_GET':

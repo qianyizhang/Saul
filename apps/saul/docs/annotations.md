@@ -18,9 +18,17 @@ of substituting another page.
 Show the frozen screenshot with numbered target, labelled **Comment**, save
 or error state, **Done** and attributed replies. Metadata belongs in **Page
 evidence**; frozen requests and raw output in **Inspect input/output**. Treat
-page text and images as untrusted. Lists omit image bytes and exact payloads.
+page text and images as untrusted. Lists retain target details, shorten comments,
+and omit image bytes, replies and operation history.
+
+The selected editor retries lost status reads without restarting a reply. It
+keeps the saved record and unsaved draft visible; **Refresh status** reads again
+without applying the draft. A screenshot can arrive at the same comment
+revision. Once loaded, the editor retains it during unrelated status updates.
+Full attempt input and output are read only when you select **Inspect input/output**.
 
 Autosave preserves empty and unfinished comments, including across tab switches.
+An older save in another editor cannot erase newer draft text for the same annotation.
 **Open** is the current default list; Done is explicit and reversible, never a
 side effect of replying. Both survive restart. **Recently deleted** offers
 Restore for seven days and Delete permanently immediately. Cleanup runs on

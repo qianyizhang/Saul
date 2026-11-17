@@ -2,9 +2,185 @@ import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider } from './support.ts';
 import { summaryPanelDriver } from './summary-panel-driver.ts';
 import type { Annotation, AnnotationResult } from '../../src/annotations/contract';
+import type { AnnotationEditorStatus } from '../../src/annotations/attempts';
 
 test.use({ browserToolsFixtures: true });
-test('queued comment edits preserve a concurrent edit and recover the local draft explicitly', async ({
+test('annotation status recovers at startup and attaches an image at the same revision', async ({
+  sandbox,
+  fixtureServer,
+}, info) => {
+  const { context, popup, worker } = await sandbox.launch();
+  const source = await context.newPage();
+  await source.goto(fixtureServer.origin + '/article');
+  const id = 'late-image-fixture';
+  const url = source.url();
+  const seeded = await popup.evaluate(
+    async ({ id, url }) => {
+      await chrome.storage.local.set({
+        ['saul-annotation-draft-' + id]: { text: 'Recovered unsaved comment', revision: 1 },
+      });
+      return chrome.runtime.sendMessage({
+        target: 'saul-annotation',
+        action: 'operate',
+        url,
+        operation: {
+          action: 'create',
+          capture: {
+            id,
+            url,
+            title: 'Late image fixture',
+            comment: 'Original saved comment',
+            target: {
+              kind: 'element',
+              label: 'Synthetic late image',
+              frame: 'top document',
+              rect: { x: 0, y: 0, width: 100, height: 100 },
+              viewport: { width: 800, height: 600, scrollX: 0, scrollY: 0, scale: 1 },
+            },
+          },
+        },
+      });
+    },
+    { id, url },
+  );
+  expect(seeded).toMatchObject({ success: true });
+  await worker.evaluate((id) => {
+    const original = chrome.runtime.sendMessage.bind(chrome.runtime) as (
+      input: unknown,
+    ) => Promise<unknown>;
+    const held = Promise.withResolvers<void>();
+    const probe = {
+      reads: 0,
+      inFlight: 0,
+      maxInFlight: 0,
+      snapshots: [] as { revision: number; hasRecord: boolean; hasImage: boolean }[],
+      release: held.resolve,
+    };
+    Object.assign(globalThis, { annotationStatusProbe: probe });
+    chrome.runtime.sendMessage = (async (input: {
+      target?: string;
+      message?: { type?: string; payload?: { id?: string } };
+    }) => {
+      if (
+        input.target !== 'saul-offscreen' ||
+        input.message?.type !== 'DB_ANNOTATION_STATUS' ||
+        input.message.payload?.id !== id
+      )
+        return original(input);
+      const read = ++probe.reads;
+      probe.inFlight++;
+      probe.maxInFlight = Math.max(probe.maxInFlight, probe.inFlight);
+      try {
+        if (read === 1)
+          return { success: false, error: 'Fixture interrupted the first annotation status read.' };
+        if (read === 2) await held.promise;
+        const result = (await original(input)) as { result?: AnnotationEditorStatus };
+        if (result.result?.kind === 'found')
+          probe.snapshots.push({
+            revision: result.result.key.revision,
+            hasRecord: !!result.result.record,
+            hasImage: result.result.capture?.kind === 'available',
+          });
+        return result;
+      } finally {
+        probe.inFlight--;
+      }
+    }) as typeof chrome.runtime.sendMessage;
+  }, id);
+  await source.bringToFront();
+  await expect(source.locator('saul-root')).toBeAttached();
+  await source.locator('#concept').click({ clickCount: 3 });
+  await source.getByRole('button', { name: 'Annotate', exact: true }).click();
+  const sidePanelCount = () =>
+    worker.evaluate(
+      async () => (await chrome.runtime.getContexts({ contextTypes: ['SIDE_PANEL'] })).length,
+    );
+  const open = source.getByRole('button', { name: 'Open annotation', exact: true });
+  await expect
+    .poll(async () => (await sidePanelCount()) > 0 || (await open.isVisible()))
+    .toBe(true);
+  if (await open.isVisible()) await open.click();
+  await expect.poll(sidePanelCount).toBe(1);
+  const panel = await summaryPanelDriver(context);
+  try {
+    await expect
+      .poll(() => panel.evaluate(() => document.querySelectorAll('.annotation-item').length))
+      .toBe(2);
+    await panel.evaluate(() =>
+      document.querySelector<HTMLButtonElement>('.annotation-item')!.click(),
+    );
+    await expect
+      .poll(() => panel.evaluate(() => document.querySelector('[role="alert"]')?.textContent))
+      .toContain('Fixture interrupted the first annotation status read');
+    await panel.click('Refresh status');
+    await panel.click('Refresh status');
+    const before = await worker.evaluate(() => {
+      const probe = (
+        globalThis as typeof globalThis & {
+          annotationStatusProbe: { reads: number; maxInFlight: number; release: () => void };
+        }
+      ).annotationStatusProbe;
+      probe.release();
+      return { reads: probe.reads, maxInFlight: probe.maxInFlight };
+    });
+    expect(before).toEqual({ reads: 2, maxInFlight: 1 });
+    const comment = () =>
+      panel.evaluate(
+        () => document.querySelector<HTMLTextAreaElement>('#annotation-comment')?.value,
+      );
+    await expect.poll(comment).toBe('Recovered unsaved comment');
+    await expect
+      .poll(() => panel.evaluate(() => document.querySelector('.annotation-editor')?.textContent))
+      .toContain('No image saved.');
+
+    // The generated JPEG simulates delayed viewport processing without depending
+    // on a second screenshot; shared storage and its version event stay real.
+    const image = await popup.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 80;
+      canvas.height = 60;
+      const context = canvas.getContext('2d')!;
+      context.fillStyle = '#172844';
+      context.fillRect(0, 0, 80, 60);
+      return canvas.toDataURL('image/jpeg');
+    });
+    expect(image).toMatch(/^data:image\/jpeg;base64,/);
+    const attached = await worker.evaluate(
+      async ({ id, image }) => {
+        const result = await chrome.runtime.sendMessage({
+          target: 'saul-offscreen',
+          operation: 'db',
+          message: { type: 'DB_ANNOTATION_IMAGE', payload: { id, image } },
+        });
+        await chrome.storage.session.set({ 'saul-annotation-version': crypto.randomUUID() });
+        return result.success;
+      },
+      { id, image },
+    );
+    expect(attached).toBe(true);
+    await expect
+      .poll(() =>
+        panel.evaluate(
+          () =>
+            document.querySelector<HTMLImageElement>('.annotation-editor figure img')?.naturalWidth,
+        ),
+      )
+      .toBe(80);
+    await panel.screenshot(info.outputPath('annotation-late-image.png'));
+    await expect.poll(comment).toBe('Recovered unsaved comment');
+    const snapshots = await worker.evaluate(
+      () =>
+        (globalThis as typeof globalThis & { annotationStatusProbe: { snapshots: unknown[] } })
+          .annotationStatusProbe.snapshots,
+    );
+    expect(snapshots).toContainEqual({ revision: 1, hasRecord: true, hasImage: false });
+    expect(snapshots).toContainEqual({ revision: 1, hasRecord: false, hasImage: true });
+  } finally {
+    await panel.detach();
+  }
+});
+
+test('queued edits preserve a concurrent comment and an older save cannot erase another editor’s draft', async ({
   sandbox,
   fixtureServer,
 }) => {
@@ -121,6 +297,84 @@ test('queued comment edits preserve a concurrent edit and recover the local draf
         ),
       )
       .toBe('Saved');
+
+    // Hold the old editor's accepted save acknowledgement while a second
+    // trusted extension context caches newer text for the same annotation.
+    const active = await read();
+    await panel.evaluate(() => {
+      const original = chrome.runtime.sendMessage.bind(chrome.runtime) as (
+        message: unknown,
+      ) => Promise<unknown>;
+      const held = Promise.withResolvers<void>();
+      const pending = { acknowledged: false, release: held.resolve };
+      Object.assign(globalThis, { pendingAnnotationSave: pending });
+      chrome.runtime.sendMessage = (async (message: {
+        action?: string;
+        operation?: { changes?: { action: string }[] };
+      }) => {
+        const reply = await original(message);
+        if (message.action === 'operate' && message.operation?.changes?.[0]?.action === 'edit') {
+          pending.acknowledged = true;
+          await held.promise;
+        }
+        return reply;
+      }) as typeof chrome.runtime.sendMessage;
+      const comment = document.querySelector<HTMLTextAreaElement>('#annotation-comment')!;
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+        comment,
+        'Older editor saved this comment',
+      );
+      comment.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await expect
+      .poll(() =>
+        panel.evaluate(
+          () =>
+            (globalThis as typeof globalThis & { pendingAnnotationSave: { acknowledged: boolean } })
+              .pendingAnnotationSave.acknowledged,
+        ),
+      )
+      .toBe(true);
+    expect((await read()).comment).toBe('Older editor saved this comment');
+    const newer = {
+      id: active.id,
+      token: crypto.randomUUID(),
+      text: 'A newer draft in another editor',
+      revision: active.revision + 1,
+    };
+    const newerReply = await popup.evaluate(
+      (newer) =>
+        chrome.runtime.sendMessage({
+          target: 'saul-annotation',
+          action: 'draft',
+          mutation: { action: 'write', ...newer },
+        }),
+      newer,
+    );
+    expect(newerReply.success).toBe(true);
+    await panel.evaluate(() =>
+      (
+        globalThis as typeof globalThis & { pendingAnnotationSave: { release: () => void } }
+      ).pendingAnnotationSave.release(),
+    );
+    await expect
+      .poll(() =>
+        panel.evaluate(
+          () => document.querySelector('.annotation-editor [role="status"]')?.textContent,
+        ),
+      )
+      .toBe('Saved');
+    const cached = () =>
+      popup.evaluate(async (id) => {
+        const key = 'saul-annotation-draft-' + id;
+        return (await chrome.storage.local.get(key))[key];
+      }, active.id);
+    expect(await cached()).toEqual({
+      token: newer.token,
+      text: newer.text,
+      revision: newer.revision,
+    });
+
     await panel.click('Delete annotation');
     await expect
       .poll(() => panel.evaluate(() => !!document.querySelector('.annotation-editor')))
@@ -143,6 +397,7 @@ test('queued comment edits preserve a concurrent edit and recover the local draf
     await expect
       .poll(() => panel.evaluate(() => !!document.querySelector('.annotation-editor')))
       .toBe(false);
+    await expect.poll(cached).toBeUndefined();
   } finally {
     await panel.detach();
   }

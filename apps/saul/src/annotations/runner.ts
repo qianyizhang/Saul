@@ -2,6 +2,7 @@ import {
   activeAnnotationAttempt,
   type AnnotationAttempt,
   type AnnotationDbOperations,
+  type AnnotationStatusRequest,
 } from './attempts';
 import {
   evidence,
@@ -120,6 +121,29 @@ export class AnnotationRunner {
     });
   }
 
+  async observedStatus(payload: AnnotationStatusRequest) {
+    // Wait for existing admission/startup work without initiating any writes.
+    await this.recovery;
+    await this.controls;
+    const value = await this.db({ type: 'DB_ANNOTATION_STATUS', payload });
+    if (value.kind === 'missing') return value;
+    return { ...value, attempts: value.attempts.map((attempt) => this.visibleAttempt(attempt)) };
+  }
+
+  private visibleAttempt<T extends Pick<AnnotationAttempt, 'id' | 'status' | 'error'>>(a: T): T {
+    if (!activeAnnotationAttempt(a)) return a;
+    const failure = this.failedWrites.get(a.id);
+    if (failure) return { ...a, status: 'failed', error: failure.error };
+    const job = this.jobs.get(a.id);
+    if (!job)
+      return {
+        ...a,
+        status: 'interrupted',
+        error: 'Run again explicitly; no request was replayed.',
+      };
+    return job.phase === 'saving' ? { ...a, status: 'saving' } : a;
+  }
+
   request<T extends AnnotationRunRequest>(
     p: T,
     prepared?: PreparedModel,
@@ -132,20 +156,8 @@ export class AnnotationRunner {
       const attempts = await this.store({ ...p, action: 'read' });
       return {
         attempts: attempts.map((a): AnnotationAttempt => {
-          if (!activeAnnotationAttempt(a)) {
-            this.failedWrites.delete(a.id);
-            return a;
-          }
-          const failure = this.failedWrites.get(a.id);
-          if (failure) return { ...a, status: 'failed', error: failure.error };
-          const job = this.jobs.get(a.id);
-          if (!job)
-            return {
-              ...a,
-              status: 'interrupted',
-              error: 'Run again explicitly; no request was replayed.',
-            };
-          return job.phase === 'saving' ? { ...a, status: 'saving' } : a;
+          if (!activeAnnotationAttempt(a)) this.failedWrites.delete(a.id);
+          return this.visibleAttempt(a);
         }),
       };
     }

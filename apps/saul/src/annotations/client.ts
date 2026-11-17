@@ -1,4 +1,8 @@
-import type { AnnotationAttempt } from './attempts';
+import type {
+  AnnotationAttempt,
+  AnnotationEditorStatus,
+  AnnotationStatusRequest,
+} from './attempts';
 import type {
   AnnotationCapture,
   AnnotationOperation,
@@ -8,11 +12,13 @@ import type {
 import type { ModelPreset } from '../configuration/definition';
 import type { CallChoice } from '../calls/contract';
 import type { Reply } from '../types/storage';
+import type { AnnotationDraftMutation } from './draft';
 
 type WorkspaceOperation<Q, R> = { input: Q; result: R };
 type Operations = {
   operate: WorkspaceOperation<{ url: string; operation: AnnotationOperation }, AnnotationResult>;
-  attempts: WorkspaceOperation<{ annotationId: string }, AnnotationAttempt[]>;
+  status: WorkspaceOperation<AnnotationStatusRequest, AnnotationEditorStatus>;
+  draft: WorkspaceOperation<{ mutation: AnnotationDraftMutation }, void>;
   inspect: WorkspaceOperation<{ id: string }, AnnotationAttempt[]>;
   stop: WorkspaceOperation<{ id: string }, void>;
   open: WorkspaceOperation<{ id?: string }, void>;
@@ -51,5 +57,3 @@ export async function annotationMessage<K extends keyof Operations>(
 
 export const annotations = (url: string, operation: AnnotationOperation) =>
   annotationMessage({ action: 'operate', url, operation });
-export const attempts = (annotationId: string) =>
-  annotationMessage({ action: 'attempts', annotationId });

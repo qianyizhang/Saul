@@ -15,6 +15,7 @@ export const HISTORY_OPERATIONS = {
   DB_ANNOTATION: 'explicit-write',
   DB_ANNOTATION_IMAGE: 'repeatable-write',
   DB_ANNOTATION_ATTEMPT: 'explicit-write',
+  DB_ANNOTATION_STATUS: 'read',
   DB_IMAGE: 'read',
   DB_IMAGE_CHUNK: 'repeatable-write',
   DB_READING_RESOLVE: 'repeatable-write',
