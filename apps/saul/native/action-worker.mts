@@ -44,6 +44,7 @@ port.on(
     const controller = new AbortController();
     runs.set(message.id, controller);
     let calls = 0;
+    let annotationCalls = 1000;
     const ctx = Object.freeze({
       source: Object.freeze(message.source),
       signal: controller.signal,
@@ -52,6 +53,14 @@ port.on(
           throw new Error('Progress must be at most 500 characters.');
         controller.signal.throwIfAborted();
         port.postMessage({ id: message.id, event: { type: 'progress', text } });
+      },
+      annotations: (operation: unknown) => {
+        controller.signal.throwIfAborted();
+        const callId = ++annotationCalls;
+        return new Promise<string>((resolve, reject) => {
+          pending.set(message.id + ':' + callId, { resolve, reject });
+          port.postMessage({ id: message.id, event: { type: 'annotation', callId, operation } });
+        }).then((text) => JSON.parse(text));
       },
       generate: (request: ActionGenerate) => {
         controller.signal.throwIfAborted();

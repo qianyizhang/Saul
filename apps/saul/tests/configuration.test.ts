@@ -1,8 +1,11 @@
-import { preparePreset, projectPresetForEditing } from '../src/models/preset-resolution';
+import { preparePreset } from '../src/configuration/resolve';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { ResolvedContext, UserSettings } from '../src/types';
-import { DEFAULT_SETTINGS, getSettings } from '../src/storage/settings';
-import { DEFAULT_SYSTEM_PROMPT, renderExplainPrompt } from '../src/models/prompts';
+import type { ResolvedContext } from '../src/types';
+import type { Configuration } from '../src/configuration/definition';
+import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
+import { decodeConfiguration } from '../src/configuration/record';
+import { inspectPreset } from '../src/configuration/inspect';
+import { DEFAULT_SYSTEM_PROMPT } from '../src/reading/prompts';
 import {
   configurationFor,
   normalizeConfiguration,
@@ -10,7 +13,7 @@ import {
   renderRecipePrompt,
   starterConfiguration,
   validateConfiguration,
-} from '../src/models/configuration';
+} from '../src/configuration/definition';
 import {
   prepareFollowUpRun,
   prepareFrozenRun,
@@ -24,8 +27,8 @@ const context: ResolvedContext = {
   pageTitle: 'Calculus',
   pageUrl: 'https://example.test/article',
 };
-function configured(): UserSettings {
-  const settings = structuredClone(DEFAULT_SETTINGS);
+function configured(): Configuration {
+  const settings = structuredClone(DEFAULT_CONFIGURATION);
   settings.openaiCompatible = {
     baseUrl: 'https://example.test/v1',
     apiKey: 'private-key',
@@ -83,62 +86,16 @@ it('follow-ups retain source, model and earlier exchanges without changing the s
   ).toThrow('too long');
 });
 
-it('migrates the legacy system prompt, model and context assembly without writing over saved data', async () => {
-  const legacy = configured();
-  delete legacy.configuration;
-  const set = vi.fn();
-  vi.stubGlobal('chrome', {
-    storage: { local: { get: vi.fn().mockResolvedValue({ saul_user_settings: legacy }), set } },
-  });
-  const settings = await getSettings();
-  const configuration = configurationFor(settings);
-  expect(configuration.recipes.map((recipe) => recipe.name)).toEqual([
-    'Explain',
-    'Lookup',
-    'Nudge',
-    'Illustrate',
-  ]);
-  expect(configuration.recipes[0]!.systemPrompt).toBe(legacy.customPromptTemplate);
-  expect(configuration.presets[0]).toMatchObject({
-    name: 'Current',
-    model: 'chosen-model',
-    profileId: 'connection-a',
-    temperature: 0.7,
-  });
-  const prepared = prepareRecipeRun(settings, context, configuration.selectedRecipeId);
-  expect(prepared.input.userPrompt).toBe(
-    renderExplainPrompt(context, 'Respond in the language of the selected text.'),
-  );
-  expect(prepared.input.systemPrompt).toBe(legacy.customPromptTemplate);
-  expect(prepared.credential).toBe('private-key');
-  expect(JSON.stringify(prepared.input)).not.toContain('private-key');
-  expect(set).not.toHaveBeenCalled();
+it('rejects records without an explicit configuration instead of inventing actions', () => {
+  const stored = configured();
+  delete stored.configuration;
+  expect(() => decodeConfiguration(stored)).toThrow('configuration is missing');
 });
 
-it('migrates an empty legacy system prompt with its original default behavior', () => {
+it('uses the default system prompt when creating a new configuration with an empty prompt', () => {
   const settings = { ...configured(), customPromptTemplate: '' };
   const recipe = starterConfiguration(settings).recipes[0]!;
   expect(recipe.systemPrompt).toBe(DEFAULT_SYSTEM_PROMPT);
-});
-
-it('preserves the authoritative legacy current endpoint and key when its saved profile differs', async () => {
-  const legacy = configured();
-  delete legacy.configuration;
-  legacy.profiles![0]!.config = {
-    ...legacy.openaiCompatible,
-    baseUrl: 'https://stale.test/v1',
-    apiKey: 'stale-key',
-  };
-  vi.stubGlobal('chrome', {
-    storage: { local: { get: vi.fn().mockResolvedValue({ saul_user_settings: legacy }) } },
-  });
-  const settings = await getSettings();
-  const prepared = prepareRecipeRun(settings, context, configurationFor(settings).selectedRecipeId);
-  expect(prepared.input.remote.baseUrl).toBe('https://example.test/v1');
-  expect(prepared.credential).toBe('private-key');
-  expect(settings.profiles?.find((profile) => profile.id === 'connection-a')?.config.apiKey).toBe(
-    'stale-key',
-  );
 });
 
 it('renders each named task as instructions instead of quoted source and adds no hidden Explain suffix', () => {
@@ -310,6 +267,6 @@ it('blocks shared API options before transport rather than silently discarding t
   for (const options of [{ effort: 'low' }, { fast: true }]) {
     const request = { ...preset, ...options, connectionKey: 'openai-api', shared: true };
     expect(() => preparePreset(settings, request)).toThrow('Run it in EZ');
-    expect(projectPresetForEditing(settings, request).activeProvider).toBe('openai-compatible');
+    expect(inspectPreset(settings, request).provider).toBe('openai-compatible');
   }
 });

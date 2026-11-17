@@ -54,6 +54,14 @@ test('widget follow-ups preserve drafts, context, failures and saved history', a
     expect(first.messages[1].content).toContain('Gradient descent');
     expect(first.messages[1].content).toContain('steepest increase');
     expect(first.messages[1].content).toContain('Why does that happen?');
+    await question.fill('abcDEF');
+    await question.evaluate((input: HTMLTextAreaElement) => input.setSelectionRange(3, 4));
+    await question.press('Shift+Enter');
+    await expect(question).toHaveValue('abc\nEF');
+    await question.press('Enter');
+    await expect(question).toHaveValue('abc\n\nEF');
+    await expect(question).toBeFocused();
+    expect(fixtureServer.requests).toHaveLength(2);
     await question.fill('Can you give a concrete example?');
     await question.press('ControlOrMeta+Enter');
     await expect.poll(async () => fixtureServer.requests.length).toBe(3);
@@ -63,6 +71,41 @@ test('widget follow-ups preserve drafts, context, failures and saved history', a
     const second = JSON.parse(fixtureServer.requests[2]!.body);
     expect(second.messages[1].content).toContain('Why does that happen?');
     expect(second.messages[1].content).toContain('Can you give a concrete example?');
+    // Inspect the same earlier attempt in both consumers of PastAttemptContent.
+    await card.getByRole('button', { name: 'More', exact: true }).click();
+    await card.getByRole('button', { name: 'Past attempts', exact: true }).click();
+    const earlierCard = card
+      .locator('details')
+      .filter({
+        has: page.getByText('Why does that happen?', { exact: true }),
+      })
+      .last();
+    await earlierCard.locator(':scope > summary').click();
+    await expect(earlierCard.getByText('Why does that happen?', { exact: true })).toBeVisible();
+    await earlierCard.locator('.saul-inspector > summary').click();
+    await expect(
+      earlierCard.getByRole('region', { name: 'Prompt · user', exact: true }).locator('pre'),
+    ).toHaveText(first.messages[1].content);
+    await browser.popup.getByRole('button', { name: 'History', exact: true }).click();
+    await browser.popup.locator('.history-title').click();
+    await browser.popup.locator('.history-more > summary').click();
+    const earlierHistory = browser.popup.locator('.history-more > details').filter({
+      has: browser.popup.getByText('Why does that happen?', { exact: true }),
+    });
+    await earlierHistory.locator(':scope > summary').click();
+    await expect(earlierHistory.getByText('Why does that happen?', { exact: true })).toBeVisible();
+    await earlierHistory.locator('.saul-inspector > summary').click();
+    await expect(
+      earlierHistory.getByRole('region', { name: 'Prompt · user', exact: true }).locator('pre'),
+    ).toHaveText(first.messages[1].content);
+    expect(fixtureServer.requests).toHaveLength(3);
+    if (process.env.SAUL_CAPTURE_REVIEW === '1')
+      await browser.popup.screenshot({
+        path: info.outputPath('past-attempt-history.png'),
+        fullPage: true,
+      });
+    await card.getByRole('button', { name: 'Past attempts', exact: true }).click();
+    await card.getByRole('button', { name: 'More', exact: true }).click();
     for (const minimum of [true, false]) {
       await browser.popup.evaluate(async (minimum) => {
         await chrome.storage.local.set({ saul_minimum_mode: minimum });

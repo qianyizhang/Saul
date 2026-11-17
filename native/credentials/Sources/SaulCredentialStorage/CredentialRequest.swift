@@ -22,6 +22,7 @@ public struct CredentialRequest {
       "models": ["accountId"],
       "generate": [
         "accountId", "model", "effort", "fast", "systemPrompt", "userPrompt", "attachments",
+        "images",
       ],
       "api-key-status": [], "api-key-save": ["key"], "api-key-remove": [],
       "connection-status": ["connectionKey"],
@@ -31,6 +32,7 @@ public struct CredentialRequest {
       "api-key-import": ["key", "selectedAccountId"],
       "api-chat": [
         "model", "systemPrompt", "userPrompt", "temperature", "maxTokens", "connectionKey",
+        "images",
       ],
       "api-realtime": ["model", "voice", "connectionKey"],
       "native-responses": ["provider", "accountId", "body", "connectionKey"],
@@ -81,6 +83,15 @@ public struct CredentialRequest {
     if ["generate", "api-chat"].contains(action) {
       guard text("model", max: 256), text("systemPrompt", max: 400_000, empty: true),
         text("userPrompt", max: 800_000), text("effort", max: 64, required: false, empty: true)
+      else { throw invalid() }
+    }
+    if let images = value["images"] {
+      guard let images = images as? [String], images.count == 1,
+        images.allSatisfy({ image in
+          image.utf8.count <= 450_000
+            && image.range(
+              of: "^data:image/jpeg;base64,[A-Za-z0-9+/]+=*$", options: .regularExpression) != nil
+        })
       else { throw invalid() }
     }
     if let attachments = value["attachments"] {

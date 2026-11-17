@@ -1,38 +1,25 @@
+import { AnnotationRunner } from '../../src/annotations/runner';
 import { DigestRunner } from '../../src/digest/runner';
 import { captureSummarySource } from '../../src/digest/source';
 import { sharedDb as db } from '../../src/storage/history';
-import type { Reply } from '../../src/types/storage';
 import type { RunnerRequest } from '../../src/storage/client';
 import { ReadingRunner } from '../../src/reading/runner';
 import { backgroundSender } from '../../src/contracts/reading';
-import { ActionManager } from '../../src/actions/manager';
-import type { ActionState } from '../../src/actions/contract';
+import { CallEditor } from '../../src/calls/editor';
+import { callEditorStorage, prepareCallPreset } from '../../src/calls/editor-client';
 
 const changed = (url: string) => {
   void chrome.runtime.sendMessage({ target: 'saul-events', url }).catch(() => undefined);
 };
+const annotations = new AnnotationRunner(db, undefined, undefined, (url) => {
+  void chrome.runtime
+    .sendMessage({ target: 'saul-annotation', action: 'updated', url })
+    .catch(() => undefined);
+});
 const digest = new DigestRunner(db, captureSummarySource);
 // Chrome offscreen documents expose runtime only. Trusted storage stays behind the background.
-async function actionStateRequest(action: 'read' | 'write', state?: ActionState) {
-  const response: Reply<ActionState> = await chrome.runtime.sendMessage({
-    target: 'saul-action-state',
-    action,
-    state,
-  });
-  if (!response?.success) throw new Error(response?.error || 'Action settings could not be saved.');
-  return response.result;
-}
-const actions = new ActionManager(db, undefined, {
-  read: () => actionStateRequest('read'),
-  write: async (state) => {
-    await actionStateRequest('write', state);
-  },
-});
-void actions.ready.catch(() => undefined);
-void digest.ready.catch(() => undefined);
+const callEditor = new CallEditor({ db, storage: callEditorStorage, prepare: prepareCallPreset });
 const runner = new ReadingRunner(db, changed);
-// Reconciliation starts once per actual offscreen incarnation, never per UI/worker connection.
-void runner.ready.catch(() => undefined);
 chrome.runtime.onMessage.addListener(
   (message: RunnerRequest & { target?: string }, sender, reply) => {
     if (message?.target !== 'saul-offscreen') return false;
@@ -41,44 +28,46 @@ chrome.runtime.onMessage.addListener(
       return false;
     }
     (async () => {
-      await runner.ready;
       switch (message.operation) {
+        case 'annotation':
+          return annotations.request(message.message, message.prepared);
         case 'digest':
           return digest.request(message.message, message.snapshot, message.credential);
         case 'action':
-          return actions.request(message.message, message.prepared);
+          return callEditor.request(message.message);
         case 'submit':
           return runner.submit(message.submission, message.credential);
-        case 'save-image':
-          return runner.saveImage(message.selectionId);
         case 'stop':
           return runner.stop(message.selectionId);
         case 'delete':
           return runner.remove(message.selectionId);
         case 'db': {
-          if (message.message.type === 'DB_IMAGE') {
-            const p = message.message.payload;
-            const image = p.runId ? runner.unsavedImage(p.selectionId, p.runId) : undefined;
-            if (image) return image;
+          const request = message.message;
+          switch (request.type) {
+            case 'DB_ANNOTATION':
+              return annotations.operate(request.payload);
+            case 'DB_ANNOTATION_IMAGE':
+              return db(request);
+            case 'DB_DIGEST_GET':
+              return digest.request({ action: 'get', id: request.payload.id });
+            case 'DB_READING_RESOLVE':
+              return runner.resolveReuse(request.payload);
+            case 'DB_VIEW':
+            case 'DB_SET_BOOKMARK':
+              return runner.updateReadState(request);
+            case 'DB_GET_HISTORY':
+            case 'DB_RUNS':
+            case 'DB_PAGE':
+            case 'DB_PASSAGE':
+            case 'DB_CONTEXT':
+            case 'DB_INPUT':
+            case 'DB_IMAGE':
+            case 'DB_UNREAD':
+            case 'DB_EXPORT_MARKDOWN':
+              return runner.query(request);
+            default:
+              throw new Error('Unknown workspace storage operation');
           }
-          if (message.message.type === 'DB_GET_HISTORY')
-            return (await db(message.message)).map((item) => ({
-              ...item,
-              latest: runner.decorateRun(item.selectionId, item.latest),
-            }));
-          if (message.message.type === 'DB_RUNS') {
-            const selectionId = message.message.payload.selectionId;
-            return (await db(message.message)).map((run) => runner.decorateRun(selectionId, run));
-          }
-          if (message.message.type === 'DB_PAGE')
-            return (await db(message.message)).map((p) => runner.decorate(p));
-          if (message.message.type === 'DB_PASSAGE') {
-            const p = await db(message.message);
-            return p && runner.decorate(p);
-          }
-          const result = await db(message.message);
-          if (['DB_VIEW', 'DB_SET_BOOKMARK'].includes(message.message.type)) changed('*');
-          return result;
         }
         default:
           throw new Error('Unknown runner operation');

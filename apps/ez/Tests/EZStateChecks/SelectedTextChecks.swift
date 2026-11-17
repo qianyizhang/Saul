@@ -26,13 +26,11 @@ import Foundation
         },
         stateCase("selected text refuses active work and preserves the entire draft") { f in
             f.model.chooseAction(f.multi.id)
-            f.model.inputValues = ["fuzzy term": "existing", "fuzzy context": "context"]
-            f.model.choosePreset(f.alternate.id)
+            f.model.setInput("existing", for: "fuzzy term")
+            f.model.setInput("context", for: "fuzzy context")
+            f.model.chooseLookupPreset(f.alternate.id)
             let revision = f.model.draftRevision
-            for blocked in ["draft", "busy", "launcher", "signing", "settings"] {
-                f.model.busy = blocked == "busy"
-                f.model.launcherPending = blocked == "launcher"
-                f.model.signingIn = blocked == "signing"
+            for blocked in ["draft", "settings"] {
                 f.model.showSettings = blocked == "settings"
                 let expected = blocked == "draft" ? "draft" : blocked == "settings" ? "Settings" : "already"
                 try expectThrows(EZError.self, matching: { $0.message.contains(expected) }) {
@@ -44,9 +42,22 @@ import Foundation
                     "Rejected selection changed the draft")
             }
         },
+        stateCase("selected text preserves a Draw draft with only a format override") { f in
+            var config = f.configuration
+            config.addIllustration()
+            try f.model.saveConfiguration(config)
+            f.model.chooseAction(config.actions.first { $0.capability == .draw }?.id)
+            f.model.chooseOutputFormat("gif")
+            try expect(f.model.query.isEmpty && f.model.hasRetainedDraft, "Missing format-only draft")
+            try expectThrows(EZError.self, matching: { $0.message.contains("draft") }) {
+                try f.model.prepareSelectedText("Do not overwrite")
+            }
+            try expectEqual(f.model.outputFormat, "gif", "Services reset the output format")
+            try expectEqual(f.model.query, "", "Services replaced a retained draft")
+        },
         stateCase("selected text rejects empty and oversized input before clearing a saved selection") { f in
             let entry = try f.selectLookup()
-            f.model.inputValues = [:]
+            f.model.query = ""
             let revision = f.model.draftRevision
             for text in ["", " \n\t", String(repeating: "é", count: 8193)] {
                 try expectThrows(EZError.self) { try f.model.prepareSelectedText(text) }

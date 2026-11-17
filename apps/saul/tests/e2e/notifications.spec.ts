@@ -7,9 +7,9 @@ import type { Page } from '@playwright/test';
 async function explain(page: Page) {
   await expect(page.locator('saul-root')).toBeAttached();
   await page.locator('#concept').click({ clickCount: 3 });
-  await page.getByRole('button', { name: 'Explain', exact: true }).click();
+  await page.getByRole('button', { name: 'Explain & open', exact: true }).click();
   // A rejected submission leaves the selected passage available to retry.
-  await expect(page.getByRole('button', { name: 'Explain', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Explain & open', exact: true })).toBeVisible();
 }
 
 test('mute from a toast applies across tabs and restart; Settings can unmute with an invalid API draft', async ({
@@ -68,7 +68,7 @@ test('mute from a toast applies across tabs and restart; Settings can unmute wit
   // Muting errors must not hide successful results or alter provider configuration.
   await configureFixtureProvider(popup, fixtureServer.origin);
   await page.locator('#concept').click({ clickCount: 3 });
-  await page.getByRole('button', { name: 'Explain', exact: true }).click();
+  await page.keyboard.press('Alt+Shift+KeyE');
   await expect(page.getByText('Explanation ready', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'View', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Saul explanation' })).toBeVisible();

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import type { UserSettings } from '../types';
-import { streamModel } from '../models/provider';
-import { preparePreset } from '../models/preset-resolution';
-import { configurationFor, presetFromSettings } from '../models/configuration';
+import type { Configuration } from '../configuration/definition';
+import { streamModel } from '../providers/stream';
+import { preparePreset } from '../configuration/resolve';
+import { configurationFor } from '../configuration/definition';
 export function useProviderTest() {
   const [testing, setTesting] = useState(false),
     [notice, setNotice] = useState(''),
@@ -16,7 +16,7 @@ export function useProviderTest() {
       controller.current?.abort();
     };
   }, []);
-  async function test(mode: 'endpoint' | 'generation', draft: UserSettings, presetId?: string) {
+  async function test(mode: 'endpoint' | 'generation', draft: Configuration, presetId?: string) {
     if (controller.current) return;
     const settings = structuredClone(draft);
     const ac = new AbortController();
@@ -26,12 +26,15 @@ export function useProviderTest() {
     setTesting(true);
     const timeout = setTimeout(
       () => ac.abort(),
-      settings.activeProvider === 'openai-compatible' ? 20000 : 120000,
+      configurationFor(settings).presets.find((p) => p.id === presetId)?.provider ===
+        'openai-compatible'
+        ? 20000
+        : 120000,
     );
     try {
       const preset = presetId
         ? configurationFor(settings).presets.find((p) => p.id === presetId)
-        : presetFromSettings(settings, 'test-current', 'Current');
+        : undefined;
       if (!preset) throw new Error('Choose an existing preset.');
       const prepared = preparePreset(settings, preset);
       if (mode === 'endpoint' && prepared.choices.provider === 'openai-compatible') {
@@ -50,19 +53,22 @@ export function useProviderTest() {
           setNotice('Endpoint reachable. Use Test generation to check the selected model.');
       } else {
         let answer = '';
+        let complete = false;
         for await (const event of streamModel(
           {
             ...prepared.choices,
             systemPrompt: 'Reply briefly.',
             userPrompt: 'Say hello.',
-            context: { selection: '', pageTitle: '', pageUrl: '' },
           },
           prepared.credential,
           ac.signal,
           { maxTokens: 32 },
-        ))
+        )) {
           if (event.type === 'delta') answer += event.text;
-        if (ac.signal.aborted) throw new Error('Stopped');
+          else if (event.type === 'complete') complete = true;
+        }
+        ac.signal.throwIfAborted();
+        if (!complete) throw new Error('The model test ended before generation completed.');
         if (!answer.trim())
           throw new Error('The model returned no text. Check the model and endpoint.');
         if (mounted.current) setNotice(`Generation succeeded: ${answer.slice(0, 120)}`);

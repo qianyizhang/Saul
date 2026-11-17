@@ -41,12 +41,14 @@ export function responsesBody(
     systemPrompt,
     userPrompt,
     attachments,
+    images,
   }: {
     model: string;
     effort?: string;
     systemPrompt: string;
     userPrompt: string;
     attachments?: PdfUrlAttachment[];
+    images?: string[];
   },
   serviceTier = 'default',
 ) {
@@ -57,15 +59,21 @@ export function responsesBody(
     input: [
       {
         role: 'user',
-        content: attachments?.length
-          ? [
-              { type: 'input_text', text: userPrompt },
-              ...attachments.map((attachment) => ({
-                type: 'input_file',
-                file_url: attachment.url,
-              })),
-            ]
-          : userPrompt,
+        content:
+          attachments?.length || images?.length
+            ? [
+                { type: 'input_text', text: userPrompt },
+                ...(images ?? []).map((image_url) => ({
+                  type: 'input_image',
+                  image_url,
+                  detail: 'auto',
+                })),
+                ...(attachments ?? []).map((attachment) => ({
+                  type: 'input_file',
+                  file_url: attachment.url,
+                })),
+              ]
+            : userPrompt,
       },
     ],
     store: false,

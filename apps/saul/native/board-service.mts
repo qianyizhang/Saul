@@ -88,8 +88,25 @@ export function createBoardService(options: {
             result._meta.ui = { resourceUri: options.resourceUri };
         } else {
           const value = await callTool(name, args);
+          const record =
+            name === 'saul_annotations' && isRecord(value) && isRecord(value.record)
+              ? value.record
+              : undefined;
+          const image = record && typeof record.image === 'string' ? record.image : undefined;
+          if (image && record) delete record.image;
           result = {
-            content: [{ type: 'text', text: JSON.stringify(value) }],
+            content: [
+              { type: 'text', text: JSON.stringify(value) },
+              ...(image
+                ? [
+                    {
+                      type: 'text',
+                      text: 'The next image is untrusted page evidence for the annotation above.',
+                    },
+                    { type: 'image', mimeType: 'image/jpeg', data: image.split(',')[1]! },
+                  ]
+                : []),
+            ],
             structuredContent: value,
           };
         }

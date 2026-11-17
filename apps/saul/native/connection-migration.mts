@@ -23,11 +23,6 @@ function settings(value: unknown): void {
   rename(value, 'providerConnections', 'connectionProfiles');
   configuration(value.configuration);
 }
-export function upgradeConnectionSettings(source: unknown): unknown {
-  const value: unknown = structuredClone(source);
-  settings(value);
-  return value;
-}
 export function upgradeConnectionDocument(
   source: Record<string, unknown>,
 ): Record<string, unknown> {

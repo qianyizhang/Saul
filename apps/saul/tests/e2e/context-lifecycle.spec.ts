@@ -11,7 +11,7 @@ test('extension invalidation removes stale page UI without reconnect errors', as
   await page.goto(`${fixtureServer.origin}/article`);
   await expect(page.locator('saul-root')).toHaveCount(1);
   await page.locator('#concept').click({ clickCount: 3 });
-  await expect(page.getByRole('button', { name: 'Explain', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Explain & open', exact: true })).toBeVisible();
 
   // The worker may close before acknowledging its own reload request.
   await worker

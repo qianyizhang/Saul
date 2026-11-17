@@ -87,7 +87,7 @@ private struct NativeSelector<Value: Equatable>: NSViewRepresentable {
     }
 }
 
-private struct WheelStepper {
+struct WheelStepper {
     var accumulated: CGFloat = 0
     var lastStep: TimeInterval = -.infinity
     var lastEvent: TimeInterval = -.infinity

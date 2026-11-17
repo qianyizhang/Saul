@@ -1,3 +1,4 @@
+import { installAnnotationCapture } from '../src/annotations/capture';
 import { createRoot, type Root } from 'react-dom/client';
 import { SaulRoot } from '../src/surface/SaulRoot';
 import '../assets/tailwind.css';
@@ -6,6 +7,8 @@ export default defineContentScript({
   matches: ['<all_urls>'],
   cssInjectionMode: 'ui',
   async main(ctx) {
+    const disposeAnnotations = installAnnotationCapture();
+    ctx.onInvalidated(disposeAnnotations);
     const ui = await createShadowRootUi(ctx, {
       name: 'saul-root',
       position: 'inline',

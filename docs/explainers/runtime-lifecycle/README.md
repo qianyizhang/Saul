@@ -1,5 +1,11 @@
 # Saul runtime and lifecycle explainer
 
+> **Historical explainer — not maintained.** Diagrams, examples, technical details
+> and checks describe the recorded survey and updates below. They are not a current
+> runtime specification. Use [Saul architecture](../../../apps/saul/docs/architecture.md),
+> [shared architecture](../../architecture.md) and current source for today's behavior.
+> See the [historical-reference policy](../../artifacts.md#historical-references).
+
 [Open the local explainer](index.html).
 
 ## Outcome and scope
@@ -19,7 +25,7 @@ for one-time import. The HTML already reflects those ownership changes.
 The original survey baseline was `dc724fcf7cbd27cf7baec5c9aa1f2540099d2b40`
 (2026-10-29). The guide has since been updated for implemented actions and shared
 history. Historical checks below describe their recorded source, not current
-installed or running versions. Current executable contracts live in
+installed or running versions. Living runtime documentation is in
 [Saul architecture](../../../apps/saul/docs/architecture.md) and
 [shared architecture](../../architecture.md).
 
@@ -44,14 +50,14 @@ installed or running versions. Current executable contracts live in
 
 ## Retention and ownership
 
-This bundle is the requested deliverable, retained as a repository reading guide.
-Keep `index.html` and this manifest together. Refresh when the named runtime owners
-or installation layout change; retire or replace the guide when superseded.
+This requested deliverable is retained for its historical analysis and provenance.
+Keep `index.html` and this manifest together; do not update its diagrams, examples
+or technical details to match later runtime or installation changes.
 Temporary review captures belong under root `.artifacts/saul/runtime-explainer/`
 and are disposable after review. No personal credentials, history or installation
 metadata were copied into the bundle.
 
-## Current scope
+## Recorded scope
 
 Chrome on-device AI is retired. Old saved selections are readable and reject
 execution until the user chooses an available provider. The map describes the

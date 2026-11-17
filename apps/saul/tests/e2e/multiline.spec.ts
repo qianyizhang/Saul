@@ -61,7 +61,7 @@ for (const backwards of [false, true]) {
     await page.goto(fixtureServer.origin + '/multiline');
     await expect(page.locator('saul-root')).toBeAttached();
     await selectAcrossBlocks(page, backwards);
-    const trigger = page.getByRole('button', { name: 'Explain', exact: true });
+    const trigger = page.getByRole('button', { name: 'Explain & open', exact: true });
     await expect(trigger).toBeVisible();
     await expectAtSelectionEnd(page, trigger);
     await page.mouse.wheel(0, 70);
@@ -103,8 +103,7 @@ test('multiline capture preserves paragraph, list, and explicit line breaks in s
   expect(selectedText).toMatch(/export\.\n+Tabs:/);
   const end = await lastSelectedCharacter(page);
   const lastLine = await page.locator('li strong').nth(1).boundingBox();
-  await page.getByRole('button', { name: 'Explain', exact: true }).click();
-  await page.getByRole('button', { name: 'View', exact: true }).click();
+  await page.getByRole('button', { name: 'Explain & open', exact: true }).click();
   const card = page.getByRole('region', { name: 'Saul explanation' });
   await expect(card.getByText('Saved', { exact: true })).toBeVisible();
   const cardBox = (await card.boundingBox())!;
@@ -131,8 +130,7 @@ test('multiline capture preserves paragraph, list, and explicit line breaks in s
   expect(await page.evaluate(() => window.getSelection()!.toString())).toBe(
     'First line\nSecond line\nFinal line',
   );
-  await page.getByRole('button', { name: 'Explain', exact: true }).click();
-  await page.getByRole('button', { name: 'View', exact: true }).click();
+  await page.getByRole('button', { name: 'Explain & open', exact: true }).click();
   await expect(card.getByText('Saved', { exact: true })).toBeVisible();
   await expect(card.locator('header span')).toHaveAttribute(
     'title',
@@ -156,7 +154,7 @@ test('live GitHub multiline selection and explanation stay aligned while scrolli
     start: 'article p',
     end: 'article ul > li:nth-child(2)',
   });
-  const trigger = page.getByRole('button', { name: 'Explain', exact: true });
+  const trigger = page.getByRole('button', { name: 'Explain & open', exact: true });
   await expect(trigger).toBeVisible();
   await expectAtSelectionEnd(page, trigger);
   await expect(trigger).toHaveCSS('transition-duration', '0s');
@@ -168,7 +166,6 @@ test('live GitHub multiline selection and explanation stay aligned while scrolli
   await expectAtSelectionEnd(page, trigger);
   const end = await lastSelectedCharacter(page);
   await trigger.click();
-  await page.getByRole('button', { name: 'View', exact: true }).click();
   const card = page.getByRole('region', { name: 'Saul explanation' });
   await expect(card.getByText('Saved', { exact: true })).toBeVisible();
   expect(Math.abs((await card.boundingBox())!.y - end.bottom - 8)).toBeLessThan(2);

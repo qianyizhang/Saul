@@ -8,7 +8,7 @@ import Foundation
             let actions = f.model.configuration.actions
             f.model.chooseAction(actions[0].id)
             f.model.query = "draft"
-            f.model.choosePreset(f.alternate.id)
+            f.model.chooseLookupPreset(f.alternate.id)
             f.model.performLookupCommand(.previousRecipe)
             try expectEqual(f.model.currentAction?.id, actions.last?.id, "Shortcut contract mismatch")
             try expect(
@@ -26,22 +26,7 @@ import Foundation
             f.model.performLookupCommand(.lastRecipe)
             try expectEqual(f.model.currentAction?.id, actions.last?.id, "Shortcut contract mismatch")
         },
-        stateCase("shortcuts respect busy launcher and absent action guards") { f in
-            f.model.query = "draft"
-            let id = f.model.selectedActionID
-            for pending in [false, true] {
-                f.model.busy = !pending
-                f.model.launcherPending = pending
-                for command in [LookupCommand.newLookup, .nextRecipe, .previousRecipe, .recipe2, .lastRecipe]
-                {
-                    try expect(!f.model.commandEnabled(command), "Busy command was enabled")
-                    f.model.performLookupCommand(command)
-                }
-                try expectEqual(f.model.selectedActionID, id, "Shortcut contract mismatch")
-                try expectEqual(f.model.query, "draft", "Shortcut contract mismatch")
-            }
-            f.model.busy = false
-            f.model.launcherPending = false
+        stateCase("shortcuts respect absent actions") { f in
             try expect(!f.model.commandEnabled(.recipe8), "Missing action was enabled")
             try f.model.saveConfiguration(Configuration())
             for command in [LookupCommand.nextRecipe, .previousRecipe, .recipe1, .lastRecipe] {
@@ -51,7 +36,7 @@ import Foundation
             try expect(f.model.currentAction == nil, "Navigation resurrected a action")
         },
         stateCase("shortcuts leave history replay and reset through the shared actions") { f in
-            f.model.reuse(try f.snapshot())
+            f.model.reuse(try f.savedAnswer())
             f.model.performLookupCommand(.nextRecipe)
             try expectEqual(
                 f.model.currentAction?.id, f.configuration.actions.first?.id, "Shortcut contract mismatch")

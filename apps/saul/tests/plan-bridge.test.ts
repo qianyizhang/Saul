@@ -161,3 +161,21 @@ it('allows trusted history operations and rejects invalid migration identities',
   h.emit({ id: packet.id, event: { type: 'result', value: [] } });
   expect(runner.port.postMessage).toHaveBeenCalledWith({ type: 'result', value: [] });
 });
+
+it('settles a timed-out request even when its native connection cannot receive cancellation', () => {
+  vi.useFakeTimers();
+  const h = harness();
+  const ui = h.connect('chrome-extension://extension/library.html');
+  ui.receive({ action: 'models', accountId: 'account' });
+  const id = h.native.postMessage.mock.calls[0]![0].id;
+  h.native.postMessage.mockImplementationOnce(() => {
+    throw new Error('Attempting to use a disconnected port');
+  });
+  vi.advanceTimersByTime(190_000);
+  expect(ui.port.postMessage).toHaveBeenCalledExactlyOnceWith({
+    type: 'error',
+    message: 'ChatGPT request timed out.',
+  });
+  h.emit({ id, event: { type: 'result', models: [] } });
+  expect(ui.port.postMessage).toHaveBeenCalledTimes(1);
+});

@@ -4,25 +4,6 @@ import Foundation
 
 @MainActor func historyStateChecks() -> [CheckCase] {
     [
-        stateCase("busy deletion preserves visible lookup and saved bytes") { f in
-            let entry = try f.selectLookup()
-            let bytes = try Data(contentsOf: f.history.url)
-            f.model.busy = true
-            f.model.deleteLookup(entry.id)
-            try expect(
-                f.model.entries == [entry] && f.model.selection == entry.id, "Busy deletion changed state")
-            try expect(try Data(contentsOf: f.history.url) == bytes, "Busy deletion changed history bytes")
-        },
-        stateCase("pending launcher prevents lookup deletion") { f in
-            let entry = try f.selectLookup()
-            let bytes = try Data(contentsOf: f.history.url)
-            f.model.launcherPending = true
-            f.model.deleteLookup(entry.id)
-            try expect(
-                f.model.entries == [entry] && f.model.selection == entry.id,
-                "Pending launcher deletion changed state")
-            try expect(try Data(contentsOf: f.history.url) == bytes, "Pending launcher allowed deletion")
-        },
         stateCase("deletion persists clears selection and preserves composer draft") { f in
             let entry = try f.selectLookup()
             let draft = f.model.inputValues

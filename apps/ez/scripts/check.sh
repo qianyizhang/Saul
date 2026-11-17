@@ -2,6 +2,16 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source scripts/lib/swift-build.sh
+state_sources=(
+    Sources/EZ/AppModel.swift
+    Sources/EZ/ConfigurationEditor.swift
+    Sources/EZ/ConnectionAvailability.swift
+    Sources/EZ/ConnectionChecks.swift
+    Sources/EZ/LookupDraft.swift
+    Sources/EZ/LookupImageLoader.swift
+    Sources/EZ/LookupRequest.swift
+    Sources/EZ/SketchDraft.swift
+)
 kind="${1:-all}"
 if [[ $# -gt 0 ]]; then shift; fi
 case "$kind" in
@@ -16,14 +26,14 @@ case "$kind" in
         ./scripts/swift.sh build --product EZ
         ez_build_product EZChecks
         ez_link_modules EZChecks EZCore SaulCredentialStorage EZCheckSupport
-        ez_compile_library Sources/EZ/AppModel.swift Sources/EZ/GenerationState.swift Sources/EZ/ConnectionState.swift \
+        ez_compile_library "${state_sources[@]}" \
             Tests/EZStateChecks/*.swift "${ez_objects[@]}" -o "$ez_bin_dir/EZStateChecks"
         exec "$ez_bin_dir/EZStateChecks" "$@"
         ;;
     services)
         ez_build_product EZChecks
         ez_link_modules EZChecks EZCore SaulCredentialStorage EZCheckSupport
-        ez_compile_library Sources/EZ/AppModel.swift Sources/EZ/GenerationState.swift Sources/EZ/ConnectionState.swift \
+        ez_compile_library "${state_sources[@]}" \
             Sources/EZ/SelectedTextService.swift Tests/EZStateChecks/StateFixture.swift \
             Tests/Services/check.swift "${ez_objects[@]}" -o "$ez_bin_dir/EZServicesChecks"
         exec "$ez_bin_dir/EZServicesChecks" "$@"
@@ -31,7 +41,8 @@ case "$kind" in
     ui)
         ez_build_product EZChecks
         ez_link_modules EZChecks EZCheckSupport
-        ez_compile_library Sources/EZ/AppStyle.swift Sources/EZ/DesignTokens.swift \
+        ez_compile_library Sources/EZ/AppStyle.swift Sources/EZ/DesignTokens.swift Sources/EZ/MultilineDraftReturn.swift \
+            Sources/EZ/LookupChoiceButton.swift Sources/EZ/SelectorPicker.swift \
             Tests/EZUIChecks/*.swift "${ez_objects[@]}" -o "$ez_bin_dir/EZUIChecks"
         exec "$ez_bin_dir/EZUIChecks" "$@"
         ;;

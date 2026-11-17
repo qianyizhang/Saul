@@ -1,7 +1,7 @@
-import { GeneratedImageView } from '../surface/GeneratedImageView';
+import { HistoryEntry } from './HistoryEntry';
 import { ActionLabel } from '../surface/ActionLabel';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Bookmark, ExternalLink, Trash2, Download, ChevronDown } from 'lucide-react';
+import { Bookmark, Download } from 'lucide-react';
 import { useRefreshOnFocus } from './useRefreshOnFocus';
 import {
   fetchHistory,
@@ -12,13 +12,8 @@ import {
   sendDbMessage,
   openHistorySource,
 } from '../storage/client';
-import { runLabel } from '../surface/ExplanationCard';
 import type { HistoryItem, RunResult } from '../types/storage';
-import { AnnotatedTextView } from '../surface/AnnotatedTextView';
-import { TagStreamParser } from '../parser/tag-stream-parser';
-import { downloadMarkdown, safeSource } from './format';
-import { InputOutputInspector } from '../surface/InputOutputInspector';
-import { RunDetails } from '../surface/RunDetails';
+import { downloadMarkdown } from './format';
 
 export function Library({
   compact = false,
@@ -180,145 +175,20 @@ export function Library({
         !error && (
           <div className="stack history-list" aria-busy={busy}>
             {items.map((item) => (
-              <article className="history-entry" key={item.selectionId}>
-                <div className="row between" style={{ alignItems: 'flex-start' }}>
-                  <button
-                    className="history-title grow"
-                    aria-expanded={expanded === item.selectionId}
-                    onClick={() => void expand(item)}
-                  >
-                    <span className="history-preview">{item.selectedText}</span>
-                    {item.unread && <span className="badge">New</span>}{' '}
-                    <ChevronDown size={14} className="disclosure-icon" />
-                  </button>
-                  <button
-                    className="btn icon"
-                    disabled={actionBusy}
-                    aria-label={item.bookmarked ? 'Remove bookmark' : 'Bookmark'}
-                    aria-pressed={item.bookmarked}
-                    onClick={() =>
-                      action(() => setHistoryBookmark(item.selectionId, !item.bookmarked))
-                    }
-                  >
-                    <Bookmark size={16} fill={item.bookmarked ? 'currentColor' : 'none'} />
-                  </button>
-                  {!minimum && (
-                    <button
-                      className="btn icon danger"
-                      title="Delete"
-                      aria-label="Delete highlight"
-                      disabled={actionBusy}
-                      onClick={() => action(() => deleteHistorySelection(item.selectionId))}
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
-                </div>
-                <div className="row between small muted" style={{ marginTop: 8 }}>
-                  {safeSource(item.pageUrl) ? (
-                    <button
-                      className="source-link"
-                      onClick={() => void action(() => openHistorySource(item.selectionId))}
-                      title="View source and explanation"
-                    >
-                      {item.pageTitle || item.pageUrl}{' '}
-                      <ExternalLink size={12} style={{ display: 'inline' }} />
-                    </button>
-                  ) : (
-                    <span>{item.pageTitle || item.pageUrl}</span>
-                  )}
-                  <time className="standard-only">
-                    {new Date(item.createdAt).toLocaleDateString()}
-                  </time>
-                </div>
-                {expanded === item.selectionId && (
-                  <div className="answer">
-                    <p className="small muted" role="status">
-                      {runLabel(item.latest.status)}
-                      {item.completed && item.completed.id !== item.latest.id
-                        ? ' · Previous answer'
-                        : ''}
-                    </p>
-                    {item.latest.error && (
-                      <p className="notice error" role="alert">
-                        {item.latest.error}
-                      </p>
-                    )}
-                    {(item.completed || item.latest).inspection?.followUpQuestion && (
-                      <p style={{ whiteSpace: 'pre-wrap', fontWeight: 600 }}>
-                        {(item.completed || item.latest).inspection?.followUpQuestion}
-                      </p>
-                    )}
-                    {item.hasImage && (
-                      <GeneratedImageView
-                        key={(item.completed || item.latest).id}
-                        selectionId={item.selectionId}
-                        runId={(item.completed || item.latest).id}
-                        workspace
-                      />
-                    )}
-                    <AnnotatedTextView segments={new TagStreamParser().feed(item.responseRaw)} />
-                    <RunDetails
-                      key={`details-${(item.completed || item.latest).id}`}
-                      run={item.completed || item.latest}
-                    >
-                      {minimum && (
-                        <InputOutputInspector
-                          key={(item.completed || item.latest).id}
-                          run={item.completed || item.latest}
-                        />
-                      )}
-                    </RunDetails>
-                    {!minimum && (
-                      <InputOutputInspector
-                        key={(item.completed || item.latest).id}
-                        run={item.completed || item.latest}
-                      />
-                    )}
-                    <details className="history-more">
-                      <summary>More</summary>
-                      {runs
-                        .filter((run) => run.id !== (item.completed || item.latest).id)
-                        .map((run) => (
-                          <details key={run.id}>
-                            <summary>
-                              {runLabel(run.status)} · {new Date(run.createdAt).toLocaleString()}
-                            </summary>
-                            {run.error && <p>{run.error}</p>}
-                            {run.inspection?.followUpQuestion && (
-                              <p style={{ whiteSpace: 'pre-wrap', fontWeight: 600 }}>
-                                {run.inspection.followUpQuestion}
-                              </p>
-                            )}
-                            {run.hasImage ? (
-                              <GeneratedImageView
-                                selectionId={item.selectionId}
-                                runId={run.id}
-                                workspace
-                              />
-                            ) : (
-                              <AnnotatedTextView
-                                segments={new TagStreamParser().feed(run.responseRaw)}
-                              />
-                            )}
-                            <RunDetails run={run} />
-                            <InputOutputInspector run={run} />
-                          </details>
-                        ))}
-                      {minimum && (
-                        <button
-                          className="btn danger"
-                          aria-label="Delete highlight"
-                          disabled={actionBusy}
-                          onClick={() => action(() => deleteHistorySelection(item.selectionId))}
-                        >
-                          <Trash2 size={16} /> Delete
-                        </button>
-                      )}
-                    </details>
-                  </div>
-                )}
-              </article>
+              <HistoryEntry
+                key={item.selectionId}
+                item={item}
+                expanded={expanded === item.selectionId}
+                minimum={minimum}
+                busy={actionBusy}
+                runs={runs}
+                onExpand={() => void expand(item)}
+                onBookmark={() =>
+                  void action(() => setHistoryBookmark(item.selectionId, !item.bookmarked))
+                }
+                onDelete={() => void action(() => deleteHistorySelection(item.selectionId))}
+                onOpenSource={() => void action(() => openHistorySource(item.selectionId))}
+              />
             ))}
           </div>
         )

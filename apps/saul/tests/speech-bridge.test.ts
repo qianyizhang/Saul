@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { initSpeechBridge } from '../src/speech/bridge';
-import { DEFAULT_SETTINGS } from '../src/storage/settings';
+import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 
 const request = {
   presetId: 'speak',
@@ -22,7 +22,7 @@ function harness() {
       },
     },
   });
-  const settings = structuredClone(DEFAULT_SETTINGS);
+  const settings = structuredClone(DEFAULT_CONFIGURATION);
   settings.profiles = [
     {
       id: 'official',
@@ -115,7 +115,7 @@ it('ends at its deadline even if reading saved configuration never replies', asy
   try {
     const h = harness(),
       ui = h.connect('chrome-extension://extension/library.html');
-    h.load.mockImplementation(() => new Promise<typeof DEFAULT_SETTINGS>(() => {}));
+    h.load.mockImplementation(() => new Promise<typeof DEFAULT_CONFIGURATION>(() => {}));
     ui.receive(request);
     await vi.advanceTimersByTimeAsync(90_000);
     expect(ui.port.postMessage).toHaveBeenCalledWith({

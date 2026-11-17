@@ -31,7 +31,7 @@ export function checkAction(value: unknown): { module: ActionModule; javascript:
       (ts.isIdentifier(node) && forbidden.has(node.text))
     )
       throw new Error(
-        'Actions use only ctx.source, ctx.generate, ctx.progress and ctx.signal. Imports, direct network, shell and browser access are outside contract 1.',
+        'Actions use only ctx.source, ctx.generate, ctx.progress, ctx.signal and scoped ctx.annotations in annotation runs. Imports, direct network, shell and browser access are outside contract 1.',
       );
     if (
       ts.isExportAssignment(node) ||

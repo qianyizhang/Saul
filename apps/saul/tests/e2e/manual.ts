@@ -1,4 +1,9 @@
-import { createFixtureServer, createSandbox, taggedAnswer } from './support.ts';
+import {
+  createFixtureServer,
+  createSandbox,
+  taggedAnswer,
+  configureFixtureProvider,
+} from './support.ts';
 
 // Uses Node's native TypeScript support (Node >=22.18); no extra runner needed.
 const smoke = process.argv.includes('--smoke');
@@ -16,14 +21,7 @@ try {
   sandbox = await createSandbox({ headless, handleProcessSignals: false });
   const { context, popup } = await sandbox.launch();
   context.once('close', stop);
-  await popup.evaluate(async (origin) => {
-    await chrome.storage.local.set({
-      saul_user_settings: {
-        activeProvider: 'openai-compatible',
-        openaiCompatible: { baseUrl: `${origin}/v1`, apiKey: '', model: 'test-model' },
-      },
-    });
-  }, server.origin);
+  await configureFixtureProvider(popup, server.origin);
   await popup.reload();
   const article = await context.newPage();
   await article.goto(`${server.origin}/article`);
@@ -33,7 +31,7 @@ try {
   if (smoke) {
     await article.locator('saul-root').waitFor({ state: 'attached' });
     await article.locator('#concept').click({ clickCount: 3 });
-    await article.getByRole('button', { name: 'Explain', exact: true }).click();
+    await article.getByRole('button', { name: 'Explain & open', exact: true }).click();
     await article.getByRole('button', { name: 'View', exact: true }).click();
     await article.getByRole('button', { name: 'Copy explanation', exact: true }).waitFor();
     await popup.getByRole('button', { name: 'History', exact: true }).click();

@@ -1,4 +1,4 @@
-import type { UserSettings } from '../types';
+import type { Configuration } from '../configuration/definition';
 import { record } from './reading';
 
 export type SettingsRequest =
@@ -7,7 +7,7 @@ export type SettingsRequest =
   | { action: 'reset'; baseline: string };
 
 export type SettingsState =
-  | { state: 'ready'; revision: string; settings: UserSettings; reset?: boolean }
+  | { state: 'ready'; revision: string; settings: Configuration; reset?: boolean }
   | { state: 'invalid'; revision: string; error: string }
   | { state: 'conflict'; error: string };
 

@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { streamModel } from '../src/models/provider';
+import { streamModel } from '../src/providers/stream';
 import type { RunInput } from '../src/types/storage';
 
 it('rejects a frozen retired-provider request without invoking a browser model or remote endpoint', async () => {

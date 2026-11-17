@@ -1,0 +1,245 @@
+{
+  "version": 1,
+  "title": "Proposal 3 · Explain and open",
+  "initial": "selection",
+  "source": {
+    "revision": "0a949cf12f226a63b0db6244f9fc2a1e3fef78d1 · 2026-11-15",
+    "description": "Accepted design comparison against baseline 0a949cf. The three changes are now implemented in the working tree with the agreed broader scope. These fixed previews record the design discussion; use the parent catalog for current behavior maps."
+  },
+  "coverage": {
+    "included": [
+      "Original and Proposed share the same start and outcome. New transitions are marked proposed and never become available in Exploration.",
+      "Only the affected route is shown. System checkpoints are simulated; no product effects occur.",
+      "Pointer-triggered first explanation with a valid configured preset. Quiet keyboard queuing remains as documented in apps/saul/docs/product.md.",
+      "The new request opens only after acceptance on the same page. Closing the card does not cancel, and later completion must not steal focus."
+    ],
+    "omitted": [
+      "This comparison is not an exhaustive UI or concurrency model. Open the parent atlas for other journeys.",
+      "No live app or usability testing, provider requests, account changes or automatic merging. This is the original design study, not the current app rendering.",
+      "Counts distinguish intentional controls from system events. Do not treat grouped transitions as measured clicks. Cancel/retry loops are retained as alternatives and excluded from the straightforward before/after route."
+    ]
+  },
+  "regions": [
+    {
+      "id": "page",
+      "label": "Source page"
+    },
+    {
+      "id": "card",
+      "label": "Explanation card"
+    }
+  ],
+  "states": [
+    {
+      "id": "selection",
+      "region": "page",
+      "label": "Passage selected",
+      "detail": "The selection widget offers an Action. Fictional passage: “Closing a view does not cancel its request.”",
+      "source": "apps/saul/src/surface/FloatingTrigger.tsx:63",
+      "preview": {
+        "title": "Passage selected",
+        "body": "The selection widget offers an Action. Fictional passage: “Closing a view does not cancel its request.”"
+      }
+    },
+    {
+      "id": "requested",
+      "region": "page",
+      "label": "Action requested",
+      "detail": "The source location is checked and existing saved work is resolved before starting new generation.",
+      "source": "apps/saul/entrypoints/background.ts:145",
+      "preview": {
+        "title": "Action requested",
+        "body": "The source location is checked and existing saved work is resolved before starting new generation."
+      }
+    },
+    {
+      "id": "receiving",
+      "region": "card",
+      "label": "Receiving",
+      "detail": "A new frozen attempt is running. Two attempts per provider may execute concurrently; this map follows one.",
+      "source": "apps/saul/src/reading/runner.ts:72",
+      "preview": {
+        "title": "Receiving explanation",
+        "body": "A new frozen attempt is running. Two attempts per provider may execute concurrently; this map follows one."
+      }
+    },
+    {
+      "id": "saved",
+      "region": "card",
+      "label": "Saved explanation",
+      "detail": "Completion and successful persistence are required. A completed answer is retained while later attempts run.",
+      "source": "apps/saul/src/reading/runner.ts:146",
+      "preview": {
+        "title": "Explanation saved",
+        "body": "Completion and successful persistence are required. A completed answer is retained while later attempts run."
+      },
+      "terminal": true
+    },
+    {
+      "id": "closed-running",
+      "region": "page",
+      "label": "Closed · running",
+      "detail": "Closing the explanation changes only local view selection. The request continues.",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:459",
+      "preview": {
+        "title": "Card closed · request active",
+        "body": "Closing the explanation changes only local view selection. The request continues."
+      },
+      "terminal": true
+    },
+    {
+      "id": "waiting",
+      "region": "page",
+      "label": "Waiting · View",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:325",
+      "detail": "A new attempt was accepted. Saul shows a Waiting… notice with View; it does not open the explanation card automatically.",
+      "preview": {
+        "title": "Waiting · card closed",
+        "body": "A new attempt was accepted. Saul shows a Waiting… notice with View; it does not open the explanation card automatically."
+      }
+    },
+    {
+      "id": "open-requested",
+      "region": "page",
+      "label": "Explain & open requested",
+      "detail": "PROPOSED: Resolve saved work first. Once this submission is accepted, open its card on the same page. A later completion must not reopen a card that the user closed.",
+      "source": "Design reference at baseline 0a949cf: apps/saul/src/surface/SaulRoot.tsx:325",
+      "preview": {
+        "title": "Opening the requested answer",
+        "body": "Resolve saved work first. Once this submission is accepted, open its card on the same page. A later completion must not reopen a card that the user closed.",
+        "fields": [],
+        "blocks": [
+          {
+            "kind": "notice",
+            "tone": "neutral",
+            "text": "Accepted design · illustrative preview"
+          }
+        ]
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "id": "request",
+      "from": "selection",
+      "to": "requested",
+      "label": "Explain",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:306",
+      "kind": "user"
+    },
+    {
+      "id": "new-attempt",
+      "from": "requested",
+      "to": "waiting",
+      "label": "New submission accepted",
+      "source": "apps/saul/src/reading/runner.ts:56",
+      "kind": "system"
+    },
+    {
+      "id": "complete",
+      "from": "receiving",
+      "to": "saved",
+      "label": "Completion and local save succeed",
+      "source": "apps/saul/src/reading/runner.ts:163",
+      "kind": "system"
+    },
+    {
+      "id": "close-running",
+      "from": "receiving",
+      "to": "closed-running",
+      "label": "Close explanation",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:459",
+      "kind": "user"
+    },
+    {
+      "id": "view",
+      "from": "waiting",
+      "to": "receiving",
+      "label": "View waiting attempt",
+      "kind": "user",
+      "source": "apps/saul/src/surface/SaulRoot.tsx:553"
+    },
+    {
+      "id": "explain-open",
+      "from": "selection",
+      "to": "open-requested",
+      "label": "Explain & open",
+      "kind": "user",
+      "proposed": true,
+      "source": "Design reference at baseline 0a949cf: apps/saul/src/surface/FloatingTrigger.tsx:63"
+    },
+    {
+      "id": "accept-open",
+      "from": "open-requested",
+      "to": "receiving",
+      "label": "Accepted; open answer card",
+      "kind": "system",
+      "proposed": true,
+      "source": "Design reference at baseline 0a949cf: apps/saul/src/surface/SaulRoot.tsx:325"
+    }
+  ],
+  "journeys": [
+    {
+      "id": "read-current",
+      "label": "Current · Explain, then View",
+      "description": "The selection button queues quietly, by deliberate product design. The user then opens the card.",
+      "start": "selection",
+      "steps": ["request", "new-attempt", "view", "complete"]
+    },
+    {
+      "id": "read-proposed",
+      "label": "Proposed · Explain & open",
+      "description": "The pointer action declares its intent; existing keyboard queuing remains quiet.",
+      "start": "selection",
+      "steps": ["explain-open", "accept-open", "complete"]
+    }
+  ],
+  "comparisons": [
+    {
+      "id": "open-on-request",
+      "label": "Saul: make “read now” a single action",
+      "before": "read-current",
+      "after": "read-proposed",
+      "detail": "Optional direction, not a defect verdict. Quiet queuing is an intentional reading contract. For users seeking an immediate explanation, a clearly named Explain & open selection button removes the second View click and matches saved-answer opening. Keyboard queuing stays quiet; Close still hides without stopping. Trade-off: the pointer action covers page content sooner and differs from the shortcut. Accepted: pointer actions open both text and images; keyboard actions stay quiet."
+    }
+  ],
+  "layout": {
+    "states": {
+      "selection": [140, 300],
+      "requested": [400, 130],
+      "waiting": [700, 130],
+      "open-requested": [520, 580],
+      "receiving": [1040, 300],
+      "saved": [1370, 250],
+      "closed-running": [160, 820]
+    },
+    "regions": {
+      "page": {
+        "label": [35, -45],
+        "outline": [
+          [20, 80],
+          [100, 30],
+          [740, 30],
+          [820, 80],
+          [840, 910],
+          [740, 980],
+          [100, 980],
+          [0, 910]
+        ]
+      },
+      "card": {
+        "label": [935, 75],
+        "outline": [
+          [920, 200],
+          [1000, 150],
+          [1410, 150],
+          [1490, 200],
+          [1510, 390],
+          [1410, 460],
+          [1000, 460],
+          [900, 390]
+        ]
+      }
+    }
+  }
+}

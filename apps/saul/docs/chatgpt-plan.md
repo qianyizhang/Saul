@@ -52,23 +52,19 @@ validates the model's capabilities again before inference.
 
 ## PDF URL attachments
 
-PDF summaries default to a URL attachment on the same Responses route. The helper
-maps a validated `pdf-url` attachment to `input_file.file_url` alongside the text
-message. It does not call the Files upload API, download the PDF or switch accounts
-or billing providers. Model/URL rejection stays explicit. Update the existing
-helper as well as the extension before using this new request field. See
-[PDF behavior](product.md#summaries) and [verification](testing.md#pdf-summaries).
+The [Call guide](calls.md#source-capture-and-pdfs) owns PDF behavior.
+The native allowlist admits one bounded HTTP(S) attachment, without URL
+userinfo, arbitrary content parts, bytes, credentials or caller-supplied
+endpoint. The helper maps it to `input_file.file_url` beside `input_text` and
+uses the existing OAuth/Responses path, never the Files upload API. Text-only
+callers retain their request shape. Update the helper with the extension.
 
 The [direct-flow limits](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)
 support file input for accepting models but exclude the Files upload API. The
 [file-input guide](https://developers.openai.com/api/docs/guides/file-inputs)
-defines PDF URL input and text/page-image processing. On October 29, 2026, one
-live request with Saul's existing eligible account, `gpt-6-luna`, medium effort
-and the supplied public Herzlinger PDF URL returned `response.completed` and a
-document-specific English–Chinese summary. Saul downloaded/uploaded no PDF bytes.
-This establishes that account/model/URL combination on that date, not universal
-access or a guarantee that every page was read; the API does not return extracted
-text or an exact page-coverage record.
+defines PDF URL input and text/page-image processing. See
+[dated live evidence](testing.md#pdf-url-attachment--2026-10-29) for the original
+account/model/URL result.
 
 ## Credentials and sign-out
 
@@ -79,13 +75,17 @@ text or an exact page-coverage record.
 - **Sign out** attempts refresh-token revocation using OpenAI's discovery document. Local tokens are cleared even if remote revocation fails; the UI reports that case and directs you to disconnect Saul in ChatGPT settings. Managed sign-out affects both apps. Sign-out retains the registration and host ID for reauthorization.
 - Browser profiles using the same helper installation share its saved accounts. Each reading job freezes the selected account and model; changing Settings never reroutes an existing job to a different account.
 
-The plan helper does not expose a general HTTP proxy, shell tool, MCP server, or tab operations. Replies are validated against the requested operation. Its extension port accepts account controls only from Saul's settings/workspace pages and generation from those pages or the trusted offscreen runner. Codex tab access remains separately opt-in.
+The plan helper does not expose a general HTTP proxy, shell tool, MCP server, or tab operations. Replies are validated against the requested operation. Its background transport in [chatgpt-plan.ts](../src/providers/chatgpt-plan.ts)
+also handles history port/control requests. It admits account controls only from
+Settings/workspace and generation from those pages or the trusted offscreen runner. Codex tab access remains separately opt-in.
 
 For shared mode, disconnect the app in Preferences → Integrations; sign out first only if you intend to disconnect the shared account in both apps. For standalone mode, sign out, disconnect its native connection, and remove `com.saul.chatgpt.json` from the browser's `NativeMessagingHosts` directory. Retain its versioned payload; do not delete individual files through `bin` or `bridge`. Remove `~/.saul/chatgpt` only if you also want to discard the saved host/account mappings. Full runtime cleanup requires all installed helpers and MCP to be disconnected; see the [helper lifecycle](native-messaging.md).
 
 ## Verification and limits
 
-Automated checks use signed fixture identities, mocked OpenAI endpoints, a real loopback OAuth callback, private temporary credential files, installed native-host framing, and disposable browser profiles. Browser tests replace only native messaging and exercise Settings, the runner, saved history, partial failures and cancellation. They do not establish live account eligibility, consent availability, actual quota charging, or model quality. No real tokens or personal browser profiles are needed for tests.
+[Plan checks](testing.md#evidence-limits) use signed fixture identities,
+private temporary credentials and real native framing. They do not establish
+live account eligibility, consent availability, quota charging or model quality.
 
 Protocol sources (sign-in, sessions, and model guidance rechecked 2026-10-18):
 
@@ -97,63 +97,20 @@ Protocol sources (sign-in, sessions, and model guidance rechecked 2026-10-18):
 
 ## Speech preview
 
-Settings → Presets supports Speak presets with an OpenAI Realtime model and voice.
-Settings → Connections owns the separate API connection and key. The preview generates
-up to 512 characters, offers Stop and an audio player, and discards input/audio when
-you leave. It requires saved choices, does not use ChatGPT sign-in, and never saves
-audio or text to reading history. Both apps preserve/edit Speak presets and execute the preview through the shared
-credential owner in managed macOS mode.
+Settings → Presets uses the saved, explicit Realtime model and voice. The
+[background speech bridge](../src/speech/bridge.ts) admits one request per trusted
+Settings port and checks that the saved Speak preset and official API
+connection still match. The [Realtime session](../src/speech/realtime.ts) obtains
+an ephemeral secret through the local key or the signed owner's `api-realtime`
+operation. Neither plan OAuth nor another connection is a fallback.
 
-The [Speech API guide](https://developers.openai.com/api/docs/guides/text-to-speech)
-schedules `gpt-4o-mini-tts` shutdown for January 6, 2027 and directs integrations to
-Realtime. Saul uses `gpt-realtime-2.1-mini` by default through the documented
-[Realtime WebSocket flow](https://developers.openai.com/api/docs/guides/voice-websockets?api=realtime),
-with a short-lived secret created by the trusted extension background. The old
-experimental OAuth `speech` operation has been removed from the helper and UI.
-Realtime output is generative; exact spoken wording is not guaranteed.
+One WebSocket response converts up to 512 text characters into PCM16 at 24 kHz.
+Audio is capped at 6 MB and the session at 90 seconds; malformed or incomplete
+responses and redirects fail without replay. Only completed WAV audio is playable.
+Stop, caller loss and leaving Presets abort/close the session; choice changes
+clear audio and unmount revokes the playback URL. No microphone, history writes
+or remote error bodies. Text, audio and secrets stay out of persistent data and
+diagnostics. Realtime is generative and does not guarantee exact wording.
 
-The probe below is historical evidence about the removed OAuth experiment, not a
-verification of current API access.
-
-### Live result — October 21, 2026
-
-A single refreshed access token from Saul's existing, plan-enabled direct OAuth
-registration was held in memory and used for every request in this run:
-
-| Endpoint                      | Model / control                                        | Observed result                             |
-| ----------------------------- | ------------------------------------------------------ | ------------------------------------------- |
-| `GET /v1/models`              | Account catalog                                        | HTTP 200                                    |
-| `POST /v1/responses`          | `gpt-6-luna`, “Reply with exactly OK.”                 | HTTP 200, `response.completed`, output `OK` |
-| `POST /v1/audio/speech`       | `gpt-4o-mini-tts`, coral                               | HTTP 401, `no_matching_rule`                |
-| `POST /v1/images/generations` | `gpt-image-2.5-flare`, one low-quality 1024×1024 image | HTTP 401, `hardened_oauth_rule_missing`     |
-| `POST /v1/embeddings`         | `text-embedding-3-small`                               | HTTP 401, `no_matching_rule`                |
-| `POST /v1/chat/completions`   | `gpt-6-luna`                                           | HTTP 401, `no_matching_rule`                |
-
-Responses completed before the other endpoints were tested: these rejections do
-not indicate a generally broken sign-in. They establish rejection for this account,
-client registration, route and date; they do not prove that every OAuth client or
-rollout behaves identically. No audio or image was generated. Other endpoints,
-Realtime sessions, and private ChatGPT backend routes were not tested.
-
-To repeat explicitly (uses live plan allowance), run from `apps/saul` with Node 24:
-
-```sh
-node --use-env-proxy scripts/probe-capabilities.mts
-```
-
-The probe requires exactly one signed-in, plan-enabled Saul account, uses the
-existing locked refresh owner, then freezes one token for the run. It stops if the
-live Responses control fails. It never prints or copies credentials. Sanitized
-status/error receipts and any successful generated media go to root
-`.artifacts/saul/capability-probe/`. Probe prompts are synthetic; no browsing history
-is read. Endpoint bodies follow the official
-[image](https://developers.openai.com/api/docs/guides/image-generation) and
-[embedding](https://developers.openai.com/api/docs/guides/embeddings) references.
-
-The widget is verified in the disposable browser harness for input validation,
-account locking, cancellation, sanitized rejection, audio-control rendering,
-keyboard disclosure, draft retention, and narrow/wide light/dark presentation in
-both display modes. Audio-control success uses synthetic bytes; live audio decoding
-and playback remain unverified because the endpoint rejected the credential.
-Source and the app-owned build were updated; the loaded personal extension and
-installed helper were not upgraded by this experiment.
+See [the dated OAuth route probe](testing.md#direct-oauth-route-probe--2026-10-21)
+for historical evidence about the removed experiment. It does not verify Realtime.

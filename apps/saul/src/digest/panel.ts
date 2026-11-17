@@ -1,3 +1,4 @@
+import { annotationPanelKey } from '../annotations/routing';
 import { validateCall } from '../../native/protocol.mts';
 import { id as validId } from '../contracts/reading';
 
@@ -44,7 +45,10 @@ export async function openSummaryPanel(windowId: number, args: { tabIds?: number
     '#summary/' + encodeURIComponent(id) + (args.tabIds ? '?tabs=' + args.tabIds.join(',') : '');
   // Both requests are dispatched while the gesture is live. A popup can close
   // as the panel opens; routing must not depend on its later promise callbacks.
-  const routeWritten = chrome.storage.session.set({ [summaryPanelKey(windowId)]: route });
+  const routeWritten = chrome.storage.session.set({
+    [summaryPanelKey(windowId)]: route,
+    [annotationPanelKey(windowId)]: { view: 'summary' },
+  });
   const opened = chrome.sidePanel.open({ windowId });
   return Promise.all([routeWritten, opened]).then(() => ({ id }));
 }

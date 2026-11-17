@@ -1,3 +1,4 @@
+import { annotationPanelKey } from '../src/annotations/routing';
 import { afterEach, expect, it, vi } from 'vitest';
 import { openSummaryPanel, summaryPanelKey, summaryPanelRoute } from '../src/digest/panel';
 import { workspaceSender } from '../src/contracts/reading';
@@ -17,7 +18,8 @@ it('dispatches panel opening in the gesture without waiting for storage, and sco
   const result = openSummaryPanel(7, { tabIds: [42] });
   expect(open).toHaveBeenCalledExactlyOnceWith({ windowId: 7 });
   const route = set.mock.calls[0]![0] as Record<string, string>;
-  expect(Object.keys(route)).toEqual([summaryPanelKey(7)]);
+  expect(Object.keys(route)).toEqual([summaryPanelKey(7), annotationPanelKey(7)]);
+  expect(route[annotationPanelKey(7)]).toEqual({ view: 'summary' });
   expect(route[summaryPanelKey(7)]).toMatch(/^#summary\/[^?]+\?tabs=42$/);
   finish();
   await expect(result).resolves.toHaveProperty('id');

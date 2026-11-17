@@ -1,17 +1,17 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
-import { generateImage, validateGeneratedImage } from '../src/models/images';
-import { DEFAULT_SETTINGS } from '../src/storage/settings';
-import { starterConfiguration } from '../src/models/configuration';
+import { generateImage, validateGeneratedImage } from '../src/providers/images';
+import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
+import { starterConfiguration } from '../src/configuration/definition';
 import { prepareRecipeRun, prepareFrozenRun } from '../src/reading/configuration';
-import type { GeneratedImage } from '../src/models/images';
+import type { GeneratedImage } from '../src/providers/images';
 import { validateCredentialRequest } from '../native/credentials-contract.mts';
 
 const gif = readFileSync(
   new URL('../../../contracts/fixtures/animation.gif', import.meta.url),
 ).toString('base64');
 function prepared() {
-  const settings = structuredClone(DEFAULT_SETTINGS);
+  const settings = structuredClone(DEFAULT_CONFIGURATION);
   settings.activeProfileId = 'api';
   settings.openaiCompatible = {
     baseUrl: 'https://api.openai.com/v1',

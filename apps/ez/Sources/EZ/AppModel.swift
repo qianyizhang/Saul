@@ -19,34 +19,53 @@ import SaulCredentialStorage
     }
     @Published var settingsSection: SettingsSection = .overview
     @Published var settingsPresetID: UUID?
-    @Published private(set) var configuration = Configuration()
-    @Published var selectedActionID: UUID? { didSet { refreshActiveConnection() } }
-    @Published var overridePresetID: UUID? { didSet { refreshActiveConnection() } }
-    @Published var inputValues: [String: String] = [:]
-    var imageImportID = UUID()
-    @Published var inputImage: ImageAttachment? { didSet { imageImportID = UUID() } }
+    @Published private(set) var configuration = Configuration() {
+        didSet {
+            connectionChecks.reconcile(configuration.connections)
+            if configuration.connections != oldValue.connections
+                || draft.preset(in: oldValue)?.connectionKey != currentPreset?.connectionKey
+            {
+                refreshActiveConnection(preferred: currentConnection)
+            }
+        }
+    }
+    @Published private var draft = LookupDraft()
+    var selectedActionID: UUID? { draft.selectedActionID }
+    var overridePresetID: UUID? { draft.presetOverride }
+    var inputValues: [String: String] { draft.values }
+    var sketch: SketchDraft { draft.sketch }
     @Published var inputImageError: String?
-    @Published var outputFormatOverride: String?
+    @Published var showsMainComposer = false
+    struct RetryFailure {
+        let entryID: UUID
+        let message: String
+    }
+    @Published private(set) var retryFailure: RetryFailure?
+    var outputFormatOverride: String? { draft.formatOverride }
     var outputFormat: String { outputFormatOverride ?? currentPreset?.imageOptions?.outputFormat ?? "png" }
-    @Published private(set) var draftRevision = 0
-    @Published private(set) var replayEntry: HistoryEntry?
+    var draftRevision: Int { draft.revision }
+    var replayEntry: HistoryEntry? { draft.reusedEntry }
     @Published var configurationError: String?
     @Published var models: [ModelOption] = []
-    @Published var connectionCatalogs: [String: ConnectionCatalog] = [:]
-    @Published var connectionStatuses: [String: ConnectionStatus] = [:]
-    @Published var connectionErrors: [String: String] = [:]
-    @Published var checkingConnections: Set<String> = []
-    var activeConnectionRefresh: Task<Void, Never>?
+    let connectionChecks: ConnectionChecks
+    func connectionStatus(_ key: String) -> ConnectionStatus? { connectionChecks.report(key)?.status }
+    func connectionCatalog(_ key: String) -> ConnectionCatalog? { connectionChecks.report(key)?.catalog }
+    func connectionError(_ key: String) -> String? { connectionChecks.report(key)?.error }
+    var checkingConnections: Set<String> { connectionChecks.checkingKeys }
     @Published var entries: [HistoryEntry] = []
     @Published var selection: UUID? {
         didSet {
+            if selection != oldValue { showsMainComposer = false }
             loadSelectedImage()
             refreshActiveConnection()
         }
     }
-    @Published var selectedImageData: Data?
-    @Published var imageLoading = false
-    var imageLoadTask: Task<Void, Never>?
+    private lazy var lookupImage = LookupImageLoader(directory: historyDirectory) { [weak self] in
+        self?.objectWillChange.send()
+    }
+    var imageLoading: Bool { lookupImage.isLoading }
+    func imageData(for entry: HistoryEntry) -> Data? { lookupImage.data(for: entry) }
+    private func loadSelectedImage() { lookupImage.select(selectedEntry) }
     @Published var followUpDrafts: [UUID: String] = [:]
     @Published var followUpTargetID: UUID?
     @Published var search = ""
@@ -54,16 +73,19 @@ import SaulCredentialStorage
     @Published var signedIn = false
     @Published var planEnabled = false
     @Published var profiles: [SaulAccount] = []
-    @Published var accountID = ""
-    @Published var signingIn = false
-    @Published var busy = false
-    @Published var responseActivity: ResponseActivity = .waiting
-    @Published var launcherPending = false
+    private enum CredentialOperation {
+        case signIn, save, disconnect
+    }
+    @Published private var credentialOperation: CredentialOperation?
+    var signingIn: Bool { credentialOperation == .signIn }
+    var credentialBusy: Bool { credentialOperation != nil }
+    @Published private(set) var runningAttempt: AttemptExecution.Progress?
+    var busy: Bool { runningAttempt != nil }
+    @Published private var launcherWork: Task<Void, Never>?
+    var launcherPending: Bool { launcherWork != nil }
     @Published var error: String?
     @Published var storageWarning: String?
     @Published var apiConnected = false
-    @Published var apiKeyBusy = false
-    @Published var apiKeyError: String?
     @Published private(set) var sharedCredentialsConnected = true
     let apiKeyStore: any OpenAIKeyStorage
     @Published var showSettings = false
@@ -78,18 +100,39 @@ import SaulCredentialStorage
     let directory: URL
     let historyDirectory: URL
     let offline: Bool
-    let auth = SaulConnection()
+    let auth: SaulConnection
     private var history: HistoryStore?
     private var lock: SessionLock?
     private var attemptExecution: AttemptExecution?
-    @Published private(set) var accountsLoaded = false
     private var configurationStore: ConfigurationStore?
     private var configurationLoaded = false
 
     init(
         directory: URL? = nil, historyDirectory: URL? = nil, offline: Bool = false,
-        attemptExecution: AttemptExecution? = nil, apiKeyStore: (any OpenAIKeyStorage)? = nil
+        attemptExecution: AttemptExecution? = nil, apiKeyStore: (any OpenAIKeyStorage)? = nil,
+        connectionChecks: ConnectionChecks? = nil
     ) {
+        let auth = SaulConnection()
+        self.auth = auth
+        self.connectionChecks =
+            connectionChecks
+            ?? ConnectionChecks(
+                status: { [auth] connection in
+                    let reply = try await auth.call([
+                        "action": "connection-status", "connectionKey": connection.key,
+                    ])
+                    guard let raw = reply["connection"] else { throw EZError("Invalid connection status.") }
+                    return try JSONDecoder().decode(
+                        ConnectionStatus.self, from: JSONSerialization.data(withJSONObject: raw))
+                },
+                catalog: { [auth] connection, force in
+                    let reply = try await auth.call([
+                        "action": "connection-catalog", "connectionKey": connection.key, "force": force,
+                    ])
+                    guard let raw = reply["catalog"] else { throw EZError("Invalid model catalog.") }
+                    return try JSONDecoder().decode(
+                        ConnectionCatalog.self, from: JSONSerialization.data(withJSONObject: raw))
+                })
         self.offline = offline
         sharedCredentialsConnected =
             offline || !UserDefaults.standard.bool(forKey: "saulCredentialsDisconnected")
@@ -101,6 +144,7 @@ import SaulCredentialStorage
             ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("EZ", isDirectory: true)
         self.historyDirectory = historyDirectory ?? (offline ? self.directory : HistoryStore.defaultDirectory)
+        self.connectionChecks.onChange = { [weak self] in self?.objectWillChange.send() }
         do {
             lock = try SessionLock(directory: self.directory)
             let store = try HistoryStore(
@@ -147,17 +191,15 @@ import SaulCredentialStorage
                         model: oldModel,
                         effort: offline ? "low" : UserDefaults.standard.string(forKey: "effort") ?? "low",
                         fast: !offline && UserDefaults.standard.bool(forKey: "fast"))
-                    try configStore.save(configuration)
-                    configuration = try configStore.load() ?? configuration
+                    configuration = try configStore.save(configuration)
                 }
                 configurationLoaded = true
                 if !offline, (configuration.actionTypesVersion ?? 0) < 2 {
                     var upgraded = configuration
                     upgraded.addSearchAndMeme()
-                    try configStore.save(upgraded)
-                    configuration = try configStore.load() ?? upgraded
+                    configuration = try configStore.save(upgraded)
                 }
-                selectedActionID = configuration.actions.first?.id
+                draft.reset(actionID: configuration.actions.first?.id)
             } catch {
                 configurationError =
                     "Configuration could not be loaded. Original file is preserved. \(error.localizedDescription)"
@@ -248,63 +290,87 @@ import SaulCredentialStorage
         guard replayEntry != nil || selectedActionID != id else { return }
         chooseAction(id)
     }
-    var currentAction: Action? {
-        replayEntry?.actionSnapshot ?? configuration.actions.first { $0.id == selectedActionID }
+    var currentAction: Action? { draft.action(in: configuration) }
+    var usesSketch: Bool {
+        currentAction?.id == Configuration.makeMemeActionID && currentAction?.imageInput != nil
+    }
+    var inputImage: ImageAttachment? { usesSketch ? sketch.scene.photo?.asset.attachment : draft.attachment }
+    var hasImageInput: Bool { usesSketch ? sketch.scene.hasContent : inputImage != nil }
+    var hasRetainedDraft: Bool {
+        inputValues.values.contains { !$0.isEmpty } || hasImageInput || replayEntry != nil
+            || overridePresetID != nil || outputFormatOverride != nil
+            || (usesSketch && (sketch.canUndo || sketch.canRedo))
     }
     func openSettings(_ section: SettingsSection = .overview) {
         if !showSettings { refreshConfiguration() }
         settingsSection = section
         showSettings = true
     }
-    var currentPreset: ModelPreset? {
-        if let overridePresetID {
-            return configuration.presets.first { $0.id == overridePresetID }
-        }
-        if let saved = replayEntry?.presetSnapshot { return saved }
-        let id = currentAction?.presetID
-        return configuration.presets.first { $0.id == id }
-    }
+    var currentPreset: ModelPreset? { draft.preset(in: configuration) }
     var inputFields: [String] { currentAction.flatMap { try? PromptTemplate($0.template).fields } ?? [] }
+
     var query: String {
         get { inputFields.first.flatMap { inputValues[$0] } ?? "" }
-        set { if let field = inputFields.first { inputValues[field] = newValue } }
+        set { if let field = inputFields.first { setInput(newValue, for: field) } }
+    }
+    func setInput(_ value: String, for field: String) {
+        guard !launcherPending, inputFields.contains(field) else { return }
+        draft.setValue(value, for: field)
+    }
+    func chooseOutputFormat(_ format: String) {
+        guard !busy, !launcherPending, currentAction?.capability == .draw,
+            ImageOptions.formats.contains(format)
+        else { return }
+        draft.setFormat(format)
     }
     var selectedModel: String { currentPreset?.model ?? "" }
     var effort: String { currentPreset?.effort ?? "" }
     var fast: Bool { currentPreset?.fast ?? false }
     var configurationLocked: Bool {
-        busy || launcherPending || signingIn || !configurationLoaded
+        busy || launcherPending || credentialBusy || !configurationLoaded
     }
     var requestIssue: String? {
-        if !configurationLoaded { return configurationError ?? "Configuration is unavailable." }
-        guard let action = currentAction else { return "Add an action in Settings → Actions to start a run." }
-        guard let preset = currentPreset else { return "Choose a preset in Settings → Presets." }
-        guard action.capability == preset.capability else {
-            return "Choose a \(action.capability.name) preset for this action."
-        }
-        if let issue = presetIssue(preset) { return issue }
-        if action.webSearch && currentConnection?.kind != .openAIAPI {
-            return "Web search needs an OpenAI API Write preset."
-        }
-        if preset.capability == .draw && outputFormat == "gif" {
-            if !preset.model.hasPrefix("gpt-image-2.6-") { return "GIF output requires GPT Image 2.6." }
-            if action.imageInput != nil { return "GIF output is unavailable for image edits. Choose PNG." }
-        }
-        if action.imageInput != nil && inputImage == nil { return "Attach an image before running." }
         do {
-            try action.validateInputs()
-            _ = try PromptTemplate(action.template).render(inputValues)
-        } catch {
-            return error.localizedDescription
+            _ = try prepareDraftRequest().compile()
+            return nil
+        } catch { return error.localizedDescription }
+    }
+
+    private func resolveRoute(_ preset: ModelPreset) throws -> LookupRoute {
+        guard let connection = configuration.connections.first(where: { $0.key == preset.connectionKey })
+        else { throw EZError("The preset’s connection is unavailable. Update the preset in Settings.") }
+        guard connection.capabilities.contains(preset.capability), preset.capability != .speak else {
+            throw EZError("Choose a compatible preset for this action.")
         }
-        return nil
+        if let issue = presetIssue(preset) { throw EZError(issue) }
+        return LookupRoute(preset: preset, connection: connection, models: modelsForPreset(preset))
+    }
+
+    private func prepareDraftRequest() throws -> LookupRequest {
+        guard configurationLoaded else {
+            throw EZError(configurationError ?? "Configuration is unavailable.")
+        }
+        guard let action = currentAction else {
+            throw EZError("Add an action in Settings → Actions to start a run.")
+        }
+        guard let preset = currentPreset else { throw EZError("Choose a preset in Settings → Presets.") }
+        guard action.capability == preset.capability else {
+            throw EZError("Choose a \(action.capability.name) preset for this action.")
+        }
+        let route = try resolveRoute(preset)
+        if let saved = replayEntry?.connectionSnapshot, overridePresetID == nil {
+            try route.requireSavedConnection(saved)
+        }
+        return LookupRequest(
+            action: action, route: route, values: inputValues,
+            source: usesSketch ? .sketch(sketch.scene) : .attachment(inputImage),
+            outputFormat: outputFormat)
     }
     var currentModel: ModelOption? { models.first { $0.model == selectedModel } }
     var selectedEntry: HistoryEntry? { entries.first { $0.id == selection } }
     var selectedResponseActivity: ResponseActivity? {
-        guard busy, let entry = selectedEntry, entry.status == "pending" else { return nil }
-        if let activeID = attemptExecution?.activeID, activeID != entry.id { return nil }
-        return responseActivity
+        guard let runningAttempt, runningAttempt.entry.id == selection else { return nil }
+        return runningAttempt.activity
     }
     var filteredEntries: [HistoryEntry] {
         search.isEmpty
@@ -314,30 +380,36 @@ import SaulCredentialStorage
                     || $0.response.localizedCaseInsensitiveContains(search)
             }
     }
+    private var canStartLookup: Bool {
+        attemptExecution != nil && history != nil && lock != nil
+            && !busy && !launcherPending && !credentialBusy
+    }
+
     var canSend: Bool {
-        attemptExecution != nil && connectionIssue == nil && !apiKeyBusy && !busy && !launcherPending
-            && !(needsPlan && connecting)
-            && !signingIn
-            && requestIssue == nil && history != nil && lock != nil
+        canStartLookup && !(needsPlan && connecting) && connectionIssue == nil && requestIssue == nil
+    }
+
+    private func startLookup(_ entry: HistoryEntry) throws {
+        guard canStartLookup, let attemptExecution else { return }
+        try attemptExecution.start(entry)
+        selection = entry.id
+        error = nil
     }
     func connect(loadAccounts: Bool = false) async {
-        guard !offline, sharedCredentialsConnected, !connecting, !busy, !signingIn, lock != nil else {
+        guard !offline, sharedCredentialsConnected, !connecting, !busy, !credentialBusy, lock != nil else {
             return
         }
         connecting = true
         error = nil
         defer { connecting = false }
-        await restoreAPIKey()
         if let connection = currentConnection { await refreshConnection(connection) }
         guard needsPlan || loadAccounts else {
             await verifyCredentialMigration()
             return
         }
         do {
-            try await auth.load()
-            accountsLoaded = true
-            syncAccount()
-            await verifyCredentialMigration()
+            try await loadConnectionAccounts()
+            if !Task.isCancelled && sharedCredentialsConnected { await verifyCredentialMigration() }
         } catch {
             syncAccount()
             self.error = error.localizedDescription
@@ -349,27 +421,62 @@ import SaulCredentialStorage
         }
     }
     func connectCredentials() async {
-        guard !offline, !busy, !signingIn, !launcherPending else { return }
+        guard !offline, !busy, !credentialBusy, !launcherPending else { return }
         sharedCredentialsConnected = true
         UserDefaults.standard.set(false, forKey: "saulCredentialsDisconnected")
         await connect(loadAccounts: true)
     }
     func disconnectCredentials() {
-        guard !offline, !busy, !connecting, !signingIn, !launcherPending else { return }
+        guard !offline, !busy, !connecting, !credentialBusy, !launcherPending else { return }
         sharedCredentialsConnected = false
+        connectionChecks.reset()
         UserDefaults.standard.set(true, forKey: "saulCredentialsDisconnected")
         profiles = []
-        accountID = ""
         signedIn = false
         planEnabled = false
-        accountsLoaded = false
         apiConnected = false
         models = []
         error = nil
     }
+    func loadConnectionAccounts() async throws {
+        guard !offline, sharedCredentialsConnected else { return }
+        try await auth.load()
+        try Task.checkCancellation()
+        guard sharedCredentialsConnected else { return }
+        syncAccount()
+    }
+
+    func signInConnection(accountID: String, addingAccount: Bool) async throws -> String? {
+        guard !offline, sharedCredentialsConnected else {
+            throw EZError("Connect to Saul before signing in.")
+        }
+        try beginCredentialOperation(.signIn)
+        defer { credentialOperation = nil }
+        let reply = try await auth.signIn(
+            accountID: accountID, addingAccount: addingAccount,
+            authorize: { NSWorkspace.shared.open($0) })
+        try Task.checkCancellation()
+        try await loadConnectionAccounts()
+        let signedInID = (reply["account"] as? [String: Any])?["id"] as? String
+        for connection in configuration.connections
+        where connection.accountId == signedInID && signedInID != nil {
+            connectionChecks.invalidate(connection.key)
+        }
+        return signedInID
+    }
+
+    private func beginCredentialOperation(_ operation: CredentialOperation) throws {
+        guard sharedCredentialsConnected else {
+            throw EZError("Connect to Saul before changing credentials.")
+        }
+        guard !credentialBusy, !busy, !launcherPending, !connecting else {
+            throw EZError("Wait for the current operation before changing connections.")
+        }
+        credentialOperation = operation
+    }
+
     private func syncAccount() {
         profiles = auth.accounts
-        accountID = auth.selectedID ?? ""
         signedIn = auth.selected?.signedIn == true
         planEnabled = auth.selected?.planEnabled == true
     }
@@ -385,56 +492,124 @@ import SaulCredentialStorage
         updated.presets[index].effort = option.supportedReasoningEfforts.isEmpty ? "" : option.quickEffort
         updated.presets[index].fast = false
         updated.unassignedStarterID = nil
+        guard let store = configurationStore else { return }
         do {
-            try configurationStore?.save(updated)
-            configuration = try configurationStore?.load() ?? updated
+            configuration = try store.save(updated)
         } catch { configurationError = "Starter preset could not be saved. \(error.localizedDescription)" }
     }
     func chooseAction(_ id: UUID?) {
         guard !busy, !launcherPending else { return }
         if !showSettings { refreshConfiguration() }
-        selectedActionID = id
-        replayEntry = nil
-        overridePresetID = nil
-        outputFormatOverride = nil
-        inputValues = [:]
-        inputImage = nil
-        inputImageError = nil
-        selection = nil
-        error = nil
-        draftRevision += 1
+        guard id == nil || configuration.actions.contains(where: { $0.id == id }) else { return }
+        guard replayEntry != nil || selectedActionID != id else { return }
+        resetDraft(actionID: id)
     }
-    func choosePreset(_ id: UUID?) {
-        guard !busy, !launcherPending, !connecting, !signingIn else { return }
-        overridePresetID = id
-        outputFormatOverride = nil
+    func chooseLookupPreset(_ id: UUID?) {
+        guard !busy, !launcherPending, !connecting, !credentialBusy else { return }
+        let preset =
+            id.flatMap { id in configuration.presets.first { $0.id == id } }
+            ?? (id == nil ? replayEntry?.presetSnapshot : nil)
+        guard let preset, lookupPresetChoiceIssue(preset) == nil else { return }
+        draft.choosePreset(id)
+        refreshActiveConnection(preferred: currentConnection)
     }
     func saveConfiguration(_ updated: Configuration) throws {
         guard !configurationLocked, let store = configurationStore else {
             throw EZError(
                 "Configuration cannot be changed while a request is active or storage is unavailable.")
         }
+        try persistConfiguration(updated, store: store)
+    }
+
+    private func persistConfiguration(_ updated: Configuration, store: ConfigurationStore) throws {
         var saved = updated
         if let id = saved.unassignedStarterID,
             !saved.presets.contains(where: { $0.id == id && $0.model.isEmpty })
         {
             saved.unassignedStarterID = nil
         }
-        try store.save(saved)
-        configuration = try store.load() ?? saved
+        configuration = try store.save(saved)
         configurationError = nil
-        if replayEntry == nil && !saved.actions.contains(where: { $0.id == selectedActionID }) {
-            chooseAction(saved.actions.first?.id)
+        if replayEntry == nil && !configuration.actions.contains(where: { $0.id == selectedActionID }) {
+            resetDraft(actionID: configuration.actions.first?.id)
         } else {
-            inputValues = inputValues.filter { inputFields.contains($0.key) }
+            draft.retainFields(inputFields)
             if currentAction?.imageInput == nil {
-                inputImage = nil
-                inputImageError = nil
+                clearImageInput()
             }
         }
     }
+    func saveConnection(_ connection: ConnectionDefinition, key: String? = nil) async throws {
+        guard configurationLoaded, let store = configurationStore else {
+            throw EZError("Configuration is unavailable. Reload saved settings first.")
+        }
+        try beginCredentialOperation(.save)
+        defer { credentialOperation = nil }
+        var updated = configuration
+        if let index = updated.connections.firstIndex(where: { $0.key == connection.key }) {
+            let existing = updated.connections[index]
+            guard existing.kind == connection.kind, existing.endpoint == connection.endpoint,
+                existing.accountId == nil || existing.accountId == connection.accountId
+            else { throw EZError("The connection’s account and endpoint are fixed. Add another connection.") }
+            updated.connections[index] = connection
+        } else {
+            updated.connections.append(connection)
+        }
+        try ConnectionDefinition.validate(updated.connections)
+        if let account = connection.accountId,
+            updated.connections.contains(where: { $0.key != connection.key && $0.accountId == account })
+        {
+            throw EZError("This account already has a connection.")
+        }
+        if let key {
+            if offline {
+                try await apiKeyStore.write(key)
+                apiConnected = !key.isEmpty
+            } else {
+                _ = try await auth.call([
+                    "action": "connection-key-save", "connectionKey": connection.key,
+                    "endpoint": connection.endpoint, "key": key,
+                ])
+            }
+        }
+        connectionChecks.invalidate(connection.key)
+        do { try persistConfiguration(updated, store: store) } catch {
+            if key != nil {
+                throw EZError(
+                    "The key was saved, but the connection settings were not saved. \(error.localizedDescription)"
+                )
+            }
+            throw error
+        }
+        await refreshConnection(connection, force: true)
+    }
+
+    func removeConnectionCredential(_ connection: ConnectionDefinition) async throws {
+        guard configuration.connections.contains(where: { $0.matchesRoute(connection) }) else {
+            throw EZError("The connection changed. Reload saved settings.")
+        }
+        try beginCredentialOperation(.disconnect)
+        defer { credentialOperation = nil }
+        if offline {
+            try await apiKeyStore.write(nil)
+            apiConnected = false
+            return
+        }
+        if connection.kind == .chatGPTPlan {
+            guard let account = connection.accountId else { throw EZError("This connection has no account.") }
+            _ = try await auth.call(["action": "logout", "accountId": account])
+        } else {
+            _ = try await auth.call([
+                "action": "connection-key-remove", "connectionKey": connection.key,
+                "endpoint": connection.endpoint,
+            ])
+        }
+        connectionChecks.invalidate(connection.key)
+        await refreshConnection(connection)
+    }
+
     func refreshConfiguration() {
-        guard !busy, !launcherPending, let store = configurationStore else { return }
+        guard !busy, !launcherPending, !credentialBusy, let store = configurationStore else { return }
         do {
             if let saved = try store.load() { configuration = saved }
             configurationLoaded = true
@@ -445,12 +620,12 @@ import SaulCredentialStorage
         }
     }
     func fillQuickLookupSelection(_ text: String?) {
-        guard !busy, !launcherPending, !signingIn, !showSettings,
-            selection == nil, inputImage == nil, inputValues.values.allSatisfy({ $0.isEmpty }),
+        guard !busy, !launcherPending, !credentialBusy, !showSettings,
+            selection == nil, !hasRetainedDraft,
             let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             text.utf8.count <= 16_384, let field = inputFields.first
         else { return }
-        inputValues = [field: text]
+        draft.setValues([field: text])
     }
 
     func prepareSelectedText(_ text: String) throws {
@@ -459,7 +634,7 @@ import SaulCredentialStorage
         else {
             throw EZError("Select 1–16,384 UTF-8 bytes of text for EZ.")
         }
-        guard !busy, !launcherPending, !signingIn else {
+        guard !busy, !launcherPending, !credentialBusy else {
             throw EZError(
                 "EZ is already preparing a lookup, generating an answer, or signing in. Try again when it finishes."
             )
@@ -467,7 +642,7 @@ import SaulCredentialStorage
         guard !showSettings else {
             throw EZError("Close EZ Settings before looking up selected text.")
         }
-        guard inputImage == nil, inputValues.values.allSatisfy({ $0.isEmpty }) else {
+        guard !hasRetainedDraft else {
             throw EZError(
                 "EZ has a draft. Finish it, then choose New lookup before looking up selected text.")
         }
@@ -480,120 +655,126 @@ import SaulCredentialStorage
             throw EZError("Add an action in Settings → Actions before looking up selected text.")
         }
         let prepared = try configuration.preparingLauncherInput(text, recipeID: action.id)
-        newQuery()
-        inputValues = prepared.values
+        resetDraft(actionID: action.id)
+        draft.setValues(prepared.values)
         // Services prepares only a draft, even for single-field actions and after sign-in.
     }
 
-    func prepareLauncher(_ text: String) throws -> Bool {
-        guard !busy, !launcherPending, !signingIn else {
-            throw EZError("EZ is already preparing or generating a lookup.")
+    /// Launcher inputs use the normal draft; only complete actions wait for the initial connection.
+    func submitLauncher(_ text: String, after connection: Task<Void, Never>) throws {
+        guard !busy, !launcherPending, !credentialBusy, !showSettings else {
+            throw EZError("EZ is already preparing or generating a lookup, signing in, or editing Settings.")
         }
-        newQuery()
-        guard let action = currentAction else {
+        let action = configuration.actions.first { $0.id == selectedActionID } ?? configuration.actions.first
+        guard let action else {
             throw EZError("Add an action in Settings → Actions before using Raycast.")
         }
         let prepared = try configuration.preparingLauncherInput(text, recipeID: action.id)
-        inputValues = prepared.values
-        return prepared.submit
+        resetDraft(actionID: action.id)
+        draft.setValues(prepared.values)
+        guard prepared.submit else { return }
+        launcherWork = Task { [weak self] in
+            await connection.value
+            guard !Task.isCancelled, let self else { return }
+            self.launcherWork = nil
+            self.send()
+            if !self.busy, self.error == nil {
+                self.error =
+                    self.storageWarning ?? self.connectionIssue ?? self.requestIssue
+                    ?? "Query not sent. Your draft is ready to submit with Run."
+            }
+        }
     }
     func send() {
+        guard canStartLookup, !(needsPlan && connecting) else { return }
+        let shownAction = currentAction
+        let shownPreset = currentPreset
+        let shownConnection = currentConnection
         refreshConfiguration()
-        guard canSend, let action = currentAction, var preset = currentPreset,
-            let connection = currentConnection, let attemptExecution
-        else {
-            return
-        }
-        error = nil
-        if preset.capability == .draw {
-            var options = preset.imageOptions ?? ImageOptions()
-            options.outputFormat = outputFormat
-            preset.imageOptions = options
-        }
-        var entry: HistoryEntry
         do {
-            entry = try action.prepare(
-                values: inputValues, preset: preset, models: modelsForPreset(preset),
-                provider: connection.kind, image: inputImage)
-        } catch {
-            self.error = error.localizedDescription
-            return
-        }
-        entry.connectionSnapshot = currentConnection
-        do { try attemptExecution.start(entry) } catch {
-            self.error = error.localizedDescription
-            return
-        }
-        selection = entry.id
+            guard shownAction == currentAction, shownPreset == currentPreset,
+                shownConnection.map({ shown in currentConnection?.matchesRoute(shown) == true })
+                    ?? (currentConnection == nil)
+            else {
+                throw EZError("Lookup setup changed. Review the action and preset, then choose Run again.")
+            }
+            let request = try prepareDraftRequest()
+            if let issue = connectionIssue(for: request.route.preset) { throw EZError(issue) }
+            try startLookup(request.freeze())
+        } catch { self.error = error.localizedDescription }
     }
-    func stop() {
-        attemptExecution?.stop()
-    }
+
+    func stop() { attemptExecution?.stop() }
+
     var canFollowUp: Bool {
-        let key = selectedEntry?.presetSnapshot?.connectionKey ?? "gpt-plan"
-        let connection = configuration.connections.first { $0.key == key }
-        let connected =
-            offline
-            ? (connection?.kind == .chatGPTPlan ? signedIn && planEnabled : apiConnected)
-            : connectionStatuses[key]?.connected == true
-        return connection != nil && selectedEntry?.capability != .draw && connected
-            && attemptExecution != nil && !busy && !launcherPending && !connecting
-            && !signingIn && history != nil && lock != nil
+        canStartLookup && !connecting && selectedEntry?.capability == .write
+            && selectedEntry?.sourceID == nil && selectedEntry?.status == "completed"
     }
+
     func followUp(_ id: UUID) {
-        guard canFollowUp, let parent = entries.first(where: { $0.id == id }), let attemptExecution else {
-            return
-        }
+        guard canFollowUp, let parent = selectedEntry, parent.id == id else { return }
+        refreshConfiguration()
         do {
-            let key = parent.presetSnapshot?.connectionKey ?? "gpt-plan"
-            guard let connection = configuration.connections.first(where: { $0.key == key }),
-                offline
-                    ? (connection.kind == .chatGPTPlan ? signedIn && planEnabled : apiConnected)
-                    : connectionStatuses[connection.key]?.connected == true
-            else { throw EZError("Set up the saved action's connection before sending a follow-up.") }
+            guard configurationLoaded else {
+                throw EZError(configurationError ?? "Configuration is unavailable.")
+            }
             let preset =
                 parent.presetSnapshot
                 ?? ModelPreset(
                     name: "Saved", model: parent.model, effort: parent.effort,
                     fast: parent.requestedServiceTier != nil)
-            if let issue = presetIssue(preset) { throw EZError(issue) }
-            var entry = try parent.prepareFollowUp(
-                followUpDrafts[id] ?? "", models: modelsForPreset(preset), provider: connection.kind)
-            entry.connectionSnapshot = connection
-            try attemptExecution.start(entry)
+            let route = try resolveRoute(preset)
+            if let issue = connectionIssue(for: preset) { throw EZError(issue) }
+            try startLookup(route.followUp(to: parent, question: followUpDrafts[id] ?? ""))
             followUpDrafts[id] = nil
             if followUpTargetID == id { followUpTargetID = nil }
-            selection = entry.id
-            error = nil
         } catch { self.error = error.localizedDescription }
     }
-    func saveError(for id: UUID) -> String? { attemptExecution?.saveError(for: id) }
-    var canSaveAgain: Bool { canDeleteLookup }
-    func saveAgain(_ id: UUID) {
-        guard canSaveAgain, entries.contains(where: { $0.id == id }) else { return }
-        attemptExecution?.saveAgain(id)
+    func canRetry(_ entry: HistoryEntry) -> Bool {
+        entry.isRetryable && canStartLookup && !connecting
+    }
+    func retry(_ id: UUID) {
+        guard let original = entries.first(where: { $0.id == id }), canRetry(original),
+            let history
+        else { return }
+        retryFailure = nil
+        refreshConfiguration()
+        do {
+            guard configurationLoaded else {
+                throw EZError(configurationError ?? "Configuration is unavailable. Open Settings.")
+            }
+            guard let preset = original.presetSnapshot else {
+                throw EZError("The saved preset is unavailable. Review the saved request.")
+            }
+            let route = try resolveRoute(preset)
+            if let issue = connectionIssue(for: preset) { throw EZError(issue) }
+            try startLookup(
+                original.prepareRetry(
+                    connection: route.connection, image: history.inputImage(for: original)))
+        } catch {
+            retryFailure = RetryFailure(entryID: id, message: error.localizedDescription)
+        }
     }
     func newQuery() {
         guard !busy, !launcherPending else { return }
-        selection = nil
-        inputValues = [:]
-        inputImage = nil
+        let action = configuration.actions.first { $0.id == selectedActionID } ?? configuration.actions.first
+        resetDraft(actionID: action?.id)
+    }
+    private func resetDraft(actionID: UUID?) {
+        draft.reset(actionID: actionID)
         inputImageError = nil
-        overridePresetID = nil
-        outputFormatOverride = nil
-        replayEntry = nil
-        if !configuration.actions.contains(where: { $0.id == selectedActionID }) {
-            selectedActionID = configuration.actions.first?.id
-        }
+        selection = nil
         error = nil
-        draftRevision += 1
+    }
+    func canReuse(_ entry: HistoryEntry) -> Bool {
+        entry.sourceID == nil && !["pending", "unsaved"].contains(entry.status) && !busy && !launcherPending
     }
     func reuse(_ entry: HistoryEntry) {
-        guard entry.sourceID == nil else {
+        if entry.sourceID != nil {
             error = "Open this saved request in Saul to run it again."
             return
         }
-        guard !busy, !launcherPending else { return }
+        guard canReuse(entry) else { return }
         var saved = entry
         if saved.actionSnapshot == nil {
             let preset = ModelPreset(
@@ -605,23 +786,21 @@ import SaulCredentialStorage
             saved.presetSnapshot = preset
             saved.inputValues = ["text": entry.query]
         }
+        draft.reuse(saved)
+        inputImageError = nil
         do {
-            inputImage = try history?.inputImage(for: saved)
-            inputImageError = nil
+            let attachment = try history?.inputImage(for: saved)
+            try draft.attach(attachment, asSketch: usesSketch, restoring: true)
         } catch {
-            inputImage = nil
             inputImageError = "The saved input image is unavailable. Attach it again."
         }
-        replayEntry = saved
-        inputValues = saved.inputValues ?? [:]
-        overridePresetID = nil
-        outputFormatOverride = nil
         selection = nil
-        draftRevision += 1
     }
     func shutdown() {
-        activeConnectionRefresh?.cancel()
-        imageLoadTask?.cancel()
+        launcherWork?.cancel()
+        launcherWork = nil
+        connectionChecks.reset()
+        lookupImage.select(nil)
         stop()
     }
     var canDeleteLookup: Bool { !busy && !launcherPending && history != nil && lock != nil }
@@ -629,7 +808,6 @@ import SaulCredentialStorage
         guard canDeleteLookup, entries.contains(where: { $0.id == id }), let history else { return }
         do {
             try history.delete(id: id)
-            attemptExecution?.forget(id)
             entries.removeAll { $0.id == id }
             followUpDrafts[id] = nil
             if selection == id { selection = nil }
@@ -640,14 +818,16 @@ import SaulCredentialStorage
     func refreshHistory() {
         guard let history else { return }
         do {
-            let retained = entries.filter {
-                $0.id == attemptExecution?.activeID || attemptExecution?.saveError(for: $0.id) != nil
-            }
+            let retained = runningAttempt.map { [$0.entry] } ?? []
             let ids = Set(retained.map(\.id))
             entries = (retained + (try history.load()).filter { !ids.contains($0.id) }).sorted {
                 $0.createdAt > $1.createdAt
             }
-            if let selection, !entries.contains(where: { $0.id == selection }) { self.selection = nil }
+            if let selection, !entries.contains(where: { $0.id == selection }) {
+                self.selection = nil
+            } else {
+                loadSelectedImage()
+            }
         } catch { storageWarning = error.localizedDescription }
     }
     func revealHistory() { NSWorkspace.shared.activateFileViewerSelecting([history?.url ?? directory]) }
@@ -669,14 +849,70 @@ import SaulCredentialStorage
         }
     }
     private func receiveAttempt(_ update: AttemptExecution.Update) {
-        if let index = entries.firstIndex(where: { $0.id == update.entry.id }) {
-            entries[index] = update.entry
-        } else {
-            entries.insert(update.entry, at: 0)
+        let entry: HistoryEntry
+        switch update {
+        case .running(let progress):
+            runningAttempt = progress
+            entry = progress.entry
+        case .saved(let saved):
+            entry = saved
+        case .saveFailed(var unsaved, let message):
+            unsaved.status = "unsaved"
+            let failure = "Could not save this lookup. \(message)"
+            unsaved.error = unsaved.error.map { "\($0)\n\(failure)" } ?? failure
+            if selection != unsaved.id { error = failure }
+            entry = unsaved
         }
-        responseActivity = update.activity
-        if selection == update.entry.id && update.entry.hasImage { loadSelectedImage() }
-        busy = attemptExecution?.activeID != nil
-        if !update.isActive, !offline { syncAccount() }
+        if let index = entries.firstIndex(where: { $0.id == entry.id }) {
+            entries[index] = entry
+        } else {
+            entries.insert(entry, at: 0)
+        }
+        if selection == entry.id && entry.hasImage { loadSelectedImage() }
+        if case .running = update { return }
+        runningAttempt = nil
+        if !offline { syncAccount() }
+    }
+}
+
+extension AppModel {
+    var canEditSketch: Bool { usesSketch && !busy && !launcherPending }
+
+    func commitSketch(_ scene: SketchScene) { updateSketch { $0.commit(scene) } }
+    func undoSketch() { updateSketch { $0.undo() } }
+    func redoSketch() { updateSketch { $0.redo() } }
+
+    func setImageInput(_ attachment: ImageAttachment) throws {
+        guard !busy, !launcherPending, currentAction?.imageInput != nil else { return }
+        try draft.attach(attachment, asSketch: usesSketch)
+    }
+
+    private func clearImageInput() {
+        draft.clearImage()
+        inputImageError = nil
+    }
+
+    func removeImageInput() {
+        guard !busy, !launcherPending else { return }
+        if usesSketch {
+            beginImageImport()
+            inputImageError = nil
+            commitSketch(SketchScene())
+        } else {
+            clearImageInput()
+        }
+    }
+
+    @discardableResult func beginImageImport() -> UUID { draft.beginImageImport() }
+
+    func finishImageImport(_ id: UUID, apply: () -> Void) {
+        guard draft.acceptsImageImport(id), !busy, !launcherPending, currentAction?.imageInput != nil
+        else { return }
+        apply()
+    }
+
+    private func updateSketch(_ update: (inout SketchDraft) -> Void) {
+        guard canEditSketch else { return }
+        draft.updateSketch(update)
     }
 }

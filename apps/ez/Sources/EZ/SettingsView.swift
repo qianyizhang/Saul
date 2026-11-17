@@ -2,10 +2,9 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var model: AppModel
-    @State private var configurationDirty = false
+    @State private var configurationEditor = ConfigurationEditor()
     @State private var connectionDirty = false
-    @State private var viewingPresetID: UUID?
-    private var hasUnsavedChanges: Bool { configurationDirty || connectionDirty }
+    private var hasUnsavedChanges: Bool { configurationEditor.hasUnsavedChanges || connectionDirty }
     @State private var confirmDiscard = false
     @Environment(\.dismiss) private var dismiss
     private var version: String {
@@ -30,10 +29,11 @@ struct SettingsView: View {
             }.padding(22)
             ForEach(
                 model.configuration.presets.filter { preset in
-                    if model.settingsSection == .configuration && preset.id == viewingPresetID {
+                    if model.settingsSection == .configuration && preset.id == configurationEditor.preset?.id
+                    {
                         return false
                     }
-                    guard let catalog = model.connectionCatalogs[preset.connectionKey],
+                    guard let catalog = model.connectionCatalog(preset.connectionKey),
                         catalog.fetchedAt > 0,
                         !preset.model.isEmpty
                     else { return false }
@@ -73,14 +73,11 @@ struct SettingsView: View {
                 Divider()
                 ZStack {
                     // One mounted owner keeps both drafts when navigating between tasks.
-                    ConfigurationView(
-                        model: model, hasUnsavedChanges: $configurationDirty,
-                        viewingPresetID: $viewingPresetID
-                    )
-                    .opacity(isConfiguration ? 1 : 0)
-                    .allowsHitTesting(isConfiguration)
-                    .disabled(!isConfiguration)
-                    .accessibilityHidden(!isConfiguration)
+                    ConfigurationView(model: model, edits: $configurationEditor)
+                        .opacity(isConfiguration ? 1 : 0)
+                        .allowsHitTesting(isConfiguration)
+                        .disabled(!isConfiguration)
+                        .accessibilityHidden(!isConfiguration)
                     ConnectionsView(
                         model: model, hasUnsavedChanges: $connectionDirty,
                         visible: model.settingsSection == .connections
