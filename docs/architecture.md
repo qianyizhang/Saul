@@ -36,8 +36,9 @@ owners. Use the storage owner's transactions and constraints directly.
 
 - [Configuration](../contracts/configuration.md#unified-configuration-scopes) shares a
   local settings file, with common connections/presets and app-scoped actions.
-- [Credentials](../contracts/credentials.md) stay behind the opted-in signed
-  owner; standalone browser routes retain their app-owned credentials.
+- [Credentials](../contracts/credentials.md): the signed owner owns all active
+  ChatGPT credentials. Local browser API connections retain their app-owned
+  credentials. The Node helper owns browser history, configuration and presets.
 - [History](#shared-history) is shared. Drafts and active request state stay
   app-owned. There is no cross-app action import or multi-device sync.
 
@@ -52,13 +53,13 @@ for the trade-off.
 
 Before adding a shared account or execution replacement, show a maintenance
 benefit for two concrete consumers. Keep installation independent and opt-in per
-app; non-adopters retain standalone routes.
+app. Independent routes for other providers can coexist with a shared capability.
 
 Use a versioned interface for discovery, capabilities, selection, operations,
 cancellation and recovery. Authenticate callers, restrict operations and keep
 secrets behind one refresh owner. Separate identity from permission, and freeze
 the chosen implementation and account for each request. Loss blocks explicitly;
-returning to the original route is an explicit choice. Define and test disconnect,
+switching between available routes requires an explicit choice. Define and test disconnect,
 uninstall and failure with both adapters before enabling the replacement.
 The [credential contract](../contracts/credentials.md) is the existing instance.
 

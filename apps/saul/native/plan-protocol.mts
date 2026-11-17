@@ -45,7 +45,7 @@ export function validPdfUrlAttachment(value: unknown): value is PdfUrlAttachment
     return false;
   }
 }
-export type PlanRequest =
+export type StorageHelperRequest =
   | { action: 'history'; request: HistoryRequest }
   | { action: 'config-read'; section: 'settings' | 'calls' }
   | {
@@ -70,7 +70,9 @@ export type PlanRequest =
       revision: number;
       presets: SharedPreset[];
       connections?: ConnectionDefinition[];
-    }
+    };
+export type PlanRequest =
+  | StorageHelperRequest
   | { action: 'accounts' }
   | { action: 'login'; accountId?: string; consent?: boolean }
   | { action: 'logout'; accountId: string }
@@ -204,6 +206,20 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
       (v.fast !== undefined && typeof v.fast !== 'boolean'))
   )
     throw new Error('Invalid generation request');
+}
+
+/** The installed standalone helper keeps its wire identity, but owns only local storage. */
+export function validateStorageHelperRequest(
+  value: unknown,
+): asserts value is StorageHelperRequest {
+  if (
+    isRecord(value) &&
+    ['accounts', 'login', 'logout', 'models', 'generate'].some((action) => action === value.action)
+  )
+    throw new Error(
+      'Standalone ChatGPT sign-in has retired. Connect to the signed Saul helper in Settings.',
+    );
+  validatePlanRequest(value);
 }
 
 const record = isRecord;

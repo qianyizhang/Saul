@@ -8,33 +8,28 @@ export interface SummaryConnection {
   available: boolean;
 }
 
-/** Public connections own managed selection; standalone installations retain local accounts. */
+/** Public connections bind the signed owner’s account selection. */
 export function summaryConnections(settings: Configuration, accounts: PlanAccount[]) {
   const eligible = accounts.filter((a) => a.signedIn && a.planEnabled);
-  const managed = settings.sharedCredentials === 'saul';
-  const choices: SummaryConnection[] = managed
-    ? settings.connections
-        .filter((c) => c.kind === 'chatgpt-plan')
-        .map((c) => ({
-          key: c.key,
-          name: c.name,
-          accountId: c.accountId,
-          available: eligible.some((a) => a.id === c.accountId),
-        }))
-    : eligible.map((a) => ({ key: a.id, name: a.label, accountId: a.id, available: true }));
-  if (settings.sharedCredentials === 'disconnected')
+  if (settings.sharedCredentials !== 'saul')
     return {
-      managed,
       choices: [],
       chosen: '',
       error: 'Connect this app in Settings → Preferences → Integrations.',
     };
-  const saved = managed ? settings.summaryConnectionKey : settings.chatgptPlan?.accountId;
+  const choices: SummaryConnection[] = settings.connections
+    .filter((c) => c.kind === 'chatgpt-plan')
+    .map((c) => ({
+      key: c.key,
+      name: c.name,
+      accountId: c.accountId,
+      available: eligible.some((a) => a.id === c.accountId),
+    }));
+  const saved = settings.summaryConnectionKey;
   // A saved unavailable choice must never fall through to another account.
   if (saved) {
     const choice = choices.find((c) => c.key === saved);
     return {
-      managed,
       choices,
       chosen: choice?.available ? saved : '',
       error: choice?.available
@@ -42,7 +37,16 @@ export function summaryConnections(settings: Configuration, accounts: PlanAccoun
         : 'The saved summary connection is unavailable. Repair it in Connections or choose another connection.',
     };
   }
-  const preferred = managed ? choices.find((c) => c.key === 'gpt-plan') : undefined;
+  // A legacy account choice is not an invitation to select a different
+  // shared registration on the first run after connecting.
+  if (settings.chatgptPlan?.accountId) {
+    return {
+      choices,
+      chosen: '',
+      error: 'Choose a shared connection for this Summary.',
+    };
+  }
+  const preferred = choices.find((c) => c.key === 'gpt-plan');
   const chosen = preferred
     ? preferred.available
       ? preferred.key
@@ -51,7 +55,6 @@ export function summaryConnections(settings: Configuration, accounts: PlanAccoun
       ? choices[0]!.key
       : '';
   return {
-    managed,
     choices,
     chosen,
     error: choices.some((c) => c.available)
@@ -66,13 +69,8 @@ export function validateSummaryConnection(
   accountId: string,
   key?: string,
 ) {
-  if (settings.sharedCredentials === 'disconnected')
+  if (settings.sharedCredentials !== 'saul')
     throw new Error('Connect this app in Settings → Preferences → Integrations.');
-  if (settings.sharedCredentials !== 'saul') {
-    if (key !== undefined)
-      throw new Error('The summary credential route changed. Reopen Call Saul.');
-    return;
-  }
   const connection = settings.connections.find((c) => c.key === key);
   if (
     !connection ||

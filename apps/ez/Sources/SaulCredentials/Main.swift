@@ -15,11 +15,7 @@ import SaulCredentialStorage
             let directory = FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent(
                     "Library/Application Support/Little Clarity/Credentials", isDirectory: true)
-            let legacy =
-                (info["SaulLegacyAccountsPath"] as? String).map { URL(fileURLWithPath: $0) }
-                ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(
-                    ".saul/chatgpt/accounts.json")
-            let storage = SharedAuthStorage(records: KeychainRecords(), directory: directory, legacy: legacy)
+            let storage = SharedAuthStorage(records: KeychainRecords(), directory: directory)
             let host = CredentialHost(storage: storage, caller: caller)
             try await host.run()
         } catch {
@@ -77,7 +73,7 @@ import SaulCredentialStorage
                         event: ["type": "error", "message": "Saul credential helper is busy."])
                     continue
                 }
-                let owner = CredentialOwner(storage: storage, caller: caller) { event in
+                let owner = CredentialOwner(storage: storage) { event in
                     self.send(id: request.id, event: event)
                 }
                 running[request.id] = Task {

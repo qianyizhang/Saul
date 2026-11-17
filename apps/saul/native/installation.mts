@@ -67,7 +67,6 @@ export interface InstallOptions {
 }
 interface InstallDependencies {
   source?: string;
-  jose?: string;
   node?: string;
   environment?: NodeJS.ProcessEnv;
   filesystem?: InstallationFs;
@@ -155,14 +154,9 @@ export const payloadFiles: Record<string, string[]> = {
     'history-protocol.mjs',
     'fragments.mjs',
     'plan-service.mjs',
-    'plan-models.mjs',
     'shared-presets.mjs',
     'shared-presets-contract.mjs',
     'connection-migration.mjs',
-    'plan-auth.mjs',
-    'plan-store.mjs',
-    'responses.mjs',
-    'sse.mjs',
     'installation-paths.mjs',
   ],
   actions: [
@@ -230,7 +224,7 @@ export function installationPlan({
         component === 'actions'
           ? 'Saul custom summary actions'
           : component === 'chatgpt'
-            ? 'Saul ChatGPT plan provider'
+            ? 'Saul history and configuration'
             : 'Saul local tab bridge',
       path: join(root, 'bin', launchers[component]),
       type: 'stdio',
@@ -690,7 +684,6 @@ export async function installHelpers(
   options: InstallOptions,
   {
     source = sourceRoot,
-    jose,
     node = process.execPath,
     environment = process.env,
     filesystem: io = fs,
@@ -805,11 +798,6 @@ export async function installHelpers(
           }
           copyTree(join(source, file), join(payload, file), io);
         }
-        if (component === 'chatgpt') {
-          const dependency =
-            jose ?? dirname(fileURLToPath(import.meta.resolve('jose/package.json')));
-          copyTree(io.realpathSync(dependency), join(payload, 'node_modules', 'jose'), io);
-        }
         if (component === 'actions') {
           const dependency = dirname(fileURLToPath(import.meta.resolve('typescript/package.json')));
           for (const file of typescriptFiles)
@@ -916,11 +904,7 @@ export async function installHelpers(
 export function verifyInstallation(
   installDir: string,
   component: Component,
-  {
-    filesystem: io = fs,
-    source,
-    jose,
-  }: Pick<InstallDependencies, 'filesystem' | 'source' | 'jose'> = {},
+  { filesystem: io = fs, source }: Pick<InstallDependencies, 'filesystem' | 'source'> = {},
 ) {
   const value = info(resolve(installDir), io);
   if (!value?.isDirectory() || value.isSymbolicLink())
@@ -952,13 +936,6 @@ export function verifyInstallation(
     for (const file of payloadFiles[component]) {
       regular(join(source, file), io);
       expected.set(file, hash(io.readFileSync(join(source, file))));
-    }
-    if (component === 'chatgpt') {
-      const dependency = io.realpathSync(
-        jose ?? dirname(fileURLToPath(import.meta.resolve('jose/package.json'))),
-      );
-      for (const file of safeFiles(dependency, io))
-        expected.set(`node_modules/jose/${file}`, hash(io.readFileSync(join(dependency, file))));
     }
     if (component === 'actions') {
       const dependency = dirname(fileURLToPath(import.meta.resolve('typescript/package.json')));

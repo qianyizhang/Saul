@@ -3,6 +3,7 @@ import Foundation
 
 /// No token-read operation. Setup binds endpoints; generation cannot choose another destination.
 public struct CredentialRequest {
+  public static let version = 2
   public let id: String
   public let action: String
   public let value: [String: Any]
@@ -12,7 +13,7 @@ public struct CredentialRequest {
       let frame = try JSONSerialization.jsonObject(with: data) as? [String: Any],
       Set(frame.keys) == ["version", "id", "request"],
       let version = frame["version"] as? NSNumber, CFGetTypeID(version) != CFBooleanGetTypeID(),
-      version.doubleValue == 1,
+      version.doubleValue == 1 || version.doubleValue == Double(Self.version),
       let id = frame["id"] as? String, !id.isEmpty, id.utf8.count <= 128,
       let value = frame["request"] as? [String: Any], let action = value["action"] as? String
     else { throw invalid() }
@@ -29,7 +30,6 @@ public struct CredentialRequest {
       "connection-catalog": ["connectionKey", "force"],
       "connection-key-save": ["connectionKey", "endpoint", "key"],
       "connection-key-remove": ["connectionKey", "endpoint"],
-      "api-key-import": ["key", "selectedAccountId"],
       "api-chat": [
         "model", "systemPrompt", "userPrompt", "temperature", "maxTokens", "connectionKey",
         "images",
@@ -41,7 +41,6 @@ public struct CredentialRequest {
         "connectionKey",
       ],
       "api-image": ["prompt", "model", "size", "quality", "outputFormat", "connectionKey"],
-      "migration-verified": [],
     ]
     guard let fields = operations[action],
       Set(value.keys).subtracting(["action"]).isSubset(of: fields)
@@ -74,10 +73,9 @@ public struct CredentialRequest {
       throw invalid()
     }
     if action == "login", !text("accountId", max: 256, required: false) { throw invalid() }
-    if ["api-key-save", "api-key-import"].contains(action) {
+    if action == "api-key-save" {
       guard text("key", max: 512), let key = value["key"] as? String,
-        key.utf8.allSatisfy({ $0 > 32 && $0 < 127 }),
-        text("selectedAccountId", max: 256, required: false)
+        key.utf8.allSatisfy({ $0 > 32 && $0 < 127 })
       else { throw invalid() }
     }
     if ["generate", "api-chat"].contains(action) {

@@ -5,8 +5,10 @@ import { tmpdir, hostname } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
+import { randomUUID } from 'node:crypto';
 import { afterEach, expect, it } from 'vitest';
 import { chatgptDirectory } from '../native/installation-paths.mts';
+import { encodeNative, nativeDecoder } from '../native/transport.mts';
 import {
   installHelpers,
   installationPlan,
@@ -46,17 +48,13 @@ process.stdin.setEncoding('utf8');
 process.stdin.on('data', () => console.log(readFileSync(new URL('./ui/workspace.html', import.meta.url), 'utf8')));
 console.log('ready');\n`,
   );
-  const jose = join(dir, 'jose');
-  fs.mkdirSync(jose);
-  fs.writeFileSync(join(jose, 'package.json'), '{"name":"jose","version":"0.0.0","type":"module"}');
-  fs.writeFileSync(join(jose, 'index.js'), 'export {};');
   return {
     dir,
     native,
     root,
     manifests,
     options: { extensionId: 'a'.repeat(32), installDir: root, manifestDir: manifests },
-    dependencies: { source: native, jose, environment: {}, verify: async () => {} },
+    dependencies: { source: native, environment: {}, verify: async () => {} },
   };
 }
 function selected(f: ReturnType<typeof fixture>, component: Component = 'tabs') {
@@ -75,18 +73,15 @@ it('verifies installed helper payload and dependencies against the selected prep
   const f = fixture();
   await installHelpers({ ...f.options, components: ['tabs', 'chatgpt'] }, f.dependencies);
   expect(verifyInstallation(f.root, 'tabs', { source: f.native }).generation).toBeTruthy();
-  expect(
-    verifyInstallation(f.root, 'chatgpt', { source: f.native, jose: f.dependencies.jose })
-      .generation,
-  ).toBeTruthy();
+  expect(verifyInstallation(f.root, 'chatgpt', { source: f.native }).generation).toBeTruthy();
   fs.writeFileSync(join(f.native, 'cli.mjs'), "console.log('next build');\n");
   expect(() => verifyInstallation(f.root, 'tabs', { source: f.native })).toThrow(
     /differs.*cli.mjs/,
   );
-  fs.writeFileSync(join(f.dependencies.jose, 'index.js'), 'export const changed = true;');
-  expect(() =>
-    verifyInstallation(f.root, 'chatgpt', { source: f.native, jose: f.dependencies.jose }),
-  ).toThrow(/differs.*index.js/);
+  fs.writeFileSync(join(f.native, 'plan-service.mjs'), 'export const changed = true;');
+  expect(() => verifyInstallation(f.root, 'chatgpt', { source: f.native })).toThrow(
+    /differs.*plan-service.mjs/,
+  );
 });
 
 it('installs complete generations through stable entry paths and keeps credentials outside payloads', async () => {
@@ -109,7 +104,108 @@ it('installs complete generations through stable entry paths and keeps credentia
   expect(fs.statSync(join(f.root, 'bin', 'saul')).mode & 0o777).toBe(0o700);
 });
 
-it('an installed helper rejects missing data-root metadata instead of opening a new credential store', async () => {
+it('rejects retired credential calls but keeps history and configuration on the installed host', async () => {
+  const directory = fs.realpathSync(fs.mkdtempSync(join(tmpdir(), 'saul-storage-retirement-')));
+  roots.push(directory);
+  const home = join(directory, 'home');
+  const root = join(home, '.saul');
+  const credentials = join(root, 'chatgpt');
+  const manifestDir = join(directory, 'manifests');
+  fs.mkdirSync(credentials, { recursive: true, mode: 0o700 });
+  const preserved = new Map([
+    ['accounts.json', Buffer.from('malformed retired credentials')],
+    ['accounts.lock', Buffer.from('fixture lock')],
+    ['accounts.lock.recovery', Buffer.from('fixture recovery record')],
+  ]);
+  for (const [name, bytes] of preserved)
+    fs.writeFileSync(join(credentials, name), bytes, { mode: 0o600 });
+  const extensionId = 'a'.repeat(32);
+  const origin = `chrome-extension://${extensionId}/`;
+  await installHelpers(
+    { extensionId, installDir: root, manifestDir, components: ['chatgpt'] },
+    { source, environment: {} },
+  );
+  const registration = JSON.parse(
+    fs.readFileSync(join(manifestDir, 'com.saul.chatgpt.json'), 'utf8'),
+  );
+  const launcher = join(root, 'bin', 'saul-chatgpt-host');
+  expect(registration).toMatchObject({
+    name: 'com.saul.chatgpt',
+    path: launcher,
+    allowed_origins: [origin],
+  });
+  const child = spawn(launcher, [origin], {
+    env: { ...process.env, HOME: home, USERPROFILE: home },
+    timeout: 5000,
+  });
+  const exited = once(child, 'close');
+  const stderr: Buffer[] = [];
+  child.stderr.on('data', (bytes: Buffer) => stderr.push(bytes));
+  const replies: unknown[] = [];
+  const decode = nativeDecoder((value) => replies.push(value));
+  const stream = child.stdout[Symbol.asyncIterator]();
+  async function exchange(request: Record<string, unknown>) {
+    const id = randomUUID();
+    child.stdin.write(encodeNative({ id, request }));
+    while (!replies.length) {
+      const chunk = await stream.next();
+      if (chunk.done) throw new Error(`Storage helper exited: ${Buffer.concat(stderr)}`);
+      decode(chunk.value);
+    }
+    const reply = replies.shift();
+    expect(reply).toMatchObject({ id });
+    return reply;
+  }
+  try {
+    for (const request of [
+      { action: 'accounts' },
+      { action: 'login' },
+      { action: 'models', accountId: 'retired' },
+      { action: 'logout', accountId: 'retired' },
+      {
+        action: 'generate',
+        accountId: 'retired',
+        model: 'fixture',
+        systemPrompt: '',
+        userPrompt: 'fixture',
+      },
+    ])
+      expect(await exchange(request)).toMatchObject({
+        event: { type: 'error', message: expect.stringMatching(/retired.*signed Saul helper/) },
+      });
+    const value = { annotationAccess: true };
+    expect(
+      await exchange({ action: 'config-save', section: 'settings', revision: 0, value }),
+    ).toMatchObject({ event: { type: 'result', config: { revision: 1, value } } });
+    expect(await exchange({ action: 'config-read', section: 'settings' })).toMatchObject({
+      event: { type: 'result', config: { revision: 1, value } },
+    });
+    expect(await exchange({ action: 'presets-read' })).toMatchObject({
+      event: { type: 'result', library: { presets: [], revision: 0 } },
+    });
+    expect(
+      await exchange({
+        action: 'history',
+        request: {
+          operation: 'db',
+          owner: randomUUID(),
+          requestId: randomUUID(),
+          message: { type: 'DB_GET_HISTORY', payload: {} },
+        },
+      }),
+    ).toMatchObject({ event: { type: 'result', value: [] } });
+    child.stdin.end();
+    expect((await exited)[0]).toBe(0);
+    expect(fs.readdirSync(credentials).sort()).toEqual([...preserved.keys()].sort());
+    for (const [name, bytes] of preserved)
+      expect(fs.readFileSync(join(credentials, name))).toEqual(bytes);
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) child.kill();
+    await exited;
+  }
+}, 12_000);
+
+it('an installed helper rejects missing data-root metadata instead of changing the data root', async () => {
   const f = fixture();
   await installHelpers({ ...f.options, components: ['chatgpt'] }, f.dependencies);
   const payload = join(f.root, 'generations', selected(f, 'chatgpt').generation, 'chatgpt');
@@ -354,7 +450,7 @@ it('recovers an interrupted transaction before starting another and never select
 import {installHelpers} from ${JSON.stringify(new URL('../.build/native/installation.mjs', import.meta.url).href)};
 const options=${JSON.stringify({ ...f.options, extensionId: 'b'.repeat(32) })};
 const io={...fs, renameSync(from,to) { fs.renameSync(from,to); if(to===${JSON.stringify(manifest(f))}) process.exit(78); }};
-await installHelpers(options,{source:${JSON.stringify(f.native)}, jose:${JSON.stringify(f.dependencies.jose)}, environment:{}, verify:async()=>{}, filesystem:io});`,
+await installHelpers(options,{source:${JSON.stringify(f.native)}, environment:{}, verify:async()=>{}, filesystem:io});`,
   );
   const child = spawn(process.execPath, [script], { stdio: 'pipe' });
   expect((await once(child, 'exit'))[0]).toBe(78);
@@ -439,7 +535,6 @@ it('rejects a syntax-invalid prepared module before activation through the defau
   fs.writeFileSync(join(f.native, 'cli.mjs'), 'this is not valid javascript!!!');
   const deps = {
     source: f.dependencies.source,
-    jose: f.dependencies.jose,
     environment: f.dependencies.environment,
   };
   await expect(installHelpers(f.options, deps)).rejects.toThrow('syntax verification');

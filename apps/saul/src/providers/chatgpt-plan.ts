@@ -22,17 +22,14 @@ export async function* planEvents(
   signal?.throwIfAborted();
   if (isCredentialPlan(request)) {
     const mode = await readCredentialRoute();
-    if (mode === 'disconnected')
-      throw new Error('Connect this app to Saul credentials in Connections.');
-    if (expectedOwner !== undefined && expectedOwner !== (mode === 'saul' ? 'saul' : 'local'))
-      throw new Error(SELECT_NEW_PRESET);
-    if (mode === 'saul') {
-      for await (const event of credentialEvents(request, signal)) {
-        if (event.type === 'authorize') continue;
-        yield event as PlanEvent;
-      }
-      return;
+    if (expectedOwner === 'local') throw new Error(SELECT_NEW_PRESET);
+    if (mode !== 'saul')
+      throw new Error('Connect this app to the signed Saul helper to use ChatGPT.');
+    for await (const event of credentialEvents(request, signal)) {
+      if (event.type === 'authorize') continue;
+      yield event as PlanEvent;
     }
+    return;
   }
   const port = chrome.runtime.connect({ name: PLAN_PORT });
   const queue: PlanEvent[] = [];

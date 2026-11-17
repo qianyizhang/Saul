@@ -2,22 +2,20 @@ import { useEffect, useState } from 'react';
 import { connectionCapabilities } from '../../native/shared-presets-contract.mts';
 import type { Configuration } from '../configuration/definition';
 import type { SettingsEdit } from '../settings/draft';
-import type { PlanSettingsState } from './usePlanSettings';
-import { ChatGPTPlanSettings } from './ChatGPTPlanSettings';
 import { officialOpenAI } from '../../native/credentials-contract.mts';
 
 export function StandaloneConnectionSettings({
   settings,
   edit,
-  plan,
   disabled,
   visible,
+  integrations,
 }: {
   settings: Configuration;
   edit: (edit: SettingsEdit) => void;
-  plan: PlanSettingsState;
   disabled: boolean;
   visible: boolean;
+  integrations: () => void;
 }) {
   const connections = settings.connections;
   const [key, setKey] = useState('gpt-plan'),
@@ -107,17 +105,13 @@ export function StandaloneConnectionSettings({
               </dl>
             </>
           )}
-          {settings.sharedCredentials === 'disconnected' && connection?.kind === 'chatgpt-plan' ? (
-            <p className="notice">Connect this app to Saul to manage ChatGPT sign-in.</p>
-          ) : connection?.kind === 'chatgpt-plan' ? (
-            <ChatGPTPlanSettings
-              plan={plan}
-              mode="connection"
-              visible={visible}
-              disabled={disabled}
-              test={() => {}}
-              shared={settings.sharedCredentials === 'saul'}
-            />
+          {connection?.kind === 'chatgpt-plan' ? (
+            <div className="stack">
+              <p className="notice">ChatGPT uses the signed Saul helper.</p>
+              <button type="button" className="btn" onClick={integrations}>
+                Open Integrations
+              </button>
+            </div>
           ) : (
             <fieldset className="stack settings-fields" disabled={disabled}>
               <div className="row">

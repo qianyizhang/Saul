@@ -11,4 +11,6 @@ independent; shared mode adds a signing and caller-validation requirement and
 loses access when its owner is unavailable. The migration adopts Saul's
 existing connections; EZ's duplicate registrations and keys are not merged.
 
-The [credential contract](../../contracts/credentials.md) owns current behavior.
+[ADR 0003](0003-retire-standalone-chatgpt-sign-in.md) supersedes the standalone
+and migration parts of this decision. The
+[credential contract](../../contracts/credentials.md) owns current behavior.

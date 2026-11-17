@@ -1,4 +1,3 @@
-import { apiConnections } from './driver.ts';
 import { readingMore } from './driver.ts';
 import { settingsSection } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
@@ -10,25 +9,35 @@ import {
   openFirstPageExplanation,
 } from './driver.ts';
 import type { PlanRequest, PlanEvent } from '../../native/plan-protocol.mts';
+import { DEFAULT_CONFIGURATION, type Configuration } from '../../src/configuration/definition';
+import type { CredentialRequest, CredentialEvent } from '../../native/credentials-contract.mts';
 import { DEFAULT_CONNECTIONS, type SharedPresets } from '../../native/shared-presets-contract.mts';
 
-test('ChatGPT provider settings route reading streams, preserve partial failures, and switch back', async ({
+test('ChatGPT provider settings route signed-owner reading streams, preserve partial failures, and stop', async ({
   sandbox,
   fixtureServer,
 }, testInfo) => {
   const { worker, context, popup: initialPopup } = await sandbox.launch();
-  let popup = initialPopup;
+  const popup = initialPopup;
   const initialApiRequests = fixtureServer.requests.length;
   // Replace only the OS transport. UI, sender validation, offscreen runner and
   // durable database are production code; no native registration or real quota.
   await worker.evaluate(
-    (connections) => {
+    async ({ connections, defaults }) => {
+      const saved =
+        ((await chrome.storage.local.get('saul_user_settings'))
+          .saul_user_settings as Configuration) || defaults;
+      await chrome.storage.local.set({
+        saul_user_settings: { ...saved, sharedCredentials: 'saul' },
+      });
       let library: SharedPresets = { revision: 0, presets: [], connections };
       const sections: Record<string, { revision: number; value?: Record<string, unknown> }> = {};
       chrome.runtime.sendNativeMessage = (async (
-        _host: string,
+        host: string,
         message: { id: string; request: PlanRequest },
       ) => {
+        if (host !== 'com.saul.chatgpt')
+          throw new Error('Configuration must use the storage helper');
         const request = message.request;
         if (request.action === 'config-commit') {
           if (
@@ -85,38 +94,38 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
         return { id: message.id, event: { type: 'result', library } };
       }) as typeof chrome.runtime.sendNativeMessage;
       const state = {
-        requests: [] as PlanRequest[],
+        requests: [] as CredentialRequest[],
         fail: false,
-        signedIn: false,
-        holdAccounts: false,
-        finishAccounts: () => {},
-        holdLogin: true,
-        finishLogin: () => {},
-        holdModels: true,
-        finishModels: () => {},
-        reducedCapabilities: false,
+        signedIn: true,
         cancelled: false,
         hold: false,
         phased: false,
         sendGeneration: (_event: PlanEvent) => {},
-        holdLogout: false,
-        finishLogout: () => {},
       };
       Object.assign(globalThis, { planFixture: state });
-      chrome.runtime.connectNative = (() => {
-        const listeners: ((m: { id: string; event: PlanEvent }) => void)[] = [];
+      const original = chrome.runtime.connectNative.bind(chrome.runtime);
+      chrome.runtime.connectNative = ((host: string) => {
+        if (host !== 'com.saul.credentials') return original(host);
+        const listeners: ((m: { id: string; event: CredentialEvent }) => void)[] = [];
         return {
           onMessage: {
-            addListener: (fn: (m: { id: string; event: PlanEvent }) => void) => listeners.push(fn),
+            addListener: (fn: (m: { id: string; event: CredentialEvent }) => void) =>
+              listeners.push(fn),
           },
           onDisconnect: { addListener: () => {} },
-          postMessage: (message: { id: string; request: PlanRequest; cancel?: boolean }) => {
+          postMessage: (message: {
+            version: number;
+            id: string;
+            request: CredentialRequest;
+            cancel?: boolean;
+          }) => {
             if (message.cancel) {
               state.cancelled = true;
               return;
             }
+            if (message.version !== 2) throw new Error('Expected signed credential protocol v2');
             state.requests.push(message.request);
-            const emit = (event: PlanEvent) =>
+            const emit = (event: CredentialEvent) =>
               listeners.forEach((fn) => fn({ id: message.id, event }));
             const account = {
               id: 'oaiapp_fixture',
@@ -126,51 +135,47 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
             };
             queueMicrotask(() => {
               switch (message.request.action) {
-                case 'accounts':
-                  state.finishAccounts = () => emit({ type: 'result', accounts: [account] });
-                  if (!state.holdAccounts) state.finishAccounts();
+                case 'status':
+                case 'api-key-status':
+                  emit({ type: 'result', accounts: [account], apiConnected: false });
                   break;
-                case 'login':
-                  state.finishLogin = () => {
-                    state.signedIn = true;
-                    emit({
-                      type: 'result',
-                      account: { ...account, signedIn: true, planEnabled: true },
-                    });
-                  };
-                  if (!state.holdLogin) state.finishLogin();
+                case 'connection-status':
+                  emit({
+                    type: 'result',
+                    connection: {
+                      connected: state.signedIn,
+                      identity: account.label,
+                      signedIn: state.signedIn,
+                    },
+                  });
                   break;
-                case 'models':
-                  state.finishModels = () =>
-                    emit({
-                      type: 'result',
+                case 'connection-catalog':
+                  emit({
+                    type: 'result',
+                    catalog: {
+                      fetchedAt: Date.now() / 1000,
                       models: [
                         {
-                          slug: 'plan-fixture-model',
-                          display_name: 'Plan fixture model',
-                          supportedReasoningEfforts: state.reducedCapabilities
-                            ? [{ effort: 'low', description: 'Quick' }]
-                            : [
-                                { effort: 'low', description: 'Quick' },
-                                { effort: 'high', description: 'Thorough' },
-                              ],
-                          defaultReasoningEffort: 'low',
-                          ...(state.reducedCapabilities ? {} : { fastTier: 'priority' }),
-                          isDefault: true,
+                          id: 'plan-fixture-model',
+                          name: 'Plan fixture model',
+                          capabilities: ['write'],
+                          efforts: ['low', 'high'],
+                          defaultEffort: 'low',
+                          fastTier: 'priority',
                         },
                       ],
-                    });
-                  if (!state.holdModels) state.finishModels();
+                    },
+                  });
+                  break;
+                case 'accounts':
+                  emit({ type: 'result', accounts: [account] });
                   break;
                 case 'logout':
-                  state.finishLogout = () => {
-                    state.signedIn = false;
-                    emit({
-                      type: 'result',
-                      account: { ...account, signedIn: false, planEnabled: false },
-                    });
-                  };
-                  if (!state.holdLogout) state.finishLogout();
+                  state.signedIn = false;
+                  emit({
+                    type: 'result',
+                    account: { ...account, signedIn: false, planEnabled: false },
+                  });
                   break;
                 case 'generate':
                   state.sendGeneration = emit;
@@ -193,85 +198,26 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
         } as unknown as chrome.runtime.Port;
       }) as typeof chrome.runtime.connectNative;
     },
-    [...DEFAULT_CONNECTIONS],
+    {
+      defaults: DEFAULT_CONFIGURATION,
+      connections: DEFAULT_CONNECTIONS.map((c) =>
+        c.key === 'gpt-plan' ? { ...c, accountId: 'oaiapp_fixture' } : c,
+      ),
+    },
   );
+  await popup.reload();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await settingsSection(popup, 'Presets');
   await popup.getByLabel('Connection', { exact: true }).selectOption('gpt-plan');
-  await expect(popup.getByPlaceholder('Optional for local models')).toBeHidden();
-  await expect(popup.getByLabel(/Temperature/)).toBeHidden();
-  await settingsSection(popup, 'Connections');
-  await popup.getByRole('button', { name: 'Continue with ChatGPT', exact: true }).click();
-  await expect(
-    popup.getByText('Complete sign-in in the opened tab.', { exact: true }),
-  ).toBeVisible();
-  await expect(popup.getByLabel('Preset', { exact: true })).toBeDisabled();
-  await expect(popup.getByLabel('Connection', { exact: true })).toBeDisabled();
-  await expect(popup.getByRole('button', { name: 'Cancel', exact: true })).toBeEnabled();
-  const popupUrl = popup.url();
-  await popup.close();
-  popup = await context.newPage();
-  await popup.goto(popupUrl);
-  await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Presets');
-  await popup.getByLabel('Connection', { exact: true }).selectOption('gpt-plan');
-  await expect(popup.getByText('ChatGPT helper connected.', { exact: true })).not.toBeVisible();
-  await worker.evaluate(() => {
-    (
-      globalThis as unknown as { planFixture: { finishLogin: () => void } }
-    ).planFixture.finishLogin();
-  });
-  await expect(popup.getByRole('dialog', { name: "You're using your ChatGPT plan" })).toHaveCount(
-    0,
-  );
-  await expect(popup.getByLabel('ChatGPT account', { exact: true })).toHaveValue('oaiapp_fixture');
-  await expect(popup.getByText('Loading available models…', { exact: true })).toBeVisible();
-  await expect(popup.getByLabel('ChatGPT model', { exact: true })).toBeDisabled();
-  await expect(popup.getByLabel('Preset', { exact: true })).toBeDisabled();
-  await expect(popup.getByLabel('Connection', { exact: true })).toBeDisabled();
-  await worker.evaluate(() => {
-    const fixture = (
-      globalThis as unknown as {
-        planFixture: { holdModels: boolean; finishModels: () => void };
-      }
-    ).planFixture;
-    fixture.holdModels = false;
-    fixture.finishModels();
-  });
-  await expect(popup.getByLabel('ChatGPT model', { exact: true })).toBeEnabled();
-  await expect(popup.getByLabel('ChatGPT model', { exact: true })).toHaveValue(
-    'plan-fixture-model',
-  );
-  await expect(popup.getByLabel('ChatGPT effort', { exact: true })).toHaveValue('low');
-  await popup.setViewportSize({ width: 640, height: 600 });
-  for (const colorScheme of ['light', 'dark'] as const) {
-    await popup.emulateMedia({ colorScheme });
-    await popup.getByRole('button', { name: 'Settings', exact: true }).scrollIntoViewIfNeeded();
-    if (reviewScreenshots)
-      await popup.screenshot({ path: testInfo.outputPath(`settings-chatgpt-${colorScheme}.png`) });
-  }
-
-  await popup.getByLabel('Model options', { exact: true }).click();
-  await popup.getByLabel('ChatGPT effort', { exact: true }).selectOption('high');
-  await popup.getByLabel('ChatGPT speed', { exact: true }).selectOption('fast');
-  await popup.getByLabel('Connection and tests', { exact: true }).click();
-  await popup.getByRole('button', { name: 'Test generation', exact: true }).click();
-  await expect(popup.getByText(/Generation succeeded:/)).toBeVisible();
-  expect(
-    await worker.evaluate(() =>
-      (globalThis as unknown as { planFixture: { requests: PlanRequest[] } }).planFixture.requests
-        .filter((request) => request.action === 'generate')
-        .at(-1),
-    ),
-  ).toMatchObject({
-    model: 'plan-fixture-model',
-    effort: 'high',
-    fast: true,
-  });
+  await popup.getByLabel('ChatGPT model', { exact: true }).selectOption('plan-fixture-model');
+  await popup
+    .locator('summary')
+    .filter({ hasText: /^Options$/ })
+    .click();
+  await popup.getByRole('combobox', { name: /^Effort/ }).selectOption('high');
+  await popup.getByRole('combobox', { name: /^Speed/ }).selectOption('true');
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
-  if (reviewScreenshots)
-    await popup.screenshot({ path: testInfo.outputPath('chatgpt-settings.png'), fullPage: true });
   await popup.reload();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await settingsSection(popup, 'Presets');
@@ -279,26 +225,12 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   await expect(popup.getByLabel('ChatGPT model', { exact: true })).toHaveValue(
     'plan-fixture-model',
   );
-  await expect(popup.getByLabel('ChatGPT effort', { exact: true })).toHaveValue('high');
-  await expect(popup.getByLabel('ChatGPT speed', { exact: true })).toHaveValue('fast');
-  await worker.evaluate(() => {
-    (
-      globalThis as unknown as { planFixture: { reducedCapabilities: boolean } }
-    ).planFixture.reducedCapabilities = true;
-  });
-  await popup.getByLabel('Connection and tests', { exact: true }).click();
-  await popup.getByRole('button', { name: 'Refresh models', exact: true }).click();
-  await expect(popup.getByRole('alert')).toContainText('saved effort');
-  await expect(popup.getByRole('button', { name: 'Test generation', exact: true })).toBeDisabled();
-  await expect(popup.getByLabel('ChatGPT effort', { exact: true })).toHaveValue('high');
-  await expect(popup.getByLabel('ChatGPT speed', { exact: true })).toHaveValue('fast');
-  await worker.evaluate(() => {
-    (
-      globalThis as unknown as { planFixture: { reducedCapabilities: boolean } }
-    ).planFixture.reducedCapabilities = false;
-  });
-  await popup.getByRole('button', { name: 'Refresh models', exact: true }).click();
-  await expect(popup.getByRole('button', { name: 'Test generation', exact: true })).toBeEnabled();
+  await popup
+    .locator('summary')
+    .filter({ hasText: /^Options$/ })
+    .click();
+  await expect(popup.getByRole('combobox', { name: /^Effort/ })).toHaveValue('high');
+  await expect(popup.getByRole('combobox', { name: /^Speed/ })).toHaveValue('true');
   const page = await context.newPage();
   await page.goto(fixtureServer.origin + '/article');
   await worker.evaluate(() => {
@@ -389,74 +321,31 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
       ),
     )
     .toBe(true);
-  const beforeFocus = await worker.evaluate(() => {
-    const fixture = (
-      globalThis as unknown as {
-        planFixture: { holdLogout: boolean; holdAccounts: boolean; requests: PlanRequest[] };
-      }
-    ).planFixture;
-    fixture.holdLogout = true;
-    fixture.holdAccounts = true;
-    return fixture.requests.filter((request) => request.action === 'accounts').length;
-  });
   await settingsSection(popup, 'Connections');
-  await popup.getByLabel('Manage accounts', { exact: true }).click();
-  await popup.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect
-    .poll(() =>
-      worker.evaluate(
-        () =>
-          (
-            globalThis as unknown as { planFixture: { requests: PlanRequest[] } }
-          ).planFixture.requests.filter((request) => request.action === 'accounts').length,
-      ),
-    )
-    .toBeGreaterThan(beforeFocus);
-  await popup.getByRole('button', { name: 'Sign out', exact: true }).click();
-  await expect(popup.getByText('Signing out…', { exact: true })).toBeVisible();
-  await expect(popup.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0);
-  await worker.evaluate(() => {
-    (
-      globalThis as unknown as { planFixture: { finishLogout: () => void } }
-    ).planFixture.finishLogout();
-  });
-  await expect(
-    popup.getByRole('button', { name: 'Continue with ChatGPT', exact: true }),
-  ).toBeVisible();
-  await worker.evaluate(() => {
-    const fixture = (
-      globalThis as unknown as {
-        planFixture: { holdAccounts: boolean; finishAccounts: () => void };
-      }
-    ).planFixture;
-    fixture.holdAccounts = false;
-    fixture.finishAccounts();
-  });
-  await expect(popup.getByLabel('ChatGPT account').locator('option:checked')).toContainText(
-    'signed out',
-  );
-  await settingsSection(popup, 'Presets');
-  await expect(popup.getByRole('button', { name: 'Test generation', exact: true })).toBeDisabled();
-  await popup.getByLabel('Connection', { exact: true }).selectOption('openai-compatible');
-  await apiConnections(popup);
-  await expect(popup.getByPlaceholder('Optional for local models')).toBeVisible();
-  expect(fixtureServer.requests).toHaveLength(initialApiRequests); // No fallback to the API-key provider.
+  const connection = popup.getByRole('article', { name: 'ChatGPT plan', exact: true });
+  await connection.getByLabel('More for ChatGPT plan').click();
+  popup.once('dialog', (dialog) => dialog.accept());
+  await connection.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect(connection.getByRole('status')).toHaveText('Not set up');
+  expect(fixtureServer.requests).toHaveLength(initialApiRequests); // No API-key fallback.
 });
 
-test('missing ChatGPT helper shows setup recovery without altering the existing provider', async ({
+test('missing signed credential helper preserves local settings and offers Integrations recovery', async ({
   sandbox,
 }) => {
-  const { popup } = await sandbox.launch();
+  const { popup, worker } = await sandbox.launch();
+  const saved = () =>
+    worker.evaluate(
+      async () => (await chrome.storage.local.get('saul_user_settings')).saul_user_settings,
+    );
+  const before = await saved();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(popup, 'Presets');
-  await popup.getByLabel('Connection', { exact: true }).selectOption('gpt-plan');
-  await expect(popup.getByRole('alert')).toContainText('helper');
   await settingsSection(popup, 'Preferences');
   await popup.getByText('Integrations', { exact: true }).click();
-  await popup.getByText('ChatGPT helper setup', { exact: true }).click();
-  await expect(popup.getByText('pnpm native:install', { exact: false })).toBeVisible();
-  await settingsSection(popup, 'Presets');
-  await popup.getByLabel('Connection', { exact: true }).selectOption('openai-compatible');
-  await apiConnections(popup);
-  await expect(popup.getByPlaceholder('Optional for local models')).toBeVisible();
+  await popup.getByRole('button', { name: 'Connect to Saul', exact: true }).click();
+  await expect(
+    popup.getByRole('alert').filter({ hasText: 'signed Saul credential helper' }),
+  ).toBeVisible();
+  expect(await saved()).toEqual(before);
+  await expect(popup.getByRole('button', { name: 'Connect to Saul', exact: true })).toBeVisible();
 });

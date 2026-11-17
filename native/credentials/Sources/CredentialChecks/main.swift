@@ -68,35 +68,6 @@ func rejects(_ operation: () throws -> Void) throws {
     try vault.write(nil, to: .openAI)
     try expect(try vault.read(.chatGPT) == original, "API removal changed the OAuth record")
 
-    let legacy = Data(
-      """
-      {"version":1,"hostId":"urn:uuid:fixture-host","accounts":[
-        {"clientId":"saul-original","email":"same@example.test","subject":"subject-a","tokens":{
-          "accessToken":"fixture-access","refreshToken":"fixture-refresh","idToken":"fixture-identity",
-          "expiresAt":1793800000000,"scopes":["openid","chatgpt.tokens.use.direct"]}},
-        {"clientId":"saul-second","email":"same@example.test","subject":"subject-a"}]}
-      """.utf8)
-    guard
-      let imported = try JSONSerialization.jsonObject(
-        with: LegacySaulCredentials.converted(legacy, selectedID: "saul-original"))
-        as? [String: Any],
-      let profiles = imported["profiles"] as? [[String: Any]],
-      let credentials = profiles.first?["credentials"] as? [String: Any]
-    else { throw CheckFailure.failed("Invalid imported credentials") }
-    try expect(profiles.count == 2, "Same-email registrations were merged")
-    try expect(imported["hostID"] as? String == "urn:uuid:fixture-host", "Host identity changed")
-    try expect(
-      imported["selectedID"] as? String == "saul-original", "Selected registration changed")
-    try expect(
-      credentials["refreshToken"] as? String == "fixture-refresh",
-      "Rotating token lost its registration")
-    try expect(
-      credentials["expiresAt"] as? Double
-        == Date(timeIntervalSince1970: 1_793_800_000).timeIntervalSinceReferenceDate,
-      "Expiry units changed")
-    try rejects { _ = try LegacySaulCredentials.converted(legacy, selectedID: "ez-discarded") }
-    try rejects { _ = try LegacySaulCredentials.converted(Data("{\"version\":99}".utf8)) }
-
     let frameOne = try NativeFrames.encode(["id": "a", "request": ["action": "status"]])
     let frameTwo = try NativeFrames.encode(["id": "b", "request": ["action": "accounts"]])
     var frames = NativeFrames()
@@ -119,6 +90,12 @@ func rejects(_ operation: () throws -> Void) throws {
         ]), caller: caller)
     }
     try request(["action": "status"])
+    try request(["action": "status"], version: CredentialRequest.version)
+    try rejects { try request(["action": "status"], version: 3) }
+    for version in [1, CredentialRequest.version] {
+      try rejects { try request(["action": "migration-verified"], version: version) }
+      try rejects { try request(["action": "api-key-import", "key": "fixture"], version: version) }
+    }
     for action in ["api-chat", "generate"] {
       var vision: [String: Any] = [
         "action": action, "model": "gpt-6", "systemPrompt": "Instructions",
@@ -242,7 +219,7 @@ func rejects(_ operation: () throws -> Void) throws {
     let recovered = try await CredentialLease.acquire(in: root, timeout: .seconds(1))
     withExtendedLifetime(recovered) {}
     print(
-      "Credential checks passed: denied/corrupt storage, provider isolation, exact registration import, bounded framing, caller rejection and cross-process lease recovery."
+      "Credential checks passed: denied/corrupt storage, provider isolation, retired migration rejection, bounded framing, caller rejection and cross-process lease recovery."
     )
   }
 }

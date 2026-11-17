@@ -219,17 +219,22 @@ it('does not send a frozen request with credentials for an edited endpoint or re
   expect(() => prepareFrozenRun(settings, original)).toThrow('saved connection');
 });
 
-it('a model preset uses the selected local account and freezes it for retries', () => {
+it('a plan preset uses its bound shared account and freezes it for retries', () => {
   const settings = configured();
   settings.configuration!.presets[0] = {
     id: 'preset-current',
     name: 'Plan',
     provider: 'chatgpt-plan',
+    connectionKey: 'gpt-plan',
     model: 'plan-model',
     effort: 'high',
     fast: true,
   };
-  settings.chatgptPlan = { accountId: 'selected-account', model: 'other' };
+  settings.sharedCredentials = 'saul';
+  settings.connections = [
+    { key: 'gpt-plan', name: 'Shared', kind: 'chatgpt-plan', accountId: 'selected-account' },
+  ];
+  settings.chatgptPlan = { accountId: 'legacy-account', model: 'other' };
   const prepared = prepareRecipeRun(settings, context, configurationFor(settings).selectedRecipeId);
   settings.chatgptPlan.accountId = 'next-account';
   expect(prepareFrozenRun(settings, prepared.input).input.plan?.accountId).toBe('selected-account');

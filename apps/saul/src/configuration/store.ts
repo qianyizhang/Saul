@@ -13,8 +13,6 @@ export interface SharedConfigurationAccess {
 }
 export interface CredentialAccess {
   prepare(settings: Configuration, current: Configuration): Promise<Configuration>;
-  sanitizeBackup(value: unknown): unknown;
-  committed(settings: Configuration, current: Configuration): Promise<void>;
 }
 
 async function revisionOf(stored: unknown): Promise<string> {
@@ -34,7 +32,6 @@ async function revisionOf(stored: unknown): Promise<string> {
 export interface ConfigurationStorage {
   /** Return a detached raw record, or undefined for a new installation. */
   read(): Promise<unknown>;
-  readBackup(): Promise<unknown>;
   /** Apply all keys together, including the invalid-record backup during reset. */
   write(values: Record<string, unknown>): Promise<void>;
 }
@@ -115,16 +112,7 @@ export function createConfigurationStore(
           settings = await credentials.prepare(settings, loaded ?? settingsFromStored(stored));
         if (shared) settings = await shared.save(settings);
         try {
-          const backup =
-            credentials && settings.sharedCredentials === 'saul'
-              ? await storage.readBackup()
-              : undefined;
-          await storage.write({
-            [SETTINGS_STORAGE_KEY]: settings,
-            ...(backup === undefined
-              ? {}
-              : { [RECOVERY_BACKUP_KEY]: credentials!.sanitizeBackup(backup) }),
-          });
+          await storage.write({ [SETTINGS_STORAGE_KEY]: settings });
         } catch (cause) {
           if (!shared) throw cause;
           throw new Error(
@@ -132,8 +120,6 @@ export function createConfigurationStore(
             { cause },
           );
         }
-        if (credentials)
-          await credentials.committed(settings, loaded ?? settingsFromStored(stored));
         return {
           state: 'ready',
           settings,

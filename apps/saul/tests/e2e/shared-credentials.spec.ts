@@ -4,7 +4,7 @@ import type { CredentialRequest, CredentialEvent } from '../../native/credential
 import type { Configuration } from '../../src/configuration/definition';
 import { DEFAULT_CONFIGURATION } from '../../src/configuration/definition';
 
-test('shared credential adoption preserves denied sources, removes verified official copies and disconnects without fallback', async ({
+test('shared credential opt-in preserves saved keys, verifies the owner and disconnects without fallback', async ({
   sandbox,
 }, info) => {
   const { worker, popup } = await sandbox.launch();
@@ -52,7 +52,6 @@ test('shared credential adoption preserves denied sources, removes verified offi
     const state = {
       denied: true,
       connected: false,
-      cleanupDenied: true,
       requests: [] as CredentialRequest[],
     };
     Object.assign(globalThis, { credentialFixture: state });
@@ -66,16 +65,18 @@ test('shared credential adoption preserves denied sources, removes verified offi
         },
         onDisconnect: { addListener: () => {} },
         disconnect: () => {},
-        postMessage: (message: { id: string; request: CredentialRequest }) => {
+        postMessage: (message: { version: number; id: string; request: CredentialRequest }) => {
+          if (message.version !== 2) throw new Error('Expected signed credential protocol v2');
           state.requests.push(message.request);
           queueMicrotask(() => {
             let event: CredentialEvent;
             switch (message.request.action) {
               case 'status':
               case 'accounts':
-                event = { type: 'result', accounts: [], apiConnected: state.connected };
+                event = state.denied
+                  ? { type: 'error', message: 'Synthetic Keychain denial' }
+                  : { type: 'result', accounts: [], apiConnected: state.connected };
                 break;
-              case 'api-key-import':
               case 'api-key-save':
                 if (state.denied) event = { type: 'error', message: 'Synthetic Keychain denial' };
                 else {
@@ -87,7 +88,6 @@ test('shared credential adoption preserves denied sources, removes verified offi
                 event = {
                   type: 'result',
                   apiConnected: state.connected,
-                  retired: !state.cleanupDenied,
                 };
                 break;
               case 'connection-status':
@@ -96,7 +96,6 @@ test('shared credential adoption preserves denied sources, removes verified offi
                   connection: {
                     connected: state.connected,
                     endpoint: 'https://api.openai.com/v1',
-                    keySuffix: '-key',
                   },
                 };
                 break;
@@ -120,11 +119,6 @@ test('shared credential adoption preserves denied sources, removes verified offi
               case 'api-key-remove':
                 state.connected = false;
                 event = { type: 'result', apiConnected: false };
-                break;
-              case 'migration-verified':
-                event = state.cleanupDenied
-                  ? { type: 'error', message: 'Synthetic cleanup denial' }
-                  : { type: 'result', retired: true };
                 break;
               default:
                 event = { type: 'error', message: 'Unexpected fixture operation' };
@@ -169,28 +163,11 @@ test('shared credential adoption preserves denied sources, removes verified offi
   if (!(await popup.getByRole('button', { name: 'Connect to Saul', exact: true }).isVisible()))
     await popup.getByText('Integrations', { exact: true }).click();
   await popup.getByRole('button', { name: 'Connect to Saul', exact: true }).click();
-  await expect(popup.getByText('OpenAI API key saved', { exact: true })).toBeVisible();
-  await expect(
-    popup.getByText('Connected · old credential cleanup pending', { exact: true }),
-  ).toBeVisible();
-  await expect(
-    popup.getByRole('alert').filter({ hasText: 'Synthetic cleanup denial' }),
-  ).toHaveCount(0);
-  await popup.getByRole('button', { name: 'Retry cleanup', exact: true }).click();
-  await expect(
-    popup.getByRole('alert').filter({ hasText: 'Synthetic cleanup denial' }),
-  ).toBeVisible();
-  await worker.evaluate(() => {
-    (
-      globalThis as unknown as { credentialFixture: { cleanupDenied: boolean } }
-    ).credentialFixture.cleanupDenied = false;
-  });
-  await popup.getByRole('button', { name: 'Retry cleanup', exact: true }).click();
-  await expect(popup.getByRole('button', { name: 'Retry cleanup', exact: true })).toHaveCount(0);
+  await expect(popup.getByText('OpenAI API key required', { exact: true })).toBeVisible();
   const adopted = await state();
   await expect(popup.getByRole('alert').filter({ hasText: 'helper disconnected' })).toHaveCount(0);
   expect(adopted.saul_user_settings.sharedCredentials).toBe('saul');
-  expect(adopted.saul_user_settings.openaiCompatible.apiKey).toBe('');
+  expect(adopted.saul_user_settings.openaiCompatible.apiKey).toBe('fixture-official-key');
   expect(adopted.saul_user_settings.activeProfileId).toBe('official');
   expect(adopted.saul_user_settings.openaiCompatible.baseUrl).toBe('https://api.openai.com/v1');
   await settingsSection(popup, 'Presets');
@@ -198,15 +175,17 @@ test('shared credential adoption preserves denied sources, removes verified offi
   expect(adopted.saul_user_settings.profiles!.find((p) => p.id === 'custom')!.config.apiKey).toBe(
     'fixture-custom-key',
   );
-  expect(adopted.saul_user_settings_recovery_backup.openaiCompatible.apiKey).toBe('');
+  expect(adopted.saul_user_settings_recovery_backup.openaiCompatible.apiKey).toBe(
+    'fixture-official-key',
+  );
   await popup.setViewportSize({ width: 640, height: 720 });
   await settingsSection(popup, 'Connections');
   const api = popup.getByRole('article', { name: 'OpenAI API', exact: true });
   await expect(api.locator('.connection-capabilities code')).toHaveText(['Write', 'Draw', 'Speak']);
-  await expect(api.getByText(/sk-\*\*\*-key/)).toBeVisible();
+  await expect(api.getByText(/sk-\*\*\*/)).toHaveCount(0);
   await expect(popup.getByLabel('Connection name')).toHaveCount(0);
-  await api.getByRole('button', { name: 'Check', exact: true }).click();
-  await expect(api.getByRole('status')).toHaveText('✓ Connected');
+  await expect(api.getByRole('button', { name: 'Set up', exact: true })).toBeVisible();
+  await expect(api.getByRole('status')).toHaveText('Not set up');
   await popup.screenshot({ path: info.outputPath('shared-credentials.png') });
   await settingsSection(popup, 'Preferences');
   await popup.getByRole('button', { name: 'Disconnect app', exact: true }).click();
@@ -218,5 +197,7 @@ test('shared credential adoption preserves denied sources, removes verified offi
         .credentialFixture.requests,
   );
   expect(requests.some((r) => r.action === 'api-key-remove' || r.action === 'logout')).toBe(false);
-  expect(requests.some((r) => r.action === 'migration-verified')).toBe(true);
+  expect(
+    requests.some((r) => r.action === 'api-key-save' || r.action === 'connection-key-save'),
+  ).toBe(false);
 });

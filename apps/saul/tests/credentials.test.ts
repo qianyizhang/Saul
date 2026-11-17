@@ -4,9 +4,8 @@ import {
   validateCredentialEvent,
   validateCredentialRequest,
 } from '../native/credentials-contract.mts';
-import { sharedCredentialProjection, stripOfficialKeys } from '../src/configuration/credentials';
+import { nativeCredentialAccess } from '../src/configuration/credentials';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
-import { preparePreset } from '../src/configuration/resolve';
 import { validImageOptions } from '../native/shared-presets-contract.mts';
 
 const imageRequest = {
@@ -222,31 +221,38 @@ it('cancels an ordinary operation on caller loss', () => {
   expect(h.native.disconnect).toHaveBeenCalled();
   expect(h.connectNative).toHaveBeenCalledTimes(1);
 });
-it('projects only official keys into the native owner and preserves custom provider credentials', () => {
-  const settings = structuredClone(DEFAULT_CONFIGURATION);
-  settings.openaiCompatible.apiKey = 'official-fixture';
-  settings.profiles = [
-    {
-      id: 'custom',
-      name: 'Custom',
-      config: {
-        ...settings.openaiCompatible,
-        baseUrl: 'https://custom.test/v1',
-        apiKey: 'custom-fixture',
-      },
+it('connects only through the newer signed owner, without importing a key or rebinding an account', async () => {
+  const h = harness();
+  const legacy = structuredClone(DEFAULT_CONFIGURATION);
+  legacy.openaiCompatible.apiKey = 'local-fixture-key';
+  legacy.chatgptPlan = { accountId: 'legacy-account', model: 'old' };
+  const optedIn = { ...legacy, sharedCredentials: 'saul' as const };
+  let prepare = nativeCredentialAccess.prepare(optedIn, legacy);
+  let sent = h.native.postMessage.mock.lastCall![0];
+  expect(sent).toMatchObject({ version: 2, request: { action: 'status' } });
+  h.emit({
+    id: sent.id,
+    event: { type: 'error', message: 'Unsupported or invalid Saul credential operation.' },
+  });
+  await expect(prepare).rejects.toThrow();
+  prepare = nativeCredentialAccess.prepare(optedIn, legacy);
+  sent = h.native.postMessage.mock.lastCall![0];
+  h.emit({
+    id: sent.id,
+    event: {
+      type: 'result',
+      apiConnected: false,
+      accounts: [{ id: 'shared-account', label: 'Fixture', signedIn: true, planEnabled: true }],
+      selectedAccountId: 'shared-account',
     },
-  ];
-  const projected = sharedCredentialProjection(settings);
-  expect(projected.openaiCompatible).toMatchObject({ apiKey: '', credentialOwner: 'saul' });
-  expect(projected.profiles![0]!.config.apiKey).toBe('custom-fixture');
-  expect(settings.openaiCompatible.apiKey).toBe('official-fixture');
-  const backup = stripOfficialKeys(settings) as typeof settings;
-  expect(backup.openaiCompatible.apiKey).toBe('');
-  expect(backup.profiles![0]!.config.apiKey).toBe('custom-fixture');
-  expect(() =>
-    preparePreset(
-      { ...projected, sharedCredentials: 'disconnected' },
-      { ...projected.configuration!.presets[0]!, profileId: 'custom', provider: 'chatgpt-plan' },
-    ),
-  ).toThrow(/Connect/);
+  });
+  await expect(prepare).resolves.toEqual(optedIn);
+  const disconnected = { ...optedIn, sharedCredentials: 'disconnected' as const };
+  await expect(nativeCredentialAccess.prepare(disconnected, optedIn)).resolves.toEqual(
+    disconnected,
+  );
+  expect(h.native.postMessage.mock.calls.map(([frame]) => frame.request)).toEqual([
+    { action: 'status' },
+    { action: 'status' },
+  ]);
 });

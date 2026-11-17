@@ -14,7 +14,8 @@ Saul is a local-first Chrome extension for reading explanations and safe tab org
 ## Install
 
 Use the [selective installer](../../docs/setup.md) for the extension and its
-ChatGPT/history helper. Tab/action helpers are optional. EZ and Codex are not required.
+history/configuration helper. ChatGPT plan use also requires the signed macOS
+credential owner. Tab/action helpers, the EZ app and Codex are optional.
 
 For optional Codex access, select the tab helper and `--codex` in the root setup.
 Then enable access in Saul Settings and run `pnpm verify:connection` from this

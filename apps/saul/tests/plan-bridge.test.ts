@@ -20,9 +20,7 @@ function harness() {
         },
       },
       connectNative,
-      sendMessage: vi.fn().mockResolvedValue(undefined),
     },
-    tabs: { create: vi.fn().mockResolvedValue({}) },
   });
   initPlanBridge();
   function connect(url: string, tab = false) {
@@ -58,7 +56,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
-it('rejects page callers and limits the offscreen runner to generation and shared history', () => {
+it('rejects page callers and lets the offscreen runner request only shared history', () => {
   vi.useFakeTimers();
   const h = harness();
   expect(h.connect('https://example.test', true).port.disconnect).toHaveBeenCalled();
@@ -66,77 +64,39 @@ it('rejects page callers and limits the offscreen runner to generation and share
     h.connect('chrome-extension://extension/content.js', true).port.disconnect,
   ).toHaveBeenCalled();
   const runner = h.connect('chrome-extension://extension/offscreen.html');
-  runner.receive({ action: 'login' });
+  runner.receive({ action: 'config-read', section: 'settings' });
   expect(runner.port.postMessage).toHaveBeenCalledWith({
     type: 'error',
-    message: 'Runner may only generate text.',
+    message: 'Runner may only request history.',
   });
   expect(h.connectNative).not.toHaveBeenCalled();
 });
-it('does not proxy caller-supplied endpoints and cancels generation on caller loss', () => {
+it('never forwards retired credential operations, even if an old helper is installed', () => {
+  vi.useFakeTimers();
+  const h = harness();
+  for (const path of ['popup.html', 'offscreen.html']) {
+    for (const action of ['accounts', 'login', 'logout', 'models', 'generate']) {
+      const client = h.connect(`chrome-extension://extension/${path}`);
+      client.receive({ action, accountId: 'legacy' });
+      expect(client.port.postMessage).toHaveBeenCalledWith({
+        type: 'error',
+        message: expect.stringContaining('Standalone ChatGPT sign-in has retired'),
+      });
+    }
+  }
+  expect(h.connectNative).not.toHaveBeenCalled();
+});
+it('cancels a storage request after caller disconnection and ignores late results', () => {
   vi.useFakeTimers();
   const h = harness();
   const ui = h.connect('chrome-extension://extension/library.html');
-  ui.receive({ action: 'models', accountId: 'account', url: 'https://evil.test' });
-  expect(h.connectNative).not.toHaveBeenCalled();
-  const runner = h.connect('chrome-extension://extension/offscreen.html');
-  runner.receive({
-    action: 'generate',
-    accountId: 'account',
-    model: 'model',
-    effort: 'high',
-    fast: true,
-    systemPrompt: 'system',
-    userPrompt: 'user',
-  });
-  const id = h.native.postMessage.mock.calls[0]![0].id;
-  expect(h.native.postMessage.mock.calls[0]![0].request).toMatchObject({
-    effort: 'high',
-    fast: true,
-  });
-  runner.disconnect();
-  expect(h.native.postMessage).toHaveBeenLastCalledWith({ id, cancel: true });
-});
-it('keeps OAuth running after popup closure and rejects non-OpenAI authorization destinations', () => {
-  vi.useFakeTimers();
-  const h = harness();
-  const ui = h.connect('chrome-extension://extension/popup.html');
-  ui.receive({ action: 'login' });
-  const id = h.native.postMessage.mock.calls[0]![0].id;
+  ui.receive({ action: 'config-read', section: 'settings' });
+  const packet = h.native.postMessage.mock.calls[0]![0];
+  expect(packet.request).toEqual({ action: 'config-read', section: 'settings' });
   ui.disconnect();
-  expect(h.native.postMessage).toHaveBeenCalledTimes(1);
-  h.emit({ id, event: { type: 'authorize', url: 'https://evil.test/sign-in' } });
-  expect(chrome.tabs.create).not.toHaveBeenCalled();
-  expect(h.native.postMessage).toHaveBeenLastCalledWith({ id, cancel: true });
-});
-it('notifies reopened Settings after sign-in completes without sharing credentials', () => {
-  vi.useFakeTimers();
-  const h = harness();
-  const ui = h.connect('chrome-extension://extension/popup.html');
-  ui.receive({ action: 'login' });
-  const id = h.native.postMessage.mock.calls[0]![0].id;
-  ui.disconnect();
-  h.emit({
-    id,
-    event: {
-      type: 'result',
-      account: { id: 'oaiapp_one', label: 'Account', signedIn: true, planEnabled: true },
-    },
-  });
-  expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
-    target: 'saul-plan-accounts',
-    accountId: 'oaiapp_one',
-  });
-});
-
-it('rejects the removed OAuth speech operation for every caller', () => {
-  vi.useFakeTimers();
-  const h = harness();
-  const request = { action: 'speech', accountId: 'fixture', input: 'Hello.', voice: 'coral' };
-  h.connect('chrome-extension://extension/offscreen.html').receive(request);
-  expect(h.connectNative).not.toHaveBeenCalled();
-  h.connect('chrome-extension://extension/library.html').receive(request);
-  expect(h.connectNative).not.toHaveBeenCalled();
+  expect(h.native.postMessage).toHaveBeenLastCalledWith({ id: packet.id, cancel: true });
+  h.emit({ id: packet.id, event: { type: 'result', config: { revision: 0, value: {} } } });
+  expect(ui.port.postMessage).not.toHaveBeenCalled();
 });
 
 it('allows trusted history operations and rejects invalid migration identities', () => {
@@ -166,7 +126,7 @@ it('settles a timed-out request even when its native connection cannot receive c
   vi.useFakeTimers();
   const h = harness();
   const ui = h.connect('chrome-extension://extension/library.html');
-  ui.receive({ action: 'models', accountId: 'account' });
+  ui.receive({ action: 'config-read', section: 'settings' });
   const id = h.native.postMessage.mock.calls[0]![0].id;
   h.native.postMessage.mockImplementationOnce(() => {
     throw new Error('Attempting to use a disconnected port');
@@ -174,8 +134,8 @@ it('settles a timed-out request even when its native connection cannot receive c
   vi.advanceTimersByTime(190_000);
   expect(ui.port.postMessage).toHaveBeenCalledExactlyOnceWith({
     type: 'error',
-    message: 'ChatGPT request timed out.',
+    message: 'Saul storage request timed out.',
   });
-  h.emit({ id, event: { type: 'result', models: [] } });
+  h.emit({ id, event: { type: 'result', config: { revision: 0, value: {} } } });
   expect(ui.port.postMessage).toHaveBeenCalledTimes(1);
 });

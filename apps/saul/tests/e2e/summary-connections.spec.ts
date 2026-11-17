@@ -97,7 +97,7 @@ async function generations(worker: Worker) {
   );
 }
 
-test('built-in summary adopts the shared binding despite duplicate registrations and remembers it after browser restart', async ({
+test('built-in summary requires a shared choice after a legacy binding and remembers it after browser restart', async ({
   sandbox,
   fixtureServer,
 }) => {
@@ -109,6 +109,12 @@ test('built-in summary adopts the shared binding despite duplicate registrations
   let source = await browser.context.newPage();
   await source.goto(fixtureServer.origin + '/article#first');
   let reader = await openDigestReader(browser.context, browser.popup, browser.worker, source.url());
+  await expect(reader.getByRole('alert')).toContainText('Choose a shared connection');
+  expect(await generations(browser.worker)).toEqual([]);
+  await reader
+    .getByRole('combobox', { name: 'ChatGPT plan connection', exact: true })
+    .selectOption('gpt-plan');
+  await reader.getByRole('button', { name: 'Start summary', exact: true }).click();
   await expect(reader.getByRole('status')).toHaveText('Summary ready');
   expect(await generations(browser.worker)).toMatchObject([{ accountId: 'bound' }]);
   expect(

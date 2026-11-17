@@ -10,6 +10,7 @@ import {
 } from './shared-presets-contract.mts';
 import { validatePlanRequest, type PlanRequest } from './plan-protocol.mts';
 
+export const CREDENTIALS_VERSION = 2;
 export const CREDENTIALS_HOST = 'com.saul.credentials';
 export const CREDENTIALS_PORT = 'saul-credentials';
 export function officialOpenAI(baseUrl: string): boolean {
@@ -27,10 +28,9 @@ export type CredentialRequest =
   | { action: 'connection-catalog'; connectionKey: string; force?: boolean }
   | { action: 'connection-key-save'; connectionKey: string; endpoint: string; key: string }
   | { action: 'connection-key-remove'; connectionKey: string; endpoint: string }
-  | { action: 'status' | 'api-key-status' | 'api-key-remove' | 'migration-verified' }
+  | { action: 'status' | 'api-key-status' | 'api-key-remove' }
   | { action: 'select'; accountId: string }
   | { action: 'api-key-save'; key: string }
-  | { action: 'api-key-import'; key: string; selectedAccountId?: string }
   | {
       action: 'api-chat';
       connectionKey?: string;
@@ -77,7 +77,6 @@ export function validateCredentialRequest(value: unknown): asserts value is Cred
     'api-key-status': [],
     'api-key-remove': [],
     'api-key-save': ['key'],
-    'api-key-import': ['key', 'selectedAccountId'],
     'connection-status': ['connectionKey'],
     'connection-catalog': ['connectionKey', 'force'],
     'connection-key-save': ['connectionKey', 'endpoint', 'key'],
@@ -93,7 +92,6 @@ export function validateCredentialRequest(value: unknown): asserts value is Cred
     ],
     'api-realtime': ['model', 'voice', 'connectionKey'],
     'api-image': ['prompt', 'model', 'size', 'quality', 'outputFormat', 'connectionKey'],
-    'migration-verified': [],
   };
   const fields = operations[value.action];
   if (!fields || Object.keys(value).some((key) => key !== 'action' && !fields.includes(key)))
@@ -125,12 +123,8 @@ export function validateCredentialRequest(value: unknown): asserts value is Cred
     throw new Error('Choose a supported Draw model and image options. GIF requires GPT Image 2.6.');
   if (value.action === 'select' && !text(value.accountId, 256))
     throw new Error('Choose a Saul account.');
-  if (value.action === 'api-key-save' || value.action === 'api-key-import') {
-    if (
-      !text(value.key, 512) ||
-      !/^[!-~]+$/.test(value.key) ||
-      (value.selectedAccountId !== undefined && !text(value.selectedAccountId, 256))
-    )
+  if (value.action === 'api-key-save') {
+    if (!text(value.key, 512) || !/^[!-~]+$/.test(value.key))
       throw new Error('Enter a valid OpenAI API key without spaces.');
   }
   if (
@@ -175,7 +169,6 @@ export function validateCredentialEvent(value: unknown): asserts value is Creden
             'apiConnected',
             'models',
             'warning',
-            'retired',
             'clientSecret',
             'imageBase64',
             'connection',
@@ -236,7 +229,6 @@ export function validateCredentialEvent(value: unknown): asserts value is Creden
           !value.models.every(model))) ||
       (value.selectedAccountId !== undefined && !text(value.selectedAccountId, 256)) ||
       (value.apiConnected !== undefined && typeof value.apiConnected !== 'boolean') ||
-      (value.retired !== undefined && typeof value.retired !== 'boolean') ||
       (value.warning !== undefined && !text(value.warning, 4000)) ||
       (value.clientSecret !== undefined &&
         (!text(value.clientSecret, 4096) || !/^[A-Za-z0-9_-]+$/.test(value.clientSecret)))

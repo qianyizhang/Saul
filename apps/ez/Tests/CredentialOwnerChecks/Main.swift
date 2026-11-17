@@ -39,45 +39,25 @@ private func denied(_ operation: () throws -> Void) throws {
         try original.write(to: legacy)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: legacy.path)
         let records = Records()
-        let storage = SharedAuthStorage(records: records, directory: root, legacy: legacy, retireEZ: {})
-        records.denyWrite = true
-        do {
-            _ = try await storage.read()
-            throw Failure.check("Denied import succeeded")
-        } catch is CredentialStorageError {}
-        try expect(try Data(contentsOf: legacy) == original, "Denied import changed its source")
-        records.denyWrite = false
+        let storage = SharedAuthStorage(records: records, directory: root)
+        let empty = try await storage.read()
+        try expect(empty.profiles.isEmpty, "A legacy sign-in was imported")
+        try expect(records.values[.chatGPT] == nil, "Reading absent shared state wrote Keychain")
+        let shared = Data(
+            #"{"hostID":"fixture-host","selectedID":"saul-existing","profiles":[{"clientID":"saul-existing","subject":"subject","credentials":{"accessToken":"fixture-access","refreshToken":"fixture-refresh","idToken":"fixture-id","expiresAt":3000000000,"scopes":["chatgpt.tokens.use.direct"]}}]}"#
+                .utf8)
+        records.values[.chatGPT] = shared
         let state = try await storage.read()
         try expect(
-            state.hostID == "fixture-host" && state.profiles.first?.id == "saul-original",
-            "Registration changed")
-        try expect(
-            state.profiles.first?.credentials?.refreshToken == "fixture-refresh", "Refresh token changed")
-        try expect(try !storage.verifyMigration(for: .saul), "One client retired the source")
-        try expect(
-            FileManager.default.fileExists(atPath: legacy.path), "Source retired before both clients verified"
-        )
+            state.hostID == "fixture-host" && state.selectedID == "saul-existing",
+            "Existing shared registration changed")
         records.denyRead = true
-        try denied { _ = try storage.verifyMigration(for: .ez) }
+        do {
+            _ = try await storage.read()
+            throw Failure.check("A denied shared read was not reported")
+        } catch is CredentialStorageError {}
         records.denyRead = false
-        try expect(FileManager.default.fileExists(atPath: legacy.path), "Denied verification retired source")
-        let failingCleanup = SharedAuthStorage(
-            records: records, directory: root, legacy: legacy,
-            retireEZ: { throw CredentialStorageError("Synthetic legacy denial") })
-        try denied { _ = try failingCleanup.verifyMigration(for: .ez) }
-        try expect(FileManager.default.fileExists(atPath: legacy.path), "Denied cleanup removed Saul source")
-        try expect(try storage.verifyMigration(for: .ez), "Retry did not complete cleanup")
-        try expect(!FileManager.default.fileExists(atPath: legacy.path), "Verified source was not retired")
-        try expect(try storage.verifyMigration(for: .saul), "Completed migration was not idempotent")
-        records.denyWrite = true
-        try denied { try storage.importKey("fixture-original-key") }
-        records.denyWrite = false
-        try storage.importKey("fixture-original-key")
-        try storage.importKey("fixture-stale-key")
-        try expect(try storage.apiKey() == "fixture-original-key", "Repeated adoption replaced shared key")
         try storage.saveKey(nil)
-        try storage.importKey("fixture-stale-key")
-        try denied { _ = try storage.apiKey() }
         try expect(records.values[.chatGPT] != nil, "Key removal removed ChatGPT")
         try storage.saveKey("fixture-new-key")
         records.denyWrite = true
@@ -85,7 +65,7 @@ private func denied(_ operation: () throws -> Void) throws {
         records.denyWrite = false
         try expect(try storage.apiKey() == "fixture-new-key", "Denied replacement changed key")
         var replies: [[String: Any]] = []
-        let owner = CredentialOwner(storage: storage, caller: .saul) { replies.append($0) }
+        let owner = CredentialOwner(storage: storage) { replies.append($0) }
         let frame = try JSONSerialization.data(withJSONObject: [
             "version": 1, "id": "test", "request": ["action": "status"],
         ])
@@ -114,22 +94,30 @@ private func denied(_ operation: () throws -> Void) throws {
         try expect(
             CredentialOwner.planContent(["userPrompt": "Text"]) as? String == "Text",
             "Text-only input changed")
-        // Changed legacy input remains available for a deliberate clean-slate decision.
-        let changedRoot = root.appendingPathComponent("changed")
-        try FileManager.default.createDirectory(
-            at: changedRoot, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-        let changedLegacy = changedRoot.appendingPathComponent("accounts.json")
-        try original.write(to: changedLegacy)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: changedLegacy.path)
-        let changed = SharedAuthStorage(
-            records: Records(), directory: changedRoot, legacy: changedLegacy, retireEZ: {})
-        _ = try await changed.read()
-        _ = try changed.verifyMigration(for: .saul)
-        try Data((String(decoding: original, as: UTF8.self) + " ").utf8).write(to: changedLegacy)
-        try denied { _ = try changed.verifyMigration(for: .ez) }
-        try expect(FileManager.default.fileExists(atPath: changedLegacy.path), "Changed source was deleted")
+        let receipt = root.appendingPathComponent("migration.json")
+        let originalReceipt = Data(
+            #"{"version":1,"apiMigrated":true,"clients":["saul","ez"],"pausedAccounts":["saul-existing"],"completed":true}"#
+                .utf8)
+        try originalReceipt.write(to: receipt)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: receipt.path)
+        let generate = try JSONSerialization.data(withJSONObject: [
+            "version": 2, "id": "paused",
+            "request": [
+                "action": "generate", "accountId": "saul-existing", "model": "fixture-model",
+                "systemPrompt": "", "userPrompt": "Fixture notice",
+            ],
+        ])
+        do {
+            try await owner.run(CredentialRequest.decode(generate, caller: .saul))
+            throw Failure.check("An existing account pause was lost")
+        } catch let error as CredentialStorageError {
+            try expect(error.localizedDescription.contains("paused"), "Expected preserved pause")
+        }
+        try expect(try Data(contentsOf: receipt) == originalReceipt, "Pause check rewrote receipt")
+        try expect(try Data(contentsOf: legacy) == original, "Legacy credentials changed")
+        try expect(records.values[.chatGPT] == shared, "Unexpected Keychain credential mutation")
         print(
-            "Credential owner checks passed: denied import/save/read/retirement, exact registration, two-client verification, retry, no key resurrection and secret-free status."
+            "Credential owner checks passed: Keychain-only state, retained legacy source and pause, denied reads/writes, and secret-free status."
         )
     }
 }

@@ -16,7 +16,6 @@ export function SharedCredentialSettings({
 }) {
   const { minimum } = useMinimumMode();
   const [connected, setConnected] = useState<boolean | undefined>();
-  const [retired, setRetired] = useState<boolean | undefined>();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -29,7 +28,6 @@ export function SharedCredentialSettings({
           throw new Error('Saul returned an invalid key status.');
         if (active) {
           setConnected(result.apiConnected);
-          setRetired(typeof result.retired === 'boolean' ? result.retired : undefined);
           setError('');
         }
       })
@@ -55,20 +53,6 @@ export function SharedCredentialSettings({
       setError('');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Cannot remove the shared API key.');
-    } finally {
-      setBusy(false);
-    }
-  };
-  const cleanup = async () => {
-    setBusy(true);
-    try {
-      const result = await credentialCall({ action: 'migration-verified' });
-      if (typeof result.retired !== 'boolean')
-        throw new Error('Saul returned an invalid cleanup status.');
-      setRetired(result.retired);
-      setError(result.retired ? '' : 'Connect EZ to Saul before retiring the old records.');
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Old credential cleanup is incomplete.');
     } finally {
       setBusy(false);
     }
@@ -122,19 +106,6 @@ export function SharedCredentialSettings({
         <p className="notice error" role="alert">
           {error}
         </p>
-      )}
-      {owner === 'saul' && retired === false && (
-        <div className="row">
-          <span>Connected · old credential cleanup pending</span>
-          <button
-            type="button"
-            className="btn"
-            disabled={disabled || busy}
-            onClick={() => void cleanup()}
-          >
-            Retry cleanup
-          </button>
-        </div>
       )}
     </div>
   );

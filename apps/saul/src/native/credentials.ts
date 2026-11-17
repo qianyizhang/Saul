@@ -1,5 +1,6 @@
 import {
   CREDENTIALS_HOST,
+  CREDENTIALS_VERSION,
   CREDENTIALS_PORT,
   validateCredentialEvent,
   validateCredentialRequest,
@@ -127,7 +128,7 @@ export async function nativeCredentialCall(
       }
     });
     try {
-      port.postMessage({ version: 1, id, request });
+      port.postMessage({ version: CREDENTIALS_VERSION, id, request });
     } catch (error) {
       finish(error instanceof Error ? error : new Error('Cannot connect to Saul credentials.'));
     }
@@ -175,7 +176,7 @@ export function initCredentialBridge() {
           message.cancel === true
         ) {
           try {
-            native?.postMessage({ version: 1, id, cancel: true });
+            native?.postMessage({ version: CREDENTIALS_VERSION, id, cancel: true });
           } catch {
             /* Disconnected. */
           }
@@ -224,8 +225,6 @@ export function initCredentialBridge() {
                 .create({ url: event.url })
                 .catch(() => finish({ type: 'error', message: 'Could not open Saul sign-in.' }));
             } else if (['result', 'complete', 'error'].includes(event.type)) {
-              if (event.type === 'result' && ['login', 'logout'].includes(message.action))
-                void chrome.runtime.sendMessage({ type: 'saul-plan-accounts' }).catch(() => {});
               finish(event);
             } else port.postMessage(event);
           } catch {
@@ -243,7 +242,7 @@ export function initCredentialBridge() {
         timer = setTimeout(
           () => {
             try {
-              native?.postMessage({ version: 1, id, cancel: true });
+              native?.postMessage({ version: CREDENTIALS_VERSION, id, cancel: true });
             } catch {
               /* Disconnected. */
             }
@@ -254,7 +253,7 @@ export function initCredentialBridge() {
           },
           login ? 320_000 : 190_000,
         );
-        native.postMessage({ version: 1, id, request: message });
+        native.postMessage({ version: CREDENTIALS_VERSION, id, request: message });
       } catch (error) {
         finish({
           type: 'error',

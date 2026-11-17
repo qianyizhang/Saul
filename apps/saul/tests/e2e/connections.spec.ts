@@ -74,13 +74,16 @@ test('managed connections preserve setup after failure and report removed models
       } else throw new Error('Unexpected settings operation');
       return { id: message.id, event: { type: 'result', ...result } };
     }) as typeof chrome.runtime.sendNativeMessage;
-    chrome.runtime.connectNative = (() => {
+    const original = chrome.runtime.connectNative.bind(chrome.runtime);
+    chrome.runtime.connectNative = ((host: string) => {
+      if (host !== 'com.saul.credentials') return original(host);
       const listeners: ((packet: { id: string; event: CredentialEvent }) => void)[] = [];
       return {
         onMessage: { addListener: (fn: (typeof listeners)[number]) => listeners.push(fn) },
         onDisconnect: { addListener: () => {} },
         disconnect: () => {},
-        postMessage: (message: { id: string; request: CredentialRequest }) => {
+        postMessage: (message: { version: number; id: string; request: CredentialRequest }) => {
+          if (message.version !== 2) throw new Error('Expected signed credential protocol v2');
           state.requests.push(message.request);
           queueMicrotask(() => {
             const r = message.request;
@@ -297,10 +300,7 @@ test('managed connections preserve setup after failure and report removed models
     async () =>
       (await chrome.storage.local.get('saul_user_settings')).saul_user_settings as Configuration,
   );
-  expect(savedAfterConnection.openaiCompatible).toEqual({
-    ...savedBeforeInspection.openaiCompatible,
-    credentialOwner: 'saul', // The unchanged credential owner marks official routes on commit.
-  });
+  expect(savedAfterConnection.openaiCompatible).toEqual(savedBeforeInspection.openaiCompatible);
   expect(savedAfterConnection.activeProvider).toBe(savedBeforeInspection.activeProvider);
   await popup
     .getByLabel('Preset', { exact: true })

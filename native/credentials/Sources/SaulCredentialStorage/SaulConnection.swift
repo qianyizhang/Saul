@@ -62,7 +62,10 @@ public struct SaulAccount: Codable, Equatable, Sendable, Identifiable {
     onEvent: (@MainActor ([String: Any]) throws -> Void)? = nil
   ) async throws -> [String: Any] {
     let id = UUID().uuidString
-    let frame = try NativeFrames.encode(["version": 1, "id": id, "request": request])
+    // Older owners reject version 2 before any operation can load an old sign-in.
+    let frame = try NativeFrames.encode([
+      "version": CredentialRequest.version, "id": id, "request": request,
+    ])
     let replies = try transport(frame)
     let seconds: Int64 =
       request["action"] as? String == "login"

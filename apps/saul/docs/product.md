@@ -96,8 +96,8 @@ keeps the draft. Edits already present in saved settings need no second save.
 when dirty. The [shared transaction contract](../../../contracts/configuration.md#unified-configuration-scopes)
 owns revision and atomic-save guarantees.
 
-- Named actions pair editable prompts with a default model preset. Explain, Lookup, and Nudge are editable starters. A preset binds a connection, capability, model, and supported options. ChatGPT plan presets use their connection’s bound account when present, including in standalone mode. In standalone mode, a preset without a bound account uses the locally selected account.
-- Inspecting a preset does not change the standalone account or the saved provider/profile defaults, including when another edit is saved. Standalone Original summary continues to use the saved local account.
+- Named actions pair editable prompts with a default model preset. Explain, Lookup, and Nudge are editable starters. A preset binds a connection, capability, model, and supported options. ChatGPT plan presets require their connection's explicitly bound shared account.
+- Inspecting a preset does not change its account or the saved provider/profile defaults, including when another edit is saved.
 - New installations start with explicit Actions and Presets. Choosing another action for the same passage creates a new attempt; retry keeps the original request choices even after Settings changes.
 - Templates substitute `{{text}}`, `{{context}}`, `{{page title}}`, `{{page url}}`, `{{heading}}`, and `{{paragraph}}` once. `{{text}}` is required; unavailable referenced context blocks submission. Enabled context is included once, and template expressions are unsupported.
 - OpenAI-compatible profiles keep separate endpoint, model, temperature, and key values.
@@ -111,7 +111,7 @@ owns revision and atomic-save guarantees.
 - Model setup appears first. Save and validation feedback stay visible while scrolling; leaving a changed draft asks before discarding it.
 - Response language and context controls apply to new submissions.
 - Chrome on-device AI is retired. Saved selections remain readable and prompt an explicit switch to ChatGPT plan or OpenAI compatible. New local requests are blocked; Saul does not switch providers automatically.
-- [ChatGPT plan](chatgpt-plan.md) uses the same sign-in flow and control labels as EZ, with shared saved sign-ins when connected to the macOS Saul credential owner; standalone browser installations retain local sign-ins. Its account catalog supplies model names, reasoning effort, and Fast/Standard choices. Saved unavailable choices block requests rather than changing silently. It requires the local helper, omits unsupported temperature and output-token options, and never switches billing providers after a failure.
+- [ChatGPT plan](chatgpt-plan.md) uses the signed macOS Saul owner for sign-in and inference, with the same controls as EZ. Its account catalog supplies model names, reasoning effort, and Fast/Standard choices. Unavailable choices block the request. Plan requests omit unsupported temperature and output-token options and never switch billing providers after a failure.
 
 Local tests cover the provider boundary with deterministic fixtures. They do not establish external-provider authentication, model quality, or device performance.
 

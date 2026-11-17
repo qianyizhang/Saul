@@ -90,7 +90,7 @@ public struct VerifiedCredentialRecords: Sendable {
     try records.write(data, to: record)
     guard try records.read(record) == data else {
       throw CredentialStorageError(
-        "Saul could not verify its Keychain write. Migration sources were not retired; retry or sign in again."
+        "Saul could not verify its Keychain write. Retry or sign in again."
       )
     }
   }

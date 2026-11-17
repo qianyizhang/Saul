@@ -25,7 +25,9 @@ function managed(): Configuration {
   };
 }
 it('uses the bound connection despite duplicate registrations and another globally selected account', () => {
-  expect(summaryConnections(managed(), accounts)).toMatchObject({
+  expect(
+    summaryConnections({ ...managed(), summaryConnectionKey: 'gpt-plan' }, accounts),
+  ).toMatchObject({
     chosen: 'gpt-plan',
     choices: [{ key: 'gpt-plan', accountId: 'bound', available: true }],
   });
@@ -80,7 +82,7 @@ it('rejects stale account bindings and credential route changes at new-run admis
   expect(() => validateSummaryConnection(settings, 'duplicate', 'gpt-plan')).toThrow('changed');
   expect(() => validateSummaryConnection(settings, 'bound')).toThrow('changed');
   expect(() => validateSummaryConnection(DEFAULT_CONFIGURATION, 'bound', 'gpt-plan')).toThrow(
-    'route changed',
+    'Connect this app',
   );
   expect(() =>
     validateSummaryConnection(
@@ -108,15 +110,27 @@ it('rejects stale account bindings and credential route changes at new-run admis
     }),
   ).toThrow();
 });
-it('retains standalone local account selection and does not borrow another account when signed out', () => {
+it('preserves a legacy account choice but never admits it for a Summary', () => {
   expect(summaryConnections(DEFAULT_CONFIGURATION, accounts).chosen).toBe('');
   const settings = {
     ...structuredClone(DEFAULT_CONFIGURATION),
     chatgptPlan: { accountId: 'bound', model: '' },
   };
-  expect(summaryConnections(settings, accounts).chosen).toBe('bound');
+  expect(summaryConnections(settings, accounts).chosen).toBe('');
   expect(summaryConnections(settings, accounts.slice(1)).chosen).toBe('');
-  expect(() => validateSummaryConnection(settings, 'bound')).not.toThrow();
+  expect(() => validateSummaryConnection(settings, 'bound')).toThrow(/Connect/);
+});
+
+it('requires an explicit shared choice before replacing a legacy Summary account', () => {
+  const settings = { ...managed(), chatgptPlan: { accountId: 'retired-local', model: '' } };
+  const before = summaryConnections(settings, accounts);
+  expect(before.choices).toContainEqual(
+    expect.objectContaining({ key: 'gpt-plan', available: true }),
+  );
+  expect(before.chosen).toBe('');
+  expect(
+    summaryConnections({ ...settings, summaryConnectionKey: 'gpt-plan' }, accounts).chosen,
+  ).toBe('gpt-plan');
 });
 
 it('validates the saved binding when retrying the original Summary route', async () => {

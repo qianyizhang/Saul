@@ -22,7 +22,7 @@ Start with [Connections and actions](docs/surfaces.md#connections-and-actions),
 then use **⌘ Return** to Run. Write supports ChatGPT plan or an explicit API
 preset; Draw and web search use separately billed API access. No Codex installation
 is needed. The [credential contract](../../contracts/credentials.md) owns sign-in,
-shared credentials and migration.
+shared credentials and retirement of older sign-in routes.
 
 ### Query from Raycast
 

@@ -64,12 +64,6 @@ URL. Run `pnpm exec playwright test tests/e2e/pdf-summary.spec.ts -g Herzlinger`
 Expect 49 pages and exact extracted input in the fixture; neither mode proves
 live cookie-authenticated access.
 
-For one deliberate live plan request, run
-`node --use-env-proxy scripts/probe-pdf-summary.mts PUBLIC_PDF_URL`. It uses one
-eligible existing account, GPT-6 Luna and medium effort. It spends plan allowance,
-sends only a URL, prints no credentials or account ID, does not retry/fall back,
-and does not exercise the installed extension.
-
 ## Test layers
 
 | Layer          | Scope                                                                                                                                   |
@@ -106,7 +100,8 @@ pnpm exec playwright show-trace ../../.artifacts/saul/e2e/latest/results/<case>/
 
 | Symptom                                             | Check first                                                                                                                                                                  |
 | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Shared history unavailable                          | Check `native/history.mts` and the ChatGPT/history helper; persistence errors must reach callers without a separate local store.                                             |
+| Shared history unavailable                          | Check `native/history.mts` and the history/configuration helper; persistence errors must reach callers without a separate local store.                                       |
+| ChatGPT connection unavailable                      | Verify the installed [signed owner and client compatibility](../../../contracts/credentials.md#retirement-and-removal). The history helper cannot sign in.                   |
 | Receiving end missing on cold start                 | `src/storage/client.ts` must lock the offscreen existence check and creation together.                                                                                       |
 | Background save gets no response                    | Popup/content route through background; background targets offscreen directly.                                                                                               |
 | Extension context invalidated after reload          | Page UI must check WXT context validity and dispose listeners/timers without calling a dead port.                                                                            |
@@ -141,20 +136,21 @@ Linux CI skips the board journey “shared window labels load initially and dupl
 
 The default browser suite uses deterministic local fixtures. It does not verify live provider credentials/output, personal native-host registration, or other browsers. Benchmark reproduction and scope are documented in [benchmarks](benchmarks/README.md).
 
-The retired on-device path has one compatibility regression: retain old
-choices, block execution, and permit explicit replacement. Plan unit tests mock
-OAuth/models but use a real callback and disposable install; socket tests need
-local binding. See the [browser skill](../../../.agents/skills/saul-browser-testing/SKILL.md).
+The retired on-device and standalone ChatGPT paths keep saved work readable
+and block execution until the user chooses a supported route. Browser fixtures
+exercise plan request handling; the
+[native credential checks](../../ez/docs/verification.md#repeatable-offline-gate)
+cover the signed owner's storage and protocol. Socket tests require local
+binding. See the [browser skill](../../../.agents/skills/saul-browser-testing/SKILL.md).
 
 ## Explicit live digest check
 
-After installing the ChatGPT helper, opt in to a real three-public-tab run:
-
-```sh
-SAUL_LIVE_CHATGPT_HOST="$HOME/.saul/bin/saul-chatgpt-host" pnpm exec playwright test tests/e2e/digest-live.spec.ts
-```
-
-This consumes ChatGPT plan quota using the helper’s existing saved sign-in. The normal suite skips it. It uses the standard disposable browser harness, registers the installed host only inside that temporary profile, opens three public articles, invokes the trusted full-reader action for those tabs, verifies generation and English–Chinese export, and reopens saved results. No native transport or model output is mocked, and no personal browser profile or credential copy is used. Artifacts include the exported HTML, screenshots, and a result record with the local account identifier redacted. This proves the built bundle and installed helper together; it does not operate the user’s personal Chrome window.
+For a deliberate live plan check, use a verified installed Chrome client and
+signed owner. Sign in or select an existing shared registration in Connections,
+bind a plan preset, and run **Summarize** on public pages. Verify completion,
+reopen the saved result and check English–Chinese HTML export. This uses plan
+allowance. Record sign-in, model discovery and inference separately; the
+disposable automated suite does not establish this result.
 
 ## TypeScript and delivered helper checks
 
@@ -181,14 +177,6 @@ conflicts, delete/restore, cancellation, scoped batch failures and exact
 request inspection. Check keyboard picking/Escape/focus and narrow/wide
 light/dark editor states. The test-only service-worker bridge ships only in
 disposable builds.
-
-## Optional OAuth capability probe
-
-From `apps/saul` run `node --use-env-proxy scripts/probe-capabilities.mts` only
-for deliberate live route checks. It takes exactly one plan-enabled saved
-account, reuses its locked refresh owner and stops if the Responses control
-fails. It never prints credentials or reads browsing history. Sanitized results
-and any returned media go to `.artifacts/saul/capability-probe/`.
 
 ## Dated evidence
 

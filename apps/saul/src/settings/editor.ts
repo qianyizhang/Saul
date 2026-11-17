@@ -40,27 +40,12 @@ export function createSettingsEditor(
       form.values.configuration.presets.find((p) => p.id === form.presetId),
     );
     const inspection = inspectDraftPreset(form);
-    // Model options follow the inspected preset across sections; account editing
-    // still targets the standalone account, never a bound preset's account.
-    const planConnection = {
-      ...(configuration.chatgptPlan ?? { accountId: '', model: '' }),
-      ...(selectedPreset?.provider === 'chatgpt-plan'
-        ? { model: selectedPreset.model, effort: selectedPreset.effort, fast: selectedPreset.fast }
-        : {}),
-    };
     return {
       phase,
       operation,
       configuration,
       selectedPreset,
       inspection,
-      planEditor: {
-        connection: planConnection,
-        preset:
-          selectedPreset?.provider === 'chatgpt-plan'
-            ? { ...planConnection, accountId: inspection.plan?.accountId ?? '' }
-            : { ...planConnection },
-      },
       selectedPresetId: form.presetId,
       selectedRecipeId: form.recipeId,
       loaded: phase === 'editing',

@@ -96,7 +96,6 @@ it('shares edits, migrates once, keeps accounts outside presets, and refuses a s
     let stored = source;
     const owner = createConfigurationStore(
       {
-        readBackup: async () => undefined,
         read: async () => structuredClone(stored),
         write: async (values) => {
           stored = structuredClone(values[SETTINGS_STORAGE_KEY]) as typeof source;

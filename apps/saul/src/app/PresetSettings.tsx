@@ -3,8 +3,6 @@ import { catalogIssue } from '../../native/connections-contract.mts';
 import type { ModelPreset, Configuration } from '../configuration/definition';
 import type { SettingsEdit } from '../settings/draft';
 import { useConnectionCatalog } from './useConnectionCatalog';
-import type { PlanSettingsState } from './usePlanSettings';
-import { ChatGPTPlanSettings } from './ChatGPTPlanSettings';
 import { CHROME_AI_RETIRED_MESSAGE } from '../providers/retired-provider';
 import {
   DrawPresetFields,
@@ -34,12 +32,10 @@ export function PresetSettings({
   selectedPreset,
   settings,
   remote,
-  plan,
   visible,
   saved,
   locked,
   testing,
-  planBusy,
   edit,
   search,
   clearTest,
@@ -55,12 +51,10 @@ export function PresetSettings({
     'connections' | 'profiles' | 'connectionProfiles' | 'sharedCredentials'
   >;
   remote: Configuration['openaiCompatible'];
-  plan: PlanSettingsState;
   visible: boolean;
   saved: boolean;
   locked: boolean;
   testing: boolean;
-  planBusy: boolean;
   edit: (edit: PresetEdit) => void;
   search: { value: string; change: (value: string) => void };
   clearTest: () => void;
@@ -73,7 +67,9 @@ export function PresetSettings({
     (p) => p.key === selectedPreset?.connectionKey,
   );
   const localConnection =
-    settings.sharedCredentials === undefined && selectedPreset?.provider === 'openai-compatible'
+    selectedPreset?.provider === 'openai-compatible' &&
+    (settings.sharedCredentials === undefined ||
+      (settings.sharedCredentials === 'disconnected' && !selectedConnection))
       ? (settings.profiles?.find(
           (p) =>
             p.id ===
@@ -299,7 +295,7 @@ export function PresetSettings({
                   locked={locked}
                   visible={visible}
                   saved={saved}
-                  previewDisabled={testing || planBusy || !!selectedModelIssue}
+                  previewDisabled={testing || !!selectedModelIssue}
                   onBusyChange={onSpeechBusy}
                 />
               ) : selectedPreset.provider === 'chatgpt-plan' &&
@@ -310,13 +306,9 @@ export function PresetSettings({
                   editPreset={editPreset}
                 />
               ) : selectedPreset.provider === 'chatgpt-plan' ? (
-                <ChatGPTPlanSettings
-                  plan={plan}
-                  mode="preset"
-                  visible={visible}
-                  disabled={testing}
-                  test={() => test('generation')}
-                />
+                <p className="notice">
+                  Connect to Saul in Preferences → Integrations to use ChatGPT.
+                </p>
               ) : selectedPreset.provider === 'chrome-ai' ? (
                 <p className="notice">{CHROME_AI_RETIRED_MESSAGE}</p>
               ) : (

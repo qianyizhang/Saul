@@ -70,11 +70,22 @@ it('retains the original Connection when the Provider is rebound to another prof
   expect(() => prepareFrozenPreset(value, input)).toThrow('saved connection');
 });
 
+it('keeps an explicit local API profile usable without falling back from a linked connection', () => {
+  const value = settings();
+  value.sharedCredentials = 'disconnected';
+  const preset = { ...value.configuration!.presets[0]!, connectionKey: undefined };
+  expect(preparePreset(value, preset).credential).toBe('fixture-key');
+  const linked = { ...preset, connectionKey: 'openai-api' };
+  value.connectionProfiles = { 'openai-api': 'original' };
+  expect(() => preparePreset(value, linked)).toThrow('Integrations');
+});
+
 it('freezes the plan owner and blocks a changed route again immediately before transport', async () => {
   const value = settings();
   value.chatgptPlan = { accountId: 'account', model: 'fixture' };
   const preset = { ...value.configuration!.presets[0]!, provider: 'chatgpt-plan' as const };
-  const prepared = preparePreset(value, preset);
+  expect(() => preparePreset(value, preset)).toThrow('Integrations');
+  const prepared = preparePreset(value, preset, 'write', true);
   value.sharedCredentials = 'saul';
   const input = { ...prepared.choices, context, systemPrompt: '', userPrompt: 'source' };
   expect(() => prepareFrozenPreset(value, input)).toThrow(SELECT_NEW_PRESET);
@@ -110,14 +121,16 @@ it('retries only the frozen account of an available ChatGPT plan connection', ()
     provider: 'chatgpt-plan' as const,
     connectionKey: connection.key,
   };
-  const local = preparePreset(value, preset).choices;
+  expect(() => preparePreset(value, preset)).toThrow('Integrations');
+  const local = preparePreset(value, preset, 'write', true).choices;
   value.chatgptPlan.accountId = 'other';
-  expect(prepareFrozenPreset(value, local).input.plan?.accountId).toBe('standalone');
+  expect(() => prepareFrozenPreset(value, local)).toThrow(SELECT_NEW_PRESET);
 
   value.sharedCredentials = 'saul';
   value.connections = [{ ...connection, accountId: 'bound' }];
   const managed = preparePreset(value, preset).choices;
   expect(prepareFrozenPreset(value, managed).input.plan?.accountId).toBe('bound');
+  expect(() => prepareFrozenPreset(value, local)).toThrow(SELECT_NEW_PRESET);
   for (const connections of [
     [],
     [connection],

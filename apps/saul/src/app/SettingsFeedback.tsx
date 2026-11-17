@@ -2,7 +2,6 @@ import type { Ref } from 'react';
 import { ActionLabel } from '../surface/ActionLabel';
 import type { useSettingsEditor } from './useSettingsEditor';
 import type { useProviderTest } from './useProviderTest';
-import type { PlanSettingsState } from './usePlanSettings';
 import type { SettingsSection } from './settings-sections';
 
 type SaveState = Pick<
@@ -18,9 +17,7 @@ type ProviderTestState = Pick<
 export function SettingsFeedback({
   draft,
   providerTest,
-  plan,
   error,
-  planBusy,
   speechBusy,
   actionBuilding,
   section,
@@ -30,9 +27,7 @@ export function SettingsFeedback({
 }: {
   draft: SaveState;
   providerTest: ProviderTestState;
-  plan: Pick<PlanSettingsState, 'busy' | 'notice' | 'cancel'>;
   error: string;
-  planBusy: boolean;
   speechBusy: boolean;
   actionBuilding: boolean;
   section: SettingsSection;
@@ -53,7 +48,6 @@ export function SettingsFeedback({
         !notice &&
         !draft.recoveryNotice &&
         !testing &&
-        !planBusy &&
         !speechBusy &&
         !actionBuilding &&
         (section === 'preferences' || section === 'connections')
@@ -82,33 +76,6 @@ export function SettingsFeedback({
           </button>
         </div>
       )}
-      {planBusy && (
-        <div className="row">
-          <span role="status">
-            {plan.busy
-              ? {
-                  accounts: 'Refreshing accounts…',
-                  login: 'Complete sign-in in the opened tab.',
-                  logout: 'Signing out…',
-                  models: 'Refreshing available models…',
-                }[plan.busy]
-              : 'Account operation in progress.'}
-          </span>
-          <button className="btn" onClick={() => onSectionChange('connections')}>
-            Connections
-          </button>
-        </div>
-      )}
-      {plan.busy && plan.busy !== 'logout' && (
-        <button className="btn" onClick={plan.cancel}>
-          Cancel
-        </button>
-      )}
-      {plan.notice && (
-        <p className="notice" role="status">
-          {plan.notice}
-        </p>
-      )}
       {error && (
         <p className="notice error" role="alert">
           {error}
@@ -133,7 +100,7 @@ export function SettingsFeedback({
             <button
               ref={reviewButton}
               className="btn primary"
-              disabled={testing || saving || planBusy || speechBusy}
+              disabled={testing || saving || speechBusy}
               onClick={() => {
                 providerTest.clear();
                 void draft.reviewLatest();
@@ -145,7 +112,7 @@ export function SettingsFeedback({
           {draft.blocked && (
             <button
               className="btn"
-              disabled={testing || saving || planBusy || speechBusy}
+              disabled={testing || saving || speechBusy}
               onClick={() => {
                 providerTest.clear();
                 void draft.reload();
@@ -159,7 +126,7 @@ export function SettingsFeedback({
           <button
             ref={saveButton}
             className="btn primary"
-            disabled={testing || saving || planBusy || speechBusy || draft.blocked}
+            disabled={testing || saving || speechBusy || draft.blocked}
             onClick={save}
           >
             {saving ? 'Saving…' : 'Save'}

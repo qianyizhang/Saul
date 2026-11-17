@@ -1,7 +1,6 @@
 import type { Configuration, ModelPreset } from './definition';
 import type { FrozenModel } from '../providers/request';
 import { inspectPreset, type PresetInspection } from './inspect';
-import { officialOpenAI } from '../../native/credentials-contract.mts';
 import { CHROME_AI_RETIRED_MESSAGE } from '../providers/retired-provider';
 
 export const SELECT_NEW_PRESET =
@@ -41,8 +40,10 @@ function validateSelection(
 ): URL | undefined {
   if (
     (selected.remote.credentialOwner === 'saul' && mode !== 'saul') ||
+    (selected.provider === 'chatgpt-plan' && mode !== 'saul') ||
     (mode === 'disconnected' &&
-      (selected.provider === 'chatgpt-plan' || officialOpenAI(selected.remote.baseUrl)))
+      selected.provider === 'openai-compatible' &&
+      !!selected.preset?.connectionKey)
   )
     throw new Error('Connect this app in Settings → Preferences → Integrations.');
   if (selected.provider === 'chrome-ai') throw new Error(CHROME_AI_RETIRED_MESSAGE);
@@ -87,8 +88,7 @@ function resolveSelection(settings: Configuration, preset: ModelPreset): PresetI
   if (
     preset.provider === 'chatgpt-plan' &&
     settings.sharedCredentials === 'saul' &&
-    connection &&
-    !connection.accountId
+    !connection?.accountId
   )
     throw new Error('Choose an account for this connection in Settings → Connections.');
   return selected;
@@ -141,24 +141,17 @@ export function prepareFrozenPreset<T extends FrozenModel>(
 }
 function credentialForChoices(settings: Configuration, input: FrozenModel): string {
   if (input.provider === 'chatgpt-plan') {
+    if (input.credentialOwner !== 'saul' || settings.sharedCredentials !== 'saul')
+      throw new Error(SELECT_NEW_PRESET);
+    const connection = settings.connections.find(
+      (item) => item.key === input.preset?.connectionKey,
+    );
     if (
-      (input.credentialOwner ?? 'local') !==
-      (settings.sharedCredentials === 'saul' ? 'saul' : 'local')
+      connection?.kind !== 'chatgpt-plan' ||
+      !connection.accountId ||
+      connection.accountId !== input.plan?.accountId
     )
       throw new Error(SELECT_NEW_PRESET);
-    const key = input.preset?.connectionKey;
-    if (key) {
-      const connection = settings.connections.find((item) => item.key === key);
-      // An unbound standalone preset uses its frozen local account. A managed
-      // connection must still bind the account that the saved request selected.
-      if (
-        connection?.kind !== 'chatgpt-plan' ||
-        (connection.accountId !== undefined
-          ? connection.accountId !== input.plan?.accountId
-          : settings.sharedCredentials === 'saul')
-      )
-        throw new Error(SELECT_NEW_PRESET);
-    }
     validateSelection(
       {
         provider: input.provider,

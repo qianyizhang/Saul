@@ -4,13 +4,13 @@ The signed **Saul** owner holds shared ChatGPT sign-ins and the official OpenAI 
 key for Chrome and EZ. Validated native connections request operations; long-lived
 secrets never enter the UI. Custom browser endpoints remain Saul-local.
 The [credential contract](../../../contracts/credentials.md) owns protocol,
-migration, caller checks and failure handling.
+retirement, caller checks and failure handling.
 
 ## Stored items
 
 | Generic-password service       | Account    | Contents                                                                 |
 | ------------------------------ | ---------- | ------------------------------------------------------------------------ |
-| `com.saul.credentials.chatgpt` | `accounts` | Original Saul registrations, host ID, identity and rotating OAuth tokens |
+| `com.saul.credentials.chatgpt` | `accounts` | Shared Saul registrations, host ID, identity and rotating OAuth tokens |
 | `com.saul.credentials.openai`  | `api-key`  | Official OpenAI API key                                                  |
 
 Availability checks read attributes, not unused secrets. OAuth secret reads run off
@@ -18,10 +18,10 @@ the UI actor; a kernel lock serializes refresh/writes across owner processes.
 Missing owner blocks without local fallback. No app receives your Mac login
 password; enter it only in a system Keychain dialog.
 
-Migration preserves Saul registrations and retires EZ duplicates only after both
-clients verify the owner. Writes are verified before source removal; denied,
-malformed or changed sources remain with an error. Private `migration.json` holds
-verification metadata, never tokens.
+The owner leaves legacy credential records untouched. Current shared
+registrations and account pauses are retained; if there is no shared sign-in,
+connect explicitly. Private `migration.json` retains prior verification metadata
+and account pauses, never tokens.
 
 ## Permission choices
 

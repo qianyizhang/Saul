@@ -1,4 +1,4 @@
-import { SETTINGS_STORAGE_KEY, RECOVERY_BACKUP_KEY, type ConfigurationStorage } from './store';
+import { SETTINGS_STORAGE_KEY, type ConfigurationStorage } from './store';
 
 /** Trusted-context adapter. The settings owner decides what to write and when. */
 export const chromeConfigurationStorage: ConfigurationStorage = {
@@ -10,8 +10,6 @@ export const chromeConfigurationStorage: ConfigurationStorage = {
       throw new Error('Could not read saved settings. Reload Saul and try again.', { cause });
     }
   },
-  readBackup: async () =>
-    (await chrome.storage.local.get(RECOVERY_BACKUP_KEY))[RECOVERY_BACKUP_KEY] as unknown,
   write: (values) => chrome.storage.local.set(values),
 };
 

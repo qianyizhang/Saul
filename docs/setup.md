@@ -8,18 +8,20 @@ Apple tools without Node.
 
 | Selection   | Requires                                                                     | Does not require                  |
 | ----------- | ---------------------------------------------------------------------------- | --------------------------------- |
-| `extension` | Chrome, ChatGPT/history helper; Node 24 and pinned pnpm to build             | EZ, tabs/actions helpers, Codex   |
+| `extension` | Chrome, history/configuration helper; Node 24 and pinned pnpm to build       | EZ, tabs/actions helpers, Codex   |
 | `chatgpt`   | Installed extension ID, Node 24, native host registration                    | EZ, Codex                         |
 | `tabs`      | Installed extension ID, Node 24, native host registration                    | EZ, Codex unless registering MCP  |
 | `actions`   | Installed extension ID, Node 24, native host registration                    | EZ, tabs helper, Codex            |
 | `ez`        | macOS, Apple tools, pinned Apple signing; installs the Saul credential owner | Chrome UI, Node at runtime, Codex |
 
-Chrome on-device inference is retired; saved selections require an explicit provider change. Reading with an OpenAI-compatible
-provider also requires `chatgpt` for shared history; it does not require sign-in. ChatGPT sign-in/inference and built-in tab summaries
-require `chatgpt`; external tab tools and native Chrome window names require `tabs`.
-Custom Summarize actions require the optional `actions` helper and an existing
-saved model preset. A ChatGPT preset still requires `chatgpt`. The action host
-does not take over credentials. See [custom actions](../apps/saul/docs/custom-actions.md).
+The `chatgpt` component keeps its installation name and provides browser history,
+configuration and presets for all providers. Local OpenAI-compatible connections
+do not require ChatGPT sign-in. ChatGPT plan presets, including those used for tab
+summaries, also require the [signed credential owner](#shared-saul-credentials-on-macos).
+Chrome on-device inference is retired; saved selections require an explicit
+provider change. External tab tools and native Chrome window names require `tabs`.
+Custom Summarize actions require the optional `actions` helper and a saved
+model preset. See [custom actions](../apps/saul/docs/custom-actions.md).
 
 ## First installation
 
@@ -30,7 +32,7 @@ node scripts/setup.mts --components extension
 ```
 
 Load the printed directory explicitly in `chrome://extensions` (Developer mode,
-Load unpacked). Copy its actual ID. Then install the required ChatGPT/history helper; add `tabs`
+Load unpacked). Copy its actual ID. Then install the history/configuration helper; add `tabs`
 only for optional tab access:
 
 ```sh
@@ -72,10 +74,12 @@ points into it. Chrome's host paths, `bin/saul`, and the existing Codex command
 running process keeps its original modules and board assets while new connections
 use the activated version. Installation never kills, resends, or restarts work.
 
-Tab, ChatGPT and action payloads are separate within a generation. Updating one copies the
-other installed payloads and their Node/proxy configuration unchanged. Credentials stay
-in `~/.saul/chatgpt`; socket state stays in its existing runtime directory. Neither
-is part of a generation. Registrations retain their exact extension IDs and the
+Tab, history/configuration and action payloads are separate within a generation.
+Updating one copies the other installed payloads and their Node/proxy
+configuration unchanged. Active ChatGPT credentials are in the shared Keychain;
+old files in `~/.saul/chatgpt` are preserved. Socket state stays in its existing
+runtime directory. Neither credential nor socket state is part of a generation.
+Registrations retain their exact extension IDs and the
 selected helper's existing allowed origins. Preserve each installation-time Node
 executable until the corresponding helper is reinstalled with a new one.
 
@@ -90,8 +94,9 @@ for this migration; after migration, they can again be upgraded independently.
 node scripts/setup.mts --components chatgpt,tabs --extension-id YOUR_ID --migrate-legacy
 ```
 
-Use only the installed helper selection (for example `tabs` alone if ChatGPT was
-never installed). `--migrate-legacy` confirms the manual disconnected maintenance
+Use only the installed helper selection (for example `tabs` alone if the
+history/configuration helper was never installed). `--migrate-legacy` confirms
+the manual disconnected maintenance
 window; it does not disconnect applications for you. Visible legacy processes or
 an uncertain installation stop activation. Process inspection is diagnostic, not
 a race-free guarantee against another app reconnecting during this one-time step.
@@ -122,12 +127,10 @@ fallback. Old generations and legacy backups are retained in this slice; no
 background cleanup deletes files still in use. Unselected staging directories are
 not active runtimes.
 
-EZ's ignored `apps/ez/.local/signing-identity` is not supplied by Git. On this Mac,
-the credential migration explicitly replaces the legacy self-signed pin with the
-Apple Development fingerprint, retaining the old pin without exporting any private key.
-Other machines must perform their own explicit signing setup. Keep bundle ID,
-URL scheme and `~/Applications/EZ.app` stable. The separate
-[credential migration](../contracts/credentials.md) retires only verified old records.
+EZ's ignored `apps/ez/.local/signing-identity` is not supplied by Git. Signing-pin
+replacement requires an explicit transition that preserves the old pin and does
+not export a private key. Follow the [signing guide](../apps/ez/docs/releasing.md#local-signing-and-installation).
+Keep bundle ID, URL scheme and `~/Applications/EZ.app` stable.
 
 The coordinator refuses to overwrite an existing `saul-tabs` Codex registration.
 Omit `--codex` to preserve it. The browser application's advanced
@@ -184,13 +187,24 @@ read-only verification does not migrate them. Verification never claims browser 
 acceptance. Use disposable profiles for development browser tests.
 
 Removing EZ, Saul or its profile leaves shared history and credentials intact.
-Delete records or sign out explicitly. Remove native hosts through the
-[tab helper](../apps/saul/docs/native-messaging.md) and
-[ChatGPT helper](../apps/saul/docs/chatgpt-plan.md) procedures.
+Delete history or sign out explicitly. To unregister the history/configuration
+helper, disconnect the extension and remove only `com.saul.chatgpt.json` from
+the native-host directory reported by the installer. This does not sign out.
+Keep legacy credential files and follow the
+[helper lifecycle](../apps/saul/docs/native-messaging.md) for generation cleanup.
 
 ## Shared Saul credentials on macOS
 
 Follow [Apple signing and owner installation](../apps/ez/docs/releasing.md#local-signing-and-installation),
-then Connect to Saul in Chrome’s Settings → Preferences → Integrations. This optional installation
-uses the existing extension ID. It does not require the other app UI to run.
-EZ uses the same owner. Custom browser endpoints retain separate keys.
+then select **Connect to Saul** in Chrome’s Settings → Preferences → Integrations.
+The signed host uses the existing extension ID. EZ uses the same owner, and
+neither UI needs the other to be running. Local browser API profiles keep their
+separate keys.
+
+Update the signed owner before the browser or EZ client. New clients refuse
+older owners: those owners can still import on an account read. The new owner
+keeps existing shared registrations and pauses. It does not import, delete or
+clean up old credential records. If a connection only had a standalone
+registration, sign in through Connections and choose its account explicitly.
+See the [credential contract](../contracts/credentials.md#retirement-and-removal)
+for version compatibility and retry boundaries.

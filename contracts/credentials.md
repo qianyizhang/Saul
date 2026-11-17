@@ -1,7 +1,9 @@
 # Saul credentials on macOS
 
-The signed macOS Saul owner serves opted-in connections in both apps. See
-[ADR 0002](../docs/adr/0002-share-signed-credential-owner.md) for the trade-off.
+The signed macOS Saul owner serves opted-in connections in both apps. It is the
+only active owner of ChatGPT sign-in and plan requests. See
+[ADR 0003](../docs/adr/0003-retire-standalone-chatgpt-sign-in.md) for the
+retirement decision.
 
 ## Ownership and lifecycle
 
@@ -16,10 +18,11 @@ The signed macOS Saul owner serves opted-in connections in both apps. See
   versioned, bounded and cancelable. Account summaries and provider results may
   leave the owner; access/refresh/identity tokens and long-lived API keys may not.
   A browser or native Realtime preview may receive only its short-lived client secret.
-- Preserve the original Saul host ID, issued client IDs, identities and grants
-  when importing. Never combine one registration's tokens with another's client
-  ID. New registrations use `agent_name_hint=Saul`. Serialize refresh and writes
-  across processes. Pin the account, provider, model and billing route for a run.
+- Preserve the shared owner's host ID, issued client IDs, identities and grants
+  on existing registrations. Never combine one registration's tokens with
+  another's client ID. New registrations use `agent_name_hint=Saul`. Serialize
+  refresh and writes across processes. Pin the account, provider, model and
+  billing route for a run.
 - Shared mode requires explicit opt-in. A lost owner blocks affected operations. It never triggers an
   app-local credential fallback, automatic replay or a different billing route.
   Explicitly added custom endpoints use connection-keyed records with a fixed
@@ -40,43 +43,43 @@ failure; network/5xx errors preserve them. Blocking reads stay off the UI actor;
 cancellation never publishes a partial restore or prevents history access.
 Keep OAuth URLs, codes, tokens and raw diagnostics out of history.
 
-## Migration and removal
+## Retirement and removal
 
-1. Establish Apple-issued signing continuity without changing the installed app,
-   extension or native-host identities. Keep the previous pin and app recoverable.
-2. Adopt Saul’s existing connections. Import valid Saul OAuth state and its selected official OpenAI API key into
-   separate shared Keychain records. Existing shared records win over a repeated
-   import. Do not import EZ's duplicate registrations or keys.
-3. Verify Keychain writes by reading them back and verify the new bindings in
-   both applications. An unreadable or malformed source is preserved and reported;
-   an absent source means signed out, not a storage failure.
-4. Retire only verified source copies. Before verification, denial, cancellation,
-   storage errors and interruption leave the originals intact. Do not keep an old
-   active writer or automatically restore discarded credentials.
-5. A saved app binding remains successful if later source retirement fails. Show
-   pending cleanup separately and offer an explicit retry. Cleanup must not wait
-   on a hidden Keychain authorization dialog.
-6. Sign out or Remove key affects the shared connection in both apps and states
-   that scope before confirmation. Disconnecting one app only removes its binding.
-   OAuth sign-out attempts revocation, then clears local tokens; report unconfirmed
-   remote revocation. Keep the original registration and host ID for re-sign-in.
+The owner reads existing shared Keychain state and retains any saved account
+pause. If no shared registration is available, sign in through Connections and
+bind the account explicitly. No runtime imports or removes old standalone
+credential files or old Keychain items. An app opt-in does not import an API key
+or bind an account automatically. Saved attempts remain inspectable; Retry
+cannot use a retired standalone route or switch to another registration.
+
+New clients send request envelope version 2. The new signed owner accepts both
+versions 1 and 2 for supported operations. Retired import and cleanup operations
+are rejected in either version. Older owners reject version 2 before reading or
+importing credentials. Update the signed owner if a new client cannot connect.
+Keep app, extension, native-host and signing identities stable across upgrades.
+
+Sign out or Remove key affects the shared connection in both apps and states
+that scope before confirmation. Disconnecting one app only removes its binding.
+OAuth sign-out attempts revocation, then clears local tokens; report unconfirmed
+remote revocation. Keep the original registration and host ID for re-sign-in.
 
 ## Acceptance
 
-Keep one verification plan: isolated storage/failure and cross-process refresh
-checks, independent native/browser protocol checks, affected app gates, installed
-both-app migration, then the same signed owner across two changed binaries.
-Probe success does not establish actual-credential or installed-app acceptance.
-Live sign-in, model discovery and inference are separate observations.
+Keep one verification plan: isolated storage and cross-process refresh checks,
+native and browser protocol checks, both app gates, and installed acceptance
+with the same signed owner across changed builds. Exercise mixed versions,
+empty shared state beside legacy sources, and retained registrations and
+pauses. Live sign-in, model discovery and inference are separate observations.
 
-See [dated installed evidence](../apps/ez/docs/verification.md#installed-baseline--2026-11-04).
-The credential migration preserves history schema and app/extension identities.
+See [dated installed evidence](../apps/ez/docs/verification.md#installed-baseline--2026-11-04)
+for the earlier migration baseline.
 
 Implementation: `native/credentials` owns the pipe, caller checks, framing and
 Keychain access; `apps/ez/Sources/SaulCredentialOwner` owns authentication and
-official OpenAI and bound custom-endpoint operations. `com.saul.credentials` is a separate native host
-from the existing standalone `com.saul.chatgpt` history/configuration helper.
-Shared mode is explicit; standalone browser installations keep their existing route.
+official OpenAI and bound custom-endpoint operations. The signed
+`com.saul.credentials` host is separate from `com.saul.chatgpt`, which keeps
+its installed identity and handles browser history, configuration and presets.
+Browser-owned API connections continue to use their local profiles.
 
 ## Connection identity and catalogs
 

@@ -1,5 +1,8 @@
 import { expect, type Worker, type BrowserContext, type Page } from '@playwright/test';
 import type { CredentialEvent, CredentialRequest } from '../../native/credentials-contract.mts';
+import { DEFAULT_CONFIGURATION, type Configuration } from '../../src/configuration/definition';
+import type { SharedPresets } from '../../native/shared-presets-contract.mts';
+import type { PlanControlRequest } from '../../native/plan-protocol.mts';
 import type { PlanRequest, PlanEvent, PlanAccount } from '../../native/plan-protocol.mts';
 export async function installDigestProvider(
   worker: Worker,
@@ -10,7 +13,64 @@ export async function installDigestProvider(
   ],
 ) {
   await worker.evaluate(
-    ({ hold, failure, accounts }) => {
+    async ({ hold, failure, accounts, defaults }) => {
+      const settings =
+        ((await chrome.storage.local.get('saul_user_settings'))
+          .saul_user_settings as Configuration) || defaults;
+      const savedFixture = (await chrome.storage.local.get('digest_fixture_config'))
+        .digest_fixture_config as
+        | {
+            library: SharedPresets;
+            sections: Record<string, { revision: number; value?: Record<string, unknown> }>;
+          }
+        | undefined;
+      if (settings.sharedCredentials !== 'saul' || savedFixture) {
+        const connections = settings.connections.map((c) =>
+          c.key === 'gpt-plan' ? { ...c, accountId: accounts[0]?.id } : c,
+        );
+        await chrome.storage.local.set({
+          saul_user_settings: { ...settings, connections, sharedCredentials: 'saul' },
+        });
+        let library: SharedPresets = savedFixture?.library ?? {
+          revision: 1,
+          connections,
+          presets: [],
+        };
+        const sections: Record<string, { revision: number; value?: Record<string, unknown> }> =
+          savedFixture?.sections ?? {};
+        await chrome.storage.local.set({ digest_fixture_config: { library, sections } });
+        chrome.runtime.sendNativeMessage = (async (
+          host: string,
+          packet: { id: string; request: PlanControlRequest },
+        ) => {
+          if (host !== 'com.saul.chatgpt')
+            throw new Error('Configuration must use the storage helper');
+          const r = packet.request;
+          let result: Record<string, unknown>;
+          if (r.action === 'presets-read') result = { library };
+          else if (r.action === 'config-read')
+            result = { config: sections[r.section] ?? { revision: 0 } };
+          else if (r.action === 'config-save' || r.action === 'config-commit') {
+            if ((sections[r.section]?.revision ?? 0) !== r.revision)
+              throw new Error('Scoped settings changed');
+            if (r.action === 'config-commit') {
+              if (r.presetRevision !== library.revision) throw new Error('Shared settings changed');
+              library = {
+                revision: library.revision + 1,
+                connections: r.connections ?? library.connections,
+                presets: r.presets,
+              };
+            }
+            sections[r.section] = { revision: r.revision + 1, value: r.value };
+            await chrome.storage.local.set({ digest_fixture_config: { library, sections } });
+            result = {
+              config: sections[r.section],
+              ...(r.action === 'config-commit' ? { library } : {}),
+            };
+          } else throw new Error('Unexpected summary settings operation: ' + r.action);
+          return { id: packet.id, event: { type: 'result', ...result } };
+        }) as typeof chrome.runtime.sendNativeMessage;
+      }
       const state = {
         requests: [] as PlanRequest[],
         accounts,
@@ -20,7 +80,9 @@ export async function installDigestProvider(
         finishes: new Map<string, () => void>(),
       };
       Object.assign(globalThis, { digestFixture: state });
-      chrome.runtime.connectNative = (() => {
+      const original = chrome.runtime.connectNative.bind(chrome.runtime);
+      chrome.runtime.connectNative = ((host: string) => {
+        if (host !== 'com.saul.credentials') return original(host);
         const listeners: ((m: { id: string; event: PlanEvent | CredentialEvent }) => void)[] = [];
         return {
           onMessage: {
@@ -30,6 +92,7 @@ export async function installDigestProvider(
           onDisconnect: { addListener: () => {} },
           disconnect: () => {},
           postMessage: (message: {
+            version: number;
             id: string;
             request: PlanRequest | Extract<CredentialRequest, { action: 'connection-catalog' }>;
             cancel?: boolean;
@@ -38,6 +101,7 @@ export async function installDigestProvider(
               if (state.finishes.delete(message.id)) state.active--;
               return;
             }
+            if (message.version !== 2) throw new Error('Expected signed credential protocol v2');
             const emit = (event: PlanEvent) =>
               listeners.forEach((fn) => fn({ id: message.id, event }));
             const request = message.request;
@@ -112,7 +176,7 @@ export async function installDigestProvider(
         } as unknown as chrome.runtime.Port;
       }) as typeof chrome.runtime.connectNative;
     },
-    { hold, failure, accounts },
+    { hold, failure, accounts, defaults: DEFAULT_CONFIGURATION },
   );
 }
 

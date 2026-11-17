@@ -104,7 +104,7 @@ it('commits an unrelated edit after inspection without retargeting Original summ
     expect(saved.settings.openaiCompatible).toEqual(before.settings.openaiCompatible);
     expect(saved.settings.activeProfileId).toBe('default');
     expect(saved.settings.activeProvider).toBe(before.settings.activeProvider);
-    expect(summaryConnections(saved.settings, accounts).chosen).toBe('local-A');
+    expect(summaryConnections(saved.settings, accounts).chosen).toBe('');
   }
 });
 
@@ -112,7 +112,6 @@ function fixture(initial?: unknown) {
   const values: Record<string, unknown> =
     initial === undefined ? {} : { [SETTINGS_STORAGE_KEY]: initial };
   const storage = {
-    readBackup: async () => structuredClone(values.saul_user_settings_recovery_backup),
     read: vi.fn(async () => structuredClone(values[SETTINGS_STORAGE_KEY])),
     write: vi.fn(async (patch: Record<string, unknown>) => {
       Object.assign(values, structuredClone(patch));
@@ -332,13 +331,11 @@ it('preserves baseline and data after a failed write and does not poison later r
   expect(ready(await f.owner({ action: 'read' })).settings.responseLanguage).toBe('Chinese');
 });
 
-it('commits credential backup cleanup with local settings and does not retire credentials after a failed write', async () => {
+it('leaves the recovery backup untouched when connecting to the signed owner', async () => {
   const f = fixture();
   f.values.saul_user_settings_recovery_backup = { apiKey: 'backup-secret' };
   const credentials = {
     prepare: vi.fn(async (settings: typeof DEFAULT_CONFIGURATION) => settings),
-    sanitizeBackup: vi.fn(() => ({ apiKey: '' })),
-    committed: vi.fn(async () => undefined),
   };
   const owner = createConfigurationStore(f.storage, undefined, credentials);
   const before = ready(await owner({ action: 'read' }));
@@ -350,13 +347,11 @@ it('commits credential backup cleanup with local settings and does not retire cr
   f.storage.write.mockRejectedValueOnce(new Error('Local write failed'));
   await expect(owner(request)).rejects.toThrow('Local write failed');
   expect(f.values.saul_user_settings_recovery_backup).toEqual({ apiKey: 'backup-secret' });
-  expect(credentials.committed).not.toHaveBeenCalled();
   await owner(request);
   expect(f.storage.write).toHaveBeenLastCalledWith({
     [SETTINGS_STORAGE_KEY]: request.settings,
-    saul_user_settings_recovery_backup: { apiKey: '' },
   });
-  expect(credentials.committed).toHaveBeenCalledTimes(1);
+  expect(f.values.saul_user_settings_recovery_backup).toEqual({ apiKey: 'backup-secret' });
 });
 
 it('validates incoming configuration and does not leak credentials into revision/error fields', async () => {

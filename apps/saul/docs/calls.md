@@ -16,8 +16,8 @@ the full reader because they lack that gesture; existing reader URLs still work.
 
 Settings → Calls puts the Call preset first. **Summarize (default)** uses the
 selected Write preset for new runs and Run again. **Original summary setup**
-keeps the prior plan binding or standalone account (GPT-6 Luna, medium effort)
-until a preset is chosen. A missing or incompatible saved preset stays visible
+uses a bound shared plan connection (GPT-6 Luna, medium effort) until a preset
+is chosen. Standalone sign-in is retired. A missing or incompatible saved preset stays visible
 for repair; there is no fallback, account switch or billing change. Custom Call
 presets display both their approved revision's name and runtime model preset;
 switching to Summarize preserves them.

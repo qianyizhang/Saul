@@ -27,9 +27,7 @@ private final class FixtureCredentialRecords: CredentialRecords, @unchecked Send
     try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
     let records = FixtureCredentialRecords()
     records.values[.openAI] = key.map { Data($0.utf8) }
-    let storage = SharedAuthStorage(
-        records: records, directory: directory,
-        legacy: directory.appendingPathComponent("absent-accounts.json"), retireEZ: {})
+    let storage = SharedAuthStorage(records: records, directory: directory)
     let connection = SaulConnection { framed in
         var frames = NativeFrames()
         guard let data = try frames.append(framed).first else {
@@ -38,7 +36,7 @@ private final class FixtureCredentialRecords: CredentialRecords, @unchecked Send
         let request = try CredentialRequest.decode(data, caller: .ez)
         let stream = AsyncThrowingStream<Data, Error> { continuation in
             let owner = CredentialOwner(
-                storage: storage, caller: .ez, http: ConnectionHTTP(session: http.session),
+                storage: storage, http: ConnectionHTTP(session: http.session),
                 connectionDefinitions: { definitions }
             ) { event in
                 do {

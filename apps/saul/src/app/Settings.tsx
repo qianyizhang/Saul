@@ -6,7 +6,6 @@ import { ConnectionSettings, ConnectionPresetWarnings } from './ConnectionSettin
 import { NativeBridge } from './NativeBridge';
 import { StandaloneConnectionSettings } from './StandaloneConnectionSettings';
 import { SharedCredentialSettings } from './SharedCredentialSettings';
-import { usePlanSettings } from './usePlanSettings';
 import { ActionLabel } from '../surface/ActionLabel';
 import { useEffect, useRef, useState } from 'react';
 import { useSettingsEditor } from './useSettingsEditor';
@@ -40,32 +39,10 @@ export function Settings({
   const providerTest = useProviderTest();
   const { testing, notice } = providerTest;
   const [presetSearch, setPresetSearch] = useState('');
-  const [planBusy, setPlanBusy] = useState(false);
   const [speechBusy, setSpeechBusy] = useState(false);
   const [actionBuilding, setActionBuilding] = useState(false);
   const configuration = configurationFor(settings);
   const selectedPreset = draft.selectedPreset;
-  const planValue = draft.planEditor[section === 'models' ? 'preset' : 'connection'];
-  const plan = usePlanSettings(
-    planValue,
-    (value) => {
-      if (value.accountId !== planValue.accountId)
-        draft.edit({ type: 'plan-account', accountId: value.accountId });
-      if (
-        selectedPreset?.provider === 'chatgpt-plan' &&
-        (value.model !== planValue.model ||
-          value.effort !== planValue.effort ||
-          value.fast !== planValue.fast)
-      )
-        draft.edit({
-          type: 'preset',
-          patch: { model: value.model, effort: value.effort, fast: value.fast },
-        });
-    },
-    setPlanBusy,
-    loaded && settings.sharedCredentials === undefined,
-    settings.sharedCredentials,
-  );
   const error = draft.error || providerTest.error;
   function update(patch: Partial<SettingsPreferences>) {
     draft.edit({ type: 'settings', patch });
@@ -73,7 +50,7 @@ export function Settings({
   }
   const test = (mode: 'endpoint' | 'generation') =>
     providerTest.test(mode, settings, selectedPreset?.id);
-  const locked = testing || planBusy || speechBusy;
+  const locked = testing || speechBusy;
   if (!loaded)
     return error ? (
       <div className="stack settings-layout">
@@ -138,13 +115,13 @@ export function Settings({
               }}
             />
           ))}
-        {settings.sharedCredentials === undefined ? (
+        {settings.sharedCredentials !== 'saul' ? (
           <StandaloneConnectionSettings
             settings={settings}
             edit={draft.edit}
-            plan={plan}
             disabled={locked}
             visible={section === 'connections'}
+            integrations={() => onSectionChange('preferences')}
           />
         ) : (
           <ConnectionSettings
@@ -171,12 +148,10 @@ export function Settings({
             sharedCredentials: settings.sharedCredentials,
           }}
           remote={inspection.remote}
-          plan={plan}
           visible={section === 'models'}
           saved={!dirty}
           locked={locked}
           testing={testing}
-          planBusy={planBusy}
           edit={draft.edit}
           search={{ value: presetSearch, change: setPresetSearch }}
           clearTest={providerTest.clear}
@@ -239,14 +214,12 @@ export function Settings({
             connections are unavailable.
           </p>
           <NativeBridge />
-          {settings.sharedCredentials === undefined && (
-            <details>
-              <summary>ChatGPT helper setup</summary>
-              <code className="code">
-                pnpm native:install --chatgpt --extension-id {chrome.runtime.id}
-              </code>
-            </details>
-          )}
+          <details>
+            <summary>History and configuration helper setup</summary>
+            <code className="code">
+              pnpm native:install --chatgpt --extension-id {chrome.runtime.id}
+            </code>
+          </details>
         </details>
         <SettingsShortcuts visible={section === 'preferences'} />
         <SettingsFeedback
@@ -261,9 +234,7 @@ export function Settings({
             reload: draft.reload,
           }}
           providerTest={{ testing, notice, stop: providerTest.stop, clear: providerTest.clear }}
-          plan={{ busy: plan.busy, notice: plan.notice, cancel: plan.cancel }}
           error={error}
-          planBusy={planBusy}
           speechBusy={speechBusy}
           actionBuilding={actionBuilding}
           section={section}

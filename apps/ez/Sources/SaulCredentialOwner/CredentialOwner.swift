@@ -5,19 +5,17 @@ import SaulCredentialStorage
 @MainActor package final class CredentialOwner {
     let storage: SharedAuthStorage
     let http: ConnectionHTTP
-    let caller: CredentialCaller
     let emit: ([String: Any]) -> Void
     let connectionDefinitions: () throws -> [ConnectionDefinition]
     private var catalogs: [String: [ModelOption]] = [:]
     package init(
-        storage: SharedAuthStorage, caller: CredentialCaller, http: ConnectionHTTP = ConnectionHTTP(),
+        storage: SharedAuthStorage, http: ConnectionHTTP = ConnectionHTTP(),
         connectionDefinitions: @escaping () throws -> [ConnectionDefinition] = {
             try SharedPresetsStore().read().connections
         },
         emit: @escaping ([String: Any]) -> Void
     ) {
         self.storage = storage
-        self.caller = caller
         self.emit = emit
         self.connectionDefinitions = connectionDefinitions
         self.http = http
@@ -206,23 +204,11 @@ import SaulCredentialStorage
         case "api-key-status":
             let lease = try await CredentialLease.acquire(in: storage.directory)
             defer { withExtendedLifetime(lease) {} }
-            result([
-                "apiConnected": try storage.records.contains(.openAI),
-                "retired": try storage.migrationCompleted(),
-            ])
-        case "api-key-save", "api-key-remove", "api-key-import":
+            result(["apiConnected": try storage.records.contains(.openAI)])
+        case "api-key-save", "api-key-remove":
             let lease = try await CredentialLease.acquire(in: storage.directory)
             defer { withExtendedLifetime(lease) {} }
-            if request.action == "api-key-import" {
-                try storage.importKey((value["key"] as? String ?? ""))
-            } else {
-                try storage.saveKey(value["key"] as? String)
-            }
-            if let selected = value["selectedAccountId"] as? String {
-                let auth = ChatGPTAuth(storage: storage)
-                try await auth.load()
-                if auth.state.profiles.contains(where: { $0.id == selected }) { try auth.select(selected) }
-            }
+            try storage.saveKey(value["key"] as? String)
             result(["apiConnected": try storage.records.contains(.openAI)])
         case "api-chat":
             let connection = try await apiConnection(value)
@@ -341,14 +327,6 @@ import SaulCredentialStorage
                     quality: (value["quality"] as? String ?? ""),
                     outputFormat: (value["outputFormat"] as? String ?? "png"), image: image), apiKey: key)
             result(["imageBase64": data.base64EncodedString()])
-        case "migration-verified":
-            if try storage.migrationCompleted() {
-                result(["retired": true])
-            } else {
-                result([
-                    "retired": try await locked { _ in try self.storage.verifyMigration(for: self.caller) }
-                ])
-            }
         default: throw CredentialStorageError("Unsupported Saul operation.")
         }
     }

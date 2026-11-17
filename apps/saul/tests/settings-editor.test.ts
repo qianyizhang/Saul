@@ -9,7 +9,6 @@ function fixture(initial: unknown = DEFAULT_CONFIGURATION) {
   let values: Record<string, unknown> = { [SETTINGS_STORAGE_KEY]: structuredClone(initial) };
   const store = createConfigurationStore({
     read: async () => structuredClone(values[SETTINGS_STORAGE_KEY]),
-    readBackup: async () => structuredClone(values.saul_user_settings_recovery_backup),
     write: async (patch) => {
       values = { ...values, ...structuredClone(patch) };
     },
@@ -82,14 +81,11 @@ it('keeps inspected plan options across sections while account editing targets t
   };
   const { editor } = fixture(configuration);
   await editor.open();
-  expect(editor.getSnapshot().planEditor).toEqual({
-    connection: { accountId: 'standalone', model: 'selected-model', effort: 'high', fast: true },
-    preset: { accountId: 'bound-account', model: 'selected-model', effort: 'high', fast: true },
-  });
+  expect(editor.getSnapshot().inspection.plan?.accountId).toBe('bound-account');
+  expect(editor.getSnapshot().inspection.plan?.effort).toBe('high');
   editor.edit(language('Chinese'));
   await editor.save();
   expect(editor.getSnapshot().configuration.chatgptPlan).toEqual(configuration.chatgptPlan);
-  expect(editor.getSnapshot().planEditor.connection.effort).toBe('high');
 });
 it('preserves a stale draft through failed/cancelled review and applies unrelated latest changes', async () => {
   const { editor, request, store } = fixture();

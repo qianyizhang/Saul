@@ -45,16 +45,18 @@ a fingerprint different from the pin.
 - Installs/updates the signed owner at
   `~/Library/Application Support/Little Clarity/Credentials/Saul.app`, registering
   `com.saul.credentials` for the installed extension. Set `SAUL_EXTENSION_ID` if no
-  existing ChatGPT host manifest supplies it. `make credentials-install` installs
+  existing `com.saul.chatgpt` history/configuration host manifest supplies it. `make credentials-install` installs
   only that owner. Owner activation failure restores its prior bundle/manifest.
 - Replaces EZ and retains `~/Applications/.ez-upgrade.XXXXXX/previous.app` for
   rollback; interrupted replacement attempts restoration. It does not launch EZ
   or change credentials/history. Verify normal use before removing the backup.
 
 To roll back, quit EZ and move `previous.app` to `~/Applications/EZ.app`, preserving
-the newer bundle if needed. Bundle rollback does not undo credential migration;
-old builds may need fresh sign-in. Chrome connects explicitly in Settings → Preferences → Integrations; EZ
-uses the owner by default and offers Disconnect app. Neither UI must stay running.
+the newer bundle if needed. Bundle rollback leaves shared Keychain state in
+place. Keep the signed owner current: older owners could still import legacy
+credentials and cannot serve new clients. Chrome connects explicitly in
+Settings → Preferences → Integrations; EZ uses the owner by default and offers
+Disconnect app. Neither UI must stay running.
 
 Stable signing alone does not guarantee prompt-free Keychain upgrades.
 [Keychain diagnosis](keychain.md#why-a-rebuild-can-ask-again) owns the old self-signed

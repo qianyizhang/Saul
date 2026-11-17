@@ -1,7 +1,7 @@
 # Shared configuration
 
 Swift and Node share `~/Library/Application Support/Little Clarity/settings.json`.
-Saul uses its ChatGPT helper to access it. Each app reads saved settings on
+Saul uses its history/configuration helper to access it. Each app reads saved settings on
 load/reload and for new work; EZ also reloads on activation outside Settings.
 An open editor retains its draft until explicit save or recovery.
 

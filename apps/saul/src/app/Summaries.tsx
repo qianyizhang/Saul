@@ -14,7 +14,7 @@ import { ComparisonNote } from './SummaryInspection';
 import { CallResults } from './CallResults';
 
 async function summaryAccounts(settings: Configuration) {
-  if (settings.sharedCredentials === 'disconnected')
+  if (settings.sharedCredentials !== 'saul')
     throw new Error('Connect this app in Settings → Preferences → Integrations.');
   const result = await planCall({ action: 'accounts' });
   return summaryConnections(settings, result.accounts);
@@ -152,7 +152,6 @@ export function SummaryReader({
   const [comparisons, setComparisons] = useState<DigestComparison[]>([]);
   const [source, setSource] = useState<{ title: string; url: string }>();
   const [accounts, setAccounts] = useState<SummaryConnection[]>([]);
-  const [managed, setManaged] = useState(false);
   const [account, setAccount] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -181,7 +180,6 @@ export function SummaryReader({
           if (!live.current) return;
           const key = choiceKey ?? resolved.chosen;
           setAccounts(resolved.choices);
-          setManaged(resolved.managed);
           setAccount(key);
           const choice = resolved.choices.find((c) => c.key === key && c.available);
           if (!choice?.accountId) {
@@ -189,24 +187,13 @@ export function SummaryReader({
             throw new Error(resolved.error || 'Choose a model preset in Settings → Calls.');
           }
           runAccountId = choice.accountId;
-          connectionKey = resolved.managed ? choice.key : undefined;
+          connectionKey = choice.key;
           const { settings, revision } = saved;
-          const changed = resolved.managed
-            ? settings.summaryConnectionKey !== choice.key
-            : settings.chatgptPlan?.accountId !== choice.accountId;
-          if (changed) {
+          if (settings.summaryConnectionKey !== choice.key) {
             const committed = await requestSettings({
               action: 'commit',
               baseline: revision,
-              settings: resolved.managed
-                ? { ...settings, summaryConnectionKey: choice.key }
-                : {
-                    ...settings,
-                    chatgptPlan: {
-                      ...(settings.chatgptPlan ?? { model: '' }),
-                      accountId: choice.accountId,
-                    },
-                  },
+              settings: { ...settings, summaryConnectionKey: choice.key },
             });
             if (committed.state !== 'ready') throw new Error(committed.error);
           }
@@ -440,9 +427,9 @@ export function SummaryReader({
         <div className="stack">
           {accounts.length > 0 && (
             <label className="field">
-              {managed ? 'ChatGPT plan connection' : 'ChatGPT account'}
+              ChatGPT plan connection
               <select value={account} onChange={(e) => setAccount(e.target.value)}>
-                <option value="">{managed ? 'Choose connection…' : 'Choose account…'}</option>
+                <option value="">Choose connection…</option>
                 {accounts.map((a) => (
                   <option key={a.key} value={a.key} disabled={!a.available}>
                     {a.name}

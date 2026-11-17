@@ -403,20 +403,11 @@ import SaulCredentialStorage
         error = nil
         defer { connecting = false }
         if let connection = currentConnection { await refreshConnection(connection) }
-        guard needsPlan || loadAccounts else {
-            await verifyCredentialMigration()
-            return
-        }
+        guard needsPlan || loadAccounts else { return }
         do {
             try await loadConnectionAccounts()
-            if !Task.isCancelled && sharedCredentialsConnected { await verifyCredentialMigration() }
         } catch {
             syncAccount()
-            self.error = error.localizedDescription
-        }
-    }
-    private func verifyCredentialMigration() async {
-        do { _ = try await auth.call(["action": "migration-verified"]) } catch {
             self.error = error.localizedDescription
         }
     }

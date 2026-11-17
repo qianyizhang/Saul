@@ -39,7 +39,6 @@ plutil -insert LSMinimumSystemVersion -string 14.0 "$info"
 plutil -insert LSUIElement -bool YES "$info"
 plutil -insert SaulAllowedExtensionIDs -json '[]' "$info"
 if [[ -n "$extension_id" ]]; then plutil -insert SaulAllowedExtensionIDs.0 -string "$extension_id" "$info"; fi
-plutil -insert SaulLegacyAccountsPath -string "${SAUL_LEGACY_ACCOUNTS_PATH:-$HOME/.saul/chatgpt/accounts.json}" "$info"
 codesign --force --sign "$ez_signing_identity" --options runtime --timestamp=none "$app"
 codesign --verify --strict "$app"
 team=$(codesign -dv --verbose=4 "$app" 2>&1 | sed -n 's/^TeamIdentifier=//p')

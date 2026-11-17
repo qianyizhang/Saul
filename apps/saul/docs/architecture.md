@@ -79,7 +79,7 @@ session. [React adapter](../src/app/useSettingsEditor.ts) owns lifetime, unload
 warnings and confirmation; stale callbacks cannot replace a newer session.
 
 The background checks an opaque local fingerprint and serializes credential
-preparation, shared commit, local commit and retirement in that order. These
+preparation, shared commit and local commit in that order. These
 are separate effects: after uncertainty or partial success, Review latest reads
 the current state before another explicit Save. See [Settings behavior](product.md#settings-and-models)
 and [shared revision rules](../../../contracts/configuration.md#unified-configuration-scopes).
