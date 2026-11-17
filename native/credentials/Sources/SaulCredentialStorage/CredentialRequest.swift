@@ -6,14 +6,10 @@ public enum CredentialCatalogIntent: String, Sendable {
 }
 
 /// No token-read operation. Setup binds endpoints; generation cannot choose another destination.
-public struct CredentialRequest {
+public struct CredentialRequest: Sendable {
   public static let version = 2
   public let id: String
-  public let action: String
-  public let value: [String: Any]
-  public var catalogIntent: CredentialCatalogIntent? {
-    (value["intent"] as? String).flatMap(CredentialCatalogIntent.init(rawValue:))
-  }
+  public let operation: CredentialOperation
 
   public static func decode(_ data: Data, caller: CredentialCaller) throws -> CredentialRequest {
     guard data.count <= NativeFrames.maximumInputBytes,
@@ -187,8 +183,81 @@ public struct CredentialRequest {
         text("imageName", max: 800, required: false)
       else { throw invalid() }
     }
-    return CredentialRequest(id: id, action: action, value: value)
+    return CredentialRequest(id: id, operation: try operation(action, value))
   }
+
+  private static func operation(_ action: String, _ value: [String: Any]) throws
+    -> CredentialOperation
+  {
+    let key = value["connectionKey"] as? String
+    let account = value["accountId"] as? String
+    func string(_ field: String, from fields: [String: Any]? = nil) throws -> String {
+      guard let text = (fields ?? value)[field] as? String else { throw invalid() }
+      return text
+    }
+    switch action {
+    case "accounts": return .accounts
+    case "status": return .status
+    case "select": return try .select(accountID: string("accountId"))
+    case "login": return .login(accountID: account, consent: value["consent"] as? Bool == true)
+    case "logout": return try .logout(accountID: string("accountId"))
+    case "models": return try .models(accountID: string("accountId"))
+    case "generate":
+      return try .generate(
+        .init(
+          accountID: string("accountId"), connectionKey: key, model: string("model"),
+          effort: value["effort"] as? String, fast: value["fast"] as? Bool == true,
+          systemPrompt: string("systemPrompt"), userPrompt: string("userPrompt"),
+          images: value["images"] as? [String] ?? [],
+          pdfURLs: (value["attachments"] as? [[String: String]] ?? []).compactMap { $0["url"] }))
+    case "api-key-status": return .apiKeyStatus
+    case "api-key-save", "api-key-remove": return .apiKey(value["key"] as? String)
+    case "connection-status": return try .connectionStatus(key: string("connectionKey"))
+    case "connection-catalog":
+      let supplied = (value["intent"] as? String).flatMap(CredentialCatalogIntent.init(rawValue:))
+      return try .connectionCatalog(
+        key: string("connectionKey"),
+        intent: supplied ?? (value["force"] as? Bool == true ? .refresh : .display),
+        includeDefault: supplied != nil)
+    case "connection-key-save", "connection-key-remove":
+      return try .connectionKey(
+        id: string("connectionKey"), endpoint: string("endpoint"), key: value["key"] as? String)
+    case "api-chat":
+      return try .apiChat(
+        .init(
+          model: string("model"), connectionKey: key,
+          systemPrompt: string("systemPrompt"), userPrompt: string("userPrompt"),
+          images: value["images"] as? [String], temperature: value["temperature"] as? Double ?? 0.3,
+          maxTokens: value["maxTokens"] as? Int ?? 1024))
+    case "api-realtime":
+      return try .apiRealtime(model: string("model"), voice: string("voice"), connectionKey: key)
+    case "native-responses":
+      guard let body = value["body"] as? [String: Any],
+        let roles = body["input"] as? [[String: Any]]
+      else { throw invalid() }
+      return try .nativeResponses(
+        .init(
+          route: value["provider"] as? String == "chatgpt-plan"
+            ? .plan(accountID: string("accountId")) : .api,
+          connectionKey: key, model: string("model", from: body),
+          instructions: body["instructions"] as? String,
+          input: roles.map {
+            try .init(role: string("role", from: $0), content: string("content", from: $0))
+          },
+          effort: (body["reasoning"] as? [String: String])?["effort"],
+          tier: body["service_tier"] as? String, usesWebSearch: body["tools"] != nil,
+          providerBody: JSONSerialization.data(withJSONObject: body)))
+    case "native-image", "api-image":
+      return try .image(
+        .init(
+          model: string("model"), connectionKey: key,
+          prompt: string("prompt"), size: string("size"),
+          quality: string("quality"), outputFormat: value["outputFormat"] as? String ?? "png",
+          imageBase64: value["imageBase64"] as? String, imageName: value["imageName"] as? String))
+    default: throw invalid()
+    }
+  }
+
   private static func invalid() -> CredentialStorageError {
     CredentialStorageError("Unsupported or invalid Saul credential operation.")
   }

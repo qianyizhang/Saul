@@ -14,7 +14,8 @@ retirement decision.
   ChatGPT OAuth, refresh and authenticated official OpenAI HTTP operations.
   Chrome connects through Native Messaging; EZ connects through a native pipe.
   A Swift library or general-purpose Node executable is not a Keychain identity.
-- Validate native callers and the exact operation at the boundary. Requests are
+- Validate native callers and the exact operation at the boundary. Decode the
+  existing JSON wire into a typed operation before dispatch. Requests are
   versioned, bounded and cancelable. Account summaries and provider results may
   leave the owner; access/refresh/identity tokens and long-lived API keys may not.
   A browser or native Realtime preview may receive only its short-lived client secret.

@@ -46,50 +46,56 @@ import SaulCredentialStorage
         if let selected = auth.state.selectedID { result["selectedAccountId"] = selected }
         return result
     }
-    private func apiConnection(_ value: [String: Any], officialOnly: Bool = false) async throws
-        -> SharedAuthStorage.APIConnection
-    {
-        let model = value["model"] as? String ?? (value["body"] as? [String: Any])?["model"] as? String ?? ""
-        return try await apiAdmission(
-            connectionKey: value["connectionKey"] as? String, model: model, officialOnly: officialOnly)
-    }
     package func run(_ request: CredentialRequest) async throws {
-        do { try await execute(request) } catch {
-            if let failure = error as? CredentialHTTPError, failure.code == "model_not_found" {
-                try Task.checkCancellation()
-                let key = request.value["connectionKey"] as? String
-                if let accountID = request.value["accountId"] as? String,
-                    request.action == "generate" || request.value["provider"] as? String == "chatgpt-plan"
-                {
-                    _ = try? await planCatalog(accountID: accountID, connectionKey: key, intent: .refresh)
-                } else if let key {
-                    _ = try? await connectionCatalog(key, intent: .refresh)
-                }
-                try Task.checkCancellation()
-                throw CredentialStorageError(
-                    "The selected model is unavailable. Update its preset in Settings.")
+        do { try await execute(request.operation) } catch {
+            guard let failure = error as? CredentialHTTPError, failure.code == "model_not_found" else {
+                throw error
             }
-            throw error
+            try Task.checkCancellation()
+            await refreshUnavailableModel(request.operation)
+            try Task.checkCancellation()
+            throw CredentialStorageError(
+                "The selected model is unavailable. Update its preset in Settings.")
         }
     }
-    package static func planContent(_ value: [String: Any]) -> Any {
-        let text = value["userPrompt"] as? String ?? ""
-        let attachments = value["attachments"] as? [[String: Any]] ?? []
-        let images = value["images"] as? [String] ?? []
-        guard !attachments.isEmpty || !images.isEmpty else { return text }
-        return [["type": "input_text", "text": text]]
-            + images.map { ["type": "input_image", "image_url": $0, "detail": "auto"] }
-            + attachments.map { ["type": "input_file", "file_url": $0["url"] as? String ?? ""] }
+
+    private func refreshUnavailableModel(_ operation: CredentialOperation) async {
+        let key: String?
+        switch operation {
+        case .generate(let text):
+            _ = try? await planCatalog(
+                accountID: text.accountID, connectionKey: text.connectionKey, intent: .refresh)
+            return
+        case .nativeResponses(let request):
+            if case .plan(let accountID) = request.route {
+                _ = try? await planCatalog(
+                    accountID: accountID, connectionKey: request.connectionKey, intent: .refresh)
+                return
+            }
+            key = request.connectionKey
+        case .apiChat(let chat): key = chat.connectionKey
+        case .apiRealtime(_, _, let connectionKey): key = connectionKey
+        case .image(let image): key = image.connectionKey
+        default: return
+        }
+        if let key { _ = try? await connectionCatalog(key, intent: .refresh) }
     }
-    private func execute(_ request: CredentialRequest) async throws {
-        let value = request.value
+
+    package static func planContent(_ input: CredentialOperation.PlanText) -> Any {
+        guard !input.pdfURLs.isEmpty || !input.images.isEmpty else { return input.userPrompt }
+        return [["type": "input_text", "text": input.userPrompt]]
+            + input.images.map { ["type": "input_image", "image_url": $0, "detail": "auto"] }
+            + input.pdfURLs.map { ["type": "input_file", "file_url": $0] }
+    }
+
+    private func execute(_ operation: CredentialOperation) async throws {
         func result(_ value: [String: Any] = [:]) {
             emit(value.merging(["type": "result"]) { _, new in new })
         }
-        switch request.action {
-        case "connection-status":
+        switch operation {
+        case .connectionStatus(let key):
             let status: [String: Any] = try await withLease {
-                let definition = try connectionDefinition(value["connectionKey"] as? String ?? "")
+                let definition = try connectionDefinition(key)
                 guard definition.kind == .chatGPTPlan else {
                     let status = try storage.connectionStatus(definition.key)
                     if let endpoint = status["endpoint"] as? String, endpoint != definition.endpoint {
@@ -110,42 +116,37 @@ import SaulCredentialStorage
                 ]
             }
             result(["connection": status])
-        case "connection-catalog":
-            let intent = request.catalogIntent ?? (value["force"] as? Bool == true ? .refresh : .display)
-            var catalog = try await connectionCatalog(value["connectionKey"] as? String ?? "", intent: intent)
-            if request.catalogIntent == nil {
+        case .connectionCatalog(let key, let intent, let includeDefault):
+            var catalog = try await connectionCatalog(key, intent: intent)
+            if !includeDefault {
                 for index in catalog.models.indices { catalog.models[index].isDefault = nil }
             }
             result(["catalog": try JSONSerialization.jsonObject(with: JSONEncoder().encode(catalog))])
-        case "connection-key-save", "connection-key-remove":
+        case .connectionKey(let id, let endpoint, let key):
             let status = try await withLease {
-                let id = value["connectionKey"] as? String ?? ""
-                let saving = request.action == "connection-key-save"
-                if saving { try invalidateAPICatalog(id) }
-                try storage.saveConnectionKey(
-                    id, endpoint: value["endpoint"] as? String ?? "",
-                    key: saving ? value["key"] as? String : nil)
-                if !saving { try? invalidateAPICatalog(id) }
+                if key != nil { try invalidateAPICatalog(id) }
+                try storage.saveConnectionKey(id, endpoint: endpoint, key: key)
+                if key == nil { try? invalidateAPICatalog(id) }
                 return try storage.connectionStatus(id)
             }
             result(["connection": status])
-        case "status", "accounts":
+        case .status, .accounts:
             emit(try await locked { try self.status($0) })
-        case "select":
+        case .select(let id):
             emit(
                 try await locked { auth in
-                    try auth.select((value["accountId"] as? String ?? ""))
+                    try auth.select(id)
                     return try self.status(auth)
                 })
-        case "login":
+        case .login(let id, let consent):
             emit(
                 try await locked { auth in
-                    if let id = value["accountId"] as? String {
+                    if let id {
                         try self.invalidatePlanCatalog(id)
                         try auth.select(id)
                     }
                     try await auth.signIn(
-                        newAccount: value["accountId"] == nil, enablePlan: value["consent"] as? Bool == true
+                        newAccount: id == nil, enablePlan: consent
                     ) { url in
                         self.emit(["type": "authorize", "url": url.absoluteString])
                         return true
@@ -156,10 +157,10 @@ import SaulCredentialStorage
                     try self.storage.pause(account.id, value: false)
                     return ["type": "result", "account": self.summary(account)]
                 })
-        case "logout":
+        case .logout(let id):
             emit(
                 try await locked { auth in
-                    try auth.select((value["accountId"] as? String ?? ""))
+                    try auth.select(id)
                     let warning = try await auth.signOut()
                     guard let profile = auth.selected else {
                         throw CredentialStorageError("Choose a Saul account.")
@@ -171,127 +172,118 @@ import SaulCredentialStorage
                     if let warning { result["warning"] = warning }
                     return result
                 })
-        case "models":
-            let catalog = try await planCatalog(accountID: value["accountId"] as? String ?? "")
+        case .models(let id):
+            let catalog = try await planCatalog(accountID: id)
             guard catalog.fetchedAt > 0 else {
                 throw CredentialStorageError(
                     catalog.error ?? "No models are available for this ChatGPT account.")
             }
             result(["models": catalog.models.map(catalogSummary)])
-        case "generate":
-            let id = value["accountId"] as? String ?? ""
+        case .generate(let text):
             let admission = try await planAdmission(
-                accountID: id, connectionKey: value["connectionKey"] as? String,
-                model: value["model"] as? String ?? "", effort: value["effort"] as? String,
-                fast: value["fast"] as? Bool == true)
+                accountID: text.accountID, connectionKey: text.connectionKey,
+                model: text.model, effort: text.effort, fast: text.fast)
             var body: [String: Any] = [
-                "model": value["model"]!, "instructions": value["systemPrompt"]!,
-                "input": [["role": "user", "content": Self.planContent(value)]], "store": false,
-                "stream": true,
-                "service_tier": admission.tier,
+                "model": text.model, "instructions": text.systemPrompt,
+                "input": [["role": "user", "content": Self.planContent(text)]], "store": false,
+                "stream": true, "service_tier": admission.tier,
             ]
-            if let effort = value["effort"] as? String, !effort.isEmpty {
-                body["reasoning"] = ["effort": effort]
-            }
-            try await streamResponses(body, token: admission.token, accountID: id, native: false)
-        case "api-key-status":
-            let lease = try await CredentialLease.acquire(in: storage.directory)
-            defer { withExtendedLifetime(lease) {} }
-            result(["apiConnected": try storage.records.contains(.openAI)])
-        case "api-key-save", "api-key-remove":
+            if let effort = text.effort, !effort.isEmpty { body["reasoning"] = ["effort": effort] }
+            try await streamResponses(
+                JSONSerialization.data(withJSONObject: body), token: admission.token,
+                accountID: text.accountID, native: false)
+        case .apiKeyStatus:
+            let connected = try await withLease { try storage.records.contains(.openAI) }
+            result(["apiConnected": connected])
+        case .apiKey(let key):
             let connected = try await withLease {
-                let saving = request.action == "api-key-save"
-                if saving { try invalidateAPICatalog("openai-api") }
-                try storage.saveKey(value["key"] as? String)
-                if !saving { try? invalidateAPICatalog("openai-api") }
+                if key != nil { try invalidateAPICatalog("openai-api") }
+                try storage.saveKey(key)
+                if key == nil { try? invalidateAPICatalog("openai-api") }
                 return try storage.records.contains(.openAI)
             }
             result(["apiConnected": connected])
-        case "api-chat":
-            let connection = try await apiConnection(value)
+        case .apiChat(let chat):
+            let connection = try await apiAdmission(
+                connectionKey: chat.connectionKey, model: chat.model, officialOnly: false)
+            let content: Any
+            if let images = chat.images {
+                content =
+                    [["type": "text", "text": chat.userPrompt] as [String: Any]]
+                    + images.map { ["type": "image_url", "image_url": ["url": $0]] }
+            } else {
+                content = chat.userPrompt
+            }
             let body: [String: Any] = [
-                "model": value["model"]!,
+                "model": chat.model,
                 "messages": [
-                    ["role": "system", "content": value["systemPrompt"]!],
-                    [
-                        "role": "user",
-                        "content": (value["images"] as? [String]).map { images -> Any in
-                            [["type": "text", "text": value["userPrompt"]!] as [String: Any]]
-                                + images.map {
-                                    ["type": "image_url", "image_url": ["url": $0]] as [String: Any]
-                                }
-                        } ?? value["userPrompt"]!,
-                    ],
+                    ["role": "system", "content": chat.systemPrompt], ["role": "user", "content": content],
                 ],
-                "temperature": value["temperature"] ?? 0.3, "max_tokens": value["maxTokens"] ?? 1024,
-                "stream": true,
+                "temperature": chat.temperature, "max_tokens": chat.maxTokens, "stream": true,
             ]
             _ = try await streamChat(body, connection: connection) { text, _ in
                 self.emit(["type": "delta", "text": text])
             }
             emit(["type": "complete"])
-        case "api-realtime":
-            let connection = try await apiConnection(value, officialOnly: true)
-            let key = connection.key
+        case .apiRealtime(let model, let voice, let key):
+            let connection = try await apiAdmission(connectionKey: key, model: model, officialOnly: true)
             let body: [String: Any] = [
                 "session": [
-                    "type": "realtime", "model": value["model"]!, "output_modalities": ["audio"],
+                    "type": "realtime", "model": model, "output_modalities": ["audio"],
                     "audio": [
                         "input": ["turn_detection": NSNull()],
                         "output": [
-                            "voice": value["voice"]!, "format": ["type": "audio/pcm", "rate": 24000],
+                            "voice": voice, "format": ["type": "audio/pcm", "rate": 24000],
                         ],
                     ],
                     "tools": [], "max_output_tokens": 2048,
                 ]
             ]
             let secret = try await http.json(
-                route: .realtime, body: JSONSerialization.data(withJSONObject: body), credential: key)
+                route: .realtime, body: JSONSerialization.data(withJSONObject: body),
+                credential: connection.key)
             guard let secret = secret["value"] as? String,
                 secret.range(of: "^[A-Za-z0-9_-]{1,4096}$", options: .regularExpression) != nil
             else {
                 throw CredentialStorageError("OpenAI returned an invalid Realtime client secret.")
             }
             result(["clientSecret": secret])
-        case "native-responses":
-            let body = (value["body"] as? [String: Any] ?? [:])
-            let plan = value["provider"] as? String == "chatgpt-plan"
-            let id = value["accountId"] as? String
-            let credential: String
-            if plan {
-                let effort = (body["reasoning"] as? [String: Any])?["effort"] as? String
-                let tier = body["service_tier"] as? String ?? "default"
+        case .nativeResponses(let request):
+            switch request.route {
+            case .plan(let accountID):
+                let tier = request.tier ?? "default"
                 let admission = try await planAdmission(
-                    accountID: id ?? "", connectionKey: value["connectionKey"] as? String,
-                    model: body["model"] as? String ?? "", effort: effort,
-                    fast: tier != "default", requestedTier: tier)
-                credential = admission.token
-            } else {
-                let connection = try await apiConnection(value)
+                    accountID: accountID, connectionKey: request.connectionKey,
+                    model: request.model, effort: request.effort, fast: tier != "default", requestedTier: tier
+                )
+                try await streamResponses(
+                    request.providerBody, token: admission.token, accountID: accountID, native: true)
+            case .api:
+                let connection = try await apiAdmission(
+                    connectionKey: request.connectionKey, model: request.model, officialOnly: false)
                 if connection.endpoint != "https://api.openai.com/v1" {
-                    try await streamCompatible(body, connection: connection)
-                    return
+                    try await streamCompatible(request, connection: connection)
+                } else {
+                    try await streamResponses(
+                        request.providerBody, token: connection.key, accountID: nil, native: true)
                 }
-                credential = connection.key
             }
-            try await streamResponses(body, token: credential, accountID: plan ? id : nil, native: true)
-        case "native-image", "api-image":
-            let key = try await apiConnection(value, officialOnly: true).key
+        case .image(let request):
+            let connection = try await apiAdmission(
+                connectionKey: request.connectionKey, model: request.model, officialOnly: true)
             var image: ImageAttachment?
-            if let encoded = value["imageBase64"] as? String {
+            if let encoded = request.imageBase64 {
                 guard let data = Data(base64Encoded: encoded) else {
                     throw CredentialStorageError("The image attachment is invalid.")
                 }
-                image = try ImageAttachment(data: data, name: value["imageName"] as? String ?? "input")
+                image = try ImageAttachment(data: data, name: request.imageName ?? "input")
             }
             let data = try await ImagesClient().generate(
                 ImageGenerationRequest(
-                    prompt: (value["prompt"] as? String ?? ""),
-                    model: (value["model"] as? String ?? ""), size: (value["size"] as? String ?? ""),
-                    quality: (value["quality"] as? String ?? ""),
-                    outputFormat: (value["outputFormat"] as? String ?? "png"), image: image), apiKey: key)
+                    prompt: request.prompt, model: request.model, size: request.size,
+                    quality: request.quality,
+                    outputFormat: request.outputFormat, image: image), apiKey: connection.key)
             result(["imageBase64": data.base64EncodedString()])
-        default: throw CredentialStorageError("Unsupported Saul operation.")
         }
     }
     private func catalogSummary(_ model: ConnectionModel) -> [String: Any] {
@@ -303,12 +295,12 @@ import SaulCredentialStorage
         if let fast = model.fastTier, ["fast", "priority"].contains(fast) { value["fastTier"] = fast }
         return value
     }
-    private func streamResponses(_ body: [String: Any], token: String, accountID: String?, native: Bool)
+    private func streamResponses(_ body: Data, token: String, accountID: String?, native: Bool)
         async throws
     {
         var complete = false
         try await http.stream(
-            route: .responses, body: JSONSerialization.data(withJSONObject: body), credential: token
+            route: .responses, body: body, credential: token
         ) { data, elapsed in
             if String(data: data, encoding: .utf8) == "[DONE]" { return true }
             guard var event = try JSONSerialization.jsonObject(with: data) as? [String: Any],

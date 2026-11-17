@@ -79,11 +79,24 @@ private func denied(_ operation: () throws -> Void) throws {
             "Status exposed refresh token")
         try expect(
             !String(decoding: summary, as: UTF8.self).contains("fixture-new-key"), "Status exposed API key")
+        func planContent(_ extras: [String: Any]) throws -> Any {
+            let defaults: [String: Any] = [
+                "action": "generate", "accountId": "fixture", "model": "m", "systemPrompt": "",
+            ]
+            let frame = try JSONSerialization.data(withJSONObject: [
+                "version": 2, "id": "plan-attachment", "request": defaults.merging(extras) { _, new in new },
+            ])
+            guard case .generate(let text) = try CredentialRequest.decode(frame, caller: .saul).operation
+            else {
+                throw Failure.check("Validated generation request did not retain its command type")
+            }
+            return CredentialOwner.planContent(text)
+        }
         let image = "data:image/jpeg;base64,YQ=="
         let content =
-            CredentialOwner.planContent([
+            try planContent([
                 "userPrompt": "Evidence", "images": [image],
-                "attachments": [["url": "https://example.test/paper.pdf"]],
+                "attachments": [["type": "pdf-url", "url": "https://example.test/paper.pdf"]],
             ]) as? [[String: String]]
         try expect(
             content == [
@@ -91,9 +104,7 @@ private func denied(_ operation: () throws -> Void) throws {
                 ["type": "input_image", "image_url": image, "detail": "auto"],
                 ["type": "input_file", "file_url": "https://example.test/paper.pdf"],
             ], "Image input silently removed the PDF attachment")
-        try expect(
-            CredentialOwner.planContent(["userPrompt": "Text"]) as? String == "Text",
-            "Text-only input changed")
+        try expect(try planContent(["userPrompt": "Text"]) as? String == "Text", "Text-only input changed")
         let receipt = root.appendingPathComponent("migration.json")
         let originalReceipt = Data(
             #"{"version":1,"apiMigrated":true,"clients":["saul","ez"],"pausedAccounts":["saul-existing"],"completed":true}"#

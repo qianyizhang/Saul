@@ -78,7 +78,8 @@ import SaulCredentialStorage
                 }
                 running[request.id] = Task {
                     let timer = Task {
-                        try? await Task.sleep(for: .seconds(request.action == "login" ? 310 : 180))
+                        let timeout: Int64 = if case .login = request.operation { 310 } else { 180 }
+                        try? await Task.sleep(for: .seconds(timeout))
                         if !Task.isCancelled { self.running[request.id]?.cancel() }
                     }
                     defer {

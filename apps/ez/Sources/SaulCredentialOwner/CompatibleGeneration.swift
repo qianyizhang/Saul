@@ -69,19 +69,21 @@ extension CredentialOwner {
     }
 
     /// Adapt Chat Completions to EZ's response accumulator.
-    func streamCompatible(_ input: [String: Any], connection: SharedAuthStorage.APIConnection) async throws {
-        guard input["tools"] == nil, input["reasoning"] == nil,
-            input["service_tier"] == nil || input["service_tier"] as? String == "default"
+    func streamCompatible(
+        _ request: CredentialOperation.Responses, connection: SharedAuthStorage.APIConnection
+    ) async throws {
+        guard !request.usesWebSearch, request.effort == nil,
+            request.tier == nil || request.tier == "default"
         else {
             throw CredentialStorageError(
                 "This endpoint does not support the preset's search, reasoning or speed options. Update the preset."
             )
         }
-        var messages = input["input"] as? [[String: Any]] ?? []
-        if let instructions = input["instructions"] as? String, !instructions.isEmpty {
+        var messages = request.input.map { ["role": $0.role, "content": $0.content] }
+        if let instructions = request.instructions, !instructions.isEmpty {
             messages.insert(["role": "system", "content": instructions], at: 0)
         }
-        let body: [String: Any] = ["model": input["model"]!, "messages": messages, "stream": true]
+        let body: [String: Any] = ["model": request.model, "messages": messages, "stream": true]
         let end = try await streamChat(body, connection: connection) { text, elapsed in
             try self.emitCompatibleResponse(["type": "response.output_text.delta", "delta": text], elapsed)
         }
