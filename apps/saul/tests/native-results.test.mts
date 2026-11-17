@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { workspaceState } from '../native/workspace-contract.mts';
 import { validateToolResult } from '../native/results.mts';
+import type { ToolArgs } from '../native/protocol.mts';
 import { tab } from './fixtures.mts';
 
 const snapshot = {
@@ -28,6 +29,25 @@ it('rejects malformed browser results before exposing typed data', () => {
     expect(() => validateToolResult('saul_tabs_list', invalid)).toThrow('Invalid browser result');
     expect(() => workspaceState({ ...state, snapshot: invalid === null ? {} : invalid })).toThrow(
       'Invalid Saul workspace',
+    );
+  }
+});
+it('checks that annotation outcomes match the requested changes', () => {
+  const args: ToolArgs['saul_annotations'] = {
+    scope: { urls: [], ids: ['one'] },
+    author: { kind: 'agent', name: 'Test' },
+    operation: {
+      action: 'change',
+      changes: [{ id: 'one', revision: 1, operationId: 'purge', action: 'purge' }],
+    },
+  };
+  expect(validateToolResult('saul_annotations', { records: [] })).toEqual({ records: [] });
+  expect(validateToolResult('saul_annotations', { outcomes: [{ id: 'one' }] }, args)).toEqual({
+    outcomes: [{ id: 'one' }],
+  });
+  for (const invalid of [{}, { records: [] }, { outcomes: [{ id: 'other' }] }]) {
+    expect(() => validateToolResult('saul_annotations', invalid, args)).toThrow(
+      'Invalid browser result',
     );
   }
 });

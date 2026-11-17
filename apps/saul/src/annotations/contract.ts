@@ -2,6 +2,14 @@ import { z } from 'zod';
 
 export const retentionMs = 7 * 24 * 60 * 60 * 1000;
 export const annotationIdSchema = z.string().min(1).max(100);
+export const MAX_ANNOTATION_BATCH = 20;
+export const reviewedAnnotationSchema = z
+  .object({
+    id: annotationIdSchema,
+    revision: z.number().int().positive(),
+  })
+  .strict();
+export type ReviewedAnnotation = z.infer<typeof reviewedAnnotationSchema>;
 const key = annotationIdSchema;
 export const pageUrl = z
   .string()
@@ -148,6 +156,103 @@ export interface AnnotationResult {
   record?: Annotation;
   nextOffset?: number;
   outcomes?: { id: string; record?: AnnotationSummary; error?: string }[];
+}
+const annotationRecordSchema = captureSchema.extend({
+  comment: z.string().max(16000),
+  number: z.number().int().positive(),
+  revision: z.number().int().positive(),
+  createdAt: finite,
+  updatedAt: finite,
+  author: authorSchema,
+  state: z.enum(['open', 'done']),
+  deletedAt: finite.optional(),
+  editedBy: authorSchema.optional(),
+  replies: z
+    .array(
+      z
+        .object({ id: key, text: z.string().max(16000), author: authorSchema, createdAt: finite })
+        .strict(),
+    )
+    .max(100),
+  operations: z.array(
+    z.object({ id: key, signature: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
+  ),
+});
+const annotationSummarySchema = annotationRecordSchema
+  .omit({ image: true, replies: true, operations: true })
+  .extend({ hasImage: z.boolean(), replyCount: z.number().int().min(0).max(100) });
+const changeOutcomeSchema = z.union([
+  z.object({ id: key, record: annotationSummarySchema }).strict(),
+  z.object({ id: key, error: z.string() }).strict(),
+  z.object({ id: key }).strict(),
+]);
+const annotationResults = {
+  list: z
+    .object({
+      records: z.array(annotationSummarySchema).max(25),
+      nextOffset: z.number().int().positive().optional(),
+    })
+    .strict(),
+  read: z.object({ record: annotationRecordSchema }).strict(),
+  create: z.object({ records: z.tuple([annotationSummarySchema]) }).strict(),
+  change: z.object({ outcomes: z.array(changeOutcomeSchema).min(1).max(50) }).strict(),
+} satisfies Record<AnnotationOperation['action'], z.ZodType<AnnotationResult>>;
+
+export function validAnnotationResult(value: unknown, operation?: AnnotationOperation): boolean {
+  if (!operation)
+    return Object.values(annotationResults).some((schema) => schema.safeParse(value).success);
+  switch (operation.action) {
+    case 'list': {
+      const parsed = annotationResults.list.safeParse(value);
+      return parsed.success && parsed.data.records.every((record) => record.url === operation.url);
+    }
+    case 'read': {
+      const parsed = annotationResults.read.safeParse(value);
+      return (
+        parsed.success &&
+        parsed.data.record.id === operation.id &&
+        (operation.image || parsed.data.record.image === undefined)
+      );
+    }
+    case 'create': {
+      const parsed = annotationResults.create.safeParse(value);
+      return parsed.success && parsed.data.records[0].id === operation.capture.id;
+    }
+    case 'change': {
+      const parsed = annotationResults.change.safeParse(value);
+      return (
+        parsed.success &&
+        parsed.data.outcomes.length === operation.changes.length &&
+        parsed.data.outcomes.every((outcome, index) => {
+          const change = operation.changes[index];
+          return (
+            change?.id === outcome.id &&
+            ('record' in outcome
+              ? outcome.record.id === outcome.id
+              : 'error' in outcome || change.action === 'purge')
+          );
+        })
+      );
+    }
+  }
+}
+
+// Leave room for framing, IDs and transport metadata in the 1 MiB bridge.
+const externalResultBytes = 1_000_000;
+export function assertExternalAnnotationSize(
+  result: AnnotationResult,
+  operation: AnnotationOperation,
+) {
+  if (new TextEncoder().encode(JSON.stringify(result)).byteLength <= externalResultBytes) return;
+  const recovery =
+    operation.action === 'read'
+      ? operation.image
+        ? 'Try reading without the image, or open it in Saul.'
+        : 'Open the complete annotation in Saul.'
+      : operation.action === 'change'
+        ? 'No changes were applied. Submit fewer changes at a time.'
+        : 'Open Annotations in Saul.';
+  throw new Error(`Annotation response exceeds the bridge size limit. ${recovery}`);
 }
 export function summary(a: Annotation): AnnotationSummary {
   const { image, operations, replies, ...rest } = a;

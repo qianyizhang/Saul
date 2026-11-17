@@ -4,6 +4,7 @@ import {
   type AnnotationRequest,
   type AnnotationResult,
 } from '../src/annotations/contract.ts';
+export { validAnnotationResult } from '../src/annotations/contract.ts';
 export type ToolCaller = <K extends ToolName>(
   name: K,
   args?: ToolArgs[K],

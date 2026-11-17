@@ -1,5 +1,5 @@
 import { workspaceSender } from '../contracts/reading';
-import { HOST_NAME } from '../../native/protocol.mts';
+import { HOST_NAME, MAX_MESSAGE } from '../../native/protocol.mts';
 import { handleTabCall } from './tabs';
 
 export const ENABLED_KEY = 'saul_native_enabled';
@@ -59,7 +59,20 @@ export function initNativeBridge() {
               },
             };
           }
-          if (port === current) current.postMessage(response);
+          if (port !== current) return;
+          if (
+            message.method === 'saul_annotations' &&
+            new TextEncoder().encode(JSON.stringify(response) + '\n').byteLength > MAX_MESSAGE
+          ) {
+            // The storage budget normally handles this before commit. This is a final frame guard.
+            current.postMessage({
+              id: message.id,
+              error: {
+                message:
+                  'Annotation response exceeds the bridge size limit. Review it in Saul before retrying.',
+              },
+            });
+          } else current.postMessage(response);
         })
         .catch((error) => console.warn('[Saul] Native response failed', error));
     });

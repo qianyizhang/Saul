@@ -30,6 +30,8 @@ calling models. Removing a record removes its owned images.
 **Respond to annotations** reviews count, Call, model preset, image inclusion
 and optional live page read before Run. Freeze reviewed revisions and choices.
 All open skips empty comments; an explicitly selected empty comment blocks.
+If more than 20 are eligible, select up to 20 to run at once. If a reviewed
+record changes before admission, review the updated batch before starting it.
 Saved evidence is the default. Image support is checked before inference;
 **Text evidence only** is explicit and recorded. A reply belongs to one record.
 Failed saves report unsaved output; Stop, failure and restart never resubmit.

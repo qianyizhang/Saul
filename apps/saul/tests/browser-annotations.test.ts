@@ -66,6 +66,65 @@ const request = (operation: AnnotationRequest['operation']): AnnotationRequest =
   author: { kind: 'user', name: 'You' },
   operation,
 });
+it('rejects oversized external reads and change acknowledgements without losing saved annotations', () => {
+  const sql = database();
+  const longTarget = { ...capture.target, text: '\u0001'.repeat(16000) };
+  const changes = Array.from({ length: 12 }, (_, index) => {
+    const id = `large-${index}`;
+    annotationStore(
+      sql,
+      'p',
+      request({ action: 'create', capture: { ...capture, id, target: longTarget } }),
+    );
+    return {
+      id,
+      revision: 1,
+      operationId: `edit-${index}`,
+      action: 'edit' as const,
+      text: 'Changed',
+    };
+  });
+  expect(() =>
+    annotationStore(sql, 'p', {
+      ...request({ action: 'list', url, filter: 'open', offset: 0 }),
+      external: true,
+    }),
+  ).toThrow('Annotation response exceeds the bridge size limit');
+  expect(() =>
+    annotationStore(sql, 'p', { ...request({ action: 'change', changes }), external: true }),
+  ).toThrow('No changes were applied');
+  const read = request({ action: 'read', id: changes[0]!.id, image: false });
+  expect(annotationStore(sql, 'p', { ...read, external: true }).record?.revision).toBe(1);
+  const accepted = annotationStore(sql, 'p', {
+    ...request({ action: 'change', changes: changes.slice(0, 1) }),
+    external: true,
+  });
+  expect(accepted.outcomes?.[0]?.record?.revision).toBe(2);
+  for (let index = 0; index < 21; index++) {
+    annotationStore(
+      sql,
+      'p',
+      request({
+        action: 'change',
+        changes: [
+          {
+            id: changes[0]!.id,
+            revision: index + 2,
+            operationId: `reply-${index}`,
+            action: 'append',
+            text: '漢'.repeat(16000),
+          },
+        ],
+      }),
+    );
+  }
+  const saved = annotationStore(sql, 'p', read).record;
+  expect(saved?.replies).toHaveLength(21);
+  expect(() => annotationStore(sql, 'p', { ...read, external: true })).toThrow(
+    'Open the complete annotation in Saul',
+  );
+  expect(annotationStore(sql, 'p', read).record).toEqual(saved);
+});
 it('persists exact URLs, attributed replies, conflicts, retries and seven-day deletion through SQLite', () => {
   const directory = mkdtempSync(join(tmpdir(), 'saul-annotation-'));
   files.push(directory);
@@ -238,7 +297,14 @@ it('requires an explicit new reply after a terminal write fails and preserves a 
   } as RunInput;
   const respond = () =>
     runner.request(
-      { action: 'respond', url, ids: [capture.id], presetId: 'p', textOnly: false, current: false },
+      {
+        action: 'respond',
+        url,
+        targets: [{ id: capture.id, revision: 1 }],
+        presetId: 'p',
+        textOnly: false,
+        current: false,
+      },
       { choices: input, credential: '' },
     );
   const replies = () =>
@@ -301,7 +367,24 @@ it('rolls back the admitted input batch when one selected revision changed befor
       {
         action: 'respond',
         url,
-        ids: [capture.id, second.id],
+        targets: [{ id: second.id, revision: 2 }],
+        presetId: 'p',
+        textOnly: true,
+        current: false,
+      },
+      { choices: { remote: { model: 'gpt-6' } } as RunInput, credential: '' },
+    ),
+  ).rejects.toThrow('Annotation changed after review');
+  expect(annotationAttempts(sql, 'p', { action: 'read' })).toEqual([]);
+  await expect(
+    runner.request(
+      {
+        action: 'respond',
+        url,
+        targets: [
+          { id: capture.id, revision: 1 },
+          { id: second.id, revision: 1 },
+        ],
         presetId: 'p',
         textOnly: true,
         current: false,
@@ -312,6 +395,82 @@ it('rolls back the admitted input batch when one selected revision changed befor
   expect(calls).toBe(0);
   expect(annotationAttempts(sql, 'p', { action: 'read' })).toEqual([]);
 });
+
+it.each(['saving the transcript', 'streaming the model'] as const)(
+  'closes annotation Call generation on script return while %s',
+  async (phase) => {
+    const sql = database();
+    annotationStore(sql, 'p', request({ action: 'create', capture }));
+    const held = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const db: DbCall = async (message) => {
+      const m = message as DbRequest;
+      if (m.type === 'DB_ANNOTATION') return annotationStore(sql, 'p', m.payload) as never;
+      if (m.type !== 'DB_ANNOTATION_ATTEMPT') throw new Error('Unexpected operation');
+      if (
+        phase === 'saving the transcript' &&
+        m.payload.action === 'save' &&
+        m.payload.attempt.calls?.length
+      ) {
+        held.resolve();
+        await release.promise;
+      }
+      return annotationAttempts(sql, 'p', m.payload) as never;
+    };
+    let modelSignal: AbortSignal | undefined;
+    let child: Promise<unknown> | undefined;
+    const host = new AbortController();
+    const runner = new AnnotationRunner(
+      db,
+      async function* (_input, _credential, signal) {
+        modelSignal = signal;
+        held.resolve();
+        await release.promise;
+        yield { type: 'delta', text: 'Late model output' };
+        yield { type: 'complete' };
+      },
+      async (_request, options) => {
+        child = options!.generate!({ instructions: 'Explain' }, host.signal).catch(
+          (error: unknown) => error,
+        );
+        await held.promise;
+        host.abort();
+        return { type: 'result', text: 'Final script reply' };
+      },
+    );
+    try {
+      const job = await runner.request(
+        {
+          action: 'respond',
+          url,
+          targets: [{ id: capture.id, revision: 1 }],
+          presetId: 'p',
+          textOnly: true,
+          current: false,
+          callRevision: 'a'.repeat(64),
+        },
+        { choices: { remote: { model: 'test' } } as RunInput, credential: '' },
+      );
+      const readAttempt = () => annotationAttempts(sql, 'p', { action: 'read', id: job.ids[0] })[0];
+      await expect.poll(() => readAttempt()?.status).toBe('completed');
+      if (phase === 'streaming the model') expect(modelSignal?.aborted).toBe(true);
+      release.resolve();
+      expect(await child).toMatchObject({ name: 'AbortError' });
+      if (phase === 'saving the transcript') expect(modelSignal).toBeUndefined();
+      expect(readAttempt()?.raw).toBe('Final script reply');
+      expect(
+        annotationStore(
+          sql,
+          'p',
+          request({ action: 'read', id: capture.id, image: false }),
+        ).record?.replies.map((r) => r.text),
+      ).toEqual(['Final script reply']);
+    } finally {
+      release.resolve();
+      await child;
+    }
+  },
+);
 
 it('deletion settles saved queued attempts and rejects late replies', () => {
   const db = database();
@@ -372,7 +531,14 @@ it('shares the two-invocation limit across separately admitted annotation batche
   });
   for (const id of ids)
     await runner.request(
-      { action: 'respond', url, ids: [id], presetId: 'p', textOnly: true, current: false },
+      {
+        action: 'respond',
+        url,
+        targets: [{ id, revision: 1 }],
+        presetId: 'p',
+        textOnly: true,
+        current: false,
+      },
       { choices: { remote: { model: 'gpt-6' } } as RunInput, credential: '' },
     );
   await expect.poll(() => releases.length).toBe(2);

@@ -17,7 +17,7 @@ export interface AnnotationAttempt {
 }
 export interface AnnotationDbOperations {
   DB_ANNOTATION_IMAGE: { payload: { id: string; image?: string; error?: string }; result: void };
-  DB_ANNOTATION: { payload: AnnotationRequest; result: AnnotationResult };
+  DB_ANNOTATION: { payload: AnnotationRequest & { external?: true }; result: AnnotationResult };
   DB_ANNOTATION_ATTEMPT: {
     payload:
       | { action: 'admit'; attempts: AnnotationAttempt[] }

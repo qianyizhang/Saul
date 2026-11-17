@@ -116,7 +116,7 @@ export async function callTool(name: string, input: unknown = {}): Promise<unkno
   const params: Record<string, unknown> = { ...args };
   delete params.session;
   if (!['saul_tabs_list', 'saul_windows_label'].includes(name))
-    return validateToolResult(name as ToolName, await request(session, name, params));
+    return validateToolResult(name as ToolName, await request(session, name, params), args);
   const connected = await request(session, '__ping');
   if (!isSession(connected)) throw new Error('Invalid bridge session');
   let names = nativeNames.get(session);

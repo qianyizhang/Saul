@@ -4,6 +4,8 @@ import {
   requestSchema,
   captureSchema,
   annotationIdSchema,
+  MAX_ANNOTATION_BATCH,
+  reviewedAnnotationSchema,
   pageUrl,
   type AnnotationCapture,
   type AnnotationResult,
@@ -16,11 +18,14 @@ import type { Configuration } from '../configuration/definition';
 import { z } from 'zod';
 
 import { ANNOTATION_ACCESS_KEY, annotationPanelKey, annotationVersionKey } from './routing';
-export async function operateAnnotations(request: AnnotationRequest): Promise<AnnotationResult> {
+export async function operateAnnotations(
+  request: AnnotationRequest,
+  external?: true,
+): Promise<AnnotationResult> {
   const parsed = requestSchema.parse(request);
   const result = await runnerRequest<AnnotationResult>({
     operation: 'db',
-    message: { type: 'DB_ANNOTATION', payload: parsed },
+    message: { type: 'DB_ANNOTATION', payload: { ...parsed, ...(external && { external }) } },
   });
   if (['create', 'change'].includes(parsed.operation.action)) {
     await chrome.storage.session.set({ [annotationVersionKey]: crypto.randomUUID() });
@@ -41,7 +46,7 @@ export async function agentAnnotations(request: unknown) {
     throw new Error('Enable Annotation access in Settings → Preferences → Integrations.');
   const parsed = requestSchema.parse(request);
   parsed.author = { kind: 'agent', name: parsed.author.name };
-  return operateAnnotations(parsed);
+  return operateAnnotations(parsed, true);
 }
 async function openPanel(windowId: number, id?: string) {
   // Opening is attempted in the original capture gesture. A visible retry remains if Chrome expires it.
@@ -274,7 +279,7 @@ export function initAnnotations(settings: () => Promise<Configuration>) {
         const p = z
           .object({
             url: pageUrl,
-            ids: z.array(annotationIdSchema).min(1).max(20),
+            targets: z.array(reviewedAnnotationSchema).min(1).max(MAX_ANNOTATION_BATCH),
             presetId: annotationIdSchema,
             textOnly: z.boolean(),
             current: z.boolean(),

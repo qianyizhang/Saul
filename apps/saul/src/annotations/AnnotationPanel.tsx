@@ -2,7 +2,12 @@ import { activeAnnotationAttempt, type AnnotationAttempt } from './attempts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { annotationMessage, annotations, attempts } from './client';
 import { annotationPanelKey, annotationVersionKey } from './routing';
-import type { Annotation, AnnotationChange, AnnotationSummary } from './contract';
+import {
+  MAX_ANNOTATION_BATCH,
+  type Annotation,
+  type AnnotationChange,
+  type AnnotationSummary,
+} from './contract';
 import type { ModelPreset } from '../configuration/definition';
 import type { CallChoice } from '../calls/contract';
 import './panel.css';
@@ -187,6 +192,11 @@ export function AnnotationPanel({ windowId }: { windowId: number }) {
               {checked.length ? 'Selected annotations' : 'All open annotations with comments'}.{' '}
               {targets.filter((a) => a.hasImage).length} screenshots.
             </p>
+            {targets.length > MAX_ANNOTATION_BATCH && (
+              <p className="notice" role="status">
+                Select up to {MAX_ANNOTATION_BATCH} annotations to run at once.
+              </p>
+            )}
             <label>
               Call
               <select value={call} onChange={(e) => setCall(e.target.value)}>
@@ -232,7 +242,7 @@ export function AnnotationPanel({ windowId }: { windowId: number }) {
             </p>
             <button
               className="btn primary"
-              disabled={busy || !preset || !targets.length}
+              disabled={busy || !preset || !targets.length || targets.length > MAX_ANNOTATION_BATCH}
               onClick={() => {
                 setBusy(true);
                 setError('');
@@ -240,7 +250,7 @@ export function AnnotationPanel({ windowId }: { windowId: number }) {
                   action: 'respond',
                   options: {
                     url: page.url,
-                    ids: targets.map((a) => a.id),
+                    targets: targets.map(({ id, revision }) => ({ id, revision })),
                     presetId: preset,
                     textOnly,
                     current,

@@ -186,6 +186,33 @@ describe('native transport', () => {
       'Tab was closed',
     );
   });
+  it('returns an empty annotation list through the real CLI and MCP client', async () => {
+    const url = 'https://example.com/';
+    const args = {
+      scope: { urls: [url] },
+      author: { kind: 'agent', name: 'Test agent' },
+      operation: { action: 'list', url },
+    };
+    await host((message) => {
+      expect(message.method).toBe('saul_annotations');
+      return { result: { records: [] } };
+    });
+    const cli = await subprocess('.build/native/cli.mjs', ['annotations', JSON.stringify(args)]);
+    expect(cli.code).toBe(0);
+    expect(JSON.parse(cli.stdout)).toEqual({ records: [] });
+    const mcp = await subprocess(
+      '.build/native/mcp.mjs',
+      [],
+      JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'saul_annotations', arguments: args },
+      }) + '\n',
+    );
+    expect(mcp.code).toBe(0);
+    expect(JSON.parse(mcp.stdout).result.structuredContent).toEqual({ records: [] });
+  });
   it('rejects pending calls and removes its socket when Chrome disconnects', async () => {
     let received!: () => void;
     const incoming = new Promise<void>((resolve) => {

@@ -3,7 +3,12 @@ import {
   type AnnotationAttempt,
   type AnnotationDbOperations,
 } from './attempts';
-import { evidence, type Annotation, type AnnotationRequest } from './contract';
+import {
+  evidence,
+  type Annotation,
+  type AnnotationRequest,
+  type ReviewedAnnotation,
+} from './contract';
 import type { DbCall } from '../types/storage';
 import type { PreparedModel } from '../configuration/resolve';
 import { streamModel } from '../providers/stream';
@@ -13,7 +18,7 @@ export type AnnotationRunRequest =
   | {
       action: 'respond';
       url: string;
-      ids: string[];
+      targets: ReviewedAnnotation[];
       presetId: string;
       textOnly: boolean;
       current: boolean;
@@ -84,13 +89,15 @@ export class AnnotationRunner {
     return next;
   }
 
-  operate(request: AnnotationRequest) {
+  operate(request: AnnotationRequest, signal?: AbortSignal) {
+    signal?.throwIfAborted();
     if (
       request.operation.action !== 'change' ||
       !request.operation.changes.some((change) => ['delete', 'purge'].includes(change.action))
     )
       return this.db({ type: 'DB_ANNOTATION', payload: request });
     return this.control(async () => {
+      signal?.throwIfAborted();
       const result = await this.db({ type: 'DB_ANNOTATION', payload: request });
       if (request.operation.action !== 'change') return result;
       for (const change of request.operation.changes) {
@@ -162,9 +169,10 @@ export class AnnotationRunner {
     prepared?: PreparedModel,
   ) {
     if (!prepared) throw new Error('Choose a model preset.');
-    if (new Set(p.ids).size !== p.ids.length) throw new Error('Select each annotation once.');
+    if (new Set(p.targets.map(({ id }) => id)).size !== p.targets.length)
+      throw new Error('Select each annotation once.');
     const records: Annotation[] = [];
-    for (const id of p.ids) {
+    for (const { id, revision } of p.targets) {
       if ([...this.jobs.values()].some((job) => !job.discarded && job.attempt.annotationId === id))
         throw new Error('An annotation is already running.');
       const { record } = await this.db({
@@ -177,6 +185,8 @@ export class AnnotationRunner {
       });
       if (!record || record.deletedAt !== undefined) throw new Error('Annotation unavailable.');
       if (record.url !== p.url) throw new Error('Annotation belongs to another page.');
+      if (record.revision !== revision)
+        throw new Error('Annotation changed after review. Review it and run again.');
       if (!record.comment.trim())
         throw new Error('Add a comment before responding to this capture.');
       records.push(record);
@@ -281,40 +291,56 @@ export class AnnotationRunner {
   private async run(job: AnnotationJob) {
     const { attempt: a, annotation, controller, credential } = job;
     const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(300_000)]);
+    const callbacks = new AbortController();
+    const callbackSignal = AbortSignal.any([signal, callbacks.signal]);
     let replyRevision = a.revision;
     try {
       a.status = 'running';
       await this.save(a);
       signal.throwIfAborted();
       this.changed(a.url);
-      const generate = async (instructions: string, input = a.evidence) => {
-        signal.throwIfAborted();
+      const generate = async (
+        instructions: string,
+        input = a.evidence,
+        hostSignal?: AbortSignal,
+      ) => {
+        const generationSignal = hostSignal
+          ? AbortSignal.any([callbackSignal, hostSignal])
+          : callbackSignal;
+        generationSignal.throwIfAborted();
         const transcript = { instructions, input, raw: '', complete: false };
         (a.calls ??= []).push(transcript);
         await this.save(a);
+        generationSignal.throwIfAborted();
         let saved = '';
         let pending: Promise<void> | undefined;
         let checkpointError: unknown;
         const timer = setInterval(() => {
-          if (pending || checkpointError || saved === transcript.raw) return;
+          if (generationSignal.aborted || pending || checkpointError || saved === transcript.raw)
+            return;
           saved = transcript.raw;
           pending = this.save(a)
             .catch((error: unknown) => {
-              checkpointError = error;
-              controller.abort();
+              if (!generationSignal.aborted) {
+                checkpointError = error;
+                controller.abort();
+              }
             })
             .finally(() => {
               pending = undefined;
             });
         }, 500);
+        const stopCheckpoint = () => clearInterval(timer);
+        generationSignal.addEventListener('abort', stopCheckpoint, { once: true });
         let readFailure: { cause: unknown } | undefined;
         try {
           for await (const event of this.model(
             { ...a.input, systemPrompt: instructions, userPrompt: input },
             credential,
-            signal,
+            generationSignal,
             { maxTokens: 6000, ...(a.image ? { images: [a.image] } : {}) },
           )) {
+            generationSignal.throwIfAborted();
             if (event.type === 'delta') {
               if (transcript.raw.length + event.text.length > 16000)
                 throw new Error('Reply exceeds the 16,000 character annotation limit.');
@@ -329,12 +355,13 @@ export class AnnotationRunner {
         } catch (cause) {
           readFailure = { cause };
         } finally {
-          clearInterval(timer);
+          stopCheckpoint();
+          generationSignal.removeEventListener('abort', stopCheckpoint);
           await pending;
         }
         if (checkpointError) throw checkpointError;
         if (readFailure) throw readFailure.cause;
-        signal.throwIfAborted();
+        generationSignal.throwIfAborted();
         if (!transcript.complete || !transcript.raw.trim())
           throw new Error('Provider did not complete a readable response.');
         return transcript.raw;
@@ -357,19 +384,24 @@ export class AnnotationRunner {
           {
             signal,
             annotations: async (operation) => {
-              signal.throwIfAborted();
-              const result = await this.operate({
-                scope: { ids: [annotation.id], urls: [] },
-                author: { kind: 'call', name: a.input.preset?.name ?? 'Custom Call' },
-                operation,
-              });
+              callbackSignal.throwIfAborted();
+              const result = await this.operate(
+                {
+                  scope: { ids: [annotation.id], urls: [] },
+                  author: { kind: 'call', name: a.input.preset?.name ?? 'Custom Call' },
+                  operation,
+                },
+                callbackSignal,
+              );
+              callbackSignal.throwIfAborted();
               const own = result.outcomes?.find((o) => o.id === annotation.id && !o.error)?.record;
               if (own) replyRevision = own.revision;
               return result;
             },
-            generate: (request) => generate(request.instructions, request.input ?? a.evidence),
+            generate: (request, hostSignal) =>
+              generate(request.instructions, request.input, hostSignal),
           },
-        );
+        ).finally(() => callbacks.abort());
         if (!result.text?.trim() || result.text.length > 16000)
           throw new Error('Call must return a nonempty reply of at most 16,000 characters.');
         a.raw = result.text;
@@ -392,6 +424,8 @@ export class AnnotationRunner {
         status: error instanceof AnnotationWriteError || !signal.aborted ? 'failed' : 'cancelled',
         error: message(error),
       });
+    } finally {
+      callbacks.abort();
     }
   }
 }

@@ -1,5 +1,10 @@
 import type { AnnotationAttempt } from './attempts';
-import type { AnnotationCapture, AnnotationOperation, AnnotationResult } from './contract';
+import type {
+  AnnotationCapture,
+  AnnotationOperation,
+  AnnotationResult,
+  ReviewedAnnotation,
+} from './contract';
 import type { ModelPreset } from '../configuration/definition';
 import type { CallChoice } from '../calls/contract';
 import type { Reply } from '../types/storage';
@@ -22,7 +27,7 @@ type Operations = {
     {
       options: {
         url: string;
-        ids: string[];
+        targets: ReviewedAnnotation[];
         presetId: string;
         textOnly: boolean;
         current: boolean;

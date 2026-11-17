@@ -188,3 +188,9 @@ Creating an annotation requires its page URL in scope and a bounded capture reco
 Agent-supplied captures retain agent attribution; they are not claimed as fresh browser
 screenshots. Tool discovery alone does not prove rendering or image arrival in an
 installed Codex chat; verify the actual host separately when delivering that integration.
+
+The bridge returns a size error if the complete result cannot fit. Try a read
+without the screenshot or open the full record in Saul. If a change batch
+would return an oversized acknowledgement, none of it is applied; submit
+fewer changes per request. Other batches still report success or failure per
+item. Size limits do not remove saved replies or evidence.

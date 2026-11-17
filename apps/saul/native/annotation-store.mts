@@ -10,7 +10,10 @@ import {
   captureSchema,
   retentionMs,
   summary,
+  assertExternalAnnotationSize,
+  MAX_ANNOTATION_BATCH,
   type Annotation,
+  type AnnotationRequest,
   type AnnotationResult,
   type AnnotationScope,
 } from '../src/annotations/contract.ts';
@@ -31,12 +34,18 @@ export function annotationStore(
   now = Date.now(),
 ): AnnotationResult {
   tables(db);
-  return db.transaction(() => applyAnnotationOperation(db, owner, request, now));
+  const { external, ...input } = request;
+  return db.transaction(() => {
+    const result = applyAnnotationOperation(db, owner, input, now);
+    // Reject before the transaction commits, even when each item fits by itself.
+    if (external) assertExternalAnnotationSize(result, input.operation);
+    return result;
+  });
 }
 function applyAnnotationOperation(
   db: SqlDatabase,
   owner: string,
-  request: AnnotationDbOperations['DB_ANNOTATION']['payload'],
+  request: AnnotationRequest,
   now: number,
 ): AnnotationResult {
   const { scope, author, operation: op } = requestSchema.parse(request);
@@ -216,7 +225,11 @@ export function annotationAttempts(
         throw new Error('Invalid annotation attempt.');
     };
     if (p.action === 'admit') {
-      if (!Array.isArray(p.attempts) || !p.attempts.length || p.attempts.length > 20)
+      if (
+        !Array.isArray(p.attempts) ||
+        !p.attempts.length ||
+        p.attempts.length > MAX_ANNOTATION_BATCH
+      )
         throw new Error('Invalid annotation attempt batch.');
       for (const a of p.attempts) {
         validate(a);
