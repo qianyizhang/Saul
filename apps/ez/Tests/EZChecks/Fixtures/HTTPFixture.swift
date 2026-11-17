@@ -5,11 +5,13 @@ struct HTTPReply {
     var status = 200
     var chunks: [Data]
     var held = false
+    var finish = true
     var headers = ["Content-Type": "text/event-stream", "x-request-id": "test-request"]
-    init(_ text: String, status: Int = 200, held: Bool = false) {
+    init(_ text: String, status: Int = 200, held: Bool = false, finish: Bool = true) {
         self.status = status
         chunks = [Data(text.utf8)]
         self.held = held
+        self.finish = finish
     }
 }
 
@@ -131,8 +133,10 @@ private final class FixtureProtocol: URLProtocol, @unchecked Sendable {
                 headerFields: reply.headers)!
             self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             for chunk in reply.chunks { self.client?.urlProtocol(self, didLoad: chunk) }
-            self.client?.urlProtocolDidFinishLoading(self)
-            self.stopped = true
+            if reply.finish {
+                self.client?.urlProtocolDidFinishLoading(self)
+                self.stopped = true
+            }
         }
     }
     func fail(_ error: Error) {

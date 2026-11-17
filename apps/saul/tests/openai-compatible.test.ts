@@ -1,9 +1,19 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { streamOpenAICompatible } from '../src/providers/openai-compatible';
 
 const config = { baseUrl: 'http://localhost:11434/v1', model: 'test-model', apiKey: '' };
 const delta = (content: string) => JSON.stringify({ choices: [{ delta: { content } }] });
 const encoder = new TextEncoder();
+const shared = JSON.parse(
+  readFileSync(
+    new URL('../../../contracts/fixtures/compatible-chat.json', import.meta.url),
+    'utf8',
+  ),
+) as {
+  version: 1;
+  cases: { name: string; sse: string; text: string; outcome: 'completed' | 'failed' }[];
+};
 
 function respond(chunks: Uint8Array[], keepOpen = false) {
   const cancel = vi.fn();
@@ -26,6 +36,28 @@ async function collect() {
 }
 
 afterEach(() => vi.unstubAllGlobals());
+
+describe('shared compatible chat contract', () => {
+  it.each(shared.cases)('$name', async (scenario) => {
+    expect(shared.version).toBe(1);
+    respond([encoder.encode(scenario.sse)]);
+    let text = '';
+    let completions = 0;
+    let failed = false;
+    try {
+      for await (const event of streamOpenAICompatible(config, 'System', 'Explain')) {
+        if (event.type === 'delta') text += event.text;
+        if (event.type === 'complete') completions++;
+      }
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      failed = true;
+    }
+    expect(text).toBe(scenario.text);
+    expect(failed).toBe(scenario.outcome === 'failed');
+    expect(completions).toBe(scenario.outcome === 'completed' ? 1 : 0);
+  });
+});
 
 describe('OpenAI-compatible streams', () => {
   it('preserves UTF-8 and multiline SSE events across byte boundaries and line endings', async () => {

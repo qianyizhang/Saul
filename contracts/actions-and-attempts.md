@@ -40,3 +40,21 @@ success across initial/terminal save failure, provider error, missing completion
 cancellation and success. A terminal save failure can omit transient output.
 [History](history.md) covers shared persistence; capture, anchors and scheduling
 are app-specific.
+
+## Stream completion
+
+Saul's direct and signed Chat Completions routes and EZ's compatible endpoints
+consume the same [compatible chat fixtures](fixtures/compatible-chat.json).
+A `stop` finish reason ends the stream. A bare `[DONE]` marker also ends it
+if the provider has sent nonblank text. Use the first accepted terminal marker
+and stop reading. Role-only deltas, null content, empty delta objects and a
+usage chunk with empty choices do not signal completion. Preserve text as sent.
+
+Malformed events, provider errors, non-stop finish reasons and EOF without an
+accepted terminal marker fail the attempt. Stop cancels the stream. Neither
+failure nor Stop turns retained partial output into saved success. A separate
+output check still applies to a completed stream.
+
+Native OpenAI Responses and the ChatGPT plan use the Responses protocol:
+`response.completed` must carry status `completed`. `[DONE]` alone cannot
+complete a Responses stream.

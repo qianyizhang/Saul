@@ -9,6 +9,7 @@ import Foundation
             + spellingComparisonChecks() + recipeHistoryChecks() + responsesChecks() + authenticationChecks()
             + shortcutChecks() + sharedContractChecks() + illustrationChecks() + providerChecks()
             + actionContractChecks() + searchImageChecks() + connectionChecks() + planCatalogChecks()
+            + compatibleChatChecks()
         exit(await CheckRunner.run(cases))
     }
 }

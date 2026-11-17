@@ -1,4 +1,5 @@
 import { eventData } from '../../native/sse.mts';
+import { isRecord } from '../../native/value.mts';
 import { IncompleteGeneration, type ModelEvent } from './events';
 import { credentialEvents } from '../native/credentials';
 export interface OpenAICompatibleConfig {
@@ -90,43 +91,64 @@ export async function* streamOpenAICompatible(
     throw new Error('Response body is null, streaming unavailable');
   }
 
-  let finished = false;
+  let answered = false;
   for await (const data of eventData(response.body)) {
-    if (data.trim() === '[DONE]') {
+    const marker = data.trim();
+    if (!marker) continue;
+    if (marker === '[DONE]') {
+      if (!answered)
+        throw new IncompleteGeneration('incomplete', 'The model completed without returning text.');
       yield { type: 'complete' };
       return;
     }
-    if (!data.trim()) continue;
-    let parsed;
+    const invalid = () =>
+      new Error('The model returned an invalid streaming response. Please retry.');
+    let parsed: unknown;
     try {
       parsed = JSON.parse(data);
     } catch {
-      throw new Error('The model returned an invalid streaming response. Please retry.');
+      throw invalid();
     }
-    if (parsed?.error)
+    if (!isRecord(parsed)) throw invalid();
+    if (parsed.error != null)
       throw new Error(
-        typeof parsed.error.message === 'string'
+        isRecord(parsed.error) && typeof parsed.error.message === 'string'
           ? parsed.error.message
           : 'The provider reported a streaming error.',
       );
-    const delta = parsed?.choices?.[0]?.delta?.content;
-    if (delta != null && typeof delta !== 'string')
+    const choices: unknown = parsed.choices;
+    if (!Array.isArray(choices)) throw invalid();
+    if (choices.length === 0 && isRecord(parsed.usage)) continue;
+    const choice: unknown = choices[0];
+    if (choices.length !== 1 || !isRecord(choice) || !isRecord(choice.delta)) throw invalid();
+    const { content, role, tool_calls, function_call } = choice.delta;
+    if (role != null && typeof role !== 'string') throw invalid();
+    const reason = choice.finish_reason;
+    if (reason != null && typeof reason !== 'string') throw invalid();
+    if (
+      (content != null && typeof content !== 'string') ||
+      tool_calls != null ||
+      function_call != null
+    )
       throw new Error('The model returned non-text content. Choose a text model.');
-    if (delta) yield { type: 'delta', text: delta };
-    const reason = parsed?.choices?.[0]?.finish_reason;
+    if (typeof content === 'string' && content) {
+      answered ||= !!content.trim();
+      yield { type: 'delta', text: content };
+    }
     if (reason != null) {
-      if (reason !== 'stop')
+      if (reason !== 'stop') {
+        const code = /^[a-z][a-z0-9_-]{0,63}$/.test(reason) ? reason : 'incomplete';
         throw new IncompleteGeneration(
-          String(reason),
-          `The model stopped with ${reason}. The partial explanation was retained.`,
+          code,
+          `The model stopped with ${code}. The partial explanation was retained.`,
         );
-      finished = true;
+      }
+      yield { type: 'complete' };
+      return;
     }
   }
-  if (!finished)
-    throw new IncompleteGeneration(
-      'unexpected-eof',
-      'The connection ended without a completion signal. Retry the incomplete explanation.',
-    );
-  yield { type: 'complete' };
+  throw new IncompleteGeneration(
+    'unexpected-eof',
+    'The connection ended without a completion signal. Retry the incomplete explanation.',
+  );
 }

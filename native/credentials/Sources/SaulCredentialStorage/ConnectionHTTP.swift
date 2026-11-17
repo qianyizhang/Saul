@@ -129,16 +129,21 @@ public struct CredentialSSE {
   private var line = Data()
   private var event: [String] = []
   private var eventBytes = 0
+  private var afterCR = false
   public init() {}
   public mutating func append(_ byte: UInt8) throws -> Data? {
-    if byte != 10 {
+    if afterCR {
+      afterCR = false
+      if byte == 10 { return nil }
+    }
+    if byte != 10 && byte != 13 {
       guard line.count < 2_000_000 else {
         throw CredentialStorageError("OpenAI event is too large.")
       }
       line.append(byte)
       return nil
     }
-    if line.last == 13 { line.removeLast() }
+    afterCR = byte == 13
     guard let value = String(data: line, encoding: .utf8) else {
       throw CredentialStorageError("OpenAI returned invalid UTF-8.")
     }
@@ -151,7 +156,7 @@ public struct CredentialSSE {
       }
       return Data(event.joined(separator: "\n").utf8)
     }
-    if value.hasPrefix("data:") {
+    if value == "data" || value.hasPrefix("data:") {
       var data = String(value.dropFirst(5))
       if data.hasPrefix(" ") { data.removeFirst() }
       eventBytes += data.utf8.count

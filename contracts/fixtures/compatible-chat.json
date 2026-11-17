@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "Explicit stop ignores trailing data",
+      "sse": "data: {\"choices\":[{\"delta\":{\"content\":\"Answer 你好\"},\"finish_reason\":null}]}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: {broken}\n\n",
+      "text": "Answer 你好",
+      "outcome": "completed"
+    },
+    {
+      "name": "Role and usage metadata before bare DONE",
+      "sse": "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":null},\"finish_reason\":null}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"Answer 你好\"},\"finish_reason\":null}]}\n\ndata: {\"choices\":[],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":2}}\n\ndata: [DONE]\n\n",
+      "text": "Answer 你好",
+      "outcome": "completed"
+    },
+    {
+      "name": "Bare carriage-return SSE boundaries",
+      "sse": "data: {\"choices\":[{\"delta\":{\"content\":\"Answer 你好\"},\"finish_reason\":null}]}\r\rdata: [DONE]\r\r",
+      "text": "Answer 你好",
+      "outcome": "completed"
+    },
+    {
+      "name": "Bare DONE needs an answer",
+      "sse": "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":null},\"finish_reason\":null}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" \"},\"finish_reason\":null}]}\n\ndata: [DONE]\n\n",
+      "text": " ",
+      "outcome": "failed"
+    },
+    {
+      "name": "EOF with partial answer",
+      "sse": "data: {\"choices\":[{\"delta\":{\"content\":\"Partial\"},\"finish_reason\":null}]}\n\n",
+      "text": "Partial",
+      "outcome": "failed"
+    },
+    {
+      "name": "Incomplete terminator",
+      "sse": "data: {\"choices\":[{\"delta\":{\"content\":\"Partial\"},\"finish_reason\":null}]}\n\ndata: [DONE]",
+      "text": "Partial",
+      "outcome": "failed"
+    },
+    {
+      "name": "Non-stop finish retains any final text",
+      "sse": "data: {\"choices\":[{\"delta\":{\"content\":\"Partial\"},\"finish_reason\":\"length\"}]}\n\ndata: [DONE]\n\n",
+      "text": "Partial",
+      "outcome": "failed"
+    },
+    {
+      "name": "Provider error overrides this event's text",
+      "sse": "data: {\"choices\":[{\"delta\":{\"content\":\"Partial\"},\"finish_reason\":null}]}\n\ndata: {\"error\":{\"message\":\"Provider refused\"},\"choices\":[{\"delta\":{\"content\":\"Hidden\"}}]}\n\ndata: [DONE]\n\n",
+      "text": "Partial",
+      "outcome": "failed"
+    },
+    {
+      "name": "Malformed JSON",
+      "sse": "data: {\"choices\":[{\"delta\":{\"content\":\"Partial\"},\"finish_reason\":null}]}\n\ndata: {broken}\n\n",
+      "text": "Partial",
+      "outcome": "failed"
+    },
+    {
+      "name": "Malformed choice",
+      "sse": "data: {\"choices\":[{\"delta\":{\"content\":\"Partial\"},\"finish_reason\":null}]}\n\ndata: {\"choices\":[{}]}\n\ndata: [DONE]\n\n",
+      "text": "Partial",
+      "outcome": "failed"
+    },
+    {
+      "name": "Malformed empty choices",
+      "sse": "data: {\"choices\":[{\"delta\":{\"content\":\"Partial\"},\"finish_reason\":null}]}\n\ndata: {\"choices\":[]}\n\ndata: [DONE]\n\n",
+      "text": "Partial",
+      "outcome": "failed"
+    },
+    {
+      "name": "Malformed finish reason",
+      "sse": "data: {\"choices\":[{\"delta\":{\"content\":\"Partial\"},\"finish_reason\":null}]}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":[\"stop\"]}]}\n\ndata: [DONE]\n\n",
+      "text": "Partial",
+      "outcome": "failed"
+    },
+    {
+      "name": "Non-text content",
+      "sse": "data: {\"choices\":[{\"delta\":{\"content\":\"Partial\"},\"finish_reason\":null}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":99},\"finish_reason\":null}]}\n\ndata: [DONE]\n\n",
+      "text": "Partial",
+      "outcome": "failed"
+    }
+  ]
+}

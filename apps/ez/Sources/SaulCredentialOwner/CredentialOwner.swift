@@ -226,36 +226,8 @@ import SaulCredentialStorage
                 "temperature": value["temperature"] ?? 0.3, "max_tokens": value["maxTokens"] ?? 1024,
                 "stream": true,
             ]
-            var finished = false
-            try await http.stream(
-                route: .chat, body: JSONSerialization.data(withJSONObject: body), credential: connection.key,
-                endpoint: connection.endpoint
-            ) { data, _ in
-                if String(data: data, encoding: .utf8) == "[DONE]" {
-                    finished = true
-                    return true
-                }
-                guard let event = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                    event["error"] == nil,
-                    let choice = (event["choices"] as? [[String: Any]])?.first
-                else { throw CredentialStorageError("OpenAI returned an invalid text event.") }
-                if let text = (choice["delta"] as? [String: Any])?["content"] {
-                    guard let text = text as? String else {
-                        throw CredentialStorageError("Choose a text model.")
-                    }
-                    if !text.isEmpty { self.emit(["type": "delta", "text": text]) }
-                }
-                if let reason = choice["finish_reason"] as? String {
-                    guard reason == "stop" else {
-                        throw CredentialStorageError(
-                            "OpenAI stopped with \(reason). The partial answer was retained.")
-                    }
-                    finished = true
-                }
-                return false
-            }
-            guard finished else {
-                throw CredentialStorageError("OpenAI disconnected before text completed. Retry explicitly.")
+            _ = try await streamChat(body, connection: connection) { text, _ in
+                self.emit(["type": "delta", "text": text])
             }
             emit(["type": "complete"])
         case "api-realtime":
