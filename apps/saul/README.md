@@ -6,7 +6,7 @@ Saul is a local-first Chrome extension for reading explanations and safe tab org
 
 - **Reading:** select text, queue an explanation, keep reading, and return through persistent underlines, notifications, or history.
 - **Library:** search saved passages and explanations, bookmark them, revisit sources, inspect attempts, and export Markdown.
-- **Models:** use your [ChatGPT plan](docs/chatgpt-plan.md) or an OpenAI-compatible endpoint. Chrome's on-device provider is currently disabled.
+- **Models:** use your [ChatGPT plan](docs/chatgpt-plan.md) or an OpenAI-compatible endpoint. Chrome's on-device provider is retired; saved results remain readable.
 - **Window and Tab board:** select, drag, group, move and summarize tabs with shared controls; Codex proposals retain review and Apply.
 - **Codex access:** opt in to local CLI/MCP tools for tab organization and new windows. A separate switch enables page reading, clicks, text filling and navigation.
 - **MCP App:** drag tabs between windows beside the conversation, use keyboard move controls, or ask Codex for a layout. Review the preview, then apply it with a button. Pinned tabs and existing groups stay intact. See the [workspace guide](docs/mcp-app.md).
@@ -52,6 +52,8 @@ Browser tests use disposable profiles and a local model fixture. On macOS, read 
 | Document                                     | Purpose                                                     |
 | -------------------------------------------- | ----------------------------------------------------------- |
 | [Product](docs/product.md)                   | Shipped behavior and current limits                         |
+| [Calls and summaries](docs/calls.md)         | Page capture, PDF processing, reuse and retry               |
+| [Annotations](docs/annotations.md)           | Persistent page evidence and replies                        |
 | [Architecture](docs/architecture.md)         | Runtime boundaries, data flow, and invariants               |
 | [Design contract](../../DESIGN.md)           | Portable visual identity, component and motion principles   |
 | [Design application](../../design/SKILL.md)  | Generation, cross-project adoption, and visual verification |
@@ -59,5 +61,3 @@ Browser tests use disposable profiles and a local model fixture. On macOS, read 
 | [ChatGPT plan](docs/chatgpt-plan.md)         | OAuth setup, supported API surface and credential lifecycle |
 | [Native messaging](docs/native-messaging.md) | CLI/MCP setup and tab-tool safety                           |
 | [Benchmarks](docs/benchmarks/README.md)      | Reproduction commands and evidence limits                   |
-
-For optional tab access and its helper lifecycle, see [native messaging](docs/native-messaging.md).

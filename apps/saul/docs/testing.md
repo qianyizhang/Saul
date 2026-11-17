@@ -1,22 +1,21 @@
 # Testing
 
-Tests use a built extension snapshot, disposable Chromium profiles, and a loopback article/model server. They do not need an API key, native-host installation, or personal browser data.
+The ordinary suite uses a built extension, disposable Chromium and a loopback
+article/model server. No real account or personal profile is required.
+Explicit live probes are opt-in.
 
 ## macOS browser execution
 
 Read `macos-browser-testing.md` in `$CODEX_HOME/practices`
 (default `~/.codex/practices`) before launching Chrome on this Mac.
 
-Playwright runs `tests/e2e/browser-preflight.ts` once before the suite. A startup
-failure retains the first error in the results directory and stops repeated
-launches. Keep this probe and browser crash notifications enabled.
+Playwright preflight records the first startup failure and stops relaunches.
+Keep the probe and browser crash notifications enabled.
 
 ## Commands
 
-Run the commands below from `apps/saul`; run root `pnpm check` for the combined
-repository gate. Exact membership is owned by [app scripts](../package.json),
-[root scripts](../../../package.json), [hooks](../../../.pre-commit-config.yaml)
-and [CI workflows](../../../.github/workflows).
+Run commands from `apps/saul`. Root `pnpm check` runs the combined gate; see
+[app scripts](../package.json), [hooks](../../../.pre-commit-config.yaml) and [CI](../../../.github/workflows).
 
 ```sh
 # Browser app gate
@@ -32,19 +31,9 @@ pnpm test:user
 pnpm test:user --smoke
 ```
 
-Focused checks can reuse an already-built `.output/chrome-mv3` snapshot:
-
-```sh
-pnpm exec playwright test tests/e2e/reading.spec.ts tests/e2e/passage-highlights.spec.ts
-pnpm exec playwright test tests/e2e/custom-calls.spec.ts tests/e2e/browser-annotations.spec.ts
-pnpm exec playwright test tests/e2e/product.spec.ts
-pnpm exec playwright test tests/e2e/chatgpt-plan.spec.ts
-pnpm exec playwright test tests/e2e/chrome-ai.spec.ts
-pnpm exec playwright test tests/e2e/notifications.spec.ts
-pnpm exec playwright test tests/e2e/minimum-mode.spec.ts tests/e2e/ui-layout.spec.ts
-pnpm exec playwright test tests/e2e/positioning.spec.ts tests/e2e/multiline.spec.ts
-pnpm exec tsc -p tests/e2e/tsconfig.json
-```
+Run one or more specs from `tests/e2e/` with `pnpm exec playwright test <spec>`.
+They can reuse a built `.output/chrome-mv3` snapshot; rebuild for changed source.
+Use `pnpm exec tsc -p tests/e2e/tsconfig.json` to check fixture types.
 
 Optional evidence runs:
 
@@ -53,60 +42,33 @@ SAUL_LIVE_GITHUB=1 pnpm exec playwright test -g 'live GitHub'
 pnpm benchmark
 ```
 
-An existing-build run verifies that snapshot, not newer source edits. Do not rebuild a shared checkout while another task owns its bundle.
-Concurrent suites must use distinct `SAUL_TEST_RUN=<scope>` values. This isolates both results and HTML reports; Playwright clears its results directory at startup. Run names use letters, digits, underscores and hyphens.
+Do not rebuild another task's snapshot. Give concurrent suites distinct
+`SAUL_TEST_RUN` names (letters, digits, underscore or hyphen): Playwright
+clears each run's results at startup.
 
 ## PDF summaries
 
-`tests/e2e/pdf-attachment.spec.ts` exercises the default URL-attachment flow through
-real summary actions, storage and Settings. It proves that Saul makes no PDF
-download, compares no unobserved text, retains the exact file URL across restart
-and Retry, preserves saved results when the default changes, and never falls back
-after a provider error. It inspects the setting and URL inspector at narrow widths
-in light/dark appearances. Model replies use the native messaging fixture.
-`tests/chatgpt-plan.test.mts` verifies the actual Responses `input_file.file_url`
-shape and that the native owner calls Models/Responses without a Files API call.
+- [Attachment spec](../tests/e2e/pdf-attachment.spec.ts) covers no PDF download,
+  unchanged URL on restart/Retry, metadata-only comparison, no fallback and
+  narrow light/dark inspection. [Plan tests](../tests/chatgpt-plan.test.mts) verify
+  `input_file.file_url` without a Files request.
+- [Local spec](../tests/e2e/pdf-summary.spec.ts) runs packaged PDF.js through the
+  viewer, extensionless/query URLs, scanned/mixed pages, coverage and malformed,
+  denied, password, bounded, stopped, navigated or closed captures. It checks the
+  real deadline, unresponsive worker cancellation and frozen-source restart Retry.
+  [PDF unit tests](../tests/pdf.test.ts) cover network/stream limits.
 
-`tests/e2e/pdf-summary.spec.ts` exercises real PDF.js and its packaged worker
-through summary actions, persistence and inspection, explicitly selecting Local
-processing for its disposable profile. It covers Chrome's PDF
-viewer, extensionless/query URLs, mixed/scanned pages, character/page limits,
-password protection, damaged documents, access/login responses, byte limits,
-Stop (including a parser worker that cannot reply), the real 30-second deadline,
-navigation, closure and frozen-source retry after restart. Unit cases in
-`tests/pdf.test.ts` cover streaming limits, network errors and the capture deadline.
-Provider replies use the deterministic digest fixture; these checks consume no
-live model quota and do not establish summary quality.
+From `apps/saul`, use `SAUL_PDF_EXAMPLE` with the supplied Herzlinger PDF stored
+under root `.artifacts/saul/pdf-capture/`, or `SAUL_PDF_EXAMPLE_URL` for its public
+URL. Run `pnpm exec playwright test tests/e2e/pdf-summary.spec.ts -g Herzlinger`.
+Expect 49 pages and exact extracted input in the fixture; neither mode proves
+live cookie-authenticated access.
 
-To include the public Herzlinger example, download the supplied PDF into root
-`.artifacts/saul/pdf-capture/herzlinger.pdf`, then run from `apps/saul`:
-
-```sh
-SAUL_PDF_EXAMPLE="$PWD/../../.artifacts/saul/pdf-capture/herzlinger.pdf" SAUL_TEST_RUN=pdf-capture pnpm exec playwright test tests/e2e/pdf-summary.spec.ts
-```
-
-The opt-in case serves those exact PDF bytes through the fixture server. It
-verifies extraction, the 49-page document count, coverage and the exact source
-sent to the mocked provider. To test the original public URL directly, set
-`SAUL_PDF_EXAMPLE_URL` to that URL instead of `SAUL_PDF_EXAMPLE`, and run the same
-file with `-g Herzlinger`. Downloading/parsing is real in both modes; provider
-replies stay mocked. Neither mode proves live site-cookie authentication.
-Do not commit the downloaded document. Rebuild before testing changed sources.
-
-For an explicit **live server parsing** check, run from `apps/saul`:
-
-```sh
-node --use-env-proxy scripts/probe-pdf-summary.mts PUBLIC_PDF_URL
-```
-
-This consumes plan allowance for exactly one Responses request. It requires one
-eligible existing Saul account and uses its app-owned refresh owner, `gpt-6-luna`
-and medium effort. It sends a PDF URL, downloads/uploads no PDF bytes, prints no
-credentials or account identifier, and stops after success or failure. There is
-no account/model/billing fallback or automatic retry. This verifies live file input
-and bilingual output through the source helper; it does not install or reload the
-personal extension/helper. Browser tests separately verify the summary UI and
-concise-output contract with deterministic provider replies.
+For one deliberate live plan request, run
+`node --use-env-proxy scripts/probe-pdf-summary.mts PUBLIC_PDF_URL`. It uses one
+eligible existing account, GPT-6 Luna and medium effort. It spends plan allowance,
+sends only a URL, prints no credentials or account ID, does not retry/fall back,
+and does not exercise the installed extension.
 
 ## Test layers
 
@@ -116,37 +78,24 @@ concise-output contract with deterministic provider replies.
 | Playwright     | Real extension contexts, shared native SQLite via isolated helper transport, page interaction, restart/loss, migrations, tabs, settings |
 | Manual sandbox | Layout, reading flow, keyboard behavior, and interaction quality in a disposable browser                                                |
 
-The browser harness is in `tests/e2e/support.ts` and `tests/e2e/fixtures.ts`. A sandbox snapshots the extension once and reuses the same profile across relaunches so restart tests prove persistence. Test-only database, marker and browser-tool fixtures are explicitly enabled and bundled only into disposable snapshots.
+[Harness support](../tests/e2e/support.ts) and [fixtures](../tests/e2e/fixtures.ts)
+snapshot the build and reuse its disposable profile across relaunch.
+Test-only database, marker and browser adapters stay out of production bundles.
 
-The board fixture renders the server-delivered document in an opaque frame under
-CSP, using the SDK AppBridge as its host. For wide pointer journeys, call
-`matchWorkspaceWindow(host)` after creating fixture tabs/windows and before the
-next interaction. Chrome can reset native window bounds to the context default
-while leaving the emulated viewport larger; screenshots then look correct but
-pointer events miss the child frame. The helper matches native bounds without
-changing app controls, CSP, or sandbox permissions.
+The MCP fixture uses delivered HTML in an opaque frame under CSP. After creating
+tabs/windows, call `matchWorkspaceWindow(host)`: Chrome can reset native bounds
+while wide emulation makes screenshots look correct but pointer events miss.
 
 ## Artifacts and debugging
 
-Playwright writes to root `.artifacts/saul/e2e/<run>/` (`results/` and `report/`);
-benchmarks use `.artifacts/saul/benchmark/<run>/`. The default run name is `latest`.
-Failures retain traces, screenshots and console logs. Set `SAUL_TEST_RUN` for
-named runs rather than overriding `--output` or the reporter destination.
-All diagnostics are disposable under the [artifact policy](../../../docs/artifacts.md).
-Routine named screenshots for visual review are opt-in with
-`SAUL_CAPTURE_REVIEW=1`. Behavioral, layout, viewport and appearance assertions
-still run without it. Failure screenshots, console logs and tracing (including
-trace images) remain enabled regardless of this flag. Successful runs discard
-their traces. Explicit live-helper and supplied-example PDF runs retain their
-promised captures under their existing opt-ins.
+Results and HTML reports live in root `.artifacts/saul/e2e/<run>/`; benchmarks
+use `.artifacts/saul/benchmark/<run>/`. Default run name: `latest`. Set
+`SAUL_TEST_RUN` instead of overriding output paths. Review screenshots are
+opt-in via `SAUL_CAPTURE_REVIEW=1`; normal assertions and failure traces,
+screenshots and logs still run. Successful traces are discarded. See the
+[artifact policy](../../../docs/artifacts.md) for retention.
 
-Enable review captures when checking a UI change, for example:
-
-```sh
-SAUL_CAPTURE_REVIEW=1 SAUL_TEST_RUN=ui-review pnpm exec playwright test tests/e2e/ui-layout.spec.ts
-```
-
-The commands below run from `apps/saul`:
+From `apps/saul`:
 
 ```sh
 pnpm exec playwright show-report ../../.artifacts/saul/e2e/latest/report
@@ -170,32 +119,21 @@ pnpm exec playwright show-trace ../../.artifacts/saul/e2e/latest/results/<case>/
 
 ## Hands-on checks
 
-In `pnpm test:user`:
+Use `pnpm test:user` for affected journeys:
 
-1. Select the fixture concept and choose **Explain & open**. Confirm its card opens after acceptance. **Illustrate & open** follows the same rule for images.
-2. Close the card before completion and confirm it stays closed. Submit another selection with **Alt+Shift+E**; confirm this keyboard request stays quiet while the underline and queued/ready cues update.
-3. Open the marker, inspect notes, close it, refresh, and reopen the restored result.
-4. Check unread state, **Alt+Shift+L**, source navigation, keyboard/pin/follow-up/stop behavior, and direct tab edits or Codex proposal review when relevant.
-5. Toggle **Mute error notifications** in Settings; verify another tab and a browser relaunch observe the setting, then turn it off.
-6. Toggle **Min Mode** while a page explanation and full History workspace are open. Check that the presentation changes immediately, remains after restart, and can change with an invalid provider draft. In Min Mode, verify **More**, **Details**, source links, errors, and unsaved changes.
-7. Check **Command/Ctrl+Enter** on a source selection, **Escape** while generation is active, and **Command/Ctrl+.** with the job open. Editable fields and Chrome shortcuts must keep their existing behavior.
-8. Make conflicting Settings edits in two surfaces. **Review latest** keeps the
-   original draft while showing changed fields. Cancel returns to the same editing
-   context; Apply requires conflict choices and changes only the draft. Save checks
-   the new revision. An already delivered save needs no second commit.
+- Exercise [reading](product.md#reading) through click vs keyboard submission,
+  close before completion, marker restore after refresh, note/pin/follow-up,
+  Stop, unread state and source navigation. Check editing/native shortcuts.
+- Toggle error notices and Min Mode across two views and restart. Verify
+  presentation still changes with invalid provider settings, and errors,
+  unsaved work and Details stay reachable.
+- Make Settings conflicts in two surfaces. Cancel preserves the original draft;
+  review requires conflict choices, Apply updates only the draft, and Save
+  checks the new revision. Already delivered writes need no second commit.
+- Check tab editing or [proposal approval](mcp-app.md#proposal-and-approval-lifetime)
+  when affected.
 
-A successful smoke run verifies setup only. Record the built source scope, passed checks, and untested live-provider behavior after hands-on review.
-
-## Metadata review — 2026-10-20
-
-Historical layout baseline: static checks and the production build passed, along
-with 194 unit/transport cases (the socket-dependent checks used approved local
-access) and browser coverage of 72 passing and five skipped cases. Fourteen affected
-cases were rerun after correcting two test assumptions.
-Review covered labelled value alignment, long labels, keyboard disclosure and
-360/440/1000 px light/dark layouts across Settings, reading, boards and errors.
-All data came from disposable fixtures; the installed extension was not reloaded.
-These dated results do not establish current acceptance.
+Smoke verifies setup only. Record the built revision and unverified paths.
 
 ## Evidence limits
 
@@ -203,11 +141,10 @@ Linux CI skips the board journey “shared window labels load initially and dupl
 
 The default browser suite uses deterministic local fixtures. It does not verify live provider credentials/output, personal native-host registration, or other browsers. Benchmark reproduction and scope are documented in [benchmarks](benchmarks/README.md).
 
-Chrome on-device generation is retired. The remaining regression verifies that legacy saved selections remain visible, reject execution, and allow an explicit change to an available provider. No Chrome model download, preparation, or generation fixture remains.
-
-Agent workflow: [saul-browser-testing skill](../../../.agents/skills/saul-browser-testing/SKILL.md).
-
-ChatGPT plan unit tests include a real loopback callback and temporary native-helper installation. Run socket-dependent tests with local binding permission. OAuth and inference endpoints are mocked; no real plan quota is consumed.
+The retired on-device path has one compatibility regression: retain old
+choices, block execution, and permit explicit replacement. Plan unit tests mock
+OAuth/models but use a real callback and disposable install; socket tests need
+local binding. See the [browser skill](../../../.agents/skills/saul-browser-testing/SKILL.md).
 
 ## Explicit live digest check
 
@@ -235,10 +172,72 @@ source. The source/output decision is recorded once in the
 
 ## Browser annotation checks
 
-`tests/browser-annotations.test.ts` covers SQLite persistence, revision and scope failures,
-idempotent edits, retention, image request shape and atomic reply completion.
-`tests/e2e/browser-annotations.spec.ts` uses the production extension and native SQLite
-transport with synthetic pages/models: native panel capture, saved screenshot input,
-replies, restart, picking, cancellation, navigation races and the agent boundary.
-The test-only bridge adapter dispatches inside the service worker; it is absent from
-production bundles. Model inference remains a deterministic local fixture.
+[Store and runner cases](../tests/browser-annotations.test.ts) cover revisions,
+scope, idempotency, retention, image requests and atomic reply completion.
+[Browser journeys](../tests/e2e/browser-annotations.spec.ts) use real extension
+and SQLite boundaries with synthetic pages and models. Exercise all capture
+targets, capture before panel resizing, navigation/zoom/scroll races, restart,
+conflicts, delete/restore, cancellation, scoped batch failures and exact
+request inspection. Check keyboard picking/Escape/focus and narrow/wide
+light/dark editor states. The test-only service-worker bridge ships only in
+disposable builds.
+
+## Optional OAuth capability probe
+
+From `apps/saul` run `node --use-env-proxy scripts/probe-capabilities.mts` only
+for deliberate live route checks. It takes exactly one plan-enabled saved
+account, reuses its locked refresh owner and stops if the Responses control
+fails. It never prints credentials or reads browsing history. Sanitized results
+and any returned media go to `.artifacts/saul/capability-probe/`.
+
+## Dated evidence
+
+These records describe only the tested baseline, not the current build.
+
+### Metadata review — 2026-10-20
+
+Static checks, production build, 194 unit/transport cases and 72 browser cases
+passed; five browser cases skipped. Fourteen cases reran after two test fixes.
+Reviewed value alignment, long labels, keyboard disclosure and
+360/440/1000 px light/dark layouts across Settings, reading, board and errors.
+Used disposable fixtures and approved local sockets; personal Chrome stayed loaded.
+
+### Annotations — 2026-11-16
+
+Original implementation `f601ca1`: 32 shared and 463 unit/transport tests
+passed with repository gates; 130 browser cases passed, four opt-ins skipped.
+Light/dark editor captures checked. Journeys verified real side-panel capture,
+scoped agents, replies, restart, navigation races and atomic revision/retention
+behavior. Regressions covered queued conflicts, permanent deletion, two active
+invocations, queued cancellation, failed batch admission and native image/PDF
+serialization. The then-existing save-only recovery was tested and has since
+been removed. No timeout changes. Personal installation, installed Codex image
+delivery, live inference and Linux/Windows acceptance were not verified.
+Temporary captures were retired after review.
+
+### PDF URL attachment — 2026-10-29
+
+One live public Herzlinger PDF request on an eligible saved plan account,
+GPT-6 Luna and medium effort, completed with a document-specific bilingual
+summary. Saul sent the URL without PDF bytes. This did not measure page coverage
+or validate other models, URLs or accounts.
+
+### Direct OAuth route probe — 2026-10-21
+
+One refreshed, plan-enabled token was used for every request. Models returned
+HTTP 200 and Responses on GPT-6 Luna completed with `OK`. Speech
+(`gpt-4o-mini-tts` / coral), embeddings (`text-embedding-3-small`) and chat
+completions (GPT-6 Luna) each returned 401 `no_matching_rule`. A 1024×1024
+low-quality image request (`gpt-image-2.5-flare`) returned 401
+`hardened_oauth_rule_missing`. These are account/registration-specific results;
+no audio or image was generated and Realtime/private routes were not tested.
+The removed OAuth speech UI was exercised with synthetic bytes for playback
+controls, rejection, input validation, cancellation, draft and layout behavior.
+Personal Chrome/helper and live playback were not verified.
+
+### Tab board timing — 2026-10-19
+
+Three dry runs over 175 live tabs in eight windows with native names:
+`6e43593` took 2543/2545/2530 ms, the optimized path 576/570/583 ms
+(77% lower median). One single-tab move reported 29 changed indices before
+and one required move after. No mutation, draft replacement or host timing.

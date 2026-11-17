@@ -25,8 +25,10 @@ and [Script Commands](https://manual.raycast.com/script-commands).
   opens Quick Lookup for explicit Run. EZ owns provider/account choices. Restart
   selects the first remaining action; removed starters stay removed.
 - Active generation/pending launcher work is preserved; a second submission is
-  refused, never queued or substituted. Blocked submissions retain the draft/error
-  for manual ⌘Return; later sign-in does not send automatically.
+  refused, never queued or substituted. A pending submission locks edits and Send
+  until startup completes, then uses normal Send admission. Blocked submissions
+  retain the draft/error for manual ⌘Return; later sign-in does not send automatically.
+  Quit cancels pending startup and launcher tasks.
 - `open -g -a` targets `~/Applications/EZ.app`, avoiding other indexed builds.
   `--ez-launcher` suppresses the main window on macOS 15+; macOS 14 cold launch may
   also show it. Esc hides the panel.

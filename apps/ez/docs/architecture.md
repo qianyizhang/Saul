@@ -1,335 +1,116 @@
-# Architecture and decisions
+# Architecture
 
-EZ is native SwiftUI/AppKit. UI lives in `Sources/EZ`; reusable protocol, storage
-and request logic lives in `Sources/EZCore`. The installed app needs no Codex,
-Node, Python, Electron or webview runtime.
+EZ is native SwiftUI/AppKit. `Sources/EZ` owns UI and app orchestration;
+`Sources/EZCore` owns request, protocol and persistence logic. The installed app
+needs no Codex, Node, Python, Electron or webview runtime.
 
-## Owners
+| Boundary | Owner |
+| --- | --- |
+| Windows, menu bar, Services and launcher | `EZApp`, [Quick Lookup controller](../Sources/EZ/QuickLookupController.swift) and [Services](../Sources/EZ/SelectedTextService.swift) |
+| Shared actions and draft | [AppModel](../Sources/EZ/AppModel.swift) and [LookupDraft](../Sources/EZ/LookupDraft.swift) |
+| Frozen submission | `LookupRequest` / `LookupRoute` |
+| Settings editing | [ConfigurationEditor](../Sources/EZ/ConfigurationEditor.swift), `ConnectionChecks` and `ConfigurationStore` |
+| Attempt and terminal save | [AttemptExecution](../Sources/EZCore/AttemptExecution.swift) and [HistoryStore](../Sources/EZCore/HistoryStore.swift) |
+| Provider calls | [SaulGeneration](../Sources/EZCore/SaulGeneration.swift), `ResponsesRequest`, `ResponseAccumulator` and `ImagesClient` |
+| Signed caller, OAuth and Keychain | [Saul credential contract](../../../contracts/credentials.md); [Keychain diagnosis](keychain.md) |
 
-| Owner                                                        | Responsibility                                                                 |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| `EZApp` / `QuickLookupController`                            | Windows, menu bar, Services, launcher and keyboard lifecycle                   |
-| `AppModel` / `LookupDraft`                                   | Shared workspace actions, launcher submission, editable draft and history      |
-| `LookupRequest` / `LookupRoute`                              | Admission and frozen input for new and contextual lookups                      |
-| `ConfigurationEditor`                                         | Settings drafts, discard decisions and save results                            |
-| `ConnectionChecks`                                           | Connection status and catalog evidence, invalidated by identity changes        |
-| `AttemptExecution`                                           | Pending admission, generation, cancellation and terminal save                  |
-| `GenerationProvider` / `SaulGeneration`                      | Supported operations and requests to the signed credential owner               |
-| `ChatGPTAuth` / `LoopbackListener` / `OIDC`                  | Owner-side OAuth, bounded loopback callback and verified identity              |
-| `ResponsesRequest` / `ResponseAccumulator` / `CredentialSSE` | Request serialization, stream parsing and completion                           |
-| `ImagesClient` / `ImageAttachment`                           | Bounded image requests and validated source images                             |
-| `HistoryStore`                                               | Shared SQLite snapshots, image blobs, migration and deletion                   |
-| `ConfigurationStore` / `SharedPresetsStore`                  | Scoped configuration, shared presets, migration and stale-save checks          |
-
-[Surfaces](surfaces.md) owns feature placement; [design](design.md) owns native
-presentation. [ADR 0001](adr/0001-screenshot-first-design-review.md) records review
-rationale; [ADR 0002](adr/0002-model-presets-and-recipes.md) records the template
-and preset decision.
+[Surfaces](surfaces.md) owns use and lifecycle at the UI boundary; [design](design.md)
+owns native presentation. [ADR 0001](adr/0001-screenshot-first-design-review.md) and
+[ADR 0002](adr/0002-model-presets-and-recipes.md) record review and template rationale.
 
 ## Direct plan-backed requests
 
-Use the documented Sign in with ChatGPT direct flow through native `URLSession`.
-No agent, CLI, app-server or tool executor runs in EZ. Plan model choices come
-from `/v1/models`; unavailable model, effort or Fast choices block sending.
+EZ sends plan, official API and bound custom endpoint requests through a pipe
+to the signed Saul owner. There is no app-local secret-reading adapter,
+fallback or tool executor; offline tests inject disposable credentials.
 
-Write sends its compiled template as one user message; starter instructions
-are editable template text, with no hidden mode instructions. Legacy history keeps
-its saved instruction semantics. Requests set `store: false`, `stream: true` and
-an explicit chosen/default tier; effort is included only when supported. They add
-no temperature, max-output-tokens, saved response ID or unsupported preview fields.
-Plan requests contain no tools. Text success requires `response.completed`;
-partial streams remain incomplete.
+Plan Write sends the compiled template as one user message, without hidden
+starter instructions, tools, temperature, max-output settings or saved
+response IDs. It sets `store: false`, `stream: true` and the chosen/default
+tier; effort requires support. Legacy history retains its saved instruction
+semantics. Unavailable model, effort or Fast blocks. Text completion requires
+`response.completed`. [Shared execution](../../../contracts/actions-and-attempts.md#execution)
+owns completion, save and replay guarantees.
 
 ## Connections and Illustration
 
-`ConnectionDefinition` owns stable keys, names and transports. Defaults are `gpt-plan`
-(Write) and `openai-api` (Write/Draw/Speak). Presets bind connection, capability, model
-and options. Each managed connection pins its account or endpoint; presets contain no secrets. Unknown/incompatible choices block
-before generation. Never silently change account, model, billing or service tier.
+Run freezes the action, input, preset and connection; changed on-disk choices
+require review before sending. API Write uses an explicit catalog model ID;
+API Fast requests `priority`. Plan Fast uses the bound account catalog.
 
-Illustration uses the same workspace and single active attempt as Write. API Write
-uses an explicit model ID; Fast sends `service_tier: priority`, while plan Fast is
-catalog-controlled. See the [API Fast guide](https://developers.openai.com/api/docs/guides/fast-mode).
-Text-only Draw sends one `POST /v1/images/generations`; the user selects a current
-catalog model. Initial image options are low quality, 1024×1024 PNG. The compiled template is the exact prompt;
-image options belong to the preset. The Draw composer can override output format
-for one draft; Run freezes it in the preset snapshot. GIF uses `output_format: "gif"`
-and API animation defaults. EZ currently enables GIF only for text-to-image with
-a 2.6 model; input images with GIF output fail before send. Exact GIF bytes remain in SQLite and
-Download preserves `.gif`. Native previews animate unless reduced motion is enabled.
-Key Save/Reload and inspection never generate.
-
-Run freezes action, inputs, preset and connection snapshots. If those choices
-changed on disk since they were shown, Run opens the updated choices for review
-without sending. Reuse keeps the saved route until the user explicitly chooses
-another preset, if the original route was recorded. Stop cancels locally
-and rejects late output; it cannot promise server cancellation or avoided billing.
-There are no automatic generation retries. Image requests time out after 180s,
-reject redirects, bound bytes/dimensions and report safe status-specific errors.
+Text-only Draw uses one Images generation request with the compiled prompt.
+Initial options are low quality 1024×1024 PNG. The draft can override format;
+Run saves it in the preset snapshot. [Shared Draw rules](../../../contracts/configuration.md#connections-and-presets)
+own supported formats and GIF compatibility. Exact returned bytes are saved and
+downloaded. Stop rejects late output but does not promise remote cancellation
+or avoid billing. Image requests reject redirects, time out after 180 seconds
+and report bounded, status-specific errors.
 
 ## Web search and image inputs
 
-Action-only `webSearch` (default false) and optional named, required `imageInput`
-never enter shared presets or Saul actions. Versioned migrations seed Illustration,
-Research and Make meme once, preserving IDs, edits and removals. Research uses API Write; Make meme uses API Draw. New presets leave the model
-unassigned until the user chooses from the current connection catalog. Saved model
-IDs remain unchanged.
+Native actions can enable `webSearch` (off by default) or require one named
+`imageInput`; neither field belongs to shared presets. Migrations seed
+Illustration, Research and Make meme once, preserving user edits and removals.
 
-Search requires the API provider and Responses
-`tools: [{type: "web_search"}]`, `tool_choice: "required"`. A completed text answer
-without a completed search action fails; it never triggers a fallback or retry.
-History retains validated HTTP(S) citations and offsets separately from raw text.
-Readers and Markdown export render source links; inspection preserves literal
-output. Follow-ups inherit search policy and search again. No background research,
-custom engine, domain controls or automatic search is added.
-See [web search](https://developers.openai.com/api/docs/guides/tools-web-search).
+API search requires `web_search` with `tool_choice: required` and completed
+search activity to report success. Retain validated HTTP(S) citations and offsets
+separately from literal response text. Readers and Markdown export render links.
+Follow-ups inherit search policy. There is no background research or retry.
 
-`ImageAttachment` accepts detected single-frame PNG/JPEG/WebP, at most 20 MB,
-40 megapixels and 8,192 pixels per edge. Choose/Paste/Drop prepare only a draft;
-invalid replacement keeps the prior source. Run freezes and saves exact input
-bytes before transmission. An image input selects one multipart
-`POST /v1/images/edits` with PNG output, without a
-hidden analysis or second request. See [image edits](https://developers.openai.com/api/docs/guides/image-generation#edit-images).
-Reuse validates the saved source; missing/invalid bytes require reattachment.
-Deletion removes saved blobs, never the original file or external exports.
-
-The built-in Make meme action keeps one in-memory Sketch composition shared by
-the two lookup surfaces. Its stable action ID selects the editor; other named
-image inputs remain attachment fields. Plain imports use exact original bytes.
-Run renders an edited composition to a square PNG and freezes it through the same
-source attachment path. A failed or completed run leaves the composition in the
-current draft. Reuse restores only the frozen source as a single image layer;
-there is no new persisted document or schema. Undo and redo are draft-local.
-
-## Authentication invariants
-
-The [shared credential contract](../../../contracts/credentials.md) owns caller
-validation, migration, refresh, disconnect and sign-out. Owner-side OAuth must:
-
-- Preserve the host ID and each issued client ID's identity, even for equal emails.
-- Register with `dynamic_agent_client`, save the issued ID before exchange, and
-  reauthenticate with that ID plus fresh state, nonce and PKCE.
-- Bind only `127.0.0.1`, use `/auth/callback`, preserve the exact redirect URI and
-  validate state, callback parameters and client ID.
-- Verify RS256/ES256 signatures against discovered JWKS plus issuer, audience,
-  expiry, subject and nonce; reject unsupported algorithms and unverified JWTs.
-- Separate identity from granted `chatgpt.tokens.use.direct` usage permission.
-- Keep secrets in Keychain, persist rotations together and serialize refresh with
-  a cross-process kernel lease. Blocking reads run off the UI actor; cancellation
-  must not publish a partial restore or prevent history access.
-- Clear tokens on terminal refresh failure, retain them on network/5xx errors,
-  and report unconfirmed logout revocation.
-- Exclude OAuth URLs, codes, tokens and raw auth diagnostics from history.
-
-[Keychain access](keychain.md) explains stored items and signing limits.
+`ImageAttachment` accepts detected single-frame PNG/JPEG/WebP up to 20 MB,
+40 megapixels and 8,192 pixels per edge. Run saves exact source bytes before
+one multipart Images edit with PNG output. Reuse validates saved bytes; missing
+or invalid input needs reattachment. Make meme's stable action ID opens Sketch;
+Run renders edited work to a square PNG, while plain imports keep original bytes.
+Its composition and undo history are draft-local; Reuse restores one frozen layer.
 
 ## Persistence contract
 
-The [History operation contract](../../../contracts/README.md#history-operations)
-and real-store fixtures share saved-output, recovery and deletion meanings with
-Saul. EZ retains direct SQLite access; transport reconnect remains browser-owned.
+[Shared history](../../../contracts/history.md) owns storage and deletion guarantees.
+EZ upserts one snapshot per UUID; native `schemaVersion: 1` JSON and image blobs
+commit together. Startup under the session lock marks abandoned EZ rows interrupted;
+activation reloads history without changing Saul's execution.
 
-[Shared history](../../../docs/architecture.md#shared-history) owns database
-location, schema, cross-app behavior and one-time migration. Native entries retain
-`schemaVersion: 1` and UUID identity; SQLite upserts one current snapshot per UUID.
-Input/output image blobs and frozen JSON save atomically in that row, without
-sidecar files. Startup under EZ's session lock marks its abandoned pending entries
-interrupted; activation reloads history without changing Saul's execution state.
+`AttemptExecution` saves pending input before credentials or transmission.
+Cancellation invalidates callbacks; terminal save must succeed before saved
+success. Unsaved output may remain copyable until history is reloaded; the
+pending row reads as interrupted when inactive. Successful deletion alone clears
+the visible result.
 
-`AttemptExecution` saves pending input before credentials or transmission, then
-saves the terminal snapshot before publishing a saved outcome. An initial save
-failure blocks the request. Cancellation invalidates callbacks from older attempts.
-Requested and returned service tiers remain separate.
-
-Failed or interrupted native requests expose **Retry same request** in both reading
-surfaces. `HistoryEntry.prepareRetry` creates a new identity from the frozen prompt,
-action, preset, connection and source image, clearing only previous output/status.
-`AppModel.retry` reloads configuration and saved image bytes, validates availability
-and immutable connection identity, then enters the same pending-save execution
-owner. It never routes through the current editor. The previous result and any
-unrelated draft remain intact; missing inputs or changed routes offer review of
-the saved request. Completed and Unsaved entries do not offer inference Retry.
-
-A terminal save failure reports **Unsaved** and the storage error in the result.
-Visible output can still be copied, exported or downloaded where available.
-Reading history again may lose the unsaved output; it reads only saved bytes.
-Nothing repeats the terminal write or the provider request. An explicit Run starts
-a new attempt. The original pending row is read as interrupted when inactive.
-
-Main-window deletion confirms its scope across EZ and Saul. It removes a native
-record and blobs, or a browser passage and its runs. Only successful deletion
-clears the visible result. Migration alone reads retired JSONL/lock/image files;
-verified import precedes removal, while malformed sources remain with a blocking
-error. No fallback writer or permanent migration backup is created.
+**Retry same request** creates a new attempt from the frozen prompt, action,
+preset, connection and image. Revalidate saved bytes and immutable route through
+the normal pending-save boundary, without touching the editor or previous
+result. Changed/missing inputs offer review. Completed and Unsaved entries
+do not offer Retry. See [surfaces](surfaces.md#reading-and-inspection).
 
 ## Follow-ups
 
-A saved, completed native Write answer can supply explicit follow-up context.
-`HistoryEntry.prepareFollowUp` keeps the saved request, instructions, earlier
-exchanges, model/effort/speed and search policy, using the saved connection's bound account.
-Each Send creates a linked history entry; no context is silently dropped.
-Questions are limited to 2,000 UTF-16 units and compiled conversations to 120,000.
-Unsaved or partial answers, Draw and browser entries cannot supply follow-ups.
-Saved answers without a recorded connection require an explicit new lookup.
-AppModel holds per-answer question drafts in memory; deletion or successful Send
-clears them. Stop and terminal persistence use `AttemptExecution`.
+A saved, completed native Write answer can supply earlier exchanges, the original
+request and its route/search policy to a linked attempt. Limit questions to
+2,000 UTF-16 units and compiled conversations to 120,000. Partial, unsaved,
+Draw and browser answers are ineligible; missing saved connections require a new
+lookup. Per-answer drafts stay in memory until Send or deletion.
 
 ## Metrics and activity
 
-Metrics are optional; older history stays readable. Record server usage and
-client-observed timing. Response tokens = output minus reasoning, including any
-non-visible formatting tokens; missing reasoning is unknown, not zero.
-
-TTFT runs on a monotonic clock from HTTP start after auth to the first nonempty
-answer/refusal delta. Empty/metadata events or terminal-only text do not establish
-TTFT. Tokens/s = response tokens / (stream duration through terminal event − TTFT).
-Missing usage, TTFT or a valid interval leaves speed unknown. Failure/partial output
-retains observations without claiming completion. See [Responses usage](https://developers.openai.com/api/reference/resources/responses)
-and [output counting](https://developers.openai.com/api/docs/guides/token-counting).
-
-Cost and plan quota percentages are omitted. API rate-limit headers are not plan
-allowance; Settings → Manage usage is the supported path, with no extra request.
-See [usage guidance](https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions#tracking-usage).
-Activity follows reasoning-item events and nonempty text deltas; no reasoning
-payload is requested or saved. [Design](design.md#activity-and-answer-presentation)
+Requested and recorded service tiers remain separate. Response tokens are output
+minus reasoning; absent reasoning usage is unknown. TTFT measures monotonic time
+from HTTP start after auth to the first nonempty answer/refusal delta, not metadata
+or terminal-only text. Tokens/s divides response tokens by the remaining stream
+duration through its terminal event; missing values or invalid intervals stay
+unknown. Partial/failing attempts can retain observations. No reasoning payload,
+estimated plan quota or cost is recorded. [Design](design.md#activity-and-answer-presentation)
 owns the divider treatment.
-
-## Quick Lookup
-
-A nonactivating `NSPanel` hosts SwiftUI and shares one `AppModel` with the main
-window. Carbon registers ⌃⌥Space while EZ runs, without global keystroke monitoring
-or Accessibility permission for opening. Registration errors remain visible;
-the menu bar is the fallback. The panel opens on the pointer's display, supports
-full-screen Spaces and returns focus when hidden.
-
-`showFreshLookup` resets idle work; plain `show` preserves Services/Raycast drafts.
-With Accessibility access, `SelectedTextCapture` reads the external focused
-element's selection once per idle invocation, off the UI actor with a 150 ms
-per-call timeout. It never reads the clipboard or falls back to document text.
-Missing permission, unsupported/empty selection or more than 16,384 UTF-8 bytes
-leaves the lookup empty. Invocation never prompts for permission or submits.
-Dismissal/new invocation cancels capture; changed drafts, active work and Settings
-reject late results. Shutdown cancels work and unregisters event handlers.
-
-The panel starts 460 points wide (420 minimum), with minimum content height starting
-at 200. It grows for inputs, notices and reading space, preserving its top edge
-within the display. Forms/answers scroll independently of actions. Configuration
-and history open the main window. [Surfaces](surfaces.md) owns reading/editing,
-shortcuts, Min Mode and shared-state behavior.
-
-## Selected-text Services
-
-`NSServices` advertises **Look Up in EZ**, plain-text input with no return types.
-`EZAppDelegate` retains/registers `SelectedTextService` after the panel is ready.
-Its `lookupSelectedText:userData:error:` callback reads only the supplied Services
-pasteboard and synchronously prepares a draft. It never changes the clipboard or
-source selection, sends, awaits auth or queues work; errors use the Services pointer.
-
-`AppModel.prepareSelectedText` validates nonblank text and the 16,384-byte limit
-before mutation. Active work, sign-in, Settings or any retained lookup draft
-reject it unchanged. This includes preset and format overrides, Reuse and sketch
-redo history even when the fields are blank. Unavailable configuration reports
-its error; empty configuration asks for an action. Otherwise it uses the selected configured action (first remaining
-if a historical action was removed), resets the override and fills the first field.
-Signed-out/catalog-loading states may hold the draft; Send remains explicit and
-no history is written before it. Cold launch may also show the main window.
-See [Apple's contract](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/SysServices/Articles/providing.html);
-a direct callback check does not prove installed cross-app delivery.
-
-## Launcher submissions
-
-[Raycast](raycast.md) owns setup and URL behavior. The delegate shares its initial
-connection task with launcher handling. Pending submission locks sending and
-query/account/preference edits until startup completes, then calls normal Send.
-Busy/signing-in/duplicate submissions preserve active work. Connection, permission,
-model or storage errors retain the draft for manual retry, never later auto-send.
-Shutdown cancels startup and launcher tasks. `--ez-launcher` suppresses the main
-window on macOS 15+; macOS 14 cold launch may show it.
-
-## Selector scrolling and keyboard commands
-
-Both composers use `LookupChoiceButton` for a native searchable popover. The
-shared wheel stepper also serves `SelectorPicker`'s remaining AppKit dropdowns.
-Label length never changes the hitbox. Only the hovered choice steps; it skips
-disabled rows, clamps at the ends, ignores momentum and throttles input. The open
-popover gives the search field and result navigation priority over lookup shortcuts.
-Escape and preset selection return focus to the choice button. Changing the action
-opens its fields and focuses the first input. `FullRowButton` gives Settings
-sections/editor rows and the main Settings entry a rectangular padded hit area;
-selection changes background only.
-
-`LookupCommand` calls existing AppModel actions and guards. Previous/Next wraps;
-positions 1–8 and Last follow configuration order. Reselecting the current action
-is a no-op; choosing another resets inputs/default preset and exits historical replay.
-One app-local key monitor serves both surfaces, including focused text fields.
-Settings, sheets and dialogs take priority; key repeats do not repeat actions.
-Global panel and lifecycle keys stay fixed.
-
-`LookupShortcutsStore` uses owner-only
-`~/Library/Application Support/EZ/shortcuts.json`. It validates version, keys, modifiers, reserved shortcuts and
-collisions, including cleared bindings. Corrupt or
-unsupported files remain intact with a Settings error; defaults run until explicit
-restore. Writes atomically replace a flushed owner-only sibling before publishing
-bindings. Chrome navigation updates both bindings together.
-
-## Spelling comparison presentation
-
-`SpellingComparison` locally diffs completed, single-input spelling entries with
-recognized corrected-text/changes headings, including Markdown and supported
-Chinese labels. Ambiguous/partial/failed responses keep ordinary rendering.
-Inline Markdown decoration is removed only in comparison text; saved response,
-Copy and Export stay literal. Notes split only at recognized headings. No request
-or prompt change occurs.
-
-Diffs are bounded at 4,000 tokens per side and 2,000,000 token pairs; larger inputs
-show unhighlighted text and disclose the limit. Unchanged-word anchors align
-paragraph/list blocks, group splits/merges and leave opposite cells empty for
-unmatched blocks. Rows grow to the taller side in one scroll area. Alignment uses
-the same long-input bound and falls back to one unhighlighted pair.
 
 ## Unified configuration
 
-`Little Clarity/settings.json` holds shared connections/presets in `modelPresets`
-and EZ actions in `apps.ez.configuration`. Section revisions reject stale saves;
-`ConfigurationStore` imports old `EZ/configuration.json` once and retains it for
-recovery. Shared connection definitions win; legacy EZ definitions are adopted only
-when the shared list is absent and omitted on later scope writes. Previous model/effort/Fast preferences seed the initial Current preset. Legacy presets
-decode as `gpt-plan`/Write; persisted `recipes`/`recipeSnapshot` keys remain stable.
-Account identity belongs to the saved connection; secrets stay with its credential owner. Shortcuts, Min Mode and window
-placement keep their local stores.
-
-Save is explicit. The shared configuration owner checks both revisions and saves Presets and the EZ
-scope in one locked JSON replacement; conflicts or staging failures change neither.
-See the [shared transaction contract](../../../contracts/README.md#unified-configuration-scopes).
-Preset/Action editors stay mounted across Settings sections;
-item changes, Add and dismissal guard dirty edits. Save failure keeps the draft
-and its original item; Reload explicitly takes the newest values.
-Configuration editing preserves lookup overrides and restored historical actions.
-Speak presets retain a catalog model and strict `speechOptions.voice`. `SpeechPreviewClient`
-uses bounded Realtime events and validates completion before creating in-memory WAV
-audio; `SpeakPreview` owns Generate/Stop and explicit playback. It never writes history.
-
-## Local packaging identity
-
-[Releasing](releasing.md#local-signing-and-installation) owns signing, installation
-and rollback. Stable bundle/credential identities are migration contracts;
-packaging must not relocate app data. A stable signature alone does not prove
-prompt-free Keychain upgrades; see [Keychain diagnosis](keychain.md#why-a-rebuild-can-ask-again).
-
-## Shared credential owner
-
-EZ requests official OpenAI and bound custom-endpoint operations from the independently installed signed
-Saul owner. Production has no app-local secret-reading adapter or fallback;
-offline suites inject disposable credentials. The [shared contract](../../../contracts/credentials.md)
-owns the protocol and lifecycle; [verification](verification.md) separates offline,
-installed and live-service evidence.
-
-## Extension points
-
-Add text workflows as actions. `QueryMode` remains a legacy history discriminator
-and starter icon mapping. Reuse app actions for shortcuts/menu entry points and
-explicit API presets for API billing. Further conversation or provider features
-need explicit context, retention and billing decisions; see [roadmap](roadmap.md).
+[Shared configuration](../../../contracts/configuration.md) owns atomic revisioned
+saves and compatibility. EZ seeds the initial Current preset from prior
+model/effort/Fast settings. The editor preserves current lookup overrides and
+historical actions; a failed save retains the original item and draft. Reload
+explicitly adopts newest settings. Shortcut storage is separate: corrupted or
+unsupported bindings retain their file and use defaults pending explicit restore.
+See [selectors and shortcuts](surfaces.md#selectors-and-shortcuts).
 
 ## Official integration references
 
@@ -337,3 +118,4 @@ need explicit context, retention and billing decisions; see [roadmap](roadmap.md
 - [Accounts and refresh](https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions)
 - [Models and Responses](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)
 - [Preview constraints](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)
+- [Search](https://developers.openai.com/api/docs/guides/tools-web-search) and [image edits](https://developers.openai.com/api/docs/guides/image-generation#edit-images)

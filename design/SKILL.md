@@ -5,14 +5,14 @@ description: Extract, refine, or apply a portable DESIGN.md visual identity to a
 
 # Apply a portable design
 
-Read the chosen `DESIGN.md` and the target's existing views, styles, instructions,
-and dirty paths. For Little Clarity, the authoring source is [DESIGN.md](../DESIGN.md).
-Keep one authored source; generated assets are not editable forks.
+Read the target views, styles and current design guidance. Little Clarity's
+[design guide](../DESIGN.md) owns presentation rules; [tokens.md](tokens.md)
+is the only authored source of generated values. Review rendered screens before
+changing visual behavior.
 
-When refining a contract, separate observed choices from proposed changes. Capture
-representative rendered screens and agree on material identity changes before applying.
-Use the Google Labs DESIGN.md alpha format: normative YAML values plus concise
-rationale, interaction, adaptation, and motion guidance. Preserve unknown prose.
+A portable design can also carry its tokens as YAML frontmatter or fenced
+YAML in a Google Labs DESIGN.md document. Use that document's guidance to
+adapt the target, and preserve prose when editing it.
 
 ## Feature UI review
 
@@ -52,10 +52,14 @@ node /path/to/design/generate.mts --source /target/DESIGN.md --css /target/asset
 node /path/to/design/generate.mts --source /target/DESIGN.md --swift /target/Sources/DesignTokens.swift
 ```
 
-Copy this directory with the contract to make a standalone kit; install the pinned
-parser in that owning project. No Google/Stitch account or runtime service is required.
-Use `--check` with the same arguments to detect drift without writing. CSS may be
-repeated for self-contained surfaces; TypeScript palettes use `--typescript`.
+With no `--source`, the generator reads [tokens.md](tokens.md) beside itself.
+Copy the design directory and the design guide as a kit; install the pinned
+parser and formatter in the target. No Google/Stitch account is required.
+
+`--check` compares the complete generated output without writing. Prose-only
+edits do not change the output, including when using a portable DESIGN.md.
+Generation leaves identical token files untouched. CSS may be repeated for
+self-contained surfaces; use `--typescript` for the palette.
 
 The adapter pairs `colors.<role>` with `colors.<role>-dark`. An unpaired light color
 is constant in both appearances. Current native export accepts opaque sRGB colors,

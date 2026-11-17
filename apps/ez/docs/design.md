@@ -1,9 +1,8 @@
 # Native design
 
-[DESIGN.md](../../../DESIGN.md) owns Little Clarity: green accent, serif subjects,
-system controls, quiet surfaces and reading space. Native system surfaces stay
-native. `AppStyle.swift` connects generated `DesignTokens.swift` roles to EZ;
-never hand-edit tokens. The generated file records its source SHA-256.
+[DESIGN.md](../../../DESIGN.md) owns shared presentation. Native system surfaces
+stay native. `AppStyle.swift` uses `DesignTokens.swift`, generated from the
+[canonical tokens](../../../design/tokens.md). Edit the source, not the generated Swift.
 
 ## Feature UI review
 
@@ -43,11 +42,8 @@ reading/writing the personal preference. Fixture names and actions live in
 
 ## Min Mode and Settings
 
-Follow the shared [Min Mode policy](../../../DESIGN.md#min-mode). The local
-preference defaults on and is shared by both lookup surfaces. Short labels retain
-full accessible names/help. Hide routine hints, help-only disclosures, documentation
-links and pinned metric strips; retain errors, blocked choices, unsaved work and
-recovery. Omit the routine Standard preset suffix; Fast stays explicit.
+Follow the shared [Min Mode policy](../../../DESIGN.md#min-mode). Both lookup surfaces share the local preference. The Standard metrics footer
+and routine guidance stay out of Min Mode.
 
 Settings has Overview, Presets, Actions, Preferences, Connections and Shortcuts.
 Show one editor at a time, preserving drafts across sections and guarding item
@@ -86,10 +82,15 @@ Original/Corrected: removed text has warm tint/strikethrough; additions green/un
 Labels make color nonessential. Wide layouts align paragraph rows in one scroll
 area; narrow layouts show Corrected first and disclose Original. Notes sit under
 Why these changes. Unrecognized formats keep ordinary reading with long original
-text collapsed. Literal output remains in Details → Inspect in both modes. [Architecture](architecture.md#spelling-comparison-presentation)
-owns parsing and bounds.
+text collapsed. Literal output remains in Details → Inspect in both modes.
+[SpellingComparison](../Sources/EZCore/SpellingComparison.swift) compares only
+completed single-input results with recognized headings; long or ambiguous
+inputs keep readable fallback text. It removes Markdown decoration only for the
+comparison, aligns unchanged-word anchors across paragraphs/lists and leaves a
+cell empty where no matching block exists. Copy and export retain literal output.
 
-Search citations are clickable in both readers. Generic image fields show preview,
+Show **Searching…** only from observed search-tool activity; search/API charges
+stay beside Run. Citations are clickable in both readers. Generic image fields show preview,
 Choose/Replace, Paste and Remove above instructions. Make meme uses a square
 Sketch canvas in the main window, with Draw, Select, Add text, undo and redo.
 The selected image shows a resize handle; the selected text shows its editor.
@@ -100,3 +101,12 @@ required/completed and source name. Reuse prepares a draft without sending.
 [Shared control symbols](../../../design/symbols.html) defines the glyphs and
 meanings used by both apps. Symbol-only controls retain full accessible names and
 tooltips in Min Mode and Standard view.
+
+## Speak preview
+
+Presets uses a saved Realtime model and strict voice choice. Show API billing
+and AI-generated audio with Generate/Stop and deliberate playback. The
+[client](../Sources/EZCore/SpeechPreviewClient.swift) receives only short-lived
+authorization, bounds the stream and creates WAV only after completion.
+Leaving the view cancels work and releases in-memory audio; preview text and
+audio never enter history.

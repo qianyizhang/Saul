@@ -18,19 +18,16 @@ and persistence; [design](design.md) owns presentation.
   After a run, Edit draft shows the canvas again; Hide draft returns to the answer.
 - Selecting another action or New restores its default preset. Unavailable choices
   block; never substitute account, model, billing or tier.
-- Both composers put Action and Preset above the inputs. The main window puts a
-  new composer below the heading. Edit/Hide opens or hides work already retained
-  in the shared draft; Reuse restores the selected saved request without running it.
+- Both composers put Action and Preset above inputs. Edit/Hide keeps the draft;
+  Reuse restores saved input without sending.
 - The main reader shows available Copy or Download, Reuse, Export and Delete in
   one row in both modes. Delete is separated at the far edge and confirms shared
   deletion. Details holds the record and inspection, followed by the follow-up.
   Quick Lookup hides inputs while reading in Min Mode and keeps its utilities
   menu and workspace handoff. New/Stop remain reachable.
-- Min Mode defaults on and is local to EZ. Settings → Preferences and the panel
-  menu change the same preference. Exact model, requested/actual tier and metrics
-  remain available in Details; errors, blockers and save failures stay visible.
-  Turn it off for explanatory guidance and the Standard metrics footer; see
-  [native presentation](design.md#min-mode-and-settings).
+- Settings → Preferences and the panel menu change the same local
+  [Min Mode](design.md#min-mode-and-settings) preference. Details retains exact
+  model, tier and metrics.
 - Compact layout grows for forms/results/notices; long content scrolls while
   Run/Stop stay reachable. Preset and requested speed remain identifiable.
 - Both surfaces offer follow-ups for saved completed native Write answers and
@@ -53,18 +50,14 @@ the shortcut hides an already focused panel. Hiding preserves active work,
 history and clipboard.
 Closing the main window leaves menu-bar access; Quit exits.
 
-Both surfaces share configurable lookup/action shortcuts and wheel selectors.
-See the [keyboard reference](../../../design/keyboard.md) for editing and commands,
-and [architecture](architecture.md#selector-scrolling-and-keyboard-commands) for
-routing and conflict handling.
-
-Illustration is a Draw action in this workspace. Connections owns credentials,
-Presets image defaults, the text-to-image composer its runtime PNG/GIF choice, and History
-saved image bytes in SQLite. A Draw draft prepared by the launcher waits for Run.
-
-Future features must name their owning surface and preserve these boundaries.
-Mobile is not implemented; touch layout, platform keys, account access and
-cross-device persistence need explicit decisions.
+The [Quick Lookup controller](../Sources/EZ/QuickLookupController.swift)
+owns a nonactivating panel on the pointer's display, including full-screen Spaces
+and focus restoration. It registers the global shortcut without monitoring keys
+or requiring Accessibility for opening. [Selected text capture](../Sources/EZ/SelectedTextCapture.swift)
+reads the external focused selection once, off the UI actor. It never reads
+the clipboard, prompts for permission or submits. Dismissal, a new invocation,
+or a changed draft rejects stale capture. The panel grows down from its top edge;
+forms and answers scroll independently of actions.
 
 ## Connections and actions
 
@@ -77,19 +70,17 @@ Settings has Overview, Presets, Actions, Preferences, Connections and Shortcuts.
 Connections shows capability, account or endpoint/key suffix, status and Check.
 Add a connection for another identity; More holds sign-in/key replacement.
 Helper and app-binding controls live in Preferences → Integrations. See the
-[shared contract](../../../contracts/README.md#connections-and-presets) for identity,
+[shared contract](../../../contracts/configuration.md#connections-and-presets) for identity,
 catalog and preset guarantees.
 
-Presets bind a connection, Write/Draw/Speak, model and supported options. Speak
-preview uses explicit Generate and Play in Settings, with separate API billing;
-audio and preview text remain in memory and never enter history.
+See [Speak preview](design.md#speak-preview) for Settings playback.
 
 Actions hold instructions, type and a compatible default preset. For example,
 `{{fuzzy term}}` and `{{fuzzy context}}` create two required inputs; repeated names
 share a field. Choose an action, fill its inputs and press **⌘ Return**. Save edited
 configuration explicitly. Section changes preserve drafts; changing items or
 closing asks before discard. Starters remain editable/removable and are added only
-once. Action chaining is out of scope. See [template semantics](../../../contracts/README.md#action-preparation)
+once. Action chaining is out of scope. See [template semantics](../../../contracts/actions-and-attempts.md#action-preparation)
 and [native configuration](architecture.md#unified-configuration).
 
 ## Reading and inspection
@@ -112,7 +103,7 @@ Completed Spell Check answers with recognized corrected-text or changes labels
 show Original / Corrected columns, highlighted edits and expandable explanations.
 Narrow windows show the correction first; long originals sit behind Original text.
 Other response formats use the ordinary reader. Copy/Export retain the full
-response. See [comparison rules and limits](architecture.md#spelling-comparison-presentation).
+response. See the [comparison presentation](design.md#activity-and-answer-presentation).
 
 ## Image and search actions
 
@@ -150,8 +141,12 @@ Select text in another app, then choose **Services → Look Up in EZ** from its 
 or selection context menu. Fill any remaining fields and press **⌘ Return**.
 The service uses a dedicated pasteboard and needs no Accessibility permission.
 Finish active work, choose New lookup to clear an existing draft, and close Settings
-before invoking it. [Services architecture](architecture.md#selected-text-services)
-defines input limits, rejection and cold-start behavior.
+before invoking it. [SelectedTextService](../Sources/EZ/SelectedTextService.swift)
+reads only the Services payload, validates before mutation and never queues or
+writes history before Send. Empty or oversized input, sign-in, Settings, active
+work or a retained draft (including overrides and Sketch redo) block unchanged.
+A valid draft may wait while signed out or loading models. Cold launch can also
+show the main window; checking the callback alone does not prove installed delivery.
 
 After [installation](../../../docs/setup.md), open the installed EZ once to register
 Services. If hidden, enable **Look Up in EZ** in **System Settings → Keyboard →
@@ -167,4 +162,10 @@ the click/scroll target. The [keyboard reference](../../../design/keyboard.md)
 owns defaults, editing and fixed commands. **Settings → Shortcuts** records,
 clears or restores bindings; valid changes save immediately. Menus and hints reflect
 custom bindings. Settings and modal sheets take priority over lookup shortcuts.
-See [routing and validation](architecture.md#selector-scrolling-and-keyboard-commands).
+An open chooser gives search/navigation priority. Escape and preset selection
+return focus to its button; changing action focuses the first input. Reselecting
+the same action is a no-op; another action exits historical replay and restores
+its default preset. Previous/Next wraps and numbered/Last commands follow
+configured order. One app-local monitor handles both surfaces without repeating
+actions on key repeat. Conflicts, reserved keys and unsupported binding versions
+are validated before atomic save; defaults remain available for explicit repair.

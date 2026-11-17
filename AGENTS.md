@@ -10,15 +10,14 @@ For lifecycle design, refactoring or review, apply
 [lifecycle ownership](docs/architecture.md#lifecycle-ownership).
 
 For cross-app features, read the [shared contracts](contracts/README.md). Share
-behavior and interfaces; keep implementations native to their runtimes. Follow
-the architecture's [data ownership](docs/architecture.md#data-ownership): shared
-history, opted-in official OpenAI credentials behind the Saul owner, and app-owned
-drafts and active request state. Add shared runtime code only for concrete
-consumers; opt-in replacement requirements live in the architecture.
+interfaces and keep implementations native to their runtimes. Follow
+[data ownership](docs/architecture.md#data-ownership) and the rules for
+[opt-in replacements](docs/architecture.md#optional-shared-capabilities).
 
 For UI changes, read [DESIGN.md](DESIGN.md) and complete the
-[feature UI review](design/SKILL.md#feature-ui-review). Generate tokens with
-`pnpm design:generate`; `pnpm design:check` verifies all surfaces on macOS.
+[feature UI review](design/SKILL.md#feature-ui-review). Edit
+[design/tokens.md](design/tokens.md) for token values; regenerate with
+`pnpm design:generate`. Run `pnpm design:check` to verify outputs.
 
 Author maintained JavaScript-family logic in strict TypeScript, including helpers,
 the board, tooling and tests. Keep JavaScript only for small tool-required config
@@ -39,3 +38,14 @@ Installed extension identity, bundle/signing identity and credential-store IDs a
 not branding strings. See [setup](docs/setup.md) before changing installed paths.
 
 Before any push, read the [publication decision](docs/migration.md#publication-decision).
+
+## Architecture decisions
+
+Read linked architecture decision records (ADRs) before changing an established
+boundary. Record an accepted choice in an ADR when it is costly to reverse,
+surprising without context, and resolves a real trade-off. Write the context,
+choice and reason; the living contract owns current behavior.
+
+Use `docs/adr/NNNN-slug.md` at the root for shared decisions or under the owning
+app for app-only decisions. Link from the living owner to the ADR. When replacing
+a decision, retain the old record and link it to its successor.

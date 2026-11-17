@@ -1,14 +1,9 @@
 # Call Saul presets
 
-**Call Saul**, named for _Better Call Saul_, is the page-level command. A **Call**
-works on captured page context; Saul's **Actions** work on local context such as
-selected text. Page scope does not guarantee a complete capture: coverage and
-truncation remain visible. The [glossary](../GLOSSARY.md) owns these terms.
-
-Call Saul runs the Call preset selected in Settings → Calls. **Summarize
-(default)** gives a bilingual summary without the optional action helper. Custom
-calls run once per selected page, with up to two pages running concurrently. There is no combined-tab
-workflow, agent loop, package installation, file watcher or custom executable UI.
+Use [Calls and summaries](calls.md) for page selection, reader and retry behavior.
+This guide covers authoring and running trusted local modules. A custom Call runs
+once per page; there is no combined-tab workflow, agent loop, package install,
+file watcher or custom UI.
 
 ## Create, check and load
 
@@ -69,7 +64,7 @@ Omitting `input` supplies the captured page input. A PDF URL remains attached ev
 when the Call supplies additional input text. URL attachments require a ChatGPT
 plan preset. Choose Local PDF processing explicitly to use extracted text with
 another provider. Existing PDF capture validation, limits and retry semantics
-remain in [the summary owner](architecture.md#summary-ownership).
+live in [source capture and PDFs](calls.md#source-capture-and-pdfs).
 
 Return nonempty plain text or Markdown, at most 60,000 characters. The reader
 renders Markdown through React nodes; raw HTML is literal text, images are not
@@ -80,9 +75,8 @@ inspection. A failed Call never presents that output as a completed answer.
 Each page Call allows at most **three model calls** and **five minutes**. Stop,
 timeouts and disconnects cancel outstanding calls. A worker that cannot cooperate
 is terminated; other active pages in that worker also fail honestly. There are no
-automatic retries. Browser restart marks unfinished jobs interrupted and never
-resends them. Explicit Retry retains the original source, revision and model
-choices; credentials are resolved only through their existing owner.
+automatic retries; see [saved Call behavior](calls.md#reuse-retry-and-run-again)
+for interruption and frozen Retry.
 
 ### Text preparation and chains
 
@@ -95,7 +89,7 @@ attached when explicit input is supplied.
 
 The Call execution module owns these results and transcripts behind detached
 progress snapshots; the runner owns scheduling and persistence. See
-[Call execution](architecture.md#call-execution) for the implementation seam.
+[Call runtime owners](calls.md#runtime-owners) for the implementation seam.
 Site-specific Call selection (for example Hacker News versus Reddit) is a future
 admission feature. Site-specific DOM extraction belongs to capture. This refactor
 adds neither automatic site rules nor a separate workflow language, cross-page

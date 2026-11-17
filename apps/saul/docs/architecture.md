@@ -1,546 +1,97 @@
 # Architecture
 
-Saul is a Chrome MV3 extension with four runtime contexts. State crosses contexts only through validated messages or the native-messaging protocol.
+Saul is a Chrome MV3 extension. Follow the [lifecycle rule](../../../docs/architecture.md#lifecycle-ownership)
+when moving state or effects. [Product behavior](product.md) and the feature guides
+describe what users can do.
 
 ## Runtime map
 
-| Context            | Entry point                     | Responsibility                                                                                                |
-| ------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Content script     | `entrypoints/content.tsx`       | Capture selections, render the shadow-DOM reading UI, restore page markers                                    |
-| Service worker     | `entrypoints/background.ts`     | Validate callers, route reading/workspace requests, manage settings, badges, notifications, and native access |
-| Offscreen document | `entrypoints/offscreen/main.ts` | Own durable reading and summary jobs                                                                          |
-| Shared history     | `native/history.mts`            | SQLite through the native helper; OPFS is read only during one-time migration                                 |
-
-The popup and full workspace reuse the application views under `src/app/`. The full workspace owns global history, export, deletion, settings, and tab organization.
-
-Presentation preferences are separate from provider drafts. `src/storage/presentation.ts`
-owns the default-on Min Mode value in trusted extension storage. Popup and
-workspace listeners share changes immediately; the background broadcasts only the
-boolean presentation value over the existing validated reading subscription. Content
-scripts do not gain direct storage or credential access. Provider validation or an
-unreadable provider record does not prevent changing presentation.
-
-## Source modules and interfaces
-
-Runtime composition stays in `entrypoints/`. Source modules follow domain and
-lifecycle ownership; callers import the interface for the operation they need.
-
-| Module                 | Responsibility                                                                                                                                           |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `configuration/`       | Connection, Preset and Action definitions; inspection, execution resolution and revisioned persistence.                                                  |
-| `settings/`            | One surface's draft and edit/save/review/reset lifecycle.                                                                                                |
-| `providers/`           | Execute prepared model requests; stream events, images and final credential-route checks.                                                                |
-| `native/`              | Browser-side native transport and tab operations. `config-transport.ts` validates native configuration replies without owning configuration policy.      |
-| `app/`, `surface/`     | Workspace/settings views and in-page reading views.                                                                                                      |
-| `capture/`, `reading/` | Selection/context capture, prompt rendering, anchors, markers and reading job lifecycle.                                                                 |
-| `annotations/`         | Annotation capture, revisioned changes and reply lifecycle.                                                                                              |
-| `calls/`               | Call admission and execution; custom Call editing, storage and native host adapter.                                                                      |
-| `digest/`              | Page and PDF capture, batch scheduling and saved Call results.                                                                                           |
-| `storage/`             | History/database operations, schema upgrades and presentation/notification preferences.                                                                  |
-| `speech/`              | Speech routing and realtime session lifecycle.                                                                                                           |
-| `contracts/`, `types/` | Validated browser protocols and capture/history data shapes. Configuration types live with their definition; provider request types live with execution. |
-| `parser/`, `design/`   | Incremental annotated-text parsing and generated design values/control symbols.                                                                          |
-
-The current [ChatGPT plan module](../src/providers/chatgpt-plan.ts) also owns the
-helper port and control-request transport used by history and account controls.
-That transport has not yet been separated into `native/`; the module table's
-provider responsibility does not describe this additional implementation role.
-Lifecycle changes follow the [root ownership decision](../../../docs/architecture.md#lifecycle-ownership).
-
-### Configuration and editing lifecycles
-
-`configuration/definition.ts` owns the Configuration, Connection-backed Preset and
-Action definitions and reference rules. `inspect.ts` returns a `PresetInspection`
-that can describe unavailable choices. `resolve.ts` admits execution and returns
-frozen model choices with a separate transient credential. Neither operation
-constructs a synthetic Configuration to represent one Preset. `providers/request.ts`
-defines model input independently of reading context and database records.
-
-`settings/editor.ts` owns an editing session: draft, baseline, selection, busy
-operation, save uncertainty, conflict review and explicit reset. `draft.ts` and
-`recovery.ts` implement its pure transitions. `app/useSettingsEditor.ts` subscribes
-React and owns browser unload warnings, discard confirmation and session lifetime;
-late responses from a closed session cannot replace a newer session's state.
-
-The editor loads a snapshot, applies edits, validates, and submits a revisioned
-commit through `configuration/client.ts`. Confirmed saves accept a fresh baseline.
-Stale revisions or uncertain submitted outcomes retain the draft and block Save.
-Connection/credential commits and invalid-record resets also require a fresh read
-after a submitted request fails, including server errors after partial success.
-Review reads current configuration and compares original/latest/draft values;
-Apply updates only the draft and baseline, and a separate explicit Save persists
-remaining changes. Matching changes need no replay. Invalid records require an
-explicit backed-up reset through the same store.
-
-`configuration/store.ts` serializes reads, commits and recovery. It preserves the
-credential prepare → shared commit → local commit → credential retirement order.
-These effects are not one cross-process transaction: partial success remains an
-uncertain outcome requiring a fresh read. Recovery-backup sanitization is included
-in the local store write. Credential adapters do not write Chrome storage.
-`chrome-storage.ts`, `shared.ts`, `scoped.ts`, `record.ts` and `credentials.ts` are
-persistence implementation files; the UI does not coordinate them.
-
-Only an absent record receives new-installation defaults. Old connection-field
-aliases and records without explicit Action/Preset configuration are rejected and
-left intact for explicit backup/reset. There is no inferred-action migration,
-recovered-profile synthesis, old module re-export or compatibility shim. Existing
-standalone account/profile setup and original Summary selection are active product
-paths, not compatibility adapters. Shared credential adoption and history schema
-upgrades remain with their existing owners.
-
-## Reading flow
-
-```text
-page selection
-  -> content script captures text, context, and anchor
-  -> background validates the source page and freezes settings
-  -> offscreen runner queues and streams generation
-  -> native history helper checkpoints and commits the attempt
-  -> background updates page subscribers and the unread badge
-  -> content script restores the marker and opens results on request
-```
-
-`src/reading/runner.ts` owns queueing, cancellation, checkpoints, completion classification, and restart reconciliation. Providers allow two concurrent jobs. Jobs are never replayed automatically after uncertain runner/browser loss.
-
-An answer is ready only after a provider completion signal, readable output, and a successful database commit. Interrupted, stopped, provider-error, and save-error states retain honest status and available partial text.
-
-Streaming checkpoints flush within 500 ms even when the provider becomes silent
-after a burst. The runner exposes transient connecting/waiting/thinking/generating
-activity separately from saved run status. Thinking requires an explicit provider
-reasoning-item event; only its activity signal is forwarded, never reasoning text.
-Answer or refusal text stops the light, and completion still requires the terminal
-provider event followed by a successful save.
-
-## Illustrate
-
-A Draw reading action uses an explicit OpenAI API preset. New installations include
-Illustrate; existing action libraries can add it from Settings → Actions. The
-selection widget offers PNG/GIF before the explicit Illustrate click. The runner
-freezes format in the preset snapshot and makes one Images generation request;
-ChatGPT-plan and custom endpoints cannot receive this operation. GIF requires a
-2.6 image model. Preset editing retains older models without silently replacing them.
-
-The signed credential owner admits bounded `api-image` generation without image
-attachments or arbitrary URLs. Local API connections use the same request shape.
-The response is bounded to 20 MB of decoded image data and 4,096 pixels per edge.
-The runner saves 200,000-character base64 chunks into the existing SQLite
-`response_structured` field. Offsets make acknowledgement replay idempotent;
-completion requires a complete image. Passage/history lists return metadata only;
-image bytes load for a selected attempt. A failed save reports failure and discards
-unsaved image bytes. Another generation requires an explicit new attempt.
-The runner owns read projections, including live activity and failed-save notices;
-the offscreen entry point does not assemble them. Deletion makes late
-writes inert and removes saved output through the existing foreign-key cascade.
-
-## Persistence and anchors
-
-- SQLite runs in the native helper at the [shared history path](../../../docs/architecture.md#shared-history). The offscreen runner uses validated native operations; helper loss fails visibly without local or in-memory fallback.
-- Schema changes are forward-only, versioned, and transactional. Unknown future schema versions are rejected; downgrades are unsupported.
-- Custom/standalone API keys remain in trusted extension storage or runner memory. In shared macOS mode, official OpenAI keys and ChatGPT tokens remain exclusively in the signed Saul native owner. They are excluded from page messages, stored run inputs, and exports.
-- A saved passage uses URL identity, quote context, and captured text offsets to restore one exact occurrence. Legacy metadata may remain stored but does not authorize a match.
-- Native CSS Custom Highlights mark exact, unambiguous occurrences without wrapping or replacing page text.
-- Missing or ambiguous passages remain accessible from the page list and library with location unavailable.
-
-Reading reuse resolves in SQLite before credentials are required. It preserves the
-submission ledger, including deleted-submission tombstones. Exact anchors remain
-the primary identity; a changed surrounding context may match only with the same
-selected text and offsets plus a matching DOM location or unchanged leading
-context. Equal words at separate offsets do not share an answer. The reuse review
-compares the displayed attempt's saved prompt, context, instructions and model
-choices against prepared current input, without credential validation or inference.
-Explicit current-input runs retain the previous attempt; ordinary Regenerate keeps
-the frozen request.
+| Context            | Entry point                                   | Responsibility                                                                       |
+| ------------------ | --------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Content script     | [Content](../entrypoints/content.tsx)         | Capture the main-frame selection, render the shadow-root UI and restore markers.     |
+| Service worker     | [Background](../entrypoints/background.ts)    | Validate callers; route reading and settings, badge, notification and native access. |
+| Offscreen document | [Offscreen](../entrypoints/offscreen/main.ts) | Run reading, Calls and annotation replies independently of views.                    |
+| Native helper      | [History](../native/history.mts)              | Access SQLite through native messaging; OPFS is migration input only.                |
 
 ## Trust boundaries
 
-Validators in `src/contracts/` restrict operations by sender:
+Content messages are scoped to the sender's current main-frame HTTP(S) page;
+the popup/workspace can request global history, settings and tab operations.
+The trusted background admits offscreen and database work; offscreen reports
+state back to it. Runtime messages do not return to their sender. Existence
+checks and offscreen creation share a lock while listeners become ready.
+Content receives action names and safe choices, never storage or credentials.
 
-| Sender                     | Allowed scope                                                            |
-| -------------------------- | ------------------------------------------------------------------------ |
-| Source page content script | Reading operations for its current main-frame HTTP(S) URL                |
-| Popup or library workspace | Global history, export, deletion, settings, and tab workspace operations |
-| Background service worker  | Offscreen runner and database operations                                 |
-| Offscreen document         | Reading-state events back to the background                              |
+| Feature boundary                             | Owner                                                                                                                                                                                                |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reading                                      | [Admission](../src/reading/admission.ts), [configuration](../src/reading/configuration.ts) and [runner](../src/reading/runner.ts)                                                                    |
+| Configuration                                | [Definition](../src/configuration/definition.ts), [inspection](../src/configuration/inspect.ts), [execution resolution](../src/configuration/resolve.ts), and [store](../src/configuration/store.ts) |
+| Providers                                    | [Requests](../src/providers/request.ts), [model stream](../src/providers/stream.ts) and shared bounded [SSE framing](../native/sse.mts)                                                              |
+| Call selection, capture, execution and saves | [Calls and summaries](calls.md#runtime-owners)                                                                                                                                                       |
+| Annotation captures, revisions and replies   | [Annotations](annotations.md#interface-and-ownership)                                                                                                                                                |
+| Optional native access and tab board         | [Native messaging](native-messaging.md) and [MCP board](mcp-app.md#implementation-and-verification)                                                                                                  |
+| Plan credentials and Speak                   | [Plan and Speech guide](chatgpt-plan.md); [shared macOS owner](../../../contracts/credentials.md)                                                                                                    |
 
-Runtime messages do not return to their sender. Content and popup requests therefore route through the background; background requests target the offscreen document directly. Offscreen existence checks and creation share one lock because Chrome can report a document before its listeners are ready.
+## Reading and persistence
 
-## Model boundary
+A submitted action freezes context, choices and rendered prompts. Retry
+resolves only its original credential route; a changed owner or endpoint
+requires a new attempt. Credentials stay transient and origin-bound; the
+plan snapshot retains the non-secret registration ID. Inspection projects saved
+instruction, context and prompt fields, not credentials, account identifiers or
+raw HTTP/SSE traffic.
 
-`src/providers/stream.ts` is the streaming facade used by the reading runner and generation tests. It dispatches to OpenAI-compatible or ChatGPT plan adapters and returns the same delta/completion events. Both HTTP adapters reuse `native/sse.mts` for bounded SSE framing across UTF-8 chunks, CRLF/LF separators, multiline `data:` fields, provider errors, cancellation, and incomplete output. Chrome on-device AI is retired. Legacy saved selections and frozen requests remain readable but reject execution with an explicit provider-choice message; no model preparation or local streaming implementation remains.
+The runner owns the queue, up to two concurrent jobs, cancellation, restart
+reconciliation and database checkpoints. Text checkpoints flush within 500 ms
+even after a silent stream. Transient activity is separate from persisted run
+status; explicit reasoning-item events can show thinking without exposing
+reasoning payloads. Answer/refusal text ends the indicator. See the [attempt
+contract](../../../contracts/actions-and-attempts.md#execution) for completion and
+save failure.
 
-Prompts and context are frozen when a job is submitted. Later settings edits do not change an in-flight job. API credentials are associated with their endpoint origin and are not persisted with job inputs. Saved connection IDs remain in frozen preset inputs. ChatGPT plan jobs freeze a non-secret account registration ID and model; OAuth credentials stay in the native helper.
+Draw freezes the chosen PNG/GIF format and sends one Images request. The
+credential boundary accepts bounded generation without input images or arbitrary
+URLs. The runner bounds results to 20 MB decoded and 4,096 pixels per edge,
+then saves idempotent 200,000-character base64 chunks at explicit offsets.
+A complete image is required before success. Lists fetch metadata; byte reads
+are on demand. Deletion invalidates late writes and cascades saved output.
 
-Reading results project only saved instruction text, user prompt and context fields
-into `inspection`. Connection settings and account identifiers are excluded. The
-shared input/output inspector renders literal text from the selected attempt in
-the page card and History, including partial output; it does not reconstruct prompts
-from current settings or claim to retain raw HTTP/SSE traffic.
+### Persistence and anchors
 
-`src/configuration/definition.ts` owns named actions (stored as `recipes`) and model presets in settings.
-`src/configuration/resolve.ts` owns execution-time Capability checks, explicit
-Connection selection and frozen credential routes for Reading, custom Summarize,
-provider tests and Speak. Editor projection retains unavailable choices separately.
-Retries never promote a local credential route to Saul: a changed owner or endpoint
-shows a preset-selection hint and requires a new attempt. Plan execution checks
-the frozen owner again immediately before opening its transport.
-New installations create the starter Actions and Presets explicitly. Actions contain
-literal prompt templates and reference a default preset. Presets identify a
-connection, capability, model and options; they contain no keys. Managed ChatGPT
-connections pin one account. Standalone installations retain an app-owned account
-and API profile binding until explicitly connected to the shared credential owner.
-The existing model controls edit the selected preset, so there is one authority
-for each model choice.
+[History](../../../contracts/history.md) uses the [native operation catalogue](../native/history-protocol.mts)
+for admission and reconnect. Eligible reads and repeatable writes try at most
+three connections with the same identity. Delete, Clear, Bookmark, migration
+transfers and unknown operations do not reconnect automatically. Request IDs
+live with run or submission rows; helper loss has no local fallback.
 
-`src/settings/draft.ts` owns action, preset and profile editing transitions,
-including connection-key clearing. The draft separates editable records and the
-standalone account from retained transport defaults and editor selection IDs.
-The inspected preset is derived; inspection never changes saved account, provider
-or profile choices. One conversion assembles the existing settings transport for
-Save and guarded connection/credential-owner commits. Explicit active-profile
-endpoint or credential edits update its transport fields at that boundary.
-Save validates connection syntax without treating a retained legacy provider as
-the execution choice; retired presets remain blocked at execution and can be
-explicitly repaired in the editor.
-Settings views use independent editing sessions and submit through `saul-settings`;
-the trusted background owns one serialized lane in `src/configuration/store.ts`.
-The plan transport uses `providers/credential-route.ts` to read only the current
-credential mode, directly in trusted contexts or through a validated runtime
-message. This read never upgrades or writes configuration.
-A commit compares the loaded raw record's opaque fingerprint before writing.
-The Chrome record uses an opaque fingerprint; shared sections have numeric
-revisions. Initial shared-settings adoption may persist migration IDs/revisions
-during a read. Ordinary reads do not rewrite the Chrome record; obsolete aliases require explicit recovery.
-The native configuration owner checks shared and scoped revisions under one
-cross-process lease and commits both sections in one JSON replacement. The
-[shared contract](../../../contracts/README.md#unified-configuration-scopes) owns
-the lock, failure and upgrade rules.
-A stale Save preserves draft fields and selection and blocks another Save until
-**Review latest** reads a fresh revision or a confirmed Reload discards the draft.
-`src/settings/recovery.ts` compares editable values against the loaded baseline,
-keeps unrelated latest changes, and requires choices for conflicts and removed
-items. Inspection and retained storage revisions are outside that comparison.
-Apply validates the reviewed draft without writing; Save still uses the trusted revision check.
-Cancelling or a failed read preserves the original draft and editing context.
-An uncertain response follows the same read-first review, without replaying the
-write. Already matching edits require no new commit. Credential/endpoint changes
-are reviewed together so recovery cannot pair a key with another destination.
-Presentation and notification preferences use separate keys and do not cause
-configuration conflicts. Invalid-record backup/reset uses the same commit lane.
+Reuse resolves in SQLite before credentials, including deleted-submission
+tombstones. Anchors use exact URL, quote context and offsets. Changed context may
+match only with the same text and offsets plus matching DOM location or unchanged
+leading context. Ambiguous or missing text remains available without a marker.
+Native CSS highlights do not wrap page text.
 
-Content scripts receive action names and safe choice summaries, then submit only
-the action ID with captured context. `src/reading/configuration.ts` resolves the
-saved action/preset in the background and freezes both with the rendered prompts
-in `input_json`. Retry uses the frozen request, resolving credentials only for its
-original connection; missing connections and changed endpoints block explicitly.
-Choosing another action for the same passage creates a new attempt. It cannot
-replace an active attempt. Historic rows remain readable without action snapshots.
+## Configuration and surfaces
 
-The [ChatGPT plan helper](chatgpt-plan.md) uses a separate native host, `com.saul.chatgpt`, and a shared allowlisted protocol. The background validates extension-port senders and brokers requests from Settings and the offscreen runner. The native helper owns loopback OAuth, JWT verification, private credential persistence, serialized refresh, and the constrained Responses/SSE transport. It is independent of the tab bridge.
+Inspection returns unavailable choices without mutation; resolution admits
+execution and returns frozen choices with a separate transient credential.
+[Settings editor](../src/settings/editor.ts) owns each draft/baseline/review
+session. [React adapter](../src/app/useSettingsEditor.ts) owns lifetime, unload
+warnings and confirmation; stale callbacks cannot replace a newer session.
 
-## Tab boundary
+The background checks an opaque local fingerprint and serializes credential
+preparation, shared commit, local commit and retirement in that order. These
+are separate effects: after uncertainty or partial success, Review latest reads
+the current state before another explicit Save. See [Settings behavior](product.md#settings-and-models)
+and [shared revision rules](../../../contracts/configuration.md#unified-configuration-scopes).
+Ordinary reads do not rewrite local records; initial shared adoption may allocate
+IDs and revisions. Provider tests use the current draft without replacing unreadable settings. Only absence seeds defaults. Invalid, obsolete or pre-Action
+records are preserved for explicit backed-up reset. Credential adapters do
+not own Chrome storage; route lookup reads mode without upgrading configuration.
 
-User-facing **Window** and **Tab board** names follow the [glossary](../GLOSSARY.md).
-Internal `workspace` names cover different scopes: `src/app/Workspace.tsx` is the
-extension shell, `src/contracts/workspace.ts` validates history operations, and
-`native/workspace.mts` owns tab-board state and proposals. These are not one domain
-entity. Existing `saul_workspace_*` tool names remain protocol identifiers.
-
-The extension tab workspace calls `src/native/tabs.ts` directly. Optional external access follows this path:
-
-```text
-CLI or MCP -> private Unix socket -> native host -> Chrome native messaging -> tab tools
-```
-
-`native/protocol.mts` is the runtime schema shared by the extension, CLI, and MCP server. Public CLI mutation tools preview by default. Internal transport commands support direct user edits; both paths validate current browser state, serialize inside the extension, and never retry automatically after an uncertain error. Incognito and non-normal windows are excluded. `src/native/pages.ts` handles separately opted-in page reads and actions through Chrome scripting in the isolated world; short-lived element references are tied to the read's document. MCP health/discovery bypasses the browser request queue.
-
-The board service in `native/board-service.mts` owns one MCP/standalone operation registry and metadata-only diagnostic file store. `native/board-web.mts` provides the opt-in loopback HTTP adapter, with same-origin and per-process bearer-token gates. The browser uses the same board and workspace rules in both modes; native modules still require only Node.
-
-The [MCP App](mcp-app.md) serves a self-contained board from `native/ui/`. Codex reorganization requests and window renames feed `native/workspace.mts` proposals; manual tab and group edits use the direct interaction boundary below. The service validates complete layouts, issues expiring approval tokens to the app, and verifies each browser move, duplicate closure and label update after the user clicks Apply. Shared window labels belong to trusted extension session storage (`src/native/window-labels.ts`), and are included in tab inventories for both surfaces. On macOS Google Chrome, `native/window-names.mts` targets the connected browser PID through the AppleScript `givenName` interface: inventory reads import names, and reviewed writes validate window/tab IDs and the expected name, then read back the result. The extension API itself has no native name field. Legacy helper-only labels import on a reviewed apply. Duplicate detection uses exact HTTP(S) URLs; closures retain pins/groups and revalidate the URL and keeper at the extension boundary. `native/app-protocol.mts` owns app-only schemas and gates direct actions with a private interaction token.
-
-The shared native protocol distinguishes public model/CLI tools from internal
-transport commands. Direct tab edits and Undo live in
-`src/native/interaction.ts`, inside the existing mutation lock. Organization
-identity ignores focus and navigation; Undo validates only affected windows.
-Both extension and MCP selection controls use this boundary.
-
-MCP manual operations require an expiring interaction token returned only in
-tool-result metadata. They are app-only, distinct from proposal approval tokens.
-The MCP dispatcher rejects unadvertised transport commands. Summarize opens a
-Chrome reader; source text and credentials never traverse the board. The reader
-then uses the existing trusted extension digest boundary.
-
-## Summary ownership
-
-**Call Saul** is the page-level command, named for _Better Call Saul_. A Call
-operates on captured page context; Saul's Actions operate on local context such
-as selected text. Summarize is the first and default Call, not the execution
-module's purpose. The [glossary](../GLOSSARY.md) owns these terms.
-
-The optional [custom Call](custom-actions.md) replaces the default Summarize behavior.
-`src/calls/editor.ts` owns build and selection transitions in the offscreen runtime.
-`src/calls/store.ts` owns draft and saved-choice persistence in the background.
-The editor accesses that store over runtime messages. Draft writes do not resave
-choices, and admission reads saved choices from the same store.
-`src/calls/admission.ts` freezes new requests and resolves saved retry inputs;
-`src/calls/execution.ts` executes one frozen Call against one
-captured page through the existing model and custom-host adapters.
-`native/action-host.mts` is the independently installed
-`com.saul.actions` host. Its store stages without evaluation; explicit Load
-initializes a revision worker, and the selected revision changes only after a
-successful export check and selection save. Digest jobs retain frozen action
-source/preset, model-call inspection, cancellation and persistence. Reuse includes
-revision and preset identity. The built-in path and both PDF capture paths remain
-available without the action host. Detailed lifecycle, budgets and retention live
-in the action contract above.
-
-**Summaries** and **Summary reader** remain the existing saved-result surface
-names, including custom Call results. `digest` remains the implementation name in
-`src/digest/`, internal messages and persisted SQLite records; it does not name a
-separate feature. Existing `action` fields, revision records and native host names
-remain migration contracts; they do not make Calls local-context Actions.
-Wire and storage renames require explicit migrations.
-
-### Call execution
-
-`CallExecutor.execute` takes a `FrozenCall` and `CapturedPageContext`, with a
-separate transient credential, cancellation signal and progress callback. It
-copies the request at entry. Each `CallSnapshot` is detached from execution state;
-it contains raw output, optional progress and custom model-request transcripts,
-never credentials, database state or a mutable digest item. A terminal
-`CallOutcome` contains a validated Summary or text result, an execution/format
-failure, or cancellation with the available partial output. Progress is provisional;
-completion does not mean the result was saved. No progress is published after
-settlement. The existing native host owns custom-script budgets and worker shutdown.
-
-The background resolves and freezes the selected Call revision and model choices
-at admission. The runner translates the saved representation into the execution
-request; execution never reads current Settings or chooses behavior from a URL.
-Capture owns browser access, coverage and PDF preparation. Execution owns model
-dispatch, output accumulation, completion checks and result validation. The
-runner owns URL exclusion, two workers per batch, Stop/Delete/Retry, checkpoints
-and terminal saves. Custom Calls retain 500 ms checkpoints; built-in Summarize
-retains terminal output saves. Save failure aborts execution and preserves the
-runner's interruption/recovery behavior, without replaying generation.
-
-Execution failures pause unstarted pages. A completed built-in response with an
-invalid Summary fails only that page, allowing siblings to continue. Custom
-script failures, including invalid final text, remain execution failures. Tests
-cross the same execution interface with controlled transport adapters; runner
-checks retain scheduling, persistence-failure and frozen-Retry coverage.
-
-Text cleanup and chained requests belong inside one page's Call execution, with
-one cancellation signal and final result. Cleanup transforms captured text; it
-does not modify the live page. Existing custom scripts can already do this within
-their model-request and time limits. Future site-based Call selection belongs
-at admission, frozen before execution; site-specific DOM extraction belongs to
-capture. Automatic site rules, cross-page chains, independently saved/resumable
-steps and a workflow language are not implemented by this refactor.
-
-### Capture and persistence
-
-`src/digest/` owns the built-in bilingual summary contract, capture, runner, persistence operations, and safe standalone HTML renderer. The workspace sends validated digest actions through the background; only the background snapshots selected tabs, and only the offscreen runner can request page captures. Content scripts cannot start or inspect digests. HTML capture uses isolated-world scripting and validates the original URL before and after reading.
-
-PDF preparation splits browser authority from two processing implementations.
-`capture.ts` checks the selected HTTP(S) tab and identifies PDF pathnames or
-top-level viewer metadata. `source.ts` runs in the existing offscreen document and
-chooses the batch's frozen `pdfProcessing` preference. New batches default to
-`attachment`; a missing preference on an old batch means `local`. Settings owns
-the saved default; snapshots freeze it before work begins. Content is a union of
-legacy-compatible text captures and PDF URL attachments, persisted in existing
-JSON source rows without a database schema change.
-
-Attachment mode validates the URL, removes the viewer fragment, revalidates the
-tab and saves the exact URL. It never fetches or stores PDF bytes. The digest's
-single request assembler supplies a text message plus a typed attachment. The
-native `PlanRequest` allowlist accepts at most one bounded HTTP(S) PDF URL, with no
-URL userinfo, arbitrary content parts, bytes, credentials or caller-supplied
-endpoint. `responsesBody` maps it to `input_file.file_url` alongside `input_text`;
-text-only callers keep their existing request shape. The helper uses the same
-OAuth owner and Responses route, never the unsupported Files upload route. Model
-or URL rejection remains an explicit provider failure with no processing fallback.
-Saved URLs freeze request identity, not document bytes; reuse/inspection compare
-metadata without asserting text equality or making an inference call.
-
-Local mode passes the runner's Stop signal through capture and revalidates the
-source tab after extraction. When Chrome denies injection, only local mode may
-identify an extensionless PDF with a bounded signature-validated download;
-downloaded HTML is never summarized as a fallback. Attachment mode requires an
-identifiable PDF rather than forwarding an unreadable HTML page as a file.
-`pdf.ts` owns the credentialed fetch, signature check, limits, extraction and cleanup.
-PDF.js and its worker, CMaps, fonts and licenses ship inside the extension. An
-explicit module worker avoids PDF.js's blob-wrapper/fake-worker fallback under
-extension CSP; each capture terminates its worker on completion or cancellation.
-No new helper installation type or browser permission is needed; existing helpers
-must be updated to accept attachments. Source input and coverage use existing
-JSON source rows; PDF bytes are never persisted. See the
-[PDF capture contract](product.md#summaries) for triggers, bounds and limitations.
-
-The offscreen document hosts the digest runner alongside reading jobs. Both use
-the shared native history helper. Built-in Summarize with a saved preset uses
-the selected provider through `streamModel`; batches without a saved Summary
-input retain the native ChatGPT plan route. Both execute through the Call module
-with frozen instructions and model choices.
-
-Starts and retries serialize their checks against active sources. Each batch
-then runs independently with up to two workers. A new batch or retry cannot
-process a URL already queued, capturing, generating, or saving in another batch. Stop
-and Delete abort only the target batch and wait for its workers to settle.
-Stop releases the control queue after signaling cancellation, so other sources
-can start while that batch settles.
-
-The runner publishes each completed result only after its row commit. Retry resets
-unfinished rows together while retaining frozen captures and completed results.
-Storage-failure interruption updates only active rows; it cannot overwrite a result
-whose save succeeded but whose acknowledgement was lost. No unsaved result queue
-or automatic inference replay is retained.
-
-The shared history schema is version 4. Browser import schema version 3 is a
-one-time import format for digest metadata and item/source rows. On restart,
-unfinished items become interrupted; Saul never retries them automatically.
-The UI polls saved/live state while mounted and renders built-in English before
-Chinese from validated pairs. Raw model text is never interpreted as HTML.
-
-`src/app/Summaries.tsx` owns saved-summary history and live reading under
-`library.html#summary/<id>`. A new reader checks saved input reuse before account
-choice and sends the exact selected tab IDs. Snapshot metadata records source-window labels per item;
-older saved summaries remain readable. Polling reads the latest active batch or the
-open reader, never the entire summary history on a recurring timer.
-
-`src/digest/actions.ts` registers **Call Saul** on installation/update.
-The context menu and Chrome command share one handler. Chrome UI actions use
-`src/digest/panel.ts` to open `summary-panel.html` synchronously in the browser
-gesture, with the selected route in trusted session storage per window. The panel
-reuses the summary history and reader components and their existing account,
-generation, persistence and recovery boundaries. Routes survive panel closure
-within the browser session. Resolving a reused result persists its saved ID,
-so reopening the panel never replays a temporary selection request.
-External native/Tab board requests retain `openSummaryReader` and full-reader URLs;
-they have no browser gesture with which to open Chrome's side panel.
-
-Summary reuse lives in the digest runner/store. `DB_DIGEST_FIND` matches ordered
-URLs without changing schema or copying output; current captures are compared with
-frozen item/source rows and then discarded. Read-only resolve/inspect actions do
-not block Stop. For a saved selection, Run again creates a new ID and captures fresh
-sources. A final start-time lookup also prevents a second reader from duplicating
-an existing active or settled selection. Page comparison failures preserve the saved
-answer and remain visible. No recurring capture, semantic cache or expiry timer is
-used. Summary inspection assembles the exact user prompt through the same function
-as generation; the shared `InspectionText` renders at most one 6,000-character
-section per block, searches all sections and copies the complete original text.
-
-## Surface composition
-
-`Settings` renders its editing session and coordinates account/provider operations
-and recovery focus. `PresetSettings`, its capability/provider fields, `ReadingSettings`,
-`SettingsShortcuts` and `SettingsFeedback` own their respective views. Sections
-remain mounted while hidden; provider tests remain stoppable across sections.
-The speech preview still unmounts on leaving Presets. Preset search stays with the
-coordinator so loading/error replacement does not clear it.
-
-`Library` owns History queries and mutations; `HistoryEntry` renders an entry.
-History and the explanation card share `PastAttemptContent` while retaining their
-own attempt filtering and disclosures. `CallResults` renders both built-in
-Summarize and custom Call output. `SummaryReader` retains resolve/start, polling,
-Stop/Retry, export and navigation; its existing surface name follows the
-[Saul glossary](../GLOSSARY.md).
-
-The portable [design contract](../../../DESIGN.md) generates CSS for the extension and
-self-contained MCP board, a palette for native page highlights, and
-SwiftUI roles for EZ. The root `design/generate.mts` consumes the pinned official DESIGN.md
-parser; `pnpm design:check` rejects stale artifacts. The [application workflow](../../../design/SKILL.md)
-also governs layout/interaction adaptation and rendered review. Generation is
-build tooling, independent of authentication, inference, and storage runtimes.
-
-## Surface adapters
-
-| Surface                                                          | Adapter                                                            | Density            |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------ |
-| Popup, library, settings, tabs                                   | Generated CSS via `assets/tailwind.css`, semantic workspace styles | Compact or reading |
-| Selection trigger, card, concept notes, page list, notifications | Same CSS scoped through the shadow root                            | Compact reading    |
-| Page underlines                                                  | Generated TypeScript palette, native CSS Highlights                | Host page          |
-| Codex MCP tab board                                              | Generated CSS inlined with board styles                            | Dense              |
-| EZ main window and settings tint                                 | Generated SwiftUI roles through `AppStyle`                         | Native reading     |
-
-Web appearance follows system preference; the MCP host's explicit light/dark
-choice takes precedence. Paired `-dark` colors provide the appearance mapping.
-The native app keeps system backgrounds and controls. The adapter maps web px
-values to native points and system font roles, without adding a runtime dependency.
-
-## Speech preview boundary
-
-The background [speech bridge](../src/speech/bridge.ts) accepts one bounded
-request per trusted Settings port. It reads saved settings, verifies the requested
-Speak preset still matches, and resolves its saved official OpenAI API connection.
-The connection must use the official OpenAI endpoint; ChatGPT OAuth and other
-profiles are never fallbacks. The old native `speech` operation has been removed.
-
-For a standalone connection, the [Realtime owner](../src/speech/realtime.ts) creates
-an ephemeral client secret with the selected local API key. For an opted-in shared
-connection, the bridge obtains that secret from the signed credential owner through
-`api-realtime`; the long-lived key stays with that owner. Realtime then makes one
-text-input/audio-output WebSocket response.
-No microphone or WebRTC permission is needed. It receives PCM16 at 24 kHz and
-packages completed audio as WAV for the preview. It bounds text to 512 characters,
-audio to 6 MB and the whole operation to 90 seconds. Redirects, incomplete/failed
-responses, malformed audio and early disconnects fail without automatic retry.
-Remote error bodies are not shown; keys and ephemeral tokens stay out of replies,
-settings exports, history and diagnostics. Normal reading and Responses are unchanged.
-
-Stop or caller loss aborts token acquisition and closes the socket. Navigating away
-from a Speak preview unmounts it, aborts pending work and revokes its blob URL.
-Text and audio remain in memory only. Preset or voice changes clear old audio.
-Realtime is generative; preview text is an instruction to read verbatim, not an
-exact-synthesis guarantee. See the [current speech flow](chatgpt-plan.md#speech-preview)
-and the historical OAuth endpoint probe below it.
-
-## Shared macOS credentials
-
-Preferences → Integrations can explicitly connect this app to the [Saul credential owner](../../../contracts/credentials.md)
-using `com.saul.credentials`. Long-lived keys and tokens stay in Keychain; the
-browser receives account/model summaries and results. Realtime receives only a
-short-lived client secret. A missing owner blocks without fallback. Per-install
-`sharedCredentials` and `credentialOwner` references never enter shared presets or
-portable configuration. Disconnect app preserves the shared connection; Sign out
-and Remove key confirm their both-app scope. Custom endpoints and standalone
-browser installations retain their existing route.
-
-Built-in Summarize stores a model preset ID in Saul's scoped settings. New-run
-admission resolves the preset through the same path as custom calls and freezes
-its route and model options in the batch; credentials stay outside saved history.
-Retry uses the saved input. Without an explicit preset, the original summary
-setup still resolves its legacy plan binding through `src/digest/connection.ts`.
-Reauthorization uses the selected registration in both
-apps; only an explicit Add another account requests a new registration.
-
-## Annotation ownership
-
-`src/annotations/contract.ts` owns the bounded operation schema shared by Chrome,
-Calls and native tools. `native/annotation-store.mts` owns additive browser-specific SQLite tables in
-the existing history store, scoped by profile owner. It is the only annotation writer;
-EZ does not project these tables. They do not change shared schema version 4 or the
-existing passage/summary deletion meanings. `runner.ts` owns frozen attempts, at most
-two active generations, interruption recovery and terminal outcomes. The persistent
-owner admits all selected inputs together against their reviewed revisions, then
-commits the final reply and completed attempt together. Failed saves report
-failure without a save-only queue or inference replay. No extra helper
-or database is introduced. Expired deleted rows and cascading attempt images are
-removed on annotation access and offscreen startup recovery.
-
-Capture checks browser-supplied tab/document identity and navigation events. The
-Chrome screenshot callback opens the side panel while retaining the initiating
-gesture; screenshot pixels are already captured before panel layout changes. Failure
-retains the original target without a substitute image. Screenshots are marked and
-bounded to JPEG, 1600 × 1200 maximum and 450,000 data-URL characters, inside the existing
-native transport limit. Number assignment precedes immutable image attachment.
-
-`background.ts` admits page capture/current-page marker reads, trusted editor operations,
-and opted-in agent operations separately. Content scripts do not receive model settings
-or arbitrary history access. `saul_annotations` requires Annotation access and explicit
-URL/ID scope; caller-assigned scope is not permission inferred from page text. Requests
-are validated again by the persistent owner. Record revisions prevent lost updates;
-operation IDs with content fingerprints prevent duplicate edits and reject ID reuse.
-
-`Panel.tsx` retains failed drafts in trusted extension storage, with explicit conflict
-review. The existing Summary panel route remains independent. `capture.ts` owns picking
-and conservative live marker resolution. Frozen evidence remains the authority when
-live targets disappear. See [the feature specification](annotations.md).
+Popup and workspace share app views; History and the explanation card share
+past-attempt rendering. Settings sections stay mounted, preserving search
+and stoppable provider tests; leaving Presets unmounts the speech preview.
+Presentation and notification preferences are separate from provider drafts.
+Min Mode can change despite an unreadable configuration; subscribers receive
+only the validated appearance boolean. [Design application](../../../design/SKILL.md)
+owns shared tokens, checked output and platform adaptation.
