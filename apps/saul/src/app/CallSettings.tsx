@@ -1,8 +1,8 @@
 import { ActionLabel } from '../surface/ActionLabel';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ModelPreset } from '../configuration/definition';
-import { ACTION_FORM_LIMITS, type ActionRequest, type ActionState } from '../actions/contract';
-import { sendActionMessage } from '../storage/client';
+import { CALL_FORM_LIMITS, type CallEditRequest, type CallEditorState } from '../calls/contract';
+import { editCall } from '../storage/client';
 import { InspectionText } from '../surface/InspectionText';
 
 const FORM_KEY = 'saul_summary_action_editor_v1';
@@ -19,10 +19,10 @@ function readForm(): Partial<ActionForm> {
     const saved = value as Record<string, unknown>;
     const form: Partial<ActionForm> = {};
     const limits = {
-      prompt: ACTION_FORM_LIMITS.prompt,
-      builderPreset: ACTION_FORM_LIMITS.presetId,
-      actionPreset: ACTION_FORM_LIMITS.presetId,
-      path: ACTION_FORM_LIMITS.path,
+      prompt: CALL_FORM_LIMITS.prompt,
+      builderPreset: CALL_FORM_LIMITS.presetId,
+      actionPreset: CALL_FORM_LIMITS.presetId,
+      path: CALL_FORM_LIMITS.path,
     };
     for (const key of Object.keys(limits) as (keyof ActionForm)[]) {
       const text = saved[key];
@@ -73,7 +73,7 @@ function PresetField({
   );
 }
 
-export function ActionSettings({
+export function CallSettings({
   presets,
   summaryPresetId,
   onSummaryPresetChange,
@@ -91,7 +91,7 @@ export function ActionSettings({
   const writePresets = presets.filter(
     (p) => (p.capability ?? 'write') === 'write' && p.provider !== 'chrome-ai',
   );
-  const [state, setState] = useState<ActionState>();
+  const [state, setState] = useState<CallEditorState>();
   const [form, setForm] = useState(readForm);
   const { prompt = '', builderPreset = '', actionPreset = '', path = '' } = form;
   const [busy, setBusy] = useState(false);
@@ -114,11 +114,11 @@ export function ActionSettings({
       live.current = false;
     };
   }, []);
-  async function request(message: ActionRequest) {
+  async function request(message: CallEditRequest) {
     setBusy(true);
     setError('');
     try {
-      const next = await sendActionMessage(message);
+      const next = await editCall(message);
       if (live.current) {
         setState(next);
         if (message.action === 'status' && !state) {
@@ -147,7 +147,7 @@ export function ActionSettings({
     let timer: ReturnType<typeof setTimeout>;
     const refresh = async () => {
       try {
-        const next = await sendActionMessage({ action: 'status' });
+        const next = await editCall({ action: 'status' });
         if (!disposed) {
           setState(next);
           if (next.building) timer = setTimeout(() => void refresh(), 700);
@@ -248,7 +248,7 @@ export function ActionSettings({
               aria-label="Call request"
               disabled={!state}
               rows={3}
-              maxLength={ACTION_FORM_LIMITS.prompt}
+              maxLength={CALL_FORM_LIMITS.prompt}
               value={prompt}
               onChange={(e) => edit({ prompt: e.target.value })}
               placeholder="Explain the main claim and its weakest evidence."
@@ -353,7 +353,7 @@ export function ActionSettings({
                 <input
                   aria-label="Module file path"
                   value={path}
-                  maxLength={ACTION_FORM_LIMITS.path}
+                  maxLength={CALL_FORM_LIMITS.path}
                   onChange={(e) => edit({ path: e.target.value })}
                   placeholder="/absolute/path/call.ts"
                 />

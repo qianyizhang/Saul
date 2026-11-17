@@ -30,7 +30,7 @@ export function SettingsFeedback({
 }: {
   draft: SaveState;
   providerTest: ProviderTestState;
-  plan: Pick<PlanSettingsState, 'busy' | 'notice' | 'controller'>;
+  plan: Pick<PlanSettingsState, 'busy' | 'notice' | 'cancel'>;
   error: string;
   planBusy: boolean;
   speechBusy: boolean;
@@ -100,7 +100,7 @@ export function SettingsFeedback({
         </div>
       )}
       {plan.busy && plan.busy !== 'logout' && (
-        <button className="btn" onClick={() => plan.controller.current?.abort()}>
+        <button className="btn" onClick={plan.cancel}>
           Cancel
         </button>
       )}

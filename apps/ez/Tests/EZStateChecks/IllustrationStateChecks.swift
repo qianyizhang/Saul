@@ -34,7 +34,9 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
 
 @MainActor private func completionSignal(_ model: AppModel) -> (CheckSignal, AnyCancellable) {
     let signal = CheckSignal()
-    let observer = model.$busy.dropFirst().filter { !$0 }.sink { _ in Task { await signal.signal() } }
+    let observer = model.$runningAttempt.dropFirst().filter { $0 == nil }.sink { _ in
+        Task { await signal.signal() }
+    }
     return (signal, observer)
 }
 
@@ -64,8 +66,9 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
             let keys = IllustrationKeyFixture()
             let model = AppModel(directory: directory, offline: true, apiKeyStore: keys)
             defer { model.shutdown() }
-            await model.restoreAPIKey()
-            try expect(model.apiConnected, "Existing API key did not restore")
+            model.apiConnected = true
+            let existingKey = await keys.read()
+            try expectEqual(existingKey, "sk-offline-fixture", "Fixture has no existing key")
             let connection = ConnectionDefinition.defaults[1]
             await keys.setFailure(true)
             try await expectAsyncThrows(EZError.self) {
@@ -92,7 +95,7 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
                 })
             defer { model.shutdown() }
             let id = model.currentPreset!.id
-            model.outputFormatOverride = "gif"
+            model.chooseOutputFormat("gif")
             let (done, observer) = completionSignal(model)
             defer { observer.cancel() }
             model.send()
@@ -144,7 +147,7 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
             try expectEqual(
                 model.selectedEntry?.id, entry.id, "Image unavailable through shared History selection")
         },
-        CheckCase("action: image save failure retains PNG and Save again never resends") { directory in
+        CheckCase("action: image save failure reports unsaved and keeps Download available") { directory in
             var calls = 0
             let model = try imageModel(
                 directory,
@@ -161,20 +164,17 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
             defer { observer.cancel() }
             model.send()
             try await done.wait()
-            let id = model.selection!
-            try expectEqual(model.selectedEntry?.status, "unsaved", "Failed PNG write reported saved")
-            try expectEqual(model.selectedEntry?.imageData, fixturePNG, "Unsaved PNG was lost")
-            try expect(model.saveError(for: id) != nil, "Image persistence error hidden")
-            model.newQuery()
-            model.selection = id
-            _ = try historySQL(directory.appendingPathComponent("history.sqlite3"), "DROP TRIGGER fail_save")
-            model.saveAgain(id)
-            try expectEqual(model.selectedEntry?.status, "completed", "Save-only recovery failed")
-            try expectEqual(calls, 1, "Save-only recovery generated another image")
-            let saved = try HistoryStore(directory: directory).load()[0]
+            let entry = model.selectedEntry!
+            try expectEqual(entry.status, "unsaved", "Failed PNG write reported saved")
             try expectEqual(
-                try HistoryStore(directory: directory).image(for: saved), fixturePNG,
-                "Recovery did not save original PNG")
+                model.imageData(for: entry), fixturePNG, "Current unsaved PNG could not be downloaded")
+            try expect(
+                entry.error?.contains("Synthetic final save failure") == true, "Image save error hidden")
+            let saved = try HistoryStore(directory: directory).load()[0]
+            try expectEqual(saved.status, "interrupted", "Failed save marked the image complete")
+            try expectEqual(
+                try HistoryStore(directory: directory).image(for: saved), nil, "Failed save had bytes")
+            try expectEqual(calls, 1, "Failed save generated another image")
         },
         CheckCase("action: Stop ignores late Draw output during a replacement run") { directory in
             let first = HeldImage()
@@ -231,11 +231,6 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
             let write = model.configuration.presets.first { $0.capability == .write }!
             model.chooseLookupPreset(write.id)
             try expectEqual(model.currentPreset?.capability, .draw, "Chooser selected Write for Draw")
-            model.choosePreset(write.id)
-            try expect(
-                !model.canSend && model.requestIssue?.contains("Draw") == true,
-                "Write preset accepted for Draw action")
-            model.choosePreset(model.configuration.presets.first { $0.capability == .draw }!.id)
             var unavailable = model.configuration
             unavailable.connections.removeAll { $0.key == "openai-api" }
             try model.saveConfiguration(unavailable)

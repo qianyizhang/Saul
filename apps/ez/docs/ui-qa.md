@@ -87,7 +87,7 @@ at the caret and over selected text. Use **Two inputs** (Tab between fields) and
 **Answer** (follow-up). Then send with the configured shortcut and check that
 single-line search and Settings fields still behave normally.
 
-## Unsaved answer recovery
+## Terminal history save failure
 
 Quit the preview, then run:
 
@@ -95,14 +95,14 @@ Quit the preview, then run:
 open 'dist/EZ Surface Preview.app' --args --unsaved-attempt
 ```
 
-The first synthetic terminal save fails; Save again succeeds. Check text and Draw:
+The first synthetic terminal save fails. Check text and Draw:
 
-1. Answer and History say Unsaved; Save error and Inspect do not claim persistence.
-2. Both surfaces expose Save, Copy/Export (Download for images where applicable),
-   including Minimum panel and both modes/appearances.
-3. New → type another draft → select Unsaved: result/recovery survive, draft unchanged.
-4. Save again clears Unsaved only after storage succeeds, preserving result/draft.
-   Cancelled export leaves the attempt intact; no generation is repeated.
+1. Answer and History show Unsaved and the result explains the storage error.
+   Inspect does not claim saved output.
+2. Copy/Export or Download still works while the output is visible. Both
+   surfaces keep the error visible in Min and Standard, light and dark.
+3. Choose New and Run an explicit request. It gets a new history entry. On
+   refresh, the earlier history shows only what was stored.
 
 ## Installed selected-text journey
 

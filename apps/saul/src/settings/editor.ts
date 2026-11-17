@@ -118,7 +118,7 @@ export function createSettingsEditor(
     }
   }
   function editable() {
-    return phase === 'editing' && !operation;
+    return phase === 'editing' && !operation && !review;
   }
   async function guardedCommit(
     patch: { sharedCredentials?: 'saul' | 'disconnected'; connections?: ConnectionDefinition[] },

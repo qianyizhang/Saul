@@ -37,7 +37,7 @@ views and stages/verifies its bundle before replacement.
 
 Previews use disposable history, no real accounts/Keychain/network, and no global
 shortcut. `surface-preview` uses an in-memory API key store; `--unsaved-attempt`
-fails its first terminal save for recovery checks. It starts in Min Mode without
+fails its first terminal save to check the result and history failure states. It starts in Min Mode without
 reading/writing the personal preference. Fixture names and actions live in
 [UI QA](ui-qa.md); previews do not prove installed or live-service behavior.
 

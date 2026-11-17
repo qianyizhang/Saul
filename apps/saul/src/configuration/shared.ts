@@ -1,6 +1,11 @@
 import { validateScopedConfigValue } from '../../native/shared-presets-contract.mts';
 import { portableSettings, restoreSettings } from './scoped';
-import { scopedCall, sharedCall, commitSharedConfiguration } from '../native/config-transport';
+import {
+  ConfigUnavailableError,
+  scopedCall,
+  sharedCall,
+  commitSharedConfiguration,
+} from '../native/config-transport';
 import type { Configuration, ModelPreset } from './definition';
 import type { SharedPreset, SharedPresets } from '../../native/shared-presets-contract.mts';
 import { configurationFor } from './definition';
@@ -100,7 +105,12 @@ export const sharedPresets = {
       library = await sharedCall({ action: 'presets-read' });
     } catch (error) {
       // An API-only installation with no shared presets needs no native helper.
-      if (old.length || source.scopedConfigRevision !== undefined) throw error;
+      if (
+        !(error instanceof ConfigUnavailableError) ||
+        old.length ||
+        source.scopedConfigRevision !== undefined
+      )
+        throw error;
       const local = { ...source };
       delete local.sharedPresetRevision;
       return local;

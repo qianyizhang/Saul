@@ -7,7 +7,7 @@ import {
   SELECT_NEW_PRESET,
 } from '../src/configuration/resolve';
 import { prepareRecipeRun } from '../src/reading/configuration';
-import { prepareActionPreset } from '../src/actions/configuration';
+import { prepareCallModel } from '../src/calls/configuration';
 import { planEvents } from '../src/providers/chatgpt-plan';
 
 function settings() {
@@ -29,9 +29,11 @@ afterEach(() => vi.unstubAllGlobals());
 it('Reading and custom Summarize use the same frozen choices and never persist a key', () => {
   const value = settings();
   const reading = prepareRecipeRun(value, context, value.configuration!.selectedRecipeId);
-  const action = prepareActionPreset(value, value.configuration!.presets[0]!.id);
+  const action = prepareCallModel(value, value.configuration!.presets[0]!.id);
   for (const field of ['provider', 'remote', 'plan', 'preset', 'credentialOwner'] as const)
-    expect(action.input[field]).toEqual(reading.input[field]);
+    expect(action.choices[field]).toEqual(reading.input[field]);
+  expect(action.choices).not.toHaveProperty('context');
+  expect(action.choices).not.toHaveProperty('userPrompt');
   expect(reading.credential).toBe('fixture-key');
   expect(JSON.stringify(reading.input)).not.toContain('fixture-key');
   expect(reading.input.preset?.profileId).toBe('original');
@@ -96,6 +98,35 @@ it('freezes the plan owner and blocks a changed route again immediately before t
   );
   await expect(stream.next()).rejects.toThrow(SELECT_NEW_PRESET);
   expect(connect).not.toHaveBeenCalled();
+});
+
+it('retries only the frozen account of an available ChatGPT plan connection', () => {
+  const value = settings();
+  const connection = { key: 'gpt-plan', name: 'My plan', kind: 'chatgpt-plan' as const };
+  value.connections = [connection];
+  value.chatgptPlan = { accountId: 'standalone', model: 'fixture' };
+  const preset = {
+    ...value.configuration!.presets[0]!,
+    provider: 'chatgpt-plan' as const,
+    connectionKey: connection.key,
+  };
+  const local = preparePreset(value, preset).choices;
+  value.chatgptPlan.accountId = 'other';
+  expect(prepareFrozenPreset(value, local).input.plan?.accountId).toBe('standalone');
+
+  value.sharedCredentials = 'saul';
+  value.connections = [{ ...connection, accountId: 'bound' }];
+  const managed = preparePreset(value, preset).choices;
+  expect(prepareFrozenPreset(value, managed).input.plan?.accountId).toBe('bound');
+  for (const connections of [
+    [],
+    [connection],
+    [{ ...connection, accountId: 'other' }],
+    [{ ...connection, kind: 'openai-api' as const }],
+  ])
+    expect(() => prepareFrozenPreset({ ...value, connections }, managed)).toThrow(
+      SELECT_NEW_PRESET,
+    );
 });
 
 it('inspection needs no key, while actual execution still rejects a missing key', () => {

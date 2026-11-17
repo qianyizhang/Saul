@@ -145,6 +145,23 @@ it('never replays a lost commit reply; review of matching saved edits needs no s
   });
   expect(request.mock.calls.filter(([r]) => r.action === 'commit')).toHaveLength(1);
 });
+it('locks the draft while conflict choices are open', async () => {
+  const { editor, request } = fixture();
+  await editor.open();
+  editor.edit(language('Chinese'));
+  request.mockResolvedValueOnce({ state: 'conflict', error: 'Changed elsewhere' });
+  await editor.save();
+  await editor.reviewLatest();
+  expect(editor.getSnapshot().review).toBeDefined();
+  // A returning connection/catalog operation can call edit despite the hidden form.
+  editor.edit(language('English'));
+  expect(editor.getSnapshot().configuration.responseLanguage).toBe('Chinese');
+  editor.applyReview({});
+  expect(editor.getSnapshot()).toMatchObject({
+    dirty: true,
+    configuration: { responseLanguage: 'Chinese' },
+  });
+});
 
 it('blocks another connection commit after a server error with an uncertain write outcome', async () => {
   const { editor, request, store } = fixture();

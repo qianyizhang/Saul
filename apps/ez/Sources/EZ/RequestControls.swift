@@ -176,7 +176,7 @@ struct ActionInputs: View {
         let imageField = model.currentAction?.imageInput
         VStack(alignment: .leading, spacing: 8) {
             if imageField != nil && model.outputFormat != "png" {
-                Button("Use PNG") { model.outputFormatOverride = "png" }
+                Button("Use PNG") { model.chooseOutputFormat("png") }
                     .help("EZ uses PNG for image edits")
             } else if model.currentAction?.capability == .draw && imageField == nil {
                 SelectorPicker(
@@ -184,7 +184,7 @@ struct ActionInputs: View {
                     options: ImageOptions.formats.map {
                         .init(value: $0, title: $0 == "gif" ? "GIF · animated" : "PNG")
                     },
-                    selection: Binding(get: { model.outputFormat }, set: { model.outputFormatOverride = $0 }))
+                    selection: Binding(get: { model.outputFormat }, set: { model.chooseOutputFormat($0) }))
             }
             if let label = imageField {
                 if model.usesSketch && !compact {
@@ -212,7 +212,7 @@ struct ActionInputs: View {
                                         model.inputFields.count > 1 ? "" : field,
                                         text: Binding(
                                             get: { model.inputValues[field] ?? "" },
-                                            set: { model.inputValues[field] = $0 }), axis: .vertical
+                                            set: { model.setInput($0, for: field) }), axis: .vertical
                                     )
                                     .textFieldStyle(.roundedBorder).lineLimit(2...(compact ? 3 : 4))
                                     .font(.system(size: 14)).accessibilityLabel(field)

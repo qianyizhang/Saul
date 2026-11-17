@@ -1,4 +1,4 @@
-import { AnnotationPanel } from '../annotations/Panel';
+import { AnnotationPanel } from '../annotations/AnnotationPanel';
 import { annotationPanelKey } from '../annotations/routing';
 import { useCallback, useEffect, useState } from 'react';
 import { useMinimumMode } from './useMinimumMode';

@@ -177,11 +177,11 @@ task. Group comparable values by meaning and unit; use alignment and typography
 to distinguish labels from values. Place caveats beside the claim they qualify.
 Keep the displayed answer, editable draft and saved configuration visibly distinct.
 
-In EZ, when a terminal answer cannot be saved, keep the available answer attached to its
-attempt and show **Unsaved** with Copy/Export and an explicit save recovery action.
-**Save again** writes the retained result; it never starts generation. Keep
-this notice visible after navigating away and back, including in Min Mode.
-Explain that unsaved output must be saved or exported before quitting.
+When an attempt cannot be saved, show a clear save failure in the affected reading
+surface, including in Min Mode. Available output may remain visible temporarily,
+but must not be presented as saved or recoverable. There is no dedicated save-only
+action. Let the user explicitly start another attempt; never repeat generation as
+error recovery. Already-saved answers remain available.
 
 A stale Settings save must preserve the local draft and selection. EZ reports
 the error beside Save; a conflict review is planned. Saul offers **Review latest**
@@ -199,7 +199,8 @@ window and Quick Lookup, for text and images. Retry creates a new attempt using
 the frozen request and validates its saved connection, model and image input.
 Keep the previous result and unrelated draft. Unavailable choices block with
 **Review saved request**; no fallback or automatic retry. Completed answers keep
-Reuse; unsaved results keep the storage-only Save again action.
+Reuse. A save failure remains distinct from a saved failed attempt and does not
+offer a storage-only retry.
 
 Input labels remain identifiable after typing, especially in multi-field forms.
 Disclosures name what they reveal and have a full-row activation target. Opening
@@ -389,7 +390,8 @@ choice visible with its correction; never silently change format or model.
 Stop cancels locally; it cannot promise server cancellation or prevent billing.
 There are no automatic generation retries. Save exact result bytes in shared
 SQLite history. Download exports the original PNG or GIF. Details shows frozen
-choices. Storage failures retain the result for Download and save-only recovery.
+choices. Storage failures report that the image was not confirmed saved; unsaved
+bytes may be discarded. Another generation is an explicit new attempt.
 History deletion removes owned output; external downloads remain user-owned.
 Images do not offer text follow-ups. Reuse prepares an explicit new run.
 
@@ -476,7 +478,7 @@ with its answer. Keep prior answers available through attempts/history. Preserve
 unsubmitted drafts on dismissal and surface switches; clear only after submission
 is accepted. Block empty questions, more than 2,000 characters and conversations
 over 120,000 characters without silently dropping context. Stop, partial output,
-errors and save-only recovery use the existing attempt lifecycle.
+errors and save failures use the existing attempt lifecycle.
 
 ### Answer details
 

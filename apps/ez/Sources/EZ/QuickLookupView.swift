@@ -208,7 +208,6 @@ struct QuickLookupView: View {
 
     private func result(_ entry: HistoryEntry) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            UnsavedAttemptNotice(model: model, entry: entry)
             LookupAnswerText(
                 entry: entry, activity: model.selectedResponseActivity, compact: true,
                 imageData: model.imageData(for: entry), imageLoading: model.imageLoading)
@@ -216,7 +215,7 @@ struct QuickLookupView: View {
             if let parentID = entry.parentID, model.entries.contains(where: { $0.id == parentID }) {
                 Button("Previous answer") { model.selection = parentID }.buttonStyle(.borderless)
             }
-            if !["pending", "completed", "unsaved"].contains(entry.status) {
+            if !["pending", "completed"].contains(entry.status) {
                 Text(entry.status.capitalized).font(AppStyle.caption).foregroundStyle(.orange)
             }
             if let error = entry.error, !notices.contains(error) {

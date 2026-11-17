@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSettingsEditor } from './useSettingsEditor';
 import { useProviderTest } from './useProviderTest';
 import { configurationFor } from '../configuration/definition';
-import { ActionSettings } from './ActionSettings';
+import { CallSettings } from './CallSettings';
 import type { SettingsSection } from './settings-sections';
 import { SettingsRecovery } from './SettingsRecovery';
 import type { SettingsPreferences } from '../settings/draft';
@@ -186,7 +186,7 @@ export function Settings({
         />
         <section hidden={section !== 'calls'} className="settings-section" aria-label="Calls">
           <h2 className="view-title">Calls</h2>
-          <ActionSettings
+          <CallSettings
             presets={configuration.presets}
             summaryPresetId={settings.summaryPresetId ?? ''}
             onSummaryPresetChange={(id) => update({ summaryPresetId: id || undefined })}
@@ -214,7 +214,7 @@ export function Settings({
                 to new calls and Run again; Retry keeps the saved method.
               </p>
             </details>
-          </ActionSettings>
+          </CallSettings>
         </section>
         <ReadingSettings
           section={section}
@@ -261,7 +261,7 @@ export function Settings({
             reload: draft.reload,
           }}
           providerTest={{ testing, notice, stop: providerTest.stop, clear: providerTest.clear }}
-          plan={{ busy: plan.busy, notice: plan.notice, controller: plan.controller }}
+          plan={{ busy: plan.busy, notice: plan.notice, cancel: plan.cancel }}
           error={error}
           planBusy={planBusy}
           speechBusy={speechBusy}

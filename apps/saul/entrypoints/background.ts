@@ -1,18 +1,18 @@
 import { readCredentialRoute } from '../src/providers/credential-route';
 import { initAnnotations } from '../src/annotations/background';
-import { callPresetStorage } from '../src/storage/call-presets';
-import { snapshotSelection, captureTab, verifyCaptureTab } from '../src/digest/capture';
-import { compareRunInput } from '../src/reading/input-change';
+import { callStore } from '../src/calls/store';
+import { captureTab, verifyCaptureTab } from '../src/digest/capture';
 import { validateDigest } from '../src/digest/contracts';
-import { validateSummaryConnection } from '../src/digest/connection';
+import { createCallAdmission } from '../src/calls/admission';
 import { initSummaryActions } from '../src/digest/actions';
 import { initPlanBridge } from '../src/native/plan';
 import { initCredentialBridge } from '../src/native/credentials';
 import { nativeCredentialAccess } from '../src/configuration/credentials';
 import { initSpeechBridge } from '../src/speech/bridge';
 import { initActionBridge } from '../src/native/actions';
-import { actionState, validateActionRequest, validateActionState } from '../src/actions/contract';
-import { prepareActionPreset } from '../src/actions/configuration';
+import { validateCallEditRequest } from '../src/calls/contract';
+import type { CallEditorBridgeRequest } from '../src/calls/editor-client';
+import { prepareCallModel } from '../src/calls/configuration';
 import { sharedPresets } from '../src/configuration/shared';
 import { createConfigurationStore, SETTINGS_STORAGE_KEY } from '../src/configuration/store';
 import {
@@ -31,11 +31,7 @@ import {
 } from '../src/storage/presentation';
 import { runnerRequest } from '../src/storage/client';
 import { configurationFor } from '../src/configuration/definition';
-import {
-  prepareFollowUpRun,
-  prepareFrozenRun,
-  prepareRecipeRun,
-} from '../src/reading/configuration';
+import { createReadingAdmission, type ReadingAdmission } from '../src/reading/admission';
 import { initNativeBridge } from '../src/native/bridge';
 import { workspaceCall } from '../src/native/workspace';
 import {
@@ -47,16 +43,19 @@ import {
   type ReadingResult,
 } from '../src/contracts/reading';
 import { validateWorkspace } from '../src/contracts/workspace';
-import type { DbCall, DbRequest, Passage, RunInput } from '../src/types/storage';
-import type { ResolvedContext, SelectionSnapshot } from '../src/types';
+import type { DbCall, DbRequest, Passage } from '../src/types/storage';
 
 const db: DbCall = (message) => runnerRequest({ operation: 'db', message: message as DbRequest });
-const callPresets = callPresetStorage();
 const settingsOwner = createConfigurationStore(
   chromeConfigurationStorage,
   sharedPresets,
   nativeCredentialAccess,
 );
+const admitCall = createCallAdmission({
+  readSettings: () => settingsOwner({ action: 'read' }),
+  readChoices: callStore.readChoices,
+  readBatch: (id) => db({ type: 'DB_DIGEST_GET', payload: { id } }),
+});
 async function currentSettings() {
   const result = await settingsOwner({ action: 'read' });
   if (result.state !== 'ready') throw new Error(result.error);
@@ -68,44 +67,14 @@ async function owned(selectionId: string, url: string): Promise<Passage> {
     throw new Error('This passage is not on the current page.');
   return p;
 }
-async function submit(
-  snapshot: SelectionSnapshot,
-  context: ResolvedContext,
-  submissionId: string,
-  regenerate: boolean,
-  recipeId?: string,
-  runId?: string,
-  outputFormat?: 'png' | 'gif',
-) {
-  const settings = await currentSettings();
-  let prepared: { input: RunInput; credential: string };
-  if (regenerate && !recipeId) {
-    const original = await db({ type: 'DB_INPUT', payload: { selectionId: snapshot.id, runId } });
-    if (!original)
-      throw new Error(
-        'This older explanation has no saved request. Select its text and choose a recipe to run again.',
-      );
-    prepared = prepareFrozenRun(settings, original);
-  } else
-    prepared = prepareRecipeRun(
-      settings,
-      context,
-      recipeId || configurationFor(settings).selectedRecipeId,
-    );
-  if (outputFormat !== undefined) {
-    if (prepared.input.preset?.capability !== 'draw')
-      throw new Error('Output format requires a Draw action.');
-    prepared.input.preset.imageOptions = {
-      size: '1024x1024',
-      quality: 'low',
-      ...prepared.input.preset.imageOptions,
-      outputFormat,
-    };
-  }
-  return runnerRequest<{ passageId: string; reused: boolean }>({
+const readingAdmission = createReadingAdmission(currentSettings, db);
+function submit(admitted: ReadingAdmission): Promise<ReadingResult<'submit'>> {
+  if (admitted.kind === 'reused')
+    return Promise.resolve({ passageId: admitted.passageId, reused: true });
+  return runnerRequest({
     operation: 'submit',
-    submission: { snapshot, input: prepared.input, submissionId, regenerate },
-    credential: prepared.credential,
+    submission: admitted.submission,
+    credential: admitted.credential,
   });
 }
 async function reading(
@@ -139,34 +108,8 @@ async function reading(
     }
     case 'list':
       return { passages: await db({ type: 'DB_PAGE', payload: { url } }) };
-    case 'submit': {
-      if (request.snapshot.page.url !== url)
-        throw new Error('The page changed. Select the passage again.');
-      const snapshot = { ...request.snapshot, page: { ...request.snapshot.page, url } };
-      const context = {
-        ...request.context,
-        selection: snapshot.text,
-        pageUrl: request.context.pageUrl ? url : '',
-      };
-      if (!request.regenerate) {
-        const recipeId =
-          request.recipeId || configurationFor(await currentSettings()).selectedRecipeId;
-        const selectionId = await db({
-          type: 'DB_READING_RESOLVE',
-          payload: { snapshot, submissionId: request.submissionId, recipeId },
-        });
-        if (selectionId) return { passageId: selectionId, reused: true };
-      }
-      return submit(
-        snapshot,
-        context,
-        request.submissionId,
-        request.regenerate === true,
-        request.recipeId,
-        undefined,
-        request.outputFormat,
-      );
-    }
+    case 'submit':
+      return submit(await readingAdmission.submit(request, url));
     default: {
       const passage = await owned(request.selectionId, url);
       switch (request.action) {
@@ -175,74 +118,10 @@ async function reading(
             type: 'DB_IMAGE',
             payload: { selectionId: request.selectionId, runId: request.runId },
           });
-        case 'review': {
-          const before = await db({
-            type: 'DB_INPUT',
-            payload: {
-              selectionId: request.selectionId,
-              runId: passage.completed?.id || passage.latest.id,
-            },
-          });
-          if (!before) return { fields: [], error: 'The original input was not recorded.' };
-          try {
-            const settings = await currentSettings();
-            const after = prepareRecipeRun(
-              settings,
-              request.context,
-              request.recipeId || configurationFor(settings).selectedRecipeId,
-              true,
-            ).input;
-            return compareRunInput(before, after);
-          } catch (error) {
-            return { fields: [], error: error instanceof Error ? error.message : String(error) };
-          }
-        }
-        case 'regenerate': {
-          if (request.instruction !== undefined) {
-            if (['queued', 'running', 'saving'].includes(passage.latest.status))
-              throw new Error('Wait for this explanation to finish before asking a follow-up.');
-            const answer = passage.completed;
-            if (!answer || (request.runId && request.runId !== answer.id))
-              throw new Error('The answer changed. Review it before asking a follow-up.');
-            const original = await db({
-              type: 'DB_INPUT',
-              payload: { selectionId: request.selectionId, runId: answer.id },
-            });
-            if (!original)
-              throw new Error('This older answer has no saved context. Start a new explanation.');
-            const prepared = prepareFollowUpRun(
-              await currentSettings(),
-              original,
-              answer.responseRaw,
-              request.instruction,
-            );
-            return runnerRequest<{ passageId: string; reused: boolean }>({
-              operation: 'submit',
-              submission: {
-                snapshot: passage.snapshot,
-                input: prepared.input,
-                submissionId: request.submissionId,
-                regenerate: true,
-              },
-              credential: prepared.credential,
-            });
-          }
-          const context = await db({
-            type: 'DB_CONTEXT',
-            payload: { selectionId: request.selectionId },
-          });
-          return submit(
-            passage.snapshot,
-            context,
-            request.submissionId,
-            true,
-            request.recipeId,
-            passage.latest.id,
-          );
-        }
-        case 'save-image':
-          await runnerRequest({ operation: 'save-image', selectionId: request.selectionId });
-          break;
+        case 'review':
+          return readingAdmission.review(request, passage);
+        case 'regenerate':
+          return submit(await readingAdmission.regenerate(request, passage));
         case 'stop':
           await runnerRequest({ operation: 'stop', selectionId: request.selectionId });
           break;
@@ -381,7 +260,7 @@ export default defineBackground(() => {
       ![
         'saul-digest',
         'saul-action',
-        'saul-action-state',
+        'saul-call-editor',
         'saul-digest-capture',
         'saul-reading',
         'saul-workspace',
@@ -405,19 +284,28 @@ export default defineBackground(() => {
         const route = await readCredentialRoute();
         return { mode: route === 'local' ? 'standalone' : route };
       }
-      if (request.target === 'saul-action-state') {
+      if (request.target === 'saul-call-editor') {
         if (
           sender.id !== chrome.runtime.id ||
           sender.tab ||
           sender.url !== chrome.runtime.getURL('offscreen.html')
         )
           throw new Error('Runner only');
-        if (request.action === 'read') return callPresets.read();
-        if (request.action !== 'write' || !request.state || typeof request.state !== 'object')
-          throw new Error('Invalid action state write.');
-        validateActionState(request.state);
-        await callPresets.write(request.state);
-        return request.state;
+        const message: CallEditorBridgeRequest = request.message;
+        switch (message?.action) {
+          case 'read-choices':
+            return callStore.readChoices();
+          case 'save-choices':
+            return callStore.saveChoices(message.source, message.choices);
+          case 'read-draft':
+            return callStore.readDraft();
+          case 'save-draft':
+            return callStore.saveDraft(message.draft);
+          case 'prepare-preset':
+            return prepareCallModel(await currentSettings(), message.presetId);
+          default:
+            throw new Error('Invalid Call storage request.');
+        }
       }
       if (request.target === 'saul-digest-capture') {
         if (
@@ -459,82 +347,12 @@ export default defineBackground(() => {
       if (!workspaceSender(sender)) throw new Error('Extension workspace only');
       if (request.target === 'saul-settings') return settings(request.message);
       if (request.target === 'saul-action') {
-        validateActionRequest(request.message);
-        const r = request.message;
-        let prepared;
-        if (r.action === 'build' || r.action === 'load' || r.action === 'select')
-          prepared = prepareActionPreset(await currentSettings(), r.presetId);
-        if (r.action === 'restore') {
-          const previous = (await actionState()).previous;
-          if (!previous) throw new Error('No previous call preset.');
-          prepareActionPreset(await currentSettings(), previous.presetId);
-        }
-        return runnerRequest({ operation: 'action', message: r, prepared });
+        validateCallEditRequest(request.message);
+        return runnerRequest({ operation: 'action', message: request.message });
       }
       if (request.target === 'saul-digest') {
         validateDigest(request.message);
-        const r = request.message;
-        let snapshot;
-        let credential = '';
-        if (r.action === 'start' || r.action === 'resolve') {
-          // Unreadable settings must not block reopening saved work. Only a new
-          // run requires a validated preference; comparisons can use its saved mode.
-          const preference = await settingsOwner({ action: 'read' }).catch(() => undefined);
-          if (r.action === 'start' && preference?.state !== 'ready')
-            throw new Error(
-              preference?.error || 'Settings could not be read. Open Settings and retry.',
-            );
-          snapshot = await snapshotSelection(
-            r.id,
-            r.tabIds,
-            r.action === 'start' ? (r.accountId ?? '') : '',
-            preference?.state === 'ready' ? preference.settings.summaryPdfProcessing : undefined,
-          );
-          if (preference?.state !== 'ready') delete snapshot.pdfProcessing;
-          if (r.action === 'start')
-            snapshot.credentialOwner =
-              preference?.state === 'ready' && preference.settings.sharedCredentials === 'saul'
-                ? 'saul'
-                : 'local';
-          const selected = (await actionState()).selected;
-          if (r.action === 'start' && !selected && preference?.state === 'ready') {
-            const settings = preference.settings;
-            if (settings.summaryPresetId) {
-              const prepared = prepareActionPreset(settings, settings.summaryPresetId);
-              const { input } = prepared;
-              snapshot.summaryInput = input;
-              snapshot.accountId = input.plan?.accountId ?? '';
-              snapshot.connectionKey = input.preset?.connectionKey;
-              snapshot.model = input.plan?.model ?? input.remote.model;
-              snapshot.effort = input.plan?.effort;
-              credential = prepared.credential;
-            } else {
-              if (!r.accountId)
-                throw new Error('Choose a model preset in Settings → Calls and reopen Call Saul.');
-              validateSummaryConnection(settings, r.accountId, r.connectionKey);
-              if (r.connectionKey) snapshot.connectionKey = r.connectionKey;
-            }
-          }
-          if (selected) {
-            snapshot.action = structuredClone(selected);
-            snapshot.prompt = selected.revision.source;
-            if (r.action === 'start' && preference?.state === 'ready') {
-              const prepared = prepareActionPreset(preference.settings, selected.presetId);
-              snapshot.action.input = prepared.input;
-              credential = prepared.credential;
-            }
-          }
-        }
-        if (r.action === 'retry') {
-          const saved = await db({ type: 'DB_DIGEST_GET', payload: { id: r.id } });
-          if (saved.action) {
-            if (!saved.action.input) throw new Error('The saved action preset is unavailable.');
-            credential = prepareFrozenRun(await currentSettings(), saved.action.input).credential;
-          } else if (saved.summaryInput) {
-            credential = prepareFrozenRun(await currentSettings(), saved.summaryInput).credential;
-          }
-        }
-        return runnerRequest({ operation: 'digest', message: r, snapshot, credential });
+        return runnerRequest({ operation: 'digest', ...(await admitCall(request.message)) });
       }
       if (request.type === 'WORKSPACE_TABS') return workspaceCall(request);
       if (request.target === 'saul-open-source') {

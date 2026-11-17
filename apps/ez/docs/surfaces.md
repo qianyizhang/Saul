@@ -28,7 +28,7 @@ and persistence; [design](design.md) owns presentation.
   menu and workspace handoff. New/Stop remain reachable.
 - Min Mode defaults on and is local to EZ. Settings → Preferences and the panel
   menu change the same preference. Exact model, requested/actual tier and metrics
-  remain available in Details; errors, blockers and unsaved recovery stay visible.
+  remain available in Details; errors, blockers and save failures stay visible.
   Turn it off for explanatory guidance and the Standard metrics footer; see
   [native presentation](design.md#min-mode-and-settings).
 - Compact layout grows for forms/results/notices; long content scrolls while
@@ -36,8 +36,8 @@ and persistence; [design](design.md) owns presentation.
 - Both surfaces offer follow-ups for saved completed native Write answers and
   Previous answer navigation. Draw has no text follow-up. Follow-up context and
   limits belong to [architecture](architecture.md#follow-ups).
-- Unsaved answers retain Save (Save again in Standard), Copy/Export and in-memory
-  recovery across navigation. Retry saves only; save/export before quitting.
+- A failed history write shows Unsaved and the storage error. Use Copy, Export or
+  Download when output is available. A new Run makes a new request.
   See [persistence](architecture.md#persistence-contract).
 
 ## Invocation and lifecycle
@@ -60,8 +60,7 @@ routing and conflict handling.
 
 Illustration is a Draw action in this workspace. Connections owns credentials,
 Presets image defaults, the text-to-image composer its runtime PNG/GIF choice, and History
-saved image bytes in SQLite. Launcher input always waits for Run;
-unsaved image recovery never generates again.
+saved image bytes in SQLite. A Draw draft prepared by the launcher waits for Run.
 
 Future features must name their owning surface and preserve these boundaries.
 Mobile is not implemented; touch layout, platform keys, account access and
@@ -106,8 +105,8 @@ for their meaning.
 The main-window history row also offers deletion through its context menu.
 Deletion confirms removal from shared history, cannot be undone, and is blocked
 while a request or launcher submission is active. The current draft is preserved.
-[Persistence](architecture.md#persistence-contract) owns inference Retry, save-only
-recovery and restart behavior.
+[Persistence](architecture.md#persistence-contract) owns inference Retry, save failures
+and restart behavior.
 
 Completed Spell Check answers with recognized corrected-text or changes labels
 show Original / Corrected columns, highlighted edits and expandable explanations.

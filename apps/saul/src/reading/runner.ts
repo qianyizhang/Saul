@@ -1,27 +1,53 @@
 import type { GeneratedImage } from '../providers/images';
-import type { DbCall, Passage, RunResult, QueuedRun, Submission } from '../types/storage';
+import type {
+  DbCall,
+  DbOperations,
+  DbRequest,
+  DbType,
+  Passage,
+  RunResult,
+  QueuedRun,
+  Submission,
+} from '../types/storage';
 import { streamModel } from '../providers/stream';
 import { type ModelActivity, type ModelEvent, IncompleteGeneration } from '../providers/events';
 import { TagStreamParser } from '../parser/tag-stream-parser';
 
-type Task = QueuedRun & {
+type ReadingQuery =
+  | 'DB_GET_HISTORY'
+  | 'DB_RUNS'
+  | 'DB_PAGE'
+  | 'DB_PASSAGE'
+  | 'DB_CONTEXT'
+  | 'DB_INPUT'
+  | 'DB_IMAGE'
+  | 'DB_UNREAD'
+  | 'DB_EXPORT_MARKDOWN';
+
+type ReadingAttempt = QueuedRun & {
   credential: string;
   controller: AbortController;
-  raw: string;
-  image?: GeneratedImage;
-  saving: boolean;
+  phase: 'queued' | 'generating' | 'saving' | 'settling';
+  discarded?: true;
   activity: ModelActivity;
 };
+type WriteFailure = { runId: string; error: string; latencyMs: number };
+
+class ReadingWriteError extends Error {
+  constructor(cause: unknown) {
+    super(
+      'Could not save this attempt. ' + (cause instanceof Error ? cause.message : String(cause)),
+    );
+  }
+}
+
 export class ReadingRunner {
-  private tasks = new Map<string, Task>();
-  private failures = new Map<
-    string,
-    { runId: string; raw: string; error: string; image?: GeneratedImage; latencyMs?: number }
-  >();
-  private savingImages = new Set<string>();
-  private active = new Set<string>();
+  private attempts = new Map<string, ReadingAttempt>();
+  // Only a failure notice can outlive execution. Output is read from SQLite.
+  private stranded = new Map<string, WriteFailure>();
+  private controls: Promise<unknown> = Promise.resolve();
   private recovery?: Promise<void>;
-  get ready(): Promise<void> {
+  private recover(): Promise<void> {
     this.recovery ??= this.db({ type: 'DB_RECOVER', payload: undefined }).catch((error) => {
       this.recovery = undefined;
       throw error;
@@ -32,62 +58,71 @@ export class ReadingRunner {
     private db: DbCall,
     private changed: (url: string) => void,
   ) {
-    void this.ready.catch(() => undefined);
+    void this.recover().catch(() => undefined);
   }
-  async submit(submission: Submission, credential: string) {
-    await this.ready;
-    const failed = this.failures.get(submission.snapshot.id);
-    if (failed?.image)
-      throw new Error('Save or download the unsaved image before starting another attempt.');
-    if (failed) {
-      await this.db({
-        type: 'DB_FINISH',
-        payload: {
-          runId: failed.runId,
-          raw: failed.raw,
-          status: 'failed',
-          reason: 'save-failed',
-          error: failed.error,
-          latencyMs: 0,
-        },
-      });
-      this.failures.delete(submission.snapshot.id);
-    }
-    const result = await this.db({ type: 'DB_SUBMIT', payload: submission });
-    if (result.run) {
-      this.failures.delete(result.passageId);
-      this.tasks.set(result.run.id, {
-        ...result.run,
-        credential,
-        controller: new AbortController(),
-        raw: '',
-        saving: false,
-        activity: 'connecting',
-      });
-      this.changed(result.run.pageUrl);
-      this.pump();
-    }
-    return { passageId: result.passageId, reused: !result.run };
+  private control<T>(operation: () => Promise<T>): Promise<T> {
+    const next = this.controls.then(async () => {
+      await this.recover();
+      return operation();
+    });
+    this.controls = next.catch(() => undefined);
+    return next;
+  }
+  submit(submission: Submission, credential: string) {
+    return this.control(async () => {
+      const selectionId = submission.snapshot.id;
+      const failed = this.stranded.get(selectionId);
+      if (failed) {
+        // An explicit new run may settle the stale active row before admission.
+        // The conditional write cannot change a completed or deleted run.
+        await this.db({
+          type: 'DB_FINISH',
+          payload: { ...failed, status: 'failed', reason: 'save-failed' },
+        });
+        this.stranded.delete(selectionId);
+      }
+      const result = await this.db({ type: 'DB_SUBMIT', payload: submission });
+      if (result.run) {
+        this.attempts.set(result.run.id, {
+          ...result.run,
+          credential,
+          controller: new AbortController(),
+          phase: 'queued',
+          activity: 'connecting',
+        });
+        this.changed(result.run.pageUrl);
+        this.pump();
+      }
+      return { passageId: result.passageId, reused: !result.run };
+    });
   }
   private pump() {
-    for (const task of this.tasks.values()) {
-      if (this.active.has(task.id)) continue;
-      const provider = task.input.provider;
-      const count = [...this.active].filter(
-        (id) => this.tasks.get(id)?.input.provider === provider,
+    for (const attempt of this.attempts.values()) {
+      if (attempt.phase !== 'queued') continue;
+      const count = [...this.attempts.values()].filter(
+        (a) => a.phase !== 'queued' && a.input.provider === attempt.input.provider,
       ).length;
       if (count >= 2) continue;
-      this.active.add(task.id);
-      void this.execute(task);
+      attempt.phase = 'generating';
+      void this.execute(attempt);
     }
   }
-  private async execute(task: Task) {
+  private async write<K extends DbType>(message: DbRequest<K>) {
+    try {
+      return await this.db(message);
+    } catch (cause) {
+      throw new ReadingWriteError(cause);
+    }
+  }
+  private async execute(task: ReadingAttempt) {
     const started = Date.now(),
       signal = task.controller.signal;
     let stream: AsyncGenerator<ModelEvent> | undefined;
+    let raw = '';
+    let image: GeneratedImage | undefined;
     try {
-      if (signal.aborted || !(await this.db({ type: 'DB_CLAIM', payload: { runId: task.id } })))
-        return;
+      if (!(await this.write({ type: 'DB_CLAIM', payload: { runId: task.id } }))) return;
+      signal.throwIfAborted();
       const input = task.input;
       this.changed(task.pageUrl);
       stream = streamModel(input, task.credential, signal);
@@ -103,7 +138,7 @@ export class ReadingRunner {
           // Flush the tail of a burst even if the provider sends nothing else.
           result = await Promise.race([
             pending,
-            ...(task.raw !== savedRaw
+            ...(raw !== savedRaw
               ? [
                   new Promise<undefined>((resolve) => {
                     timer = setTimeout(
@@ -122,23 +157,23 @@ export class ReadingRunner {
           pending = undefined;
           if (result.done) break;
           const event = result.value;
-          if (event.type === 'image') task.image = event.image;
+          if (event.type === 'image') image = event.image;
           if (event.type === 'complete') {
             completed = true;
             break;
           }
           const previous = task.activity;
           if (event.type === 'delta' && event.text) {
-            task.raw += event.text;
+            raw += event.text;
             task.activity = 'generating';
           } else if (event.type === 'activity' && task.activity !== 'generating') {
             task.activity = event.phase;
           }
           if (previous !== task.activity) this.changed(task.pageUrl);
         }
-        if (task.raw !== savedRaw && Date.now() - checkpoint >= 500) {
-          await this.db({ type: 'DB_CHECKPOINT', payload: { runId: task.id, raw: task.raw } });
-          savedRaw = task.raw;
+        if (raw !== savedRaw && Date.now() - checkpoint >= 500) {
+          await this.write({ type: 'DB_CHECKPOINT', payload: { runId: task.id, raw: raw } });
+          savedRaw = raw;
           checkpoint = Date.now();
           this.changed(task.pageUrl);
         }
@@ -150,82 +185,78 @@ export class ReadingRunner {
           'Generation ended without a completion signal.',
         );
       if (
-        !task.image &&
-        !new TagStreamParser()
-          .feed(task.raw)
-          .some((s) => (s.type === 'text' ? s.text : s.term).trim())
+        !image &&
+        !new TagStreamParser().feed(raw).some((s) => (s.type === 'text' ? s.text : s.term).trim())
       )
         throw new Error('The model returned no explanation. Check the model and endpoint.');
-      if (task.image) await this.writeImage(task.id, task.image, signal);
-      task.saving = true;
-      if (!(await this.db({ type: 'DB_SAVING', payload: { runId: task.id } }))) return;
+      task.phase = 'saving';
+      if (!(await this.write({ type: 'DB_SAVING', payload: { runId: task.id } }))) return;
       this.changed(task.pageUrl);
-      await this.db({
+      if (image) await this.writeImage(task.id, image, signal);
+      await this.write({
         type: 'DB_FINISH',
-        payload: {
-          runId: task.id,
-          raw: task.raw,
-          status: 'completed',
-          latencyMs: Date.now() - started,
-        },
+        payload: { runId: task.id, raw, status: 'completed', latencyMs: Date.now() - started },
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (task.image && !signal.aborted) {
-        this.failures.set(task.selectionId, {
-          runId: task.id,
-          raw: task.raw,
-          image: task.image,
-          latencyMs: Date.now() - started,
-          error: 'Image not saved. Download it or retry saving before closing Saul. ' + message,
-        });
-        return;
-      }
-      try {
-        await this.db({
-          type: 'DB_FINISH',
-          payload: {
-            runId: task.id,
-            raw: task.raw,
-            status: signal.aborted
-              ? 'cancelled'
-              : error instanceof IncompleteGeneration
-                ? 'interrupted'
-                : 'failed',
-            reason: signal.aborted
-              ? 'stopped'
-              : error instanceof IncompleteGeneration
-                ? error.reason
-                : task.saving
-                  ? 'save-failed'
-                  : 'provider-error',
-            error: signal.aborted ? 'Stopped. Partial explanation retained.' : message,
-            latencyMs: Date.now() - started,
-          },
-        });
-      } catch {
-        this.failures.set(task.selectionId, {
-          runId: task.id,
-          raw: task.raw,
-          error:
-            'Could not save this attempt. Available text is shown here; retry after storage recovers. ' +
-            message,
-        });
-      }
+      if (task.discarded) return;
+      const storageFailure = error instanceof ReadingWriteError;
+      task.phase = 'settling';
+      await this.finishFailure(task, {
+        ...(storageFailure ? {} : { raw }),
+        status: storageFailure
+          ? 'failed'
+          : signal.aborted
+            ? 'cancelled'
+            : error instanceof IncompleteGeneration
+              ? 'interrupted'
+              : 'failed',
+        reason: storageFailure
+          ? 'save-failed'
+          : signal.aborted
+            ? 'stopped'
+            : error instanceof IncompleteGeneration
+              ? error.reason
+              : 'provider-error',
+        error:
+          !storageFailure && signal.aborted
+            ? 'Stopped. Partial explanation retained.'
+            : error instanceof Error
+              ? error.message
+              : String(error),
+        latencyMs: Date.now() - started,
+      });
     } finally {
       task.controller.abort();
       await stream?.return(undefined).catch(() => {});
-      task.credential = '';
-      this.tasks.delete(task.id);
-      this.active.delete(task.id);
-      this.changed(task.pageUrl);
-      this.pump();
+      this.release(task);
     }
   }
-  private async writeImage(runId: string, image: GeneratedImage, signal?: AbortSignal) {
+  private async finishFailure(
+    attempt: ReadingAttempt,
+    result: Omit<DbRequest<'DB_FINISH'>['payload'], 'runId'>,
+  ) {
+    try {
+      await this.db({ type: 'DB_FINISH', payload: { ...result, runId: attempt.id } });
+    } catch (error) {
+      if (!attempt.discarded)
+        this.stranded.set(attempt.selectionId, {
+          runId: attempt.id,
+          error:
+            result.reason === 'save-failed' ? result.error! : new ReadingWriteError(error).message,
+          latencyMs: result.latencyMs,
+        });
+    }
+  }
+  private release(attempt: ReadingAttempt) {
+    attempt.credential = '';
+    this.attempts.delete(attempt.id);
+    this.changed(attempt.pageUrl);
+    this.pump();
+  }
+  private async writeImage(runId: string, image: GeneratedImage, signal: AbortSignal) {
     for (let offset = 0; offset < image.data.length; offset += 200_000) {
-      signal?.throwIfAborted();
-      await this.db({
+      signal.throwIfAborted();
+      await this.write({
         type: 'DB_IMAGE_CHUNK',
         payload: {
           runId,
@@ -237,103 +268,88 @@ export class ReadingRunner {
       });
     }
   }
-  unsavedImage(selectionId: string, runId: string) {
-    const failure = this.failures.get(selectionId);
-    return failure?.runId === runId ? failure.image : undefined;
-  }
-  async saveImage(selectionId: string) {
-    const failure = this.failures.get(selectionId);
-    if (!failure?.image || this.savingImages.has(selectionId))
-      throw new Error('No unsaved image is ready to save.');
-    this.savingImages.add(selectionId);
-    try {
-      const passage = await this.db({ type: 'DB_PASSAGE', payload: { selectionId } });
-      if (passage?.latest.id !== failure.runId) throw new Error('The image attempt changed.');
-      if (passage.latest.status !== 'completed') {
-        await this.writeImage(failure.runId, failure.image);
-        if (
-          passage.latest.status !== 'saving' &&
-          !(await this.db({ type: 'DB_SAVING', payload: { runId: failure.runId } }))
-        )
-          throw new Error('The image attempt is no longer available.');
-        await this.db({
-          type: 'DB_FINISH',
-          payload: {
-            runId: failure.runId,
-            raw: failure.raw,
-            status: 'completed',
-            latencyMs: failure.latencyMs ?? 0,
-          },
+  stop(selectionId: string) {
+    return this.control(async () => {
+      const attempt = [...this.attempts.values()].find(
+        (a) => !a.discarded && a.selectionId === selectionId,
+      );
+      if (!attempt || attempt.phase === 'saving' || attempt.phase === 'settling') return;
+      attempt.controller.abort();
+      if (attempt.phase === 'queued') {
+        attempt.phase = 'settling';
+        await this.finishFailure(attempt, {
+          status: 'cancelled',
+          reason: 'stopped',
+          error: 'Stopped before generation.',
+          latencyMs: 0,
         });
-        const saved = await this.db({ type: 'DB_PASSAGE', payload: { selectionId } });
-        if (saved?.latest.id !== failure.runId || saved.latest.status !== 'completed')
-          throw new Error('The image could not be saved.');
+        this.release(attempt);
       }
-      this.failures.delete(selectionId);
-    } finally {
-      this.savingImages.delete(selectionId);
-      this.changed('*');
-    }
+    });
   }
-  async stop(selectionId: string) {
-    await this.ready;
-    for (const task of this.tasks.values()) {
-      if (task.selectionId !== selectionId || task.saving) continue;
-      task.controller.abort();
-      if (!this.active.has(task.id)) {
-        this.tasks.delete(task.id);
-        task.credential = '';
-        await this.db({
-          type: 'DB_FINISH',
-          payload: {
-            runId: task.id,
-            raw: task.raw,
-            status: 'cancelled',
-            reason: 'stopped',
-            error: 'Stopped before generation.',
-            latencyMs: 0,
-          },
-        });
-        this.changed(task.pageUrl);
-      }
-    }
-    this.pump();
-  }
-  async remove(selectionId?: string) {
-    await this.ready;
-    // Delete first: foreign keys and conditional writes make every late event inert.
-    await this.db(
-      selectionId
-        ? { type: 'DB_DELETE_SELECTION', payload: { selectionId } }
-        : { type: 'DB_CLEAR_HISTORY', payload: undefined },
-    );
-    for (const task of this.tasks.values())
-      if (!selectionId || task.selectionId === selectionId) {
-        task.controller.abort();
-        if (!this.active.has(task.id)) this.tasks.delete(task.id);
-      }
-    if (selectionId) this.failures.delete(selectionId);
-    else this.failures.clear();
-    this.changed('*');
-    this.pump();
-  }
-  decorateRun(selectionId: string, run: RunResult): RunResult {
-    const task = this.tasks.get(run.id);
-    if (task && run.status === 'running') run = { ...run, activity: task.activity };
-    const failed = this.failures.get(selectionId);
-    if (failed?.runId === run.id && run.status === 'completed') this.failures.delete(selectionId);
-    return failed?.runId === run.id && ['queued', 'running', 'saving'].includes(run.status)
-      ? {
-          ...run,
-          status: 'failed',
-          responseRaw: failed.raw,
-          error: failed.error,
-          reason: 'save-failed',
-          hasImage: !!failed.image,
+  remove(selectionId?: string) {
+    return this.control(async () => {
+      // Delete first: foreign keys and conditional writes make every late event inert.
+      await this.db(
+        selectionId
+          ? { type: 'DB_DELETE_SELECTION', payload: { selectionId } }
+          : { type: 'DB_CLEAR_HISTORY', payload: undefined },
+      );
+      for (const attempt of this.attempts.values())
+        if (!selectionId || attempt.selectionId === selectionId) {
+          attempt.discarded = true;
+          attempt.controller.abort();
+          if (attempt.phase === 'queued') {
+            attempt.credential = '';
+            this.attempts.delete(attempt.id);
+          }
         }
-      : run;
+      if (selectionId) this.stranded.delete(selectionId);
+      else this.stranded.clear();
+      this.changed('*');
+      this.pump();
+    });
   }
-  decorate(passage: Passage): Passage {
-    return { ...passage, latest: this.decorateRun(passage.snapshot.id, passage.latest) };
+  resolveReuse(payload: DbRequest<'DB_READING_RESOLVE'>['payload']) {
+    return this.control(() => this.db({ type: 'DB_READING_RESOLVE', payload }));
+  }
+  async updateReadState(message: DbRequest<'DB_VIEW' | 'DB_SET_BOOKMARK'>) {
+    await this.recover();
+    await this.db(message);
+    this.changed('*');
+  }
+  query<K extends ReadingQuery>(message: DbRequest<K>): Promise<DbOperations[K]['result']>;
+  async query(message: DbRequest<ReadingQuery>) {
+    await this.recover();
+    switch (message.type) {
+      case 'DB_GET_HISTORY':
+        return (await this.db(message)).map((item) => ({
+          ...item,
+          latest: this.projectAttempt(item.selectionId, item.latest),
+        }));
+      case 'DB_RUNS':
+        return (await this.db(message)).map((run) =>
+          this.projectAttempt(message.payload.selectionId, run),
+        );
+      case 'DB_PAGE':
+        return (await this.db(message)).map((passage) => this.projectPassage(passage));
+      case 'DB_PASSAGE': {
+        const passage = await this.db(message);
+        return passage && this.projectPassage(passage);
+      }
+      default:
+        return this.db(message);
+    }
+  }
+  private projectAttempt(selectionId: string, run: RunResult): RunResult {
+    const attempt = this.attempts.get(run.id);
+    const failure = this.stranded.get(selectionId);
+    if (failure?.runId === run.id && ['queued', 'running', 'saving'].includes(run.status))
+      return { ...run, status: 'failed', error: failure.error, reason: 'save-failed' };
+    if (attempt && run.status === 'running') return { ...run, activity: attempt.activity };
+    return run;
+  }
+  private projectPassage(passage: Passage): Passage {
+    return { ...passage, latest: this.projectAttempt(passage.snapshot.id, passage.latest) };
   }
 }

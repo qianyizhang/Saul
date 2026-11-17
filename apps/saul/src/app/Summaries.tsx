@@ -5,7 +5,7 @@ import { planCall } from '../providers/chatgpt-plan';
 import { requestSettings } from '../configuration/client';
 import type { Configuration } from '../configuration/definition';
 import { summaryConnections, type SummaryConnection } from '../digest/connection';
-import { sendActionMessage, sendDigestMessage, sendWorkspaceMessage } from '../storage/client';
+import { editCall, sendDigestMessage, sendWorkspaceMessage } from '../storage/client';
 import { activeItem, type DigestBatch, type DigestOverview } from '../digest/types';
 import { callResultLabel, digestHtml, sourceUrl } from '../digest/html';
 import { openSummaryPanel } from '../digest/panel';
@@ -170,7 +170,7 @@ export function SummaryReader({
       setError('');
       try {
         const [call, saved] = await Promise.all([
-          sendActionMessage({ action: 'status' }),
+          editCall({ action: 'status' }),
           requestSettings({ action: 'read' }),
         ]);
         if (saved.state !== 'ready') throw new Error(saved.error);
@@ -356,6 +356,7 @@ export function SummaryReader({
         queued: custom ? 'Waiting to run…' : 'Waiting to summarize…',
         capturing: 'Reading page…',
         running: custom ? 'Running call…' : 'Generating summary…',
+        saving: custom ? 'Saving call result…' : 'Saving summary…',
         completed: custom ? 'Call complete' : 'Summary ready',
         cancelled: custom ? 'Call stopped' : 'Summary stopped',
         interrupted: custom ? 'Call interrupted' : 'Summary interrupted',

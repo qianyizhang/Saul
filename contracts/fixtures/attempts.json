@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "cases": [
     {
       "id": "completed-and-saved",
@@ -7,7 +7,7 @@
       "providerOutcome": "complete",
       "initialSaveFails": false,
       "finalSaveFails": false,
-      "expected": { "providerCalls": 1, "hasOutput": true, "savedSuccess": true }
+      "expected": { "providerCalls": 1, "output": "present", "savedSuccess": true }
     },
     {
       "id": "initial-save-blocks-execution",
@@ -15,7 +15,7 @@
       "providerOutcome": "complete",
       "initialSaveFails": true,
       "finalSaveFails": false,
-      "expected": { "providerCalls": 0, "hasOutput": false, "savedSuccess": false }
+      "expected": { "providerCalls": 0, "output": "absent", "savedSuccess": false }
     },
     {
       "id": "final-save-blocks-saved-success",
@@ -23,7 +23,7 @@
       "providerOutcome": "complete",
       "initialSaveFails": false,
       "finalSaveFails": true,
-      "expected": { "providerCalls": 1, "hasOutput": true, "savedSuccess": false }
+      "expected": { "providerCalls": 1, "output": "optional", "savedSuccess": false }
     },
     {
       "id": "provider-error-retains-partial-output",
@@ -31,7 +31,7 @@
       "providerOutcome": "error",
       "initialSaveFails": false,
       "finalSaveFails": false,
-      "expected": { "providerCalls": 1, "hasOutput": true, "savedSuccess": false }
+      "expected": { "providerCalls": 1, "output": "present", "savedSuccess": false }
     },
     {
       "id": "missing-completion-is-not-success",
@@ -39,7 +39,7 @@
       "providerOutcome": "eof",
       "initialSaveFails": false,
       "finalSaveFails": false,
-      "expected": { "providerCalls": 1, "hasOutput": true, "savedSuccess": false }
+      "expected": { "providerCalls": 1, "output": "present", "savedSuccess": false }
     },
     {
       "id": "stop-retains-partial-output",
@@ -47,7 +47,7 @@
       "providerOutcome": "cancel",
       "initialSaveFails": false,
       "finalSaveFails": false,
-      "expected": { "providerCalls": 1, "hasOutput": true, "savedSuccess": false }
+      "expected": { "providerCalls": 1, "output": "present", "savedSuccess": false }
     }
   ]
 }

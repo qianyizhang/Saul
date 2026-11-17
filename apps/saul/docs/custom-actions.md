@@ -114,8 +114,11 @@ or active runs. Its next connection reloads the exact approved revision only whe
 requested. An idle restart is not a retry of any job.
 
 The unified JSON `apps.saul.calls` scope owns saved call choices when the config
-helper is available; browser-only installations keep local choices. Chrome's trusted
-extension storage owns builder drafts and runtime state. The offscreen owner accesses it through validated background messages.
+helper is available; browser-only installations keep local choices. The Call editor
+owns selection commands and the active build. Chrome's trusted extension storage
+holds its draft separately from saved choices, through validated background messages.
+Draft saves never rewrite selection. A failed or uncertain selection save is reported
+without a compensating write; the next read reports the persistent owner's state.
 The helper owns immutable revision files under `~/.saul/actions/revisions`, outside
 installed runtime generations. History saves the exact Call source, revision,
 frozen preset and model-call input/output. Reuse includes the Call revision and
@@ -123,7 +126,7 @@ preset ID as well as ordered URLs, so different Calls cannot reuse each other's
 answers. Model-option edits under the same preset retain the saved result; Run
 again explicitly freezes the current choices.
 
-Demand-driven cleanup on create, stage and load operations protects history-referenced revisions,
+Demand-driven cleanup during Call editing protects history-referenced revisions,
 all saved call presets, the selected and previous revisions, the current candidate and live workers. Other
 revisions older than seven days are removed. This is separate from disposable
 developer artifacts; no permanent janitor runs.
@@ -165,6 +168,7 @@ user's Call request asks for them; page evidence never grants authority.
 
 Each model request and output is retained in attempt inspection. Failed or interrupted
 invocations do not append incomplete replies. A completed response that cannot be saved
-retains **Save reply without generating**. The runner never retries inference on restart.
+reports failure; unsaved output may be discarded. Another response requires an explicit
+action. The runner never retries inference on restart.
 Annotation replies are limited to 16,000 characters; oversized evidence or output fails
 explicitly. Shared generation connection/model validation remains unchanged.

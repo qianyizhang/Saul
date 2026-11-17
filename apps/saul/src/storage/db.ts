@@ -326,6 +326,8 @@ export class SaulDatabase {
       case 'DB_DIGEST_ACTION_REVISIONS':
       case 'DB_DIGEST_CREATE':
       case 'DB_DIGEST_GET':
+      case 'DB_DIGEST_RETRY':
+      case 'DB_DIGEST_INTERRUPT':
       case 'DB_DIGEST_LIST':
       case 'DB_DIGEST_ITEM':
       case 'DB_DIGEST_SOURCE':
@@ -418,17 +420,23 @@ export class SaulDatabase {
               throw new Error('The generated image has not finished saving.');
           }
           this.write(
-            `UPDATE llm_run SET response_raw=?,status=?,error_message=?,reason=?,latency_ms=? WHERE id=? AND status IN (${p.status === 'completed' ? "'saving'" : "'queued','running','saving'"})`,
-            [p.raw, p.status, p.error || null, p.reason || null, p.latencyMs, p.runId],
+            `UPDATE llm_run SET response_raw=COALESCE(?,response_raw),status=?,error_message=?,reason=?,latency_ms=? WHERE id=? AND status IN (${p.status === 'completed' ? "'saving'" : "'queued','running','saving'"})`,
+            [p.raw ?? null, p.status, p.error || null, p.reason || null, p.latencyMs, p.runId],
           );
           changed = this.db.changes() === 1;
           if (changed && p.status !== 'completed')
             this.write('UPDATE llm_run SET response_structured=NULL WHERE id=?', [p.runId]);
-          if (changed)
+          if (changed) {
+            const raw =
+              p.raw ??
+              String(
+                this.db.selectValue('SELECT response_raw FROM llm_run WHERE id=?', [p.runId]) ?? '',
+              );
             this.write(
               'INSERT OR REPLACE INTO explanation_fts(rowid,body) SELECT rowid,? FROM llm_run WHERE id=?',
-              [searchableResponse(p.raw), p.runId],
+              [searchableResponse(raw), p.runId],
             );
+          }
         });
         return changed;
       }

@@ -11,9 +11,7 @@ extension HistoryEntry {
     {
         guard isRetryable else { throw EZError("Only failed or stopped requests can be retried.") }
         guard let preset = presetSnapshot, let saved = connectionSnapshot,
-            saved.key == preset.connectionKey, saved.key == connection.key,
-            saved.kind == connection.kind, saved.accountId == connection.accountId,
-            saved.endpoint == connection.endpoint
+            saved.key == preset.connectionKey, saved.matchesRoute(connection)
         else {
             throw EZError(
                 "The saved connection is unavailable or changed. Review the saved request and choose a connection."

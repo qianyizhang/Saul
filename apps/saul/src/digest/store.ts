@@ -1,4 +1,5 @@
 import type { SqlDatabase } from '../storage/sql';
+import { activeItem, interruptItem, restartItem, retryableItem } from './types';
 import type {
   DigestBatch,
   DigestDbOperations,
@@ -23,6 +24,11 @@ export function digestStore(db: SqlDatabase, request: Request, owner = ''): unkn
         .map((row) => JSON.parse(String(row.data)) as DigestItem),
     };
   };
+  const writeItem = (id: string, item: DigestItem) =>
+    db.exec({
+      sql: 'UPDATE digest_item SET data=? WHERE batch_id=? AND position=?',
+      bind: [JSON.stringify(item), id, item.index],
+    });
   switch (request.type) {
     case 'DB_DIGEST_FIND': {
       // Match the exact ordered URL selection; retain settled partial/failed attempts too.
@@ -63,6 +69,29 @@ export function digestStore(db: SqlDatabase, request: Request, owner = ''): unkn
     }
     case 'DB_DIGEST_GET':
       return get(request.payload.id);
+    case 'DB_DIGEST_RETRY':
+      return db.transaction(() => {
+        const { id } = request.payload;
+        const batch = get(id);
+        for (const item of batch.items.filter(retryableItem)) writeItem(id, restartItem(item));
+        db.exec({
+          sql: "UPDATE digest_batch SET data=json_remove(data,'$.error') WHERE id=?",
+          bind: [id],
+        });
+        return get(id);
+      });
+    case 'DB_DIGEST_INTERRUPT':
+      return db.transaction(() => {
+        const { id, error } = request.payload;
+        const active = get(id).items.filter(activeItem);
+        for (const item of active) writeItem(id, interruptItem(item, error));
+        if (active.length)
+          db.exec({
+            sql: "UPDATE digest_batch SET data=json_set(data,'$.error',?) WHERE id=?",
+            bind: [error, id],
+          });
+        return get(id);
+      });
     case 'DB_DIGEST_ACTION_REVISIONS':
       return db
         .selectObjects(
@@ -106,13 +135,14 @@ export function digestStore(db: SqlDatabase, request: Request, owner = ''): unkn
           [owner],
         )) {
           const item = JSON.parse(String(row.data)) as DigestItem;
-          if (!['queued', 'capturing', 'running'].includes(item.status)) continue;
-          item.status = 'interrupted';
-          item.error = 'Interrupted when Saul restarted. Retry unfinished tabs explicitly.';
-          db.exec({
-            sql: 'UPDATE digest_item SET data=? WHERE batch_id=? AND position=?',
-            bind: [JSON.stringify(item), row.batch_id!, row.position!],
-          });
+          if (!activeItem(item)) continue;
+          writeItem(
+            String(row.batch_id),
+            interruptItem(
+              item,
+              'Interrupted when Saul restarted. Retry unfinished tabs explicitly.',
+            ),
+          );
         }
       });
       return;

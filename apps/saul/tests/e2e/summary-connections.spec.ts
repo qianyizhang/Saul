@@ -60,7 +60,10 @@ async function installSharedSummary(
           result = { config: state.sections[r.section] ?? { revision: 0 } };
         else if (r.action === 'config-save' || r.action === 'config-commit') {
           if (state.failCommit && r.action === 'config-commit')
-            throw new Error('Synthetic settings storage denied');
+            return {
+              id: packet.id,
+              event: { type: 'error', message: 'Synthetic settings storage denied' },
+            };
           if ((state.sections[r.section]?.revision ?? 0) !== r.revision)
             throw new Error('Scoped settings changed');
           if (r.action === 'config-commit') {

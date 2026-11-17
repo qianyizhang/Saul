@@ -9,7 +9,27 @@ import SwiftUI
     init() {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ez-configuration-preview-\(UUID())", isDirectory: true)
-        let model = AppModel(directory: directory, offline: true)
+        let checks = ConnectionChecks(
+            status: { connection in
+                connection.kind == .chatGPTPlan
+                    ? ConnectionStatus(connected: true, identity: "alex@example.com", signedIn: true)
+                    : ConnectionStatus(connected: true, endpoint: connection.endpoint, keySuffix: "7K2m")
+            },
+            catalog: { connection, _ in
+                let models =
+                    connection.kind == .chatGPTPlan
+                    ? [
+                        ConnectionModel(
+                            id: "fixture-luna", name: "Luna (offline fixture)", capabilities: [.write],
+                            efforts: ["low", "medium", "high"], defaultEffort: "low", fastTier: "priority")
+                    ]
+                    : [
+                        ConnectionModel(id: "gpt-image-fixture", capabilities: [.draw]),
+                        ConnectionModel(id: "gpt-realtime-fixture", capabilities: [.speak]),
+                    ]
+                return ConnectionCatalog(models: models, fetchedAt: Date().timeIntervalSince1970)
+            })
+        let model = AppModel(directory: directory, offline: true, connectionChecks: checks)
         model.models = [
             ModelOption(catalog: [
                 "visibility": "list", "slug": "fixture-luna", "display_name": "Luna (offline fixture)",
@@ -22,24 +42,6 @@ import SwiftUI
         config.connections[1].baseUrl = "https://api.openai.com/v1"
         model.signedIn = true
         model.apiConnected = true
-        model.connectionStatuses = [
-            "gpt-plan": ConnectionStatus(connected: true, identity: "alex@example.com", signedIn: true),
-            "openai-api": ConnectionStatus(
-                connected: true, endpoint: "https://api.openai.com/v1", keySuffix: "7K2m"),
-        ]
-        model.connectionCatalogs = [
-            "gpt-plan": ConnectionCatalog(
-                models: [
-                    ConnectionModel(
-                        id: "fixture-luna", name: "Luna (offline fixture)", capabilities: [.write],
-                        efforts: ["low", "medium", "high"], defaultEffort: "low", fastTier: "priority")
-                ], fetchedAt: Date().timeIntervalSince1970),
-            "openai-api": ConnectionCatalog(
-                models: [
-                    ConnectionModel(id: "gpt-image-fixture", capabilities: [.draw]),
-                    ConnectionModel(id: "gpt-realtime-fixture", capabilities: [.speak]),
-                ], fetchedAt: Date().timeIntervalSince1970),
-        ]
         config.presets.append(
             ModelPreset(
                 name: "Speak", model: "gpt-realtime-fixture", effort: "", fast: false,
@@ -48,6 +50,10 @@ import SwiftUI
         config.presets.append(ModelPreset(name: "steady", model: "fixture-luna", effort: "high", fast: false))
         do { try model.saveConfiguration(config) } catch { model.error = error.localizedDescription }
         model.chooseAction(config.actions[3].id)
+        let connections = config.connections
+        Task {
+            for connection in connections { await checks.refresh(connection) }
+        }
         _model = StateObject(wrappedValue: model)
         controller = QuickLookupController(model: model)
     }

@@ -18,7 +18,7 @@ import ImageIO
             defer { model.shutdown() }
             model.attachImage(data: fixturePNG, name: "source.png")
             var done = CheckSignal()
-            let observer = model.$busy.dropFirst().filter { !$0 }.sink { _ in
+            let observer = model.$runningAttempt.dropFirst().filter { $0 == nil }.sink { _ in
                 let signal = done
                 Task { await signal.signal() }
             }
@@ -63,11 +63,11 @@ import ImageIO
             model.commitSketch(scene)
             try expect(model.canSend, "A drawing still required an attachment")
             let instructions = model.inputValues
-            model.inputValues = [:]
+            model.query = ""
             model.undoSketch()
             try expect(
                 !model.hasImageInput && model.hasRetainedDraft, "A redo-only sketch lost its edit affordance")
-            model.inputValues = instructions
+            for (field, text) in instructions { model.setInput(text, for: field) }
             try expect(!model.canSend, "Undo left a runnable blank sketch")
             model.redoSketch()
             let pendingImport = model.beginImageImport()
@@ -85,7 +85,9 @@ import ImageIO
             model.attachImage(data: Data("bad".utf8), name: "bad.png")
             try expectEqual(model.sketch.scene, scene, "Invalid paste replaced the composition")
             let done = CheckSignal()
-            let observer = model.$busy.dropFirst().filter { !$0 }.sink { _ in Task { await done.signal() } }
+            let observer = model.$runningAttempt.dropFirst().filter { $0 == nil }.sink { _ in
+                Task { await done.signal() }
+            }
             defer { observer.cancel() }
             model.send()
             try await done.wait()
@@ -133,9 +135,15 @@ import ImageIO
             let model = AppModel(directory: local, historyDirectory: shared, offline: true)
             defer { model.shutdown() }
             model.selection = entry.id
-            await model.imageLoadTask?.value
+            let loaded = CheckSignal()
+            let observer = model.objectWillChange.filter { !model.imageLoading }.sink { _ in
+                Task { await loaded.signal() }
+            }
+            defer { observer.cancel() }
+            if model.imageLoading { try await loaded.wait() }
+            guard let selected = model.selectedEntry else { throw CheckFailure("Saved image not selected") }
             try expectEqual(
-                model.selectedImageData, fixturePNG, "Image reader used the configuration directory")
+                model.imageData(for: selected), fixturePNG, "Image reader used the configuration directory")
             try expect(
                 !FileManager.default.fileExists(atPath: local.appendingPathComponent("history.sqlite3").path),
                 "Image reader created a second history store")
@@ -164,7 +172,9 @@ import ImageIO
                 model.inputImageError != nil && model.canSend,
                 "Invalid replacement hid error or broke retained input")
             let done = CheckSignal()
-            let observer = model.$busy.dropFirst().filter { !$0 }.sink { _ in Task { await done.signal() } }
+            let observer = model.$runningAttempt.dropFirst().filter { $0 == nil }.sink { _ in
+                Task { await done.signal() }
+            }
             defer { observer.cancel() }
             model.send()
             try await done.wait()
@@ -205,18 +215,17 @@ import ImageIO
             try expect(
                 model.inputImage != nil && model.query == "Make a Monday meme", "Failed send lost draft")
         },
-        CheckCase("image action: failed final save retains both images and save recovery never sends") {
+        CheckCase("image action: failed final save preserves the saved source without claiming a result") {
             directory in
             let store = try HistoryStore(directory: directory)
             var calls = 0
-            var failTerminal = true
             let execution = AttemptExecution(
                 generate: { _, _ in
                     calls += 1
                     return .image(fixturePNG)
                 },
                 append: { entry in
-                    if entry.status != "pending" && failTerminal {
+                    if entry.status != "pending" {
                         throw EZError("Synthetic terminal-save failure")
                     }
                     try store.append(entry)
@@ -225,22 +234,25 @@ import ImageIO
             defer { model.shutdown() }
             model.attachImage(data: fixturePNG, name: "source.png")
             let done = CheckSignal()
-            let observer = model.$busy.dropFirst().filter { !$0 }.sink { _ in Task { await done.signal() } }
+            let observer = model.$runningAttempt.dropFirst().filter { $0 == nil }.sink { _ in
+                Task { await done.signal() }
+            }
             defer { observer.cancel() }
             model.send()
             try await done.wait()
             let unsaved = model.selectedEntry!
             try expectEqual(unsaved.status, "unsaved", "Failed save reported success")
-            try expectEqual(unsaved.inputImage?.data, fixturePNG, "Unsaved source lost")
+            try expectEqual(unsaved.inputImage?.name, "source.png", "Source reference lost")
             try expectEqual(unsaved.imageData, fixturePNG, "Unsaved result lost")
-            model.newQuery()
-            failTerminal = false
-            model.saveAgain(unsaved.id)
+            model.refreshHistory()
             let saved = try store.load()[0]
-            try expectEqual(saved.status, "completed", "Save recovery failed")
-            try expectEqual(try store.inputImage(for: saved)?.data, fixturePNG, "Recovered source lost")
-            try expectEqual(try store.image(for: saved), fixturePNG, "Recovered result lost")
-            try expectEqual(calls, 1, "Save recovery sent another request")
+            guard let reloaded = model.selectedEntry else { throw CheckFailure("Saved row lost on refresh") }
+            try expect(model.imageData(for: reloaded) == nil, "History showed unsaved image bytes")
+            try expectEqual(saved.status, "interrupted", "Failed save marked the image complete")
+            try expectEqual(
+                try store.inputImage(for: saved)?.data, fixturePNG, "Pending save lost the source")
+            try expectEqual(try store.image(for: saved), nil, "Unsaved result appeared in storage")
+            try expectEqual(calls, 1, "Refresh sent another request")
         },
         CheckCase("search action: missing completed search remains failed and retains draft") { directory in
             let store = try HistoryStore(directory: directory)
@@ -274,7 +286,9 @@ import ImageIO
             try expectEqual(
                 model.currentPreset?.connectionKey, "openai-api", "Chooser switched search to plan billing")
             let done = CheckSignal()
-            let observer = model.$busy.dropFirst().filter { !$0 }.sink { _ in Task { await done.signal() } }
+            let observer = model.$runningAttempt.dropFirst().filter { $0 == nil }.sink { _ in
+                Task { await done.signal() }
+            }
             defer { observer.cancel() }
             model.send()
             try await done.wait()

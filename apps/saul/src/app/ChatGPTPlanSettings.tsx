@@ -1,7 +1,6 @@
 import { ControlIcon } from '../surface/ControlIcon';
 import { useEffect, useRef } from 'react';
 import { ActionLabel } from '../surface/ActionLabel';
-import { planCall } from '../providers/chatgpt-plan';
 import { planModelDefaults } from '../../native/plan-models.mts';
 import { useMinimumMode } from './useMinimumMode';
 import type { PlanSettingsState } from './usePlanSettings';
@@ -134,11 +133,7 @@ export function ChatGPTPlanSettings({
               <button
                 className="btn"
                 disabled={locked || !active?.planEnabled}
-                onClick={() =>
-                  void plan.operation('models', (signal) =>
-                    plan.loadModels(value.accountId, signal),
-                  )
-                }
+                onClick={() => void plan.refreshModels()}
                 aria-label="Refresh models"
                 title="Refresh models"
               >
@@ -219,18 +214,7 @@ export function ChatGPTPlanSettings({
                     !window.confirm('Sign out of this ChatGPT connection in Saul and EZ?')
                   )
                     return;
-                  void plan.operation('logout', async (signal) => {
-                    const r = await planCall({ action: 'logout', accountId: active.id }, signal);
-                    if (!plan.mounted.current) return;
-                    plan.setAccounts((all) =>
-                      all.map((a) => (a.id === r.account.id ? r.account : a)),
-                    );
-                    plan.setModels([]);
-                    plan.setNotice(
-                      r.warning ||
-                        'Signed out. Account registration is retained for your next sign-in.',
-                    );
-                  });
+                  void plan.logout();
                 }}
               >
                 <ActionLabel short={shared ? 'Sign out' : 'Disconnect'} full="Sign out" />
@@ -249,9 +233,7 @@ export function ChatGPTPlanSettings({
               disabled={locked || !active?.planEnabled}
               aria-label="Refresh models"
               title="Refresh models"
-              onClick={() =>
-                void plan.operation('models', (signal) => plan.loadModels(value.accountId, signal))
-              }
+              onClick={() => void plan.refreshModels()}
             >
               <ControlIcon symbol="refresh" />
             </button>
@@ -265,15 +247,7 @@ export function ChatGPTPlanSettings({
               disabled={locked}
               aria-label="Refresh accounts"
               title="Refresh accounts"
-              onClick={() =>
-                void plan.operation('accounts', async (signal) => {
-                  const result = await planCall({ action: 'accounts' }, signal);
-                  if (plan.mounted.current) {
-                    plan.setAccounts(result.accounts);
-                    plan.setHelperReady(true);
-                  }
-                })
-              }
+              onClick={() => void plan.refreshAccounts()}
             >
               <ControlIcon symbol="refresh" />
             </button>
@@ -286,19 +260,14 @@ export function ChatGPTPlanSettings({
               ref={dialog}
               aria-label="You're using your ChatGPT plan"
               className="panel stack"
-              onCancel={() => plan.setWelcome(false)}
+              onCancel={plan.dismissWelcome}
             >
               <strong>You're using your ChatGPT plan</strong>
               <p>Eligible Saul requests use your plan after you save this connection.</p>
               <button
                 className="btn primary"
                 aria-label="Got it"
-                onClick={() =>
-                  void chrome.storage.local
-                    .set({ saul_chatgpt_welcome_seen: true })
-                    .then(() => plan.setWelcome(false))
-                    .catch(() => plan.setError('Could not save confirmation.'))
-                }
+                onClick={() => void plan.confirmWelcome()}
               >
                 <ActionLabel short="Done" full="Got it" />
               </button>

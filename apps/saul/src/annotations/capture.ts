@@ -1,5 +1,5 @@
 import { annotationMessage } from './client';
-import type { AnnotationTarget, Annotation, AnnotationSummary, AnnotationResult } from './contract';
+import type { AnnotationTarget, Annotation, AnnotationSummary } from './contract';
 export const viewport = () => ({
   width: innerWidth,
   height: innerHeight,
@@ -64,7 +64,7 @@ export async function captureAnnotation(target: AnnotationTarget) {
   const hidden = hosts.map((h) => h.style.cssText);
   hosts.forEach((h) => h.style.setProperty('display', 'none', 'important'));
   try {
-    const result = await annotationMessage<{ panelError?: string }>({
+    const result = await annotationMessage({
       action: 'capture',
       capture: {
         id,
@@ -201,7 +201,7 @@ export function installAnnotationCapture() {
   };
   const refresh = () => {
     const url = location.href;
-    void annotationMessage<AnnotationResult>({ action: 'page-markers' }).then(
+    void annotationMessage({ action: 'page-markers' }).then(
       (r) => {
         if (!disposed && url === location.href) {
           saved = r.records ?? [];

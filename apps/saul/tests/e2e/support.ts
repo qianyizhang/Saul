@@ -1,5 +1,5 @@
 import { SharedHistory } from '../../.build/native/history.mjs';
-import { validateHistoryRequest } from '../../native/history-protocol.mts';
+import { validateHistoryRequest, type HistoryRequest } from '../../native/history-protocol.mts';
 import { randomUUID } from 'node:crypto';
 import { chromium, expect, type BrowserContext } from '@playwright/test';
 import { createServer } from 'node:http';
@@ -193,6 +193,8 @@ export async function createSandbox(options: SandboxOptions = {}) {
   const profile = path.join(root, 'profile');
   const history = new SharedHistory(path.join(root, 'history'));
   const token = randomUUID();
+  let rejectWrite:
+    ((message: Extract<HistoryRequest, { operation: 'db' }>['message']) => boolean) | undefined;
   const historyServer = createServer(async (request, response) => {
     response.setHeader('Access-Control-Allow-Origin', '*');
     try {
@@ -213,6 +215,10 @@ export async function createSandbox(options: SandboxOptions = {}) {
         ).runHistoryFixture(history, data as import('./database-harness').DatabaseFixtureRequest);
       else if (request.url === '/' + token) {
         validateHistoryRequest(data);
+        if (data.operation === 'db' && rejectWrite?.(data.message)) {
+          rejectWrite = undefined;
+          throw new Error('Fixture rejected the storage write.');
+        }
         result = await history.run(data);
       } else throw new Error('Unavailable fixture route');
       response.end(JSON.stringify({ success: true, result: result ?? null }));
@@ -330,6 +336,9 @@ export async function createSandbox(options: SandboxOptions = {}) {
 
   return {
     profile,
+    rejectHistoryWriteOnce(match: NonNullable<typeof rejectWrite>) {
+      rejectWrite = match;
+    },
     diagnosticsRoot: path.join(root, 'diagnostics'),
     historyDirectory: path.join(root, 'history'),
     async launch() {
@@ -400,69 +409,3 @@ export async function createSandbox(options: SandboxOptions = {}) {
 }
 
 export type ExtensionSandbox = Awaited<ReturnType<typeof createSandbox>>;
-
-// Seed via the real database worker's current job transitions from the trusted
-// background. Test helpers are never exposed as production workspace routes.
-export async function seedHistory(
-  browser: Awaited<ReturnType<ExtensionSandbox['launch']>>,
-  origin: string,
-  count: number,
-  options: { prefix?: string; response?: string; title?: string } = {},
-) {
-  await browser.popup.evaluate(async () => {
-    const reply = await chrome.runtime.sendMessage({
-      target: 'saul-workspace',
-      message: { type: 'DB_UNREAD' },
-    });
-    if (!reply.success) throw new Error(reply.error);
-  });
-  await browser.worker.evaluate(
-    async ({ origin, count, options }) => {
-      const db = async (type: string, payload?: unknown) => {
-        const reply = await chrome.runtime.sendMessage({
-          target: 'saul-offscreen',
-          operation: 'db',
-          message: { type, payload },
-        });
-        if (!reply.success) throw new Error(reply.error);
-        return reply.result;
-      };
-      for (let i = 0; i < count; i++) {
-        const id = `${options.prefix || 'item'}-${i}`,
-          text = `Selection ${id}`;
-        const { run } = await db('DB_SUBMIT', {
-          submissionId: id,
-          regenerate: false,
-          snapshot: {
-            id,
-            text,
-            page: { url: origin + '/article', title: options.title || 'Calculus notes' },
-            anchor: { exact: text, prefix: '', suffix: '', textStart: i, textEnd: i + text.length },
-            viewport: { x: 0, y: 0, width: 0, height: 0, scrollX: 0, scrollY: 0 },
-            capturedAt: i + 1,
-          },
-          input: {
-            provider: 'openai-compatible',
-            remote: { baseUrl: origin + '/v1', model: 'test-model', temperature: 0.3 },
-            local: { temperature: 0.3, topK: 3 },
-            systemPrompt: 'test',
-            userPrompt: 'test',
-            context: { selection: text, pageTitle: '', pageUrl: '' },
-          },
-        });
-        await db('DB_CLAIM', { runId: run.id });
-        await db('DB_SAVING', { runId: run.id });
-        await db('DB_FINISH', {
-          runId: run.id,
-          status: 'completed',
-          raw:
-            options.response ||
-            'A <term note="Steepest increase">gradient</term> explains velocity.',
-          latencyMs: 1,
-        });
-        await db('DB_VIEW', { selectionId: id, runId: run.id });
-      }
-    },
-    { origin, count, options },
-  );
-}

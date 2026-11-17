@@ -24,8 +24,8 @@ generated from it. Keep native semantic controls and backgrounds, and use `AppSt
 ## Required checks
 
 Run `make format`, then `make check` after Swift changes. Run `make app` for bundle,
-resource, signing, or release changes. `EZChecks` is an offline executable test
-suite so Apple Command Line Tools suffice; no live account is needed for CI.
+resource, signing, or release changes. See [development setup](CONTRIBUTING.md#development-setup-and-gates)
+for the native toolchain. Checks run offline without a live account.
 When the outer agent sandbox rejects nested SwiftPM `sandbox-exec`, set
 `EZ_SWIFTPM_DISABLE_SANDBOX=1` for the command. Keep ordinary checks inside the
 outer sandbox. This exception disables only SwiftPM's nested manifest sandbox.

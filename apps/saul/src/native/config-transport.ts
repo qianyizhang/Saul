@@ -11,8 +11,7 @@ import {
 
 type Request = Extract<PlanControlRequest, { action: 'config-read' | 'config-save' }>;
 export class ConfigUnavailableError extends Error {}
-export async function scopedCall(request: Request): Promise<ScopedConfig> {
-  if (request.action === 'config-save') validateScopedConfigValue(request.value);
+async function configReply(request: PlanControlRequest): Promise<unknown> {
   let reply;
   try {
     reply = await chrome.runtime.sendNativeMessage(PLAN_HOST, { id: crypto.randomUUID(), request });
@@ -20,8 +19,13 @@ export async function scopedCall(request: Request): Promise<ScopedConfig> {
     throw new ConfigUnavailableError('Unified config helper unavailable.', { cause });
   }
   if (reply?.event?.type === 'error') throw new Error(reply.event.message);
-  validatePlanResult(request, reply?.event);
-  return reply.event.config;
+  return reply?.event;
+}
+export async function scopedCall(request: Request): Promise<ScopedConfig> {
+  if (request.action === 'config-save') validateScopedConfigValue(request.value);
+  const event = await configReply(request);
+  validatePlanResult(request, event);
+  return event.config;
 }
 
 type PresetRequest = Extract<
@@ -29,23 +33,15 @@ type PresetRequest = Extract<
   { action: 'presets-read' | 'presets-import' | 'presets-save' }
 >;
 export async function sharedCall(request: PresetRequest): Promise<SharedPresets> {
-  const reply = await chrome.runtime.sendNativeMessage(PLAN_HOST, {
-    id: crypto.randomUUID(),
-    request,
-  });
-  if (reply?.event?.type === 'error') throw new Error(reply.event.message);
-  validatePlanResult(request, reply?.event);
-  return reply.event.library;
+  const event = await configReply(request);
+  validatePlanResult(request, event);
+  return event.library;
 }
 
 export async function commitSharedConfiguration(
   request: Extract<PlanControlRequest, { action: 'config-commit' }>,
 ) {
-  const reply = await chrome.runtime.sendNativeMessage(PLAN_HOST, {
-    id: crypto.randomUUID(),
-    request,
-  });
-  if (reply?.event?.type === 'error') throw new Error(reply.event.message);
-  validatePlanResult(request, reply?.event);
-  return { library: reply.event.library, config: reply.event.config };
+  const event = await configReply(request);
+  validatePlanResult(request, event);
+  return { library: event.library, config: event.config };
 }

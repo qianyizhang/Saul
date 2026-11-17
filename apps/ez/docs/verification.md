@@ -23,13 +23,15 @@ explains tool setup, hooks and hosted execution. Tool versions and hashes live i
 windows or establish live-service behavior.
 
 [Tests/README.md](../Tests/README.md) owns cases, filtering and fixture rules.
-`make test` runs core and app-state suites even if one fails; executable harnesses
-work with Command Line Tools without XCTest/Swift Testing or third-party frameworks.
+`make test` runs core and app-state suites even if one fails. The native
+harnesses need no XCTest, Swift Testing or third-party framework.
+The app and previews need SwiftUI's compiler plug-ins.
 App suites use disposable storage, isolated HTTP handlers and synthetic credentials,
 not live accounts, network or personal Keychain. Identity checks use generated RSA
 keys and a fixed clock. Separate credential acceptance uses isolated test storage.
 
-If nested SwiftPM sandboxing fails, use `EZ_SWIFTPM_DISABLE_SANDBOX=1 make check`;
+If SwiftPM’s nested manifest sandbox fails, use
+`EZ_SWIFTPM_DISABLE_SANDBOX=1 make check`;
 the outer sandbox stays active and caches stay in `.build/`. After `make clean`,
 restore tools with `make tools`. Duplicate modules from differently capitalized
 checkout paths require clearing generated state. Icon dimensions alone do not

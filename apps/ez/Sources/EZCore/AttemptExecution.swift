@@ -1,6 +1,6 @@
 import Foundation
 
-/// One explicit attempt owns generation and the durable terminal outcome together.
+/// Runs one frozen request and reports whether its terminal snapshot reached history.
 @MainActor public final class AttemptExecution {
     public enum Output {
         case text(ResponseAccumulator)
@@ -15,23 +15,41 @@ import Foundation
             HistoryEntry, @escaping @MainActor (ResponseAccumulator) -> Void
         ) async throws -> Output
 
-    public struct Update {
+    public struct Progress {
         public let entry: HistoryEntry
         public let activity: ResponseActivity
-        public let isActive: Bool
+    }
+
+    public enum Update {
+        case running(Progress)
+        case saved(HistoryEntry)
+        case saveFailed(HistoryEntry, message: String)
+    }
+
+    private struct Running {
+        var entry: HistoryEntry
+        let task: Task<Void, Never>
+    }
+
+    private enum Outcome {
+        case completed, interrupted
+        case failed(String)
+
+        func record(in entry: inout HistoryEntry) {
+            switch self {
+            case .completed: entry.status = "completed"
+            case .interrupted: entry.status = "interrupted"
+            case .failed(let message):
+                entry.status = "failed"
+                entry.error = message
+            }
+        }
     }
 
     public var onChange: (@MainActor (Update) -> Void)?
-    public private(set) var activeID: UUID?
     private let generate: Generation
     private let append: @MainActor (HistoryEntry) throws -> Void
-    private var active: HistoryEntry?
-    private var task: Task<Void, Never>?
-    private struct Unsaved {
-        let terminal: HistoryEntry
-        var error: String
-    }
-    private var unsaved: [UUID: Unsaved] = [:]
+    private var running: Running?
 
     public convenience init(
         accessToken: @escaping @MainActor () async throws -> String,
@@ -53,113 +71,76 @@ import Foundation
         self.append = append
     }
 
-    public func saveError(for id: UUID) -> String? { unsaved[id]?.error }
-
     public func start(_ entry: HistoryEntry) throws {
-        guard activeID == nil else { throw EZError("An attempt is already running.") }
-        guard entry.status == "pending", unsaved[entry.id] == nil else {
+        guard running == nil else { throw EZError("An attempt is already running.") }
+        guard entry.status == "pending" else {
             throw EZError("Start a new lookup to send another request.")
         }
         do { try append(entry) } catch {
             throw EZError("Query not sent: history could not be saved. \(error.localizedDescription)")
         }
-        active = entry
-        activeID = entry.id
-        publish(entry, activity: .waiting, isActive: true)
-        task = Task { [self] in
-            do {
-                try Task.checkCancellation()
-                let result = try await generate(entry) { [weak self] progress in
-                    self?.progress(progress, for: entry.id)
-                }
-                try Task.checkCancellation()
-                switch result {
-                case .text(let response):
-                    progress(response, for: entry.id)
-                    try response.requireCompleted(webSearchRequired: entry.usesWebSearch)
-                case .image(let png):
-                    guard var image = active, activeID == entry.id else { return }
-                    image.imageData = png
-                    active = image
-                }
-                finish(entry.id, status: "completed")
-            } catch is CancellationError {
-                finish(entry.id, status: "interrupted")
-            } catch {
-                let cancelled = (error as? URLError)?.code == .cancelled
-                finish(
-                    entry.id, status: cancelled ? "interrupted" : "failed",
-                    error: cancelled ? nil : error.localizedDescription)
-            }
-        }
+        let task = Task { [self] in await run(entry) }
+        running = Running(entry: entry, task: task)
+        onChange?(.running(Progress(entry: entry, activity: .waiting)))
     }
 
     public func stop() {
-        guard let id = activeID else { return }
-        task?.cancel()
-        finish(id, status: "interrupted")
+        guard let running else { return }
+        running.task.cancel()
+        finish(running.entry.id, outcome: .interrupted)
     }
 
-    /// Repeats only the append of the frozen terminal snapshot; never generates again.
-    public func saveAgain(_ id: UUID) {
-        guard activeID == nil, var pending = unsaved[id] else { return }
+    private func run(_ entry: HistoryEntry) async {
         do {
-            try append(pending.terminal)
-            unsaved.removeValue(forKey: id)
-            var saved = pending.terminal
-            saved.storedImage = saved.imageData != nil || saved.storedImage
-            saved.imageData = nil
-            saved.inputImage?.data = nil
-            publish(saved, activity: .finished, isActive: false)
+            try Task.checkCancellation()
+            let result = try await generate(entry) { [weak self] response in
+                self?.progress(response, for: entry.id)
+            }
+            try Task.checkCancellation()
+            switch result {
+            case .text(let response):
+                progress(response, for: entry.id)
+                try response.requireCompleted(webSearchRequired: entry.usesWebSearch)
+            case .image(let data):
+                guard running?.entry.id == entry.id else { return }
+                running?.entry.imageData = data
+            }
+            finish(entry.id, outcome: .completed)
+        } catch is CancellationError {
+            finish(entry.id, outcome: .interrupted)
         } catch {
-            pending.error = error.localizedDescription
-            unsaved[id] = pending
-            publish(unsavedProjection(pending.terminal), activity: .finished, isActive: false)
+            let cancelled = (error as? URLError)?.code == .cancelled
+            finish(entry.id, outcome: cancelled ? .interrupted : .failed(error.localizedDescription))
         }
     }
 
-    /// Call only after the owning history deletion succeeds.
-    public func forget(_ id: UUID) { unsaved.removeValue(forKey: id) }
-
-    private func progress(_ result: ResponseAccumulator, for id: UUID) {
-        guard var entry = active, activeID == id else { return }
-        entry.response = result.text
-        entry.citations = result.citations
-        entry.webSearchCompleted = result.webSearchCompleted
-        entry.metrics = result.metrics
-        entry.actualServiceTier = result.actualServiceTier
-        active = entry
-        publish(entry, activity: result.activity, isActive: true)
+    private func progress(_ response: ResponseAccumulator, for id: UUID) {
+        guard var entry = running?.entry, entry.id == id else { return }
+        entry.response = response.text
+        entry.citations = response.citations
+        entry.webSearchCompleted = response.webSearchCompleted
+        entry.metrics = response.metrics
+        entry.actualServiceTier = response.actualServiceTier
+        running?.entry = entry
+        onChange?(.running(Progress(entry: entry, activity: response.activity)))
     }
 
-    private func finish(_ id: UUID, status: String, error message: String? = nil) {
-        guard var entry = active, activeID == id else { return }
-        entry.status = status
-        entry.error = message
+    private func finish(_ id: UUID, outcome: Outcome) {
+        guard var entry = running?.entry, entry.id == id else { return }
+        outcome.record(in: &entry)
         entry.durationSeconds = Date().timeIntervalSince(entry.createdAt)
-        var visible = entry
+        let update: Update
         do {
             try append(entry)
-            visible.storedImage = visible.imageData != nil || visible.storedImage
-            visible.imageData = nil
-            visible.inputImage?.data = nil
+            entry.storedImage = entry.imageData != nil || entry.storedImage
+            entry.imageData = nil
+            entry.inputImage?.data = nil
+            update = .saved(entry)
         } catch {
-            unsaved[id] = Unsaved(terminal: entry, error: error.localizedDescription)
-            visible = unsavedProjection(entry)
+            entry.inputImage?.data = nil  // The input is already in the pending row.
+            update = .saveFailed(entry, message: error.localizedDescription)
         }
-        active = nil
-        activeID = nil
-        task = nil
-        publish(visible, activity: .finished, isActive: false)
-    }
-
-    private func unsavedProjection(_ entry: HistoryEntry) -> HistoryEntry {
-        var visible = entry
-        visible.status = "unsaved"
-        return visible
-    }
-
-    private func publish(_ entry: HistoryEntry, activity: ResponseActivity, isActive: Bool) {
-        onChange?(Update(entry: entry, activity: activity, isActive: isActive))
+        running = nil
+        onChange?(update)
     }
 }

@@ -5,7 +5,7 @@ import {
   type CallSnapshot,
   type FrozenCall,
 } from '../src/calls/execution';
-import type { actionHost } from '../src/actions/host';
+import type { actionHost } from '../src/calls/host';
 import type { streamModel } from '../src/providers/stream';
 import type { ModelEvent } from '../src/providers/events';
 type TextEvent = Extract<ModelEvent, { type: 'delta' | 'complete' }>;

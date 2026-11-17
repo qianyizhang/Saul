@@ -35,7 +35,8 @@ pnpm test:user --smoke
 Focused checks can reuse an already-built `.output/chrome-mv3` snapshot:
 
 ```sh
-pnpm exec playwright test tests/e2e/reading.spec.ts tests/e2e/annotations.spec.ts
+pnpm exec playwright test tests/e2e/reading.spec.ts tests/e2e/passage-highlights.spec.ts
+pnpm exec playwright test tests/e2e/custom-calls.spec.ts tests/e2e/browser-annotations.spec.ts
 pnpm exec playwright test tests/e2e/product.spec.ts
 pnpm exec playwright test tests/e2e/chatgpt-plan.spec.ts
 pnpm exec playwright test tests/e2e/chrome-ai.spec.ts
@@ -235,7 +236,7 @@ source. The source/output decision is recorded once in the
 ## Browser annotation checks
 
 `tests/browser-annotations.test.ts` covers SQLite persistence, revision and scope failures,
-idempotent edits, retention, image request shape and save-only recovery.
+idempotent edits, retention, image request shape and atomic reply completion.
 `tests/e2e/browser-annotations.spec.ts` uses the production extension and native SQLite
 transport with synthetic pages/models: native panel capture, saved screenshot input,
 replies, restart, picking, cancellation, navigation races and the agent boundary.

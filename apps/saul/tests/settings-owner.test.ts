@@ -153,6 +153,39 @@ it('rejects a competing full draft without changing either draft or the first sa
   expect(f.storage.write).toHaveBeenCalledTimes(1);
 });
 
+it('uses the loaded shared revisions when saving an edit, even if the submitted draft omits them', async () => {
+  const f = fixture(DEFAULT_CONFIGURATION);
+  const shared = structuredClone({
+    ...DEFAULT_CONFIGURATION,
+    sharedPresetRevision: 5,
+    scopedConfigRevision: 9,
+  });
+  const save = vi.fn(async (next: typeof shared) => {
+    if (next.sharedPresetRevision !== 5 || next.scopedConfigRevision !== 9)
+      throw new Error('Wrong shared revisions');
+    Object.assign(shared, next);
+    return next;
+  });
+  const owner = createConfigurationStore(f.storage, {
+    load: async () => structuredClone(shared),
+    save,
+  });
+  const before = ready(await owner({ action: 'read' }));
+  const draft = structuredClone(before.settings);
+  delete draft.sharedPresetRevision;
+  delete draft.scopedConfigRevision;
+  const result = ready(
+    await owner({
+      action: 'commit',
+      baseline: before.revision,
+      settings: { ...draft, responseLanguage: 'Chinese' },
+    }),
+  );
+  expect(result.settings.responseLanguage).toBe('Chinese');
+  expect(shared.responseLanguage).toBe('Chinese');
+  expect(save).toHaveBeenCalledTimes(1);
+});
+
 it('serializes simultaneous commits and checks the baseline after an earlier write settles', async () => {
   const f = fixture();
   const original = ready(await f.owner({ action: 'read' }));

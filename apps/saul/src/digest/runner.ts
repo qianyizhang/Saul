@@ -10,6 +10,8 @@ import { SUMMARY_PROMPT } from './summary';
 import { compareText } from '../reading/input-change';
 import {
   activeItem,
+  interruptItem,
+  retryableItem,
   type DigestBatch,
   type DigestItem,
   type DigestRequest,
@@ -33,26 +35,40 @@ const sourceBusy =
   'A summary is already running for one of these pages. Stop it or wait for it to finish.';
 
 export class DigestRunner {
-  readonly ready: Promise<void>;
+  private recovery?: Promise<void>;
   private runs = new Map<string, DigestRun>();
-  // A failed save cannot record its own interruption in SQLite.
-  private interrupted = new Map<string, DigestBatch>();
+  // A storage outage can leave an active row behind after its task has stopped.
+  // Keep only its notice; the durable row remains the only saved result.
+  private writeFailures = new Map<string, string>();
   private controls: Promise<unknown> = Promise.resolve();
   constructor(
     private db: DbCall,
     private capture: Capture,
     private executor: CallExecutor = createCallExecutor(),
   ) {
-    this.ready = db({ type: 'DB_DIGEST_RECOVER', payload: undefined });
+    void this.recover().catch(() => undefined);
+  }
+  private recover() {
+    this.recovery ??= this.db({ type: 'DB_DIGEST_RECOVER', payload: undefined }).catch((error) => {
+      this.recovery = undefined;
+      throw error;
+    });
+    return this.recovery;
   }
   // Serialize control actions; generation itself stays independent of popup lifetime.
   request(request: DigestRequest, snapshot?: DigestBatch, credential = ''): Promise<unknown> {
     // Read-only page comparisons must not delay Stop or other generation controls.
-    if (request.action === 'resolve' || request.action === 'inspect')
-      return this.ready.then(() => this.handle(request, snapshot));
+    if (
+      request.action === 'resolve' ||
+      request.action === 'inspect' ||
+      request.action === 'active' ||
+      request.action === 'list' ||
+      request.action === 'get'
+    )
+      return this.handle(request, snapshot);
     if (request.action === 'stop')
       return this.enqueue(async () => {
-        await this.ready;
+        await this.recover();
         return this.abort(request.id);
       }).then(async (run) => {
         // Settling one run must not delay control actions on unrelated sources.
@@ -77,7 +93,7 @@ export class DigestRunner {
     snapshot?: DigestBatch,
     credential = '',
   ): Promise<unknown> {
-    await this.ready;
+    await this.recover();
     if (r.action === 'active') return structuredClone([...this.runs.values()].at(-1)?.batch);
     if (r.action === 'inspect') {
       const batch = await this.db({ type: 'DB_DIGEST_GET', payload: { id: r.id } });
@@ -108,18 +124,23 @@ export class DigestRunner {
       return { batch: structuredClone(batch), comparisons };
     }
     if (r.action === 'list') return this.db({ type: 'DB_DIGEST_LIST', payload: undefined });
-    if (r.action === 'get')
-      return structuredClone(
-        this.runs.get(r.id)?.batch ??
-          this.interrupted.get(r.id) ??
-          (await this.db({ type: 'DB_DIGEST_GET', payload: { id: r.id } })),
-      );
+    if (r.action === 'get') {
+      const running = this.runs.get(r.id);
+      if (running) return structuredClone(running.batch);
+      const batch = await this.db({ type: 'DB_DIGEST_GET', payload: { id: r.id } });
+      const error = this.writeFailures.get(r.id);
+      if (!error || !batch.items.some(activeItem)) return batch;
+      return {
+        ...batch,
+        error,
+        items: batch.items.map((item) => (activeItem(item) ? interruptItem(item, error) : item)),
+      };
+    }
     if (r.action === 'delete') {
       const run = this.abort(r.id);
       if (run) await run.task;
-      else await this.handle({ action: 'get', id: r.id });
       await this.db({ type: 'DB_DIGEST_DELETE', payload: { id: r.id } });
-      this.interrupted.delete(r.id);
+      this.writeFailures.delete(r.id);
       return;
     }
     if (r.action === 'start' && !r.regenerate && snapshot) {
@@ -129,8 +150,9 @@ export class DigestRunner {
     let batch: DigestBatch;
     if (r.action === 'start') {
       if (!snapshot) throw new Error('Missing selection snapshot.');
-      const existing = this.runs.get(r.id)?.batch ?? this.interrupted.get(r.id);
+      const existing = this.runs.get(r.id)?.batch;
       if (existing) return structuredClone(existing);
+      if (this.writeFailures.has(r.id)) return this.handle({ action: 'get', id: r.id });
       this.checkSources(snapshot.items.filter(activeItem));
       batch = await this.db({ type: 'DB_DIGEST_CREATE', payload: snapshot });
       // Duplicate start IDs never regenerate completed or interrupted work.
@@ -138,36 +160,32 @@ export class DigestRunner {
     } else {
       if (this.runs.has(r.id)) throw new Error(sourceBusy);
       batch = await this.db({ type: 'DB_DIGEST_GET', payload: { id: r.id } });
-      const unfinished = batch.items.filter(
-        (item) => activeItem(item) || ['failed', 'interrupted', 'cancelled'].includes(item.status),
-      );
-      this.checkSources(unfinished);
-      for (const item of unfinished) {
-        item.status = 'queued';
-        item.raw = '';
-        delete item.error;
-        delete item.summary;
-        delete item.finalText;
-        delete item.calls;
-        delete item.progress;
-        await this.save(batch, item);
-      }
+      this.checkSources(batch.items.filter(retryableItem));
+      batch = await this.db({ type: 'DB_DIGEST_RETRY', payload: { id: r.id } });
     }
-    this.interrupted.delete(batch.id);
+    this.writeFailures.delete(batch.id);
     const controller = new AbortController();
     const task = this.run(batch, controller, credential)
-      .catch((error) => {
-        batch.error =
-          'Saving progress failed; processing stopped. ' +
-          String(error instanceof Error ? error.message : error);
-        for (const item of batch.items)
-          if (activeItem(item)) {
-            item.status = 'interrupted';
-            item.error = batch.error;
-            delete item.finalText;
-            delete item.summary;
-          }
-        this.interrupted.set(batch.id, batch);
+      .catch(async (cause: unknown) => {
+        const error =
+          'Could not save summary progress; processing stopped. ' +
+          (cause instanceof Error ? cause.message : String(cause));
+        try {
+          // Do not replace a completed row if the save committed but its reply was lost.
+          Object.assign(
+            batch,
+            await this.db({
+              type: 'DB_DIGEST_INTERRUPT',
+              payload: { id: batch.id, error },
+            }),
+          );
+        } catch {
+          this.writeFailures.set(batch.id, error);
+          batch.error = error;
+          batch.items = batch.items.map((item) =>
+            activeItem(item) ? interruptItem(item, error) : item,
+          );
+        }
       })
       .finally(() => {
         this.runs.delete(batch.id);
@@ -257,12 +275,6 @@ export class DigestRunner {
     return this.db({
       type: 'DB_DIGEST_ITEM',
       payload: { id: batch.id, item: { ...item }, source },
-    }).catch((error: unknown) => {
-      item.status = 'interrupted';
-      item.error = 'Progress could not be saved.';
-      delete item.finalText;
-      delete item.summary;
-      throw error;
     });
   }
   private async run(batch: DigestBatch, controller: AbortController, credential: string) {
@@ -374,12 +386,8 @@ export class DigestRunner {
         { call, page: { title: item.title, url: item.url, source } },
         { credential, signal: executionSignal, onProgress: project },
       );
-      // Live failure/Stop state must not wait for an outstanding checkpoint.
-      // A known save failure retains its stronger interruption state.
-      if (outcome.kind !== 'completed' && !saveError) {
-        item.status = outcome.kind === 'cancelled' ? 'cancelled' : 'failed';
-        item.error = outcome.message;
-      }
+      // Keep the item in a live saving phase until the final row commits.
+      if (!saveError) item.status = 'saving';
       // Stop admitting siblings before waiting for a slow outstanding checkpoint.
       if (outcome.kind === 'failed' && outcome.failure === 'execution') pause();
     } finally {
@@ -389,11 +397,17 @@ export class DigestRunner {
     }
     if (saveError) throw saveError;
     project(outcome.output);
+    const terminal = { ...item };
     if (outcome.kind === 'completed') {
-      item.status = 'completed';
-      if (outcome.result.kind === 'summary') item.summary = outcome.result.summary;
-      else item.finalText = outcome.result.text;
+      terminal.status = 'completed';
+      if (outcome.result.kind === 'summary') terminal.summary = outcome.result.summary;
+      else terminal.finalText = outcome.result.text;
+    } else {
+      terminal.status = outcome.kind === 'cancelled' ? 'cancelled' : 'failed';
+      terminal.error = outcome.message;
     }
-    await this.save(batch, item);
+    delete terminal.progress;
+    await this.save(batch, terminal);
+    Object.assign(item, terminal);
   }
 }

@@ -1,5 +1,8 @@
 import { test, expect } from './fixtures.ts';
-import { configureFixtureProvider, seedHistory } from './support.ts';
+import { configureFixtureProvider } from './support.ts';
+import { seedPersistedHistory } from './database-harness.ts';
+
+test.use({ databaseFixtures: true });
 
 test('deleting a saved passage updates its page and clearing history survives restart', async ({
   sandbox,
@@ -24,7 +27,7 @@ test('deleting a saved passage updates its page and clearing history survives re
   await expect(popup.getByText('No highlights recorded yet.')).toBeVisible();
   await expect(article.getByRole('region', { name: 'Saul explanation' })).toHaveCount(0);
 
-  await seedHistory(browser, fixtureServer.origin, 2);
+  await seedPersistedHistory(browser, fixtureServer.origin + '/seeded-history', 2);
   await popup.reload();
   await popup.getByLabel('Export and manage history', { exact: true }).click();
   popup.once('dialog', (dialog) => dialog.accept());

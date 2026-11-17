@@ -6,6 +6,8 @@ when present; local contracts and checks below still apply.
 Saul (Chrome) and EZ (macOS) are independently installed applications. Read the
 [architecture](docs/architecture.md) before changing ownership or installation.
 Follow the app-local instructions in `apps/saul/AGENTS.md` or `apps/ez/AGENTS.md`.
+For lifecycle design, refactoring or review, apply
+[lifecycle ownership](docs/architecture.md#lifecycle-ownership).
 
 For cross-app features, read the [shared contracts](contracts/README.md). Share
 behavior and interfaces; keep implementations native to their runtimes. Follow

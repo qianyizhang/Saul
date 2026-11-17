@@ -14,7 +14,7 @@ struct ConnectionsView: View {
     @State private var key = ""
     @State private var account = ""
     @State private var newID = ""
-    @State private var busy = false
+    private var busy: Bool { model.credentialBusy }
     @State private var error: String?
     @State private var removing: ConnectionDefinition?
     @State private var loginTask: Task<Void, Never>?
@@ -35,7 +35,6 @@ struct ConnectionsView: View {
                     Button("Cancel sign-in") {
                         loginTask?.cancel()
                         loginTask = nil
-                        busy = false
                     }
                 }
                 if editing {
@@ -81,9 +80,9 @@ struct ConnectionsView: View {
         }
     }
     private func connectionRow(_ connection: ConnectionDefinition) -> some View {
-        let status = model.connectionStatuses[connection.key]
+        let status = model.connectionStatus(connection.key)
         let checking = model.checkingConnections.contains(connection.key)
-        let problem = model.connectionErrors[connection.key]
+        let problem = model.connectionError(connection.key)
         let connected =
             model.offline
             ? (connection.kind == .chatGPTPlan ? model.signedIn : model.apiConnected)
@@ -165,8 +164,7 @@ struct ConnectionsView: View {
         guard !model.offline else { return }
         Task {
             do {
-                try await model.auth.load()
-                model.profiles = model.auth.accounts
+                try await model.loadConnectionAccounts()
             } catch { self.error = error.localizedDescription }
         }
     }
@@ -219,32 +217,21 @@ struct ConnectionsView: View {
         }.disabled(busy || model.configurationLocked)
     }
     private func signIn(addingAccount: Bool = false) {
-        model.signingIn = true
-        busy = true
         error = nil
         loginTask = Task {
-            defer {
-                model.signingIn = false
-                busy = false
-                loginTask = nil
-            }
+            defer { loginTask = nil }
             do {
-                let reply = try await model.auth.signIn(
-                    accountID: target?.accountId ?? account, addingAccount: addingAccount,
-                    authorize: { NSWorkspace.shared.open($0) })
-                try await model.auth.load()
-                model.profiles = model.auth.accounts
-                if let profile = reply["account"] as? [String: Any], let id = profile["id"] as? String {
+                if let id = try await model.signInConnection(
+                    accountID: target?.accountId ?? account, addingAccount: addingAccount)
+                {
                     account = id
                 }
-            } catch { self.error = error.localizedDescription }
+            } catch { if !Task.isCancelled { self.error = error.localizedDescription } }
         }
     }
     private func save() {
-        busy = true
         error = nil
         Task {
-            defer { busy = false }
             do {
                 let definition: ConnectionDefinition
                 if kind == "plan" {

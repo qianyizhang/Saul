@@ -53,6 +53,7 @@ export function useProviderTest() {
           setNotice('Endpoint reachable. Use Test generation to check the selected model.');
       } else {
         let answer = '';
+        let complete = false;
         for await (const event of streamModel(
           {
             ...prepared.choices,
@@ -62,9 +63,12 @@ export function useProviderTest() {
           prepared.credential,
           ac.signal,
           { maxTokens: 32 },
-        ))
+        )) {
           if (event.type === 'delta') answer += event.text;
-        if (ac.signal.aborted) throw new Error('Stopped');
+          else if (event.type === 'complete') complete = true;
+        }
+        ac.signal.throwIfAborted();
+        if (!complete) throw new Error('The model test ended before generation completed.');
         if (!answer.trim())
           throw new Error('The model returned no text. Check the model and endpoint.');
         if (mounted.current) setNotice(`Generation succeeded: ${answer.slice(0, 120)}`);

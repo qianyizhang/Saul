@@ -3,13 +3,15 @@ import { runnerRequest } from '../storage/client';
 import {
   requestSchema,
   captureSchema,
+  annotationIdSchema,
+  pageUrl,
   type AnnotationCapture,
   type AnnotationResult,
   type AnnotationRequest,
 } from './contract';
-import { prepareActionPreset } from '../actions/configuration';
+import { prepareCallModel } from '../calls/configuration';
 import { configurationFor } from '../configuration/definition';
-import { callPresetStorage } from '../storage/call-presets';
+import { callStore } from '../calls/store';
 import type { Configuration } from '../configuration/definition';
 import { z } from 'zod';
 
@@ -20,17 +22,6 @@ export async function operateAnnotations(request: AnnotationRequest): Promise<An
     operation: 'db',
     message: { type: 'DB_ANNOTATION', payload: parsed },
   });
-  if (parsed.operation.action === 'change')
-    for (const change of parsed.operation.changes) {
-      if (
-        ['delete', 'purge'].includes(change.action) &&
-        result.outcomes?.some((o) => o.id === change.id && !o.error)
-      )
-        void runnerRequest({
-          operation: 'annotation',
-          message: { action: 'cancel-annotation', id: change.id },
-        }).catch(() => undefined);
-    }
   if (['create', 'change'].includes(parsed.operation.action)) {
     await chrome.storage.session.set({ [annotationVersionKey]: crypto.randomUUID() });
     const urls = new Set([
@@ -98,22 +89,20 @@ async function markedImage(data: string, c: AnnotationCapture, number: number) {
     bitmap.close();
   }
 }
-let captureBusy = false;
-async function capture(request: unknown, sender: chrome.runtime.MessageSender) {
-  const url = sourcePage(sender),
-    tabId = sender.tab!.id!,
-    windowId = sender.tab!.windowId;
-  if (sender.tab!.incognito) throw new Error('Incognito capture is unavailable.');
-  const c = captureSchema.parse(request);
-  if (c.url !== url) throw new Error('Page changed before capture. Select the target again.');
-  c.tabId = tabId;
-  c.documentId = sender.documentId;
-  delete c.image;
+type ViewportEvidence =
+  { kind: 'available'; screenshot: string } | { kind: 'unavailable'; error: string };
+
+async function takeViewportEvidence(
+  capture: AnnotationCapture & { tabId: number },
+  windowId: number,
+  active: boolean,
+): Promise<ViewportEvidence> {
+  const { tabId, documentId, url, target } = capture;
   const state = () =>
     chrome.tabs.sendMessage(
       tabId,
       { type: 'SAUL_ANNOTATION_STATE' },
-      { documentId: sender.documentId! },
+      { documentId },
     ) as Promise<string>;
 
   let changed = false;
@@ -130,7 +119,7 @@ async function capture(request: unknown, sender: chrome.runtime.MessageSender) {
   chrome.tabs.onUpdated.addListener(updated);
   chrome.tabs.onZoomChange.addListener(zoomed);
   try {
-    if (!sender.tab!.active) throw new Error('Activate the source tab before capture.');
+    if (!active) throw new Error('Activate the source tab before capture.');
     const image = await new Promise<string>((resolve, reject) => {
       chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 90 }, (data) => {
         const error = chrome.runtime.lastError;
@@ -139,7 +128,7 @@ async function capture(request: unknown, sender: chrome.runtime.MessageSender) {
           return;
         }
         // Chrome propagates the initiating gesture through its API callback.
-        void openPanel(windowId, c.id).catch(() => undefined);
+        void openPanel(windowId, capture.id).catch(() => undefined);
         resolve(data);
       });
     });
@@ -154,37 +143,45 @@ async function capture(request: unknown, sender: chrome.runtime.MessageSender) {
       !after.active ||
       after.pendingUrl ||
       after.status !== 'complete' ||
-      after.url !== c.url ||
-      currentState.url !== c.url
+      after.url !== url ||
+      currentState.url !== url
     )
       throw new Error('Page changed during capture. Image was discarded.');
     if (
-      currentState.viewport.scrollX !== c.target.viewport.scrollX ||
-      currentState.viewport.scrollY !== c.target.viewport.scrollY ||
-      currentState.viewport.scale !== c.target.viewport.scale
+      currentState.viewport.scrollX !== target.viewport.scrollX ||
+      currentState.viewport.scrollY !== target.viewport.scrollY ||
+      currentState.viewport.scale !== target.viewport.scale
     )
       throw new Error('Page scrolled or zoomed during capture. Image was discarded.');
-    c.image = image;
+    return { kind: 'available', screenshot: image };
   } catch (e) {
-    c.imageError = (e as Error).message;
+    return { kind: 'unavailable', error: (e as Error).message };
   } finally {
     chrome.tabs.onActivated.removeListener(activated);
     chrome.tabs.onUpdated.removeListener(updated);
     chrome.tabs.onZoomChange.removeListener(zoomed);
   }
-  const rawImage = c.image;
-  delete c.image;
-  const imageError = c.imageError;
-  delete c.imageError;
+}
+let capturing = false;
+async function capture(request: unknown, sender: chrome.runtime.MessageSender) {
+  const url = sourcePage(sender);
+  const tab = sender.tab!;
+  if (tab.incognito) throw new Error('Incognito capture is unavailable.');
+  const { id, title, target, comment, url: capturedUrl } = captureSchema.parse(request);
+  if (capturedUrl !== url) throw new Error('Page changed before capture. Select the target again.');
+  const c = { id, title, target, comment, url, tabId: tab.id!, documentId: sender.documentId };
+  const windowId = tab.windowId;
+  const evidence = await takeViewportEvidence(c, windowId, tab.active);
   const result = await operateAnnotations({
     scope: { urls: [url], ids: [] },
     author: { kind: 'user', name: 'You' },
     operation: { action: 'create', capture: c },
   });
   let marked: string | undefined,
-    error = imageError;
+    error = evidence.kind === 'unavailable' ? evidence.error : undefined;
   try {
-    if (rawImage) marked = await markedImage(rawImage, c, result.records![0]!.number);
+    if (evidence.kind === 'available')
+      marked = await markedImage(evidence.screenshot, c, result.records![0]!.number);
   } catch (e) {
     error = (e as Error).message;
   }
@@ -240,19 +237,18 @@ export function initAnnotations(settings: () => Promise<Configuration>) {
         });
       }
       if (request.action === 'capture') {
-        if (captureBusy)
-          throw new Error('Another capture is in progress. Try again after it saves.');
-        captureBusy = true;
+        if (capturing) throw new Error('Another capture is in progress. Try again after it saves.');
+        capturing = true;
         try {
           return await capture(request.capture, sender);
         } finally {
-          captureBusy = false;
+          capturing = false;
         }
       }
       if (request.action === 'open') {
         const url = sourcePage(sender);
         void url;
-        return openPanel(sender.tab!.windowId, request.id);
+        return openPanel(sender.tab!.windowId, annotationIdSchema.optional().parse(request.id));
       }
       if (!workspaceSender(sender)) throw new Error('Annotation editor only.');
       if (request.action === 'operate')
@@ -268,33 +264,37 @@ export function initAnnotations(settings: () => Promise<Configuration>) {
       }
       if (request.action === 'choices') {
         const s = await settings();
-        const calls = await callPresetStorage().read();
+        const calls = await callStore.readChoices();
         return {
           presets: configurationFor(s).presets.filter((p) => (p.capability ?? 'write') === 'write'),
-          calls: calls.library ?? [],
+          calls: calls.state === 'ready' ? (calls.choices.library ?? []) : [],
         };
       }
       if (request.action === 'respond') {
         const p = z
           .object({
-            url: z.string(),
-            ids: z.array(z.string()).min(1).max(20),
-            presetId: z.string(),
+            url: pageUrl,
+            ids: z.array(annotationIdSchema).min(1).max(20),
+            presetId: annotationIdSchema,
             textOnly: z.boolean(),
             current: z.boolean(),
-            callRevision: z.string().optional(),
+            callRevision: z
+              .string()
+              .regex(/^[a-f0-9]{64}$/)
+              .optional(),
           })
           .strict()
           .parse(request.options);
         const s = await settings(),
-          prepared = prepareActionPreset(s, p.presetId);
-        if (
-          p.callRevision &&
-          !(await callPresetStorage().read()).library?.some(
-            (c) => c.revision.revision === p.callRevision,
+          prepared = prepareCallModel(s, p.presetId);
+        if (p.callRevision) {
+          const calls = await callStore.readChoices();
+          if (
+            calls.state !== 'ready' ||
+            !calls.choices.library?.some((c) => c.revision.revision === p.callRevision)
           )
-        )
-          throw new Error('Choose an approved Call.');
+            throw new Error('Choose an approved Call.');
+        }
         let currentText: string | undefined;
         if (p.current) {
           const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -324,19 +324,17 @@ export function initAnnotations(settings: () => Promise<Configuration>) {
           message: {
             action: 'attempts',
             ...(request.action === 'inspect'
-              ? { id: String(request.id) }
-              : { annotationId: String(request.annotationId) }),
+              ? { id: annotationIdSchema.parse(request.id) }
+              : { annotationId: annotationIdSchema.parse(request.annotationId) }),
           },
         });
         return result.attempts;
       }
-      if (request.action === 'stop' || request.action === 'save-result')
+      if (request.action === 'stop')
         return runnerRequest({
           operation: 'annotation',
-          message: { action: request.action, id: String(request.id) },
+          message: { action: request.action, id: annotationIdSchema.parse(request.id) },
         });
-      if (request.action === 'current-text')
-        throw new Error('Current text is captured through the runner.');
       throw new Error('Unknown annotation action.');
     })().then(
       (result) => reply({ success: true, result }),

@@ -146,6 +146,19 @@ function credentialForChoices(settings: Configuration, input: FrozenModel): stri
       (settings.sharedCredentials === 'saul' ? 'saul' : 'local')
     )
       throw new Error(SELECT_NEW_PRESET);
+    const key = input.preset?.connectionKey;
+    if (key) {
+      const connection = settings.connections.find((item) => item.key === key);
+      // An unbound standalone preset uses its frozen local account. A managed
+      // connection must still bind the account that the saved request selected.
+      if (
+        connection?.kind !== 'chatgpt-plan' ||
+        (connection.accountId !== undefined
+          ? connection.accountId !== input.plan?.accountId
+          : settings.sharedCredentials === 'saul')
+      )
+        throw new Error(SELECT_NEW_PRESET);
+    }
     validateSelection(
       {
         provider: input.provider,

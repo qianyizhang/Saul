@@ -213,7 +213,6 @@ struct ContentView: View {
                     Text(entry.createdAt, style: .time).font(.caption).foregroundStyle(.secondary)
                 }
             }
-            UnsavedAttemptNotice(model: model, entry: entry, showsExport: false)
             LookupAnswerText(
                 entry: entry, activity: model.selectedResponseActivity,
                 imageData: model.imageData(for: entry), imageLoading: model.imageLoading)
@@ -228,7 +227,7 @@ struct ContentView: View {
                     .font(AppStyle.caption)
             }
             if entry.status != "pending" {
-                if !["completed", "unsaved"].contains(entry.status) {
+                if entry.status != "completed" {
                     Text(entry.status.capitalized).font(.caption).foregroundStyle(.orange)
                 }
                 if let error = entry.error {

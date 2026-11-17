@@ -32,7 +32,8 @@ installation into personal Chrome and live-model spending are separate actions.
   in All open, and appends individually associated replies. Explicit empty selections block.
   Saved evidence is default; current page text is an explicit option. Images cannot be
   silently omitted. Text evidence only is explicit and recorded. Stop/failure/restart never
-  automatically resubmit. Save-only recovery never repeats inference.
+  automatically resubmit. A failed reply save reports failure; unsaved output may
+  be discarded and another response requires an explicit action.
 - Agent operations are list/read/create/append/edit/complete/reopen/delete/restore, single
   or batch, scoped to explicit URLs/IDs, with author attribution, revision conflicts and
   per-item outcomes. A scope identifies permitted records, not authority inferred from page text.
@@ -85,6 +86,10 @@ live model quality or an installed Codex panel. Temporary review evidence belong
 root `.artifacts/saul/e2e/` outcome bundle and is removed after review at closeout.
 
 ## Acceptance result — 2026-11-16
+
+This dated record describes the original implementation, including the then-existing
+save-only recovery. Current lifecycle behavior follows the product contract above
+and the [root lifecycle decision](../../../docs/architecture.md#lifecycle-ownership).
 
 `pnpm check` passed: 32 shared tests, 463 Saul unit/transport tests, strict TypeScript,
 lint/format/link checks, generated design verification, and native Swift/credential

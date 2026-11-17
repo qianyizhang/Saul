@@ -1,27 +1,41 @@
 import type { ActionRevision } from '../../native/action-protocol.mts';
 import { validRevision, validateActionModule } from '../../native/action-protocol.mts';
 import { record } from '../contracts/reading';
-import type { RunInput } from '../types/storage';
+import type { FrozenModel } from '../providers/request';
 
-export interface ActionChoice {
+export interface CallChoice {
   revision: ActionRevision;
   presetId: string;
 }
-export interface ActionState {
-  library?: ActionChoice[];
-  selected?: ActionChoice;
-  previous?: ActionChoice;
+export interface CallChoices {
+  library?: CallChoice[];
+  selected?: CallChoice;
+  previous?: CallChoice;
+}
+export interface CallDraft {
   candidate?: ActionRevision;
   prompt?: string;
   raw?: string;
   error?: string;
-  building?: boolean;
+}
+export type SavedCallDraft = CallDraft & { building?: boolean };
+export interface CallEditorState extends SavedCallDraft, CallChoices {
   blocked?: boolean;
 }
-export interface FrozenAction extends ActionChoice {
-  input?: RunInput;
+export type CallChoiceSource = { kind: 'chrome' } | { kind: 'shared'; revision: number };
+export type SavedCallChoices = { source: CallChoiceSource } & (
+  { state: 'ready'; choices: CallChoices } | { state: 'invalid'; error: string }
+);
+export interface CallEditorStorage {
+  readChoices(): Promise<SavedCallChoices>;
+  saveChoices(source: CallChoiceSource, choices: CallChoices): Promise<void>;
+  readDraft(): Promise<SavedCallDraft>;
+  saveDraft(draft: SavedCallDraft): Promise<void>;
 }
-export type ActionRequest =
+export interface FrozenCustomCall extends CallChoice {
+  input?: FrozenModel;
+}
+export type CallEditRequest =
   | { action: 'status' }
   | { action: 'build'; prompt: string; presetId: string }
   | { action: 'stop' }
@@ -31,8 +45,8 @@ export type ActionRequest =
   | { action: 'select'; revision: string; presetId: string }
   | { action: 'restore' }
   | { action: 'builtin' };
-export const ACTION_STATE_KEY = 'saul_summary_action_v1';
-export const ACTION_FORM_LIMITS = { prompt: 8000, presetId: 128, path: 4096 } as const;
+export const LEGACY_CALL_STATE_KEY = 'saul_summary_action_v1';
+export const CALL_FORM_LIMITS = { prompt: 8000, presetId: 128, path: 4096 } as const;
 export const BUILDER_PROMPT = `You write Saul action contract 1 modules. Return ONLY a JSON object with exactly:
 {"contractVersion":1,"name":"short name","description":"what it does","language":"typescript","source":"one complete module"}.
 The self-contained module exports default async function run(ctx): Promise<string>.
@@ -44,7 +58,7 @@ Use only these capabilities and standard JavaScript/erasable TypeScript. No impo
 Use a single call unless the user asks for a workflow needing more. Do not catch cancellation or model errors to present incomplete output as success. Loading only initializes the module; do not call run at top level.
 Revise the supplied candidate/selected source when present. Preserve useful behavior not affected by the user's request. Refuse incompatible requests in description and supply no executable module only if you cannot meet this contract.`;
 
-export function validateActionRequest(value: unknown): asserts value is ActionRequest {
+export function validateCallEditRequest(value: unknown): asserts value is CallEditRequest {
   if (!record(value) || typeof value.action !== 'string')
     throw new Error('Invalid action request.');
   const keys: Record<string, string[]> = {
@@ -72,22 +86,17 @@ export function validateActionRequest(value: unknown): asserts value is ActionRe
         (key === 'json'
           ? 100_000
           : key === 'prompt'
-            ? ACTION_FORM_LIMITS.prompt
+            ? CALL_FORM_LIMITS.prompt
             : key === 'path'
-              ? ACTION_FORM_LIMITS.path
-              : ACTION_FORM_LIMITS.presetId)
+              ? CALL_FORM_LIMITS.path
+              : CALL_FORM_LIMITS.presetId)
     )
       throw new Error('Invalid action ' + key + '.');
   }
   if ((value.action === 'load' || value.action === 'select') && !validRevision(value.revision))
     throw new Error('Invalid action revision.');
 }
-export async function actionState(): Promise<ActionState> {
-  const value: unknown = (await chrome.storage.local.get(ACTION_STATE_KEY))[ACTION_STATE_KEY] ?? {};
-  validateActionState(value);
-  return value;
-}
-export function validateActionState(value: unknown): asserts value is ActionState {
+export function validateCallEditorState(value: unknown): asserts value is CallEditorState {
   if (
     !record(value) ||
     Object.keys(value).some(
@@ -121,8 +130,8 @@ export function validateActionState(value: unknown): asserts value is ActionStat
   if (value.library !== undefined) {
     if (!Array.isArray(value.library) || value.library.length > 128)
       throw new Error('Keep at most 128 call presets.');
-    for (const choice of value.library) validateActionState({ selected: choice });
-    const ids = value.library.map((c: ActionChoice) => `${c.revision.revision}:${c.presetId}`);
+    for (const choice of value.library) validateCallEditorState({ selected: choice });
+    const ids = value.library.map((c: CallChoice) => `${c.revision.revision}:${c.presetId}`);
     if (new Set(ids).size !== ids.length) throw new Error('Duplicate call presets.');
   }
   for (const key of ['selected', 'previous'] as const)
@@ -132,14 +141,14 @@ export function validateActionState(value: unknown): asserts value is ActionStat
         !record(choice) ||
         typeof choice.presetId !== 'string' ||
         !choice.presetId ||
-        choice.presetId.length > ACTION_FORM_LIMITS.presetId
+        choice.presetId.length > CALL_FORM_LIMITS.presetId
       )
         throw new Error('Invalid action preset reference.');
       revision(choice.revision);
     }
   if (value.candidate !== undefined) revision(value.candidate);
   for (const [key, limit] of [
-    ['prompt', ACTION_FORM_LIMITS.prompt],
+    ['prompt', CALL_FORM_LIMITS.prompt],
     ['raw', 100_000],
     ['error', 100_000],
   ] as const)

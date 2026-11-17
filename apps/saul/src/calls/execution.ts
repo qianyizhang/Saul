@@ -1,16 +1,16 @@
-import { actionHost } from '../actions/host';
+import { actionHost } from './host';
 import { planEvents } from '../providers/chatgpt-plan';
 import { streamModel } from '../providers/stream';
 import { parseSummary, summaryRequestInput } from '../digest/summary';
 import type { DigestSource, Summary } from '../digest/types';
-import type { RunInput } from '../types/storage';
+import type { FrozenModel } from '../providers/request';
 
 export type FrozenCall =
   | {
       kind: 'summarize';
       instructions: string;
       model:
-        | { kind: 'preset'; input: RunInput }
+        | { kind: 'preset'; input: FrozenModel }
         | {
             kind: 'plan';
             accountId: string;
@@ -19,7 +19,7 @@ export type FrozenCall =
             credentialOwner: 'local' | 'saul';
           };
     }
-  | { kind: 'script'; revision: string; input?: RunInput };
+  | { kind: 'script'; revision: string; input?: FrozenModel };
 
 export interface CapturedPageContext {
   title: string;

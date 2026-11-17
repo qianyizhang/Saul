@@ -4,9 +4,9 @@ export interface AnnotationAttempt {
   annotationId: string;
   url: string;
   revision: number;
-  status: 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled' | 'unsaved';
+  status: 'queued' | 'running' | 'saving' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
   createdAt: number;
-  input: import('../types/storage').RunInput;
+  input: import('../providers/request').ModelRequest;
   evidence: string;
   image?: string;
   raw: string;
@@ -19,12 +19,15 @@ export interface AnnotationDbOperations {
   DB_ANNOTATION_IMAGE: { payload: { id: string; image?: string; error?: string }; result: void };
   DB_ANNOTATION: { payload: AnnotationRequest; result: AnnotationResult };
   DB_ANNOTATION_ATTEMPT: {
-    payload: {
-      action: 'save' | 'read' | 'recover';
-      attempt?: AnnotationAttempt;
-      id?: string;
-      annotationId?: string;
-    };
+    payload:
+      | { action: 'admit'; attempts: AnnotationAttempt[] }
+      | { action: 'save'; attempt: AnnotationAttempt }
+      | { action: 'complete'; attempt: AnnotationAttempt; revision: number }
+      | { action: 'read'; id?: string; annotationId?: string }
+      | { action: 'recover' };
     result: AnnotationAttempt[];
   };
+}
+export function activeAnnotationAttempt(attempt: AnnotationAttempt) {
+  return ['queued', 'running', 'saving'].includes(attempt.status);
 }

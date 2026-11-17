@@ -7,7 +7,7 @@ import Foundation
         stateCase("preset override preserves draft during unrelated configuration edit") { f in
             f.model.chooseAction(f.single.id)
             f.model.query = "word"
-            f.model.choosePreset(f.alternate.id)
+            f.model.chooseLookupPreset(f.alternate.id)
             try expect(f.model.currentPreset == f.alternate && f.model.query == "word", "Override lost input")
             var edited = f.configuration
             let index = edited.actions.firstIndex { $0.legacyMode == .spelling }!
@@ -20,7 +20,7 @@ import Foundation
         stateCase("new lookup clears override and uses action default") { f in
             f.model.chooseAction(f.single.id)
             f.model.query = "word"
-            f.model.choosePreset(f.alternate.id)
+            f.model.chooseLookupPreset(f.alternate.id)
             f.model.newQuery()
             let original = f.configuration.presets.first { $0.id == f.single.presetID }
             try expect(
@@ -33,27 +33,15 @@ import Foundation
             try expect(
                 f.model.currentPreset == f.alternate
                     && f.model.inputFields == ["fuzzy term", "fuzzy context"], "Action defaults/fields wrong")
-            let submits = try f.model.prepareLauncher("ellicitate")
+            try f.model.submitLauncher("ellicitate", after: Task {})
             try expect(
-                !submits && f.model.inputValues == ["fuzzy term": "ellicitate"],
+                !f.model.launcherPending && f.model.inputValues == ["fuzzy term": "ellicitate"],
                 "Launcher sent incomplete action")
-            f.model.inputValues["fuzzy context"] = "draw out"
+            f.model.setInput("draw out", for: "fuzzy context")
             let snapshot = try f.multi.prepare(
                 values: f.model.inputValues, preset: f.alternate, models: f.model.models,
                 provider: .chatGPTPlan)
             try expect(snapshot.inputValues == f.model.inputValues, "Completed launcher inputs lost")
-        },
-        stateCase("busy guards preserve action and reject configuration saves") { f in
-            f.model.chooseAction(f.multi.id)
-            f.model.busy = true
-            f.model.chooseAction(f.single.id)
-            try expect(f.model.currentAction?.id == f.multi.id, "Busy action changed")
-            try expectThrows(
-                EZError.self, matching: { $0.message.contains("Configuration cannot be changed") }
-            ) {
-                try f.model.saveConfiguration(Configuration())
-            }
-            try expect(f.model.configuration == f.configuration, "Rejected save changed configuration")
         },
         stateCase("deleting configuration clears selected action without restoring starters") { f in
             try f.model.saveConfiguration(Configuration())
@@ -146,25 +134,6 @@ import Foundation
             try expectEqual(f.model.currentPreset, selected, "A removed model replaced the selected route")
             f.model.chooseLookupPreset(f.alternate.id)
             try expectEqual(f.model.currentPreset, f.alternate, "A supported preset could not be selected")
-        },
-        stateCase("thinking light follows only the selected pending lookup while busy") { f in
-            let entry = try f.selectLookup()
-            f.model.responseActivity = .thinking
-            try expect(f.model.selectedResponseActivity == nil, "Idle history showed thinking")
-            f.model.busy = true
-            try expect(f.model.selectedResponseActivity == .thinking, "Active reasoning was hidden")
-            f.model.responseActivity = .responding
-            try expect(
-                f.model.selectedResponseActivity?.showsThinkingLight == false,
-                "Responding kept thinking light")
-            f.model.entries[0].status = "completed"
-            try expect(f.model.selectedResponseActivity == nil, "Completed history showed activity")
-            f.model.entries[0].status = "pending"
-            f.model.selection = UUID()
-            try expect(f.model.selectedResponseActivity == nil, "Missing selection showed activity")
-            f.model.selection = entry.id
-            f.model.busy = false
-            try expect(f.model.selectedResponseActivity == nil, "Stopped lookup showed activity")
         },
         stateCase("offline model refuses sending despite ready account and valid draft") { f in
             f.model.signedIn = true

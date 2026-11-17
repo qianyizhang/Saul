@@ -205,23 +205,21 @@ it('sends separately labeled images through Responses and rejects invalid image 
   ]);
   expect(() => validatePlanRequest({ ...p, images: ['https://evil.test/image'] })).toThrow();
 });
-it('freezes runs, appends one reply, and recovers save-only without another model call', async () => {
+it('requires an explicit new reply after a terminal write fails and preserves a committed reply on lost acknowledgement', async () => {
   const sql = database();
   annotationStore(sql, 'p', request({ action: 'create', capture }));
-  let rejectAppend = true,
-    rejectCompletion = true,
-    calls = 0;
-  const db: DbCall = async (message) => {
-    const m = message as DbRequest;
-    if (m.type === 'DB_ANNOTATION') {
-      if (m.payload.operation.action === 'change' && rejectAppend)
-        throw new Error('Store temporarily unavailable');
-      return annotationStore(sql, 'p', m.payload) as never;
-    }
-    if (m.type === 'DB_ANNOTATION_ATTEMPT') {
-      if (m.payload.attempt?.status === 'completed' && rejectCompletion)
-        throw new Error('Completion status unavailable');
-      return annotationAttempts(sql, 'p', m.payload) as never;
+  let rejectCompletion = true;
+  let calls = 0;
+  const db: DbCall = async (requestMessage) => {
+    const message = requestMessage as DbRequest;
+    if (message.type === 'DB_ANNOTATION')
+      return annotationStore(sql, 'p', message.payload) as never;
+    if (message.type === 'DB_ANNOTATION_ATTEMPT') {
+      if (message.payload.action === 'complete' && rejectCompletion)
+        throw new Error('Result storage unavailable');
+      const result = annotationAttempts(sql, 'p', message.payload);
+      if (message.payload.action === 'complete') throw new Error('Lost acknowledgement');
+      return result as never;
     }
     throw new Error('Unexpected operation');
   };
@@ -238,47 +236,59 @@ it('freezes runs, appends one reply, and recovers save-only without another mode
     systemPrompt: '',
     userPrompt: '',
   } as RunInput;
-  const result = await runner.request(
-    { action: 'respond', url, ids: [capture.id], presetId: 'p', textOnly: false, current: false },
-    { input, credential: '' },
-  );
-  await expect
-    .poll(
-      () => annotationAttempts(sql, 'p', { action: 'read', annotationId: capture.id })[0]?.status,
-    )
-    .toBe('unsaved');
-  rejectAppend = false;
-  await expect(runner.request({ action: 'save-result', id: result.ids![0]! })).rejects.toThrow(
-    'Completion status unavailable',
-  );
-  expect(
-    (await runner.request({ action: 'attempts', id: result.ids![0]! })).attempts![0]!.status,
-  ).toBe('unsaved');
-  rejectCompletion = false;
-  await runner.request({ action: 'save-result', id: result.ids![0]! });
-  expect(calls).toBe(1);
-  expect(
+  const respond = () =>
+    runner.request(
+      { action: 'respond', url, ids: [capture.id], presetId: 'p', textOnly: false, current: false },
+      { choices: input, credential: '' },
+    );
+  const replies = () =>
     annotationStore(sql, 'p', request({ action: 'read', id: capture.id, image: false })).record!
-      .replies,
-  ).toHaveLength(1);
-  await expect(runner.request({ action: 'save-result', id: result.ids![0]! })).rejects.toThrow(
-    /No completed/,
-  );
+      .replies;
+  const first = (await respond()).ids![0]!;
+  await expect
+    .poll(() => annotationAttempts(sql, 'p', { action: 'read', id: first })[0]?.status)
+    .toBe('failed');
+  expect(replies()).toEqual([]);
+  expect(calls).toBe(1);
+  rejectCompletion = false;
+  const second = (await respond()).ids![0]!;
+  expect(second).not.toBe(first);
+  await expect
+    .poll(() => annotationAttempts(sql, 'p', { action: 'read', id: second })[0]?.status)
+    .toBe('completed');
+  expect(replies()).toEqual([expect.objectContaining({ id: second, text: 'Reviewed reply' })]);
+  expect(calls).toBe(2);
 });
 
-it('marks admitted batch inputs failed when a later input cannot be saved, without starting inference', async () => {
+it('rolls back the admitted input batch when one selected revision changed before saving', async () => {
   const sql = database();
   annotationStore(sql, 'p', request({ action: 'create', capture }));
   const second = { ...capture, id: 'annotation-two' };
   annotationStore(sql, 'p', request({ action: 'create', capture: second }));
   let calls = 0;
-  const db: DbCall = async (message) => {
-    const m = message as DbRequest;
-    if (m.type === 'DB_ANNOTATION') return annotationStore(sql, 'p', m.payload) as never;
-    if (m.type === 'DB_ANNOTATION_ATTEMPT') {
-      if (m.payload.attempt?.annotationId === second.id && m.payload.attempt.status === 'running')
-        throw new Error('Input write failed');
-      return annotationAttempts(sql, 'p', m.payload) as never;
+  const db: DbCall = async (requestMessage) => {
+    const message = requestMessage as DbRequest;
+    if (message.type === 'DB_ANNOTATION')
+      return annotationStore(sql, 'p', message.payload) as never;
+    if (message.type === 'DB_ANNOTATION_ATTEMPT') {
+      if (message.payload.action === 'admit')
+        annotationStore(
+          sql,
+          'p',
+          request({
+            action: 'change',
+            changes: [
+              {
+                id: second.id,
+                revision: 1,
+                operationId: 'edit-before-save',
+                action: 'edit',
+                text: 'Edited',
+              },
+            ],
+          }),
+        );
+      return annotationAttempts(sql, 'p', message.payload) as never;
     }
     throw new Error('Unexpected operation');
   };
@@ -296,41 +306,28 @@ it('marks admitted batch inputs failed when a later input cannot be saved, witho
         textOnly: true,
         current: false,
       },
-      { input: { remote: { model: 'gpt-6' } } as RunInput, credential: '' },
+      { choices: { remote: { model: 'gpt-6' } } as RunInput, credential: '' },
     ),
-  ).rejects.toThrow('Input write failed');
+  ).rejects.toThrow('Annotation changed before its inputs were saved');
   expect(calls).toBe(0);
-  expect(annotationAttempts(sql, 'p', { action: 'read' }).map((a) => a.status)).toEqual([
-    'failed',
-    'failed',
-  ]);
+  expect(annotationAttempts(sql, 'p', { action: 'read' })).toEqual([]);
 });
 
-it('interruption recovery handles deleted active attempts without blocking the next runner', () => {
+it('deletion settles saved queued attempts and rejects late replies', () => {
   const db = database();
   annotationStore(db, 'p', request({ action: 'create', capture }));
-  const input = {
-    provider: 'openai-compatible',
-    remote: { model: 'gpt-6', baseUrl: 'http://fixture' },
-    local: {},
-    context: { selection: '', pageUrl: url, pageTitle: '' },
-    systemPrompt: '',
-    userPrompt: '',
-  } as RunInput;
-  annotationAttempts(db, 'p', {
-    action: 'save',
-    attempt: {
-      id: 'in-flight',
-      annotationId: capture.id,
-      url,
-      revision: 1,
-      status: 'running',
-      createdAt: Date.now(),
-      input,
-      evidence: 'Saved',
-      raw: 'Partial reply',
-    },
-  });
+  const attempt = {
+    id: 'in-flight',
+    annotationId: capture.id,
+    url,
+    revision: 1,
+    status: 'queued' as const,
+    createdAt: Date.now(),
+    input: { remote: { model: 'gpt-6' } } as RunInput,
+    evidence: 'Saved',
+    raw: '',
+  };
+  annotationAttempts(db, 'p', { action: 'admit', attempts: [attempt] });
   annotationStore(
     db,
     'p',
@@ -341,8 +338,15 @@ it('interruption recovery handles deleted active attempts without blocking the n
   );
   expect(() => annotationAttempts(db, 'p', { action: 'recover' })).not.toThrow();
   expect(annotationAttempts(db, 'p', { action: 'read', id: 'in-flight' })[0]!.status).toBe(
-    'interrupted',
+    'cancelled',
   );
+  expect(() =>
+    annotationAttempts(db, 'p', {
+      action: 'complete',
+      attempt: { ...attempt, status: 'completed', raw: 'Late reply' },
+      revision: 1,
+    }),
+  ).toThrow(/no longer available/);
 });
 
 it('shares the two-invocation limit across separately admitted annotation batches', async () => {
@@ -369,7 +373,7 @@ it('shares the two-invocation limit across separately admitted annotation batche
   for (const id of ids)
     await runner.request(
       { action: 'respond', url, ids: [id], presetId: 'p', textOnly: true, current: false },
-      { input: { remote: { model: 'gpt-6' } } as RunInput, credential: '' },
+      { choices: { remote: { model: 'gpt-6' } } as RunInput, credential: '' },
     );
   await expect.poll(() => releases.length).toBe(2);
   expect(maximum).toBe(2);

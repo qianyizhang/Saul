@@ -1,7 +1,6 @@
 import { runLabel } from './run-status';
 import { PastAttemptContent } from './PastAttemptContent';
 import { ControlIcon } from './ControlIcon';
-import { sendReadingMessage } from '../storage/client';
 import { GeneratedImageView } from './GeneratedImageView';
 import { useRef, useState } from 'react';
 import { X, Pin, Bookmark, Square } from 'lucide-react';
@@ -48,7 +47,6 @@ export function ExplanationCard({
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const moreButton = useRef<HTMLButtonElement>(null);
-  const [savingImage, setSavingImage] = useState(false);
   const anchored = useAnchoredPosition(range, ref);
   const style = range
     ? anchored
@@ -179,26 +177,6 @@ export function ExplanationCard({
           <p role="alert" className="text-sm text-danger bg-danger-wash p-3 rounded-control mb-3">
             {latest.error}
           </p>
-        )}
-        {latest.reason === 'save-failed' && latest.hasImage && (
-          <div>
-            {answer.id !== latest.id && (
-              <GeneratedImageView selectionId={passage.snapshot.id} runId={latest.id} />
-            )}
-            <button
-              className="px-2 py-1.5 text-sm rounded-control border border-line hover:bg-wash"
-              disabled={savingImage}
-              onClick={() => {
-                setSavingImage(true);
-                setError('');
-                void sendReadingMessage({ action: 'save-image', selectionId: passage.snapshot.id })
-                  .catch((e) => setError(String(e)))
-                  .finally(() => setSavingImage(false));
-              }}
-            >
-              {savingImage ? 'Saving…' : 'Retry saving image'}
-            </button>
-          </div>
         )}
         {answer.id !== latest.id && <p className="text-xs text-muted mb-2">Previous answer</p>}
         {answer.inspection?.followUpQuestion && (

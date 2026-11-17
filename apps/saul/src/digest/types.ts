@@ -14,6 +14,7 @@ export type ItemStatus =
   | 'queued'
   | 'capturing'
   | 'running'
+  | 'saving'
   | 'completed'
   | 'failed'
   | 'interrupted'
@@ -59,8 +60,8 @@ export interface DigestItem {
 }
 export interface DigestMeta {
   credentialOwner?: 'local' | 'saul';
-  action?: import('../actions/contract').FrozenAction;
-  summaryInput?: import('../types/storage').RunInput;
+  action?: import('../calls/contract').FrozenCustomCall;
+  summaryInput?: import('../providers/request').FrozenModel;
   pdfProcessing?: PdfProcessing; // Missing on old batches means local parsing.
   id: string;
   windowTitle: string;
@@ -124,7 +125,7 @@ export interface DigestOperations {
 export type DigestRequest = DigestOperations[keyof DigestOperations]['request'];
 export type DigestResult<T extends DigestRequest> = DigestOperations[T['action']]['result'];
 export const activeItem = (item: DigestItem) =>
-  ['queued', 'capturing', 'running'].includes(item.status);
+  ['queued', 'capturing', 'running', 'saving'].includes(item.status);
 
 export interface DigestDbOperations {
   DB_DIGEST_ACTION_REVISIONS: { payload: undefined; result: string[] };
@@ -134,6 +135,8 @@ export interface DigestDbOperations {
   };
   DB_DIGEST_CREATE: { payload: DigestBatch; result: DigestBatch };
   DB_DIGEST_GET: { payload: { id: string }; result: DigestBatch };
+  DB_DIGEST_RETRY: { payload: { id: string }; result: DigestBatch };
+  DB_DIGEST_INTERRUPT: { payload: { id: string; error: string }; result: DigestBatch };
   DB_DIGEST_LIST: { payload: undefined; result: DigestOverview[] };
   DB_DIGEST_ITEM: {
     payload: { id: string; item: DigestItem; source?: DigestSource };
@@ -142,4 +145,25 @@ export interface DigestDbOperations {
   DB_DIGEST_SOURCE: { payload: { id: string; index: number }; result: DigestSource | undefined };
   DB_DIGEST_RECOVER: { payload: undefined; result: void };
   DB_DIGEST_DELETE: { payload: { id: string }; result: void };
+}
+
+export const retryableItem = (item: DigestItem) =>
+  activeItem(item) || ['failed', 'interrupted', 'cancelled'].includes(item.status);
+
+export function restartItem(item: DigestItem): DigestItem {
+  const next = { ...item, status: 'queued' as const, raw: '' };
+  delete next.error;
+  delete next.summary;
+  delete next.finalText;
+  delete next.calls;
+  delete next.progress;
+  return next;
+}
+
+export function interruptItem(item: DigestItem, error: string): DigestItem {
+  const next = { ...item, status: 'interrupted' as const, error };
+  delete next.summary;
+  delete next.finalText;
+  delete next.progress;
+  return next;
 }

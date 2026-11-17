@@ -25,20 +25,27 @@ unreadable provider record does not prevent changing presentation.
 Runtime composition stays in `entrypoints/`. Source modules follow domain and
 lifecycle ownership; callers import the interface for the operation they need.
 
-| Module                          | Responsibility                                                                                                                                           |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `configuration/`                | Connection, Preset and Action definitions; inspection, execution resolution and revisioned persistence.                                                  |
-| `settings/`                     | One surface's draft and edit/save/review/reset lifecycle.                                                                                                |
-| `providers/`                    | Execute prepared model requests; stream events, images and final credential-route checks.                                                                |
-| `native/`                       | Browser-side native transport and tab operations. `config-transport.ts` validates native configuration replies without owning configuration policy.      |
-| `app/`, `surface/`              | Workspace/settings views and in-page reading views.                                                                                                      |
-| `capture/`, `reading/`          | Selection/context capture, prompt rendering, anchors, markers and reading job lifecycle.                                                                 |
-| `annotations/`                  | Annotation capture, revisioned changes and reply lifecycle.                                                                                              |
-| `digest/`, `calls/`, `actions/` | Page capture and saved results, frozen Call execution, and custom Call host/selection lifecycle. Existing wire names retain their protocol meaning.      |
-| `storage/`                      | History/database operations, schema upgrades and presentation/notification preferences.                                                                  |
-| `speech/`                       | Speech routing and realtime session lifecycle.                                                                                                           |
-| `contracts/`, `types/`          | Validated browser protocols and capture/history data shapes. Configuration types live with their definition; provider request types live with execution. |
-| `parser/`, `design/`            | Incremental annotated-text parsing and generated design values/control symbols.                                                                          |
+| Module                 | Responsibility                                                                                                                                           |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `configuration/`       | Connection, Preset and Action definitions; inspection, execution resolution and revisioned persistence.                                                  |
+| `settings/`            | One surface's draft and edit/save/review/reset lifecycle.                                                                                                |
+| `providers/`           | Execute prepared model requests; stream events, images and final credential-route checks.                                                                |
+| `native/`              | Browser-side native transport and tab operations. `config-transport.ts` validates native configuration replies without owning configuration policy.      |
+| `app/`, `surface/`     | Workspace/settings views and in-page reading views.                                                                                                      |
+| `capture/`, `reading/` | Selection/context capture, prompt rendering, anchors, markers and reading job lifecycle.                                                                 |
+| `annotations/`         | Annotation capture, revisioned changes and reply lifecycle.                                                                                              |
+| `calls/`               | Call admission and execution; custom Call editing, storage and native host adapter.                                                                      |
+| `digest/`              | Page and PDF capture, batch scheduling and saved Call results.                                                                                           |
+| `storage/`             | History/database operations, schema upgrades and presentation/notification preferences.                                                                  |
+| `speech/`              | Speech routing and realtime session lifecycle.                                                                                                           |
+| `contracts/`, `types/` | Validated browser protocols and capture/history data shapes. Configuration types live with their definition; provider request types live with execution. |
+| `parser/`, `design/`   | Incremental annotated-text parsing and generated design values/control symbols.                                                                          |
+
+The current [ChatGPT plan module](../src/providers/chatgpt-plan.ts) also owns the
+helper port and control-request transport used by history and account controls.
+That transport has not yet been separated into `native/`; the module table's
+provider responsibility does not describe this additional implementation role.
+Lifecycle changes follow the [root ownership decision](../../../docs/architecture.md#lifecycle-ownership).
 
 ### Configuration and editing lifecycles
 
@@ -119,9 +126,10 @@ The response is bounded to 20 MB of decoded image data and 4,096 pixels per edge
 The runner saves 200,000-character base64 chunks into the existing SQLite
 `response_structured` field. Offsets make acknowledgement replay idempotent;
 completion requires a complete image. Passage/history lists return metadata only;
-image bytes load for a selected attempt. A failed save retains exact bytes in the
-current runner for Download and Retry saving image, with no inference replay.
-Closing/restarting the runner loses unsaved in-memory output. Deletion makes late
+image bytes load for a selected attempt. A failed save reports failure and discards
+unsaved image bytes. Another generation requires an explicit new attempt.
+The runner owns read projections, including live activity and failed-save notices;
+the offscreen entry point does not assemble them. Deletion makes late
 writes inert and removes saved output through the existing foreign-key cascade.
 
 ## Persistence and anchors
@@ -269,9 +277,12 @@ as selected text. Summarize is the first and default Call, not the execution
 module's purpose. The [glossary](../GLOSSARY.md) owns these terms.
 
 The optional [custom Call](custom-actions.md) replaces the default Summarize behavior.
-`src/actions/manager.ts` owns builder/selection transitions in the offscreen runtime;
-trusted background messages own storage access because offscreen Chrome exposes
-runtime only. `src/calls/execution.ts` executes one frozen Call against one
+`src/calls/editor.ts` owns build and selection transitions in the offscreen runtime.
+`src/calls/store.ts` owns draft and saved-choice persistence in the background.
+The editor accesses that store over runtime messages. Draft writes do not resave
+choices, and admission reads saved choices from the same store.
+`src/calls/admission.ts` freezes new requests and resolves saved retry inputs;
+`src/calls/execution.ts` executes one frozen Call against one
 captured page through the existing model and custom-host adapters.
 `native/action-host.mts` is the independently installed
 `com.saul.actions` host. Its store stages without evaluation; explicit Load
@@ -372,10 +383,16 @@ with frozen instructions and model choices.
 
 Starts and retries serialize their checks against active sources. Each batch
 then runs independently with up to two workers. A new batch or retry cannot
-process a URL already queued, capturing, or generating in another batch. Stop
+process a URL already queued, capturing, generating, or saving in another batch. Stop
 and Delete abort only the target batch and wait for its workers to settle.
 Stop releases the control queue after signaling cancellation, so other sources
 can start while that batch settles.
+
+The runner publishes each completed result only after its row commit. Retry resets
+unfinished rows together while retaining frozen captures and completed results.
+Storage-failure interruption updates only active rows; it cannot overwrite a result
+whose save succeeded but whose acknowledgement was lost. No unsaved result queue
+or automatic inference replay is retained.
 
 The shared history schema is version 4. Browser import schema version 3 is a
 one-time import format for digest metadata and item/source rows. On restart,
@@ -453,12 +470,15 @@ values to native points and system font roles, without adding a runtime dependen
 
 The background [speech bridge](../src/speech/bridge.ts) accepts one bounded
 request per trusted Settings port. It reads saved settings, verifies the requested
-Speak preset still matches, and resolves only that provider's local API connection.
+Speak preset still matches, and resolves its saved official OpenAI API connection.
 The connection must use the official OpenAI endpoint; ChatGPT OAuth and other
 profiles are never fallbacks. The old native `speech` operation has been removed.
 
-The [Realtime owner](../src/speech/realtime.ts) creates an ephemeral client secret
-with the selected API key, then makes one text-input/audio-output WebSocket response.
+For a standalone connection, the [Realtime owner](../src/speech/realtime.ts) creates
+an ephemeral client secret with the selected local API key. For an opted-in shared
+connection, the bridge obtains that secret from the signed credential owner through
+`api-realtime`; the long-lived key stays with that owner. Realtime then makes one
+text-input/audio-output WebSocket response.
 No microphone or WebRTC permission is needed. It receives PCM16 at 24 kHz and
 packages completed audio as WAV for the preview. It bounds text to 512 characters,
 audio to 6 MB and the whole operation to 90 seconds. Redirects, incomplete/failed
@@ -499,7 +519,10 @@ Calls and native tools. `native/annotation-store.mts` owns additive browser-spec
 the existing history store, scoped by profile owner. It is the only annotation writer;
 EZ does not project these tables. They do not change shared schema version 4 or the
 existing passage/summary deletion meanings. `runner.ts` owns frozen attempts, at most
-two active generations, interruption recovery and save-only completion. No extra helper
+two active generations, interruption recovery and terminal outcomes. The persistent
+owner admits all selected inputs together against their reviewed revisions, then
+commits the final reply and completed attempt together. Failed saves report
+failure without a save-only queue or inference replay. No extra helper
 or database is introduced. Expired deleted rows and cascading attempt images are
 removed on annotation access and offscreen startup recovery.
 

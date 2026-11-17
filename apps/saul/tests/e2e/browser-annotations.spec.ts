@@ -234,6 +234,26 @@ test('captures text before opening the native panel, saves drafts, replies throu
       select.value = select.options[1]!.value;
       select.dispatchEvent(new Event('change', { bubbles: true }));
     });
+    const inferenceBefore = fixtureServer.requests.length;
+    sandbox.rejectHistoryWriteOnce(
+      ({ type, payload }) =>
+        type === 'DB_ANNOTATION_ATTEMPT' && (payload as { action: string }).action === 'complete',
+    );
+    await panel.click('Run · 1');
+    await expect
+      .poll(() =>
+        panel.evaluate(
+          () => document.querySelector('.annotation-editor [role="alert"]')?.textContent,
+        ),
+      )
+      .toContain('Could not save the annotation response');
+    expect(
+      await panel.evaluate(() => document.querySelectorAll('.annotation-replies li').length),
+    ).toBe(0);
+    expect(await panel.evaluate(() => document.body.textContent)).not.toContain(
+      'Save reply without generating',
+    );
+    expect(fixtureServer.requests).toHaveLength(inferenceBefore + 1);
     await panel.click('Run · 1');
     await expect
       .poll(
@@ -241,11 +261,17 @@ test('captures text before opening the native panel, saves drafts, replies throu
         { timeout: 15000 },
       )
       .toBe(1);
+    expect(fixtureServer.requests).toHaveLength(inferenceBefore + 2);
     const body = fixtureServer.requests.at(-1)!.body;
     expect(body).toContain('Untrusted page evidence');
     expect(body).toContain('image_url');
     expect(body).toContain('Explain the selected concept');
-    await panel.click('Inspect input/output');
+    await panel.evaluate(() => {
+      const inspect = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+        (button) => button.textContent === 'Inspect input/output',
+      )!;
+      inspect.click();
+    });
     await expect
       .poll(() => panel.evaluate(() => document.body.textContent))
       .toContain('Recorded model input/output');

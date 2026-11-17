@@ -94,7 +94,7 @@ export interface DbOperations extends DigestDbOperations, AnnotationDbOperations
   DB_FINISH: {
     payload: {
       runId: string;
-      raw: string;
+      raw?: string;
       status: Extract<RunStatus, 'completed' | 'failed' | 'interrupted' | 'cancelled'>;
       error?: string;
       reason?: string;

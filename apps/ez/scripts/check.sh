@@ -2,8 +2,16 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source scripts/lib/swift-build.sh
-state_sources=(Sources/EZ/AppModel.swift Sources/EZ/GenerationState.swift Sources/EZ/ConnectionState.swift
-    Sources/EZ/SketchDraft.swift)
+state_sources=(
+    Sources/EZ/AppModel.swift
+    Sources/EZ/ConfigurationEditor.swift
+    Sources/EZ/ConnectionAvailability.swift
+    Sources/EZ/ConnectionChecks.swift
+    Sources/EZ/LookupDraft.swift
+    Sources/EZ/LookupImageLoader.swift
+    Sources/EZ/LookupRequest.swift
+    Sources/EZ/SketchDraft.swift
+)
 kind="${1:-all}"
 if [[ $# -gt 0 ]]; then shift; fi
 case "$kind" in

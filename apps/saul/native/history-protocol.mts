@@ -40,6 +40,8 @@ export const HISTORY_OPERATIONS = {
   DB_DIGEST_ACTION_REVISIONS: 'read',
   DB_DIGEST_CREATE: 'repeatable-write',
   DB_DIGEST_GET: 'read',
+  DB_DIGEST_RETRY: 'repeatable-write',
+  DB_DIGEST_INTERRUPT: 'repeatable-write',
   DB_DIGEST_LIST: 'read',
   DB_DIGEST_ITEM: 'repeatable-write',
   DB_DIGEST_SOURCE: 'read',

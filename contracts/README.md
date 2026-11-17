@@ -34,7 +34,9 @@ outcome, and accepts explicit cancellation. Both adapters must:
 - Keep terminal success distinct from partial/interrupted/provider-error output.
 - Require the provider's completion signal and successful local save before
   presenting a saved successful result.
-- Preserve available partial output and honest errors after cancellation/failure.
+- Preserve partial output when it can be saved, and report cancellation/failure honestly.
+- A failed save may discard unsaved output. Report that it was not confirmed saved;
+  there is no save-only retry. Another generation requires an explicit user action.
 - Never resubmit after restart, import or uncertain loss without an explicit action.
 - Keep dismissing a view distinct from stopping work.
 - Keep draft restoration distinct from execution.
@@ -45,29 +47,29 @@ Concurrency, source capture and anchors are app-specific. History shares SQLite.
 owners: Saul's ReadingRunner and EZ's AttemptExecution via AppModel actions. They
 cover initial-save failure, completed and saved output, terminal-save failure,
 provider failure, missing completion and cancellation. The common assertions are
-provider-call count, retained output and saved success, not matching status enums.
-EZ projects a failed terminal save as **Unsaved** and retries only that frozen
-terminal record. Saul retains its existing failed/save-failed projection and
-durable recovery before an explicit new attempt. Neither app reports saved success
-from a provider completion signal alone.
+provider-call count, output presence and saved success, not matching status enums.
+Fixture version 2 makes output optional when the terminal save fails: a transient
+view may retain it, but neither app maintains a dedicated unsaved recovery lifecycle.
+Neither app reports saved success from a provider completion signal alone. Saved
+history and configuration remain intact unless explicitly deleted or reset.
 
 ## History operations
 
 Saul and EZ share the SQLite schema and these behavioral meanings, with native
 interfaces and record projections in each app:
 
-| Operation             | Shared outcome                                                                                                                                                                |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Read                  | Return literal saved prompts/output, including Unicode; never generate.                                                                                                       |
-| Save a frozen attempt | Repeating the same terminal save retains one record and its original input/output. Publish saved success only after storage acknowledges it.                                  |
-| Delete                | Refuse deletion while the other app owns an active attempt. A successful delete remains absent on reopen; the execution owner discards that attempt's unsaved recovery state. |
-| Open a store          | Reject an unknown newer schema, preserving it for recovery.                                                                                                                   |
+| Operation             | Shared outcome                                                                                                                                                         |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Read                  | Return literal saved prompts/output, including Unicode; never generate.                                                                                                |
+| Save a frozen attempt | Repeating the same terminal save retains one record and its original input/output. Publish saved success only after storage acknowledges it.                           |
+| Delete                | Refuse deletion while the other app owns an active attempt. A successful delete remains absent on reopen; the execution owner invalidates live state for that attempt. |
+| Open a store          | Reject an unknown newer schema, preserving it for recovery.                                                                                                            |
 
 [History fixtures](fixtures/history.json) run against the production Node and Swift
 stores: repeated terminal saves, durable deletion, foreign active-attempt guards,
 and newer-schema rejection. The existing [Attempt fixtures](fixtures/attempts.json)
 and execution-owner checks cover save failure, no inference replay and invalidated
-recovery. An upsert primitive is not permission to retry a deleted attempt.
+live state. An upsert primitive is not permission to retry a deleted attempt.
 
 Only Saul needs reconnect after Native Messaging loss. Its exhaustive
 [operation catalogue](../apps/saul/native/history-protocol.mts) owns admission and
@@ -77,8 +79,8 @@ keeping the same request identity. Delete, Clear and Bookmark stay single-attemp
 after an uncertain reply; migration transfers and unknown operations never
 reconnect automatically. Sender permissions remain separately validated.
 
-EZ accesses SQLite directly. It retains explicit Save again for the exact unsaved
-terminal snapshot, and never adds a reconnect loop or repeats generation. The
+EZ accesses SQLite directly. A storage failure ends the attempt with an honest
+error; it does not create a save-retry queue or repeat generation. The
 native implementations remain separate; this contract adds no Node dependency,
 shared process, runtime manifest or database migration.
 

@@ -3,20 +3,34 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { ActionManager } from '../src/actions/manager';
-import { actionHost } from '../src/actions/host';
-import { ACTION_STATE_KEY, type ActionState } from '../src/actions/contract';
+import { CallEditor } from '../src/calls/editor';
+import { createCallStore } from '../src/calls/store';
+import type { streamModel } from '../src/providers/stream';
+import { actionHost } from '../src/calls/host';
+import { LEGACY_CALL_STATE_KEY, type CallEditorState } from '../src/calls/contract';
 import { ActionStore } from '../.build/native/action-store.mjs';
 import { ActionRuntime } from '../.build/native/action-runtime.mjs';
 import type { DbCall, RunInput } from '../src/types/storage';
 import type { ModelEvent } from '../src/providers/events';
-import { prepareActionPreset } from '../src/actions/configuration';
+import { prepareCallModel } from '../src/calls/configuration';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 import { starterConfiguration } from '../src/configuration/definition';
-import { prepareFrozenRun } from '../src/reading/configuration';
+import { prepareFrozenPreset } from '../src/configuration/resolve';
 
-vi.mock('../src/actions/host', () => ({ actionHost: vi.fn() }));
-let saved: ActionState;
+vi.mock('../src/calls/host', () => ({ actionHost: vi.fn() }));
+let saved: CallEditorState;
+let local: Record<string, unknown>;
+function readLocal(keys: string | string[]) {
+  return Object.fromEntries(
+    (typeof keys === 'string' ? [keys] : keys).map((key) => [
+      key,
+      key === LEGACY_CALL_STATE_KEY ? saved : local[key],
+    ]),
+  );
+}
+function writeLocal(values: Record<string, unknown>) {
+  Object.assign(local, structuredClone(values));
+}
 let root: string;
 let store: ActionStore;
 let runtime: ActionRuntime;
@@ -36,20 +50,27 @@ const input: RunInput = {
   userPrompt: '',
   context: { selection: '', pageTitle: '', pageUrl: '' },
 };
+function editor(generate?: typeof streamModel) {
+  return new CallEditor({
+    db,
+    prepare: async () => ({ choices: input, credential: '' }),
+    generate,
+    storage: createCallStore(),
+  });
+}
 const db = vi.fn(async () => ['a'.repeat(64)]) as unknown as DbCall;
 beforeEach(async () => {
   vi.clearAllMocks();
   saved = {};
-  root = await mkdtemp(join(tmpdir(), 'saul-action-manager-'));
+  local = {};
+  root = await mkdtemp(join(tmpdir(), 'saul-call-editor-'));
   store = new ActionStore(join(root, 'revisions'));
   runtime = new ActionRuntime(store);
   vi.stubGlobal('chrome', {
     storage: {
       local: {
-        get: vi.fn(async () => ({ [ACTION_STATE_KEY]: structuredClone(saved) })),
-        set: vi.fn(async (v: Record<string, ActionState>) => {
-          saved = structuredClone(v[ACTION_STATE_KEY]!);
-        }),
+        get: vi.fn(async (keys) => structuredClone(readLocal(keys))),
+        set: vi.fn(async (values) => writeLocal(values)),
       },
     },
   });
@@ -68,7 +89,7 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
   vi.unstubAllGlobals();
 });
-async function settle(manager: ActionManager) {
+async function settle(manager: CallEditor) {
   await vi.waitFor(async () =>
     expect((await manager.request({ action: 'status' })).building).toBe(false),
   );
@@ -79,11 +100,8 @@ it('creates, checks, previews, explicitly loads and revises without invoking the
     yield { type: 'delta', text: JSON.stringify(module) };
     yield { type: 'complete' };
   });
-  const manager = new ActionManager(db, generate);
-  await manager.request(
-    { action: 'build', prompt: 'Make a summary', presetId: 'builder' },
-    { input, credential: '' },
-  );
+  const manager = editor(generate);
+  await manager.request({ action: 'build', prompt: 'Make a summary', presetId: 'builder' });
   const checked = await settle(manager);
   expect(checked.candidate?.approved).toBeUndefined();
   expect(checked.selected).toBeUndefined();
@@ -94,10 +112,7 @@ it('creates, checks, previews, explicitly loads and revises without invoking the
     presetId: 'runner',
   });
   expect(selected.selected?.presetId).toBe('runner');
-  await manager.request(
-    { action: 'build', prompt: 'Make it shorter', presetId: 'builder' },
-    { input, credential: '' },
-  );
+  await manager.request({ action: 'build', prompt: 'Make it shorter', presetId: 'builder' });
   await settle(manager);
   const request = generate.mock.calls.at(-1) as unknown as [RunInput];
   expect(JSON.parse(request[0].userPrompt)).toMatchObject({
@@ -118,28 +133,22 @@ it('retains malformed, refused and incomplete output for the next explicit revis
     yield { type: 'delta', text: response };
     if (complete) yield { type: 'complete' };
   });
-  const manager = new ActionManager(db, generate);
-  await manager.request(
-    { action: 'build', prompt: 'Create', presetId: 'builder' },
-    { input, credential: '' },
-  );
+  const manager = editor(generate);
+  await manager.request({ action: 'build', prompt: 'Create', presetId: 'builder' });
   let state = await settle(manager);
   expect(state.raw).toBe(response);
   expect(state.error).toContain('completed');
   expect(vi.mocked(actionHost).mock.calls.every(([r]) => r.action === 'prune')).toBe(true);
   complete = true;
   response = '{bad JSON';
-  await manager.request(
-    { action: 'build', prompt: 'Revise', presetId: 'builder' },
-    { input, credential: '' },
-  );
+  await manager.request({ action: 'build', prompt: 'Revise', presetId: 'builder' });
   state = await settle(manager);
   expect(state.raw).toBe(response);
   expect(state.candidate).toBeUndefined();
   expect(generate).toHaveBeenCalledTimes(2);
 });
 it('failed initialization and stale candidates preserve the selected action; rollback and built-in are explicit', async () => {
-  const manager = new ActionManager(db);
+  const manager = editor();
   const first = await manager.request({ action: 'stage', json: JSON.stringify(module) });
   const original = (
     await manager.request({
@@ -182,7 +191,7 @@ it('failed initialization and stale candidates preserve the selected action; rol
   expect(actionHost).toHaveBeenCalledTimes(calls);
 });
 it('does not adopt a loaded candidate when saving selection fails', async () => {
-  const manager = new ActionManager(db);
+  const manager = editor();
   const checked = await manager.request({ action: 'stage', json: JSON.stringify(module) });
   vi.mocked(chrome.storage.local.set).mockRejectedValueOnce(new Error('disk full'));
   const result = await manager.request({
@@ -194,15 +203,55 @@ it('does not adopt a loaded candidate when saving selection fails', async () => 
   expect(result.error).toContain('disk full');
 });
 
+it('keeps an acknowledged shared Call selected even when Chrome cannot save a draft', async () => {
+  let config: { revision: number; value: object } = { revision: 1, value: { library: [] } };
+  const writes: object[] = [];
+  local.saul_calls_unified = true;
+  vi.stubGlobal('chrome', {
+    storage: {
+      local: {
+        get: async (keys: string | string[]) => readLocal(keys),
+        set: async (values: Record<string, unknown>) => {
+          if (writes.length) throw new Error('Chrome disk full');
+          writeLocal(values);
+        },
+      },
+    },
+    runtime: {
+      sendNativeMessage: async (
+        _host: string,
+        { request }: { request: { action: string; value: object } },
+      ) => {
+        if (request.action === 'config-save') {
+          writes.push(request.value);
+          config = { revision: config.revision + 1, value: request.value };
+        }
+        return { event: { type: 'result', config } };
+      },
+    },
+  });
+  const manager = editor();
+  const { candidate } = await manager.request({ action: 'stage', json: JSON.stringify(module) });
+  const selected = await manager.request({
+    action: 'load',
+    revision: candidate!.revision,
+    presetId: 'preset',
+  });
+  expect(writes).toHaveLength(1);
+  expect(selected.selected?.revision.revision).toBe(candidate!.revision);
+  expect((await editor().request({ action: 'status' })).selected).toEqual(selected.selected);
+});
+
 it('a failed initial builder save preserves idle state and never starts inference', async () => {
   const generate = vi.fn();
-  const manager = new ActionManager(db, generate);
-  await manager.ready;
+  const manager = editor(generate);
+  await manager.request({ action: 'status' });
   vi.mocked(chrome.storage.local.set).mockRejectedValueOnce(new Error('disk full'));
-  const failed = await manager.request(
-    { action: 'build', prompt: 'Keep my request', presetId: 'builder' },
-    { input, credential: '' },
-  );
+  const failed = await manager.request({
+    action: 'build',
+    prompt: 'Keep my request',
+    presetId: 'builder',
+  });
   expect(failed.error).toContain('disk full');
   expect(failed.prompt).toBe('Keep my request');
   expect(failed.building).not.toBe(true);
@@ -222,13 +271,10 @@ it('reconciles an interrupted builder without resending and cancels explicit cre
     );
     signal!.throwIfAborted();
   });
-  const manager = new ActionManager(db, generate);
+  const manager = editor(generate);
   expect((await manager.request({ action: 'status' })).error).toContain('interrupted');
   expect(generate).not.toHaveBeenCalled();
-  await manager.request(
-    { action: 'build', prompt: 'Try now', presetId: 'builder' },
-    { input, credential: '' },
-  );
+  await manager.request({ action: 'build', prompt: 'Try now', presetId: 'builder' });
   await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(1));
   const stopped = await manager.request({ action: 'stop' });
   expect(stopped.building).toBe(false);
@@ -239,11 +285,12 @@ it('reconciles an interrupted builder without resending and cancels explicit cre
 it('blocks creation before spending quota when the optional action helper is unavailable', async () => {
   vi.mocked(actionHost).mockRejectedValue(new Error('Action helper unavailable'));
   const generate = vi.fn();
-  const manager = new ActionManager(db, generate);
-  const result = await manager.request(
-    { action: 'build', prompt: 'Keep this request', presetId: 'builder' },
-    { input, credential: '' },
-  );
+  const manager = editor(generate);
+  const result = await manager.request({
+    action: 'build',
+    prompt: 'Keep this request',
+    presetId: 'builder',
+  });
   expect(result.error).toContain('unavailable');
   expect(result.prompt).toBe('Keep this request');
   expect(generate).not.toHaveBeenCalled();
@@ -255,15 +302,12 @@ it('retains bounded oversized builder output with its real error instead of a fa
     yield { type: 'delta', text: 'x'.repeat(100_001) };
     yield { type: 'complete' };
   });
-  const manager = new ActionManager(db, generate);
-  await manager.request(
-    { action: 'build', prompt: 'Create', presetId: 'builder' },
-    { input, credential: '' },
-  );
+  const manager = editor(generate);
+  await manager.request({ action: 'build', prompt: 'Create', presetId: 'builder' });
   const state = await settle(manager);
   expect(state.raw).toHaveLength(100_000);
   expect(state.error).toContain('output limit');
-  expect(saved.error).toContain('output limit');
+  expect((await editor().request({ action: 'status' })).error).toContain('output limit');
   expect(state.candidate).toBeUndefined();
 });
 
@@ -276,18 +320,18 @@ it('freezes preset choices, excludes credentials from saved input and blocks cha
     temperature: 0.6,
   };
   settings.configuration = starterConfiguration(settings);
-  const prepared = prepareActionPreset(settings, 'preset-current');
+  const prepared = prepareCallModel(settings, 'preset-current');
   expect(prepared.credential).toBe('PRIVATE-FIXTURE-KEY');
-  expect(JSON.stringify(prepared.input)).not.toContain('PRIVATE-FIXTURE-KEY');
+  expect(JSON.stringify(prepared.choices)).not.toContain('PRIVATE-FIXTURE-KEY');
   settings.configuration.presets[0]!.model = 'new-model';
-  expect(prepareFrozenRun(settings, prepared.input).input.remote.model).toBe('chosen');
+  expect(prepareFrozenPreset(settings, prepared.choices).input.remote.model).toBe('chosen');
   settings.openaiCompatible.baseUrl = 'https://other.example/v1';
-  expect(() => prepareFrozenRun(settings, prepared.input)).toThrow('Select a new preset');
-  expect(() => prepareActionPreset(settings, 'missing')).toThrow('existing saved preset');
+  expect(() => prepareFrozenPreset(settings, prepared.choices)).toThrow('Select a new preset');
+  expect(() => prepareCallModel(settings, 'missing')).toThrow('existing saved preset');
 });
 
 it('keeps every saved call preset selectable across restart and built-in selection', async () => {
-  const manager = new ActionManager(db);
+  const manager = editor();
   const choices = [];
   for (let n = 0; n < 4; n++) {
     const checked = await manager.request({
@@ -305,9 +349,9 @@ it('keeps every saved call preset selectable across restart and built-in selecti
     });
     choices.push(state.selected!);
   }
-  expect(saved.library).toHaveLength(4);
+  expect((await manager.request({ action: 'status' })).library).toHaveLength(4);
   await manager.request({ action: 'builtin' });
-  const restarted = new ActionManager(db);
+  const restarted = editor();
   expect((await restarted.request({ action: 'status' })).selected).toBeUndefined();
   const selected = await restarted.request({
     action: 'select',
@@ -327,4 +371,24 @@ it('keeps every saved call preset selectable across restart and built-in selecti
   const last = prunes.at(-1)![0];
   if (last.action !== 'prune') throw new Error('Expected prune');
   for (const choice of choices) expect(last.protect).toContain(choice.revision.revision);
+});
+
+it('adopts both choices from the old Chrome record without letting it become a second authority', async () => {
+  const original = await store.stage(module);
+  const next = await store.stage({ ...module, source: 'export default async () => "next";' });
+  const previous = { revision: await runtime.load(original.revision), presetId: 'previous' };
+  const selected = { revision: await runtime.load(next.revision), presetId: 'selected' };
+  saved = { selected, previous };
+  expect(await editor().request({ action: 'status' })).toMatchObject({
+    selected,
+    previous,
+    library: [previous, selected],
+  });
+  expect(saved).toEqual({ selected, previous });
+  saved = { selected: previous };
+  expect(await editor().request({ action: 'status' })).toMatchObject({
+    selected,
+    previous,
+    library: [previous, selected],
+  });
 });

@@ -1,10 +1,10 @@
-import type { AnnotationAttempt } from './attempts';
+import { activeAnnotationAttempt, type AnnotationAttempt } from './attempts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { annotationMessage, annotations, attempts } from './client';
 import { annotationPanelKey, annotationVersionKey } from './routing';
 import type { Annotation, AnnotationChange, AnnotationSummary } from './contract';
 import type { ModelPreset } from '../configuration/definition';
-import type { ActionChoice } from '../actions/contract';
+import type { CallChoice } from '../calls/contract';
 import './panel.css';
 
 export function AnnotationPanel({ windowId }: { windowId: number }) {
@@ -14,7 +14,7 @@ export function AnnotationPanel({ windowId }: { windowId: number }) {
   const [filter, setFilter] = useState<'open' | 'done' | 'deleted' | 'all'>('open'),
     [checked, setChecked] = useState<string[]>([]);
   const [error, setError] = useState(''),
-    [choices, setChoices] = useState<{ presets: ModelPreset[]; calls: ActionChoice[] }>({
+    [choices, setChoices] = useState<{ presets: ModelPreset[]; calls: CallChoice[] }>({
       presets: [],
       calls: [],
     });
@@ -93,9 +93,7 @@ export function AnnotationPanel({ windowId }: { windowId: number }) {
     };
   }, [refresh, windowId]);
   useEffect(() => {
-    void annotationMessage<typeof choices>({ action: 'choices' }).then(setChoices, (e) =>
-      setError(String(e)),
-    );
+    void annotationMessage({ action: 'choices' }).then(setChoices, (e) => setError(String(e)));
   }, []);
   const targets = checked.length
     ? records.filter((a) => checked.includes(a.id))
@@ -252,9 +250,6 @@ export function AnnotationPanel({ windowId }: { windowId: number }) {
                   .then(
                     () => {
                       setSelected(targets[0]?.id);
-                      void chrome.storage.session.set({
-                        [annotationVersionKey]: crypto.randomUUID(),
-                      });
                     },
                     (e) => setError(String(e)),
                   )
@@ -269,6 +264,10 @@ export function AnnotationPanel({ windowId }: { windowId: number }) {
     </section>
   );
 }
+type CommentDraft =
+  | { phase: 'loading' | 'saved' | 'saving'; text: string }
+  | { phase: 'blocked'; text: string; error: string };
+
 function AnnotationEditor({
   id,
   url,
@@ -281,74 +280,86 @@ function AnnotationEditor({
   updated: () => void;
 }) {
   const [record, setRecord] = useState<Annotation>(),
-    [comment, setComment] = useState(''),
+    [draft, showDraft] = useState<CommentDraft>({ phase: 'loading', text: '' }),
     [reply, setReply] = useState(''),
-    [status, setStatus] = useState('Loading…'),
     [error, setError] = useState(''),
     [located, setLocated] = useState<string>(),
     [runs, setRuns] = useState<AnnotationAttempt[]>([]),
     [inspect, setInspect] = useState<AnnotationAttempt>();
-  const base = useRef<Annotation | undefined>(undefined);
-  const chain = useRef(Promise.resolve());
-  const draftWrites = useRef(Promise.resolve());
-  const draftVersion = useRef(0);
+  const currentDraft = useRef(draft);
+  const baseRevision = useRef<number | undefined>(undefined);
+  const edits = useRef(Promise.resolve());
+  const localWrites = useRef(Promise.resolve());
+  const readVersion = useRef(0);
+  const mounted = useRef(false);
   const draftKey = 'saul-annotation-draft-' + id;
-  const dirty = useRef(false),
-    mounted = useRef(true);
+  const publishDraft = useCallback((next: CommentDraft) => {
+    currentDraft.current = next;
+    if (mounted.current) showDraft(next);
+  }, []);
   const load = useCallback(async () => {
-    const result = await annotations(url, { action: 'read', id, image: true });
-    if (!mounted.current || !result.record) return;
-    setRecord(result.record);
-    if (!dirty.current) {
-      base.current = result.record;
-      setComment(result.record.comment);
+    const version = ++readVersion.current;
+    const { record: saved } = await annotations(url, { action: 'read', id, image: true });
+    if (!mounted.current || version !== readVersion.current || !saved) return;
+    setRecord(saved);
+    if (currentDraft.current.phase === 'saved') {
+      baseRevision.current = saved.revision;
+      publishDraft({ phase: 'saved', text: saved.comment });
     }
     const history = await attempts(id);
-    if (mounted.current) setRuns(history);
-  }, [id, url]);
+    if (mounted.current && version === readVersion.current) setRuns(history);
+    return saved;
+  }, [id, url, publishDraft]);
   useEffect(() => {
     mounted.current = true;
+    const read = () =>
+      void load().catch((e) => {
+        if (mounted.current) setError(String(e));
+      });
     void (async () => {
-      await load();
-      const draft = (await chrome.storage.local.get(draftKey))[draftKey];
+      const recovered = (await chrome.storage.local.get(draftKey))[draftKey];
+      const saved = await load();
+      if (!saved || !mounted.current || currentDraft.current.phase !== 'loading') return;
+      baseRevision.current = saved.revision;
       if (
-        draft &&
-        typeof draft === 'object' &&
-        'text' in draft &&
-        typeof draft.text === 'string' &&
-        mounted.current
-      ) {
-        dirty.current = true;
-        setComment(draft.text);
-        setError('An unsaved draft was restored. Review the current comment before saving it.');
-        setStatus('Unsaved');
-        return;
-      }
-      setStatus('Saved');
-    })().catch((e) => setError(String(e)));
+        recovered &&
+        typeof recovered === 'object' &&
+        'text' in recovered &&
+        typeof recovered.text === 'string'
+      )
+        publishDraft({
+          phase: 'blocked',
+          text: recovered.text,
+          error: 'An unsaved draft was restored. Review the current comment before saving it.',
+        });
+      else publishDraft({ phase: 'saved', text: saved.comment });
+    })().catch((e) => {
+      if (mounted.current) setError(String(e));
+    });
     const changed = (changes: Record<string, chrome.storage.StorageChange>) => {
-      if (changes[annotationVersionKey]) void load().catch((e) => setError(String(e)));
+      if (changes[annotationVersionKey] && currentDraft.current.phase !== 'loading') read();
     };
     chrome.storage.onChanged.addListener(changed);
     return () => {
       mounted.current = false;
+      readVersion.current++;
       chrome.storage.onChanged.removeListener(changed);
     };
-  }, [load, draftKey]);
+  }, [load, draftKey, publishDraft]);
   useEffect(() => {
-    if (!runs.some((r) => r.status === 'running')) return;
+    if (!runs.some(activeAnnotationAttempt)) return;
     const timer = setInterval(() => void load().catch((e) => setError(String(e))), 1000);
     return () => clearInterval(timer);
   }, [runs, load]);
   const change = async (action: AnnotationChange['action'], text?: string) => {
-    const a = base.current;
-    if (!a) throw new Error('Annotation is still loading.');
+    const revision = baseRevision.current;
+    if (revision === undefined) throw new Error('Annotation is still loading.');
     const result = await annotations(url, {
       action: 'change',
       changes: [
         {
           id,
-          revision: a.revision,
+          revision,
           operationId: crypto.randomUUID(),
           action,
           ...(text !== undefined ? { text } : {}),
@@ -357,66 +368,80 @@ function AnnotationEditor({
     });
     const outcome = result.outcomes?.[0];
     if (outcome?.error) throw new Error(outcome.error);
+    if (action === 'purge') return;
     if (!outcome?.record) throw new Error('Annotation save was not confirmed.');
-    // A read may already include someone else's next edit. Advance only to the
-    // revision this write accepted so queued drafts cannot silently overwrite it.
-    base.current = { ...a, revision: outcome.record.revision };
-    const fresh = await annotations(url, { action: 'read', id, image: true });
-    if (fresh.record) {
-      if (mounted.current) setRecord(fresh.record);
-    }
-    updated();
+    // Advance the edit lane to the revision this write accepted, never to a
+    // newer revision read while an unsaved local edit remains.
+    baseRevision.current = outcome.record.revision;
+    return load().catch((e) => {
+      if (mounted.current) setError(String(e));
+    });
   };
-  const save = (text: string) => {
-    dirty.current = true;
-    setComment(text);
-    setStatus('Saving…');
-    const version = ++draftVersion.current;
-    const local = draftWrites.current
+  const enqueue = (work: () => Promise<void>) => {
+    edits.current = edits.current.then(work).catch((e) => {
+      if (mounted.current) setError(String(e));
+    });
+  };
+  const save = (text: string, review = false) => {
+    const before = currentDraft.current;
+    if (review && record) baseRevision.current = record.revision;
+    const next: CommentDraft =
+      before.phase === 'blocked' && !review ? { ...before, text } : { phase: 'saving', text };
+    publishDraft(next);
+    const persist = localWrites.current
       .catch(() => undefined)
       .then(() => chrome.storage.local.set({ [draftKey]: { text } }));
-    draftWrites.current = local;
-    void local.catch(() => undefined);
-    chain.current = chain.current
-      .then(async () => {
-        await local;
-        await change('edit', text);
-        if (version === draftVersion.current) {
-          draftWrites.current = draftWrites.current.then(async () => {
-            if (version === draftVersion.current) await chrome.storage.local.remove(draftKey);
-          });
-          await draftWrites.current;
-          if (version === draftVersion.current) {
-            dirty.current = false;
-            if (mounted.current) setStatus('Saved');
-          }
+    localWrites.current = persist;
+    void persist.catch(() => undefined);
+    enqueue(async () => {
+      try {
+        await persist;
+        if (next.phase === 'blocked' || currentDraft.current.phase === 'blocked') return;
+        const fresh = await change('edit', text);
+        if (currentDraft.current !== next) return;
+        const clear = localWrites.current.then(async () => {
+          if (currentDraft.current === next) await chrome.storage.local.remove(draftKey);
+        });
+        localWrites.current = clear;
+        await clear;
+        if (currentDraft.current === next) {
+          if (fresh) baseRevision.current = fresh.revision;
+          publishDraft({ phase: 'saved', text: fresh?.comment ?? text });
         }
-      })
-      .catch((e) => {
-        if (mounted.current) {
-          setError(String(e));
-          setStatus('Unsaved');
-        }
-        throw e;
-      });
-    void chain.current.catch(() => undefined);
+      } catch (cause) {
+        // Whether this save or a newer queued edit was active, retain its text
+        // and stop sending edits until the author explicitly reviews the base.
+        publishDraft({
+          phase: 'blocked',
+          text: currentDraft.current.text,
+          error: String(cause),
+        });
+        await load().catch(() => undefined);
+      }
+    });
   };
   const act = (action: AnnotationChange['action'], text?: string) => {
-    chain.current = chain.current
-      .then(() => change(action, text))
-      .then(() => {
-        if (mounted.current) {
-          setReply('');
-          setError('');
-        }
-      })
-      .catch((e) => {
-        if (mounted.current) setError(String(e));
-        if (dirty.current) throw e;
-      });
-    void chain.current.catch(() => undefined);
+    enqueue(async () => {
+      if (currentDraft.current.phase === 'blocked' && action !== 'purge') return;
+      await change(action, text);
+      if (action === 'purge') {
+        await localWrites.current.catch(() => undefined);
+        await chrome.storage.local.remove(draftKey);
+      }
+      if (mounted.current) {
+        setReply('');
+        setError('');
+      }
+      updated();
+    });
   };
-  if (!record) return <p role="status">{error || status}</p>;
+  const status = {
+    loading: 'Loading…',
+    saved: 'Saved',
+    saving: 'Saving…',
+    blocked: 'Unsaved',
+  }[draft.phase];
+  if (!record || draft.phase === 'loading') return <p role="status">{error || status}</p>;
   return (
     <article className="stack annotation-editor" aria-label="Annotation editor">
       <h2>Annotation {record.number}</h2>
@@ -471,25 +496,18 @@ function AnnotationEditor({
           )}
           <textarea
             id="annotation-comment"
-            value={comment}
+            value={draft.text}
             maxLength={16000}
             rows={4}
             onChange={(e) => save(e.target.value)}
           />
           <p role="status">{status}</p>
-          {error && (
+          {error && <p role="alert">{error}</p>}
+          {draft.phase === 'blocked' && (
             <div role="alert">
-              <p>{error}</p>
+              <p>{draft.error}</p>
               <p>Latest saved comment: {record.comment}</p>
-              <button
-                className="btn"
-                onClick={() => {
-                  base.current = record;
-                  chain.current = Promise.resolve();
-                  setError('');
-                  save(comment);
-                }}
-              >
+              <button className="btn" onClick={() => save(draft.text, true)}>
                 Save draft against latest
               </button>
             </div>
@@ -518,27 +536,7 @@ function AnnotationEditor({
           <button className="btn" onClick={() => act('restore')}>
             Restore
           </button>
-          <button
-            className="btn"
-            onClick={() =>
-              void annotations(url, {
-                action: 'change',
-                changes: [
-                  {
-                    id,
-                    revision: record.revision,
-                    operationId: crypto.randomUUID(),
-                    action: 'purge',
-                  },
-                ],
-              })
-                .then((r) => {
-                  if (r.outcomes?.[0]?.error) throw new Error(r.outcomes[0].error);
-                  updated();
-                })
-                .catch((e) => setError(String(e)))
-            }
-          >
+          <button className="btn" onClick={() => act('purge')}>
             Delete permanently
           </button>
         </div>
@@ -584,7 +582,7 @@ function AnnotationEditor({
           <button
             className="btn"
             onClick={() =>
-              void annotationMessage<AnnotationAttempt[]>({ action: 'inspect', id: r.id }).then(
+              void annotationMessage({ action: 'inspect', id: r.id }).then(
                 (v) => setInspect(v[0]),
                 (e) => setError(String(e)),
               )
@@ -592,7 +590,7 @@ function AnnotationEditor({
           >
             Inspect input/output
           </button>
-          {r.status === 'running' && (
+          {(r.status === 'queued' || r.status === 'running') && (
             <button
               className="btn"
               onClick={() =>
@@ -602,19 +600,6 @@ function AnnotationEditor({
               }
             >
               Stop
-            </button>
-          )}
-          {r.status === 'unsaved' && (
-            <button
-              className="btn"
-              onClick={() =>
-                void annotationMessage({ action: 'save-result', id: r.id }).then(
-                  () => load(),
-                  (e) => setError(String(e)),
-                )
-              }
-            >
-              Save reply without generating
             </button>
           )}
         </div>

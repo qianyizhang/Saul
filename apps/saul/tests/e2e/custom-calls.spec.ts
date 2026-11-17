@@ -1,22 +1,21 @@
-import { summaryMore } from './driver.ts';
-import { settingsSection } from './driver.ts';
+import { configureFixtureProvider, settingsSection, summaryMore } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures';
-import { configureFixtureProvider } from './driver';
 import { installDigestProvider, openDigestReader } from './digest-fixture';
 import { actionHelperFixture } from './action-helper-fixture';
 import type { ActionModule } from '../../native/action-protocol.mts';
-import type { ActionRequest, ActionState } from '../../src/actions/contract';
+import type { CallEditRequest, CallEditorState } from '../../src/calls/contract';
 import type { Page } from '@playwright/test';
 
 test.afterEach(({ fixtureServer }) => {
   fixtureServer.clearHandlers();
 });
 
-test('unsubmitted action fields survive navigation and reload without a model call', async ({
+test('unsubmitted Call fields survive navigation and reload without a model call', async ({
   sandbox,
   fixtureServer,
 }) => {
+  const initialRequests = fixtureServer.requests.length;
   const { popup } = await sandbox.launch();
   await configureFixtureProvider(popup, fixtureServer.origin);
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -42,7 +41,7 @@ test('unsubmitted action fields survive navigation and reload without a model ca
   await expect(popup.getByLabel('Module file path', { exact: true })).toHaveValue(
     '/tmp/my-summary.ts',
   );
-  expect(fixtureServer.requests).toHaveLength(0);
+  expect(fixtureServer.requests).toHaveLength(initialRequests);
   expect((await request(popup, { action: 'status' })).selected).toBeUndefined();
 });
 
@@ -54,13 +53,75 @@ const candidate: ActionModule = {
   source:
     'export default async function run(ctx) { ctx.progress("Checking evidence…"); const answer = await ctx.generate({instructions:"Explain the main claim and its weakest evidence."}); return "# Main claim\\n\\n" + answer; }',
 };
-async function request(page: Page, message: ActionRequest): Promise<ActionState> {
+async function request(page: Page, message: CallEditRequest): Promise<CallEditorState> {
   return page.evaluate(async (message) => {
     const reply = await chrome.runtime.sendMessage({ target: 'saul-action', message });
     if (!reply.success) throw new Error(reply.error);
     return reply.result;
   }, message);
 }
+
+test('Call Saul uses the saved shared selection when Chrome cannot mirror the choice', async ({
+  sandbox,
+  fixtureServer,
+}) => {
+  const initialRequests = fixtureServer.requests.length;
+  const helper = await actionHelperFixture(fixtureServer);
+  try {
+    const { worker, context, popup } = await sandbox.launch();
+    await helper.install(worker);
+    await configureFixtureProvider(popup, fixtureServer.origin);
+    await worker.evaluate(async () => {
+      // Replace the shared config transport only. Module loading still uses the
+      // real local action helper and page execution uses the real history path.
+      const native = chrome.runtime.sendNativeMessage.bind(chrome.runtime);
+      const write = chrome.storage.local.set.bind(chrome.storage.local);
+      await write({ saul_calls_unified: true, saul_summary_action_v1: {} });
+      let value: unknown = { library: [] };
+      let revision = 1;
+      chrome.runtime.sendNativeMessage = (async (
+        host: string,
+        message: { id: string; request: { action: string; section?: string; value?: unknown } },
+      ) => {
+        if (message.request.section !== 'calls') return native(host, message);
+        if (message.request.action === 'config-save') {
+          value = message.request.value;
+          revision++;
+        }
+        return { id: message.id, event: { type: 'result', config: { value, revision } } };
+      }) as typeof chrome.runtime.sendNativeMessage;
+      chrome.storage.local.set = (async (values: Record<string, unknown>) => {
+        if (revision > 1 && ('saul_summary_action_v1' in values || 'saul_call_draft_v1' in values))
+          throw new Error('Builder draft storage unavailable');
+        await write(values);
+      }) as typeof chrome.storage.local.set;
+    });
+    const checked = await request(popup, {
+      action: 'stage',
+      json: JSON.stringify({
+        ...candidate,
+        source: 'export default () => "# Shared choice in use";',
+      }),
+    });
+    await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+    await settingsSection(popup, 'Calls');
+    await popup.getByLabel('Customize Call Saul', { exact: true }).click();
+    await popup.getByRole('button', { name: 'Save and select' }).click();
+    await expect(popup.getByLabel('Call preset').locator('option:checked')).toHaveText(
+      'Evidence summary · Current',
+    );
+    expect((await request(popup, { action: 'status' })).selected?.revision.revision).toBe(
+      checked.candidate?.revision,
+    );
+    const source = await context.newPage();
+    await source.goto(fixtureServer.origin + '/article');
+    const reader = await openDigestReader(context, popup, worker, source.url());
+    await expect(reader.getByRole('heading', { name: 'Shared choice in use' })).toBeVisible();
+    expect(fixtureServer.requests).toHaveLength(initialRequests);
+  } finally {
+    await helper.close();
+  }
+});
 
 test('creates and explicitly loads a real local action, renders safely, isolates revision reuse and persists across restart', async ({
   sandbox,

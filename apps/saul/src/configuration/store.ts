@@ -102,7 +102,14 @@ export function createConfigurationStore(
       if (request.action === 'commit') {
         settingsFromStored(stored); // Invalid originals require explicit backed-up recovery.
         // Normalize and validate in the write owner, not only in the form.
-        let settings = decodeConfiguration(request.settings);
+        // The revision token names the loaded state. A draft cannot pick a
+        // different shared revision or bypass the shared commit by omitting it.
+        let settings = decodeConfiguration(
+          Object.assign({}, request.settings, {
+            sharedPresetRevision: loaded?.sharedPresetRevision,
+            scopedConfigRevision: loaded?.scopedConfigRevision,
+          }),
+        );
         validateSettingsConnections(settings);
         if (credentials)
           settings = await credentials.prepare(settings, loaded ?? settingsFromStored(stored));

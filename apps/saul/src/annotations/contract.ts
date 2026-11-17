@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
 export const retentionMs = 7 * 24 * 60 * 60 * 1000;
-const key = z.string().min(1).max(100);
+export const annotationIdSchema = z.string().min(1).max(100);
+const key = annotationIdSchema;
 export const pageUrl = z
   .string()
   .max(8192)

@@ -4,8 +4,15 @@ import { digestHtml } from '../src/digest/html';
 import { validateDigest } from '../src/digest/contracts';
 import { DigestRunner } from '../src/digest/runner';
 import { createCallExecutor } from '../src/calls/execution';
-import type { actionHost } from '../src/actions/host';
-import type { DigestBatch, DigestSource } from '../src/digest/types';
+import type { actionHost } from '../src/calls/host';
+import {
+  activeItem,
+  interruptItem,
+  restartItem,
+  retryableItem,
+  type DigestBatch,
+  type DigestSource,
+} from '../src/digest/types';
 import type { DbCall, DbRequest } from '../src/types/storage';
 import type { PlanEvent, PlanRequest } from '../native/plan-protocol.mts';
 const pair = { en: 'A concrete explanation.', zh: '具体解释。' };
@@ -65,6 +72,21 @@ function fixture() {
         return structuredClone(get(r.payload.id));
       case 'DB_DIGEST_GET':
         return structuredClone(get(r.payload.id));
+      case 'DB_DIGEST_RETRY': {
+        const batch = get(r.payload.id);
+        batch.items = batch.items.map((item) => (retryableItem(item) ? restartItem(item) : item));
+        delete batch.error;
+        return structuredClone(batch);
+      }
+      case 'DB_DIGEST_INTERRUPT': {
+        const batch = get(r.payload.id);
+        if (batch.items.some(activeItem)) batch.error = r.payload.error;
+        const error = r.payload.error;
+        batch.items = batch.items.map((item) =>
+          activeItem(item) ? interruptItem(item, error) : item,
+        );
+        return structuredClone(batch);
+      }
       case 'DB_DIGEST_SOURCE':
         return sources.get(r.payload.id + ':' + r.payload.index);
       case 'DB_DIGEST_ITEM':
@@ -91,7 +113,7 @@ async function* success(): AsyncGenerator<Extract<PlanEvent, { type: 'delta' | '
 async function waitDone(r: DigestRunner) {
   await vi.waitFor(async () => {
     const b = (await r.request({ action: 'get', id: 'digest-test' })) as DigestBatch;
-    expect(b.items.some((i) => ['queued', 'capturing', 'running'].includes(i.status))).toBe(false);
+    expect(b.items.some(activeItem)).toBe(false);
   });
 }
 describe('window digests', () => {
@@ -524,9 +546,6 @@ function customBatch(revision = 'a'.repeat(64)): DigestBatch {
         plan: { accountId: 'frozen', model: 'chosen', effort: 'low' },
         remote: { baseUrl: '', model: '', temperature: 0.3 },
         local: { topK: 3, temperature: 0.3 },
-        systemPrompt: '',
-        userPrompt: '',
-        context: { selection: '', pageTitle: '', pageUrl: '' },
       },
     },
   };
@@ -781,7 +800,7 @@ it('pauses unstarted pages on a Call failure before a pending checkpoint settles
 });
 
 it.each(['failed', 'cancelled'] as const)(
-  'shows a %s Call while its last checkpoint is still pending',
+  'does not settle a %s Call while its last checkpoint is still pending',
   async (status) => {
     const f = fixture();
     const db = f.mock.getMockImplementation()!;
@@ -816,10 +835,7 @@ it.each(['failed', 'cancelled'] as const)(
       else fail();
       await vi.waitFor(async () => {
         const current = (await runner.request({ action: 'get', id: saved.id })) as DigestBatch;
-        expect(current.items[0]).toMatchObject({
-          status,
-          error: status === 'failed' ? 'Call failed' : 'Stopped.',
-        });
+        expect(current.items[0]?.status).toBe('saving');
         expect(current.items[0]?.finalText).toBeUndefined();
       });
       expect(f.get().items[0]?.status).toBe('running');
@@ -829,7 +845,6 @@ it.each(['failed', 'cancelled'] as const)(
       await stopping;
       await waitDone(runner);
     }
-    // Live terminal state deliberately precedes durability; wait for the actual save.
     await vi.waitFor(() => expect(f.get().items[0]?.status).toBe(status));
   },
 );

@@ -8,6 +8,13 @@ import {
 } from '../../native/plan-protocol.mts';
 import { workspaceSender } from '../contracts/reading';
 
+type BridgeRequest = {
+  port: chrome.runtime.Port;
+  native?: chrome.runtime.Port;
+  request: PlanRequest;
+  timer: ReturnType<typeof setTimeout>;
+};
+
 // Native messaging is available in the background, not the offscreen runner.
 // Multiplex only allowlisted plan operations; never expose a general proxy.
 export function initPlanBridge() {
@@ -37,10 +44,14 @@ export function initPlanBridge() {
   });
   let native: chrome.runtime.Port | undefined;
   let historyNative: chrome.runtime.Port | undefined;
-  const requests = new Map<
-    string,
-    { port: chrome.runtime.Port; request: PlanRequest; timer: ReturnType<typeof setTimeout> }
-  >();
+  const requests = new Map<string, BridgeRequest>();
+  const cancel = (id: string) => {
+    try {
+      requests.get(id)?.native?.postMessage({ id, cancel: true });
+    } catch {
+      // Transport loss can race a timeout or Stop. Settle from the owner.
+    }
+  };
   const finish = (id: string, event: PlanEvent) => {
     const entry = requests.get(id);
     if (!entry) return;
@@ -91,11 +102,11 @@ export function initPlanBridge() {
             throw new Error();
           if (requests.get(message.id)?.request.action !== 'login') throw new Error();
           void chrome.tabs.create({ url: event.url }).catch(() => {
-            port.postMessage({ id: message.id, cancel: true });
+            cancel(messageId);
             finish(messageId, { type: 'error', message: 'Could not open ChatGPT sign-in.' });
           });
         } catch {
-          port.postMessage({ id: message.id, cancel: true });
+          cancel(messageId);
           finish(message.id, { type: 'error', message: 'Invalid sign-in destination.' });
         }
       } else finish(message.id, event);
@@ -105,9 +116,8 @@ export function initPlanBridge() {
       if ((history ? historyNative : native) !== port) return;
       if (history) historyNative = undefined;
       else native = undefined;
-      for (const id of [...requests.keys()].filter(
-        (id) => (requests.get(id)?.request.action === 'history') === history,
-      ))
+      for (const [id, entry] of requests) {
+        if (entry.native !== port) continue;
         finish(id, {
           type: 'error',
           reason: history ? 'history-disconnected' : undefined,
@@ -115,6 +125,7 @@ export function initPlanBridge() {
             ? 'Shared history helper disconnected or needs an update. Run the ChatGPT/history helper setup in Settings, then retry.'
             : 'ChatGPT helper disconnected or is not installed. Run the setup command in Settings, then retry.',
         });
+      }
     });
     return port;
   };
@@ -139,10 +150,8 @@ export function initPlanBridge() {
         'cancel' in message &&
         message.cancel === true
       ) {
-        (requests.get(id)?.request.action === 'history' ? historyNative : native)?.postMessage({
-          id,
-          cancel: true,
-        });
+        cancel(id);
+        finish(id, { type: 'error', message: 'ChatGPT request stopped.' });
         return;
       }
       if (id) return; // One logical operation per extension port.
@@ -154,18 +163,17 @@ export function initPlanBridge() {
         const currentId = id;
         const timer = setTimeout(
           () => {
-            (message.action === 'history' ? historyNative : native)?.postMessage({
-              id: currentId,
-              cancel: true,
-            });
+            cancel(currentId);
             finish(currentId, { type: 'error', message: 'ChatGPT request timed out.' });
           },
           message.action === 'login' ? 320_000 : 190_000,
         );
-        requests.set(id, { port, request: message, timer });
+        const entry: BridgeRequest = { port, request: message, timer };
+        requests.set(id, entry);
         const frames = packets({ id, request: message });
         try {
           const connection = connect(message.action === 'history');
+          entry.native = connection;
           for (const packet of frames) connection.postMessage(packet);
         } catch (error) {
           finish(id, {
@@ -188,12 +196,9 @@ export function initPlanBridge() {
       const entry = requests.get(id);
       if (entry?.request.action === 'login') return; // OAuth survives popup closure.
       if (entry) {
+        cancel(id);
         clearTimeout(entry.timer);
         requests.delete(id);
-        (entry.request.action === 'history' ? historyNative : native)?.postMessage({
-          id,
-          cancel: true,
-        });
       }
     });
   });

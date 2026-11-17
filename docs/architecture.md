@@ -31,16 +31,77 @@ owner. Historical records follow the [snapshot policy](artifacts.md#historical-r
 | Running checks and diagnosing failures                      | [Saul testing](../apps/saul/docs/testing.md), [EZ verification](../apps/ez/docs/verification.md) and their linked test guides |
 | Historical evidence and retention                           | Existing dated records/bundles under the [artifact policy](artifacts.md)                                                      |
 
+## Lifecycle ownership
+
+Decision — 2026-11-17: **One lifecycle, one owner, explicit transitions.**
+
+Each lifecycle has one authoritative module. That module defines its meaningful
+states, the data valid in each state, and the operations that move between states.
+Callers request transitions and observe snapshots; they do not coordinate lifecycle
+flags or mutate state directly.
+
+Use distinct types when stages require different data or permit different
+operations. Derive redundant status values. Keep independent properties separate
+rather than forcing every combination into one state enum.
+
+The owner coordinates effects and records their outcomes. It advances state only
+when the required evidence exists, and explicitly handles failure, cancellation,
+uncertain completion, and stale responses. Completion evidence follows the owning
+contract: for example, provider completion alone does not establish a saved attempt.
+
+Apply this per lifecycle. Saved records and view snapshots may describe a lifecycle
+without owning it. One lifecycle may span several implementation files, and one
+object may contain several independent lifecycles. Ownership is required; typestate
+is an optional technique. Internal booleans are appropriate for independent facts;
+this decision requires neither a module per stage nor a state-machine framework.
+Keep platform-specific execution and recovery semantics with their existing owners.
+
+When changing a lifecycle, trace its transitions and what callers must know.
+Keep existing owners that satisfy this rule. Use domain names for states and
+operations. Verify the user journey through the same interface callers use, then
+remove superseded implementations and update the living documentation.
+
+For failed attempt saves, report the failure without claiming a saved result.
+Unsaved output may be discarded; there is no dedicated save-only recovery lifecycle.
+Another generation requires an explicit user action. Preserve already-saved history
+and configuration unless explicitly reset. Trust local database transactions and
+constraints within their owner; avoid speculative repair layers or duplicate state
+kept only for unlikely failures. Validation at external interfaces and honest error
+reporting remain required. An uncertain write is not permission to replay or undo it.
+
+Review each affected lifecycle through four questions:
+
+1. Can we identify the sole owner of each transition?
+2. Can callers bypass it or construct an invalid state?
+3. Are completion and uncertainty represented honestly?
+4. Can we test the lifecycle through the same interface callers use?
+
 ## Behavior owners
 
-| Boundary                                   | Owner                                                                                                                                 | Stable check                                                                                    |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Native attempt execution and final save    | [AttemptExecution](../apps/ez/Sources/EZCore/AttemptExecution.swift), projected by AppModel                                           | Production Send/Stop/Save again actions in the [native state suite](../apps/ez/Tests/README.md) |
-| Browser attempt execution and persistence  | [ReadingRunner](../apps/saul/src/reading/runner.ts)                                                                                   | Both apps consume the [Attempt contract fixtures](../contracts/README.md#execution)             |
-| Page-level Call execution                  | [Call executor](../apps/saul/src/calls/execution.ts); [digest runner](../apps/saul/src/digest/runner.ts) retains scheduling and saves | Execution outcomes/snapshots through controlled adapters; runner and real-store browser checks  |
-| Browser configuration writes and conflicts | [Configuration store](../apps/saul/src/configuration/store.ts) in the trusted background                                              | Concurrent owner requests and two real Settings surfaces                                        |
-| Helper installation and recovery           | [Installation transaction](../apps/saul/native/installation.mts)                                                                      | Disposable installs, failure injection and old/new running processes                            |
-| Tab board host connection                  | [Host adapter](../apps/saul/native/ui/host-adapter.ts) using the pinned MCP Apps SDK                                                  | Independent SDK host and the delivered document under CSP                                       |
+App-local owners include:
+
+- Browser [Settings editor](../apps/saul/src/settings/editor.ts): edit, save,
+  conflict review and closed-session response handling.
+- Browser [Call editor](../apps/saul/src/calls/editor.ts): build and selection, with
+  independent draft and saved-choice persistence in the [Call store](../apps/saul/src/calls/store.ts).
+- [Reading admission](../apps/saul/src/reading/admission.ts) and
+  [Call admission](../apps/saul/src/calls/admission.ts): current-input preparation,
+  frozen retries and saved-result reuse.
+- [Annotation runner](../apps/saul/src/annotations/runner.ts) and its
+  [transaction owner](../apps/saul/native/annotation-store.mts): admission, execution,
+  atomic final reply saving and deletion.
+- Native [Lookup draft](../apps/ez/Sources/EZ/LookupDraft.swift) and
+  [Configuration editor](../apps/ez/Sources/EZ/ConfigurationEditor.swift): composer and
+  Settings editing, respectively. AppModel and views request their transitions.
+
+| Boundary                                   | Owner                                                                                                                                 | Stable check                                                                                          |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Native attempt execution and final save    | [AttemptExecution](../apps/ez/Sources/EZCore/AttemptExecution.swift), projected by AppModel                                           | Production Send/Stop and save-failure actions in the [native state suite](../apps/ez/Tests/README.md) |
+| Browser attempt execution and persistence  | [ReadingRunner](../apps/saul/src/reading/runner.ts)                                                                                   | Both apps consume the [Attempt contract fixtures](../contracts/README.md#execution)                   |
+| Page-level Call execution                  | [Call executor](../apps/saul/src/calls/execution.ts); [digest runner](../apps/saul/src/digest/runner.ts) retains scheduling and saves | Execution outcomes/snapshots through controlled adapters; runner and real-store browser checks        |
+| Browser configuration writes and conflicts | [Configuration store](../apps/saul/src/configuration/store.ts) in the trusted background                                              | Concurrent owner requests and two real Settings surfaces                                              |
+| Helper installation and recovery           | [Installation transaction](../apps/saul/native/installation.mts)                                                                      | Disposable installs, failure injection and old/new running processes                                  |
+| Tab board host connection                  | [Host adapter](../apps/saul/native/ui/host-adapter.ts) using the pinned MCP Apps SDK                                                  | Independent SDK host and the delivered document under CSP                                             |
 
 Views express user intent and render state. These owners hold the ordering,
 durability and lifecycle rules. Shared fixtures compare behavior; history uses the shared SQLite schema. App-local details remain
@@ -169,7 +230,7 @@ History reloads on activation/focus rather than a recurring background timer.
 The [History operation contract](../contracts/README.md#history-operations) shares
 recovery/deletion meanings and real-store fixtures across Swift and Node. Saul's
 typed operation catalogue owns Native Messaging admission and reconnect policy;
-EZ keeps direct SQLite access and explicit save-only recovery. Operation IDs live
+EZ keeps direct SQLite access and reports failed saves without save-only recovery. Operation IDs live
 with the existing run/submission rows; there is no separate receipt log containing
 deleted history.
 

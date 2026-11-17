@@ -9,8 +9,11 @@ Node, Python, Electron or webview runtime.
 | Owner                                                        | Responsibility                                                                 |
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------ |
 | `EZApp` / `QuickLookupController`                            | Windows, menu bar, Services, launcher and keyboard lifecycle                   |
-| `AppModel` / `GenerationState`                               | User actions, selected configuration, draft, history and visible errors        |
-| `AttemptExecution`                                           | Frozen attempt, generation, cancellation, terminal save and save-only recovery |
+| `AppModel` / `LookupDraft`                                   | Shared workspace actions, launcher submission, editable draft and history      |
+| `LookupRequest` / `LookupRoute`                              | Admission and frozen input for new and contextual lookups                      |
+| `ConfigurationEditor`                                         | Settings drafts, discard decisions and save results                            |
+| `ConnectionChecks`                                           | Connection status and catalog evidence, invalidated by identity changes        |
+| `AttemptExecution`                                           | Pending admission, generation, cancellation and terminal save                  |
 | `GenerationProvider` / `SaulGeneration`                      | Supported operations and requests to the signed credential owner               |
 | `ChatGPTAuth` / `LoopbackListener` / `OIDC`                  | Owner-side OAuth, bounded loopback callback and verified identity              |
 | `ResponsesRequest` / `ResponseAccumulator` / `CredentialSSE` | Request serialization, stream parsing and completion                           |
@@ -56,7 +59,10 @@ a 2.6 model; input images with GIF output fail before send. Exact GIF bytes rema
 Download preserves `.gif`. Native previews animate unless reduced motion is enabled.
 Key Save/Reload and inspection never generate.
 
-Run freezes action, inputs, preset and connection snapshots. Stop cancels locally
+Run freezes action, inputs, preset and connection snapshots. If those choices
+changed on disk since they were shown, Run opens the updated choices for review
+without sending. Reuse keeps the saved route until the user explicitly chooses
+another preset, if the original route was recorded. Stop cancels locally
 and rejects late output; it cannot promise server cancellation or avoided billing.
 There are no automatic generation retries. Image requests time out after 180s,
 reject redirects, bound bytes/dimensions and report safe status-specific errors.
@@ -144,17 +150,15 @@ owner. It never routes through the current editor. The previous result and any
 unrelated draft remain intact; missing inputs or changed routes offer review of
 the saved request. Completed and Unsaved entries do not offer inference Retry.
 
-A terminal save failure retains the exact completed/interrupted/failed snapshot,
-images, provider error and metrics in memory by UUID, projected as **Unsaved**
-with a separate save error. New lookup, selection and hiding preserve it.
-**Save again** retries only that snapshot's upsert, without auth, prompt preparation
-or generation. It is blocked during an active request/pending launcher. Success
-restores the original outcome; failure retains Unsaved. Copy/Export remain usable.
-Bytes never saved cannot survive quitting; startup never resubmits.
+A terminal save failure reports **Unsaved** and the storage error in the result.
+Visible output can still be copied, exported or downloaded where available.
+Reading history again may lose the unsaved output; it reads only saved bytes.
+Nothing repeats the terminal write or the provider request. An explicit Run starts
+a new attempt. The original pending row is read as interrupted when inactive.
 
 Main-window deletion confirms its scope across EZ and Saul. It removes a native
 record and blobs, or a browser passage and its runs. Only successful deletion
-clears in-memory recovery. Migration alone reads retired JSONL/lock/image files;
+clears the visible result. Migration alone reads retired JSONL/lock/image files;
 verified import precedes removal, while malformed sources remain with a blocking
 error. No fallback writer or permanent migration backup is created.
 
@@ -165,9 +169,10 @@ A saved, completed native Write answer can supply explicit follow-up context.
 exchanges, model/effort/speed and search policy, using the saved connection's bound account.
 Each Send creates a linked history entry; no context is silently dropped.
 Questions are limited to 2,000 UTF-16 units and compiled conversations to 120,000.
-Unsaved/partial answers must finish or recover first. Draw and browser entries
-cannot run follow-ups in EZ. AppModel holds per-answer question drafts in memory;
-deletion or successful Send clears them. Stop and recovery use `AttemptExecution`.
+Unsaved or partial answers, Draw and browser entries cannot supply follow-ups.
+Saved answers without a recorded connection require an explicit new lookup.
+AppModel holds per-answer question drafts in memory; deletion or successful Send
+clears them. Stop and terminal persistence use `AttemptExecution`.
 
 ## Metrics and activity
 
@@ -221,9 +226,10 @@ pasteboard and synchronously prepares a draft. It never changes the clipboard or
 source selection, sends, awaits auth or queues work; errors use the Services pointer.
 
 `AppModel.prepareSelectedText` validates nonblank text and the 16,384-byte limit
-before mutation. Active work, sign-in, Settings, nonempty inputs or an image reject
-it unchanged. Unavailable configuration reports its error; empty configuration
-asks for an action. Otherwise it uses the selected configured action (first remaining
+before mutation. Active work, sign-in, Settings or any retained lookup draft
+reject it unchanged. This includes preset and format overrides, Reuse and sketch
+redo history even when the fields are blank. Unavailable configuration reports
+its error; empty configuration asks for an action. Otherwise it uses the selected configured action (first remaining
 if a historical action was removed), resets the override and fills the first field.
 Signed-out/catalog-loading states may hold the draft; Send remains explicit and
 no history is written before it. Cold launch may also show the main window.
@@ -296,7 +302,8 @@ Save is explicit. The shared configuration owner checks both revisions and saves
 scope in one locked JSON replacement; conflicts or staging failures change neither.
 See the [shared transaction contract](../../../contracts/README.md#unified-configuration-scopes).
 Preset/Action editors stay mounted across Settings sections;
-item changes, Add and dismissal guard dirty edits. Save failure keeps the draft.
+item changes, Add and dismissal guard dirty edits. Save failure keeps the draft
+and its original item; Reload explicitly takes the newest values.
 Configuration editing preserves lookup overrides and restored historical actions.
 Speak presets retain a catalog model and strict `speechOptions.voice`. `SpeechPreviewClient`
 uses bounded Realtime events and validates completion before creating in-memory WAV
