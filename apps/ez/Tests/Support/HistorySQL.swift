@@ -9,6 +9,8 @@ public func historySQL(_ url: URL, _ sql: String) throws -> String? {
         throw CheckFailure("Cannot open fixture history")
     }
     defer { sqlite3_close(database) }
+    // Match HistoryStore while the model finishes work on another connection.
+    sqlite3_busy_timeout(database, 5000)
     var statement: OpaquePointer?
     guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK else {
         throw CheckFailure(String(cString: sqlite3_errmsg(database)))
