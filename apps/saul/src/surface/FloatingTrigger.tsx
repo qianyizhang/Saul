@@ -1,3 +1,4 @@
+import { annotateRange } from '../annotations/capture';
 import type { ReadingOperations } from '../contracts/reading';
 import React, { useRef } from 'react';
 import { useAnchoredPosition } from './useAnchoredPosition';
@@ -24,13 +25,18 @@ export const FloatingTrigger: React.FC<FloatingTriggerProps> = ({
 }) => {
   const triggerRef = useRef<HTMLDivElement>(null);
   const style = useAnchoredPosition(range, triggerRef, 'bottom-end');
+  const rects = [...range.getClientRects()].filter((rect) => rect.width > 0);
+  const available = Math.max(210, (rects.at(-1)?.right ?? innerWidth) - 12);
 
   return (
     <div
       ref={triggerRef}
-      style={style}
+      style={{ ...style, maxWidth: `min(calc(100vw - 24px), ${available}px)` }}
       className="flex items-center bg-accent text-on-accent text-xs font-sans font-medium rounded-control saul-elevated border border-accent select-none max-w-[calc(100vw-24px)]"
     >
+      <button type="button" onClick={() => annotateRange(range)} className="shrink-0 px-2.5 py-1.5">
+        Annotate
+      </button>
       <select
         aria-label="Action"
         style={{ fieldSizing: 'content' }}
@@ -68,7 +74,9 @@ export const FloatingTrigger: React.FC<FloatingTriggerProps> = ({
       >
         <Sparkles className="w-3.5 h-3.5" />
         <span>
-          {recipes.find((r) => r.id === recipeId)?.capability === 'draw' ? 'Illustrate' : 'Explain'}
+          {recipes.find((r) => r.id === recipeId)?.capability === 'draw'
+            ? 'Illustrate & open'
+            : 'Explain & open'}
         </span>
       </button>
     </div>

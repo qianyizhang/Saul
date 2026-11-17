@@ -1,0 +1,1151 @@
+{
+  "version": 1,
+  "title": "Saul · Settings and Calls setup",
+  "initial": "overview",
+  "source": {
+    "revision": "Code accompanying this IR; baseline 0a949cf12f226a63b0db6244f9fc2a1e3fef78d1 plus accepted journey changes, reviewed 2026-11-16",
+    "description": "Source-derived current behavior, including the accepted Retry, Settings review and pointer-open changes. Fixed fictional fixtures; no live provider requests. Affected browser flows and native offline checks passed. Scaffold: repo-kit 4914a36."
+  },
+  "coverage": {
+    "included": [
+      "Browser configuration draft Save, conflict/uncertain delivery blocking, explicit reload confirmation and dirty navigation.",
+      "Managed shared connections, explicit account authorization and key-removal confirmation; shared definitions are separate from secrets.",
+      "Custom Call Create / Check file stages a candidate; only Save and select loads local code. Restore/default selection stays explicit.",
+      "Saved Speak preview generates in memory and only plays after a user action.",
+      "Reviewed layout hints group navigation contexts and route/recovery neighborhoods; coordinates are presentation only, not time or rank.",
+      "Review latest retains non-conflicting local edits, requires Mine/Latest for conflicting fields and removed items, masks credentials, and applies to the draft without saving. Cancel/read failure keeps the original context."
+    ],
+    "omitted": [
+      "Standalone credential setup, every provider catalog option, invalid-record reset, notification rules and optional native helper installation are not expanded.",
+      "The app has more Settings sections than these graph regions; the inventory in README records the remaining source owners.",
+      "No real account, key, local script, billing request, browser setting or audio playback is used.",
+      "A finite scenario projection, not the full Cartesian product of app state. System buttons simulate possible source-code outcomes.",
+      "No proposed optimization: Comparison is intentionally absent.",
+      "The expanded Settings conflict/reload route uses the Preset editor; identical owner checks for Action editing are not duplicated into UI states.",
+      "Terminal landmarks end this scoped review; they do not imply that the real application quits. Compound navigation labels name their menu/section steps; route counts are model transitions, not measured click counts.",
+      "The atlas illustrates one conflicting name. The implementation also handles additions, removals, already-delivered writes and paired credential/endpoint edits; these are covered by model and browser checks rather than separate landmarks."
+    ]
+  },
+  "regions": [
+    {
+      "id": "settings",
+      "label": "Presets & actions"
+    },
+    {
+      "id": "connections",
+      "label": "Accounts & connections"
+    },
+    {
+      "id": "calls",
+      "label": "Calls"
+    },
+    {
+      "id": "review",
+      "label": "Review latest"
+    }
+  ],
+  "states": [
+    {
+      "id": "overview",
+      "region": "settings",
+      "label": "Settings overview",
+      "detail": "Overview, Presets, Actions, Calls, Preferences and Connections share one Settings shell. Configuration drafts remain mounted across sections.",
+      "source": "apps/saul/src/app/Workspace.tsx:139",
+      "preview": {
+        "title": "Settings overview",
+        "body": "Overview, Presets, Actions, Calls, Preferences and Connections share one Settings shell. Configuration drafts remain mounted across sections."
+      }
+    },
+    {
+      "id": "presets",
+      "region": "settings",
+      "label": "Presets",
+      "detail": "Select a saved model preset. The editor preserves unsupported choices and requires an explicit valid replacement.",
+      "source": "apps/saul/src/app/Settings.tsx:286",
+      "preview": {
+        "title": "Presets",
+        "body": "Select a saved model preset. The editor preserves unsupported choices and requires an explicit valid replacement."
+      }
+    },
+    {
+      "id": "dirty",
+      "region": "settings",
+      "label": "Unsaved preset",
+      "detail": "The fixed fixture has valid changed preset fields. Global Save commits the configuration draft.",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:109",
+      "preview": {
+        "title": "Preset · unsaved changes",
+        "body": "The fixed fixture has valid changed preset fields. Global Save commits the configuration draft."
+      }
+    },
+    {
+      "id": "saving",
+      "region": "settings",
+      "label": "Saving",
+      "detail": "The trusted settings owner compares the loaded baseline before committing shared and scoped changes.",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:117",
+      "preview": {
+        "title": "Saving configuration",
+        "body": "The trusted settings owner compares the loaded baseline before committing shared and scoped changes."
+      }
+    },
+    {
+      "id": "saved",
+      "region": "settings",
+      "label": "Saved",
+      "detail": "Save succeeded and the draft baseline advanced. Future requests use the new choices; old attempts keep frozen input.",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:138",
+      "preview": {
+        "title": "Configuration saved",
+        "body": "Save succeeded and the draft baseline advanced. Future requests use the new choices; old attempts keep frozen input."
+      },
+      "outcome": "Configuration saved",
+      "terminal": true
+    },
+    {
+      "id": "conflict",
+      "region": "settings",
+      "label": "Save blocked",
+      "detail": "A stale or uncertain save preserves the draft and blocks another Save. Review latest keeps edits; confirmed Reload remains the discard path.",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:133",
+      "preview": {
+        "title": "Save blocked · draft retained",
+        "body": "A stale or uncertain save preserves the draft and blocks another Save. Review latest keeps edits; confirmed Reload remains the discard path."
+      }
+    },
+    {
+      "id": "reload-confirm",
+      "region": "settings",
+      "label": "Reload?",
+      "detail": "Reload explicitly asks before replacing unsaved fields with current saved settings.",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:208",
+      "preview": {
+        "title": "Discard draft and reload?",
+        "body": "Reload explicitly asks before replacing unsaved fields with current saved settings.",
+        "overlay": {
+          "title": "Discard your draft and reload?",
+          "body": "Reload explicitly asks before replacing unsaved fields with current saved settings.",
+          "blocks": []
+        }
+      }
+    },
+    {
+      "id": "reloaded",
+      "region": "settings",
+      "label": "Reloaded",
+      "detail": "The confirmed reload replaced the old draft and adopted the current revision.",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:215",
+      "preview": {
+        "title": "Latest configuration loaded",
+        "body": "The confirmed reload replaced the old draft and adopted the current revision."
+      },
+      "outcome": "Configuration reloaded"
+    },
+    {
+      "id": "leave-confirm",
+      "region": "settings",
+      "label": "Leave Settings?",
+      "detail": "Navigating from Settings to History is intercepted while edits are dirty. Cancel keeps the editor.",
+      "source": "apps/saul/src/app/Workspace.tsx:38",
+      "preview": {
+        "title": "Discard unsaved settings?",
+        "body": "Navigating from Settings to History is intercepted while edits are dirty. Cancel keeps the editor.",
+        "overlay": {
+          "title": "Discard unsaved settings?",
+          "body": "Navigating from Settings to History is intercepted while edits are dirty. Cancel keeps the editor.",
+          "blocks": []
+        }
+      }
+    },
+    {
+      "id": "history",
+      "region": "settings",
+      "label": "History opened",
+      "detail": "The user confirmed discarding Settings changes and moved to the requested History route.",
+      "source": "apps/saul/src/app/Workspace.tsx:41",
+      "preview": {
+        "title": "History opened",
+        "body": "The user confirmed discarding Settings changes and moved to the requested History route."
+      },
+      "outcome": "Left Settings",
+      "terminal": true
+    },
+    {
+      "id": "actions",
+      "region": "settings",
+      "label": "Actions",
+      "detail": "Actions edit local reading templates and their default presets. They are separate from page-level Calls.",
+      "source": "apps/saul/src/app/RecipeSettings.tsx:90",
+      "preview": {
+        "title": "Actions",
+        "body": "Actions edit local reading templates and their default presets. They are separate from page-level Calls."
+      }
+    },
+    {
+      "id": "action-dirty",
+      "region": "settings",
+      "label": "Unsaved action",
+      "detail": "The current action template/default preset changed in the shared Settings draft. Global Save is still required.",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:109",
+      "preview": {
+        "title": "Action · unsaved changes",
+        "body": "The current action template/default preset changed in the shared Settings draft. Global Save is still required."
+      }
+    },
+    {
+      "id": "connections",
+      "region": "connections",
+      "label": "Connections",
+      "detail": "This fixture uses the shared Saul credential owner. Connection editing is blocked while configuration has unsaved changes.",
+      "source": "apps/saul/src/app/ConnectionSettings.tsx:321",
+      "preview": {
+        "title": "Connections",
+        "body": "This fixture uses the shared Saul credential owner. Connection editing is blocked while configuration has unsaved changes."
+      }
+    },
+    {
+      "id": "connection-editor",
+      "region": "connections",
+      "label": "Add connection",
+      "detail": "Select an account or add one. The connection cannot retarget an already bound identity.",
+      "source": "apps/saul/src/app/ConnectionSettings.tsx:200",
+      "preview": {
+        "title": "New plan connection",
+        "body": "Select an account or add one. The connection cannot retarget an already bound identity."
+      }
+    },
+    {
+      "id": "signing-in",
+      "region": "connections",
+      "label": "Signing in",
+      "detail": "The owner handles explicit sign-in and plan consent. Its result does not yet persist a connection definition.",
+      "source": "apps/saul/src/app/ConnectionSettings.tsx:253",
+      "preview": {
+        "title": "Sign-in pending",
+        "body": "The owner handles explicit sign-in and plan consent. Its result does not yet persist a connection definition."
+      }
+    },
+    {
+      "id": "authorized",
+      "region": "connections",
+      "label": "Authorized",
+      "detail": "The usable account is selected. Save validates permission and persists the connection definition.",
+      "source": "apps/saul/src/app/ConnectionSettings.tsx:269",
+      "preview": {
+        "title": "Account ready to bind",
+        "body": "The usable account is selected. Save validates permission and persists the connection definition."
+      }
+    },
+    {
+      "id": "connection-saved",
+      "region": "connections",
+      "label": "Connection saved",
+      "detail": "The definition is saved and the editor closes. Presets in both apps can select the fixed connection identity.",
+      "source": "apps/saul/src/app/ConnectionSettings.tsx:238",
+      "preview": {
+        "title": "Connection saved",
+        "body": "The definition is saved and the editor closes. Presets in both apps can select the fixed connection identity."
+      },
+      "outcome": "Connection saved",
+      "terminal": true
+    },
+    {
+      "id": "disconnect",
+      "region": "connections",
+      "label": "Remove shared credential?",
+      "detail": "This confirmation affects the account/key in both Saul and EZ; presets keep the connection reference.",
+      "source": "apps/saul/src/app/ConnectionSettings.tsx:279",
+      "preview": {
+        "title": "Remove shared credential?",
+        "body": "This confirmation affects the account/key in both Saul and EZ; presets keep the connection reference.",
+        "overlay": {
+          "title": "Disconnect shared credential?",
+          "body": "This confirmation affects the account/key in both Saul and EZ; presets keep the connection reference.",
+          "blocks": []
+        }
+      }
+    },
+    {
+      "id": "disconnected",
+      "region": "connections",
+      "label": "Needs setup",
+      "detail": "The saved connection now needs setup. Other connections and frozen historical output remain available.",
+      "source": "apps/saul/src/app/ConnectionSettings.tsx:291",
+      "preview": {
+        "title": "Credential removed",
+        "body": "The saved connection now needs setup. Other connections and frozen historical output remain available."
+      },
+      "outcome": "Credential removed",
+      "terminal": true
+    },
+    {
+      "id": "calls",
+      "region": "calls",
+      "label": "Calls · Summarize",
+      "detail": "Built-in Summarize is selected. A model preset may be chosen here; changing that setting needs global Save.",
+      "source": "apps/saul/src/app/ActionSettings.tsx:174",
+      "preview": {
+        "title": "Calls · Summarize",
+        "body": "Built-in Summarize is selected. A model preset may be chosen here; changing that setting needs global Save."
+      }
+    },
+    {
+      "id": "call-prompt",
+      "region": "calls",
+      "label": "Call brief",
+      "detail": "A fixed custom Call request and compatible Build with preset are ready. Creating code does not activate it.",
+      "source": "apps/saul/src/app/ActionSettings.tsx:264",
+      "preview": {
+        "title": "Custom Call brief ready",
+        "body": "A fixed custom Call request and compatible Build with preset are ready. Creating code does not activate it."
+      }
+    },
+    {
+      "id": "call-building",
+      "region": "calls",
+      "label": "Creating Call",
+      "detail": "The builder may spend model quota in the real app. This atlas simulates output only; the helper checks/stages the candidate.",
+      "source": "apps/saul/src/actions/manager.ts:59",
+      "preview": {
+        "title": "Creating Call candidate",
+        "body": "The builder may spend model quota in the real app. This atlas simulates output only; the helper checks/stages the candidate."
+      }
+    },
+    {
+      "id": "candidate",
+      "region": "calls",
+      "label": "Checked candidate",
+      "detail": "The candidate is staged for inspection. It has not been loaded or made active.",
+      "source": "apps/saul/src/actions/manager.ts:134",
+      "preview": {
+        "title": "Checked candidate",
+        "body": "The candidate is staged for inspection. It has not been loaded or made active."
+      }
+    },
+    {
+      "id": "build-failed",
+      "region": "calls",
+      "label": "Build failed",
+      "detail": "Available draft output and the error are retained. Nothing has been loaded; revise explicitly to try again.",
+      "source": "apps/saul/src/actions/manager.ts:198",
+      "preview": {
+        "title": "Call creation stopped/failed",
+        "body": "Available draft output and the error are retained. Nothing has been loaded; revise explicitly to try again."
+      }
+    },
+    {
+      "id": "loading-call",
+      "region": "calls",
+      "label": "Loading Call",
+      "detail": "Save and select explicitly loads local code with OS permissions, then verifies the exact revision. This atlas executes no code.",
+      "source": "apps/saul/src/actions/manager.ts:117",
+      "preview": {
+        "title": "Loading reviewed Call",
+        "body": "Save and select explicitly loads local code with OS permissions, then verifies the exact revision. This atlas executes no code."
+      }
+    },
+    {
+      "id": "call-selected",
+      "region": "calls",
+      "label": "Call selected",
+      "detail": "The checked revision and model preset are saved as the active Call. Selecting it does not summarize a page.",
+      "source": "apps/saul/src/actions/manager.ts:121",
+      "preview": {
+        "title": "Custom Call selected",
+        "body": "The checked revision and model preset are saved as the active Call. Selecting it does not summarize a page."
+      },
+      "outcome": "Custom Call selected"
+    },
+    {
+      "id": "summarize-restored",
+      "region": "calls",
+      "label": "Summarize selected",
+      "detail": "Use Summarize clears custom selection and preserves the previous choice for explicit restoration.",
+      "source": "apps/saul/src/actions/manager.ts:86",
+      "preview": {
+        "title": "Summarize selected",
+        "body": "Use Summarize clears custom selection and preserves the previous choice for explicit restoration."
+      },
+      "outcome": "Built-in Call selected"
+    },
+    {
+      "id": "speak",
+      "region": "settings",
+      "label": "Saved Speak preset",
+      "detail": "A saved compatible API Speak preset and fixed short preview text are ready. Unsaved settings cannot generate speech.",
+      "source": "apps/saul/src/app/SpeechTest.tsx:38",
+      "preview": {
+        "title": "Saved Speak preset",
+        "body": "A saved compatible API Speak preset and fixed short preview text are ready. Unsaved settings cannot generate speech."
+      }
+    },
+    {
+      "id": "speech-running",
+      "region": "settings",
+      "label": "Generating speech",
+      "detail": "The in-memory preview can be stopped. No history entry or automatic playback is created.",
+      "source": "apps/saul/src/app/SpeechTest.tsx:50",
+      "preview": {
+        "title": "Generating speech preview",
+        "body": "The in-memory preview can be stopped. No history entry or automatic playback is created."
+      }
+    },
+    {
+      "id": "speech-ready",
+      "region": "settings",
+      "label": "Speech ready",
+      "detail": "The browser audio control is available. Play is a separate deliberate action.",
+      "source": "apps/saul/src/app/SpeechTest.tsx:61",
+      "preview": {
+        "title": "Speech ready",
+        "body": "The browser audio control is available. Play is a separate deliberate action."
+      },
+      "outcome": "Speech generated"
+    },
+    {
+      "id": "speech-playing",
+      "region": "settings",
+      "label": "Playing",
+      "detail": "The preview audio is played through the explicit browser media control.",
+      "source": "apps/saul/src/app/SpeechTest.tsx:123",
+      "preview": {
+        "title": "Speech playing",
+        "body": "The preview audio is played through the explicit browser media control."
+      },
+      "outcome": "Speech preview played",
+      "terminal": true
+    },
+    {
+      "id": "reading-latest",
+      "region": "review",
+      "label": "Reading latest",
+      "detail": "The original draft and editor selection remain intact during this read. No write is retried.",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:163",
+      "preview": {
+        "title": "Reading latest",
+        "body": "The original draft and editor selection remain intact during this read. No write is retried.",
+        "fields": []
+      }
+    },
+    {
+      "id": "review-changes",
+      "region": "review",
+      "label": "Choose conflict value",
+      "detail": "This fixture edits the same name on both sides. Mine/Latest is required. Unrelated local edits are selected by default; unrelated current values are kept.",
+      "source": "apps/saul/src/app/SettingsRecovery.tsx:34",
+      "preview": {
+        "title": "Choose conflict value",
+        "body": "This fixture edits the same name on both sides. Mine/Latest is required. Unrelated local edits are selected by default; unrelated current values are kept.",
+        "fields": [
+          {
+            "label": "When editing began",
+            "value": "Standard"
+          },
+          {
+            "label": "Mine",
+            "value": "Clear writing"
+          },
+          {
+            "label": "Latest",
+            "value": "Changed elsewhere"
+          }
+        ]
+      }
+    },
+    {
+      "id": "review-mine",
+      "region": "review",
+      "label": "Mine selected",
+      "detail": "The local name is selected for this conflict. Apply to draft remains separate from Save.",
+      "source": "apps/saul/src/app/SettingsRecovery.tsx:34",
+      "preview": {
+        "title": "Mine selected",
+        "body": "The local name is selected for this conflict. Apply to draft remains separate from Save.",
+        "fields": []
+      }
+    },
+    {
+      "id": "review-latest",
+      "region": "review",
+      "label": "Latest selected",
+      "detail": "The current saved name is selected. This one-field fixture will become clean without another commit.",
+      "source": "apps/saul/src/app/SettingsRecovery.tsx:34",
+      "preview": {
+        "title": "Latest selected",
+        "body": "The current saved name is selected. This one-field fixture will become clean without another commit.",
+        "fields": []
+      }
+    },
+    {
+      "id": "reviewed-draft",
+      "region": "review",
+      "label": "Reviewed draft",
+      "detail": "Chosen edits have been reapplied to the current revision. The form and editor selection return; Save is still explicit.",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:183",
+      "preview": {
+        "title": "Reviewed draft",
+        "body": "Chosen edits have been reapplied to the current revision. The form and editor selection return; Save is still explicit.",
+        "fields": []
+      }
+    },
+    {
+      "id": "current-adopted",
+      "region": "review",
+      "label": "Current values adopted",
+      "detail": "All local edits in this fixture match the selected saved values. Apply needed no commit.",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:183",
+      "preview": {
+        "title": "Current values adopted",
+        "body": "All local edits in this fixture match the selected saved values. Apply needed no commit.",
+        "fields": []
+      },
+      "outcome": "Current settings adopted",
+      "terminal": true
+    }
+  ],
+  "transitions": [
+    {
+      "id": "presets",
+      "from": "overview",
+      "to": "presets",
+      "label": "Presets section",
+      "source": "apps/saul/src/app/Workspace.tsx:142",
+      "kind": "user"
+    },
+    {
+      "id": "edit",
+      "from": "presets",
+      "to": "dirty",
+      "label": "Edit preset fields",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:109",
+      "kind": "input"
+    },
+    {
+      "id": "save",
+      "from": "dirty",
+      "to": "saving",
+      "label": "Save",
+      "source": "apps/saul/src/app/Settings.tsx:980",
+      "kind": "user"
+    },
+    {
+      "id": "save-ok",
+      "from": "saving",
+      "to": "saved",
+      "label": "Commit succeeds",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:138",
+      "kind": "system"
+    },
+    {
+      "id": "save-conflict",
+      "from": "saving",
+      "to": "conflict",
+      "label": "Stale revision or uncertain reply",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:133",
+      "kind": "system"
+    },
+    {
+      "id": "reload",
+      "from": "conflict",
+      "to": "reload-confirm",
+      "label": "Reload saved settings",
+      "source": "apps/saul/src/app/Settings.tsx:901",
+      "kind": "user"
+    },
+    {
+      "id": "reload-cancel",
+      "from": "reload-confirm",
+      "to": "conflict",
+      "label": "Cancel",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:210",
+      "kind": "user"
+    },
+    {
+      "id": "reload-confirm",
+      "from": "reload-confirm",
+      "to": "reloaded",
+      "label": "Discard draft and reload",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:210",
+      "kind": "user"
+    },
+    {
+      "id": "reedit",
+      "from": "reloaded",
+      "to": "dirty",
+      "label": "Edit current preset",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:109",
+      "kind": "input"
+    },
+    {
+      "id": "leave",
+      "from": "dirty",
+      "to": "leave-confirm",
+      "label": "Navigate to History",
+      "source": "apps/saul/src/app/Workspace.tsx:41",
+      "kind": "user"
+    },
+    {
+      "id": "stay",
+      "from": "leave-confirm",
+      "to": "dirty",
+      "label": "Cancel",
+      "source": "apps/saul/src/app/Workspace.tsx:41",
+      "kind": "user"
+    },
+    {
+      "id": "discard-leave",
+      "from": "leave-confirm",
+      "to": "history",
+      "label": "Discard and leave",
+      "source": "apps/saul/src/app/Workspace.tsx:45",
+      "kind": "user"
+    },
+    {
+      "id": "actions",
+      "from": "overview",
+      "to": "actions",
+      "label": "Actions section",
+      "source": "apps/saul/src/app/Workspace.tsx:142",
+      "kind": "user"
+    },
+    {
+      "id": "edit-action",
+      "from": "actions",
+      "to": "action-dirty",
+      "label": "Edit action fields",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:109",
+      "kind": "input"
+    },
+    {
+      "id": "save-action",
+      "from": "action-dirty",
+      "to": "saved",
+      "label": "Save; commit succeeds",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:117",
+      "kind": "user"
+    },
+    {
+      "id": "connections",
+      "from": "overview",
+      "to": "connections",
+      "label": "Connections section",
+      "source": "apps/saul/src/app/Workspace.tsx:142",
+      "kind": "user"
+    },
+    {
+      "id": "add",
+      "from": "connections",
+      "to": "connection-editor",
+      "label": "Add plan connection",
+      "source": "apps/saul/src/app/ConnectionSettings.tsx:200",
+      "kind": "user"
+    },
+    {
+      "id": "sign-in",
+      "from": "connection-editor",
+      "to": "signing-in",
+      "label": "Sign in / add account",
+      "source": "apps/saul/src/app/ConnectionSettings.tsx:253",
+      "kind": "user"
+    },
+    {
+      "id": "authorized",
+      "from": "signing-in",
+      "to": "authorized",
+      "label": "Verified sign-in succeeds",
+      "source": "apps/saul/src/app/ConnectionSettings.tsx:269",
+      "kind": "system"
+    },
+    {
+      "id": "auth-failed",
+      "from": "signing-in",
+      "to": "connection-editor",
+      "label": "Sign-in fails or is cancelled",
+      "source": "apps/saul/src/app/ConnectionSettings.tsx:272",
+      "kind": "system"
+    },
+    {
+      "id": "connection-save",
+      "from": "authorized",
+      "to": "connection-saved",
+      "label": "Save; connection commit succeeds",
+      "source": "apps/saul/src/app/ConnectionSettings.tsx:238",
+      "kind": "user"
+    },
+    {
+      "id": "remove",
+      "from": "connections",
+      "to": "disconnect",
+      "label": "Sign out / remove key",
+      "source": "apps/saul/src/app/ConnectionSettings.tsx:279",
+      "kind": "user"
+    },
+    {
+      "id": "remove-cancel",
+      "from": "disconnect",
+      "to": "connections",
+      "label": "Cancel",
+      "source": "apps/saul/src/app/ConnectionSettings.tsx:283",
+      "kind": "user"
+    },
+    {
+      "id": "remove-confirm",
+      "from": "disconnect",
+      "to": "disconnected",
+      "label": "Confirm; owner removes credential",
+      "source": "apps/saul/src/app/ConnectionSettings.tsx:291",
+      "kind": "user"
+    },
+    {
+      "id": "calls",
+      "from": "overview",
+      "to": "calls",
+      "label": "Calls section",
+      "source": "apps/saul/src/app/Workspace.tsx:142",
+      "kind": "user"
+    },
+    {
+      "id": "brief",
+      "from": "calls",
+      "to": "call-prompt",
+      "label": "Describe custom Call; choose Build with",
+      "source": "apps/saul/src/app/ActionSettings.tsx:257",
+      "kind": "input"
+    },
+    {
+      "id": "create",
+      "from": "call-prompt",
+      "to": "call-building",
+      "label": "Create",
+      "source": "apps/saul/src/app/ActionSettings.tsx:273",
+      "kind": "user"
+    },
+    {
+      "id": "built",
+      "from": "call-building",
+      "to": "candidate",
+      "label": "Candidate validates and stages",
+      "source": "apps/saul/src/actions/manager.ts:195",
+      "kind": "system"
+    },
+    {
+      "id": "build-fail",
+      "from": "call-building",
+      "to": "build-failed",
+      "label": "Build fails or times out",
+      "source": "apps/saul/src/actions/manager.ts:198",
+      "kind": "system"
+    },
+    {
+      "id": "build-stop",
+      "from": "call-building",
+      "to": "build-failed",
+      "label": "Stop creating",
+      "source": "apps/saul/src/actions/manager.ts:47",
+      "kind": "user"
+    },
+    {
+      "id": "revise",
+      "from": "build-failed",
+      "to": "call-building",
+      "label": "Revise",
+      "source": "apps/saul/src/actions/manager.ts:59",
+      "kind": "user"
+    },
+    {
+      "id": "check-file",
+      "from": "calls",
+      "to": "candidate",
+      "label": "Check a valid local file",
+      "source": "apps/saul/src/app/ActionSettings.tsx:365",
+      "kind": "user"
+    },
+    {
+      "id": "load",
+      "from": "candidate",
+      "to": "loading-call",
+      "label": "Save and select",
+      "source": "apps/saul/src/app/ActionSettings.tsx:331",
+      "kind": "user"
+    },
+    {
+      "id": "loaded",
+      "from": "loading-call",
+      "to": "call-selected",
+      "label": "Helper confirms exact revision; selection saved",
+      "source": "apps/saul/src/actions/manager.ts:117",
+      "kind": "system"
+    },
+    {
+      "id": "load-fail",
+      "from": "loading-call",
+      "to": "candidate",
+      "label": "Load fails; candidate retained",
+      "source": "apps/saul/src/actions/manager.ts:147",
+      "kind": "system"
+    },
+    {
+      "id": "use-builtin",
+      "from": "call-selected",
+      "to": "summarize-restored",
+      "label": "Use Summarize",
+      "source": "apps/saul/src/actions/manager.ts:86",
+      "kind": "user"
+    },
+    {
+      "id": "restore",
+      "from": "summarize-restored",
+      "to": "loading-call",
+      "label": "Restore previous Call",
+      "source": "apps/saul/src/app/ActionSettings.tsx:379",
+      "kind": "user"
+    },
+    {
+      "id": "select-speech",
+      "from": "presets",
+      "to": "speak",
+      "label": "Select saved Speak preset",
+      "source": "apps/saul/src/app/Settings.tsx:286",
+      "kind": "user"
+    },
+    {
+      "id": "generate-speech",
+      "from": "speak",
+      "to": "speech-running",
+      "label": "Generate",
+      "source": "apps/saul/src/app/SpeechTest.tsx:108",
+      "kind": "user"
+    },
+    {
+      "id": "speech-complete",
+      "from": "speech-running",
+      "to": "speech-ready",
+      "label": "Valid audio received",
+      "source": "apps/saul/src/app/SpeechTest.tsx:61",
+      "kind": "system"
+    },
+    {
+      "id": "speech-stop",
+      "from": "speech-running",
+      "to": "speak",
+      "label": "Stop",
+      "source": "apps/saul/src/app/SpeechTest.tsx:94",
+      "kind": "user"
+    },
+    {
+      "id": "speech-fail",
+      "from": "speech-running",
+      "to": "speak",
+      "label": "Preview fails; show error",
+      "source": "apps/saul/src/app/SpeechTest.tsx:64",
+      "kind": "system"
+    },
+    {
+      "id": "play",
+      "from": "speech-ready",
+      "to": "speech-playing",
+      "label": "Play audio control",
+      "source": "apps/saul/src/app/SpeechTest.tsx:123",
+      "kind": "user"
+    },
+    {
+      "id": "review",
+      "from": "conflict",
+      "to": "reading-latest",
+      "label": "Review latest",
+      "kind": "user",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:163"
+    },
+    {
+      "id": "latest-read",
+      "from": "reading-latest",
+      "to": "review-changes",
+      "label": "Current settings received",
+      "kind": "system",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:163"
+    },
+    {
+      "id": "latest-failed",
+      "from": "reading-latest",
+      "to": "conflict",
+      "label": "Read fails; retain original draft",
+      "kind": "system",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:163"
+    },
+    {
+      "id": "choose-mine",
+      "from": "review-changes",
+      "to": "review-mine",
+      "label": "Mine",
+      "kind": "input",
+      "source": "apps/saul/src/app/SettingsRecovery.tsx:34"
+    },
+    {
+      "id": "choose-latest",
+      "from": "review-changes",
+      "to": "review-latest",
+      "label": "Latest",
+      "kind": "input",
+      "source": "apps/saul/src/app/SettingsRecovery.tsx:34"
+    },
+    {
+      "id": "review-cancel",
+      "from": "review-changes",
+      "to": "conflict",
+      "label": "Cancel review",
+      "kind": "user",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:163"
+    },
+    {
+      "id": "apply-mine",
+      "from": "review-mine",
+      "to": "reviewed-draft",
+      "label": "Apply to draft",
+      "kind": "user",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:183"
+    },
+    {
+      "id": "apply-latest",
+      "from": "review-latest",
+      "to": "current-adopted",
+      "label": "Apply to draft",
+      "kind": "user",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:183"
+    },
+    {
+      "id": "save-reviewed",
+      "from": "reviewed-draft",
+      "to": "saving",
+      "label": "Save",
+      "kind": "user",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:183"
+    },
+    {
+      "id": "change-to-latest",
+      "from": "review-mine",
+      "to": "review-latest",
+      "label": "Latest",
+      "kind": "input",
+      "source": "apps/saul/src/app/SettingsRecovery.tsx:34"
+    },
+    {
+      "id": "change-to-mine",
+      "from": "review-latest",
+      "to": "review-mine",
+      "label": "Mine",
+      "kind": "input",
+      "source": "apps/saul/src/app/SettingsRecovery.tsx:34"
+    },
+    {
+      "id": "cancel-mine",
+      "from": "review-mine",
+      "to": "conflict",
+      "label": "Cancel review",
+      "kind": "user",
+      "source": "apps/saul/src/app/SettingsRecovery.tsx:34"
+    },
+    {
+      "id": "cancel-latest",
+      "from": "review-latest",
+      "to": "conflict",
+      "label": "Cancel review",
+      "kind": "user",
+      "source": "apps/saul/src/app/SettingsRecovery.tsx:34"
+    }
+  ],
+  "journeys": [
+    {
+      "id": "preset",
+      "label": "Edit and save a preset",
+      "start": "overview",
+      "steps": ["presets", "edit", "save", "save-ok"],
+      "description": "A deliberate settings commit changes future attempts only."
+    },
+    {
+      "id": "conflict",
+      "label": "Recover a stale Settings draft",
+      "start": "overview",
+      "steps": [
+        "presets",
+        "edit",
+        "save",
+        "save-conflict",
+        "review",
+        "latest-read",
+        "review-cancel",
+        "review",
+        "latest-read",
+        "choose-mine",
+        "apply-mine",
+        "save-reviewed",
+        "save-ok"
+      ],
+      "description": "Read and cancel without losing edits; then resolve the conflicting name, apply to draft and save against the current revision."
+    },
+    {
+      "id": "leave",
+      "label": "Protect dirty edits while navigating away",
+      "start": "overview",
+      "steps": ["presets", "edit", "leave", "stay", "leave", "discard-leave"],
+      "description": "Cancel keeps the same draft; later confirmation discards it."
+    },
+    {
+      "id": "action",
+      "label": "Save a reading Action",
+      "start": "overview",
+      "steps": ["actions", "edit-action", "save-action"],
+      "description": "An Action is a local reading template; Calls operate on captured pages."
+    },
+    {
+      "id": "connection",
+      "label": "Authorize and save a managed connection",
+      "start": "overview",
+      "steps": ["connections", "add", "sign-in", "authorized", "connection-save"],
+      "description": "Browser sign-in and connection definition saving are separate steps."
+    },
+    {
+      "id": "disconnect",
+      "label": "Confirm shared credential removal",
+      "start": "connections",
+      "steps": ["remove", "remove-cancel", "remove", "remove-confirm"],
+      "description": "This simulates only the UI route; it never signs out or removes keys."
+    },
+    {
+      "id": "create-call",
+      "label": "Create, inspect and select a custom Call",
+      "start": "overview",
+      "steps": ["calls", "brief", "create", "built", "load", "loaded"],
+      "description": "Staging code is not activation. The explicit Save and select boundary is retained."
+    },
+    {
+      "id": "retry-builder",
+      "label": "Recover a failed Call build",
+      "start": "overview",
+      "steps": ["calls", "brief", "create", "build-fail", "revise", "built", "load", "loaded"],
+      "description": "The retry/revise loop is an authored major journey, not a shortest path."
+    },
+    {
+      "id": "file-call",
+      "label": "Check a file before loading it",
+      "start": "calls",
+      "steps": ["check-file", "load", "loaded"],
+      "description": "Check file stages a candidate. The atlas reads no external script file."
+    },
+    {
+      "id": "restore-call",
+      "label": "Return to Summarize, then restore the custom Call",
+      "start": "call-selected",
+      "steps": ["use-builtin", "restore", "loaded"],
+      "description": "Keeps the explicit selection/activation boundary."
+    },
+    {
+      "id": "speech",
+      "label": "Generate a speech preview and play it",
+      "start": "overview",
+      "steps": ["presets", "select-speech", "generate-speech", "speech-complete", "play"],
+      "description": "Uses fixed content; there is no live billing, audio output or history write."
+    },
+    {
+      "id": "recover-latest",
+      "label": "Keep current settings after reviewing a conflict",
+      "start": "conflict",
+      "steps": ["review", "latest-read", "choose-latest", "apply-latest"],
+      "description": "Choosing all current values requires no repeat write."
+    }
+  ],
+  "layout": {
+    "states": {
+      "action-dirty": [400, 1060],
+      "actions": [150, 1010],
+      "authorized": [1620, 500],
+      "build-failed": [1700, 1450],
+      "call-building": [1730, 1110],
+      "call-prompt": [1500, 1060],
+      "call-selected": [1230, 1530],
+      "calls": [1270, 1090],
+      "candidate": [1930, 1320],
+      "conflict": [680, 490],
+      "connection-editor": [1620, 180],
+      "connection-saved": [1350, 650],
+      "connections": [1370, 150],
+      "dirty": [650, 190],
+      "disconnect": [1870, 650],
+      "disconnected": [1820, 880],
+      "history": [160, 740],
+      "leave-confirm": [390, 480],
+      "loading-call": [1460, 1370],
+      "overview": [150, 180],
+      "presets": [410, 180],
+      "reload-confirm": [680, 750],
+      "reloaded": [930, 850],
+      "saved": [940, 500],
+      "saving": [900, 240],
+      "signing-in": [1840, 350],
+      "speak": [430, 780],
+      "speech-playing": [1090, 1110],
+      "speech-ready": [890, 1140],
+      "speech-running": [670, 1050],
+      "summarize-restored": [1440, 1760],
+      "reading-latest": [200, 1590],
+      "review-changes": [480, 1590],
+      "review-mine": [810, 1530],
+      "review-latest": [500, 1940],
+      "reviewed-draft": [1100, 1550],
+      "current-adopted": [900, 1940]
+    },
+    "regions": {
+      "settings": {
+        "label": [95, -30],
+        "outline": [
+          [60, 368.75],
+          [306.4, 75],
+          [866.4, 65],
+          [1180, 368.75],
+          [1195, 897.5],
+          [933.6, 1250],
+          [306.4, 1250],
+          [45, 897.5]
+        ]
+      },
+      "connections": {
+        "label": [1295, -60],
+        "outline": [
+          [1260, 281.25],
+          [1414.0, 45],
+          [1764.0, 35],
+          [1960, 281.25],
+          [1975, 706.5],
+          [1806.0, 990],
+          [1414.0, 990],
+          [1245, 706.5]
+        ]
+      },
+      "calls": {
+        "label": [1175, 1040],
+        "outline": [
+          [1140, 1183.75],
+          [1333.6, 955],
+          [1773.6, 945],
+          [2020, 1183.75],
+          [2035, 1595.5],
+          [1826.4, 1870],
+          [1333.6, 1870],
+          [1125, 1595.5]
+        ]
+      },
+      "review": {
+        "label": [90, 1370],
+        "outline": [
+          [70, 1540],
+          [180, 1430],
+          [1030, 1430],
+          [1220, 1540],
+          [1240, 1960],
+          [1080, 2100],
+          [180, 2100],
+          [50, 1960]
+        ]
+      }
+    }
+  }
+}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { connectionCapabilities } from '../../native/shared-presets-contract.mts';
-import type { UserSettings } from '../types';
-import type { SettingsEdit } from '../models/settings-draft';
+import type { Configuration } from '../configuration/definition';
+import type { SettingsEdit } from '../settings/draft';
 import type { PlanSettingsState } from './usePlanSettings';
 import { ChatGPTPlanSettings } from './ChatGPTPlanSettings';
 import { officialOpenAI } from '../../native/credentials-contract.mts';
@@ -13,7 +13,7 @@ export function StandaloneConnectionSettings({
   disabled,
   visible,
 }: {
-  settings: UserSettings;
+  settings: Configuration;
   edit: (edit: SettingsEdit) => void;
   plan: PlanSettingsState;
   disabled: boolean;
@@ -41,7 +41,7 @@ export function StandaloneConnectionSettings({
     if (connection?.kind === 'openai-api') edit({ type: 'connection-profile', key, profileId: id });
     else setProfileId(id);
   };
-  const editProfile = (patch: Partial<UserSettings['openaiCompatible']>) => {
+  const editProfile = (patch: Partial<Configuration['openaiCompatible']>) => {
     if (profile) edit({ type: 'connection', id: profile.id, patch });
   };
   const options = [

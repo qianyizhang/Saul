@@ -1,6 +1,7 @@
 ## Change
 
 Describe the user-visible problem and resulting behavior.
+For a qualifying [architecture decision](../AGENTS.md#architecture-decisions), link the ADR.
 
 ## Verification
 

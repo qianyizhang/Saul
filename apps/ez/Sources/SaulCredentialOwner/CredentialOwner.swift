@@ -92,6 +92,15 @@ import SaulCredentialStorage
             throw error
         }
     }
+    package static func planContent(_ value: [String: Any]) -> Any {
+        let text = value["userPrompt"] as? String ?? ""
+        let attachments = value["attachments"] as? [[String: Any]] ?? []
+        let images = value["images"] as? [String] ?? []
+        guard !attachments.isEmpty || !images.isEmpty else { return text }
+        return [["type": "input_text", "text": text]]
+            + images.map { ["type": "input_image", "image_url": $0, "detail": "auto"] }
+            + attachments.map { ["type": "input_file", "file_url": $0["url"] as? String ?? ""] }
+    }
     private func execute(_ request: CredentialRequest) async throws {
         let value = request.value
         func result(_ value: [String: Any] = [:]) {
@@ -184,15 +193,10 @@ import SaulCredentialStorage
             let tier = try validateModel(
                 (value["model"] as? String ?? ""), effort: value["effort"] as? String,
                 fast: value["fast"] as? Bool == true, models: models)
-            var content: Any = (value["userPrompt"] as? String ?? "")
-            if let attachments = value["attachments"] as? [[String: Any]] {
-                content =
-                    [["type": "input_text", "text": (value["userPrompt"] as? String ?? "")]]
-                    + attachments.map { ["type": "input_file", "file_url": ($0["url"] as? String ?? "")] }
-            }
             var body: [String: Any] = [
                 "model": value["model"]!, "instructions": value["systemPrompt"]!,
-                "input": [["role": "user", "content": content]], "store": false, "stream": true,
+                "input": [["role": "user", "content": Self.planContent(value)]], "store": false,
+                "stream": true,
                 "service_tier": tier,
             ]
             if let effort = value["effort"] as? String, !effort.isEmpty {
@@ -226,7 +230,15 @@ import SaulCredentialStorage
                 "model": value["model"]!,
                 "messages": [
                     ["role": "system", "content": value["systemPrompt"]!],
-                    ["role": "user", "content": value["userPrompt"]!],
+                    [
+                        "role": "user",
+                        "content": (value["images"] as? [String]).map { images -> Any in
+                            [["type": "text", "text": value["userPrompt"]!] as [String: Any]]
+                                + images.map {
+                                    ["type": "image_url", "image_url": ["url": $0]] as [String: Any]
+                                }
+                        } ?? value["userPrompt"]!,
+                    ],
                 ],
                 "temperature": value["temperature"] ?? 0.3, "max_tokens": value["maxTokens"] ?? 1024,
                 "stream": true,

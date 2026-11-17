@@ -5,6 +5,48 @@ import Foundation
 
 @MainActor func modelChecks() -> [CheckCase] {
     [
+        CheckCase("retry: reset results while preserving frozen image and follow-up inputs") { _ in
+            var entry = HistoryEntry(
+                mode: .ask, query: "Frozen prompt", model: "gpt-image-2.6-flare", effort: "",
+                requestedServiceTier: nil)
+            entry.status = "interrupted"
+            entry.response = "Partial output"
+            entry.error = "Stopped"
+            entry.parentID = UUID()
+            entry.followUpQuestion = "Original question"
+            entry.instructions = "Frozen instructions"
+            entry.connectionSnapshot = ConnectionDefinition.defaults[1]
+            entry.presetSnapshot = ModelPreset(
+                name: "Image", model: entry.model, effort: "", fast: false,
+                connectionKey: "openai-api", capability: .draw, imageOptions: ImageOptions())
+            let image = try ImageAttachment(data: fixturePNG, name: "source.png")
+            entry.inputImage = image
+            entry.inputImage?.data = nil
+            entry.storedImage = true
+            entry.imageData = fixturePNG
+            let retry = try entry.prepareRetry(connection: ConnectionDefinition.defaults[1], image: image)
+            try expect(retry.id != entry.id, "Retry reused a history identity")
+            try expectEqual(retry.parentID, entry.parentID, "Follow-up parent changed")
+            try expectEqual(retry.query, entry.query, "Frozen prompt changed")
+            try expectEqual(retry.instructions, entry.instructions, "Instructions changed")
+            try expectEqual(retry.inputImage?.data, fixturePNG, "Frozen image lost")
+            try expect(
+                retry.status == "pending" && retry.response.isEmpty && retry.error == nil
+                    && !retry.storedImage && retry.imageData == nil, "Retry retained prior result state")
+            try expectThrows(EZError.self) {
+                _ = try entry.prepareRetry(connection: ConnectionDefinition.defaults[1], image: nil)
+            }
+            var changed = ConnectionDefinition.defaults[1]
+            changed.baseUrl = "https://example.test/v1"
+            try expectThrows(EZError.self) { _ = try entry.prepareRetry(connection: changed, image: image) }
+            for status in ["completed", "pending", "unsaved"] {
+                entry.status = status
+                try expect(!entry.isRetryable, "Ineligible state offered Retry")
+            }
+            entry.status = "failed"
+            entry.sourceID = "saul-origin"
+            try expect(!entry.isRetryable, "Saul-origin request offered native Retry")
+        },
         CheckCase("model: live-catalog-only model capabilities") { _ in
             let model = ModelOption(catalog: [
                 "visibility": "list", "slug": "test", "display_name": "Test",

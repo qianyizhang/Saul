@@ -1,225 +1,90 @@
-# Architecture and decisions
+# Architecture
 
-## Repository ownership
+[Saul](../apps/saul/docs/architecture.md) owns Chrome UI, capture, anchors and Node
+helpers. [EZ](../apps/ez/docs/architecture.md) owns the native UI and its request
+and storage adapters. They build and install independently. The signed Saul
+credential owner is a separate executable, not an EZ or Chrome UI process.
 
-The repository coordinates independently installed applications. `apps/saul`
-owns Chrome UI, capture, anchors, persistence and optional Node helpers.
-`apps/ez` owns native macOS UI, authentication, inference and persistence.
-[Shared contracts](../contracts/README.md), [vocabulary](../GLOSSARY.md) and
-[design](../DESIGN.md) have one root owner. Swift and browser builds retain their
-own toolchains. Root commands coordinate them; they are not runtime dependencies.
+## Documentation ownership
 
-The Git history includes both original repositories. Application-local docs remain
-the authority for platform details. CI has separate browser and native jobs; each
-release artifact can be built and installed independently.
+| To find                             | Read                                                                                             |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Shared guarantees and fixture links | [Contracts](../contracts/README.md)                                                              |
+| Current behavior                    | [Saul product](../apps/saul/docs/product.md), [EZ surfaces](../apps/ez/docs/surfaces.md)         |
+| Terms and presentation              | [Glossary](../GLOSSARY.md), [design](../DESIGN.md)                                               |
+| Installation, upgrades and recovery | [Setup](setup.md)                                                                                |
+| Checks and diagnosis                | [Saul testing](../apps/saul/docs/testing.md), [EZ verification](../apps/ez/docs/verification.md) |
+| Historical evidence                 | [Snapshot policy](artifacts.md#historical-references)                                            |
 
-## Behavior owners
+Code, schemas, scripts and configuration own implementation details and tool pins.
+Use the [ADR rule](../AGENTS.md#architecture-decisions) for durable trade-offs.
 
-| Boundary                                   | Owner                                                                                       | Stable check                                                                                    |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Native attempt execution and final save    | [AttemptExecution](../apps/ez/Sources/EZCore/AttemptExecution.swift), projected by AppModel | Production Send/Stop/Save again actions in the [native state suite](../apps/ez/Tests/README.md) |
-| Browser attempt execution and persistence  | [ReadingRunner](../apps/saul/src/reading/runner.ts)                                         | Both apps consume the [Attempt contract fixtures](../contracts/README.md#execution)             |
-| Browser configuration writes and conflicts | [Settings owner](../apps/saul/src/storage/settings.ts) in the trusted background            | Concurrent owner requests and two real Settings surfaces                                        |
-| Helper installation and recovery           | [Installation transaction](../apps/saul/native/installation.mts)                            | Disposable installs, failure injection and old/new running processes                            |
-| Tab board host connection                  | [Host adapter](../apps/saul/native/ui/host-adapter.ts) using the pinned MCP Apps SDK        | Independent SDK host and the delivered document under CSP                                       |
+## Lifecycle ownership
 
-Views express user intent and render state. These owners hold the ordering,
-durability and lifecycle rules. Shared fixtures compare behavior; history uses the shared SQLite schema. App-local details remain
-in the [Saul](../apps/saul/docs/architecture.md) and
-[EZ](../apps/ez/docs/architecture.md) architecture documents.
+One lifecycle has one owner for its states, valid data, transitions and effects.
+Callers request transitions and read snapshots. Keep independent facts separate;
+use distinct types when states require different data or operations.
 
-## TypeScript maintenance
-
-Decision — 2026-10-23: maintain substantial JavaScript-family code as TypeScript.
-The extension already used strict TypeScript; direct Node helpers, board logic and
-maintenance scripts had escaped implementation checking behind handwritten declaration
-files. Types now live with their implementation. External JSON still needs runtime
-validation; a cast does not establish trust. EZ remains Swift.
-
-| Compiler scope    | Runtime and output                                                                  |
-| ----------------- | ----------------------------------------------------------------------------------- |
-| Extension         | WXT strict browser program; retains indexed-access checks                           |
-| Board             | Strict DOM-only program; esbuild bundles the pinned MCP Apps SDK                    |
-| Native helpers    | Strict ESM `.mts`; TypeScript emits `.mjs` and declarations; history SQL is bundled |
-| JXA               | Strict macOS script context; emits `window-names.jxa` with global `run`             |
-| Tooling and tests | Strict Node or mixed test programs; Node 24 runs erasable tooling source            |
-
-`pnpm --dir apps/saul build:native` produces the complete disposable
-`apps/saul/.build/native/` tree: emitted modules, JXA, HTML, CSS and bundled board.
-It sits outside WXT's output tree so rebuilding the extension cannot erase helper
-assets. Installation copies that complete output into the existing immutable
-generation layout. Public pnpm commands and installed `bridge/*.mjs`/`bin/*`
-paths stay stable; direct checkout commands use `.mts` tooling or the emitted tree.
-Development ChatGPT metadata preserves `apps/saul/chatgpt`; installed credentials
-remain under the existing installation root.
-
-`pnpm typecheck` covers every authored compiler scope. The normal check gates
-include it by scope, and lint rejects new authored JS outside the two small ESLint
-configs. Unit tests import TypeScript; delivered-board, subprocess and installation
-checks use emitted artifacts. No TypeScript loader is required by installed helpers.
-The cost is an explicit build before helper execution, already owned by package
-commands. There are no source compatibility shims or independently maintained `.d.mts`
-contracts. Build outputs are never hand-edited or committed.
-
-## Installation
-
-Extension, ChatGPT helper, tab helper, action helper and native app are explicit setup selections.
-The extension requires the ChatGPT/history helper for shared persistence, including API-provider reading. It does not require EZ.
-ChatGPT plan features and built-in summaries need the ChatGPT helper. Custom
-Summarize modules use a third optional action helper and retain their selected
-provider's credential owner. External tab access
-and native window names need the tab helper. Codex registration is separate.
-
-The optional setup CLI runs with Node; the native installed app does not.
-Current browser helpers retain the installation-time Node executable dependency.
-A future npm package may distribute this coordinator. Public distribution,
-notarization, app stores and mobile packaging are separate release work.
-
-The helper installer owns one serialized transaction: stage a complete runtime
-generation, validate its payload and managed paths, then activate it atomically.
-Stable launcher and Codex entry paths resolve into immutable generations. Running
-processes keep their original generation, including lazy-loaded assets; later
-connections use the new generation. Credential and runtime data roots stay fixed.
-An interrupted install has an explicit recovery path and never kills or replays work.
-
-Migrating the old mutable installation requires one manual disconnect/reconnect
-window. If both legacy helpers are installed, the first migration includes both;
-subsequent updates preserve an unselected helper's payload and registration.
-See [setup](setup.md) for migration and recovery commands.
-
-## Optional shared capabilities
-
-This section governs optional account and execution replacements. Shared history
-below is the selected persistence owner and has no app-local fallback.
-
-Decision: allow an explicit opt-in replacement for duplicated behavior, including
-the macOS [Saul credential owner](../contracts/credentials.md). That concrete
-replacement is implemented; other replacements remain subject to this contract.
-
-A replacement must define a small versioned interface covering discovery,
-capabilities, explicit connection selection, operation/cancellation, and typed
-unavailable/recovery outcomes. For accounts, identity and usage permission remain
-separate; model/tier availability and refresh ownership are explicit.
-
-Before implementing a concrete replacement:
-
-1. Demonstrate two real consumers and a maintenance benefit over bespoke adapters.
-2. Keep independent installation. Retain standalone browser and custom-endpoint
-   routes for installations that do not opt in.
-3. Require explicit per-app opt-in; show which module owns the connection.
-4. Serialize credential refresh through one owner. Never have two implementations
-   independently rotate the same refresh token. An account label is not identity.
-5. Validate local callers, restrict each operation and keep credentials behind the
-   owner. User records and tokens do not become shared merely by installing it.
-6. Freeze a request's selected implementation and account. Loss blocks explicitly;
-   it never silently falls back, resends, switches billing or copies credentials.
-7. Define disconnect, uninstall and recovery before enabling the replacement.
-   Returning to app-local execution is explicit and may require local sign-in.
-8. Test both adapters against the common contract and their own lifecycle failures.
-
-A desktop replacement cannot become a mandatory dependency for browser-only or
-mobile installation. The macOS credential owner uses signed Swift, native pipes
-and Chrome Native Messaging. It starts on demand and has no daemon.
+Trace each transition through its owner and check it through the caller-facing
+interface. Handle failures, cancellations, uncertain effects and stale responses.
+Advance on evidence from the owning contract: a provider completion does not
+establish a saved result. The [Attempt contract](../contracts/actions-and-attempts.md#execution)
+owns save failures and replay rules; the app architecture pages identify runtime
+owners. Use the storage owner's transactions and constraints directly.
 
 ## Data ownership
 
-ChatGPT model presets share one local JSON document through native Swift and
-Node adapters; [the shared contract](../contracts/README.md#connections-and-presets)
-defines migration, revisions and presets bound to stable connections. App-specific
-preferences and actions use `apps.saul` and `apps.ez` scopes in that document.
-Runtime state remains app-owned. In opted-in macOS installations, managed connection
-credentials use the [Saul owner](../contracts/credentials.md); standalone browser
-connections keep their existing local owner. Saved history uses one shared SQLite database. There is no
-cross-app action import, sync queue, remote library or
-Git sync. Multi-device sync remains separate work.
+- [Configuration](../contracts/configuration.md#unified-configuration-scopes) shares a
+  local settings file, with common connections/presets and app-scoped actions.
+- [Credentials](../contracts/credentials.md) stay behind the opted-in signed
+  owner; standalone browser routes retain their app-owned credentials.
+- [History](#shared-history) is shared. Drafts and active request state stay
+  app-owned. There is no cross-app action import or multi-device sync.
 
 ## Shared history
 
-Decision — 2026-11-04: Saul and EZ use
-`~/Library/Application Support/Little Clarity/history.sqlite3`.
-The [schema](../contracts/history.sql) has one source, packaged as a native resource
-and copied into Saul's installed helper. Swift accesses SQLite directly; Saul
-uses its existing native-messaging helper. EZ has no Node runtime dependency.
-SQLite transactions serialize both adapters, with owner-only files, a busy timeout,
-foreign keys and secure deletion. There is no second history writer, sync queue,
-daemon, local fallback or compatibility shim.
+Both apps use one local SQLite store. See the [history contract](../contracts/history.md)
+for guarantees, schema and adapters, [setup](setup.md#shared-history-upgrade) for
+upgrade and recovery, and the [decision record](adr/0001-share-local-history.md)
+for the trade-off.
 
-Browser relational records preserve page anchors, submissions, complete attempt
-history, bookmarks and saved summaries. Native records retain frozen JSON metadata
-and input/output image blobs in the same database. Both History views project
-reading passages and EZ lookups. Cross-app entries are readable, searchable,
-copyable and deletable; browser-specific execution stays in Saul. Saved summaries
-retain their existing dedicated Saul surfaces. Drafts and active request state
-stay app-owned. Browser recovery is scoped to the originating profile.
-History reloads on activation/focus rather than a recurring background timer.
-The [History operation contract](../contracts/README.md#history-operations) shares
-recovery/deletion meanings and real-store fixtures across Swift and Node. Saul's
-typed operation catalogue owns Native Messaging admission and reconnect policy;
-EZ keeps direct SQLite access and explicit save-only recovery.
-Bridge loss permits at most three connection attempts for safe history operations,
-using the same operation identity for submission/claim/save acknowledgement. These
-retries never repeat inference. Uncertain delete, clear and bookmark operations are
-not retried automatically. Operation IDs live with the existing run/submission
-rows; there is no separate receipt log containing deleted history.
+## Optional shared capabilities
 
-Migration imports the old browser OPFS database and EZ JSONL/images once. It
-validates records and attachments and commits a durable migration marker before
-removing the old files. Reopening after interrupted cleanup never reimports or
-resurrects deleted records. Conflicting, malformed, missing-attachment or unknown
-newer-schema data stops migration and preserves the source. Migration is the
-only reader of the retired formats; they are never used as runtime fallbacks.
+Before adding a shared account or execution replacement, show a maintenance
+benefit for two concrete consumers. Keep installation independent and opt-in per
+app; non-adopters retain standalone routes.
 
-## Naming reminder
-
-Saul is the current repository name; Saul and EZ remain application names.
-Revisit umbrella and application names before public distribution. Shared concepts
-and fixture formats use domain names, not branding. Installed identities such as
-`local.ez.app`, `ez:`, native host names, extension IDs and Keychain service IDs
-remain stable until a separately tested identity migration is designed. A display
-rename must not accidentally relocate data or create a new account registration.
+Use a versioned interface for discovery, capabilities, selection, operations,
+cancellation and recovery. Authenticate callers, restrict operations and keep
+secrets behind one refresh owner. Separate identity from permission, and freeze
+the chosen implementation and account for each request. Loss blocks explicitly;
+returning to the original route is an explicit choice. Define and test disconnect,
+uninstall and failure with both adapters before enabling the replacement.
+The [credential contract](../contracts/credentials.md) is the existing instance.
 
 ## Managed connections
 
-Decision — 2026-11-05: Connections is the user-facing instance concept. A preset
-selects one saved account or endpoint through its existing `connectionKey`. Provider
-remains the protocol/authentication implementation. Bound identities cannot be
-retargeted; adding another account or endpoint creates another connection. Existing
-IDs and historical snapshots remain stable. Legacy unbound plan definitions need
-an explicit account choice, preserving potentially different prior app selections.
-
-The existing signed credential owner owns refresh, endpoint-key binding, masked
-status and live catalogs. SwiftUI and React implement the same settings journey;
-there is no new runtime dependency, daemon or form-description language. Shared
-configuration, native wire validation and each app's state checks exercise the
-same semantics. New catalog choices are dynamic; a saved removed model blocks with
-an update request rather than being silently replaced. The credential contract
-owns cache retention and operation admission; DESIGN.md owns presentation.
+[Connections and presets](../contracts/configuration.md#connections-and-presets) owns
+binding, migration and model choices. The [credential contract](../contracts/credentials.md#connection-identity-and-catalogs)
+owns credential lifecycle and live catalogs.
 
 ### Provider, connection and protocol
 
-The [glossary](../GLOSSARY.md) owns the terms. A provider is broader than a wire
-protocol: it includes authentication, token lifecycle and supported capabilities.
-The implemented provider kinds are `chatgpt-plan` and `openai-api`. The API kind
-uses official OpenAI routes or the supported chat-completions adapter for a custom
-endpoint. Responses, Chat Completions and Realtime are protocols/routes, not saved
-connections. Adding a second account or endpoint adds a connection, not a provider.
+See the [glossary](../GLOSSARY.md) for the distinction and the
+[connection upgrade contract](../contracts/configuration.md#connection-data-upgrades)
+for stored names and compatibility.
 
-| Source or stored name                                  | Meaning                                                               |
-| ------------------------------------------------------ | --------------------------------------------------------------------- |
-| `kind: chatgpt-plan` / `kind: openai-api`              | Provider integration used by a connection.                            |
-| `key: gpt-plan` / `key: openai-api`                    | Stable IDs of the two default connections. There is no `gpt-api` ID.  |
-| `ConnectionDefinition` (Swift and TypeScript)          | Saved account or endpoint definition.                                 |
-| `connections` / `connectionKey` / `connectionSnapshot` | Connection list, preset reference and frozen history snapshot.        |
-| `connectionProfiles` / `APIProfile` (Saul)             | Standalone browser connection bindings and app-owned API credentials. |
+## TypeScript maintenance
 
-Current types and wire messages accept only these names. Storage upgrades consume
-old connection field names once, preserve IDs, models and arbitrary user input,
-and write the canonical representation. Conflicting old/new fields stop the
-upgrade and preserve the original. There are no alias types or old-reply fallbacks.
-Shared history schema 4 and browser import schema 3 upgrade frozen snapshots in
-one transaction. Older runtimes cannot open the newer history schema; update both
-apps and helpers together before reopening shared data.
+Keep authored code and types together; validate external JSON at the boundary.
+[Saul testing](../apps/saul/docs/testing.md#typescript-and-delivered-helper-checks)
+covers the different compiler and test scopes. The complete helper build lives
+outside WXT output so rebuilding the extension cannot erase it. Installed helpers
+use emitted modules and stable entry paths without a TypeScript loader.
 
-The three original architecture candidates were implemented together: connection
-identity/binding, credential-owner lifecycle/catalogs, and matching native UI adapters.
-They are parts of one change, not three remaining alternatives.
+## Naming reminder
+
+Saul is the repository name; Saul and EZ remain app names. Revisit public names
+before distribution. Shared vocabulary uses domain names. Preserve installed
+identities and data locations across display renames; see [setup](setup.md) and
+[installed identities](migration.md#installed-identities-and-artifacts).

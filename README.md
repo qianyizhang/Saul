@@ -1,48 +1,43 @@
 # Saul workspace
 
 One repository for independently installed Chrome and macOS applications, with
-shared design, vocabulary, behavior and interface contracts. Implementations,
-credentials and local records remain app-owned. Mobile and two-way sync are future work.
+shared design, vocabulary, behavior and interface contracts. Saved history and
+model presets share local stores; drafts and active requests remain app-owned.
+Managed credentials use an explicit shared owner. See
+[data ownership](docs/architecture.md#data-ownership) for boundaries and opt-in rules.
 
-| Application                 | Install independently                                       | Development                    |
-| --------------------------- | ----------------------------------------------------------- | ------------------------------ |
-| [Saul](apps/saul/README.md) | Chrome extension; optional ChatGPT and tab helpers          | TypeScript/React, Node helpers |
-| [EZ](apps/ez/README.md)     | Native macOS app; no Saul, Node or Codex runtime dependency | SwiftUI/AppKit and Swift core  |
+| Application                 | Install independently                                                                 | Development                    |
+| --------------------------- | ------------------------------------------------------------------------------------- | ------------------------------ |
+| [Saul](apps/saul/README.md) | Chrome extension with required history helper; optional tab/action helpers            | TypeScript/React, Node helpers |
+| [EZ](apps/ez/README.md)     | Native macOS app with signed credential owner; no Chrome UI, Node or Codex dependency | SwiftUI/AppKit and Swift core  |
 
 ## Setup
 
-Start with [selective installation](docs/setup.md). From the repository root:
+Follow [selective installation](docs/setup.md) for component requirements,
+Chrome loading, native signing, upgrades and recovery. Preview a selection from
+the repository root:
 
 ```sh
 node scripts/setup.mts --components extension --dry-run
-node scripts/setup.mts --components extension --prepare
-node scripts/setup.mts --components ez --dry-run
 ```
-
-To install EZ on this Mac, quit it and run `make -C apps/ez install`; the existing
-pinned identity is already retained. On another Mac, follow the signing setup guide.
-
-No package is published to npm. The setup command is an optional coordinator;
-each application's own build/install commands remain usable. Chrome loading is
-explicit. Codex registration is an explicit `--codex` option, never a prerequisite.
 
 ## Develop
 
 Use Node 24 and the pinned pnpm version, then `pnpm install --frozen-lockfile`.
-Native development also needs Apple tools and `make -C apps/ez tools`.
+For native tool setup, see [EZ contributing](apps/ez/CONTRIBUTING.md#development-setup-and-gates).
 
 ```sh
 pnpm check                 # Shared + browser + macOS checks
-pnpm check:shared          # Shared tooling, contracts and browser design receipts
-pnpm check:saul            # Browser app checks
-pnpm check:ez              # All design receipts + native checks (macOS)
 pnpm build:saul
 pnpm build:ez
 pnpm test:e2e              # Disposable browser tests; observe macOS launch policy
 pnpm design:generate       # Regenerate CSS, TypeScript and Swift together (macOS)
 ```
 
-Git hooks use the root `.pre-commit-config.yaml`; install through
+Gate membership lives in [package.json](package.json), the app package/Makefile,
+and [.pre-commit-config.yaml](.pre-commit-config.yaml). Use the
+[Saul runbook](apps/saul/docs/testing.md) or [EZ verification guide](apps/ez/docs/verification.md)
+for focused checks and diagnosis. Install Git hooks through
 `bash scripts/install-hooks.sh`. Native commands run from `apps/ez` or with
 `make -C apps/ez`. Browser commands run from `apps/saul` or with `pnpm --dir apps/saul`.
 
@@ -52,5 +47,4 @@ Git hooks use the root `.pre-commit-config.yaml`; install through
 - [Design](DESIGN.md) and [feature review](design/SKILL.md)
 - [Migration verification](docs/migration.md)
 
-Naming is provisional. A future rename must separate display names from installed
-identities; the shared contracts use domain terms rather than product names.
+Naming and installed identities follow the [architecture decision](docs/architecture.md#naming-reminder).

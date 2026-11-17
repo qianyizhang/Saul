@@ -73,6 +73,29 @@ import SwiftUI
                             ]))
                         return .text(result)
                     }
+                    if entry.query.contains("[waiting]") || entry.query.contains("[thinking]")
+                        || entry.query.contains("[streaming]")
+                    {
+                        var sample = ResponseAccumulator()
+                        if entry.query.contains("[thinking]") {
+                            try sample.consume(
+                                Data(
+                                    #"{"type":"response.output_item.added","item":{"type":"reasoning"}}"#.utf8
+                                ))
+                        }
+                        if entry.query.contains("[streaming]") {
+                            try sample.consume(
+                                Data(
+                                    #"{"type":"response.output_text.delta","delta":"Serendipity means finding something valuable or pleasant by chance."}"#
+                                        .utf8))
+                        }
+                        update(sample)
+                        try await Task.sleep(for: .seconds(120))
+                    }
+                    if entry.query.contains("[slow]") { try await Task.sleep(for: .seconds(120)) }
+                    if entry.query.contains("[fail]") {
+                        throw EZError("Synthetic text request failure. Your draft is retained.")
+                    }
                     var result = ResponseAccumulator()
                     try result.consume(
                         JSONSerialization.data(withJSONObject: [
@@ -91,8 +114,7 @@ import SwiftUI
                     guard let history else { throw EZError("Preview history is unavailable.") }
                     if entry.status != "pending", !failedTerminal, failFirstSave {
                         failedTerminal = true
-                        throw EZError(
-                            "Synthetic final-save failure. Save again will use disposable local history.")
+                        throw EZError("Synthetic final-save failure.")
                     }
                     try history.append(entry)
                 })
@@ -118,6 +140,7 @@ import SwiftUI
 private struct SurfacePreviewControls: View {
     @ObservedObject var model: AppModel
     @ObservedObject var controller: QuickLookupController
+    @Environment(\.openWindow) private var openWindow
     let syntheticAttempt: Bool
     @State private var scenario = "Empty"
     @State private var dark = false
@@ -127,8 +150,10 @@ private struct SurfacePreviewControls: View {
         self.controller = controller
         self.syntheticAttempt = syntheticAttempt
         _scenario = State(
-            initialValue: CommandLine.arguments.contains("--actions")
-                ? "Draw" : syntheticAttempt ? "Unsaved" : "Empty")
+            initialValue: CommandLine.arguments.contains("--meme")
+                ? "Meme blank"
+                : CommandLine.arguments.contains("--actions")
+                    ? "Draw" : syntheticAttempt ? "Unsaved" : "Empty")
     }
     var body: some View {
         VStack(spacing: 0) {
@@ -136,13 +161,14 @@ private struct SurfacePreviewControls: View {
                 Picker("Fixture", selection: $scenario) {
                     ForEach(
                         [
-                            "Empty", "Signed out", "Two inputs", "Many inputs", "Answer", "Waiting",
+                            "Empty", "Signed out", "Two inputs", "Many inputs", "Answer", "Retained draft",
+                            "Waiting",
                             "Thinking",
                             "Streaming", "Blocked", "Prose corrections",
                             "No actions", "Selector hitboxes", "Long metadata", "Legacy answer",
                             "Draw", "Draw result", "Draw GIF", "Draw waiting", "Draw error",
                             "Research", "Research result", "Research waiting", "Research error",
-                            "Meme", "Meme result", "Meme invalid",
+                            "Meme blank", "Meme", "Meme result", "Meme invalid",
                         ] + (syntheticAttempt ? ["Unsaved"] : []), id: \.self
                     ) {
                         Text($0)
@@ -174,6 +200,7 @@ private struct SurfacePreviewControls: View {
         }
         .preferredColorScheme(dark ? .dark : .light)
         .onAppear {
+            controller.setOpenMain { openWindow(id: "main") }
             NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
             loadFixture()
         }
@@ -185,9 +212,6 @@ private struct SurfacePreviewControls: View {
 
     private func loadFixture() {
         model.stop()
-        model.busy = false
-        model.responseActivity = .waiting
-        model.launcherPending = false
         model.newQuery()
         model.storageWarning = nil
         model.error = nil
@@ -205,8 +229,14 @@ private struct SurfacePreviewControls: View {
         if scenario == "Selector hitboxes" {
             config.actions[0].name = "A deliberately long action title for checking the full selector hitbox"
             config.actions[1].name = "S"
-            config.presets[0].name = "A deliberately long preset title"
+            config.presets[0].name =
+                "A deliberately long retired preset name for checking unavailable choices"
+            config.presets[0].model = "fixture-retired"
             config.presets[1].name = "S"
+            config.presets.append(
+                ModelPreset(
+                    name: "Speech preview", model: "fixture-audio", effort: "", fast: false,
+                    connectionKey: "openai-api", capability: .speak, speechOptions: SpeechOptions()))
         }
         if scenario == "Many inputs" {
             config.actions.append(
@@ -216,6 +246,11 @@ private struct SurfacePreviewControls: View {
         }
         if scenario.hasPrefix("Draw") { config.addIllustration() }
         if scenario.hasPrefix("Meme") || scenario.hasPrefix("Research") { config.addSearchAndMeme() }
+        // Production starters await model discovery. Supply offline IDs before making synthetic requests.
+        for index in config.presets.indices where config.presets[index].model.isEmpty {
+            config.presets[index].model =
+                config.presets[index].capability == .draw ? "gpt-image-2.6-fixture" : "fixture-luna"
+        }
         if scenario == "No actions" { config.actions = [] }
         do { try model.saveConfiguration(config) } catch { model.error = error.localizedDescription }
         let action: Action?
@@ -241,7 +276,7 @@ private struct SurfacePreviewControls: View {
             model.query = "Make this a Monday meme. Caption: already?"
             if scenario == "Meme invalid" {
                 model.attachImage(data: Data("invalid".utf8), name: "bad.png")
-            } else if let png = try? previewPNG() {
+            } else if scenario != "Meme blank", let png = try? previewPNG() {
                 model.attachImage(data: png, name: "sketch.png")
             }
             if scenario == "Meme result" { model.send() }
@@ -253,19 +288,25 @@ private struct SurfacePreviewControls: View {
             if scenario != "Research" { model.send() }
         }
         if scenario.hasPrefix("Draw") {
-            if scenario == "Draw GIF" { model.outputFormatOverride = "gif" }
+            if scenario == "Draw GIF" { model.chooseOutputFormat("gif") }
             model.query = "A tree shares nutrients through its roots and fungi."
             if scenario == "Draw waiting" { model.query += " [slow]" }
             if scenario == "Draw error" { model.query += " [fail]" }
             if scenario != "Draw" { model.send() }
         }
-        if ["Answer", "Waiting", "Thinking", "Streaming", "Blocked", "Long metadata", "Legacy answer"]
-            .contains(scenario)
-        {
+        if [
+            "Answer", "Retained draft", "Waiting", "Thinking", "Streaming", "Blocked", "Long metadata",
+            "Legacy answer",
+        ]
+        .contains(scenario) {
             model.query = "Serendipity"
         }
-        if ["Answer", "Waiting", "Thinking", "Streaming", "Blocked", "Long metadata", "Legacy answer"]
-            .contains(scenario), let action,
+        if ["Waiting", "Thinking", "Streaming"].contains(scenario) {
+            model.query = "Serendipity [\(scenario.lowercased())]"
+            model.send()
+        }
+        if ["Answer", "Retained draft", "Blocked", "Long metadata", "Legacy answer"].contains(scenario),
+            let action,
             let preset = model.currentPreset
         {
             if var entry = try? action.prepare(
@@ -273,18 +314,11 @@ private struct SurfacePreviewControls: View {
             {
                 entry.response =
                     "**Serendipity** means finding something valuable or pleasant by chance.\n\nExample: finding a book you love while searching for something else."
-                let pending = ["Waiting", "Thinking", "Streaming"].contains(scenario)
-                if ["Waiting", "Thinking"].contains(scenario) { entry.response = "" }
-                model.responseActivity =
-                    scenario == "Thinking" ? .thinking : scenario == "Streaming" ? .responding : .waiting
-                entry.status = pending ? "pending" : "completed"
-                entry.actualServiceTier = pending ? nil : "default"
+                entry.status = "completed"
+                entry.actualServiceTier = "default"
                 entry.metrics = ResponseMetrics(
-                    inputTokens: pending ? nil : 128,
-                    reasoningTokens: pending ? nil : 256,
-                    outputTokens: pending ? nil : 320,
-                    timeToFirstTokenSeconds: ["Waiting", "Thinking"].contains(scenario) ? nil : 0.82,
-                    durationSeconds: pending ? nil : 4.2)
+                    inputTokens: 128, reasoningTokens: 256, outputTokens: 320,
+                    timeToFirstTokenSeconds: 0.82, durationSeconds: 4.2)
                 if scenario == "Long metadata" {
                     entry.model = "fixture-model-with-a-deliberately-long-identifier-for-wrapping"
                     entry.presetSnapshot?.name =
@@ -295,9 +329,9 @@ private struct SurfacePreviewControls: View {
                     entry.metrics = nil
                     entry.actualServiceTier = nil
                 }
+                model.query = scenario == "Retained draft" ? "An unrelated question I have not run yet." : ""
                 model.entries = [entry]
                 model.selection = entry.id
-                model.busy = pending
             }
         }
         if scenario == "Prose corrections" {

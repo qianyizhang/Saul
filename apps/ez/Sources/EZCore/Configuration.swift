@@ -134,13 +134,41 @@ public struct Action: Codable, Equatable, Identifiable, Sendable {
     ) throws
         -> HistoryEntry
     {
+        try compile(values: values, preset: preset, models: models, provider: provider).freeze(image: image)
+    }
+
+    public struct Compiled {
+        fileprivate let action: Action
+        fileprivate let preset: ModelPreset
+        fileprivate let values: [String: String]
+        fileprivate let prompt: String
+        fileprivate let tier: String?
+
+        public func freeze(image: ImageAttachment?) throws -> HistoryEntry {
+            var source: ImageAttachment?
+            if action.imageInput != nil {
+                guard let image else { throw EZError("Attach an image before running.") }
+                _ = try image.validatedData()
+                source = image
+            }
+            var entry = HistoryEntry(
+                mode: action.legacyMode ?? .ask, query: prompt, model: preset.model,
+                effort: preset.effort, requestedServiceTier: tier)
+            entry.actionSnapshot = action
+            entry.presetSnapshot = preset
+            entry.inputValues = values
+            entry.instructions = ""
+            entry.inputImage = source
+            return entry
+        }
+    }
+
+    public func compile(
+        values: [String: String], preset: ModelPreset, models: [ModelOption], provider: GenerationProviderID
+    ) throws -> Compiled {
         try validateInputs()
         if webSearch && provider == .chatGPTPlan {
             throw EZError("Web search needs an OpenAI API Write preset.")
-        }
-        if imageInput != nil {
-            guard let image else { throw EZError("Attach an image before running.") }
-            _ = try image.validatedData()
         }
         guard capability == preset.capability else {
             throw EZError("Choose a \(capability.name) preset for this action.")
@@ -149,24 +177,19 @@ public struct Action: Codable, Equatable, Identifiable, Sendable {
         let prompt = try PromptTemplate(template).render(values)
         if capability == .draw {
             let options = preset.imageOptions ?? ImageOptions()
+            if options.outputFormat == "gif" && imageInput != nil {
+                throw EZError("GIF output is unavailable for image edits. Choose PNG.")
+            }
             try ImageGenerationRequest(
                 prompt: prompt, model: preset.model, size: options.size,
-                quality: options.quality, outputFormat: options.outputFormat,
-                image: imageInput == nil ? nil : image
+                quality: options.quality, outputFormat: options.outputFormat
             ).validate()
         }
-        var entry = HistoryEntry(
-            mode: legacyMode ?? .ask, query: prompt, model: preset.model,
-            effort: preset.effort,
-            requestedServiceTier: preset.capability == .write && preset.fast
-                ? (provider == .chatGPTPlan
-                    ? models.first { $0.model == preset.model }?.fastTier : "priority") : nil)
-        entry.actionSnapshot = self
-        entry.presetSnapshot = preset
-        entry.inputValues = values
-        entry.inputImage = imageInput == nil ? nil : image
-        entry.instructions = ""
-        return entry
+        let tier =
+            preset.capability == .write && preset.fast
+            ? (provider == .chatGPTPlan ? models.first { $0.model == preset.model }?.fastTier : "priority")
+            : nil
+        return Compiled(action: self, preset: preset, values: values, prompt: prompt, tier: tier)
     }
 }
 
@@ -330,6 +353,8 @@ public struct Configuration: Codable, Equatable {
                 capability: .draw))
         return true
     }
+    public static let makeMemeActionID = UUID(uuidString: "8ED3A908-D0BF-4FB8-8A61-86549BE9ED49")!
+
     /// Versioned seeding belongs to configuration; removed starters stay removed.
     @discardableResult public mutating func addSearchAndMeme() -> Bool {
         guard (actionTypesVersion ?? 0) < 2 else { return false }
@@ -349,7 +374,7 @@ public struct Configuration: Codable, Equatable {
                         "Search the web to answer the following question. Answer directly in the user's language, cite sources inline, and state material uncertainty.\n\n{{Question}}",
                     webSearch: true))
         }
-        let memeID = UUID(uuidString: "8ED3A908-D0BF-4FB8-8A61-86549BE9ED49")!
+        let memeID = Self.makeMemeActionID
         let memePreset = ModelPreset(
             id: UUID(uuidString: "8F092456-F150-4B43-B9FB-D58345429826")!,
             name: uniqueName("Make meme", in: presets.map(\.name)), model: "",
@@ -401,10 +426,9 @@ public final class ConfigurationStore {
 
     public func load() throws -> Configuration? {
         if let shared {
-            let section = try shared.readAppSection("configuration")
-            scopedRevision = section.revision
+            let section = try shared.configurationSnapshot()
             if var value = section.value {
-                let library = try shared.read()
+                let library = section.library
                 value["presets"] = try JSONSerialization.jsonObject(
                     with: JSONEncoder().encode(library.presets))
                 value["connections"] = try JSONSerialization.jsonObject(
@@ -413,8 +437,10 @@ public final class ConfigurationStore {
                 let result = try JSONDecoder().decode(
                     Configuration.self, from: JSONSerialization.data(withJSONObject: value))
                 try result.validate()
+                scopedRevision = section.revision
                 return result
             }
+            scopedRevision = section.revision
         }
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
         let data = try Data(contentsOf: url)
@@ -453,13 +479,19 @@ public final class ConfigurationStore {
         return result
     }
 
-    public func save(_ configuration: Configuration) throws {
+    @discardableResult public func save(_ configuration: Configuration) throws -> Configuration {
         try configuration.validate()
-        if let shared {
-            scopedRevision = try shared.saveConfiguration(configuration, scopedRevision: scopedRevision)
-        } else {
+        guard let shared else {
             try writeLocal(configuration)
+            return configuration
         }
+        let committed = try shared.saveConfiguration(configuration, scopedRevision: scopedRevision)
+        scopedRevision = committed.scopedRevision
+        var saved = configuration
+        saved.connections = committed.library.connections
+        saved.presets = committed.library.presets
+        saved.sharedPresetRevision = committed.library.revision
+        return saved
     }
     private func writeScope(_ configuration: Configuration, shared: SharedPresetsStore) throws {
         guard

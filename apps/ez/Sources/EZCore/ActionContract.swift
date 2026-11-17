@@ -13,6 +13,11 @@ public struct ConnectionDefinition: Codable, Equatable, Identifiable, Sendable {
     public var baseUrl: String?
     public var endpoint: String { baseUrl ?? "https://api.openai.com/v1" }
     public var id: String { key }
+
+    /// A name change does not redirect generation; account or endpoint changes do.
+    public func matchesRoute(_ other: ConnectionDefinition) -> Bool {
+        key == other.key && kind == other.kind && accountId == other.accountId && endpoint == other.endpoint
+    }
     public var capabilities: [ActionCapability] {
         kind == .chatGPTPlan || endpoint != "https://api.openai.com/v1" ? [.write] : [.write, .draw, .speak]
     }

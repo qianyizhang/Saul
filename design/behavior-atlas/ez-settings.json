@@ -1,0 +1,1011 @@
+{
+  "version": 1,
+  "title": "EZ · Settings and connections",
+  "initial": "lookup",
+  "source": {
+    "revision": "Code accompanying this IR; baseline 0a949cf12f226a63b0db6244f9fc2a1e3fef78d1 plus accepted journey changes, reviewed 2026-11-16",
+    "description": "Source-derived current behavior, including the accepted Retry, Settings review and pointer-open changes. Fixed fictional fixtures; no live provider requests. Affected browser flows and native offline checks passed. Scaffold: repo-kit 4914a36."
+  },
+  "coverage": {
+    "included": [
+      "Signed-in native main-window entry: Settings opens Overview, then Presets. Explicit Preset/Action Save, dirty dismissal, reload and retained draft after save failure.",
+      "Managed plan connection: browser sign-in, permission, explicit save, disconnect and recovery.",
+      "A saved compatible API Speak preset: generate, then deliberate playback; no history writes.",
+      "Reviewed layout hints group navigation contexts and route/recovery neighborhoods; coordinates are presentation only, not time or rank.",
+      "Overview can navigate directly to Actions, Connections and Preferences; Presets is not a required intermediate screen."
+    ],
+    "omitted": [
+      "Shortcuts recording, accessibility permission prompts and all provider/model fields are inventoried in README, not expanded.",
+      "The plan sign-in scenario assumes the signed Saul owner is connected. API key entry, helper installation and schema migration are not simulated.",
+      "The native Settings error path retains edits; it does not inherit the browser Save-disabled conflict rule.",
+      "A finite scenario projection, not the full Cartesian product of app state. System buttons simulate possible source-code outcomes.",
+      "No proposed optimization: Comparison is intentionally absent.",
+      "Terminal landmarks end this scoped review; they do not imply that the real application quits. Compound navigation labels name their menu/section steps; route counts are model transitions, not measured click counts."
+    ]
+  },
+  "regions": [
+    {
+      "id": "lookup",
+      "label": "Main window"
+    },
+    {
+      "id": "settings",
+      "label": "Presets & actions"
+    },
+    {
+      "id": "connections",
+      "label": "Connections"
+    }
+  ],
+  "states": [
+    {
+      "id": "lookup",
+      "region": "lookup",
+      "label": "Lookup ready",
+      "detail": "The current draft is retained while Settings is open. Closing Settings does not run it.",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:267",
+      "preview": {
+        "title": "Lookup ready",
+        "body": "The current draft is retained while Settings is open. Closing Settings does not run it."
+      },
+      "outcome": "Ready to review lookup"
+    },
+    {
+      "id": "presets",
+      "region": "settings",
+      "label": "Presets",
+      "detail": "Choose a preset. Connection, capability, model and options belong to this saved preset.",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:112",
+      "preview": {
+        "title": "Presets",
+        "body": "Choose a preset. Connection, capability, model and options belong to this saved preset."
+      }
+    },
+    {
+      "id": "missing",
+      "region": "lookup",
+      "label": "Preset unavailable",
+      "detail": "Run is blocked when the selected model/preset is unavailable. Edit preset opens the corresponding editor.",
+      "source": "apps/ez/Sources/EZ/ContentView.swift:341",
+      "preview": {
+        "title": "Preset unavailable",
+        "body": "Run is blocked when the selected model/preset is unavailable. Edit preset opens the corresponding editor."
+      }
+    },
+    {
+      "id": "dirty",
+      "region": "settings",
+      "label": "Unsaved preset",
+      "detail": "A valid model choice has been edited in this fixed fixture. The saved preset and active lookup remain unchanged until Save.",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:457",
+      "preview": {
+        "title": "Preset · unsaved edits",
+        "body": "A valid model choice has been edited in this fixed fixture. The saved preset and active lookup remain unchanged until Save."
+      }
+    },
+    {
+      "id": "saving",
+      "region": "settings",
+      "label": "Saving preset",
+      "detail": "A Save checkpoint: shared presets and the EZ scope commit through the configuration owner.",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:426",
+      "preview": {
+        "title": "Saving preset",
+        "body": "A Save checkpoint: shared presets and the EZ scope commit through the configuration owner."
+      }
+    },
+    {
+      "id": "saved",
+      "region": "settings",
+      "label": "Preset saved",
+      "detail": "The editor reflects the saved preset. Existing history retains its frozen choices.",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:505",
+      "preview": {
+        "title": "Preset saved",
+        "body": "The editor reflects the saved preset. Existing history retains its frozen choices."
+      },
+      "outcome": "Preset saved"
+    },
+    {
+      "id": "save-error",
+      "region": "settings",
+      "label": "Save error",
+      "detail": "A stale revision or write failure leaves the editor draft intact. Reload is explicit; no save or generation is replayed.",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:509",
+      "preview": {
+        "title": "Save failed · draft kept",
+        "body": "A stale revision or write failure leaves the editor draft intact. Reload is explicit; no save or generation is replayed."
+      }
+    },
+    {
+      "id": "discard",
+      "region": "settings",
+      "label": "Discard unsaved edits?",
+      "detail": "Done would close Settings. Keep returns to this preset draft; Discard closes without saving.",
+      "source": "apps/ez/Sources/EZ/SettingsView.swift:110",
+      "preview": {
+        "title": "Discard unsaved edits?",
+        "body": "Done would close Settings. Keep returns to this preset draft; Discard closes without saving.",
+        "overlay": {
+          "title": "Discard unsaved edits?",
+          "body": "Done would close Settings. Keep returns to this preset draft; Discard closes without saving.",
+          "blocks": []
+        }
+      }
+    },
+    {
+      "id": "reload-confirm",
+      "region": "settings",
+      "label": "Reload?",
+      "detail": "Reload would replace this unsaved preset draft with the latest saved configuration.",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:33",
+      "preview": {
+        "title": "Discard and reload?",
+        "body": "Reload would replace this unsaved preset draft with the latest saved configuration.",
+        "overlay": {
+          "title": "Discard unsaved edits?",
+          "body": "Reload would replace this unsaved preset draft with the latest saved configuration.",
+          "blocks": []
+        }
+      }
+    },
+    {
+      "id": "reloaded",
+      "region": "settings",
+      "label": "Reloaded",
+      "detail": "The current saved configuration has replaced the discarded draft. Edits can be made again.",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:33",
+      "preview": {
+        "title": "Latest preset loaded",
+        "body": "The current saved configuration has replaced the discarded draft. Edits can be made again."
+      },
+      "outcome": "Configuration reloaded"
+    },
+    {
+      "id": "actions",
+      "region": "settings",
+      "label": "Actions",
+      "detail": "EZ actions own their input template, default preset and capability. They are app-local, unlike shared presets.",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:286",
+      "preview": {
+        "title": "Actions",
+        "body": "EZ actions own their input template, default preset and capability. They are app-local, unlike shared presets."
+      }
+    },
+    {
+      "id": "action-dirty",
+      "region": "settings",
+      "label": "Unsaved action",
+      "detail": "The fixture changes the template and keeps a compatible default preset. Changes are still local to the editor.",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:461",
+      "preview": {
+        "title": "Action · unsaved edits",
+        "body": "The fixture changes the template and keeps a compatible default preset. Changes are still local to the editor."
+      }
+    },
+    {
+      "id": "action-saved",
+      "region": "settings",
+      "label": "Action saved",
+      "detail": "The action is saved in EZ configuration. Future runs use it; history is not rewritten.",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:530",
+      "preview": {
+        "title": "Action saved",
+        "body": "The action is saved in EZ configuration. Future runs use it; history is not rewritten."
+      },
+      "outcome": "Action saved"
+    },
+    {
+      "id": "connections",
+      "region": "connections",
+      "label": "Connections",
+      "detail": "Connections bind one account or endpoint. This scenario uses the signed Saul credential owner.",
+      "source": "apps/ez/Sources/EZ/ConnectionsView.swift:28",
+      "preview": {
+        "title": "Connections",
+        "body": "Connections bind one account or endpoint. This scenario uses the signed Saul credential owner."
+      }
+    },
+    {
+      "id": "connection-editor",
+      "region": "connections",
+      "label": "Add connection",
+      "detail": "The editor needs a signed-in account with plan-use permission. A name alone is not usable authorization.",
+      "source": "apps/ez/Sources/EZ/ConnectionsView.swift:190",
+      "preview": {
+        "title": "Add plan connection",
+        "body": "The editor needs a signed-in account with plan-use permission. A name alone is not usable authorization."
+      }
+    },
+    {
+      "id": "signing-in",
+      "region": "connections",
+      "label": "Signing in",
+      "detail": "The native app opens the owner authorization URL. The real browser/account exchange is not executed by this atlas.",
+      "source": "apps/ez/Sources/EZ/ConnectionsView.swift:221",
+      "preview": {
+        "title": "Browser sign-in pending",
+        "body": "The native app opens the owner authorization URL. The real browser/account exchange is not executed by this atlas."
+      }
+    },
+    {
+      "id": "auth-error",
+      "region": "connections",
+      "label": "Sign-in did not finish",
+      "detail": "The editor retains the error and permits explicit retry or cancel. No connection is silently substituted.",
+      "source": "apps/ez/Sources/EZ/ConnectionsView.swift:240",
+      "preview": {
+        "title": "Sign-in did not finish",
+        "body": "The editor retains the error and permits explicit retry or cancel. No connection is silently substituted."
+      }
+    },
+    {
+      "id": "authorized",
+      "region": "connections",
+      "label": "Authorized",
+      "detail": "The browser flow returned a usable account. Saving the connection definition is a separate deliberate action.",
+      "source": "apps/ez/Sources/EZ/ConnectionsView.swift:235",
+      "preview": {
+        "title": "Account authorized",
+        "body": "The browser flow returned a usable account. Saving the connection definition is a separate deliberate action."
+      }
+    },
+    {
+      "id": "connection-saving",
+      "region": "connections",
+      "label": "Saving connection",
+      "detail": "Save checks sign-in and plan permission, validates the definition, then persists the connection.",
+      "source": "apps/ez/Sources/EZ/ConnectionsView.swift:243",
+      "preview": {
+        "title": "Saving connection",
+        "body": "Save checks sign-in and plan permission, validates the definition, then persists the connection."
+      }
+    },
+    {
+      "id": "connection-saved",
+      "region": "connections",
+      "label": "Connection saved",
+      "detail": "The connection is bound to its account; compatible presets can refer to it in both Saul and EZ.",
+      "source": "apps/ez/Sources/EZ/ConnectionsView.swift:269",
+      "preview": {
+        "title": "Connection saved",
+        "body": "The connection is bound to its account; compatible presets can refer to it in both Saul and EZ."
+      },
+      "outcome": "Connection saved"
+    },
+    {
+      "id": "disconnect",
+      "region": "connections",
+      "label": "Disconnect shared credential?",
+      "detail": "This disconnect affects the account/key in both apps. Presets keep the connection and show that setup is required.",
+      "source": "apps/ez/Sources/EZ/ConnectionsView.swift:63",
+      "preview": {
+        "title": "Disconnect shared credential?",
+        "body": "This disconnect affects the account/key in both apps. Presets keep the connection and show that setup is required.",
+        "overlay": {
+          "title": "Disconnect this account or key?",
+          "body": "This disconnect affects the account/key in both apps. Presets keep the connection and show that setup is required.",
+          "blocks": []
+        }
+      }
+    },
+    {
+      "id": "disconnected",
+      "region": "connections",
+      "label": "Connection needs setup",
+      "detail": "Credentials were disconnected; saved preset references remain. Sign in again or explicitly configure another connection.",
+      "source": "apps/ez/Sources/EZ/ConnectionsView.swift:79",
+      "preview": {
+        "title": "Connection needs setup",
+        "body": "Credentials were disconnected; saved preset references remain. Sign in again or explicitly configure another connection."
+      },
+      "outcome": "Credential disconnected"
+    },
+    {
+      "id": "preferences",
+      "region": "settings",
+      "label": "Preferences",
+      "detail": "Min Mode and Integrations have their own controls. Preference changes do not submit a lookup.",
+      "source": "apps/ez/Sources/EZ/SettingsView.swift:148",
+      "preview": {
+        "title": "Preferences",
+        "body": "Min Mode and Integrations have their own controls. Preference changes do not submit a lookup."
+      }
+    },
+    {
+      "id": "preference-saved",
+      "region": "settings",
+      "label": "Preference saved",
+      "detail": "This app-local presentation preference is shared by EZ main and Quick Lookup, and saves immediately.",
+      "source": "apps/ez/Sources/EZ/SettingsView.swift:148",
+      "preview": {
+        "title": "Min Mode changed",
+        "body": "This app-local presentation preference is shared by EZ main and Quick Lookup, and saves immediately."
+      },
+      "outcome": "Preference saved"
+    },
+    {
+      "id": "speech",
+      "region": "settings",
+      "label": "Speak preview ready",
+      "detail": "Fixture: a saved API Speak preset, a valid voice/model and a short sample. Unsaved or invalid presets cannot Generate.",
+      "source": "apps/ez/Sources/EZ/SpeakPreview.swift:21",
+      "preview": {
+        "title": "Speak preview ready",
+        "body": "Fixture: a saved API Speak preset, a valid voice/model and a short sample. Unsaved or invalid presets cannot Generate."
+      }
+    },
+    {
+      "id": "speech-active",
+      "region": "settings",
+      "label": "Generating speech",
+      "detail": "The preview uses the chosen saved preset. Stop cancels the preview; no history record is written.",
+      "source": "apps/ez/Sources/EZ/SpeakPreview.swift:61",
+      "preview": {
+        "title": "Generating speech",
+        "body": "The preview uses the chosen saved preset. Stop cancels the preview; no history record is written."
+      }
+    },
+    {
+      "id": "speech-ready",
+      "region": "settings",
+      "label": "Speech ready",
+      "detail": "Audio is held in memory. Generation does not start playback automatically.",
+      "source": "apps/ez/Sources/EZ/SpeakPreview.swift:75",
+      "preview": {
+        "title": "Speech ready",
+        "body": "Audio is held in memory. Generation does not start playback automatically."
+      },
+      "outcome": "Speech generated"
+    },
+    {
+      "id": "speech-playing",
+      "region": "settings",
+      "label": "Playing",
+      "detail": "Play is a separate user action. Stop playback leaves the generated audio available.",
+      "source": "apps/ez/Sources/EZ/SpeakPreview.swift:33",
+      "preview": {
+        "title": "Speech playing",
+        "body": "Play is a separate user action. Stop playback leaves the generated audio available."
+      },
+      "outcome": "Speech preview played"
+    },
+    {
+      "id": "overview",
+      "region": "settings",
+      "label": "Settings overview",
+      "source": "apps/ez/Sources/EZ/SettingsView.swift:122",
+      "detail": "The signed-in main-window Settings entry opens Overview. Choose Presets to edit model choices.",
+      "preview": {
+        "title": "Settings overview",
+        "body": "The signed-in main-window Settings entry opens Overview. Choose Presets to edit model choices."
+      }
+    },
+    {
+      "id": "repair-editor",
+      "region": "settings",
+      "label": "Unavailable model",
+      "source": "apps/ez/Sources/EZ/ContentView.swift:342",
+      "detail": "The saved model is unavailable. The fixture offers a valid current catalog replacement.",
+      "preview": {
+        "title": "Unavailable preset editor",
+        "body": "The saved model is unavailable. The fixture offers a valid current catalog replacement."
+      }
+    },
+    {
+      "id": "repair-dirty",
+      "region": "settings",
+      "label": "New model chosen",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:457",
+      "detail": "The replacement is unsaved. The original lookup remains blocked until Save succeeds.",
+      "preview": {
+        "title": "Replacement model selected",
+        "body": "The replacement is unsaved. The original lookup remains blocked until Save succeeds."
+      }
+    },
+    {
+      "id": "repair-saving",
+      "region": "settings",
+      "label": "Saving repair",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:492",
+      "detail": "The replacement commits through the same configuration owner. A failure retains these repair edits.",
+      "preview": {
+        "title": "Saving replacement model",
+        "body": "The replacement commits through the same configuration owner. A failure retains these repair edits."
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "id": "settings",
+      "from": "lookup",
+      "to": "overview",
+      "label": "Settings",
+      "source": "apps/ez/Sources/EZ/ContentView.swift:158",
+      "kind": "user"
+    },
+    {
+      "id": "repair",
+      "from": "missing",
+      "to": "repair-editor",
+      "label": "Edit preset",
+      "source": "apps/ez/Sources/EZ/ContentView.swift:342",
+      "kind": "user"
+    },
+    {
+      "id": "edit",
+      "from": "presets",
+      "to": "dirty",
+      "label": "Edit preset fields",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:457",
+      "kind": "input"
+    },
+    {
+      "id": "save",
+      "from": "dirty",
+      "to": "saving",
+      "label": "Save",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:492",
+      "kind": "user"
+    },
+    {
+      "id": "save-ok",
+      "from": "saving",
+      "to": "saved",
+      "label": "Configuration write succeeds",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:505",
+      "kind": "system"
+    },
+    {
+      "id": "save-error",
+      "from": "saving",
+      "to": "save-error",
+      "label": "Revision conflict or write failure",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:509",
+      "kind": "system"
+    },
+    {
+      "id": "retry-save",
+      "from": "save-error",
+      "to": "saving",
+      "label": "Save again",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:492",
+      "kind": "user"
+    },
+    {
+      "id": "reload",
+      "from": "save-error",
+      "to": "reload-confirm",
+      "label": "Reload saved settings",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:33",
+      "kind": "user"
+    },
+    {
+      "id": "reload-discard",
+      "from": "reload-confirm",
+      "to": "reloaded",
+      "label": "Discard edits and reload",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:81",
+      "kind": "user"
+    },
+    {
+      "id": "reload-keep",
+      "from": "reload-confirm",
+      "to": "save-error",
+      "label": "Keep",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:80",
+      "kind": "user"
+    },
+    {
+      "id": "edit-reloaded",
+      "from": "reloaded",
+      "to": "dirty",
+      "label": "Edit current preset",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:457",
+      "kind": "input"
+    },
+    {
+      "id": "done",
+      "from": "saved",
+      "to": "lookup",
+      "label": "Done",
+      "source": "apps/ez/Sources/EZ/SettingsView.swift:27",
+      "kind": "user"
+    },
+    {
+      "id": "done-dirty",
+      "from": "dirty",
+      "to": "discard",
+      "label": "Done",
+      "source": "apps/ez/Sources/EZ/SettingsView.swift:27",
+      "kind": "user"
+    },
+    {
+      "id": "keep",
+      "from": "discard",
+      "to": "dirty",
+      "label": "Keep",
+      "source": "apps/ez/Sources/EZ/SettingsView.swift:112",
+      "kind": "user"
+    },
+    {
+      "id": "discard",
+      "from": "discard",
+      "to": "lookup",
+      "label": "Discard",
+      "source": "apps/ez/Sources/EZ/SettingsView.swift:113",
+      "kind": "user"
+    },
+    {
+      "id": "actions",
+      "from": "presets",
+      "to": "actions",
+      "label": "Actions section",
+      "source": "apps/ez/Sources/EZ/SettingsView.swift:56",
+      "kind": "user"
+    },
+    {
+      "id": "action-edit",
+      "from": "actions",
+      "to": "action-dirty",
+      "label": "Edit action template",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:461",
+      "kind": "input"
+    },
+    {
+      "id": "action-save",
+      "from": "action-dirty",
+      "to": "action-saved",
+      "label": "Save; configuration write succeeds",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:511",
+      "kind": "user"
+    },
+    {
+      "id": "action-done",
+      "from": "action-saved",
+      "to": "lookup",
+      "label": "Done",
+      "source": "apps/ez/Sources/EZ/SettingsView.swift:27",
+      "kind": "user"
+    },
+    {
+      "id": "connections",
+      "from": "presets",
+      "to": "connections",
+      "label": "Connections section",
+      "source": "apps/ez/Sources/EZ/SettingsView.swift:56",
+      "kind": "user"
+    },
+    {
+      "id": "add",
+      "from": "connections",
+      "to": "connection-editor",
+      "label": "Add plan connection",
+      "source": "apps/ez/Sources/EZ/ConnectionsView.swift:28",
+      "kind": "user"
+    },
+    {
+      "id": "sign-in",
+      "from": "connection-editor",
+      "to": "signing-in",
+      "label": "Sign in and allow plan use",
+      "source": "apps/ez/Sources/EZ/ConnectionsView.swift:190",
+      "kind": "user"
+    },
+    {
+      "id": "sign-in-fails",
+      "from": "signing-in",
+      "to": "auth-error",
+      "label": "Sign-in fails or is cancelled",
+      "source": "apps/ez/Sources/EZ/ConnectionsView.swift:240",
+      "kind": "system"
+    },
+    {
+      "id": "retry-auth",
+      "from": "auth-error",
+      "to": "signing-in",
+      "label": "Sign in again",
+      "source": "apps/ez/Sources/EZ/ConnectionsView.swift:221",
+      "kind": "user"
+    },
+    {
+      "id": "authorized",
+      "from": "signing-in",
+      "to": "authorized",
+      "label": "Verified sign-in and permission return",
+      "source": "apps/ez/Sources/EZ/ConnectionsView.swift:235",
+      "kind": "system"
+    },
+    {
+      "id": "cancel-auth",
+      "from": "signing-in",
+      "to": "connection-editor",
+      "label": "Cancel sign-in",
+      "source": "apps/ez/Sources/EZ/ConnectionsView.swift:35",
+      "kind": "user"
+    },
+    {
+      "id": "save-connection",
+      "from": "authorized",
+      "to": "connection-saving",
+      "label": "Save",
+      "source": "apps/ez/Sources/EZ/ConnectionsView.swift:243",
+      "kind": "user"
+    },
+    {
+      "id": "connection-ok",
+      "from": "connection-saving",
+      "to": "connection-saved",
+      "label": "Connection write succeeds",
+      "source": "apps/ez/Sources/EZ/ConnectionsView.swift:269",
+      "kind": "system"
+    },
+    {
+      "id": "connection-fail",
+      "from": "connection-saving",
+      "to": "authorized",
+      "label": "Save error; editor retained",
+      "source": "apps/ez/Sources/EZ/ConnectionsView.swift:272",
+      "kind": "system"
+    },
+    {
+      "id": "cancel-editor",
+      "from": "connection-editor",
+      "to": "connections",
+      "label": "Cancel",
+      "source": "apps/ez/Sources/EZ/ConnectionsView.swift:212",
+      "kind": "user"
+    },
+    {
+      "id": "use-connection",
+      "from": "connection-saved",
+      "to": "presets",
+      "label": "Presets section",
+      "source": "apps/ez/Sources/EZ/SettingsView.swift:56",
+      "kind": "user"
+    },
+    {
+      "id": "disconnect",
+      "from": "connections",
+      "to": "disconnect",
+      "label": "Sign out",
+      "source": "apps/ez/Sources/EZ/ConnectionsView.swift:102",
+      "kind": "user"
+    },
+    {
+      "id": "disconnect-confirm",
+      "from": "disconnect",
+      "to": "disconnected",
+      "label": "Disconnect confirmed; owner succeeds",
+      "source": "apps/ez/Sources/EZ/ConnectionsView.swift:68",
+      "kind": "user"
+    },
+    {
+      "id": "disconnect-cancel",
+      "from": "disconnect",
+      "to": "connections",
+      "label": "Cancel confirmation",
+      "source": "apps/ez/Sources/EZ/ConnectionsView.swift:63",
+      "kind": "user"
+    },
+    {
+      "id": "setup-again",
+      "from": "disconnected",
+      "to": "connection-editor",
+      "label": "Set up / sign in again",
+      "source": "apps/ez/Sources/EZ/ConnectionsView.swift:138",
+      "kind": "user"
+    },
+    {
+      "id": "preferences",
+      "from": "presets",
+      "to": "preferences",
+      "label": "Preferences section",
+      "source": "apps/ez/Sources/EZ/SettingsView.swift:56",
+      "kind": "user"
+    },
+    {
+      "id": "min-mode",
+      "from": "preferences",
+      "to": "preference-saved",
+      "label": "Toggle Min Mode",
+      "source": "apps/ez/Sources/EZ/SettingsView.swift:148",
+      "kind": "input"
+    },
+    {
+      "id": "prefs-done",
+      "from": "preference-saved",
+      "to": "lookup",
+      "label": "Done",
+      "source": "apps/ez/Sources/EZ/SettingsView.swift:27",
+      "kind": "user"
+    },
+    {
+      "id": "speak-preset",
+      "from": "presets",
+      "to": "speech",
+      "label": "Select a saved Speak preset",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:424",
+      "kind": "user"
+    },
+    {
+      "id": "speech-generate",
+      "from": "speech",
+      "to": "speech-active",
+      "label": "Generate",
+      "source": "apps/ez/Sources/EZ/SpeakPreview.swift:26",
+      "kind": "user"
+    },
+    {
+      "id": "speech-complete",
+      "from": "speech-active",
+      "to": "speech-ready",
+      "label": "Valid audio completion",
+      "source": "apps/ez/Sources/EZ/SpeakPreview.swift:71",
+      "kind": "system"
+    },
+    {
+      "id": "speech-stop",
+      "from": "speech-active",
+      "to": "speech",
+      "label": "Stop",
+      "source": "apps/ez/Sources/EZ/SpeakPreview.swift:53",
+      "kind": "user"
+    },
+    {
+      "id": "speech-error",
+      "from": "speech-active",
+      "to": "speech",
+      "label": "Preview fails; show error",
+      "source": "apps/ez/Sources/EZ/SpeakPreview.swift:78",
+      "kind": "system"
+    },
+    {
+      "id": "play",
+      "from": "speech-ready",
+      "to": "speech-playing",
+      "label": "Play",
+      "source": "apps/ez/Sources/EZ/SpeakPreview.swift:33",
+      "kind": "user"
+    },
+    {
+      "id": "stop-playback",
+      "from": "speech-playing",
+      "to": "speech-ready",
+      "label": "Stop playback",
+      "source": "apps/ez/Sources/EZ/SpeakPreview.swift:37",
+      "kind": "user"
+    },
+    {
+      "id": "open-presets",
+      "from": "overview",
+      "to": "presets",
+      "label": "Presets section",
+      "source": "apps/ez/Sources/EZ/SettingsView.swift:56",
+      "kind": "user"
+    },
+    {
+      "id": "choose-replacement",
+      "from": "repair-editor",
+      "to": "repair-dirty",
+      "label": "Choose available model",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:457",
+      "kind": "input"
+    },
+    {
+      "id": "save-replacement",
+      "from": "repair-dirty",
+      "to": "repair-saving",
+      "label": "Save",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:492",
+      "kind": "user"
+    },
+    {
+      "id": "replacement-ok",
+      "from": "repair-saving",
+      "to": "saved",
+      "label": "Replacement saved",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:505",
+      "kind": "system"
+    },
+    {
+      "id": "replacement-error",
+      "from": "repair-saving",
+      "to": "repair-dirty",
+      "label": "Save fails; repair draft remains",
+      "source": "apps/ez/Sources/EZ/ConfigurationView.swift:509",
+      "kind": "system"
+    },
+    {
+      "id": "overview-actions",
+      "from": "overview",
+      "to": "actions",
+      "label": "Actions section",
+      "source": "apps/ez/Sources/EZ/SettingsView.swift:56",
+      "kind": "user"
+    },
+    {
+      "id": "overview-connections",
+      "from": "overview",
+      "to": "connections",
+      "label": "Connections section",
+      "source": "apps/ez/Sources/EZ/SettingsView.swift:56",
+      "kind": "user"
+    },
+    {
+      "id": "overview-preferences",
+      "from": "overview",
+      "to": "preferences",
+      "label": "Preferences section",
+      "source": "apps/ez/Sources/EZ/SettingsView.swift:56",
+      "kind": "user"
+    }
+  ],
+  "journeys": [
+    {
+      "id": "preset",
+      "label": "Change a preset and return to the draft",
+      "start": "lookup",
+      "steps": ["settings", "open-presets", "edit", "save", "save-ok", "done"],
+      "description": "Save is explicit; Done returns to the retained lookup."
+    },
+    {
+      "id": "recover",
+      "label": "Recover a conflicting preset edit",
+      "start": "lookup",
+      "steps": [
+        "settings",
+        "open-presets",
+        "edit",
+        "save",
+        "save-error",
+        "reload",
+        "reload-keep",
+        "reload",
+        "reload-discard",
+        "edit-reloaded",
+        "save",
+        "save-ok",
+        "done"
+      ],
+      "description": "Keep first preserves the draft; the later Discard explicitly adopts the current saved settings."
+    },
+    {
+      "id": "discard",
+      "label": "Cancel leaving an unsaved edit, then discard",
+      "start": "lookup",
+      "steps": ["settings", "open-presets", "edit", "done-dirty", "keep", "done-dirty", "discard"],
+      "description": "Repeated visits distinguish changing your mind from saving."
+    },
+    {
+      "id": "repair",
+      "label": "Repair an unavailable preset",
+      "start": "missing",
+      "steps": ["repair", "choose-replacement", "save-replacement", "replacement-ok", "done"],
+      "description": "A concrete current catalog selection is required; this fixture supplies one without querying a provider."
+    },
+    {
+      "id": "action",
+      "label": "Edit an app-local action",
+      "start": "lookup",
+      "steps": ["settings", "overview-actions", "action-edit", "action-save", "action-done"],
+      "description": "Actions stay in EZ; their preset references use shared configuration."
+    },
+    {
+      "id": "connection",
+      "label": "Connect a plan account after a failed sign-in",
+      "start": "lookup",
+      "steps": [
+        "settings",
+        "overview-connections",
+        "add",
+        "sign-in",
+        "sign-in-fails",
+        "retry-auth",
+        "authorized",
+        "save-connection",
+        "connection-ok",
+        "use-connection"
+      ],
+      "description": "Authorization and definition saving remain distinct."
+    },
+    {
+      "id": "disconnect",
+      "label": "Review shared credential disconnection",
+      "start": "connections",
+      "steps": ["disconnect", "disconnect-cancel", "disconnect", "disconnect-confirm"],
+      "description": "The confirmation names both apps; the atlas never touches real credentials."
+    },
+    {
+      "id": "speech",
+      "label": "Generate speech, then play it deliberately",
+      "start": "presets",
+      "steps": ["speak-preset", "speech-generate", "speech-complete", "play"],
+      "description": "A valid saved preset is assumed; audio is represented as a fixed fixture."
+    },
+    {
+      "id": "min-mode",
+      "label": "Change EZ presentation mode",
+      "start": "lookup",
+      "steps": ["settings", "overview-preferences", "min-mode", "prefs-done"],
+      "description": "Immediate app-local preference, not a configuration Save or lookup Run."
+    }
+  ],
+  "layout": {
+    "states": {
+      "action-dirty": [770, 810],
+      "action-saved": [560, 1040],
+      "actions": [540, 690],
+      "auth-error": [2150, 620],
+      "authorized": [1890, 640],
+      "connection-editor": [1900, 160],
+      "connection-saved": [1650, 1020],
+      "connection-saving": [1640, 730],
+      "connections": [1630, 190],
+      "dirty": [1030, 190],
+      "discard": [810, 470],
+      "disconnect": [1940, 1000],
+      "disconnected": [2160, 1210],
+      "lookup": [130, 240],
+      "missing": [130, 580],
+      "overview": [500, 180],
+      "preference-saved": [580, 520],
+      "preferences": [500, 400],
+      "presets": [760, 180],
+      "reload-confirm": [1290, 940],
+      "reloaded": [1030, 1050],
+      "repair-dirty": [330, 1100],
+      "repair-editor": [300, 850],
+      "repair-saving": [330, 1350],
+      "save-error": [1340, 680],
+      "saved": [1130, 500],
+      "saving": [1250, 240],
+      "signing-in": [2120, 330],
+      "speech": [780, 1090],
+      "speech-active": [810, 1330],
+      "speech-playing": [1250, 1310],
+      "speech-ready": [1030, 1360]
+    },
+    "regions": {
+      "lookup": {
+        "label": [75, 30],
+        "outline": [
+          [40, 273.75],
+          [79.6, 135],
+          [169.6, 125],
+          [220, 273.75],
+          [235, 523.5],
+          [180.4, 690],
+          [79.6, 690],
+          [25, 523.5]
+        ]
+      },
+      "settings": {
+        "label": [245, -30],
+        "outline": [
+          [210, 423.75],
+          [478.4, 75],
+          [1088.4, 65],
+          [1430, 423.75],
+          [1445, 1051.5],
+          [1161.6, 1470],
+          [478.4, 1470],
+          [195, 1051.5]
+        ]
+      },
+      "connections": {
+        "label": [1575, -50],
+        "outline": [
+          [1540, 371.25],
+          [1696.2, 55],
+          [2051.2, 45],
+          [2250, 371.25],
+          [2265, 940.5],
+          [2093.8, 1320],
+          [1696.2, 1320],
+          [1525, 940.5]
+        ]
+      }
+    }
+  }
+}

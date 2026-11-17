@@ -1,0 +1,1028 @@
+{
+  "version": 1,
+  "title": "EZ · Lookup and saved work",
+  "initial": "draft",
+  "source": {
+    "revision": "Code accompanying this IR; baseline 0a949cf12f226a63b0db6244f9fc2a1e3fef78d1 plus accepted journey changes, reviewed 2026-11-16",
+    "description": "Source-derived current behavior, including the accepted Retry, Settings review and pointer-open changes. Fixed fictional fixtures; no live provider requests. Affected browser flows and native offline checks passed. Scaffold: repo-kit 4914a36."
+  },
+  "coverage": {
+    "included": [
+      "Native Write with a valid connected preset and one fictional question. Min Mode is the primary presentation.",
+      "Run, initial-write blocking, completion, Stop, failure, save-only recovery, follow-up, reuse, export and delete.",
+      "Quick Lookup handoff preserves an active request; closing a view does not cancel it.",
+      "Reviewed layout hints group navigation contexts and route/recovery neighborhoods; coordinates are presentation only, not time or rank.",
+      "Failed/stopped text and image requests have direct Retry in both windows. Initial-save, connection, model and saved-image checks remain before generation."
+    ],
+    "omitted": [
+      "Connection setup, preset editing and image work are separate maps.",
+      "Raycast, Services, global shortcut permission prompts and every concurrent history/hidden-window combination are not expanded.",
+      "Save failure of a completed text answer is expanded; unsaved failed/interrupted variants use the same owner but are not separate fixtures.",
+      "A finite scenario projection, not the full Cartesian product of app state. System buttons simulate possible source-code outcomes.",
+      "No proposed optimization: Comparison is intentionally absent.",
+      "Terminal landmarks end this scoped review; they do not imply that the real application quits. Compound navigation labels name their menu/section steps; route counts are model transitions, not measured click counts.",
+      "The detailed Retry blocked notice is not a separate landmark: it retains the failed result and offers Review saved request. Tests cover changed account, missing image and initial-save failure."
+    ]
+  },
+  "regions": [
+    {
+      "id": "history",
+      "label": "History sidebar",
+      "plane": true
+    },
+    {
+      "id": "main",
+      "label": "Lookup · main window",
+      "plane": true
+    },
+    {
+      "id": "panel",
+      "label": "Quick Lookup",
+      "plane": true
+    }
+  ],
+  "states": [
+    {
+      "id": "active",
+      "region": "main",
+      "label": "Receiving answer",
+      "detail": "The attempt is pending. Input and preset changes are locked; Stop is available.",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:68",
+      "secondary": false,
+      "terminal": false,
+      "preview": {
+        "title": "Receiving answer",
+        "body": "The attempt is pending. Input and preset changes are locked; Stop is available.",
+        "fields": [],
+        "blocks": []
+      }
+    },
+    {
+      "id": "delete",
+      "region": "main",
+      "label": "Delete lookup?",
+      "detail": "Delete removes this saved lookup from shared history in EZ and Saul. This cannot be undone.",
+      "source": "apps/ez/Sources/EZ/ContentView.swift:74",
+      "secondary": false,
+      "terminal": false,
+      "preview": {
+        "title": "Delete lookup?",
+        "body": "Delete removes this saved lookup from shared history in EZ and Saul. This cannot be undone.",
+        "fields": [],
+        "blocks": [],
+        "overlay": {
+          "title": "Delete lookup?",
+          "body": "Delete removes this saved lookup from shared history in EZ and Saul. This cannot be undone.",
+          "blocks": []
+        }
+      }
+    },
+    {
+      "id": "deleted",
+      "region": "history",
+      "label": "Lookup deleted",
+      "detail": "Deletion succeeded, its unsaved recovery was forgotten, and selection was cleared.",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:672",
+      "secondary": false,
+      "terminal": false,
+      "outcome": "Lookup deleted",
+      "preview": {
+        "title": "Lookup deleted",
+        "body": "Deletion succeeded, its unsaved recovery was forgotten, and selection was cleared.",
+        "fields": [],
+        "blocks": []
+      }
+    },
+    {
+      "id": "draft",
+      "region": "main",
+      "label": "New lookup",
+      "detail": "The composer is empty. Run stays unavailable until required inputs and the selected connection/preset are valid.",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:332",
+      "secondary": false,
+      "terminal": false,
+      "preview": {
+        "title": "New lookup",
+        "body": "The composer is empty. Run stays unavailable until required inputs and the selected connection/preset are valid.",
+        "fields": [
+          {
+            "label": "Action",
+            "value": "Configured Write action"
+          },
+          {
+            "label": "Input",
+            "value": "Empty"
+          }
+        ],
+        "blocks": []
+      }
+    },
+    {
+      "id": "export",
+      "region": "main",
+      "label": "Export answer",
+      "detail": "The native save panel proposes a Markdown file. Cancel returns to the selected answer.",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:702",
+      "secondary": false,
+      "terminal": false,
+      "preview": {
+        "title": "Export answer",
+        "body": "The native save panel proposes a Markdown file. Cancel returns to the selected answer.",
+        "fields": [],
+        "blocks": [],
+        "overlay": {
+          "title": "Export Markdown",
+          "body": "The native save panel proposes a Markdown file. Cancel returns to the selected answer.",
+          "blocks": []
+        }
+      }
+    },
+    {
+      "id": "exported",
+      "region": "main",
+      "label": "Answer exported",
+      "detail": "The chosen Markdown file was written. The saved answer remains selected.",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:709",
+      "secondary": false,
+      "terminal": true,
+      "outcome": "Markdown exported",
+      "preview": {
+        "title": "Answer exported",
+        "body": "The chosen Markdown file was written. The saved answer remains selected.",
+        "fields": [],
+        "blocks": []
+      }
+    },
+    {
+      "id": "failed",
+      "region": "main",
+      "label": "Request failed",
+      "detail": "Failure retains available output. Retry same request starts a new attempt with the saved choices; Reuse remains the edit path.",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:79",
+      "secondary": false,
+      "terminal": false,
+      "preview": {
+        "title": "Request failed",
+        "body": "Failure retains available output. Retry same request starts a new attempt with the saved choices; Reuse remains the edit path.",
+        "fields": [],
+        "blocks": []
+      }
+    },
+    {
+      "id": "followup",
+      "region": "main",
+      "label": "Follow-up ready",
+      "detail": "A fixed follow-up is attached to this completed native Write answer. Its text is retained per answer until accepted.",
+      "source": "apps/ez/Sources/EZ/FollowUpComposer.swift:11",
+      "secondary": false,
+      "terminal": false,
+      "preview": {
+        "title": "Follow-up ready",
+        "body": "A fixed follow-up is attached to this completed native Write answer. Its text is retained per answer until accepted.",
+        "fields": [
+          {
+            "label": "Question",
+            "value": "How can I stop it deliberately?"
+          }
+        ],
+        "blocks": []
+      }
+    },
+    {
+      "id": "followup-active",
+      "region": "main",
+      "label": "Follow-up running",
+      "detail": "The parent answer and saved choices are used to prepare a new attempt. The parent remains in history.",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:557",
+      "secondary": false,
+      "terminal": false,
+      "preview": {
+        "title": "Receiving follow-up",
+        "body": "The parent answer and saved choices are used to prepare a new attempt. The parent remains in history.",
+        "fields": [],
+        "blocks": []
+      }
+    },
+    {
+      "id": "followup-saved",
+      "region": "main",
+      "label": "Follow-up saved",
+      "detail": "The second answer is saved. Previous answer selects its parent without generating.",
+      "source": "apps/ez/Sources/EZ/ContentView.swift:221",
+      "secondary": false,
+      "terminal": false,
+      "outcome": "Follow-up saved",
+      "preview": {
+        "title": "Follow-up saved",
+        "body": "The second answer is saved. Previous answer selects its parent without generating.",
+        "fields": [],
+        "blocks": []
+      }
+    },
+    {
+      "id": "hidden-active",
+      "region": "panel",
+      "label": "Hidden · running",
+      "detail": "The panel is hidden; the attempt continues in AppModel. This is a lifecycle state, not a visible screen.",
+      "source": "apps/ez/Sources/EZ/QuickLookupController.swift:157",
+      "secondary": false,
+      "terminal": false,
+      "preview": {
+        "title": "Panel hidden · running",
+        "body": "The panel is hidden; the attempt continues in AppModel. This is a lifecycle state, not a visible screen.",
+        "fields": [],
+        "blocks": []
+      }
+    },
+    {
+      "id": "historic",
+      "region": "main",
+      "label": "Reopened answer",
+      "detail": "This fixture is a native EZ Write record. Saul-origin records can be read here but cannot be reused or followed up in EZ.",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:631",
+      "secondary": false,
+      "terminal": false,
+      "outcome": "History read",
+      "preview": {
+        "title": "Saved lookup reopened",
+        "body": "This fixture is a native EZ Write record. Saul-origin records can be read here but cannot be reused or followed up in EZ.",
+        "fields": [],
+        "blocks": []
+      }
+    },
+    {
+      "id": "history",
+      "region": "history",
+      "label": "Search history",
+      "detail": "History filters saved query and response text. Selecting a result reads it without generation.",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:324",
+      "secondary": false,
+      "terminal": false,
+      "preview": {
+        "title": "Search history",
+        "body": "History filters saved query and response text. Selecting a result reads it without generation.",
+        "fields": [
+          {
+            "label": "Search",
+            "value": "closing a view"
+          }
+        ],
+        "blocks": []
+      }
+    },
+    {
+      "id": "more",
+      "region": "main",
+      "label": "Answer · More",
+      "detail": "Min Mode exposes Reuse, Export and Delete here. These operate on the selected saved answer.",
+      "source": "apps/ez/Sources/EZ/ContentView.swift:248",
+      "secondary": false,
+      "terminal": false,
+      "preview": {
+        "title": "Answer · More",
+        "body": "Min Mode exposes Reuse, Export and Delete here. These operate on the selected saved answer.",
+        "fields": [],
+        "blocks": [],
+        "overlay": {
+          "title": "More",
+          "body": "Min Mode exposes Reuse, Export and Delete here. These operate on the selected saved answer.",
+          "blocks": []
+        }
+      }
+    },
+    {
+      "id": "panel-active",
+      "region": "panel",
+      "label": "Receiving",
+      "detail": "The same active request is visible in the compact panel. Opening the main window preserves it.",
+      "source": "apps/ez/Sources/EZ/QuickLookupController.swift:192",
+      "secondary": false,
+      "terminal": false,
+      "preview": {
+        "title": "Quick Lookup · receiving",
+        "body": "The same active request is visible in the compact panel. Opening the main window preserves it.",
+        "fields": [],
+        "blocks": []
+      }
+    },
+    {
+      "id": "panel-ready",
+      "region": "panel",
+      "label": "Draft",
+      "detail": "The shared draft is ready in the compact panel. Run uses the same attempt owner as the main window. This fixture assumes selected-text capture is already allowed.",
+      "source": "apps/ez/Sources/EZ/QuickLookupView.swift:156",
+      "secondary": false,
+      "terminal": false,
+      "preview": {
+        "title": "Quick Lookup · draft",
+        "body": "The shared draft is ready in the compact panel. Run uses the same attempt owner as the main window. This fixture assumes selected-text capture is already allowed.",
+        "fields": [],
+        "blocks": []
+      }
+    },
+    {
+      "id": "panel-saved",
+      "region": "panel",
+      "label": "Saved answer",
+      "detail": "The same completed answer is visible. Open EZ and history for management; Copy does not generate.",
+      "source": "apps/ez/Sources/EZ/QuickLookupView.swift:184",
+      "secondary": false,
+      "terminal": false,
+      "outcome": "Quick Lookup answer saved",
+      "preview": {
+        "title": "Quick Lookup · answer",
+        "body": "The same completed answer is visible. Open EZ and history for management; Copy does not generate.",
+        "fields": [],
+        "blocks": []
+      }
+    },
+    {
+      "id": "ready",
+      "region": "main",
+      "label": "Question ready",
+      "detail": "A fixed question is ready. Run freezes this input, action, preset and connection.",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:513",
+      "secondary": false,
+      "terminal": false,
+      "preview": {
+        "title": "Question ready",
+        "body": "A fixed question is ready. Run freezes this input, action, preset and connection.",
+        "fields": [
+          {
+            "label": "Question",
+            "value": "Explain why closing a view should not stop a request."
+          },
+          {
+            "label": "Preset",
+            "value": "Configured Write preset"
+          }
+        ],
+        "blocks": []
+      }
+    },
+    {
+      "id": "restored",
+      "region": "main",
+      "label": "Restored draft",
+      "detail": "Reuse restores the saved action, input and preset as a draft. Nothing has been sent.",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:631",
+      "secondary": false,
+      "terminal": false,
+      "outcome": "Saved request restored",
+      "preview": {
+        "title": "Saved request restored",
+        "body": "Reuse restores the saved action, input and preset as a draft. Nothing has been sent.",
+        "fields": [
+          {
+            "label": "Preset",
+            "value": "Saved preset snapshot"
+          },
+          {
+            "label": "Question",
+            "value": "Explain why closing a view should not stop a request."
+          }
+        ],
+        "blocks": []
+      }
+    },
+    {
+      "id": "save-blocked",
+      "region": "main",
+      "label": "Not sent",
+      "detail": "The initial history write failed. The draft remains and no provider request started.",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:63",
+      "secondary": false,
+      "terminal": false,
+      "preview": {
+        "title": "Request not sent",
+        "body": "The initial history write failed. The draft remains and no provider request started.",
+        "fields": [],
+        "blocks": []
+      }
+    },
+    {
+      "id": "saved",
+      "region": "main",
+      "label": "Saved answer",
+      "detail": "The provider completed and the terminal snapshot was saved. Copy and follow-up are available; More contains Reuse, Export and Delete.",
+      "source": "apps/ez/Sources/EZ/ContentView.swift:216",
+      "secondary": false,
+      "terminal": false,
+      "outcome": "Answer saved",
+      "preview": {
+        "title": "Answer saved",
+        "body": "The provider completed and the terminal snapshot was saved. Copy and follow-up are available; More contains Reuse, Export and Delete.",
+        "fields": [
+          {
+            "label": "Answer",
+            "value": "Closing a view preserves work; cancellation is a separate action."
+          }
+        ],
+        "blocks": []
+      }
+    },
+    {
+      "id": "saving-again",
+      "region": "main",
+      "label": "Saving again",
+      "detail": "Storage-only checkpoint for the frozen completed snapshot. No model request is made.",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:103",
+      "secondary": false,
+      "terminal": false,
+      "preview": {
+        "title": "Saving retained answer",
+        "body": "Storage-only checkpoint for the frozen completed snapshot. No model request is made.",
+        "fields": [],
+        "blocks": []
+      }
+    },
+    {
+      "id": "starting",
+      "region": "main",
+      "label": "Run requested",
+      "detail": "A checkpoint inside Run: pending input must be saved before generation starts. This is not a separate native screen.",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:58",
+      "secondary": false,
+      "terminal": false,
+      "preview": {
+        "title": "Run requested",
+        "body": "A checkpoint inside Run: pending input must be saved before generation starts. This is not a separate native screen.",
+        "fields": [],
+        "blocks": []
+      }
+    },
+    {
+      "id": "stopped",
+      "region": "main",
+      "label": "Stopped",
+      "detail": "Stop cancels locally and saves an interrupted record. It does not promise remote cancellation or avoided billing.",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:97",
+      "secondary": false,
+      "terminal": false,
+      "outcome": "Stopped and retained",
+      "preview": {
+        "title": "Stopped · partial retained",
+        "body": "Stop cancels locally and saves an interrupted record. It does not promise remote cancellation or avoided billing.",
+        "fields": [],
+        "blocks": []
+      }
+    },
+    {
+      "id": "unsaved",
+      "region": "main",
+      "label": "Unsaved answer",
+      "detail": "Completed output remains in memory. Save again retries only this terminal record; Export preserves a copy before quitting. It does not generate again.",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:586",
+      "secondary": false,
+      "terminal": false,
+      "preview": {
+        "title": "Answer not saved",
+        "body": "Completed output remains in memory. Save again retries only this terminal record; Export preserves a copy before quitting. It does not generate again.",
+        "fields": [],
+        "blocks": []
+      }
+    },
+    {
+      "id": "panel-stopped",
+      "region": "panel",
+      "label": "Stopped",
+      "detail": "Stop keeps the partial result. Retry retains the saved request and does not change the main-window draft.",
+      "source": "apps/ez/Sources/EZCore/RetryAttempt.swift:9",
+      "preview": {
+        "title": "Stopped",
+        "body": "Stop keeps the partial result. Retry retains the saved request and does not change the main-window draft.",
+        "fields": []
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "id": "close-more",
+      "from": "more",
+      "to": "saved",
+      "label": "Dismiss menu",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/ContentView.swift:248"
+    },
+    {
+      "id": "delete",
+      "from": "more",
+      "to": "delete",
+      "label": "Delete",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/ContentView.swift:258"
+    },
+    {
+      "id": "delete-cancel",
+      "from": "delete",
+      "to": "saved",
+      "label": "Cancel",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/ContentView.swift:83"
+    },
+    {
+      "id": "delete-confirm",
+      "from": "delete",
+      "to": "deleted",
+      "label": "Delete confirmed; storage succeeds",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:672"
+    },
+    {
+      "id": "export",
+      "from": "more",
+      "to": "export",
+      "label": "Export…",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:702"
+    },
+    {
+      "id": "export-cancel",
+      "from": "export",
+      "to": "saved",
+      "label": "Cancel",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:709"
+    },
+    {
+      "id": "export-write",
+      "from": "export",
+      "to": "exported",
+      "label": "Choose file and save",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:709"
+    },
+    {
+      "id": "fail",
+      "from": "active",
+      "to": "failed",
+      "label": "Provider fails or ends early",
+      "kind": "system",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:79"
+    },
+    {
+      "id": "fill",
+      "from": "draft",
+      "to": "ready",
+      "label": "Fill question",
+      "kind": "input",
+      "source": "apps/ez/Sources/EZ/RequestControls.swift:220"
+    },
+    {
+      "id": "finish",
+      "from": "active",
+      "to": "saved",
+      "label": "Completion and save succeed",
+      "kind": "system",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:135"
+    },
+    {
+      "id": "followup-finish",
+      "from": "followup-active",
+      "to": "followup-saved",
+      "label": "Completion and save succeed",
+      "kind": "system",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:135"
+    },
+    {
+      "id": "followup-input",
+      "from": "saved",
+      "to": "followup",
+      "label": "Fill follow-up",
+      "kind": "input",
+      "source": "apps/ez/Sources/EZ/FollowUpComposer.swift:15"
+    },
+    {
+      "id": "followup-send",
+      "from": "followup",
+      "to": "followup-active",
+      "label": "Send follow-up",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:557"
+    },
+    {
+      "id": "handoff",
+      "from": "panel-active",
+      "to": "active",
+      "label": "Open EZ & history",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/QuickLookupController.swift:192"
+    },
+    {
+      "id": "handoff-saved",
+      "from": "panel-saved",
+      "to": "saved",
+      "label": "Open EZ & history",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/QuickLookupController.swift:192"
+    },
+    {
+      "id": "hide",
+      "from": "panel-active",
+      "to": "hidden-active",
+      "label": "Hide panel",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/QuickLookupController.swift:157"
+    },
+    {
+      "id": "history",
+      "from": "draft",
+      "to": "history",
+      "label": "Search history",
+      "kind": "input",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:324"
+    },
+    {
+      "id": "initial-fails",
+      "from": "starting",
+      "to": "save-blocked",
+      "label": "History write fails",
+      "kind": "system",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:63"
+    },
+    {
+      "id": "more",
+      "from": "saved",
+      "to": "more",
+      "label": "More",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/ContentView.swift:248"
+    },
+    {
+      "id": "new",
+      "from": "saved",
+      "to": "draft",
+      "label": "New run",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:617"
+    },
+    {
+      "id": "new-after-delete",
+      "from": "deleted",
+      "to": "draft",
+      "label": "New run",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:617"
+    },
+    {
+      "id": "parent",
+      "from": "followup-saved",
+      "to": "saved",
+      "label": "Previous answer",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/ContentView.swift:221"
+    },
+    {
+      "id": "quick-finish",
+      "from": "panel-active",
+      "to": "panel-saved",
+      "label": "Completion and save succeed",
+      "kind": "system",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:135"
+    },
+    {
+      "id": "quick-from-active",
+      "from": "active",
+      "to": "panel-active",
+      "label": "Quick Lookup while running",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/QuickLookupController.swift:184"
+    },
+    {
+      "id": "quick-open",
+      "from": "draft",
+      "to": "panel-ready",
+      "label": "Quick Lookup; fill captured text",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/QuickLookupController.swift:64"
+    },
+    {
+      "id": "quick-run",
+      "from": "panel-ready",
+      "to": "panel-active",
+      "label": "Run; pending input saved",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:513"
+    },
+    {
+      "id": "read-history",
+      "from": "history",
+      "to": "historic",
+      "label": "Select saved native lookup",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:318"
+    },
+    {
+      "id": "reopen-main",
+      "from": "hidden-active",
+      "to": "active",
+      "label": "Open EZ & history",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/QuickLookupController.swift:192"
+    },
+    {
+      "id": "rerun",
+      "from": "restored",
+      "to": "starting",
+      "label": "Run saved request",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:513"
+    },
+    {
+      "id": "retry-run",
+      "from": "save-blocked",
+      "to": "starting",
+      "label": "Run again after storage recovers",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:513"
+    },
+    {
+      "id": "reuse",
+      "from": "more",
+      "to": "restored",
+      "label": "Reuse",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:631"
+    },
+    {
+      "id": "reuse-failed",
+      "from": "failed",
+      "to": "restored",
+      "label": "More → Reuse",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/ContentView.swift:248"
+    },
+    {
+      "id": "reuse-history",
+      "from": "historic",
+      "to": "restored",
+      "label": "More → Reuse",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:631"
+    },
+    {
+      "id": "reuse-stopped",
+      "from": "stopped",
+      "to": "restored",
+      "label": "More → Reuse",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/ContentView.swift:248"
+    },
+    {
+      "id": "run",
+      "from": "ready",
+      "to": "starting",
+      "label": "Run",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:513"
+    },
+    {
+      "id": "save-again",
+      "from": "unsaved",
+      "to": "saving-again",
+      "label": "Save again",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:586"
+    },
+    {
+      "id": "save-again-fails",
+      "from": "saving-again",
+      "to": "unsaved",
+      "label": "Storage still fails",
+      "kind": "system",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:114"
+    },
+    {
+      "id": "save-fails",
+      "from": "active",
+      "to": "unsaved",
+      "label": "Completion succeeds; terminal save fails",
+      "kind": "system",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:146"
+    },
+    {
+      "id": "saved-again",
+      "from": "saving-again",
+      "to": "saved",
+      "label": "Storage acknowledges save",
+      "kind": "system",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:107"
+    },
+    {
+      "id": "saved-input",
+      "from": "starting",
+      "to": "active",
+      "label": "Pending input saved",
+      "kind": "system",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:63"
+    },
+    {
+      "id": "stop",
+      "from": "active",
+      "to": "stopped",
+      "label": "Stop",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:97"
+    },
+    {
+      "id": "retry-failed",
+      "from": "failed",
+      "to": "starting",
+      "label": "Retry same request",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:594"
+    },
+    {
+      "id": "retry-stopped",
+      "from": "stopped",
+      "to": "starting",
+      "label": "Retry same request",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:594"
+    },
+    {
+      "id": "panel-stop",
+      "from": "panel-active",
+      "to": "panel-stopped",
+      "label": "Stop",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:543"
+    },
+    {
+      "id": "panel-retry",
+      "from": "panel-stopped",
+      "to": "panel-active",
+      "label": "Retry same request; pending input saved",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:594"
+    }
+  ],
+  "journeys": [
+    {
+      "id": "lookup",
+      "label": "Ask and retain an answer",
+      "description": "The ordinary Write path; success requires both provider completion and local save.",
+      "start": "draft",
+      "steps": ["fill", "run", "saved-input", "finish"]
+    },
+    {
+      "id": "save-recovery",
+      "label": "Recover an unsaved answer without generating again",
+      "description": "Includes a repeated storage retry, preserving the exact completed answer.",
+      "start": "draft",
+      "steps": [
+        "fill",
+        "run",
+        "saved-input",
+        "save-fails",
+        "save-again",
+        "save-again-fails",
+        "save-again",
+        "saved-again"
+      ]
+    },
+    {
+      "id": "failure-retry",
+      "label": "Recover from a failed request",
+      "description": "Direct Retry uses the frozen request. The failed result and unrelated draft stay intact.",
+      "start": "draft",
+      "steps": ["fill", "run", "saved-input", "fail", "retry-failed", "saved-input", "finish"]
+    },
+    {
+      "id": "stop",
+      "label": "Stop and keep partial output",
+      "description": "Local cancellation and retained interrupted history.",
+      "start": "draft",
+      "steps": ["fill", "run", "saved-input", "stop"]
+    },
+    {
+      "id": "followup",
+      "label": "Ask a follow-up and return to its parent",
+      "description": "Two saved answers, with distinct recorded visits to the parent.",
+      "start": "draft",
+      "steps": [
+        "fill",
+        "run",
+        "saved-input",
+        "finish",
+        "followup-input",
+        "followup-send",
+        "followup-finish",
+        "parent"
+      ]
+    },
+    {
+      "id": "handoff",
+      "label": "Hide Quick Lookup, then continue in the main window",
+      "description": "Closing the panel is separate from stopping work.",
+      "start": "draft",
+      "steps": ["quick-open", "quick-run", "hide", "reopen-main", "finish"]
+    },
+    {
+      "id": "initial-save",
+      "label": "Recover before a request is sent",
+      "description": "An initial storage failure prevents generation entirely.",
+      "start": "draft",
+      "steps": ["fill", "run", "initial-fails", "retry-run", "saved-input", "finish"]
+    },
+    {
+      "id": "history-reuse",
+      "label": "Read history and restore its frozen request",
+      "description": "Restoration is a meaningful stopping point; Run remains a separate action.",
+      "start": "draft",
+      "steps": ["history", "read-history", "reuse-history"]
+    },
+    {
+      "id": "export",
+      "label": "Export a saved answer",
+      "description": "A fixed saved native answer; native file selection is simulated.",
+      "start": "saved",
+      "steps": ["more", "export", "export-write"]
+    },
+    {
+      "id": "delete",
+      "label": "Review and delete a saved lookup",
+      "description": "Includes cancel and a repeated visit before deletion.",
+      "start": "saved",
+      "steps": ["more", "delete", "delete-cancel", "more", "delete", "delete-confirm"]
+    },
+    {
+      "id": "quick-retry",
+      "label": "Stop and retry in Quick Lookup",
+      "start": "draft",
+      "steps": ["quick-open", "quick-run", "panel-stop", "panel-retry", "quick-finish"],
+      "description": "The same Retry owner serves both native reading surfaces."
+    }
+  ],
+  "layout": {
+    "states": {
+      "active": [770, 180],
+      "delete": [1000, 1110],
+      "deleted": [1590, 1110],
+      "draft": [120, 230],
+      "export": [760, 1040],
+      "exported": [540, 1120],
+      "failed": [680, 430],
+      "followup": [780, 710],
+      "followup-active": [570, 820],
+      "followup-saved": [350, 910],
+      "hidden-active": [1350, 500],
+      "historic": [120, 750],
+      "history": [1370, 880],
+      "more": [990, 810],
+      "panel-active": [1590, 280],
+      "panel-ready": [1360, 200],
+      "panel-saved": [1710, 510],
+      "ready": [330, 180],
+      "restored": [310, 540],
+      "save-blocked": [470, 420],
+      "saved": [1010, 280],
+      "saving-again": [1090, 420],
+      "starting": [550, 230],
+      "stopped": [850, 520],
+      "unsaved": [1060, 590],
+      "panel-stopped": [1530, 580]
+    },
+    "regions": {
+      "main": {
+        "outline": [
+          [30, 363.75],
+          [283, 75],
+          [858, 65],
+          [1180, 363.75],
+          [1195, 883.5],
+          [927, 1230],
+          [283, 1230],
+          [15, 883.5]
+        ],
+        "label": [65, -30]
+      },
+      "panel": {
+        "outline": [
+          [1260, 226],
+          [1380, 95],
+          [1650, 85],
+          [1800, 226],
+          [1815, 550],
+          [1680, 710],
+          [1380, 710],
+          [1245, 550]
+        ],
+        "label": [1295, -10]
+      },
+      "history": {
+        "outline": [
+          [1280, 886.25],
+          [1368, 775],
+          [1568, 765],
+          [1680, 886.25],
+          [1695, 1086.5],
+          [1592, 1220],
+          [1368, 1220],
+          [1265, 1086.5]
+        ],
+        "label": [1315, 780]
+      }
+    }
+  }
+}

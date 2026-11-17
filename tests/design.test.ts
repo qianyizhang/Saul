@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtemp, readFile, writeFile, rm, symlink, link } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm, symlink, link, stat, utimes } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { compileDesign, generate } from '../design/generate.mts';
@@ -49,7 +49,6 @@ describe('portable design application', () => {
     expect(JSON.parse(result.typescript.split(' = ')[1]!.split(' as const')[0]!).primary).toBe(
       '#245b80',
     );
-    expect(result.hash).not.toBe(compileDesign(contract).hash);
   });
 
   it('rejects broken references, unreadable text and unsupported native font mappings', () => {
@@ -62,7 +61,7 @@ describe('portable design application', () => {
     ).toThrow(/map this font/);
   });
 
-  it('applies to an unrelated project and detects stale artifacts without rewriting them', async () => {
+  it('keeps portable outputs stable for prose edits and detects changed tokens', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'saul-design-'));
     try {
       const source = path.join(root, 'DESIGN.md');
@@ -72,7 +71,17 @@ describe('portable design application', () => {
       await generate(args);
       const original = await readFile(css, 'utf8');
       await generate({ ...args, check: true });
-      await writeFile(source, contract.replace('#296e59', '#245b80'));
+
+      await utimes(css, new Date(0), new Date(0));
+      const originalMtime = (await stat(css)).mtimeMs;
+      const proseEdit = contract.replace('An independent, portable fixture.', 'Updated guidance.');
+      await writeFile(source, proseEdit.replace('Fixture Identity', 'Another Project'));
+      await generate({ ...args, check: true });
+      await generate(args);
+      expect(await readFile(css, 'utf8')).toBe(original);
+      expect((await stat(css)).mtimeMs).toBe(originalMtime);
+
+      await writeFile(source, proseEdit.replace('#296e59', '#245b80'));
       await expect(generate({ ...args, check: true })).rejects.toThrow(/stale/);
       expect(await readFile(css, 'utf8')).toBe(original);
       await generate(args);

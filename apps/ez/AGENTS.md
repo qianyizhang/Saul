@@ -8,30 +8,29 @@ networking, protocol, and storage code in `Sources/EZCore`. Do not add a Codex,
 Node, Python, Electron, or webview runtime dependency to the app.
 
 For feature UI, forms, metadata, actions, or disclosure changes, read `docs/design.md`
-and follow its feature UI review before implementation and completion. The shared
-authoring contract currently lives at [the root DESIGN.md](../../DESIGN.md); `DesignTokens.swift` is
-generated from it. Keep native semantic controls and backgrounds, and use `AppStyle` roles for shared identity.
+and follow its feature UI review before implementation and completion. Keep native semantic controls and backgrounds,
+and use `AppStyle` roles from the [shared tokens](../../design/tokens.md).
 
 ## Working rules
 
 - Prefer the smallest complete feature slice. Add abstractions for actual callers,
   not hypothetical providers. No generated protocol dumps or large JSON fixtures.
 - Do not commit credentials, user history, browser profiles, builds, or local logs.
-- Record decisions that affect future features in `docs/architecture.md`. Keep
-  planned features in `docs/roadmap.md`; distinguish plans from shipped behavior.
+- Follow the root [ADR rule](../../AGENTS.md#architecture-decisions). Keep
+  planned features in `docs/roadmap.md`.
 - Never silently switch the account, model, billing path, or requested service tier.
 
 ## Required checks
 
 Run `make format`, then `make check` after Swift changes. Run `make app` for bundle,
-resource, signing, or release changes. `EZChecks` is an offline executable test
-suite so Apple Command Line Tools suffice; no live account is needed for CI.
+resource, signing, or release changes. See [development setup](CONTRIBUTING.md#development-setup-and-gates)
+for the native toolchain. Checks run offline without a live account.
 When the outer agent sandbox rejects nested SwiftPM `sandbox-exec`, set
 `EZ_SWIFTPM_DISABLE_SANDBOX=1` for the command. Keep ordinary checks inside the
 outer sandbox. This exception disables only SwiftPM's nested manifest sandbox.
 
 Changes to OAuth, models, or Responses must follow current official OpenAI docs
-and preserve the contracts documented in `docs/architecture.md`. Test invalid
+and preserve the [runtime](docs/architecture.md) and [credential](../../contracts/credentials.md) contracts. Test invalid
 identity, missing permission, failed refresh, interrupted streams, and storage
 failures when those paths change. A successful build or model list does not prove
 live inference. Report live verification separately.

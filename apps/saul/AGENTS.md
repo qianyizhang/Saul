@@ -5,8 +5,8 @@ and [product contracts](docs/product.md); use the existing modules and harness.
 
 For feature UI, forms, metadata, actions, or disclosure changes, read the
 [design contract](../../DESIGN.md) and follow the [feature UI review](../../design/SKILL.md#feature-ui-review)
-before implementation and completion. Edit the contract, then regenerate with
-`pnpm design:generate`; do not hand-edit generated tokens. Adapt layout density
+before implementation and completion. Edit the [shared tokens](../../design/tokens.md)
+when changing values, then run `pnpm design:generate`. Adapt layout density
 to the surface while preserving the shared identity and motion guidance.
 
 ## Changes
@@ -37,7 +37,7 @@ Read the [browser-testing skill](../../.agents/skills/saul-browser-testing/SKILL
 ## Document owners
 
 Shared skills use the root [glossary](../../GLOSSARY.md), with
-[Saul terms](GLOSSARY.md) for browser-specific meaning. Consequential decisions
-belong in [architecture](docs/architecture.md); checks and diagnosis belong in
-[testing](docs/testing.md). Shared design application and adoption use
+[Saul terms](GLOSSARY.md) for browser-specific meaning. Follow the root
+[ADR rule](../../AGENTS.md#architecture-decisions). Checks and diagnosis belong
+in [testing](docs/testing.md). Shared design application and adoption use
 [the root workflow](../../design/SKILL.md). Keep generic skills at user scope.

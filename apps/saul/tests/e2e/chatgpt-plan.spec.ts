@@ -88,6 +88,8 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
         requests: [] as PlanRequest[],
         fail: false,
         signedIn: false,
+        holdAccounts: false,
+        finishAccounts: () => {},
         holdLogin: true,
         finishLogin: () => {},
         holdModels: true,
@@ -100,7 +102,7 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
         holdLogout: false,
         finishLogout: () => {},
       };
-      Object.assign(globalThis, { planFixture: state, scopedConfigs: sections });
+      Object.assign(globalThis, { planFixture: state });
       chrome.runtime.connectNative = (() => {
         const listeners: ((m: { id: string; event: PlanEvent }) => void)[] = [];
         return {
@@ -125,7 +127,8 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
             queueMicrotask(() => {
               switch (message.request.action) {
                 case 'accounts':
-                  emit({ type: 'result', accounts: [account] });
+                  state.finishAccounts = () => emit({ type: 'result', accounts: [account] });
+                  if (!state.holdAccounts) state.finishAccounts();
                   break;
                 case 'login':
                   state.finishLogin = () => {
@@ -192,17 +195,6 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
     },
     [...DEFAULT_CONNECTIONS],
   );
-  const resetCall = await popup.evaluate(async () =>
-    chrome.runtime.sendMessage({ target: 'saul-action', message: { action: 'builtin' } }),
-  );
-  expect(resetCall.success).toBe(true);
-  expect(
-    await worker.evaluate(
-      () =>
-        (globalThis as unknown as { scopedConfigs: Record<string, { value: unknown }> })
-          .scopedConfigs.calls?.value,
-    ),
-  ).toEqual({ library: [] });
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await settingsSection(popup, 'Presets');
   await popup.getByLabel('Connection', { exact: true }).selectOption('gpt-plan');
@@ -397,12 +389,29 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
       ),
     )
     .toBe(true);
-  await worker.evaluate(() => {
-    (globalThis as unknown as { planFixture: { holdLogout: boolean } }).planFixture.holdLogout =
-      true;
+  const beforeFocus = await worker.evaluate(() => {
+    const fixture = (
+      globalThis as unknown as {
+        planFixture: { holdLogout: boolean; holdAccounts: boolean; requests: PlanRequest[] };
+      }
+    ).planFixture;
+    fixture.holdLogout = true;
+    fixture.holdAccounts = true;
+    return fixture.requests.filter((request) => request.action === 'accounts').length;
   });
   await settingsSection(popup, 'Connections');
   await popup.getByLabel('Manage accounts', { exact: true }).click();
+  await popup.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect
+    .poll(() =>
+      worker.evaluate(
+        () =>
+          (
+            globalThis as unknown as { planFixture: { requests: PlanRequest[] } }
+          ).planFixture.requests.filter((request) => request.action === 'accounts').length,
+      ),
+    )
+    .toBeGreaterThan(beforeFocus);
   await popup.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(popup.getByText('Signing out…', { exact: true })).toBeVisible();
   await expect(popup.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0);
@@ -414,6 +423,18 @@ test('ChatGPT provider settings route reading streams, preserve partial failures
   await expect(
     popup.getByRole('button', { name: 'Continue with ChatGPT', exact: true }),
   ).toBeVisible();
+  await worker.evaluate(() => {
+    const fixture = (
+      globalThis as unknown as {
+        planFixture: { holdAccounts: boolean; finishAccounts: () => void };
+      }
+    ).planFixture;
+    fixture.holdAccounts = false;
+    fixture.finishAccounts();
+  });
+  await expect(popup.getByLabel('ChatGPT account').locator('option:checked')).toContainText(
+    'signed out',
+  );
   await settingsSection(popup, 'Presets');
   await expect(popup.getByRole('button', { name: 'Test generation', exact: true })).toBeDisabled();
   await popup.getByLabel('Connection', { exact: true }).selectOption('openai-compatible');

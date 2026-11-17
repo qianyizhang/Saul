@@ -59,6 +59,16 @@ await build({
   target: 'node24',
   logLevel: 'silent',
 });
+for (const name of ['protocol', 'action-protocol'])
+  await build({
+    entryPoints: [fileURLToPath(new URL(`native/${name}.mts`, root))],
+    outfile: fileURLToPath(new URL(`.build/native/${name}.mjs`, root)),
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    target: 'node24',
+    logLevel: 'silent',
+  });
 await copyFile(
   new URL('../../contracts/history.sql', root),
   new URL('.build/native/history.sql', root),

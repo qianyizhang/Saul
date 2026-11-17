@@ -4,14 +4,27 @@ See the [glossary](../GLOSSARY.md) for shared domain and surface names.
 
 ## Reading
 
-1. Select a term or short passage, choose an action, and select **Explain**. **Alt+Shift+E** uses the selected or default action.
-2. Saul saves the request, adds a quiet underline, and confirms that the job is queued. It does not open a card automatically.
-3. Keep reading. A completion notification offers **View**; the badge and page list retain unread state.
+1. Select a term or short passage, choose an action, and select **Explain & open** or **Illustrate & open**. The card opens once the submission is accepted, including when saved work is reused.
+2. **Alt+Shift+E** and **Command/Ctrl+Enter** use the selected or default action and queue quietly. Repeated keyboard requests also stay quiet; View opens their saved or active request.
+3. Saul saves the request and adds a quiet underline. For work outside the open card, a completion notification offers **View**; the badge and page list retain unread state. Completion never reopens a closed card.
 4. Click a marker or open the page list with **Alt+Shift+L** to inspect progress or the saved answer.
 
 Reading jobs survive card closure, refresh, navigation, or source-tab closure while the extension runtime remains available. **Stop** cancels queued or running work and retains partial text. **Regenerate** and follow-ups create new attempts; the last successful answer remains available if a later attempt fails.
 
 Opening a completed answer marks it read. Dismissing a notification does not. Error notifications can be muted from Settings or an error notification; success notifications and inline explanation errors remain visible.
+
+### Illustrate and reading activity
+
+Choose the Draw preset and PNG/GIF in the selection widget, then **Illustrate &
+open**. Existing action libraries can add the starter in Settings → Actions.
+Each attempt keeps its own image. Download preserves the original bytes, and
+GIF Play/Pause respects Reduce Motion. Loading or inspecting an image never sends.
+
+The [answer divider](../assets/surface.css) uses warning while connecting or
+waiting, green only on a provider thinking signal, and static light under
+Reduce Motion. Reserve its height. Clear the light at answer/refusal text;
+keep truthful **Generating response…**, **Saving…** and saved/error status.
+Queued work shows **Waiting…**, including in Min Mode.
 
 ### Page markers
 
@@ -33,6 +46,8 @@ Opening a completed answer marks it read. Dismissing a notification does not. Er
 - Concept terms expose notes on hover, focus, or click.
 - **Simpler**, **Give an example**, and **Go deeper** retain the captured source context and include the previous explanation.
 - **Ask a follow-up** accepts a custom question below a saved answer. Send or Command/Ctrl+Enter includes the saved source and earlier exchanges with the same model choices. The question appears with its answer; earlier answers remain in Past attempts. Drafts survive closing/reopening the card within the page. Stop and incomplete answers retain the last successful answer.
+- Follow-ups are limited to 2,000 characters per question and 120,000 compiled
+  conversation characters; reject overflow rather than dropping context.
 - Copy reports clipboard failures rather than claiming success.
 
 ## History
@@ -48,17 +63,9 @@ choices and billing/permission consequences stay visible. Preferences save immed
 independently of configuration drafts, and update open extension surfaces, including
 the summary panel. The board keeps its own presentation preference.
 
-Shortcuts are listed in Settings → Preferences. **Command/Ctrl+Enter** explains an
-available source selection outside editable fields; **Command/Ctrl+.** stops the
-open explanation's active job. **Escape** dismisses the reading surface without
-cancelling work. **Command/Ctrl+,** opens Settings inside the extension workspace.
-The existing **Alt+Shift+E/L** shortcuts remain. Browser shortcuts stay with Chrome.
-
-**Control+S (⌃S)** on macOS summarizes the current page; **Command+S** still
-saves the page in Chrome. Other platforms default to **Alt+Shift+S**. This is
-a Chrome extension command, active only in Chrome on regular HTTP(S) tabs.
-**Settings → Preferences → Shortcuts** shows its actual assignment. Use **Configure Chrome
-shortcuts** to change it or assign it if Chrome reports a conflict.
+See the [keyboard reference](../../../design/keyboard.md#saul) for reading,
+workspace and browser shortcuts. **Settings → Preferences → Shortcuts** shows
+Chrome's current assignments.
 
 The full workspace provides:
 
@@ -67,7 +74,10 @@ The full workspace provides:
 - Markdown export of retained passages and attempts, including incomplete labels;
 - deletion and **Clear all**, which cancel affected work and block late writes from recreating it.
 
-History shares `~/Library/Application Support/Little Clarity/history.sqlite3` with EZ. Both apps browse and delete the same saved records. The native helper is required even for API providers. Browser-profile removal does not delete shared history. The previous OPFS store is imported once and removed after verification.
+[History](../../../contracts/history.md) is shared with EZ. The helper is
+required even for API providers. Removing a browser profile does not delete it.
+Repeated reading actions disclose reuse and offer **Run again with current input**;
+normal Regenerate keeps the frozen request.
 
 ## Settings and models
 
@@ -77,13 +87,23 @@ preset beside its fields, with a compact selector at narrow widths. Section chan
 preserve the mounted configuration draft. Save and conflict recovery remain reachable
 across sections; preferences and access retain their independent immediate-save behavior.
 
-- Named actions pair editable prompts with a default model preset. Explain, Lookup, and Nudge are editable starters. A preset binds a connection, capability, model, and supported options. Managed ChatGPT plan presets use their connection’s bound account; standalone presets retain the locally selected account.
-- The existing prompt and model migrate into Explain and Current. Choosing another action for the same passage creates a new attempt; retry keeps the original request choices even after Settings changes.
+Stale or uncertain saves keep the draft and block another save. **Review latest**
+compares the original, saved and local values; same-field conflicts need an explicit
+choice (**Mine / Latest**). Show only local edits; retain non-conflicting ones.
+**Apply to draft** changes only the draft, then Save checks the fresh revision. Cancel
+keeps the draft. Edits already present in saved settings need no second save.
+**Reload** replaces it with saved settings after confirming discard
+when dirty. The [shared transaction contract](../../../contracts/configuration.md#unified-configuration-scopes)
+owns revision and atomic-save guarantees.
+
+- Named actions pair editable prompts with a default model preset. Explain, Lookup, and Nudge are editable starters. A preset binds a connection, capability, model, and supported options. ChatGPT plan presets use their connection’s bound account when present, including in standalone mode. In standalone mode, a preset without a bound account uses the locally selected account.
+- Inspecting a preset does not change the standalone account or the saved provider/profile defaults, including when another edit is saved. Standalone Original summary continues to use the saved local account.
+- New installations start with explicit Actions and Presets. Choosing another action for the same passage creates a new attempt; retry keeps the original request choices even after Settings changes.
 - Templates substitute `{{text}}`, `{{context}}`, `{{page title}}`, `{{page url}}`, `{{heading}}`, and `{{paragraph}}` once. `{{text}}` is required; unavailable referenced context blocks submission. Enabled context is included once, and template expressions are unsupported.
 - OpenAI-compatible profiles keep separate endpoint, model, temperature, and key values.
 - Changing endpoint origin clears the current key.
-- Missing/stale profile selection preserves the current configuration in a recovered profile.
-- Invalid saved settings show the affected field and offer an explicit backup-and-reset action.
+- Missing referenced profiles remain unavailable until explicitly repaired; no replacement profile is synthesized.
+- Invalid or obsolete saved settings show the affected field and offer an explicit backup-and-reset action. Unsupported old records remain untouched; Saul does not infer Actions or synthesize profiles from them.
 - Save, connection test, and generation test use the current draft without overwriting unreadable stored settings.
 - A saved attempt whose credential owner or endpoint changed keeps its output and
   shows “Select a new preset in Settings, then start a new attempt.” Retry never
@@ -128,132 +148,14 @@ On macOS Chrome, the native helper imports **Name Window** labels through
 AppleScript and verifies reviewed renames. Automation errors remain visible;
 other platforms use Saul labels. Helper and page-access controls live
 under **Settings → Preferences → Integrations**. External access is off by default.
-See [native messaging](native-messaging.md).
+Rows show readable titles with hostname fallback, full original title/URL on
+hover, and names/counts above the list. Display text does not change saved
+sources or browser metadata. Preserve focus, scroll and surviving choices on
+refresh. See [native messaging](native-messaging.md) and the [Tab board](mcp-app.md).
 
 ### Summaries
 
-The built-in behavior below remains the default. **Settings → Calls →
-Customize Call Saul** can save and select a custom Call preset while retaining earlier choices.
-Create/revise uses a chosen saved preset, then checks and previews a candidate
-without running it. **Save and select** initializes trusted code; the next Call Saul
-invokes it once per page. Custom results use safe text/Markdown, their own frozen
-preset, and the existing reader/Stop/history controls. See
-[custom actions](custom-actions.md) for the versioned interface and recovery.
-
-Right-click a web page and choose **Call Saul** to summarize that tab's
-loaded page text, even when the click is on a link or selected text. It does
-not summarize the link destination or only the selection. The reader opens
-in Chrome's side panel, keeping the source tab active, and shows its page title,
-source link and progress. The context menu, Control+S, Window selections and
-saved-summary buttons use this panel. Switching tabs keeps the current summary;
-closing the panel leaves its background work running. Opening a saved summary
-does not regenerate it. Settings recovery opens the full Settings workspace.
-
-External Tab board/native commands retain the full reader because Chrome requires
-a direct browser gesture to open a side panel. Existing reader URLs remain valid.
-
-**Select all → Summarize** summarizes a window; a smaller selection summarizes
-only those tabs. A selection across windows produces one saved summary in
-display order with source-window labels.
-
-Call Saul immediately opens a reader in Chrome and checks for a saved selection.
-**Summarize (default)** produces concise English followed by equivalent Simplified
-Chinese. For new work, **Settings → Calls → Model preset** chooses a saved Write
-preset. Its connection supplies the account or endpoint. Save applies the choice
-to new runs and **Run again**; **Retry** keeps the saved model, connection and
-options. A missing preset, unavailable connection or missing capability blocks
-without a provider or billing fallback.
-
-**Original summary setup** preserves the previous GPT-6 Luna, medium-effort
-ChatGPT plan route, including the saved plan binding or standalone account.
-It is selected until a model preset is chosen.
-
-Summaries for different page URLs can run at the same time, including pages on
-the same site. A new run or retry is blocked while one of its page URLs is already
-being processed. Two items process concurrently within one summary, and results
-appear in the original tab order. Other reading jobs retain their existing concurrency.
-Provider failures stop dequeuing new items while in-flight siblings settle;
-capture/format failures affect only their own item. **Stop** aborts all active
-streams for that summary and retains completed/partial results. If saving fails,
-Saul stops that summary's workers before releasing the run.
-
-Loaded HTTP(S) text is captured without focusing or reloading source tabs,
-bounded to 120,000 characters. Video, audio, images, frames, linked pages,
-collapsed and unloaded content are not read. Source changes and unreadable
-pages report their limitations. Restricted pages are skipped.
-
-Settings → Calls → **PDF processing** selects the default for new summaries
-and **Run again**. It is a Saul preference, independent of shared model presets.
-**PDF URL attachment (server)** is the default. Saul sends the PDF URL as a
-Responses `input_file` through the selected ChatGPT plan preset, without downloading,
-uploading or locally parsing PDF bytes. OpenAI is asked to read the whole document,
-including text and page images, subject to model and provider limits. Local page
-and text cutoffs do not apply. The URL must be reachable by OpenAI without the
-browser's cookies; private, password-protected, expired or unsupported inputs may
-fail. No API-key billing or local-parsing fallback is chosen automatically.
-
-Server input records retain the exact attachment URL and prepared time, not the
-PDF contents or OpenAI's extracted text. **Retry unfinished** reuses that URL and
-method; the remote document may have changed. Inspection and reuse comparisons
-state that contents were not verified, even for an identical URL. Comparing or
-reopening saved work does not ask OpenAI to fetch it or send another model request.
-Older summaries retain their original captured text and local retry behavior.
-
-**Local parsing · send text** downloads the selected document using available
-site cookies and extracts text with bundled PDF.js. Capture happens for new
-summaries, Run again and current-input comparisons (including repeated Summarize).
-Opening saved history alone does not download the document. The downloaded
-version can differ from the one already open in Chrome's viewer.
-
-Local PDF capture stops at 20 MiB, 200 pages, 120,000 characters, or 30 seconds.
-Coverage reports the pages read, pages without extractable text and truncation;
-the last included page may be partial. Images, charts and scanned text are not
-read, and text/table order may be imperfect. Password protection, missing text,
-invalid documents and download/access failures are explicit errors. No OCR,
-linked-document traversal, local-file access or automatic retry is performed.
-Stop cancels downloading/parsing; source-tab changes or closure reject a late
-capture before saving or generation. PDF bytes are temporary; extracted text
-uses the same local storage, inspection and frozen-source retry as HTML sources.
-Changing the default never regenerates an existing result; reuse discloses a
-changed processing choice and **Run again** explicitly prepares new input.
-
-Summaries and captured text persist in local SQLite. The reader is a disposable
-view: closing it never stops processing or deletes data. Reopening never
-regenerates results. Browser/extension restart marks unfinished work interrupted
-and never automatically spends quota again. **Retry unfinished** explicitly
-retries using frozen text or the saved attachment URL when available. A saved URL
-freezes the request, not the remote file contents.
-
-History separates **Passages** and **Summaries**. The reader contains progress,
-Stop, Retry unfinished, source coverage, **Export HTML**, and deletion under
-Details. Export creates a self-contained snapshot, including incomplete states.
-Completion does not open a second tab or steal focus. Tab surfaces retain only
-a compact link to the most recently started active summary. Earlier runs are
-available in Saved summaries. Summary deletion remains separate
-from passage History's Clear all action.
-
-### Saved input and reuse
-
-Repeated **Call Saul** reopens the latest saved summary for the exact ordered
-URL selection, or its active run. Before any new account/model call, Saul compares
-current source text with the saved capture. An upfront notice shows the original date,
-text change estimate, changed instructions/title/coverage, or a capture error.
-**Run again** explicitly captures current input in a new saved summary. **Retry
-unfinished** retains the original input. Closing with **Control+W** on macOS
-(**Alt+Shift+W** elsewhere) closes only the panel and leaves work running.
-
-Each summary offers **Inspect input/output**: capture time, character count,
-coverage, saved source input, instructions and the exact assembled prompt and raw
-response. **Compare current page** reads the current source again, downloading
-the current document for local PDFs, without a model request. URL attachments
-compare metadata only and cannot establish unchanged contents. Saved/current views remain distinct. Large text is searched across all
-sections and displayed one bounded section at a time; Copy includes the full text.
-Token additions/removals estimate lexical change, not meaning or edit distance;
-changes outside truncated or unloaded input cannot be measured.
-
-Repeated reading actions reopen the saved result, disclose input changes, and
-offer **Run again with current input**. Regenerate in the normal action row keeps
-the saved request. Reading and summary inspectors share the large-text viewer.
+[Calls and summaries](calls.md) owns page capture, the reader, PDFs and retry.
 
 ## Compatibility
 
@@ -261,21 +163,9 @@ the saved request. Reading and summary inspectors share the large-text viewer.
 - The native bridge supports macOS and Linux Chromium-family browsers; Google Chrome is the verified target.
 - See [testing](testing.md) for covered behavior and evidence limits.
 
-Shared presets retain `connectionKey` as a saved connection reference, capability and
-model options. Both apps edit and execute Draw; EZ also supports image inputs.
-Managed connections pin an account or endpoint, while secrets stay with the signed
-owner. Standalone browser installations retain their local profiles. Connections
-shows identity, capabilities and health, with type-specific setup and repair.
-Model options refresh from the connection catalog. Missing saved models remain
-visible and require a preset update; failed discovery does not imply removal.
+See [shared presets](../../../contracts/configuration.md) and
+[Speak preview](chatgpt-plan.md#speech-preview) for provider and capability rules.
 
-Speech previews live in Settings → Presets for Speak presets. Connections owns the
-OpenAI API connection and key; Presets owns the Realtime model and voice. Generate
-sends at most 512 characters using the saved configuration and separate API billing.
-Stop, navigation or closing cancels generation and clears audio. Text/audio are
-never added to reading history. Speak is a preview capability; reading actions
-use compatible Write or Draw presets.
+## Browser annotations
 
-[Shared control symbols](../../../design/symbols.html) defines the glyphs and
-meanings used by both apps. Symbol-only controls retain full accessible names and
-tooltips in Min Mode and Standard view.
+See [annotations](annotations.md) for capture, replies, evidence and retention.

@@ -128,7 +128,7 @@ import SwiftUI
 
     private func handleKey(_ event: NSEvent) -> Bool {
         guard let window = NSApp.keyWindow, !model.showSettings,
-            window.attachedSheet == nil, NSApp.modalWindow == nil
+            window.attachedSheet == nil, NSApp.modalWindow == nil, !ChoiceAnchor.hasOpenChooser
         else { return false }
         let binding = LookupKeyBinding(event: event)
         if window === panel {
@@ -156,6 +156,7 @@ import SwiftUI
 
     func hide() {
         selectionTask?.cancel()
+        ChoiceAnchor.dismissChooser(in: panel)
         isVisible = false
         panel?.orderOut(nil)
     }

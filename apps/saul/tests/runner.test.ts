@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { ReadingRunner } from '../src/reading/runner';
-import type { DbCall, DbRequest, Passage, Submission, RunStatus } from '../src/types/storage';
+import type { DbCall, DbRequest, RunResult, Submission, RunStatus } from '../src/types/storage';
 const mocks = vi.hoisted(() => ({ remote: vi.fn() }));
 
 const attemptContract = JSON.parse(
@@ -14,10 +14,14 @@ const attemptContract = JSON.parse(
     providerOutcome: 'complete' | 'error' | 'eof' | 'cancel';
     initialSaveFails: boolean;
     finalSaveFails: boolean;
-    expected: { providerCalls: number; hasOutput: boolean; savedSuccess: boolean };
+    expected: {
+      providerCalls: number;
+      output: 'present' | 'absent' | 'optional';
+      savedSuccess: boolean;
+    };
   }[];
 };
-vi.mock('../src/models/openai-compatible', () => ({ streamOpenAICompatible: mocks.remote }));
+vi.mock('../src/providers/openai-compatible', () => ({ streamOpenAICompatible: mocks.remote }));
 const submission = (id: string): Submission => ({
   submissionId: id,
   regenerate: true,
@@ -71,9 +75,18 @@ function store() {
         if (finishFailures-- > 0) throw new Error('Temporary disk failure');
         rows.set(message.payload.runId, {
           status: message.payload.status,
-          raw: message.payload.raw,
+          raw: message.payload.raw ?? rows.get(message.payload.runId)!.raw,
         });
         return true;
+      case 'DB_RUNS':
+        return [...rows].map(([id, row]): RunResult => ({
+          id,
+          status: row.status,
+          responseRaw: row.raw,
+          provider: 'openai-compatible',
+          model: 'model',
+          createdAt: 1,
+        }));
       default:
         throw new Error('Unexpected test operation');
     }
@@ -97,7 +110,7 @@ beforeEach(() => {
 });
 for (const scenario of attemptContract.cases) {
   it(`satisfies shared Attempt contract: ${scenario.id}`, async () => {
-    expect(attemptContract.version).toBe(1);
+    expect(attemptContract.version).toBe(2);
     const db = store();
     if (scenario.initialSaveFails) db.failSubmit();
     if (scenario.finalSaveFails) db.failFinish(2);
@@ -115,15 +128,13 @@ for (const scenario of attemptContract.cases) {
       }
     });
     const runner = new ReadingRunner(db.call, () => {});
-    const current = () =>
-      runner.decorateRun('passage', {
-        id: scenario.id,
-        status: db.rows.get(scenario.id)?.status ?? 'queued',
-        responseRaw: db.rows.get(scenario.id)?.raw ?? '',
-        provider: 'openai-compatible',
-        model: 'model',
-        createdAt: 1,
-      });
+    const current = async () =>
+      (
+        await runner.query({
+          type: 'DB_RUNS',
+          payload: { selectionId: 'passage' },
+        })
+      ).find((run) => run.id === scenario.id);
     if (scenario.initialSaveFails) {
       await expect(runner.submit(submission(scenario.id), 'secret')).rejects.toThrow(
         'Storage unavailable',
@@ -134,12 +145,16 @@ for (const scenario of attemptContract.cases) {
         await vi.waitFor(() => expect(db.rows.get(scenario.id)?.raw).toBe(scenario.text));
         await runner.stop('passage');
       }
-      await vi.waitFor(() =>
-        expect(['completed', 'failed', 'interrupted', 'cancelled']).toContain(current().status),
+      await vi.waitFor(async () =>
+        expect(['completed', 'failed', 'interrupted', 'cancelled']).toContain(
+          (await current())?.status,
+        ),
       );
     }
     expect(mocks.remote).toHaveBeenCalledTimes(scenario.expected.providerCalls);
-    expect(current().responseRaw).toBe(scenario.expected.hasOutput ? scenario.text : '');
+    const raw = (await current())?.responseRaw ?? '';
+    if (scenario.expected.output === 'optional') expect(['', scenario.text]).toContain(raw);
+    else expect(raw).toBe(scenario.expected.output === 'present' ? scenario.text : '');
     expect(db.rows.get(scenario.id)?.status === 'completed').toBe(scenario.expected.savedSuccess);
   });
 }
@@ -156,30 +171,12 @@ it('persists a stranded storage failure before allowing explicit retry', async (
   const changed = vi.fn(),
     runner = new ReadingRunner(db.call, changed);
   await runner.submit(submission('first'), 'secret');
-  await vi.waitFor(() =>
+  await vi.waitFor(async () =>
     expect(
-      runner.decorateRun('passage', { id: 'first', status: 'saving' } as Passage['latest']).reason,
-    ).toBe('save-failed'),
+      (await runner.query({ type: 'DB_RUNS', payload: { selectionId: 'passage' } }))[0],
+    ).toMatchObject({ status: 'failed', reason: 'save-failed' }),
   );
   expect(db.rows.get('first')?.status).toBe('saving');
-  const passage = {
-    snapshot: submission('first').snapshot,
-    latest: {
-      id: 'first',
-      status: 'saving',
-      responseRaw: '',
-      provider: 'openai-compatible',
-      model: 'model',
-      createdAt: 1,
-    },
-    bookmarked: false,
-    unread: false,
-  } satisfies Passage;
-  expect(runner.decorate(passage).latest).toMatchObject({
-    status: 'failed',
-    responseRaw: 'Retained text',
-    reason: 'save-failed',
-  });
   await runner.submit(submission('retry'), 'secret');
   await vi.waitFor(() => expect(db.rows.get('retry')?.status).toBe('completed'));
   expect(db.rows.get('first')).toEqual({ status: 'failed', raw: 'Retained text' });
@@ -249,21 +246,18 @@ it('exposes live provider activity without retaining reasoning or regressing aft
   });
   const db = store();
   const runner = new ReadingRunner(db.call, () => {});
-  const current = () =>
-    runner.decorateRun('passage', {
-      id: 'activity',
-      status: db.rows.get('activity')?.status,
-    } as Passage['latest']);
+  const current = async () =>
+    (await runner.query({ type: 'DB_RUNS', payload: { selectionId: 'passage' } }))[0];
   await runner.submit(submission('activity'), '');
-  await vi.waitFor(() => expect(current().activity).toBe('connecting'));
+  await vi.waitFor(async () => expect((await current())?.activity).toBe('connecting'));
   resume();
-  await vi.waitFor(() => expect(current().activity).toBe('thinking'));
+  await vi.waitFor(async () => expect((await current())?.activity).toBe('thinking'));
   resume();
   await vi.waitFor(() => expect(db.rows.get('activity')?.raw).toBe('Answer'));
-  expect(current().activity).toBe('generating');
+  expect((await current())?.activity).toBe('generating');
   resume();
-  await vi.waitFor(() => expect(current().status).toBe('completed'));
-  expect(current().activity).toBeUndefined();
+  await vi.waitFor(async () => expect((await current())?.status).toBe('completed'));
+  expect((await current())?.activity).toBeUndefined();
 });
 
 it('retries failed startup recovery without automatically sending a provider request', async () => {
@@ -283,7 +277,9 @@ it('retries failed startup recovery without automatically sending a provider req
     throw new Error('Unexpected operation');
   };
   const runner = new ReadingRunner(db, () => {});
-  await expect(runner.ready).rejects.toThrow('History helper unavailable');
+  await expect(
+    runner.query({ type: 'DB_RUNS', payload: { selectionId: 'passage' } }),
+  ).rejects.toThrow('History helper unavailable');
   available = true;
   await expect(runner.submit(submission('reopen'), 'token')).resolves.toEqual({
     passageId: 'saved',

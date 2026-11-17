@@ -1,0 +1,376 @@
+{
+  "version": 1,
+  "title": "Proposal 2 · Keep Settings edits",
+  "initial": "conflict",
+  "source": {
+    "revision": "0a949cf12f226a63b0db6244f9fc2a1e3fef78d1 · 2026-11-15",
+    "description": "Accepted design comparison against baseline 0a949cf. The three changes are now implemented in the working tree with the agreed broader scope. These fixed previews record the design discussion; use the parent catalog for current behavior maps."
+  },
+  "coverage": {
+    "included": [
+      "Original and Proposed share the same start and outcome. New transitions are marked proposed and never become available in Exploration.",
+      "Only the affected route is shown. System checkpoints are simulated; no product effects occur.",
+      "Confirmed stale revision; one valid name edit. Latest saved reasoning effort changed independently.",
+      "Not an auto-merge proposal. Same-field conflict choices and uncertain-commit reconciliation need separate implementation design. The existing explicit discard path remains available."
+    ],
+    "omitted": [
+      "This comparison is not an exhaustive UI or concurrency model. Open the parent atlas for other journeys.",
+      "No live app or usability testing, provider requests, account changes or automatic merging. This is the original design study, not the current app rendering.",
+      "Counts distinguish intentional controls from system events. Do not treat grouped transitions as measured clicks. Cancel/retry loops are retained as alternatives and excluded from the straightforward before/after route."
+    ]
+  },
+  "regions": [
+    {
+      "id": "settings",
+      "label": "Presets & actions"
+    }
+  ],
+  "states": [
+    {
+      "id": "dirty",
+      "region": "settings",
+      "label": "Unsaved preset",
+      "detail": "The fixed fixture has valid changed preset fields. Global Save commits the configuration draft.",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:96",
+      "preview": {
+        "title": "Preset · unsaved changes",
+        "body": "The fixed fixture has valid changed preset fields. Global Save commits the configuration draft.",
+        "fields": [
+          {
+            "label": "Name",
+            "value": "Clear writing · re-entered"
+          },
+          {
+            "label": "Reasoning effort",
+            "value": "Low"
+          }
+        ]
+      }
+    },
+    {
+      "id": "saving",
+      "region": "settings",
+      "label": "Saving",
+      "detail": "The trusted settings owner compares the loaded baseline before committing shared and scoped changes.",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:104",
+      "preview": {
+        "title": "Saving configuration",
+        "body": "The trusted settings owner compares the loaded baseline before committing shared and scoped changes."
+      }
+    },
+    {
+      "id": "saved",
+      "region": "settings",
+      "label": "Saved",
+      "detail": "Save succeeded and the draft baseline advanced. Future requests use the new choices; old attempts keep frozen input.",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:121",
+      "preview": {
+        "title": "Configuration saved",
+        "body": "Save succeeded and the draft baseline advanced. Future requests use the new choices; old attempts keep frozen input."
+      },
+      "terminal": true
+    },
+    {
+      "id": "conflict",
+      "region": "settings",
+      "label": "Stale draft",
+      "detail": "A stale or uncertain result preserves the draft and disables another Save. Reload is required before another commit.",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:116",
+      "preview": {
+        "title": "Settings changed elsewhere",
+        "body": "The owner rejected this stale revision. Your name edit is retained; Save is blocked.",
+        "fields": [
+          {
+            "label": "Your unsaved name",
+            "value": "Clear writing"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reload-confirm",
+      "region": "settings",
+      "label": "Reload?",
+      "detail": "Reload explicitly asks before replacing unsaved fields with current saved settings.",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:144",
+      "preview": {
+        "title": "Discard draft and reload?",
+        "body": "Reload explicitly asks before replacing unsaved fields with current saved settings.",
+        "overlay": {
+          "title": "Discard your draft and reload?",
+          "body": "Reload explicitly asks before replacing unsaved fields with current saved settings.",
+          "blocks": []
+        }
+      }
+    },
+    {
+      "id": "reloaded",
+      "region": "settings",
+      "label": "Reloaded",
+      "detail": "The confirmed reload replaced the old draft and adopted the current revision.",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:151",
+      "preview": {
+        "title": "Latest configuration loaded",
+        "body": "The confirmed reload replaced the old draft and adopted the current revision.",
+        "fields": [
+          {
+            "label": "Name",
+            "value": "Standard"
+          },
+          {
+            "label": "Reasoning effort",
+            "value": "Low"
+          }
+        ]
+      }
+    },
+    {
+      "id": "read-latest",
+      "region": "settings",
+      "label": "Reading latest",
+      "detail": "PROPOSED: Reading the current saved revision. Your unsaved name change stays in memory.",
+      "source": "Design reference at baseline 0a949cf: apps/saul/src/app/useSettingsDraft.ts:144",
+      "preview": {
+        "title": "Keep your draft",
+        "body": "Reading the current saved revision. Your unsaved name change stays in memory.",
+        "fields": [],
+        "blocks": [
+          {
+            "kind": "notice",
+            "tone": "neutral",
+            "text": "Accepted design · illustrative preview"
+          }
+        ]
+      }
+    },
+    {
+      "id": "review-changes",
+      "region": "settings",
+      "label": "Review changes",
+      "detail": "PROPOSED: One non-overlapping name edit. Another session changed reasoning effort. Nothing is saved by opening this review.",
+      "source": "Design reference at baseline 0a949cf: apps/saul/src/app/useSettingsDraft.ts:144",
+      "preview": {
+        "title": "Review your edit against latest",
+        "body": "One non-overlapping name edit. Another session changed reasoning effort. Nothing is saved by opening this review.",
+        "fields": [
+          {
+            "label": "Name when editing began",
+            "value": "Standard"
+          },
+          {
+            "label": "Name saved now",
+            "value": "Standard"
+          },
+          {
+            "label": "Your unsaved name",
+            "value": "Clear writing"
+          },
+          {
+            "label": "Reasoning effort saved elsewhere",
+            "value": "Low · was Medium"
+          }
+        ],
+        "blocks": [
+          {
+            "kind": "notice",
+            "tone": "neutral",
+            "text": "Accepted design · illustrative preview"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reviewed-draft",
+      "region": "settings",
+      "label": "Draft reapplied",
+      "detail": "PROPOSED: The chosen name change is applied to the latest draft. Save remains explicit and checks that revision again.",
+      "source": "Design reference at baseline 0a949cf: apps/saul/src/app/useSettingsDraft.ts:144",
+      "preview": {
+        "title": "Your edit is ready to save",
+        "body": "The chosen name change is applied to the latest draft. Save remains explicit and checks that revision again.",
+        "fields": [
+          {
+            "label": "Name",
+            "value": "Clear writing"
+          },
+          {
+            "label": "Reasoning effort",
+            "value": "Low · current saved value"
+          }
+        ],
+        "blocks": [
+          {
+            "kind": "notice",
+            "tone": "neutral",
+            "text": "Accepted design · illustrative preview"
+          }
+        ]
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "id": "save",
+      "from": "dirty",
+      "to": "saving",
+      "label": "Save",
+      "source": "apps/saul/src/app/Settings.tsx:1021",
+      "kind": "user"
+    },
+    {
+      "id": "save-ok",
+      "from": "saving",
+      "to": "saved",
+      "label": "Commit succeeds",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:121",
+      "kind": "system"
+    },
+    {
+      "id": "save-conflict",
+      "from": "saving",
+      "to": "conflict",
+      "label": "Stale revision or uncertain reply",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:116",
+      "kind": "system"
+    },
+    {
+      "id": "reload",
+      "from": "conflict",
+      "to": "reload-confirm",
+      "label": "Reload saved settings",
+      "source": "apps/saul/src/app/Settings.tsx:1007",
+      "kind": "user"
+    },
+    {
+      "id": "reload-cancel",
+      "from": "reload-confirm",
+      "to": "conflict",
+      "label": "Cancel",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:146",
+      "kind": "user"
+    },
+    {
+      "id": "reload-confirm",
+      "from": "reload-confirm",
+      "to": "reloaded",
+      "label": "Discard draft and reload",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:146",
+      "kind": "user"
+    },
+    {
+      "id": "reedit",
+      "from": "reloaded",
+      "to": "dirty",
+      "label": "Edit current preset",
+      "source": "apps/saul/src/app/useSettingsDraft.ts:96",
+      "kind": "input"
+    },
+    {
+      "id": "review-latest",
+      "from": "conflict",
+      "to": "read-latest",
+      "label": "Review latest",
+      "kind": "user",
+      "proposed": true,
+      "source": "Design reference at baseline 0a949cf: apps/saul/src/app/useSettingsDraft.ts:144"
+    },
+    {
+      "id": "latest-read",
+      "from": "read-latest",
+      "to": "review-changes",
+      "label": "Latest settings received",
+      "kind": "system",
+      "proposed": true,
+      "source": "Design reference at baseline 0a949cf: apps/saul/src/app/useSettingsDraft.ts:144"
+    },
+    {
+      "id": "latest-fails",
+      "from": "read-latest",
+      "to": "conflict",
+      "label": "Latest settings unavailable; keep draft",
+      "kind": "system",
+      "proposed": true,
+      "source": "Design reference at baseline 0a949cf: apps/saul/src/app/useSettingsDraft.ts:144"
+    },
+    {
+      "id": "keep-name",
+      "from": "review-changes",
+      "to": "reviewed-draft",
+      "label": "Reapply my name change",
+      "kind": "user",
+      "proposed": true,
+      "source": "Design reference at baseline 0a949cf: apps/saul/src/app/useSettingsDraft.ts:144"
+    },
+    {
+      "id": "review-cancel",
+      "from": "review-changes",
+      "to": "conflict",
+      "label": "Cancel; keep my draft",
+      "kind": "user",
+      "proposed": true,
+      "source": "Design reference at baseline 0a949cf: apps/saul/src/app/useSettingsDraft.ts:144"
+    },
+    {
+      "id": "save-reviewed",
+      "from": "reviewed-draft",
+      "to": "saving",
+      "label": "Save reviewed changes",
+      "kind": "user",
+      "proposed": true,
+      "source": "Design reference at baseline 0a949cf: apps/saul/src/app/useSettingsDraft.ts:104"
+    }
+  ],
+  "journeys": [
+    {
+      "id": "conflict-current",
+      "label": "Current · Reload and recreate the edit",
+      "description": "Straightforward recovery from a confirmed stale revision. Optional Cancel loops are not counted as required work.",
+      "start": "conflict",
+      "steps": ["reload", "reload-confirm", "reedit", "save", "save-ok"]
+    },
+    {
+      "id": "conflict-proposed",
+      "label": "Proposed · Review and keep the edit",
+      "description": "Read current settings without losing the draft, review one edit, then save explicitly.",
+      "start": "conflict",
+      "steps": ["review-latest", "latest-read", "keep-name", "save-reviewed", "save-ok"]
+    }
+  ],
+  "comparisons": [
+    {
+      "id": "keep-draft",
+      "label": "Saul: recover without retyping the draft",
+      "before": "conflict-current",
+      "after": "conflict-proposed",
+      "detail": "Highest recovery cost, larger implementation. Current: discard the draft, reconstruct the edit, save. Proposed: retain it, review latest values, explicitly reapply the selected edit, then save. The benefit is preserved work, not a claimed bulk click saving. No automatic merge or overwrite. If a field changed on both sides, require a field choice; read failure or another stale save must retain the draft. This fixture covers a confirmed stale revision with one non-overlapping name edit, not uncertain delivery."
+    }
+  ],
+  "layout": {
+    "states": {
+      "conflict": [100, 400],
+      "reload-confirm": [420, 170],
+      "reloaded": [730, 170],
+      "dirty": [1030, 170],
+      "read-latest": [380, 700],
+      "review-changes": [700, 700],
+      "reviewed-draft": [1050, 700],
+      "saving": [1360, 400],
+      "saved": [1640, 400]
+    },
+    "regions": {
+      "settings": {
+        "label": [-5, -5],
+        "outline": [
+          [-20, 120],
+          [60, 70],
+          [1680, 70],
+          [1760, 120],
+          [1780, 790],
+          [1680, 860],
+          [60, 860],
+          [-40, 790]
+        ]
+      }
+    }
+  }
+}

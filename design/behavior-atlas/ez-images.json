@@ -1,0 +1,679 @@
+{
+  "version": 1,
+  "title": "EZ · Images and sketch",
+  "initial": "illustration",
+  "source": {
+    "revision": "Code accompanying this IR; baseline 0a949cf12f226a63b0db6244f9fc2a1e3fef78d1 plus accepted journey changes, reviewed 2026-11-16",
+    "description": "Source-derived current behavior, including the accepted Retry, Settings review and pointer-open changes. Fixed fictional fixtures; no live provider requests. Affected browser flows and native offline checks passed. Scaffold: repo-kit 4914a36."
+  },
+  "coverage": {
+    "included": [
+      "Configured API Draw presets; Illustration PNG/GIF and Make meme sketch editing.",
+      "Input validation, Quick Lookup to main-window sketch handoff, retained draft, image save recovery and reuse.",
+      "Reviewed layout hints group navigation contexts and route/recovery neighborhoods; coordinates are presentation only, not time or rank.",
+      "Direct Retry repeats frozen PNG/GIF requests and image edits; missing source blocks with an explicit review/reattach path."
+    ],
+    "omitted": [
+      "Exact canvas strokes/undo history, file picker contents and every image format/error permutation are summarized.",
+      "Account/catalog setup is in EZ settings. Network generation, filesystem writes and clipboard reads are simulated.",
+      "A finite scenario projection, not the full Cartesian product of app state. System buttons simulate possible source-code outcomes.",
+      "No proposed optimization: Comparison is intentionally absent.",
+      "Terminal landmarks end this scoped review; they do not imply that the real application quits. Compound navigation labels name their menu/section steps; route counts are model transitions, not measured click counts."
+    ]
+  },
+  "regions": [
+    {
+      "id": "compose",
+      "label": "Draft · main window"
+    },
+    {
+      "id": "panel",
+      "label": "Quick Lookup"
+    },
+    {
+      "id": "answer",
+      "label": "Answer · main window"
+    }
+  ],
+  "states": [
+    {
+      "id": "illustration",
+      "region": "compose",
+      "label": "Illustration draft",
+      "detail": "A configured Draw preset is selected. The fixed prompt is ready; PNG is the default.",
+      "source": "apps/ez/Sources/EZCore/Configuration.swift:316",
+      "preview": {
+        "title": "Illustration draft",
+        "body": "A configured Draw preset is selected. The fixed prompt is ready; PNG is the default.",
+        "fields": [
+          {
+            "label": "Prompt",
+            "value": "A diagram of a request continuing after a window closes."
+          },
+          {
+            "label": "Output",
+            "value": "PNG"
+          }
+        ]
+      }
+    },
+    {
+      "id": "gif",
+      "region": "compose",
+      "label": "GIF selected",
+      "detail": "Text-only Illustration can request GIF when the configured model supports it. Input-image edits require PNG.",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:302",
+      "preview": {
+        "title": "GIF selected",
+        "body": "Text-only Illustration can request GIF when the configured model supports it. Input-image edits require PNG.",
+        "fields": [
+          {
+            "label": "Output",
+            "value": "GIF"
+          },
+          {
+            "label": "Model",
+            "value": "Configured supported 2.6 image model"
+          }
+        ]
+      }
+    },
+    {
+      "id": "meme-empty",
+      "region": "compose",
+      "label": "Empty sketch",
+      "detail": "Choose Make meme. The shared sketch is empty; Run is blocked until an image or drawing exists.",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:306",
+      "preview": {
+        "title": "Make meme · empty sketch",
+        "body": "Choose Make meme. The shared sketch is empty; Run is blocked until an image or drawing exists.",
+        "fields": []
+      }
+    },
+    {
+      "id": "sketch",
+      "region": "compose",
+      "label": "Sketch ready",
+      "detail": "A fixed sketch is ready. Run renders the edited composition to one PNG and freezes it with the prompt.",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:528",
+      "preview": {
+        "title": "Sketch ready",
+        "body": "A fixed sketch is ready. Run renders the edited composition to one PNG and freezes it with the prompt.",
+        "fields": [
+          {
+            "label": "Sketch",
+            "value": "A window, an arrow, and a continuing request"
+          },
+          {
+            "label": "Instruction",
+            "value": "Make the idea humorous without changing its meaning."
+          }
+        ]
+      }
+    },
+    {
+      "id": "invalid",
+      "region": "compose",
+      "label": "Input rejected",
+      "detail": "An invalid replacement leaves the prior valid image or sketch intact. Run can still use that retained source.",
+      "source": "apps/ez/Sources/EZ/GenerationState.swift:118",
+      "preview": {
+        "title": "Replacement rejected",
+        "body": "An invalid replacement leaves the prior valid image or sketch intact. Run can still use that retained source.",
+        "fields": []
+      }
+    },
+    {
+      "id": "quick-sketch",
+      "region": "panel",
+      "label": "Shared sketch",
+      "detail": "The panel can preview, paste and run the shared sketch. Edit sketch opens the same draft in the main window.",
+      "source": "apps/ez/Sources/EZ/ImageInputView.swift:32",
+      "preview": {
+        "title": "Sketch in Quick Lookup",
+        "body": "The panel can preview, paste and run the shared sketch. Edit sketch opens the same draft in the main window.",
+        "fields": []
+      }
+    },
+    {
+      "id": "drawing",
+      "region": "answer",
+      "label": "Generating",
+      "detail": "One explicit image generation request is active. Settings and input changes cannot retarget it.",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:72",
+      "preview": {
+        "title": "Generating image",
+        "body": "One explicit image generation request is active. Settings and input changes cannot retarget it.",
+        "fields": []
+      }
+    },
+    {
+      "id": "meme-drawing",
+      "region": "answer",
+      "label": "Editing image",
+      "detail": "One image-edit request uses the frozen PNG sketch. There is no hidden analysis request.",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:528",
+      "preview": {
+        "title": "Generating from sketch",
+        "body": "One image-edit request uses the frozen PNG sketch. There is no hidden analysis request.",
+        "fields": []
+      }
+    },
+    {
+      "id": "image",
+      "region": "answer",
+      "label": "Image saved",
+      "detail": "Completion and local save succeeded. Download preserves returned image bytes and format; Draw has no text follow-up.",
+      "source": "apps/ez/Sources/EZ/ContentView.swift:233",
+      "preview": {
+        "title": "Image saved",
+        "body": "Completion and local save succeeded. Download preserves returned image bytes and format; Draw has no text follow-up.",
+        "fields": []
+      },
+      "outcome": "Generated image saved"
+    },
+    {
+      "id": "meme-image",
+      "region": "answer",
+      "label": "Meme saved",
+      "detail": "The image is saved and the original sketch draft remains available for editing.",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:528",
+      "preview": {
+        "title": "Meme saved",
+        "body": "The image is saved and the original sketch draft remains available for editing.",
+        "fields": []
+      },
+      "outcome": "Meme saved"
+    },
+    {
+      "id": "unsaved",
+      "region": "answer",
+      "label": "Image not saved",
+      "detail": "The completed image remains in memory. Save again only retries the frozen terminal record; Download can preserve the bytes.",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:146",
+      "preview": {
+        "title": "Image not saved",
+        "body": "The completed image remains in memory. Save again only retries the frozen terminal record; Download can preserve the bytes.",
+        "fields": []
+      }
+    },
+    {
+      "id": "download",
+      "region": "answer",
+      "label": "Download image",
+      "detail": "The native save panel uses the PNG or GIF extension detected from the actual bytes.",
+      "source": "apps/ez/Sources/EZ/GenerationState.swift:88",
+      "preview": {
+        "title": "Download image",
+        "body": "The native save panel uses the PNG or GIF extension detected from the actual bytes.",
+        "fields": [],
+        "overlay": {
+          "title": "Download image",
+          "body": "The native save panel uses the PNG or GIF extension detected from the actual bytes.",
+          "blocks": []
+        }
+      }
+    },
+    {
+      "id": "downloaded",
+      "region": "answer",
+      "label": "Downloaded",
+      "detail": "The selected destination received the exact image bytes. No new request was sent.",
+      "source": "apps/ez/Sources/EZ/GenerationState.swift:88",
+      "preview": {
+        "title": "Image downloaded",
+        "body": "The selected destination received the exact image bytes. No new request was sent.",
+        "fields": []
+      },
+      "outcome": "Image downloaded",
+      "terminal": true
+    },
+    {
+      "id": "reused",
+      "region": "compose",
+      "label": "Restored image",
+      "detail": "Reuse restores the frozen input as one image layer, not the earlier editable scene or undo history.",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:650",
+      "preview": {
+        "title": "Frozen image restored",
+        "body": "Reuse restores the frozen input as one image layer, not the earlier editable scene or undo history.",
+        "fields": []
+      },
+      "outcome": "Image draft restored"
+    },
+    {
+      "id": "missing",
+      "region": "compose",
+      "label": "Source missing",
+      "detail": "Reuse cannot find or validate the saved source image. The draft asks for reattachment before Run.",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:657",
+      "preview": {
+        "title": "Saved source unavailable",
+        "body": "Reuse cannot find or validate the saved source image. The draft asks for reattachment before Run.",
+        "fields": []
+      }
+    },
+    {
+      "id": "failed",
+      "region": "answer",
+      "label": "Image request failed",
+      "detail": "No automatic retry. Partial/error state stays visible; Edit draft exposes the retained sketch for an explicit new Run.",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:89",
+      "preview": {
+        "title": "Image request failed",
+        "body": "No automatic retry. Partial/error state stays visible; Edit draft exposes the retained sketch for an explicit new Run.",
+        "fields": []
+      }
+    },
+    {
+      "id": "image-stopped",
+      "region": "answer",
+      "label": "Illustration stopped",
+      "detail": "Retry repeats the saved Illustration request, including its PNG/GIF choice. It does not use a changed draft.",
+      "source": "apps/ez/Sources/EZCore/RetryAttempt.swift:9",
+      "preview": {
+        "title": "Illustration stopped",
+        "body": "Retry repeats the saved Illustration request, including its PNG/GIF choice. It does not use a changed draft.",
+        "fields": []
+      }
+    },
+    {
+      "id": "meme-stopped",
+      "region": "answer",
+      "label": "Image edit stopped",
+      "detail": "Retry reloads the exact stored source image. A missing source blocks and offers Review saved request.",
+      "source": "apps/ez/Sources/EZCore/RetryAttempt.swift:9",
+      "preview": {
+        "title": "Image edit stopped",
+        "body": "Retry reloads the exact stored source image. A missing source blocks and offers Review saved request.",
+        "fields": []
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "id": "format",
+      "from": "illustration",
+      "to": "gif",
+      "label": "Choose GIF",
+      "kind": "input",
+      "source": "apps/ez/Sources/EZ/RequestControls.swift:205"
+    },
+    {
+      "id": "png",
+      "from": "gif",
+      "to": "illustration",
+      "label": "Choose PNG",
+      "kind": "input",
+      "source": "apps/ez/Sources/EZ/RequestControls.swift:205"
+    },
+    {
+      "id": "generate",
+      "from": "illustration",
+      "to": "drawing",
+      "label": "Run Illustration",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:513"
+    },
+    {
+      "id": "generate-gif",
+      "from": "gif",
+      "to": "drawing",
+      "label": "Run GIF Illustration",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:513"
+    },
+    {
+      "id": "finish",
+      "from": "drawing",
+      "to": "image",
+      "label": "Image completion and save succeed",
+      "kind": "system",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:80"
+    },
+    {
+      "id": "save-fails",
+      "from": "drawing",
+      "to": "unsaved",
+      "label": "Image completes; save fails",
+      "kind": "system",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:146"
+    },
+    {
+      "id": "save-image",
+      "from": "unsaved",
+      "to": "image",
+      "label": "Save again; storage succeeds",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:103"
+    },
+    {
+      "id": "meme",
+      "from": "illustration",
+      "to": "meme-empty",
+      "label": "Choose Make meme",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:408"
+    },
+    {
+      "id": "draw",
+      "from": "meme-empty",
+      "to": "sketch",
+      "label": "Draw or paste fixture",
+      "kind": "input",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:731"
+    },
+    {
+      "id": "invalid",
+      "from": "sketch",
+      "to": "invalid",
+      "label": "Try invalid replacement",
+      "kind": "input",
+      "source": "apps/ez/Sources/EZ/GenerationState.swift:118"
+    },
+    {
+      "id": "valid",
+      "from": "invalid",
+      "to": "meme-drawing",
+      "label": "Run using retained sketch",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:513"
+    },
+    {
+      "id": "meme-run",
+      "from": "sketch",
+      "to": "meme-drawing",
+      "label": "Run Make meme",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:513"
+    },
+    {
+      "id": "meme-finish",
+      "from": "meme-drawing",
+      "to": "meme-image",
+      "label": "Image completion and save succeed",
+      "kind": "system",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:80"
+    },
+    {
+      "id": "meme-fail",
+      "from": "meme-drawing",
+      "to": "failed",
+      "label": "Image request fails",
+      "kind": "system",
+      "source": "apps/ez/Sources/EZCore/AttemptExecution.swift:89"
+    },
+    {
+      "id": "edit-failed",
+      "from": "failed",
+      "to": "sketch",
+      "label": "Edit draft",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/ContentView.swift:56"
+    },
+    {
+      "id": "edit",
+      "from": "meme-image",
+      "to": "sketch",
+      "label": "Edit draft",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/ContentView.swift:19"
+    },
+    {
+      "id": "quick-paste",
+      "from": "meme-empty",
+      "to": "quick-sketch",
+      "label": "Quick Lookup; paste a sketch",
+      "kind": "input",
+      "source": "apps/ez/Sources/EZ/ImageInputView.swift:39"
+    },
+    {
+      "id": "main-sketch",
+      "from": "quick-sketch",
+      "to": "sketch",
+      "label": "Edit sketch",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/QuickLookupView.swift:45"
+    },
+    {
+      "id": "download",
+      "from": "image",
+      "to": "download",
+      "label": "Download",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/ContentView.swift:234"
+    },
+    {
+      "id": "save-file",
+      "from": "download",
+      "to": "downloaded",
+      "label": "Choose file and save",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/GenerationState.swift:97"
+    },
+    {
+      "id": "cancel-download",
+      "from": "download",
+      "to": "image",
+      "label": "Cancel",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/GenerationState.swift:97"
+    },
+    {
+      "id": "reuse",
+      "from": "meme-image",
+      "to": "reused",
+      "label": "More → Reuse; source exists",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:650"
+    },
+    {
+      "id": "reuse-missing",
+      "from": "meme-image",
+      "to": "missing",
+      "label": "More → Reuse; source missing",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:657"
+    },
+    {
+      "id": "reattach",
+      "from": "missing",
+      "to": "reused",
+      "label": "Attach replacement image",
+      "kind": "input",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:735"
+    },
+    {
+      "id": "edit-reused",
+      "from": "reused",
+      "to": "sketch",
+      "label": "Edit restored image layer",
+      "kind": "input",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:731"
+    },
+    {
+      "id": "retry-meme",
+      "from": "failed",
+      "to": "meme-drawing",
+      "label": "Retry same request; pending image saved",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:594"
+    },
+    {
+      "id": "stop-image",
+      "from": "drawing",
+      "to": "image-stopped",
+      "label": "Stop",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:594"
+    },
+    {
+      "id": "retry-image",
+      "from": "image-stopped",
+      "to": "drawing",
+      "label": "Retry same request; pending input saved",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:594"
+    },
+    {
+      "id": "stop-meme",
+      "from": "meme-drawing",
+      "to": "meme-stopped",
+      "label": "Stop",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:594"
+    },
+    {
+      "id": "retry-stopped-meme",
+      "from": "meme-stopped",
+      "to": "meme-drawing",
+      "label": "Retry same request; pending image saved",
+      "kind": "user",
+      "source": "apps/ez/Sources/EZ/AppModel.swift:594"
+    }
+  ],
+  "journeys": [
+    {
+      "id": "illustration",
+      "label": "Generate and download an illustration",
+      "start": "illustration",
+      "steps": ["generate", "finish", "download", "save-file"],
+      "description": "Configured API preset; real transport and file writing remain simulated."
+    },
+    {
+      "id": "gif",
+      "label": "Generate a GIF deliberately",
+      "start": "illustration",
+      "steps": ["format", "generate-gif", "finish", "download", "save-file"],
+      "description": "Supported text-only model fixture; the output format is frozen when Run is pressed."
+    },
+    {
+      "id": "meme",
+      "label": "Sketch, recover from failure, and keep editing",
+      "start": "illustration",
+      "steps": [
+        "meme",
+        "draw",
+        "meme-run",
+        "meme-fail",
+        "edit-failed",
+        "meme-run",
+        "meme-finish",
+        "edit"
+      ],
+      "description": "The sketch survives a failed or completed request."
+    },
+    {
+      "id": "panel-sketch",
+      "label": "Move a sketch from Quick Lookup to the main editor",
+      "start": "meme-empty",
+      "steps": ["quick-paste", "main-sketch", "meme-run", "meme-finish"],
+      "description": "Both surfaces share the same draft; opening the editor does not run it."
+    },
+    {
+      "id": "save-image",
+      "label": "Recover an unsaved image",
+      "start": "illustration",
+      "steps": ["generate", "save-fails", "save-image"],
+      "description": "Storage-only recovery of the original output."
+    },
+    {
+      "id": "reuse-image",
+      "label": "Restore a saved image input",
+      "start": "meme-image",
+      "steps": ["reuse", "edit-reused"],
+      "description": "Reuse keeps the frozen input as one layer; it does not recreate the original editing document."
+    },
+    {
+      "id": "missing-image",
+      "label": "Reattach a missing saved source",
+      "start": "meme-image",
+      "steps": ["reuse-missing", "reattach", "edit-reused"],
+      "description": "No generation occurs until the later explicit Run."
+    },
+    {
+      "id": "invalid-replacement",
+      "label": "Keep a valid sketch after a bad replacement",
+      "start": "sketch",
+      "steps": ["invalid", "valid", "meme-finish"],
+      "description": "An invalid attachment does not destroy the existing draft or trigger a request."
+    },
+    {
+      "id": "meme-retry",
+      "label": "Retry a failed image edit without rebuilding the sketch",
+      "start": "illustration",
+      "steps": ["meme", "draw", "meme-run", "meme-fail", "retry-meme", "meme-finish"],
+      "description": "A fresh attempt uses the saved source bytes and prompt, leaving the editable sketch alone."
+    },
+    {
+      "id": "image-stop-retry",
+      "label": "Stop and retry an illustration",
+      "start": "illustration",
+      "steps": ["generate", "stop-image", "retry-image", "finish"],
+      "description": "Explicit retry remains distinct from storage-only recovery."
+    }
+  ],
+  "layout": {
+    "states": {
+      "download": [1560, 170],
+      "downloaded": [1680, 440],
+      "drawing": [1030, 220],
+      "failed": [1050, 780],
+      "gif": [450, 170],
+      "illustration": [180, 200],
+      "image": [1300, 200],
+      "invalid": [150, 750],
+      "meme-drawing": [1030, 500],
+      "meme-empty": [200, 480],
+      "meme-image": [1320, 510],
+      "missing": [510, 1000],
+      "quick-sketch": [830, 920],
+      "reused": [510, 730],
+      "sketch": [480, 440],
+      "unsaved": [1450, 780],
+      "image-stopped": [1400, 1080],
+      "meme-stopped": [1100, 1090]
+    },
+    "regions": {
+      "compose": {
+        "label": [95, -40],
+        "outline": [
+          [60, 326.25],
+          [178.8, 65],
+          [448.8, 55],
+          [600, 326.25],
+          [615, 796.5],
+          [481.2, 1110],
+          [178.8, 1110],
+          [45, 796.5]
+        ]
+      },
+      "panel": {
+        "label": [775, 710],
+        "outline": [
+          [740, 868.75],
+          [779.6, 815],
+          [869.6, 805],
+          [920, 868.75],
+          [935, 965.5],
+          [880.4, 1030],
+          [779.6, 1030],
+          [725, 965.5]
+        ]
+      },
+      "answer": {
+        "label": [975, -40],
+        "outline": [
+          [940, 271],
+          [1123, 65],
+          [1538, 55],
+          [1770, 271],
+          [1785, 900],
+          [1588, 1240],
+          [1123, 1240],
+          [925, 900]
+        ]
+      }
+    }
+  }
+}

@@ -3,11 +3,12 @@ import { captureSelection, buildResolvedContext } from '../capture/selection';
 import { sendReadingMessage } from '../storage/client';
 import type { ReadingRequest } from '../contracts/reading';
 import type { ReadingOperations } from '../contracts/reading';
-import { EXPLAIN_RECIPE_ID } from '../models/configuration';
+import { EXPLAIN_RECIPE_ID } from '../configuration/definition';
 import type { Passage } from '../types/storage';
 import { PassageMarkers } from '../reading/markers';
 import { FloatingTrigger } from './FloatingTrigger';
-import { ExplanationCard, runLabel } from './ExplanationCard';
+import { ExplanationCard } from './ExplanationCard';
+import { runLabel } from './run-status';
 import type { InputComparison } from '../reading/input-change';
 type Captured = NonNullable<ReturnType<typeof captureSelection>>;
 export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) {
@@ -273,7 +274,11 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
       setBusy(false);
     }
   }
-  async function explain(selection: Captured | null = captured, regenerate = false) {
+  async function explain(
+    selection: Captured | null = captured,
+    regenerate = false,
+    presentation: 'queue' | 'open' = 'queue',
+  ) {
     if (!selection || busy) return;
     const requestedRecipeId = recipeChoice || (recipes.length ? defaultRecipeId : undefined);
     setBusy(true);
@@ -320,9 +325,15 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
       if (location.href !== selection.snapshot.page.url) return;
       setCaptured(null);
       window.getSelection()?.removeAllRanges();
+      // Opening belongs to the accepted user action, never to a later completion.
+      // Set it before refreshing so Close/Escape during that read stays authoritative.
+      if (presentation === 'open' && result.passageId) {
+        if (result.reused) await showReuse(result.passageId);
+        else open(result.passageId);
+      } else {
+        setToast({ text: result.reused ? 'Request available' : 'Waiting…', id: result.passageId });
+      }
       await refreshRef.current();
-      if (result.reused && result.passageId) await showReuse(result.passageId);
-      else setToast({ text: 'Waiting…', id: result.passageId });
     } catch (error) {
       setToast({ text: (error as Error).message, error: true });
     } finally {
@@ -424,7 +435,7 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
       {captured && !busy && (
         <FloatingTrigger
           range={captured.range}
-          onTrigger={() => void explain()}
+          onTrigger={() => void explain(captured, false, 'open')}
           recipes={recipes}
           recipeId={recipeChoice || defaultRecipeId}
           onRecipe={(id) => {
@@ -453,7 +464,9 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
               : undefined
           }
           onRunCurrent={
-            reuse?.id === active.snapshot.id ? () => void explain(reuse.selection, true) : undefined
+            reuse?.id === active.snapshot.id
+              ? () => void explain(reuse.selection, true, 'open')
+              : undefined
           }
           onPin={() => setPinned((v) => !v)}
           onClose={() => {

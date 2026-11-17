@@ -1,8 +1,8 @@
 import { test, expect } from './fixtures.ts';
 import { settingsSection } from './driver.ts';
 import type { CredentialRequest, CredentialEvent } from '../../native/credentials-contract.mts';
-import type { UserSettings } from '../../src/types';
-import { DEFAULT_SETTINGS } from '../../src/storage/settings';
+import type { Configuration } from '../../src/configuration/definition';
+import { DEFAULT_CONFIGURATION } from '../../src/configuration/definition';
 
 test('shared credential adoption preserves denied sources, removes verified official copies and disconnects without fallback', async ({
   sandbox,
@@ -10,13 +10,13 @@ test('shared credential adoption preserves denied sources, removes verified offi
   const { worker, popup } = await sandbox.launch();
   await worker.evaluate(async (defaults) => {
     const key = 'saul_user_settings';
-    const saved = ((await chrome.storage.local.get(key))[key] as UserSettings) || defaults;
+    const saved = ((await chrome.storage.local.get(key))[key] as Configuration) || defaults;
     const official = {
       ...saved.openaiCompatible,
       baseUrl: 'https://api.openai.com/v1',
       apiKey: 'fixture-official-key',
     };
-    const settings: UserSettings = {
+    const settings: Configuration = {
       ...saved,
       activeProvider: 'openai-compatible',
       openaiCompatible: official,
@@ -30,6 +30,19 @@ test('shared credential adoption preserves denied sources, removes verified offi
         },
       ],
       connectionProfiles: { ...saved.connectionProfiles, 'openai-api': 'official' },
+      configuration: {
+        ...saved.configuration!,
+        presets: [
+          ...saved.configuration!.presets,
+          {
+            id: 'inspect-custom',
+            name: 'Inspect custom',
+            provider: 'openai-compatible',
+            profileId: 'custom',
+            model: 'custom-model',
+          },
+        ],
+      },
     };
     await chrome.storage.local.set({
       [key]: settings,
@@ -121,9 +134,11 @@ test('shared credential adoption preserves denied sources, removes verified offi
         },
       } as unknown as chrome.runtime.Port;
     }) as typeof chrome.runtime.connectNative;
-  }, DEFAULT_SETTINGS);
+  }, DEFAULT_CONFIGURATION);
   await popup.reload();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(popup, 'Presets');
+  await popup.getByRole('button', { name: 'Inspect custom', exact: true }).click();
   await settingsSection(popup, 'Preferences');
   if (!(await popup.getByRole('button', { name: 'Connect to Saul', exact: true }).isVisible()))
     await popup.getByText('Integrations', { exact: true }).click();
@@ -138,8 +153,8 @@ test('shared credential adoption preserves denied sources, removes verified offi
         'saul_user_settings_recovery_backup',
       ]);
       return values as {
-        saul_user_settings: UserSettings;
-        saul_user_settings_recovery_backup: UserSettings;
+        saul_user_settings: Configuration;
+        saul_user_settings_recovery_backup: Configuration;
       };
     });
   expect((await state()).saul_user_settings.openaiCompatible.apiKey).toBe('fixture-official-key');
@@ -148,6 +163,8 @@ test('shared credential adoption preserves denied sources, removes verified offi
       false;
   });
   await popup.getByRole('button', { name: 'Reload saved settings', exact: true }).click();
+  await settingsSection(popup, 'Presets');
+  await popup.getByRole('button', { name: 'Inspect custom', exact: true }).click();
   await settingsSection(popup, 'Preferences');
   if (!(await popup.getByRole('button', { name: 'Connect to Saul', exact: true }).isVisible()))
     await popup.getByText('Integrations', { exact: true }).click();
@@ -174,6 +191,10 @@ test('shared credential adoption preserves denied sources, removes verified offi
   await expect(popup.getByRole('alert').filter({ hasText: 'helper disconnected' })).toHaveCount(0);
   expect(adopted.saul_user_settings.sharedCredentials).toBe('saul');
   expect(adopted.saul_user_settings.openaiCompatible.apiKey).toBe('');
+  expect(adopted.saul_user_settings.activeProfileId).toBe('official');
+  expect(adopted.saul_user_settings.openaiCompatible.baseUrl).toBe('https://api.openai.com/v1');
+  await settingsSection(popup, 'Presets');
+  await expect(popup.getByLabel('Preset', { exact: true })).toHaveValue('inspect-custom');
   expect(adopted.saul_user_settings.profiles!.find((p) => p.id === 'custom')!.config.apiKey).toBe(
     'fixture-custom-key',
   );

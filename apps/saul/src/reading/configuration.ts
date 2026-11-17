@@ -1,10 +1,11 @@
-import type { ResolvedContext, UserSettings } from '../types';
+import type { ResolvedContext } from '../types';
+import type { Configuration } from '../configuration/definition';
 import type { RunInput } from '../types/storage';
-import { configurationFor, renderRecipePrompt } from '../models/configuration';
-import { preparePreset, prepareFrozenPreset } from '../models/preset-resolution';
+import { configurationFor, renderRecipePrompt } from '../configuration/definition';
+import { preparePreset, prepareFrozenPreset } from '../configuration/resolve';
 
 export function prepareRecipeRun(
-  settings: UserSettings,
+  settings: Configuration,
   context: ResolvedContext,
   recipeId: string,
   inspectOnly = false,
@@ -31,14 +32,14 @@ export function prepareRecipeRun(
 }
 
 export function prepareFrozenRun(
-  settings: UserSettings,
+  settings: Configuration,
   original: RunInput,
 ): { input: RunInput; credential: string } {
   return prepareFrozenPreset(settings, original);
 }
 
 export function prepareFollowUpRun(
-  settings: UserSettings,
+  settings: Configuration,
   original: RunInput,
   answer: string,
   question: string,

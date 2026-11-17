@@ -4,6 +4,7 @@ import Foundation
 struct QuickLookupLayout: Equatable {
     static let defaultWidth: CGFloat = 460
     static let minimumWidth: CGFloat = 420
+    var showsChoices = false
     let fieldCount: Int
     let showsNotice: Bool
     let showsAnswer: Bool
@@ -17,7 +18,7 @@ struct QuickLookupLayout: Equatable {
     var minimumHeight: CGFloat {
         max(
             200,
-            150 + Self.inputHeight(fieldCount: fieldCount)
+            150 + (showsChoices ? 50 : 0) + Self.inputHeight(fieldCount: fieldCount)
                 + (showsImageInput ? 150 : 0) + (showsNotice ? 98 : 0) + (showsAnswer ? 118 : 0)
                 + (showsFollowUp ? 72 : 0))
     }

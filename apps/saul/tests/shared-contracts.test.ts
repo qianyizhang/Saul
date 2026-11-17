@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
-import { parseTemplate, renderRecipePrompt } from '../src/models/configuration';
+import { parseTemplate, renderRecipePrompt } from '../src/configuration/definition';
 
 const fixture = JSON.parse(
   readFileSync(new URL('../../../contracts/fixtures/templates.json', import.meta.url), 'utf8'),

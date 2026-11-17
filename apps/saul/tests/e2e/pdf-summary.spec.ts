@@ -1,3 +1,4 @@
+import { DEFAULT_CONFIGURATION } from '../../src/configuration/definition';
 import { reviewScreenshots } from './artifacts.ts';
 import { readFile } from 'node:fs/promises';
 import type { Page, Worker } from '@playwright/test';
@@ -12,9 +13,11 @@ import type { DigestBatch, DigestInspection } from '../../src/digest/types';
 // own suite and never opt into this preference implicitly.
 async function launchLocalPdf(sandbox: ExtensionSandbox) {
   const browser = await sandbox.launch();
-  await browser.popup.evaluate(async () => {
-    await chrome.storage.local.set({ saul_user_settings: { summaryPdfProcessing: 'local' } });
-  });
+  await browser.popup.evaluate(async (defaults) => {
+    await chrome.storage.local.set({
+      saul_user_settings: { ...defaults, summaryPdfProcessing: 'local' },
+    });
+  }, DEFAULT_CONFIGURATION);
   return browser;
 }
 

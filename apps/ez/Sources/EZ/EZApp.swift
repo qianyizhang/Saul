@@ -30,7 +30,6 @@ import SwiftUI
         quickLookup.show()
     }
     private var connectionTask: Task<Void, Never>?
-    private var launcherTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         quickLookup.start()
@@ -53,30 +52,8 @@ import SwiftUI
                 throw EZError("Submit one EZ launcher query at a time.")
             }
             let request = try LauncherQuery(url: url)
-            guard !model.busy, !model.launcherPending, !model.signingIn else {
-                throw EZError(
-                    "Query not sent: EZ is already preparing a lookup, generating an answer, or signing in. Try again when it finishes."
-                )
-            }
+            try model.submitLauncher(request.query, after: connectOnce())
             quickLookup.launcherError = nil
-            let shouldSubmit = try model.prepareLauncher(request.query)
-            guard shouldSubmit else { return }
-            model.launcherPending = true
-            let connection = connectOnce()
-            launcherTask = Task {
-                await connection.value
-                guard !Task.isCancelled else { return }
-                model.launcherPending = false
-                launcherTask = nil
-                if model.canSend {
-                    model.send()
-                } else if model.error == nil {
-                    model.error =
-                        model.storageWarning
-                        ?? model.requestIssue
-                        ?? "Query not sent: connect ChatGPT, enable plan access, and choose an available model. Your query is ready to submit with Run."
-                }
-            }
         } catch { quickLookup.launcherError = error.localizedDescription }
     }
 
@@ -86,7 +63,6 @@ import SwiftUI
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        launcherTask?.cancel()
         connectionTask?.cancel()
         model.shutdown()
         quickLookup.shutdown()

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { streamOpenAICompatible } from '../src/models/openai-compatible';
+import { streamOpenAICompatible } from '../src/providers/openai-compatible';
 
 const config = { baseUrl: 'http://localhost:11434/v1', model: 'test-model', apiKey: '' };
 const delta = (content: string) => JSON.stringify({ choices: [{ delta: { content } }] });

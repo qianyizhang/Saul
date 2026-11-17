@@ -1,6 +1,9 @@
 import type { DigestItem, DigestSource } from './types';
 
-export function summaryUserPrompt(item: DigestItem, source: DigestSource): string {
+export function summaryUserPrompt(
+  item: Pick<DigestItem, 'title' | 'url'>,
+  source: DigestSource,
+): string {
   return JSON.stringify({
     title: item.title,
     url: item.url,
@@ -8,7 +11,7 @@ export function summaryUserPrompt(item: DigestItem, source: DigestSource): strin
     ...(source.kind === 'pdf-url' ? { attachment: source.attachment } : { text: source.text }),
   });
 }
-export function summaryRequestInput(item: DigestItem, source: DigestSource) {
+export function summaryRequestInput(item: Pick<DigestItem, 'title' | 'url'>, source: DigestSource) {
   return {
     userPrompt: summaryUserPrompt(item, source),
     ...(source.kind === 'pdf-url' ? { attachments: [source.attachment] } : {}),

@@ -1,12 +1,9 @@
-import type { ModelActivity } from '../models/events';
+import type { ModelRequest } from '../providers/request';
+import type { AnnotationDbOperations } from '../annotations/attempts';
+import type { ModelActivity } from '../providers/events';
 import type { DigestDbOperations } from '../digest/types';
-import type {
-  SelectionSnapshot,
-  ResolvedContext,
-  UserSettings,
-  Recipe,
-  ModelPreset,
-} from './index';
+import type { SelectionSnapshot, ResolvedContext } from './index';
+import type { Recipe, ModelPreset } from '../configuration/definition';
 
 export type RunStatus =
   'queued' | 'running' | 'saving' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
@@ -37,19 +34,10 @@ export interface Passage {
   completed?: RunResult;
   unread: boolean;
 }
-export interface RunInput {
-  /** Plan route; API requests retain their owner in remote. Missing legacy routes are local. */
-  credentialOwner?: 'local' | 'saul';
-  provider: UserSettings['activeProvider'];
-  remote: Omit<UserSettings['openaiCompatible'], 'apiKey'>;
-  local: UserSettings['chromeAi'];
-  plan?: UserSettings['chatgptPlan'];
-  systemPrompt: string;
-  userPrompt: string;
+export interface RunInput extends ModelRequest {
   followUpQuestion?: string;
   context: ResolvedContext;
   recipe?: Recipe;
-  preset?: ModelPreset;
 }
 export interface QueuedRun {
   id: string;
@@ -80,10 +68,10 @@ export interface HistoryItem {
   unread: boolean;
 }
 
-export interface DbOperations extends DigestDbOperations {
+export interface DbOperations extends DigestDbOperations, AnnotationDbOperations {
   DB_IMAGE: {
     payload: { selectionId: string; runId?: string };
-    result: import('../models/images').GeneratedImage | undefined;
+    result: import('../providers/images').GeneratedImage | undefined;
   };
   DB_IMAGE_CHUNK: {
     payload: {
@@ -106,7 +94,7 @@ export interface DbOperations extends DigestDbOperations {
   DB_FINISH: {
     payload: {
       runId: string;
-      raw: string;
+      raw?: string;
       status: Extract<RunStatus, 'completed' | 'failed' | 'interrupted' | 'cancelled'>;
       error?: string;
       reason?: string;
