@@ -26,10 +26,7 @@ export async function scopedCall(request: Request): Promise<ScopedConfig> {
   return event.config;
 }
 
-type PresetRequest = Extract<
-  StorageHelperRequest,
-  { action: 'presets-read' | 'presets-import' | 'presets-save' }
->;
+type PresetRequest = Extract<StorageHelperRequest, { action: 'presets-read' | 'presets-import' }>;
 export async function sharedCall(request: PresetRequest): Promise<SharedPresets> {
   const event = await configReply(request);
   return event.library;

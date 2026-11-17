@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-import { dirname, join } from 'node:path';
-import { chatgptDirectory } from '../installation/paths.mts';
+import { actionRevisionDirectory } from '../installation/paths.mts';
 import { encodeNative, nativeDecoder } from '../transport.mts';
 import { isRecord } from '../../shared/model/value.mts';
 import { ActionStore } from '../action-store.mts';
@@ -13,9 +12,7 @@ import {
 
 if (!/^chrome-extension:\/\/[a-p]{32}\/$/.test(process.argv[2] || '')) process.exit(1);
 process.umask(0o077);
-const store = new ActionStore(
-  join(dirname(chatgptDirectory(import.meta.url)), 'actions', 'revisions'),
-);
+const store = new ActionStore(actionRevisionDirectory(import.meta.url));
 const runtime = new ActionRuntime(store);
 const running = new Map<string, { controller: AbortController; revision?: string }>();
 let idle: ReturnType<typeof setTimeout>;

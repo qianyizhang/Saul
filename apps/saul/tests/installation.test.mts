@@ -7,7 +7,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { afterEach, expect, it } from 'vitest';
-import { chatgptDirectory } from '../native/installation/paths.mts';
+import { actionRevisionDirectory } from '../native/installation/paths.mts';
 import { encodeNative, nativeDecoder } from '../native/transport.mts';
 import {
   installHelpers,
@@ -36,10 +36,7 @@ function fixture() {
   }
   for (const file of ['installation-paths.mjs', 'value.mjs'])
     fs.copyFileSync(join(source, file), join(native, file));
-  fs.writeFileSync(
-    join(native, 'plan-host.mjs'),
-    "import { chatgptDirectory } from './installation-paths.mjs'; console.log(chatgptDirectory(import.meta.url));\n",
-  );
+  fs.writeFileSync(join(native, 'plan-host.mjs'), "console.log('storage-v1');\n");
   fs.writeFileSync(join(native, 'cli.mjs'), "console.log('tabs-v1');\n");
   fs.writeFileSync(
     join(native, 'mcp.mjs'),
@@ -78,9 +75,9 @@ it('verifies installed helper payload and dependencies against the selected prep
   expect(() => verifyInstallation(f.root, 'tabs', { source: f.native })).toThrow(
     /differs.*cli.mjs/,
   );
-  fs.writeFileSync(join(f.native, 'plan-service.mjs'), 'export const changed = true;');
+  fs.writeFileSync(join(f.native, 'history.mjs'), 'export const changed = true;');
   expect(() => verifyInstallation(f.root, 'chatgpt', { source: f.native })).toThrow(
-    /differs.*plan-service.mjs/,
+    /differs.*history.mjs/,
   );
 });
 
@@ -92,7 +89,7 @@ it('installs complete generations through stable entry paths and keeps credentia
   expect(fs.readlinkSync(join(f.root, 'bin'))).toBe('bridge/bin');
   expect(fs.readlinkSync(join(f.root, 'bridge'))).toMatch(/^generations\/g-/);
   expect(command(f, 'saul')).toBe('tabs-v1');
-  expect(command(f, 'saul-chatgpt-host')).toBe(join(f.root, 'chatgpt'));
+  expect(command(f, 'saul-chatgpt-host')).toBe('storage-v1');
   const value = selected(f, 'chatgpt');
   expect(fs.readFileSync(join(f.root, 'chatgpt', 'accounts.json'), 'utf8')).toBe(
     'PRIVATE-FIXTURE-CREDENTIALS',
@@ -101,6 +98,7 @@ it('installs complete generations through stable entry paths and keeps credentia
     fs.readFileSync(join(f.root, 'generations', value.generation, 'installation.json'), 'utf8'),
   );
   expect(Object.keys(receipt.files).some((file) => file.includes('accounts'))).toBe(false);
+  expect(Object.hasOwn(receipt.files, 'chatgpt/installation-root.json')).toBe(false);
   expect(fs.statSync(join(f.root, 'bin', 'saul')).mode & 0o777).toBe(0o700);
 });
 
@@ -205,14 +203,14 @@ it('rejects retired credential calls but keeps history and configuration on the 
   }
 }, 12_000);
 
-it('an installed helper rejects missing data-root metadata instead of changing the data root', async () => {
+it('an installed action helper rejects missing data-root metadata', async () => {
   const f = fixture();
-  await installHelpers({ ...f.options, components: ['chatgpt'] }, f.dependencies);
-  const payload = join(f.root, 'generations', selected(f, 'chatgpt').generation, 'chatgpt');
+  await installHelpers({ ...f.options, components: ['actions'] }, f.dependencies);
+  const payload = join(f.root, 'generations', selected(f, 'actions').generation, 'actions');
+  const entry = new URL(`file://${join(payload, 'action-host.mjs')}`);
+  expect(actionRevisionDirectory(entry)).toBe(join(f.root, 'actions', 'revisions'));
   fs.unlinkSync(join(payload, 'installation-root.json'));
-  expect(() => chatgptDirectory(new URL(`file://${join(payload, 'plan-host.mjs')}`))).toThrow(
-    'Invalid helper installation data root',
-  );
+  expect(() => actionRevisionDirectory(entry)).toThrow('Invalid helper installation data root');
 });
 
 it('a late missing file leaves the active generation and registration unchanged', async () => {
@@ -314,7 +312,7 @@ it('updating one helper preserves the other payload, Node choice, proxy and regi
     ),
   );
   expect(command(f, 'saul')).toBe('tabs-v2');
-  expect(command(f, 'saul-chatgpt-host')).toBe(join(f.root, 'chatgpt'));
+  expect(command(f, 'saul-chatgpt-host')).toBe('storage-v1');
 });
 
 function childLines(path: string) {
@@ -435,7 +433,7 @@ it('legacy migration requires all installed helpers and an explicit disconnected
     { ...f.dependencies, inspectLegacyProcesses: () => 0 },
   );
   expect(fs.existsSync(join(f.root, result.legacyBackup!, 'bridge', 'plan-host.mjs'))).toBe(true);
-  expect(command(f, 'saul-chatgpt-host')).toBe(join(f.root, 'chatgpt'));
+  expect(command(f, 'saul-chatgpt-host')).toBe('storage-v1');
 });
 
 it('recovers an interrupted transaction before starting another and never selects partial bytes', async () => {
@@ -555,10 +553,10 @@ it('explicit recovery selects a retained complete generation and restores its re
   expect(command(f, 'saul')).toBe('tabs-v1');
 });
 
-it('preserves the development credential directory and refuses installation over authored sources', async () => {
-  const emittedHost = new URL('../.build/native/plan-host.mjs', import.meta.url);
-  const sourceHost = new URL('../native/hosts/storage.mts', import.meta.url);
-  expect(chatgptDirectory(emittedHost)).toBe(chatgptDirectory(sourceHost));
+it('preserves the development action revisions and refuses installation over authored sources', async () => {
+  const emittedHost = new URL('../.build/native/action-host.mjs', import.meta.url);
+  const sourceHost = new URL('../native/hosts/actions.mts', import.meta.url);
+  expect(actionRevisionDirectory(emittedHost)).toBe(actionRevisionDirectory(sourceHost));
   await expect(
     installHelpers({
       extensionId: 'a'.repeat(32),

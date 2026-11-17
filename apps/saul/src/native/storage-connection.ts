@@ -1,11 +1,11 @@
 import { Fragments, packets } from '../../shared/protocol/fragments.mts';
 import {
+  STORAGE_HOST,
   validateStorageResult,
   validateStorageHelperRequest,
   type StorageResult,
   type StorageHelperRequest,
 } from '../../shared/protocol/storage-protocol.mts';
-import { STORAGE_HOST } from '../../shared/protocol/storage-protocol.mts';
 import { isRecord } from '../../shared/model/value.mts';
 
 export class StorageDisconnected extends Error {}

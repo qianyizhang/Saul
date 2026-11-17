@@ -746,7 +746,7 @@ export async function installHelpers(
           for (const file of typescriptFiles)
             copyTree(join(dependency, file), join(payload, 'node_modules', 'typescript', file), io);
         }
-        if (component === 'chatgpt' || component === 'actions') {
+        if (component === 'actions') {
           writeFile(
             join(payload, 'installation-root.json'),
             JSON.stringify({ version: 1, root }),
@@ -888,7 +888,7 @@ export function verifyInstallation(
           hash(io.readFileSync(join(dependency, file))),
         );
     }
-    if (component !== 'tabs')
+    if (component === 'actions')
       expected.set('installation-root.json', hash(JSON.stringify({ version: 1, root })));
     const actual = safeFiles(installed, io);
     if (JSON.stringify(actual.sort()) !== JSON.stringify([...expected.keys()].sort()))

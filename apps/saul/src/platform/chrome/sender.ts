@@ -14,6 +14,13 @@ export function backgroundSender(sender: chrome.runtime.MessageSender): boolean 
     (!sender.url || sender.url === chrome.runtime.getURL('background.js'))
   );
 }
+export function offscreenSender(sender: chrome.runtime.MessageSender | undefined): boolean {
+  return (
+    sender?.id === chrome.runtime.id &&
+    !sender.tab &&
+    sender.url === chrome.runtime.getURL('offscreen.html')
+  );
+}
 export function sourcePage(sender: chrome.runtime.MessageSender): string {
   if (
     sender.id !== chrome.runtime.id ||

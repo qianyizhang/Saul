@@ -26,7 +26,7 @@ separate TypeScript check.
 Background settings and offscreen history use the same
 [framing and request correlation](../src/native/storage-connection.ts). Settings
 use a native connection directly from the background. Offscreen accesses history
-through a restricted bridge. The [signed credential client](../src/native/credentials.ts)
+through a [history-only port](../src/native/storage-bridge.ts) that rejects workspace and content senders. The [signed credential client](../src/native/credentials.ts)
 has its own protocol and never carries storage operations. Provider adapters
 select the signed route or a browser-owned API route from the saved request.
 

@@ -9,7 +9,7 @@ check must pass; failure, cancellation and an unexpected skip fail the verdict.
 | Documentation only                                  | File checks, formatting and links; no browser or Xcode                         |
 | Saul or JavaScript workspace dependencies           | Shared and Saul checks, plus the browser smoke tests in parallel               |
 | EZ                                                  | Native lint and a debug build; the affected core, state or installation checks |
-| Shared credentials                                  | Browser smoke and native credential checks                                     |
+| Shared credentials                                  | Browser smoke, credential checks, and EZ checks for affected callers           |
 | Shared design, contracts, CI or unclassified inputs | Both platforms and all fast native checks                                      |
 
 The [scope script](../scripts/ci-scope.mts) compares the checked-out PR merge

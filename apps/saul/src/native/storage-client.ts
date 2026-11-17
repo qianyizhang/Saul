@@ -1,8 +1,8 @@
 import {
+  STORAGE_PORT,
   validateStorageResult,
   type StorageHelperRequest,
 } from '../../shared/protocol/storage-protocol.mts';
-import { STORAGE_PORT } from '../../shared/protocol/storage-protocol.mts';
 import { isRecord } from '../../shared/model/value.mts';
 import { StorageDisconnected } from './storage-connection';
 

@@ -1,18 +1,15 @@
-import { validateStorageHelperRequest } from '../../shared/protocol/storage-protocol.mts';
-import { STORAGE_PORT } from '../../shared/protocol/storage-protocol.mts';
-import { workspaceSender } from '../platform/chrome/sender';
+import {
+  STORAGE_PORT,
+  validateStorageHelperRequest,
+} from '../../shared/protocol/storage-protocol.mts';
+import { offscreenSender } from '../platform/chrome/sender';
 import { StorageConnection, StorageDisconnected } from './storage-connection';
 
-// Native messaging is available in the background, not the offscreen runner.
-// Multiplex only allowlisted history/configuration operations; never expose a general proxy.
+// The offscreen runner uses this history port. Settings run directly in background.
 export function initStorageBridge() {
   chrome.runtime.onMessage.addListener((message, sender, reply) => {
     if (message?.target !== 'saul-history-identity') return false;
-    if (
-      sender.id !== chrome.runtime.id ||
-      sender.tab ||
-      sender.url !== chrome.runtime.getURL('offscreen.html')
-    ) {
+    if (!offscreenSender(sender)) {
       reply({ success: false, error: 'Offscreen history only.' });
       return false;
     }
@@ -34,13 +31,7 @@ export function initStorageBridge() {
   const storage = new StorageConnection();
   chrome.runtime.onConnect.addListener((port) => {
     if (port.name !== STORAGE_PORT) return;
-    const sender = port.sender;
-    const workspace = !!sender && workspaceSender(sender);
-    const offscreen =
-      sender?.id === chrome.runtime.id &&
-      !sender.tab &&
-      sender.url === chrome.runtime.getURL('offscreen.html');
-    if (!workspace && !offscreen) {
+    if (!offscreenSender(port.sender)) {
       port.disconnect();
       return;
     }
@@ -53,22 +44,10 @@ export function initStorageBridge() {
       }
     };
     port.onMessage.addListener((message: unknown) => {
-      if (active) {
-        if (
-          typeof message === 'object' &&
-          message !== null &&
-          'cancel' in message &&
-          message.cancel === true
-        ) {
-          active.abort();
-          post({ type: 'error', message: 'Saul storage request stopped.' });
-        }
-        return;
-      }
+      if (active) return;
       try {
         validateStorageHelperRequest(message);
-        if (offscreen && message.action !== 'history')
-          throw new Error('Runner may only request history.');
+        if (message.action !== 'history') throw new Error('Runner may only request history.');
       } catch (error) {
         post({
           type: 'error',
@@ -86,8 +65,7 @@ export function initStorageBridge() {
           if (controller.signal.aborted) return;
           post({
             type: 'error',
-            ...(error instanceof StorageDisconnected &&
-              message.action === 'history' && { reason: 'history-disconnected' }),
+            ...(error instanceof StorageDisconnected && { reason: 'history-disconnected' }),
             message: error instanceof Error ? error.message : 'Saul storage request failed.',
           });
         },
