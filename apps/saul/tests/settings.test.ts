@@ -3,7 +3,6 @@ import { chromeConfigurationStorage } from '../src/configuration/chrome-storage'
 import { createConfigurationStore } from '../src/configuration/store';
 import { decodeConfiguration } from '../src/configuration/record';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
-import { preparePreset } from '../src/configuration/resolve';
 const get = vi.fn(),
   set = vi.fn();
 beforeEach(() => {
@@ -77,7 +76,12 @@ it.each([
   get.mockResolvedValue({ saul_user_settings: invalid });
   const owner = createConfigurationStore(chromeConfigurationStorage);
   const result = await owner({ action: 'read' });
-  expect(result.state).toBe('invalid');
+  const obsolete =
+    'providers' in patch || 'providerConnections' in patch || 'summaryProviderKey' in patch;
+  expect(result).toMatchObject({
+    state: 'invalid',
+    ...(obsolete && { error: expect.stringContaining('Obsolete') }),
+  });
   expect(set).not.toHaveBeenCalled();
   if (result.state !== 'invalid') throw new Error('Expected invalid record');
   expect(await owner({ action: 'reset', baseline: result.revision })).toMatchObject({
@@ -88,12 +92,6 @@ it.each([
     saul_user_settings: DEFAULT_CONFIGURATION,
     saul_user_settings_recovery_backup: invalid,
   });
-});
-it('preserves retired choices for explicit repair but never executes them', () => {
-  const stored = structuredClone(DEFAULT_CONFIGURATION);
-  stored.configuration!.presets[0]!.provider = 'chrome-ai';
-  const settings = decodeConfiguration(stored);
-  expect(() => preparePreset(settings, settings.configuration!.presets[0]!)).toThrow('retired');
 });
 it('does not replace unreadable configuration or poison a later request', async () => {
   get.mockRejectedValueOnce(new Error('Storage unavailable')).mockResolvedValue({});

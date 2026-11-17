@@ -1,16 +1,10 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'vitest';
-import {
-  appSourceFingerprint,
-  createBuildInfo,
-  fingerprintInputs,
-  verifyArtifactTree,
-  verifyBuildInfo,
-} from '../scripts/build-identity.mts';
+import { createBuildInfo, fingerprintInputs, verifyBuildInfo } from '../scripts/build-identity.mts';
 
 test('app versions use independent three-part numeric semantic versions', () => {
   for (const version of ['1.0', '01.0.0', '0.1.0-dev', '65536.0.0'])
@@ -39,30 +33,6 @@ test('input identity includes dirty bytes, path changes, missing inputs, and rej
   }
 });
 
-test('signed app verification still rejects a same-version older payload and stale reference source', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'build-reference-'));
-  try {
-    await mkdir(join(dir, 'apps/ez'), { recursive: true });
-    await writeFile(join(dir, 'apps/ez/build-inputs.json'), '["source"]');
-    await writeFile(join(dir, 'source'), 'current source');
-    const expected = join(dir, 'expected');
-    const installed = join(dir, 'installed');
-    await mkdir(expected);
-    const info = createBuildInfo('ez', '0.1.0', await appSourceFingerprint(dir, 'ez'), 'fixture');
-    await writeFile(join(expected, 'build-info.json'), JSON.stringify(info));
-    await writeFile(join(expected, 'executable'), 'new');
-    await cp(expected, installed, { recursive: true });
-    await verifyBuildInfo(join(expected, 'build-info.json'), dir, 'ez');
-    await verifyArtifactTree(expected, installed);
-    await writeFile(join(installed, 'executable'), 'old but signed');
-    await assert.rejects(verifyArtifactTree(expected, installed), /differs.*executable/);
-    await writeFile(join(dir, 'source'), 'newer source');
-    await assert.rejects(verifyBuildInfo(join(expected, 'build-info.json'), dir, 'ez'), /stale/);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-});
-
 test.skipIf(process.platform !== 'darwin')(
   'standalone Swift identity and TypeScript verifier agree',
   async () => {
@@ -86,10 +56,6 @@ test.skipIf(process.platform !== 'darwin')(
       );
       const info = await verifyBuildInfo(output, dir, 'ez');
       assert.equal(info.version, '0.1.0');
-      assert.equal(
-        JSON.parse(await readFile(output, 'utf8')).source,
-        await appSourceFingerprint(dir, 'ez'),
-      );
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

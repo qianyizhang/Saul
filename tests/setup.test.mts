@@ -212,6 +212,8 @@ test('native verification requires both a valid signature and the current prepar
     assert.deepEqual(calls, ['codesign']);
     await writeFile(join(plan.app, 'Contents/executable'), 'old but signed');
     await assert.rejects(executePlan(plan, { run, log() {} }), /differs.*executable/);
+    await writeFile(join(dir, 'source'), 'edited after building');
+    await assert.rejects(executePlan(plan, { run, log() {} }), /build is stale/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

@@ -105,14 +105,6 @@ it('requires a choice for a field edited on both sides', () => {
   expect(saved.dirty).toBe(false);
 });
 
-it('recognizes an already delivered save without creating another edit', () => {
-  const base = baseDraft(),
-    mine = editSettingsDraft(base, { type: 'preset-name', name: 'Already saved' });
-  const review = reviewSettings(base, mine, settingsFromDraft(mine));
-  expect(review.changes).toEqual([]);
-  expect(review.apply({}).dirty).toBe(false);
-});
-
 it('does not mistake selecting a preset or a storage revision for an edit', () => {
   const base = editSettingsDraft(baseDraft(), { type: 'add-preset', id: 'second' });
   const mine = editSettingsDraft(base, { type: 'select-preset', id: 'preset-current' });

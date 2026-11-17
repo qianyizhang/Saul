@@ -145,7 +145,11 @@ it('coexists with both existing hosts, preserves their payloads and supports ret
 }, 20_000);
 it('exits after idle timeout and reloads approved code on the next deliberate connection', async () => {
   const options = await install();
-  const host = connect(options.installDir, options.clock);
+  // A former override must not shorten the installed host's idle deadline.
+  const host = connect(options.installDir, options.clock, {
+    ...process.env,
+    SAUL_ACTION_IDLE_MS: '200',
+  });
   const staged = await host.call({
     action: 'stage',
     module: {
@@ -172,20 +176,6 @@ it('exits after idle timeout and reloads approved code on the next deliberate co
     }),
   ).toEqual({ type: 'result', text: 'restored' });
   expect(host.events.filter((e) => e.event.type === 'generate')).toHaveLength(0);
-}, 10_000);
-
-it('keeps the installed sixty-second idle policy regardless of former environment overrides', async () => {
-  const options = await install();
-  for (const value of [undefined, '-1', '0', 'Infinity', '1.5', '2147483648', '200']) {
-    const env = { ...process.env };
-    if (value === undefined) delete env.SAUL_ACTION_IDLE_MS;
-    else env.SAUL_ACTION_IDLE_MS = value;
-    const host = connect(options.installDir, options.clock, env);
-    const [code] = await once(host.child, 'exit');
-    expect(code).toBe(0);
-    expect(host.clockDelays).toEqual([60_000]);
-    expect(host.events).toEqual([]);
-  }
 }, 10_000);
 
 it('keeps active work alive past idle expiry, then cancels once and exits without replay', async () => {

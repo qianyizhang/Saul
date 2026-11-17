@@ -104,28 +104,6 @@ test('provider profiles preserve their own credentials and clear keys across ori
   await expect(popup.getByText(/Generation succeeded:/)).toBeVisible();
 });
 
-test('obsolete settings remain untouched until explicit backup and reset', async ({ sandbox }) => {
-  const { popup } = await sandbox.launch();
-  const obsolete = { providers: [], providerConnections: { old: 'profile' } };
-  await popup.evaluate(
-    async (value) => chrome.storage.local.set({ saul_user_settings: value }),
-    obsolete,
-  );
-  await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-  await expect(popup.getByText(/Obsolete configuration fields/)).toBeVisible();
-  expect(
-    await popup.evaluate(
-      async () => (await chrome.storage.local.get('saul_user_settings')).saul_user_settings,
-    ),
-  ).toEqual(obsolete);
-  await popup.getByRole('button', { name: 'Back up and reset settings', exact: true }).click();
-  const stored = await popup.evaluate(async () =>
-    chrome.storage.local.get(['saul_user_settings', 'saul_user_settings_recovery_backup']),
-  );
-  expect(stored.saul_user_settings_recovery_backup).toEqual(obsolete);
-  expect(stored.saul_user_settings).toHaveProperty('configuration.schemaVersion', 1);
-});
-
 test('Window drag reorders immediately and Undo restores the previous order', async ({
   sandbox,
   fixtureServer,
@@ -332,12 +310,16 @@ test('save locks the draft; provider tests lock only provider settings and remai
     await settingsSection(popup, 'Presets');
     await popup.getByLabel('Model options and tests', { exact: true }).click();
     await popup.getByRole('button', { name: 'Test generation', exact: true }).click();
+    await expect.poll(() => server.requests.length).toBe(1);
     await settingsSection(popup, 'Connections');
     await expect(popup.getByLabel('Profile name', { exact: true })).toBeDisabled();
     await expect(popup.getByLabel('Response language', { exact: true })).toBeEnabled();
     await settingsSection(popup, 'Actions');
     await popup.getByLabel('Response language', { exact: true }).selectOption('English');
-    await popup.getByRole('button', { name: 'Stop test', exact: true }).click();
+    const stop = popup.getByRole('button', { name: 'Stop test', exact: true });
+    await stop.click();
+    await expect(stop).toHaveCount(0);
+    expect(server.requests).toHaveLength(1);
     await expect(popup.getByLabel('Profile name', { exact: true })).toBeEnabled();
     // Hold the actual storage write so the save boundary can be observed reliably.
     await worker.evaluate(() => {

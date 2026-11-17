@@ -1,7 +1,7 @@
 import { settingsSection } from './driver.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
-import { configureFixtureProvider, createFixtureServer } from './support.ts';
+import { configureFixtureProvider } from './support.ts';
 
 test('focused settings preserves drafts across sections and keeps Min Mode concise', async ({
   sandbox,
@@ -87,29 +87,6 @@ test('focused settings preserves drafts across sections and keeps Min Mode conci
         }
       }
     }
-  }
-});
-
-test('a provider test stays stoppable after visiting another settings section', async ({
-  sandbox,
-}) => {
-  const server = await createFixtureServer('A test response.', { gated: true });
-  try {
-    const { popup } = await sandbox.launch();
-    await configureFixtureProvider(popup, server.origin);
-    await popup.getByRole('button', { name: 'Settings', exact: true }).click();
-    await settingsSection(popup, 'Presets');
-    await popup.getByLabel('Model options and tests', { exact: true }).click();
-    await popup.getByRole('button', { name: 'Test generation', exact: true }).click();
-    await expect.poll(() => server.requests.length).toBe(1);
-    await settingsSection(popup, 'Preferences');
-    const stop = popup.getByRole('button', { name: 'Stop test', exact: true });
-    await expect(stop).toBeVisible();
-    await stop.click();
-    await expect(stop).toHaveCount(0);
-    expect(server.requests).toHaveLength(1);
-  } finally {
-    await server.close();
   }
 });
 

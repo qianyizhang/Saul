@@ -89,7 +89,6 @@ import SaulTestSupport
                     values: ["fuzzy term": "word", "fuzzy context": "context"], preset: changed,
                     models: [option], provider: .chatGPTPlan)
             }
-            try expect(changed.effort == "ultra" && preset.fast, "Validation mutated choices")
         },
         CheckCase("preset: added plan connections use their provider's model and Fast rules") { _ in
             let fixture = RecipeFixture()

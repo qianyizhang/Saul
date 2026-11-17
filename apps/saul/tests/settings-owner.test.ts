@@ -292,17 +292,6 @@ it('does not rewrite invalid records on read and keeps invalid recovery in the s
   expect(f.storage.write).toHaveBeenCalledTimes(1);
 });
 
-it('rejects obsolete aliases without rewriting the stored record', async () => {
-  const obsolete = { ...DEFAULT_CONFIGURATION, providers: DEFAULT_CONFIGURATION.connections };
-  const f = fixture(obsolete);
-  expect(await f.owner({ action: 'read' })).toMatchObject({
-    state: 'invalid',
-    error: expect.stringContaining('Obsolete'),
-  });
-  expect(f.storage.write).not.toHaveBeenCalled();
-  expect(f.values[SETTINGS_STORAGE_KEY]).toEqual(obsolete);
-});
-
 it('a stale recovery request cannot replace newly valid settings or its existing backup', async () => {
   const f = fixture({ activeProvider: 'unknown' });
   const bad = await f.owner({ action: 'read' });
