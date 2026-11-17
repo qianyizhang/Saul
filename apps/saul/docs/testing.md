@@ -15,7 +15,7 @@ Keep the probe and browser crash notifications enabled.
 ## Commands
 
 Run commands from `apps/saul`. Root `pnpm check` runs the combined gate; see
-[app scripts](../package.json), [hooks](../../../.pre-commit-config.yaml) and [CI](../../../.github/workflows).
+[app scripts](../package.json), [hooks](../../../.pre-commit-config.yaml) and [GitHub checks](../../../docs/ci.md).
 
 ```sh
 # Browser app gate
@@ -25,6 +25,9 @@ pnpm check
 pnpm exec playwright install chromium
 pnpm test:e2e
 pnpm test:e2e:headed
+
+# PR smoke tests
+pnpm test:e2e --grep @smoke
 
 # Hands-on disposable browser
 pnpm test:user

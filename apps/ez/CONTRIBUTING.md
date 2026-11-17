@@ -36,8 +36,8 @@ Update pins deliberately, verify release hashes, and run both gates before deliv
 Dependabot proposes weekly GitHub Actions updates; native tools and hook revisions
 are updated manually.
 
-CI uses macOS 26 with Xcode 26.6, runs root commit hooks, native checks and `make app`
-with ad-hoc signature verification, retaining a development app ZIP for 14 days.
+CI uses macOS 26 with Xcode 26.6. See [GitHub checks](../../docs/ci.md) for PR
+selection and when the full native checks and development ZIP run.
 It needs no account, secrets, or live inference.
 Workflow permissions are read-only; checkout credentials are not persisted.
 Packaging validates a local development bundle. Publishing, Developer ID signing,
@@ -63,8 +63,7 @@ and notarization remain explicit release work in [the release guide](docs/releas
   changing persisted history or Keychain schemas.
 - Dependency additions need a specific reason, license review, pinned resolution,
   and an account of what ships inside the application.
-- GitHub Actions runs the macOS checks on pushes and pull requests; see
-  [verification](docs/verification.md) for dated results and remaining acceptance gaps.
+- See [verification](docs/verification.md) for dated results and remaining acceptance gaps.
 
 ## Review priorities
 

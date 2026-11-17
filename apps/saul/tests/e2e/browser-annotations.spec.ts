@@ -403,7 +403,7 @@ test('queued edits preserve a concurrent comment and an older save cannot erase 
   }
 });
 
-test('captures text before opening the native panel, saves drafts, replies through a Call, and restores after restart', async ({
+test('captures text before opening the native panel, saves drafts, replies through a Call, and restores after restart @smoke', async ({
   sandbox,
   fixtureServer,
 }, info) => {

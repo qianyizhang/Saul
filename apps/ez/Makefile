@@ -1,4 +1,4 @@
-.PHONY: build check check-scripts test-tooling test test-core test-state test-services test-ui test-install lint lint-swift lint-shell lint-workflows format tools app run install signing-setup clean design-preview configuration-preview surface-preview credentials-app credentials-install
+.PHONY: build check check-scripts test-tooling test-credentials test test-core test-state test-services test-ui test-install lint lint-swift lint-shell lint-workflows format tools app run install signing-setup clean design-preview configuration-preview surface-preview credentials-app credentials-install
 build:
 	./scripts/swift.sh build --product EZ
 test:
@@ -33,7 +33,8 @@ lint-workflows:
 format:
 	xcrun swift-format format --in-place --recursive Sources Tests scripts Package.swift
 	xcrun swift-format format --in-place --recursive ../../native/credentials/Sources ../../native/credentials/Package.swift
-check: lint build test test-install test-tooling check-scripts
+check: lint build test test-install test-tooling check-scripts test-credentials
+test-credentials:
 	bash scripts/check-credentials.sh
 	./scripts/swift.sh run CredentialOwnerChecks
 check-scripts: build
