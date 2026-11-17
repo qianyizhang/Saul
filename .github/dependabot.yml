@@ -1,7 +1,12 @@
 version: 2
 updates:
   - package-ecosystem: npm
-    directories: ['/', '/apps/saul']
+    # Scan the pnpm workspace once, using its shared lockfile.
+    directory: /
+    ignore:
+      # Keep Node types aligned with the runtime pinned in .node-version.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
     schedule:
       interval: weekly
     groups:
