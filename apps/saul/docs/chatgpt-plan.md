@@ -30,18 +30,27 @@ browser-owned API connections. See [installation](../../../docs/setup.md).
 
 ## Supported request surface
 
-| Provider          | Authentication                                                 | Inference                        | Options                                                                                                                                                   |
-| ----------------- | -------------------------------------------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ChatGPT plan      | OAuth authorization code with PKCE and validated OIDC identity | Public `/v1/responses`, HTTP/SSE | `model`, `instructions`, text input with optional PDF URL file input, `store: false`, `stream: true`, catalog-supported reasoning effort and service tier |
-| OpenAI compatible | Profile-specific API key or unauthenticated loopback           | `/chat/completions`, HTTP/SSE    | Existing model, temperature and token-limit behavior                                                                                                      |
-| Chrome on-device  | Retired                                                        | Legacy saved selections only     | Choose ChatGPT plan or OpenAI compatible explicitly                                                                                                       |
+| Provider          | Authentication                                                 | Inference                        | Options                                              |
+| ----------------- | -------------------------------------------------------------- | -------------------------------- | ---------------------------------------------------- |
+| ChatGPT plan      | OAuth authorization code with PKCE and validated OIDC identity | Public `/v1/responses`, HTTP/SSE | [Chrome plan request](#chrome-plan-request)          |
+| OpenAI compatible | Profile-specific API key or unauthenticated loopback           | `/chat/completions`, HTTP/SSE    | Existing model, temperature and token-limit behavior |
+| Chrome on-device  | Retired                                                        | Legacy saved selections only     | Choose ChatGPT plan or OpenAI compatible explicitly  |
 
-Plan mode sends no temperature, output-token limit, stored conversation ID, background job, or tools. It sends the captured context needed for each explanation or follow-up. Only `response.completed` marks successful generation; failed, incomplete and disconnected streams retain honest partial-output status. A usage-limit failure pauses new requests for that account. Review usage in ChatGPT; a successful model listing does not prove that the limit has reset.
+### Chrome plan request
+
+The signed owner sends `model` and top-level `instructions`. The user `input`
+contains text and can also carry a [PDF URL](#pdf-url-attachments) and image
+evidence for an [annotation reply](annotations.md#records-and-replies). Requests use
+`store: false`, `stream: true`, and catalog-supported reasoning effort and
+service tier.
+
+This route sends no temperature, output-token limit, stored conversation ID, background job, or tools. It sends the captured context needed for each explanation or follow-up. Only `response.completed` marks successful generation; failed, incomplete and disconnected streams retain honest partial-output status. A usage-limit failure pauses new requests for that account. Review usage in ChatGPT; a successful model listing does not prove that the limit has reset.
 
 Standard requests the default service tier. Fast requests the account catalog's
 advertised faster tier and may use more plan allowance; it does not promise a
 particular latency or prove which tier ultimately served the response. The helper
-validates the model's capabilities again before inference.
+validates the model's capabilities again before inference. A model listed in
+the public API docs is not proof that it is available on a given plan account.
 
 ## PDF URL attachments
 

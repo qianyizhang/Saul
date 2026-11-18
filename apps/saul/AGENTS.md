@@ -11,7 +11,11 @@ to the surface while preserving the shared identity and motion guidance.
 
 ## Changes
 
-- Reuse the native protocol registry and browser fixtures before adding helpers.
+- For tab or page tools, extend the [operation registry](shared/protocol/protocol.mts)
+  rather than defining a separate CLI or MCP schema. Preserve existing callers’
+  inputs and results unless the task changes that contract.
+- Extend the [existing browser fixtures](tests/e2e/fixtures.ts) for changed
+  journeys. Add a case when the current checks would miss a specific regression.
 - Remove obsolete code and docs with their callers/links. Keep benchmark evidence intact.
 - Do not add compatibility layers or dependencies without a concrete consumer.
 

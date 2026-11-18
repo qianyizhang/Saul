@@ -20,10 +20,16 @@ Use serif subjects and system sans for answers, navigation and controls. Map
 web serif to SwiftUI system serif. Captions remain readable; support wrapping,
 selectable text, zoom and platform scaling.
 
+Use images where they are part of the work: a source capture as evidence or a
+generated image as a result. Keep decorative imagery out of reading and lookup
+surfaces.
+
 ## Layout and first read
 
 Make the subject, state and next useful action apparent. Separate the displayed
 answer, editable draft and saved configuration. Put caveats beside their claim.
+Keep labels, guidance and status that help readers act or recover. Remove
+headings and badges that only repeat information already visible.
 Use generous measure for reading, tighter spacing in popups and lookup panels,
 and dense rows for boards. Keep the primary action reachable at narrow widths.
 Use tonal layers and quiet dividers; reserve shadows for overlays. Use soft
