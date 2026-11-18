@@ -1,98 +1,44 @@
 # Artifacts and retained references
 
-Root `.artifacts/` is the only home for disposable test diagnostics, screenshots,
-traces, logs and local review exports. Its contents may be deleted after the run
-has stopped and any useful evidence has been retained elsewhere. Do not store
-source, credentials, user data, signing state or the only copy of a durable record
-there. The directory is ignored by Git and formatting.
-
 ## Layout and retention
 
-Follow installed `practices/artifacts.md`: one bundle per major outcome, with its
-README owning the outcome, source reference, final checks, limits and retention.
-Routine passing checks need no saved log or checksum receipt. Promote useful
-decisions and results, then delete spent bundles at closeout. Review leftovers
-older than 30 days; continued retention needs a named use and next review date.
-The benchmark records below support retained measurements and keep their own
-source/conditions; ordinary verification paperwork has no indefinite exemption.
+| Output                       | Location from repository root                             | Retention                                                            |
+| ---------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------- |
+| Browser test reports         | `.artifacts/saul/e2e/<run>/{results,report}/`             | After review, remove spent runs                                      |
+| Browser benchmark candidates | `.artifacts/saul/benchmark/<run>/{results,report}/`       | Promote accepted measurements before cleanup                         |
+| Native captures and reviews  | `.artifacts/ez/<run>/`                                    | After review, remove spent runs                                      |
+| Cross-app diagnostics        | `.artifacts/shared/<run>/`                                | After review, remove spent runs                                      |
+| Durable measurements         | [Saul benchmarks](../apps/saul/docs/benchmarks/README.md) | Tracked evidence                                                     |
+| Hosted CI                    | [Workflows](ci.md)                                        | Failure diagnostics for seven days, installable bundles for fourteen |
 
-| Output                             | Location relative to repository root                | Retention                                    |
-| ---------------------------------- | --------------------------------------------------- | -------------------------------------------- |
-| Browser tests                      | `.artifacts/saul/e2e/<run>/{results,report}/`       | Disposable after review                      |
-| Browser benchmarks                 | `.artifacts/saul/benchmark/<run>/{results,report}/` | Promote accepted measurements before cleanup |
-| Native captures and review exports | `.artifacts/ez/<run>/`                              | Disposable after review                      |
-| Cross-app diagnostics              | `.artifacts/shared/<run>/`                          | Disposable after review                      |
-| Durable benchmark evidence         | `apps/saul/docs/benchmarks/`                        | Tracked records; excluded from cleanup       |
-
-Browser runs default to `latest`, replacing earlier results for that suite. Set
-`SAUL_TEST_RUN=<scope>` for concurrent or named runs; this isolates both results
-and reports. Do not write new `test-results-*` or `playwright-report` directories
-at the root or inside an app. See the [browser runbook](../apps/saul/docs/testing.md).
-
-Before clearing a result needed for a regression or decision, promote its minimal
-evidence into the relevant tracked app documentation with source revision,
-command, conditions and limitations. A temporary screenshot path is not a durable
-receipt. Scrub account identifiers and private content before retaining or sharing.
-CI retains failure diagnostics for seven days and installable bundles for fourteen.
+- **Disposable outputs** — Root `.artifacts/` only. Git and formatting ignore it. Keep source, credentials, user data, signing state and sole durable copies outside it.
+- **Major outcomes** — One bundle per outcome under `practices/artifacts.md`. Its README owns source revision, final checks, limits and retention. Routine passing checks need no saved logs or checksum receipts.
+- **Durable evidence** — Promote the minimum result, command, conditions, source and limitations into the owning tracked doc. Scrub private content and identifiers.
+- **Browser runs** — `latest` is replaced on rerun. Set `SAUL_TEST_RUN=<scope>` to isolate results and reports. [Test commands](../apps/saul/docs/testing.md#commands)
+- **Review at 30 days** — Keep older bundles only for a named use and next review date. Check readers and preserve evidence supporting live claims before removing spent material.
 
 ## Historical references
 
-The [behavior atlas](../design/behavior-atlas/README.md) and its accepted
-comparisons are retained as point-in-time references. Preserve unique evidence,
-the source baseline, recorded checks and limitations.
+| Reference                                                                                                                                                   | Evidence                                                                                                                                     |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Behavior Atlas](../design/behavior-atlas/README.md)                                                                                                        | Point-in-time maps and accepted comparisons                                                                                                  |
+| [Archived runtime explainer](https://github.com/qianyizhang/Saul/blob/57a4558bd1d0427754ca0b93fef054561f5a8e05/docs/explainers/runtime-lifecycle/README.md) | Provenance and checks at `57a4558bd1d0427754ca0b93fef054561f5a8e05`. Open `docs/explainers/runtime-lifecycle/index.html` from that revision. |
 
-The Saul runtime explainer is archived in Git at
-`57a4558bd1d0427754ca0b93fef054561f5a8e05`. Read the
-[archived README](https://github.com/qianyizhang/Saul/blob/57a4558bd1d0427754ca0b93fef054561f5a8e05/docs/explainers/runtime-lifecycle/README.md)
-for provenance and checks. To open the diagrams locally, check out that revision
-and open `docs/explainers/runtime-lifecycle/index.html`.
-
-Do not refresh their states, source anchors, diagrams, comparisons, examples or
-technical details when the product changes. Put a short historical notice in each
-bundle README and direct reader entry page, linking to living documentation.
-Current behavior must be derived from current source and its
-[documentation owners](architecture.md#documentation-ownership). Reproducing an old
-rendering does not update its evidence. A future reconstruction may cautiously
-reuse the structure, but must establish its own current-source baseline.
-
-Retain dated records when they support a decision, recovery, comparison or useful
-reference. Compact repetition in place while keeping unique results, provenance,
-conditions and limits. Consolidate only when it makes related evidence easier to
-use; prefer its existing owner over a new append-only ledger. Remove spent material
-only after checking readers and preserving evidence still needed by a live claim.
-Disposable captures from reviewing historical references follow the finite
-retention rules above.
+- **Keep** — Unique evidence, original baseline, checks and limits. Compact routine records in their owning doc.
+- **Freeze** — Preserve old diagrams, anchors, examples, comparisons and technical details. Label historical bundles in the README and direct entry page. Use the [living owners](architecture.md#documentation-ownership) for current behavior.
+- **Reproduce or reconstruct** — A regenerated view still describes the old baseline. A new review requires a new source baseline. Disposable captures use the same retention rules.
 
 ## Periodic cleanup
 
-At the end of a task or during periodic housekeeping, stop all test, benchmark and
-capture runs in this checkout and close reports you still need. Cleanup does not
-detect active writers. From the repository root:
+| Goal                                      | Root command                   |
+| ----------------------------------------- | ------------------------------ |
+| Preview directories, count and bytes      | `pnpm artifacts:clean`         |
+| Clear all disposable outputs after review | `pnpm artifacts:clean --apply` |
 
-```sh
-pnpm artifacts:clean         # Preview directories, file count and bytes
-pnpm artifacts:clean --apply # Delete all contents of .artifacts
-```
-
-The command has no arbitrary target argument. It refuses a symlink at `.artifacts`
-or any tracked file inside it, and never follows nested symlinks. It leaves the
-empty root directory in place; tools recreate their subdirectories as needed.
-There is no automatic background deletion or age-based retention.
+- **Before clearing** — Stop writers and close reports. The command cannot detect active writers.
+- **Scope guards** — Fixed `.artifacts/` target. Refuses a symlink root or tracked contents. Skips nested symlink targets. Retains the empty root. Cleanup is manual.
 
 ## Outside this cleanup boundary
 
-Toolchain builds and caches stay in their conventional locations:
-`apps/saul/.output`, `apps/saul/.wxt`, `apps/ez/.build`, `apps/ez/dist`,
-`node_modules` and `.cache`. Rebuild or clear them only through their owning
-workflow; an installed app may depend on a particular bundle path. Empty cache
-directories alone are not evidence that the cache is obsolete.
-
-`apps/saul/.build/native/` is the ignored, generated helper runtime tree.
-`pnpm --dir apps/saul build:native` compiles the helpers and bundles the board with its pinned MCP Apps SDK;
-the native installer stages that complete asset with the board HTML and styles.
-The source MCP server and installed server deliver the same document format.
-
-The root `.output/chrome-mv3` is still the loaded extension path and must remain
-until an explicit identity/data-preserving upgrade. Never include it, native
-`apps/ez/.local/signing-identity`, Keychain state, installed helper directories or
-the original EZ checkout in artifact cleanup. See [migration](migration.md).
+- **Toolchain outputs** — Leave `apps/saul/.output`, `apps/saul/.wxt`, `apps/saul/.build/native`, `apps/ez/.build`, `apps/ez/dist`, `node_modules` and `.cache` to their build workflows. Installed apps may depend on a built path. [Helper delivery](architecture.md#typescript-maintenance)
+- **Installed and recovery state** — Keep the loaded root `.output/chrome-mv3`, signing pin, Keychain, installed helper directories and original EZ checkout outside cleanup. [Installation and migration](migration.md#installed-identities-and-artifacts)

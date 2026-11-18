@@ -1,39 +1,14 @@
 # Shared contracts
 
-Saul and EZ implement these shared guarantees in TypeScript and Swift.
+| Guarantee                                                   | Owner                                                                                                                        |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Action inputs, substitution and preparation                 | [Action preparation](actions-and-attempts.md#action-preparation)                                                             |
+| Completion, Stop, saved success and retry                   | [Attempt execution](actions-and-attempts.md#execution)                                                                       |
+| Compatible chat and Responses terminal signals and fixtures | [Stream completion](actions-and-attempts.md#stream-completion)                                                               |
+| SQLite, deletion and legacy import                          | [History](history.md)                                                                                                        |
+| Saved connection bindings and model choices                 | [Connections and presets](configuration.md#connections-and-presets)                                                          |
+| Settings revisions, app scopes and upgrades                 | [Configuration scopes](configuration.md#unified-configuration-scopes), [upgrades](configuration.md#connection-data-upgrades) |
+| Consent, credentials and catalog refresh                    | [Credentials](credentials.md)                                                                                                |
+| Terms, visuals and controls                                 | [Glossary](../GLOSSARY.md), [design](../DESIGN.md), [keyboard](../design/keyboard.md), [symbols](../design/symbols.json)     |
 
-## Action preparation
-
-[Actions and attempts](actions-and-attempts.md#action-preparation) owns template
-inputs, substitution and preparation.
-
-## Execution
-
-[Attempt execution](actions-and-attempts.md#execution) owns completion, Stop,
-saved success and retry.
-[Stream completion](actions-and-attempts.md#stream-completion) records the
-terminal signals and common fixtures for compatible chat and Responses.
-
-## History operations
-
-[History](history.md) owns SQLite, deletion and legacy imports.
-
-## Connections and presets
-
-[Configuration](configuration.md#connections-and-presets) owns saved choices.
-[Credentials](credentials.md) owns account and key access, consent and catalog
-refresh.
-
-### Connection data upgrades
-
-See [configuration upgrades](configuration.md#connection-data-upgrades).
-
-## Unified configuration scopes
-
-See [scope and revision rules](configuration.md#unified-configuration-scopes).
-
-## Presentation
-
-[Design](../DESIGN.md) owns shared visual and interaction rules. See the
-[glossary](../GLOSSARY.md), [keyboard reference](../design/keyboard.md), and
-[symbol registry](../design/symbols.json) for the corresponding controls.
+- Shared interfaces and fixtures. TypeScript and Swift implementations stay native to their runtimes.

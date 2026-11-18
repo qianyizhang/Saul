@@ -1,71 +1,31 @@
 # EZ
 
-A native Mac app for definitions, spelling checks, quick answers and images.
-The main window and Quick Lookup panel share one workspace and local history
-with Saul. See the [surface guide](docs/surfaces.md) for current user behavior and
-[architecture](docs/architecture.md) for execution and storage boundaries.
+| Goal                                                          | Outcome                                                                       |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| [Look up or write](docs/surfaces.md#shared-workspace)         | Definitions, spelling checks and answers from the main window or Quick Lookup |
+| [Use selected text](docs/surfaces.md#look-up-selected-text)   | Open a draft from another macOS app                                           |
+| [Run from Raycast](docs/raycast.md)                           | Send a query to EZ through its URL scheme                                     |
+| [Draw or search](docs/surfaces.md#image-and-search-actions)   | Image or web search with an explicitly selected API preset                    |
+| [Configure a model](docs/surfaces.md#connections-and-actions) | Bind an action to a saved plan or API preset                                  |
 
 ## Run
 
-Follow [selective setup](../../docs/setup.md) for prerequisites and installation;
-[releasing](docs/releasing.md#local-signing-and-installation) owns signing and rollback.
-For a local development build, run from `apps/ez`:
-
-```sh
-make tools
-make check
-make app
-open dist/EZ.app
-```
-
-Start with [Connections and actions](docs/surfaces.md#connections-and-actions),
-then use **⌘ Return** to Run. Write supports ChatGPT plan or an explicit API
-preset; Draw and web search use separately billed API access. No Codex installation
-is needed. The [credential contract](../../contracts/credentials.md) owns sign-in,
-shared credentials and retirement of older sign-in routes.
-
-### Query from Raycast
-
-Follow [Raycast setup and behavior](docs/raycast.md).
-
-### Look up selected text
-
-Follow [Services setup and use](docs/surfaces.md#look-up-selected-text).
-
-## Illustration
-
-See [image and search actions](docs/surfaces.md#image-and-search-actions).
-
-## Configure connections, presets and actions
-
-See [Connections and actions](docs/surfaces.md#connections-and-actions).
-
-## Selectors and keyboard shortcuts
-
-See the [surface guide](docs/surfaces.md#selectors-and-shortcuts) and
-[keyboard reference](../../design/keyboard.md).
+- **Install and recover** — [Setup](../../docs/setup.md) and [local signing](docs/releasing.md#local-signing-and-installation).
+- **Run a lookup** — `⌘ Return`. [Selectors and shortcuts](docs/surfaces.md#selectors-and-shortcuts)
+- **Distribution** — Local personal project. Public release requires a license and [distribution checks](docs/releasing.md#distribution).
 
 ## Local data
 
-[Shared data ownership](../../docs/architecture.md#data-ownership) defines the
-history, configuration and credential stores. [Native persistence](docs/architecture.md#persistence-contract)
-defines save/recovery behavior; [Keychain access](docs/keychain.md) explains signing
-and access limits. Local history is plaintext and is not encrypted by EZ.
+- **History** — Shared SQLite with Saul. EZ stores it as plaintext. [Native persistence](docs/architecture.md#persistence-contract)
+- **Credentials** — Shared signed owner with Keychain storage. [Keychain access](docs/keychain.md)
+- **Data boundaries** — [Shared ownership](../../docs/architecture.md#data-ownership).
 
 ## Development
 
-Use [contributing](CONTRIBUTING.md) for setup, tool pins, hooks and CI;
-[tests](Tests/README.md) for focused checks;
-[design](docs/design.md) for disposable native previews;
-[verification](docs/verification.md) for evidence and acceptance gaps;
-and [releasing](docs/releasing.md) for signing and distribution.
-Gate membership lives in the [Makefile](Makefile) and
-[shared hook configuration](../../.pre-commit-config.yaml).
-Future candidates live in the [roadmap](docs/roadmap.md).
-
-## Official integration references
-
-See [architecture references](docs/architecture.md#official-integration-references).
-
-This is a local personal project. No distribution license has been selected.
-A release for other people requires the steps in the release guide.
+| Goal                                       | Owner                                                          |
+| ------------------------------------------ | -------------------------------------------------------------- |
+| Build and check native code                | [Contributing](CONTRIBUTING.md), [Makefile](Makefile)          |
+| Verify offline, installed or live behavior | [Tests](Tests/README.md), [verification](docs/verification.md) |
+| Review native UI                           | [Native design and previews](docs/design.md)                   |
+| Understand request and storage boundaries  | [Architecture](docs/architecture.md)                           |
+| Find planned work                          | [Roadmap](docs/roadmap.md)                                     |

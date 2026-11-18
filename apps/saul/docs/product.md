@@ -1,30 +1,24 @@
 # Product behavior
 
-See the [glossary](../GLOSSARY.md) for shared domain and surface names.
+- [Saul terms and surfaces](../GLOSSARY.md)
 
 ## Reading
 
-1. Select a term or short passage, choose an action, and select **Explain & open** or **Illustrate & open**. The card opens once the submission is accepted, including when saved work is reused.
-2. **Alt+Shift+E** and **Command/Ctrl+Enter** use the selected or default action and queue quietly. Repeated keyboard requests also stay quiet; View opens their saved or active request.
-3. Saul saves the request and adds a quiet underline. For work outside the open card, a completion notification offers **View**; the badge and page list retain unread state. Completion never reopens a closed card.
-4. Click a marker or open the page list with **Alt+Shift+L** to inspect progress or the saved answer.
-
-Reading jobs survive card closure, refresh, navigation, or source-tab closure while the extension runtime remains available. **Stop** cancels queued or running work and retains partial text. **Regenerate** and follow-ups create new attempts; the last successful answer remains available if a later attempt fails.
-
-Opening a completed answer marks it read. Dismissing a notification does not. Error notifications can be muted from Settings or an error notification; success notifications and inline explanation errors remain visible.
+| Goal                                 | Outcome                                                                                                                                                                  |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Open a selected explanation or image | **Explain & open** or **Illustrate & open** opens the card after acceptance, including saved reuse.                                                                      |
+| Submit quietly                       | **Alt+Shift+E** or **Command/Ctrl+Enter** queues the selected or default action. Repeated keyboard requests stay quiet.                                                  |
+| Return to a request                  | Use the persistent marker, **View** from a completion notification, or **Alt+Shift+L** for the page list.                                                                |
+| Keep reading while work runs         | Card closure, refresh, navigation and tab closure leave work active while the extension runtime remains available. Completion never reopens the card.                    |
+| Stop or continue                     | **Stop** cancels queued or running work and retains partial text. **Regenerate** and follow-ups create new attempts. Later failures preserve the last successful answer. |
+| Clear unread state                   | Open the completed answer. Dismissing the notification leaves it unread.                                                                                                 |
+| Mute errors                          | Mute error notifications in Settings or from a notification. Success notifications and inline errors stay visible.                                                       |
 
 ### Illustrate and reading activity
 
-Choose the Draw preset and PNG/GIF in the selection widget, then **Illustrate &
-open**. Existing action libraries can add the starter in Settings → Actions.
-Each attempt keeps its own image. Download preserves the original bytes, and
-GIF Play/Pause respects Reduce Motion. Loading or inspecting an image never sends.
-
-The [answer divider](../assets/surface.css) uses warning while connecting or
-waiting, green only on a provider thinking signal, and static light under
-Reduce Motion. Reserve its height. Clear the light at answer/refusal text;
-keep truthful **Generating response…**, **Saving…** and saved/error status.
-Queued work shows **Waiting…**, including in Min Mode.
+- **Image attempt** — Choose the Draw preset and PNG/GIF in the selection widget. **Illustrate & open** starts the attempt. Existing libraries can add the starter under Settings → Actions.
+- **Saved image** — Each attempt keeps its own image. Download preserves original bytes. GIF Play/Pause respects Reduce Motion. Reading an image leaves the request unchanged.
+- **Activity** — [Answer divider](../assets/surface.css) shows warning while waiting, green on a provider thinking signal and a static light under Reduce Motion. Retain its space. Clear the light at answer/refusal text. **Waiting…**, **Generating response…**, **Saving…** and saved/error status remain visible, including in Min Mode.
 
 ### Page markers
 
@@ -39,133 +33,68 @@ Queued work shows **Waiting…**, including in Min Mode.
 - **Inspect input/output** reveals the selected attempt's saved instructions,
   context fields, assembled user prompt and literal response text. Each block can
   be selected or copied. History and past attempts use the same inspector. Status
-  distinguishes prepared, completed and incomplete attempts; missing older input
+  distinguishes prepared, completed and incomplete attempts. Missing older input
   is labelled unavailable. Inspection does not send another request.
 
 - Pin keeps the card open while interacting with the page.
 - Concept terms expose notes on hover, focus, or click.
 - **Simpler**, **Give an example**, and **Go deeper** retain the captured source context and include the previous explanation.
-- **Ask a follow-up** accepts a custom question below a saved answer. Send or Command/Ctrl+Enter includes the saved source and earlier exchanges with the same model choices. The question appears with its answer; earlier answers remain in Past attempts. Drafts survive closing/reopening the card within the page. Stop and incomplete answers retain the last successful answer.
-- Follow-ups are limited to 2,000 characters per question and 120,000 compiled
-  conversation characters; reject overflow rather than dropping context.
+- **Ask a follow-up** opens a draft below the saved answer. Send or Command/Ctrl+Enter submits it with the saved source, earlier exchanges and the same model choices. The question appears with its answer, and earlier answers remain in Past attempts. Closing the card preserves the draft on the page. Stop or failure preserves the last successful answer.
+- Follow-ups reject questions over 2,000 characters or compiled conversations
+  over 120,000 characters. Context stays intact.
 - Copy reports clipboard failures rather than claiming success.
 
 ## History
 
-The popup opens directly to History. Search and bookmarks stay visible; export and deletion of the entire library are under **Export and manage history**. The full workspace uses the same views with a wider reading area.
-
-**Min Mode** is the default expert everyday view, following [DESIGN.md](../../../DESIGN.md#min-mode).
-It shows the current input/answer, action or preset choice, essential state and primary
-actions. Routine subtext is omitted; buttons use one clear word or a familiar symbol,
-with complete accessible names and tooltips. More/Details retain uncommon operations,
-regeneration, inspection and history management. Errors, unsaved work, unavailable
-choices and billing/permission consequences stay visible. Preferences save immediately,
-independently of configuration drafts, and update open extension surfaces, including
-the summary panel. The board keeps its own presentation preference.
-
-See the [keyboard reference](../../../design/keyboard.md#saul) for reading,
-workspace and browser shortcuts. **Settings → Preferences → Shortcuts** shows
-Chrome's current assignments.
-
-The full workspace provides:
-
-- search across selected text, readable explanations, concept notes, titles, and URLs;
-- bookmarks, pagination, source navigation, and per-passage attempt history;
-- Markdown export of retained passages and attempts, including incomplete labels;
-- deletion and **Clear all**, which cancel affected work and block late writes from recreating it.
-
-[History](../../../contracts/history.md) is shared with EZ. The helper is
-required even for API providers. Removing a browser profile does not delete it.
-Repeated reading actions disclose reuse and offer **Run again with current input**;
-normal Regenerate keeps the frozen request.
+| Goal                      | Outcome                                                                                                                                                                                                                                                                  |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Find saved work           | Popup opens to History. The workspace offers wider reading with the same views. Search selected text, readable answers, notes, titles and URLs. Bookmark, paginate, reopen sources or inspect past attempts.                                                             |
+| Export or delete          | Markdown includes retained attempts and incomplete labels. Bulk export and **Clear all** live under **Export and manage history**. Deletion cancels affected work and blocks late writes.                                                                                |
+| Use Min Mode              | Default everyday view. Keep essential state, controls and choices visible. More/Details exposes uncommon operations. [Shared design](../../../DESIGN.md#min-mode)                                                                                                        |
+| Change presentation       | Preferences save independently of configuration drafts and update open surfaces, including the summary panel. The board keeps its own mode. Current key assignments appear in Settings → Preferences → Shortcuts. [Keyboard reference](../../../design/keyboard.md#saul) |
+| Preserve or reuse history | [Shared history](../../../contracts/history.md) requires the helper even with API providers and survives browser profile removal. Reuse is disclosed. **Run again with current input** captures a new request. **Regenerate** uses the frozen request.                   |
 
 ## Settings and models
 
-Settings has focused sections: Overview, Presets, Actions, Calls, Preferences
-and Connections. Overview leads with reading defaults; Presets keeps the selected
-preset beside its fields, with a compact selector at narrow widths. Section changes
-preserve the mounted configuration draft. Save and conflict recovery remain reachable
-across sections; preferences and access retain their independent immediate-save behavior.
-
-Stale or uncertain saves keep the draft and block another save. **Review latest**
-compares the original, saved and local values; same-field conflicts need an explicit
-choice (**Mine / Latest**). Show only local edits; retain non-conflicting ones.
-**Apply to draft** changes only the draft, then Save checks the fresh revision. Cancel
-keeps the draft. Edits already present in saved settings need no second save.
-**Reload** replaces it with saved settings after confirming discard
-when dirty. The [shared transaction contract](../../../contracts/configuration.md#unified-configuration-scopes)
-owns revision and atomic-save guarantees.
-
-- Named actions pair editable prompts with a default model preset. Explain, Lookup, and Nudge are editable starters. A preset binds a connection, capability, model, and supported options. ChatGPT plan presets require their connection's explicitly bound shared account.
-- Inspecting a preset does not change its account or the saved provider/profile defaults, including when another edit is saved.
-- New installations start with explicit Actions and Presets. Choosing another action for the same passage creates a new attempt; retry keeps the original request choices even after Settings changes.
-- Templates substitute `{{text}}`, `{{context}}`, `{{page title}}`, `{{page url}}`, `{{heading}}`, and `{{paragraph}}` once. `{{text}}` is required; unavailable referenced context blocks submission. Enabled context is included once, and template expressions are unsupported.
-- OpenAI-compatible profiles keep separate endpoint, model, temperature, and key values.
-- Changing endpoint origin clears the current key.
-- Missing referenced profiles remain unavailable until explicitly repaired; no replacement profile is synthesized.
-- Invalid or obsolete saved settings show the affected field and offer an explicit backup-and-reset action. Unsupported old records remain untouched; Saul does not infer Actions or synthesize profiles from them.
-- Save, connection test, and generation test use the current draft without overwriting unreadable stored settings.
-- A saved attempt whose credential owner or endpoint changed keeps its output and
-  shows “Select a new preset in Settings, then start a new attempt.” Retry never
-  silently adopts the new route.
-- Model setup appears first. Save and validation feedback stay visible while scrolling; leaving a changed draft asks before discarding it.
-- Response language and context controls apply to new submissions.
-- Chrome on-device AI is retired. Saved selections remain readable and prompt an explicit switch to ChatGPT plan or OpenAI compatible. New local requests are blocked; Saul does not switch providers automatically.
-- [ChatGPT plan](chatgpt-plan.md) uses the signed macOS Saul owner for sign-in and inference, with the same controls as EZ. Its account catalog supplies model names, reasoning effort, and Fast/Standard choices. Unavailable choices block the request. Plan requests omit unsupported temperature and output-token options and never switch billing providers after a failure.
-
-Local tests cover the provider boundary with deterministic fixtures. They do not establish external-provider authentication, model quality, or device performance.
+| Goal                            | Outcome                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Configure an action             | Editable prompts and default model presets. Explain, Lookup and Nudge are editable starters. New installations have explicit Actions and Presets.                                                                                                                                                                                                                                                             |
+| Edit across sections            | Overview leads with reading defaults. Presets keeps the choice near its fields and uses a compact selector at narrow widths. Section changes keep the draft and visible Save/validation. Leaving or reloading a dirty draft asks before discard.                                                                                                                                                              |
+| Resolve stale or uncertain save | **Review latest** compares original, saved and local values. Show local edits. Choose **Mine / Latest** for same-field conflicts and keep non-conflicting edits. **Apply to draft** updates only the draft. Save checks the fresh revision. Cancel keeps the draft. An already delivered write needs no second save. [Transaction contract](../../../contracts/configuration.md#unified-configuration-scopes) |
+| Prepare text                    | `{{text}}` is required. Other allowed fields are `{{context}}`, `{{page title}}`, `{{page url}}`, `{{heading}}` and `{{paragraph}}`. Response language and context changes affect new requests. [Preparation guarantees](../../../contracts/actions-and-attempts.md#action-preparation)                                                                                                                       |
+| Bind a model                    | Presets bind connection, capability and options. Inspection leaves account and defaults intact. [Shared preset contract](../../../contracts/configuration.md#connections-and-presets), [ChatGPT plan](chatgpt-plan.md)                                                                                                                                                                                        |
+| Use a local API profile         | Separate endpoint, model, temperature and key. Changing origin clears the current key.                                                                                                                                                                                                                                                                                                                        |
+| Repair unavailable settings     | Missing profiles stay unavailable. Invalid or obsolete settings show the field and offer explicit backup-and-reset. Unsupported records stay intact until explicit reset. Save and connection/generation tests use the current draft.                                                                                                                                                                         |
+| Retry a saved attempt           | Frozen choices remain bound. Changed credential owner or endpoint preserves output and asks for a new preset and attempt. [Retry rules](../../../contracts/actions-and-attempts.md#execution)                                                                                                                                                                                                                 |
+| Replace retired Chrome AI       | Saved selections stay readable. Explicitly select ChatGPT plan or OpenAI compatible before new work.                                                                                                                                                                                                                                                                                                          |
 
 ## Window and Tab board
 
-**Window** manages the Chrome window containing the extension popup or page.
-**Tab board** manages all connected normal windows in the MCP app. Window
-names, row styling, selection and action labels are shared. Incognito windows
-are excluded. Live refresh preserves surviving selections.
+| Goal                      | Outcome                                                                                                                                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Pick the scope            | **Window** manages the containing Chrome window. The MCP **Tab board** shows connected normal windows. Incognito is excluded.                                                                                      |
+| Select tabs               | Individual selection, Shift ranges or Select all. Order follows displayed windows and tabs. **Group**, **Move to** or **Summarize**. Pins can be summarized and remain pinned.                                     |
+| Arrange manually          | Drags and Group/Move apply immediately. Individual tabs enter or leave groups. Drag group headings to keep groups intact. Cross-window grouping asks for a destination. Keyboard move controls accompany dragging. |
+| Recover a manual edit     | Undo applies while the affected arrangement can be restored. Closing the source window prevents Undo. Refresh and inspect partial failures before retrying.                                                        |
+| Review a Codex suggestion | [Tab board proposal rules](mcp-app.md#proposal-and-approval-lifetime).                                                                                                                                             |
+| Share window names        | [Window label ownership and native Chrome names](mcp-app.md#manual-controls).                                                                                                                                      |
+| Grant external access     | Settings → Preferences → Integrations. Access is off by default. [Native messaging](native-messaging.md#connect-and-verify)                                                                                        |
 
-Select tabs individually, with Shift for a range, or with Select all. The
-selection bar offers only **Group**, **Move to**, and **Summarize**. Pinned tabs
-can be summarized; grouping and moving never silently unpin them.
-
-Manual drags and Group/Move act immediately. Individual tabs can leave or join
-groups; dragging a group heading moves it intact. Grouping a selection spanning
-windows asks for an existing or new destination. Selection order follows the
-displayed window and tab order. Keyboard move controls accompany dragging.
-Explicit sorting and Ungroup controls are absent.
-
-**Undo** restores the last reversible manual arrangement while its affected
-tabs remain unchanged. A move that closes its source window has no Undo:
-Chrome's window identity and associated UI cannot be restored. Partial failures
-require refreshing and inspecting the result; operations are not replayed.
-
-Codex-generated reorganizations retain the editable proposal service and an
-explicit **Apply** boundary. The board shows proposed moves and duplicate
-closures together, with an opt-out for deduplication. **Discard** dismisses
-the proposal. Manual gestures operate on the current layout after a proposal
-is applied or discarded; they never silently remove duplicate tabs.
-Pinned/grouped tabs stay protected in automated proposals.
-
-On macOS Chrome, the native helper imports **Name Window** labels through
-AppleScript and verifies reviewed renames. Automation errors remain visible;
-other platforms use Saul labels. Helper and page-access controls live
-under **Settings → Preferences → Integrations**. External access is off by default.
-Rows show readable titles with hostname fallback, full original title/URL on
-hover, and names/counts above the list. Display text does not change saved
-sources or browser metadata. Preserve focus, scroll and surviving choices on
-refresh. See [native messaging](native-messaging.md) and the [Tab board](mcp-app.md).
+- **Rows** — Readable titles with hostname fallback, full original title/URL on hover and window counts above the list. Display labels leave source metadata intact.
+- **Refresh** — Preserve focus, scroll and surviving choices.
 
 ### Summaries
 
-[Calls and summaries](calls.md) owns page capture, the reader, PDFs and retry.
+- [Calls and summaries](calls.md) owns page capture, the reader, PDFs and retry.
 
 ## Compatibility
 
 - Saul targets Google Chrome MV3 only.
-- The native bridge supports macOS and Linux Chromium-family browsers; Google Chrome is the verified target.
+- [Native bridge support](native-messaging.md) covers tested browsers and platforms.
 - See [testing](testing.md) for covered behavior and evidence limits.
 
-See [shared presets](../../../contracts/configuration.md) and
-[Speak preview](chatgpt-plan.md#speech-preview) for provider and capability rules.
+- [Shared presets](../../../contracts/configuration.md) and [Speak preview](chatgpt-plan.md#speech-preview) own capability rules.
 
 ## Browser annotations
 
-See [annotations](annotations.md) for capture, replies, evidence and retention.
+- [Annotation guide](annotations.md) owns capture, replies, evidence and retention.

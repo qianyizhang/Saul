@@ -1,64 +1,25 @@
 # Saul
 
-Saul is a local-first Chrome extension for reading explanations and safe tab organization. It is built with WXT, React, TypeScript, and shared native SQLite history.
-
-## Capabilities
-
-- **Reading:** select text, queue an explanation, keep reading, and return through persistent underlines, notifications, or history.
-- **Library:** search saved passages and explanations, bookmark them, revisit sources, inspect attempts, and export Markdown.
-- **Models:** use your [ChatGPT plan](docs/chatgpt-plan.md) or an OpenAI-compatible endpoint. Chrome's on-device provider is retired; saved results remain readable.
-- **Window and Tab board:** select, drag, group, move and summarize tabs with shared controls; Codex proposals retain review and Apply.
-- **Codex access:** opt in to local CLI/MCP tools for tab organization and new windows. A separate switch enables page reading, clicks, text filling and navigation.
-- **MCP App:** drag tabs between windows beside the conversation, use keyboard move controls, or ask Codex for a layout. Review the preview, then apply it with a button. Pinned tabs and existing groups stay intact. See the [workspace guide](docs/mcp-app.md).
+| Goal                                                  | Outcome                                                                            |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| [Read and explain](docs/product.md#reading)           | Explain a selection and return to it through markers, notifications or the Library |
+| [Summarize](docs/calls.md)                            | Run a Call on pages or PDFs and reopen, export or retry the result                 |
+| [Annotate](docs/annotations.md)                       | Save page evidence, compose replies and keep a record across visits                |
+| [Organize tabs](docs/mcp-app.md)                      | Edit windows and groups. Review and apply Codex proposals explicitly               |
+| [Choose a model](docs/product.md#settings-and-models) | Use a ChatGPT plan or an OpenAI-compatible connection                              |
 
 ## Install
 
-Use the [selective installer](../../docs/setup.md) for the extension and its
-history/configuration helper. ChatGPT plan use also requires the signed macOS
-credential owner. Tab/action helpers, the EZ app and Codex are optional.
-
-For optional Codex access, select the tab helper and `--codex` in the root setup.
-Then enable access in Saul Settings and run `pnpm verify:connection` from this
-application directory. See [connection verification and helper lifecycle](docs/native-messaging.md).
+| Outcome                                                    | Owner                                             |
+| ---------------------------------------------------------- | ------------------------------------------------- |
+| Chrome extension and required history/configuration helper | [Selective setup](../../docs/setup.md)            |
+| ChatGPT plan connection                                    | [Plan setup](docs/chatgpt-plan.md#setup)          |
+| Optional tab access, page tools or Codex connection        | [Native browser access](docs/native-messaging.md) |
+| Optional custom Call actions                               | [Call presets](docs/custom-actions.md)            |
 
 ## Develop
 
-Use the Node version in the root `.node-version` and the pnpm version declared in `package.json`.
-
-```sh
-corepack enable
-pnpm install --frozen-lockfile
-bash ../../scripts/install-hooks.sh
-pnpm dev
-```
-
-Build and verify:
-
-The hook command uses [uv](https://docs.astral.sh/uv/). Gate membership lives in
-[package.json](package.json), [root commands](../../package.json) and
-[hook configuration](../../.pre-commit-config.yaml); the [testing runbook](docs/testing.md)
-owns focused checks and diagnosis. Commands here run from `apps/saul`.
-
-```sh
-pnpm check
-pnpm build
-pnpm test:e2e
-pnpm zip
-```
-
-Browser tests use disposable profiles and a local model fixture. On macOS, read the browser-launch approval guidance in the [testing runbook](docs/testing.md) before running them from a restricted agent sandbox.
-
-## Documentation
-
-| Document                                     | Purpose                                                     |
-| -------------------------------------------- | ----------------------------------------------------------- |
-| [Product](docs/product.md)                   | Shipped behavior and current limits                         |
-| [Calls and summaries](docs/calls.md)         | Page capture, PDF processing, reuse and retry               |
-| [Annotations](docs/annotations.md)           | Persistent page evidence and replies                        |
-| [Architecture](docs/architecture.md)         | Runtime boundaries, data flow, and invariants               |
-| [Design contract](../../DESIGN.md)           | Portable visual identity, component and motion principles   |
-| [Design application](../../design/SKILL.md)  | Generation, cross-project adoption, and visual verification |
-| [Testing](docs/testing.md)                   | Running checks, browser harness, and debugging              |
-| [ChatGPT plan](docs/chatgpt-plan.md)         | OAuth setup, supported API surface and credential lifecycle |
-| [Native messaging](docs/native-messaging.md) | CLI/MCP setup and tab-tool safety                           |
-| [Benchmarks](docs/benchmarks/README.md)      | Reproduction commands and evidence limits                   |
+- **Runtime** — WXT, React, TypeScript and native SQLite. [Architecture](docs/architecture.md)
+- **Development server, build or ZIP** — `pnpm dev`, `pnpm build` or `pnpm zip` from `apps/saul` after [workspace setup](../../README.md#develop).
+- **Checks and browser launch** — [Testing](docs/testing.md) and [benchmarks](docs/benchmarks/README.md).
+- **UI changes** — [Shared design](../../DESIGN.md) and [feature review](../../design/SKILL.md#feature-ui-review).

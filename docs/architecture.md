@@ -1,94 +1,70 @@
 # Architecture
 
-[Saul](../apps/saul/docs/architecture.md) owns Chrome UI, capture, anchors and Node
-helpers. [EZ](../apps/ez/docs/architecture.md) owns the native UI and its request
-and storage adapters. They build and install independently. The signed Saul
-credential owner is a separate executable, not an EZ or Chrome UI process.
+| Runtime                                      | Owner                                                   |
+| -------------------------------------------- | ------------------------------------------------------- |
+| Chrome UI, capture, anchors and Node helpers | [Saul](../apps/saul/docs/architecture.md)               |
+| macOS UI and native request/storage adapters | [EZ](../apps/ez/docs/architecture.md)                   |
+| Managed credentials and provider operations  | [Independent signed owner](../contracts/credentials.md) |
 
 ## Documentation ownership
 
-| To find                             | Read                                                                                             |
+| Decision or question                | Owner                                                                                            |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Shared guarantees and fixture links | [Contracts](../contracts/README.md)                                                              |
-| Current behavior                    | [Saul product](../apps/saul/docs/product.md), [EZ surfaces](../apps/ez/docs/surfaces.md)         |
+| Shared guarantees and fixtures      | [Contracts](../contracts/README.md)                                                              |
+| Shipped behavior                    | [Saul product](../apps/saul/docs/product.md), [EZ surfaces](../apps/ez/docs/surfaces.md)         |
 | Terms and presentation              | [Glossary](../GLOSSARY.md), [design](../DESIGN.md)                                               |
 | Installation, upgrades and recovery | [Setup](setup.md)                                                                                |
 | Checks and diagnosis                | [Saul testing](../apps/saul/docs/testing.md), [EZ verification](../apps/ez/docs/verification.md) |
-| Historical evidence                 | [Snapshot policy](artifacts.md#historical-references)                                            |
-
-Code, schemas, scripts and configuration own implementation details and tool pins.
-Use the [ADR rule](../AGENTS.md#architecture-decisions) for durable trade-offs.
+| Historical evidence                 | [Artifact policy](artifacts.md#historical-references)                                            |
+| Implementation and tool pins        | Code, schemas, scripts and configuration                                                         |
+| Durable trade-offs                  | [ADR rule](../AGENTS.md#architecture-decisions)                                                  |
 
 ## Lifecycle ownership
 
-One lifecycle has one owner for its states, valid data, transitions and effects.
-Callers request transitions and read snapshots. Keep independent facts separate;
-use distinct types when states require different data or operations.
-
-Trace each transition through its owner and check it through the caller-facing
-interface. Handle failures, cancellations, uncertain effects and stale responses.
-Advance on evidence from the owning contract: a provider completion does not
-establish a saved result. The [Attempt contract](../contracts/actions-and-attempts.md#execution)
-owns save failures and replay rules; the app architecture pages identify runtime
-owners. Use the storage owner's transactions and constraints directly.
-
-Saul and EZ use [bounded local recovery](adr/0006-bound-local-recovery.md).
+- **One owner** — States, valid data, transitions and effects. Callers request transitions and read snapshots. Use distinct types for independent facts or states with different data and operations.
+- **Evidence** — Verify transitions through the caller-facing interface. Cover failure, cancellation, uncertain effects and stale responses.
+- **Persistence** — Use storage transactions and constraints. Provider completion and saved success require separate evidence. [Attempt contract](../contracts/actions-and-attempts.md#execution), [bounded recovery decision](adr/0006-bound-local-recovery.md)
 
 ## Data ownership
 
-- [Configuration](../contracts/configuration.md#unified-configuration-scopes) shares a
-  local settings file, with common connections/presets and app-scoped actions.
-- [Credentials](../contracts/credentials.md): the signed owner owns all active
-  ChatGPT credentials. Local browser API connections retain their app-owned
-  credentials. The Node helper owns browser history, configuration and presets.
-- [History](#shared-history) is shared. Drafts and active request state stay
-  app-owned. There is no cross-app action import or multi-device sync.
+| Data                       | Owner                                                                                                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Connections and presets    | Shared local settings. Node storage helper for Saul, Swift adapter for EZ. [Configuration scopes](../contracts/configuration.md#unified-configuration-scopes) |
+| Actions                    | App-scoped configuration. Cross-app import and multi-device sync are outside the shared contract.                                                             |
+| Managed credentials        | Signed owner. Browser-local API connections keep app-owned keys. [Credential contract](../contracts/credentials.md)                                           |
+| History                    | [Shared SQLite](#shared-history)                                                                                                                              |
+| Drafts and active requests | App-local runtime state                                                                                                                                       |
 
 ## Shared history
 
-Both apps use one local SQLite store. See the [history contract](../contracts/history.md)
-for guarantees, schema and adapters, [setup](setup.md#shared-history-upgrade) for
-upgrade and recovery, and the [decision record](adr/0001-share-local-history.md)
-for the trade-off.
+- **Store and adapters** — [History contract](../contracts/history.md).
+- **Upgrade and recovery** — [Shared history setup](setup.md#shared-history-upgrade).
+- **Trade-off** — [Shared history decision](adr/0001-share-local-history.md).
 
 ## Optional shared capabilities
 
-Before adding a shared account or execution replacement, show a maintenance
-benefit for two concrete consumers. Keep installation independent and opt-in per
-app. Independent routes for other providers can coexist with a shared capability.
-
-Use a versioned interface for discovery, capabilities, selection, operations,
-cancellation and recovery. Authenticate callers, restrict operations and keep
-secrets behind one refresh owner. Separate identity from permission, and freeze
-the chosen implementation and account for each request. Loss blocks explicitly;
-switching between available routes requires an explicit choice. Define and test disconnect,
-uninstall and failure with both adapters before enabling the replacement.
-The [credential contract](../contracts/credentials.md) is the existing instance.
+| Requirement                | Outcome                                                                                                                                                |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Justification and adoption | Maintenance benefit for two real consumers. Independent installation and per-app opt-in. Other provider routes can coexist.                            |
+| Interface                  | Versioned discovery, capabilities, selection, operations, cancellation and recovery. Authenticate callers and restrict operations.                     |
+| Identity and execution     | One refresh owner. Identity and permission remain distinct. Freeze route and account for each request. Loss blocks execution until an explicit choice. |
+| Acceptance                 | Disconnect, uninstall and failure exercised through both adapters. [Credential implementation](../contracts/credentials.md)                            |
 
 ## Managed connections
 
-[Connections and presets](../contracts/configuration.md#connections-and-presets) owns
-binding, migration and model choices. The [credential contract](../contracts/credentials.md#connection-identity-and-catalogs)
-owns credential lifecycle and live catalogs.
+- **Binding, migration and model choices** — [Configuration](../contracts/configuration.md#connections-and-presets).
+- **Credential lifecycle and catalogs** — [Credentials](../contracts/credentials.md#connection-identity-and-catalogs).
 
 ### Provider, connection and protocol
 
-See the [glossary](../GLOSSARY.md) for the distinction and the
-[connection upgrade contract](../contracts/configuration.md#connection-data-upgrades)
-for stored names and compatibility.
+- **Terms and saved names** — [Glossary](../GLOSSARY.md), [connection upgrades](../contracts/configuration.md#connection-data-upgrades).
 
 ## TypeScript maintenance
 
-Keep authored code and types together; validate external JSON at the boundary.
-[Saul testing](../apps/saul/docs/testing.md#typescript-and-delivered-helper-checks)
-covers the different compiler and test scopes. The complete helper build lives
-outside WXT output so rebuilding the extension cannot erase it. Installed helpers
-use emitted modules and stable entry paths without a TypeScript loader.
-See the [Saul artifact decision](adr/0005-separate-saul-helper-source-from-installed-artifacts.md).
+- **Source** — Author code and types together. Validate external JSON at the boundary. [Compiler and delivery checks](../apps/saul/docs/testing.md#typescript-and-delivered-helper-checks)
+- **Delivery** — Complete helper builds live outside WXT output. Installed helpers use emitted modules and stable entry paths without a TypeScript loader. [Artifact decision](adr/0005-separate-saul-helper-source-from-installed-artifacts.md)
 
 ## Naming reminder
 
-Saul is the repository name; Saul and EZ remain app names. Revisit public names
-before distribution. Shared vocabulary uses domain names. Preserve installed
-identities and data locations across display renames; see [setup](setup.md) and
-[installed identities](migration.md#installed-identities-and-artifacts).
+- **Display names** — Saul is the repository name. Saul and EZ are the app names. Revisit public names before distribution.
+- **Installed identities** — Retain identifiers and data paths across display renames. [Setup](setup.md), [migration](migration.md#installed-identities-and-artifacts)

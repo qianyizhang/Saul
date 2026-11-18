@@ -1,50 +1,31 @@
 # Saul workspace
 
-One repository for independently installed Chrome and macOS applications, with
-shared design, vocabulary, behavior and interface contracts. Saved history and
-model presets share local stores; drafts and active requests remain app-owned.
-Managed credentials use an explicit shared owner. See
-[data ownership](docs/architecture.md#data-ownership) for boundaries and opt-in rules.
+| App                         | Goal                                                              | Runtime                                      |
+| --------------------------- | ----------------------------------------------------------------- | -------------------------------------------- |
+| [Saul](apps/saul/README.md) | Explain selections, summarize pages and organize tabs             | Chrome extension and Node helpers            |
+| [EZ](apps/ez/README.md)     | Run definitions, spelling checks, quick answers and image actions | Native macOS app and signed credential owner |
 
-| Application                 | Install independently                                                                 | Development                    |
-| --------------------------- | ------------------------------------------------------------------------------------- | ------------------------------ |
-| [Saul](apps/saul/README.md) | Chrome extension with required history helper; optional tab/action helpers            | TypeScript/React, Node helpers |
-| [EZ](apps/ez/README.md)     | Native macOS app with signed credential owner; no Chrome UI, Node or Codex dependency | SwiftUI/AppKit and Swift core  |
+- Independent installation. Shared local history and presets. App-owned drafts and active requests. [Data ownership](docs/architecture.md#data-ownership)
 
-## Setup
+## Find the right guide
 
-Follow [selective installation](docs/setup.md) for component requirements,
-Chrome loading, native signing, upgrades and recovery. Preview a selection from
-the repository root:
-
-```sh
-node scripts/setup.mts --components extension --dry-run
-```
+| Goal                                  | Owner                                                                                                        |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Install, upgrade or recover an app    | [Setup](docs/setup.md)                                                                                       |
+| Understand runtime and data ownership | [Architecture](docs/architecture.md)                                                                         |
+| Check cross-app guarantees            | [Shared contracts](contracts/README.md)                                                                      |
+| Use consistent terms and controls     | [Glossary](GLOSSARY.md), [design](DESIGN.md)                                                                 |
+| Verify a change                       | [Saul testing](apps/saul/docs/testing.md), [EZ verification](apps/ez/docs/verification.md), [CI](docs/ci.md) |
+| Review or retain evidence             | [Feature review](design/SKILL.md), [artifact policy](docs/artifacts.md)                                      |
 
 ## Develop
 
-Use Node 24 and the pinned pnpm version, then `pnpm install --frozen-lockfile`.
-For native tool setup, see [EZ contributing](apps/ez/CONTRIBUTING.md#development-setup-and-gates).
+| Goal                                                 | Root command                         |
+| ---------------------------------------------------- | ------------------------------------ |
+| Install JS dependencies with Node 24 and pinned pnpm | `pnpm install --frozen-lockfile`     |
+| Install Git hooks with uv                            | `bash scripts/install-hooks.sh`      |
+| Verify shared, Chrome and macOS code                 | `pnpm check`                         |
+| Build an app                                         | `pnpm build:saul` or `pnpm build:ez` |
+| Regenerate shared design outputs on macOS            | `pnpm design:generate`               |
 
-```sh
-pnpm check                 # Shared + browser + macOS checks
-pnpm build:saul
-pnpm build:ez
-pnpm test:e2e              # Disposable browser tests; observe macOS launch policy
-pnpm design:generate       # Regenerate CSS, TypeScript and Swift together (macOS)
-```
-
-Gate membership lives in [package.json](package.json), the app package/Makefile,
-and [.pre-commit-config.yaml](.pre-commit-config.yaml). Use the
-[Saul runbook](apps/saul/docs/testing.md) or [EZ verification guide](apps/ez/docs/verification.md)
-for focused checks and diagnosis. Install Git hooks through
-`bash scripts/install-hooks.sh`. Native commands run from `apps/ez` or with
-`make -C apps/ez`. Browser commands run from `apps/saul` or with `pnpm --dir apps/saul`.
-
-- [Architecture and decisions](docs/architecture.md)
-- [Shared behavior and interfaces](contracts/README.md)
-- [Vocabulary](GLOSSARY.md)
-- [Design](DESIGN.md) and [feature review](design/SKILL.md)
-- [Migration verification](docs/migration.md)
-
-Naming and installed identities follow the [architecture decision](docs/architecture.md#naming-reminder).
+- Gate membership and tool pins. [Workspace scripts](package.json), [hooks](.pre-commit-config.yaml), [EZ tool setup](apps/ez/CONTRIBUTING.md#development-setup-and-gates)

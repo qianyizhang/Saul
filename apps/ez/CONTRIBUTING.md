@@ -2,71 +2,30 @@
 
 ## Development setup and gates
 
-Use Swift 6.3. Apple Command Line Tools suffice for `make test-core`. For
-`make check`, app builds and previews, select a toolchain with the SwiftUI
-compiler plug-ins, such as CI’s Xcode 26.6. Install
-[uv](https://docs.astral.sh/uv/getting-started/installation/) (`brew install uv`),
-then run `make tools` from `apps/ez` and `bash scripts/install-hooks.sh` from the
-monorepo root. These install the native linters and shared Git hooks. `make tools`
-alone is enough for `make check`; uv/Python are needed only for the development
-hook runner. Nothing is added to EZ.app.
+| Goal                               | Requirement or command                                                                                                                             |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Core checks                        | Swift 6.3 and Apple Command Line Tools. `make test-core` from `apps/ez`.                                                                           |
+| App build, preview and full checks | Xcode toolchain with SwiftUI compiler plug-ins. `make tools`, then `make check` from `apps/ez`.                                                    |
+| Commit and push hooks              | Install uv and run `bash scripts/install-hooks.sh` from the root. Hook dependencies stay out of EZ.app.                                            |
+| Run hooks on the worktree          | `bash scripts/pre-commit.sh run --all-files`. Add `--hook-stage pre-push` for the native push gate. Installed commit hooks inspect staged changes. |
+| Restore cleared tools              | `make tools` after `make clean`. Shared hook cache stays under root `.cache/`.                                                                     |
 
-| Python analogy | EZ gate |
-| --- | --- |
-| Ruff formatting | Apple's [swift-format](https://github.com/swiftlang/swift-format), using `.swift-format` |
-| Ruff linting | [SwiftLint](https://github.com/realm/SwiftLint) 0.65.1, explicit correctness rules using SwiftSyntax |
-| mypy | Swift compiler type checking, warnings as errors, [complete concurrency checking](https://www.swift.org/migration/documentation/swift-6-concurrency-migration-guide/enabledataracesafety/) |
-| pytest | `make test`, the existing offline core and app-state executables |
-
-Commit hooks check whitespace, merge markers, YAML/JSON, private keys, files over
-512 KiB, Swift, shell scripts, workflows, and plists. They do not rewrite Swift;
-use `make format` to fix formatting. Push hooks run `make check`, including both
-offline suites. From the monorepo root, run `bash scripts/pre-commit.sh run --all-files`; add
-`--hook-stage pre-push` for the native push gate.
-Git commit hooks check staged changes; manual gates check the current working tree.
-
-Native linters live in ignored `.build/tools/`. Their versions and release archive
-SHA-256 hashes are pinned in `scripts/bootstrap-tools.sh` for Apple Silicon and Intel.
-Run `make tools` again after `make clean`.
-Hook environments use the root ignored `.cache/`, which survives `make clean` so installed
-hooks retain their Python interpreter. The root `scripts/pre-commit.sh` pins
-pre-commit 4.7.0 and Python 3.12; hook revisions and CI actions use full commit hashes.
-Installed hooks use pre-commit's generated runner with the same repository cache.
-Update pins deliberately, verify release hashes, and run both gates before delivery.
-Dependabot proposes weekly GitHub Actions updates; native tools and hook revisions
-are updated manually.
-
-CI uses macOS 26 with Xcode 26.6. See [GitHub checks](../../docs/ci.md) for PR
-selection and when the full native checks and development ZIP run.
-It needs no account, secrets, or live inference.
-Workflow permissions are read-only; checkout credentials are not persisted.
-Packaging validates a local development bundle. Publishing, Developer ID signing,
-and notarization remain explicit release work in [the release guide](docs/releasing.md).
+- **Gate owners** — [Makefile](Makefile), [hook configuration](../../.pre-commit-config.yaml), [GitHub checks](../../docs/ci.md).
+- **Tool pins** — [Native versions and release hashes](scripts/bootstrap-tools.sh), [hook runner and Python](../../scripts/pre-commit.sh), [CI runner and Xcode](../../.github/workflows/native.yml). Verify release hashes when changing pins.
+- **Acceptance** — [Offline and installed evidence](docs/verification.md). [Signing and distribution](docs/releasing.md) owns release checks.
 
 ## A feature change
 
-1. Describe the user-visible behavior and acceptance checks. For larger work,
-   agree on scope before changing authentication, storage, or the app's interaction model.
-2. Read `AGENTS.md` and `docs/architecture.md`; inspect the working tree.
-3. Implement a bounded change. Keep UI state out of the networking and storage layers.
-4. Add tests for meaningful behavior and failure modes. Prefer small synthetic
-   values over captured user payloads. Never record OAuth URLs or live credentials.
-5. Run `make format` and `make check`, then the root commit hooks; package and inspect the native app when UI changes.
-6. Update relevant docs and `CHANGELOG.md`. Describe checks and limitations in the PR.
+| Goal                     | Outcome                                                                                                                                                                                                  |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bound the change         | User-visible behavior, failure cases and acceptance checks. Agree on material authentication, storage or interaction changes first.                                                                      |
+| Preserve architecture    | [EZ rules](AGENTS.md) and [runtime boundaries](docs/architecture.md). Keep UI state out of networking and storage.                                                                                       |
+| Preserve data and access | Versioned decoding and preservation tests for schema changes. Use synthetic inputs. Exclude credentials and OAuth URLs from evidence.                                                                    |
+| Verify behavior          | Run `make format` then `make check` after Swift changes. Inspect a packaged app for UI changes. Check consent, cancellation, data loss, accessibility, keyboard use and visible recovery where affected. |
+| Deliver                  | Update the owning docs and [changelog](CHANGELOG.md). Report checks and gaps. Keep commits scoped to owned work.                                                                                         |
 
 ## Repository conventions
 
-- `main` is the integration branch. Use short feature branches for substantial work.
-- Keep commits cohesive and reviewable; do not stage unrelated changes.
-- Public core types use clear domain names. Avoid speculative generic provider frameworks.
-- No implicit migrations: add versioned decoding and a preservation test before
-  changing persisted history or Keychain schemas.
-- Dependency additions need a specific reason, license review, pinned resolution,
-  and an account of what ships inside the application.
-- See [verification](docs/verification.md) for dated results and remaining acceptance gaps.
-
-## Review priorities
-
-Check consent and account ownership, rotating refresh tokens, loss of user text,
-cancellation, schema compatibility, accessibility labels, keyboard paths, and
-visible error recovery. Verify completed inference separately from sign-in.
+- **Dependencies** — Specific need, license review, pinned resolution and an account of shipped code.
+- **Core types** — Use domain names and interfaces with concrete callers.
+- **Branches** — `main` integrates work. Use short feature branches for substantial changes.
