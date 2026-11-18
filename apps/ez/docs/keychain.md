@@ -1,8 +1,9 @@
 # Keychain access
 
 The signed **Saul** owner holds shared ChatGPT sign-ins and the official OpenAI API
-key for Chrome and EZ. Validated native connections request operations; long-lived
-secrets never enter the UI. Custom browser endpoints remain Saul-local.
+key for Chrome and EZ. Validated native connections request operations. Custom
+endpoints added through the signed owner have their own connection-bound keys.
+Legacy browser-only profiles stay local until explicitly replaced.
 The [credential contract](../../../contracts/credentials.md) owns protocol,
 retirement, caller checks and failure handling.
 

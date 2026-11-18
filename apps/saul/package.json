@@ -9,7 +9,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "design:generate": "node ../../design/generate.mts --css assets/design-tokens.css --css board/design-tokens.css --typescript src/design/tokens.ts",
+    "design:generate": "node ../../design/generate.mts --css assets/design-tokens.css --typescript src/design/tokens.ts",
     "design:check": "node ../../design/generate-symbols.mts --web-only --check && pnpm design:generate --check",
     "dev": "wxt",
     "build": "pnpm build:native && wxt build",

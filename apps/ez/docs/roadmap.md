@@ -6,7 +6,6 @@ Candidates, not commitments:
 - Language preferences and richer action-field rules.
 - Bulk history deletion, retention controls and larger-history indexing.
 - Action chaining.
-- Additional provider instances/accounts and model discovery.
 - Optional follow-up context selection beyond the saved conversation.
 - Signed/notarized distribution and an update channel.
 

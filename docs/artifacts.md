@@ -37,11 +37,15 @@ CI retains failure diagnostics for seven days and installable bundles for fourte
 
 ## Historical references
 
-The [behavior atlas](../design/behavior-atlas/README.md), its accepted comparisons,
-and [runtime explainer](explainers/runtime-lifecycle/README.md) are point-in-time
-references. Other point-in-time explainers follow the same rule. Preserve their
-unique evidence, source baseline, recorded checks and limitations. They are not
-maintained specifications or evidence of the current source or installed app.
+The [behavior atlas](../design/behavior-atlas/README.md) and its accepted
+comparisons are retained as point-in-time references. Preserve unique evidence,
+the source baseline, recorded checks and limitations.
+
+The Saul runtime explainer is archived in Git at
+`57a4558bd1d0427754ca0b93fef054561f5a8e05`. Read the
+[archived README](https://github.com/qianyizhang/Saul/blob/57a4558bd1d0427754ca0b93fef054561f5a8e05/docs/explainers/runtime-lifecycle/README.md)
+for provenance and checks. To open the diagrams locally, check out that revision
+and open `docs/explainers/runtime-lifecycle/index.html`.
 
 Do not refresh their states, source anchors, diagrams, comparisons, examples or
 technical details when the product changes. Put a short historical notice in each
@@ -56,8 +60,8 @@ reference. Compact repetition in place while keeping unique results, provenance,
 conditions and limits. Consolidate only when it makes related evidence easier to
 use; prefer its existing owner over a new append-only ledger. Remove spent material
 only after checking readers and preserving evidence still needed by a live claim.
-The atlas and explainer bundles remain tracked historical references; disposable
-captures around them still follow the finite retention rules above.
+Disposable captures from reviewing historical references follow the finite
+retention rules above.
 
 ## Periodic cleanup
 

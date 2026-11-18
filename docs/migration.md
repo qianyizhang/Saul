@@ -32,23 +32,9 @@ Benchmark measurements remain under `apps/saul/docs/benchmarks`.
 
 ## Verification — 2026-10-20
 
-Retained source-migration evidence; results and artifact statements below apply
-to that migration, not the current checkout or installed apps.
-
-| Scope                  | Evidence                                                                                                                 |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Shared tooling/setup   | 20 tests passed, including dry-run, literal subprocess arguments, component isolation and failure ordering               |
-| Browser unit/transport | 182 tests passed; socket tests used approved local access                                                                |
-| Native                 | 62 core + 24 state cases, installation recovery fixtures, static checks and preview-script compilation passed            |
-| Design                 | All four generated outputs match source receipt `71cb2beb35f2`                                                           |
-| Browser artifact       | Production ZIP built at the app-owned path; MV3 manifest and background entry verified                                   |
-| Native artifact        | Built from the monorepo using the retained signer; ZIP extraction preserved valid signature and `local.ez.app` identity  |
-| Browser integration    | Migration run: 72 passed, 5 expected skips. Application runtime and browser harness are unchanged by this cleanup        |
-| CI                     | Workflow/static checks pass locally; native CI now retains a development app ZIP alongside the separate browser artifact |
-
-Application runtime/resource files and benchmark bytes remain unchanged by the
-reconciliation. The duplicate installer and native hook forwarding scripts are
-removed; callers use their current owners directly. The running EZ app was not
-replaced. Hosted CI and live-provider authentication/inference remain unverified;
-CI's ad-hoc app artifact is not a notarized public release. The later publication
-decision above supersedes the original hold.
+At source reconciliation `8cd540e`, the Chrome ZIP contained the expected MV3
+manifest and background entry. The EZ ZIP preserved the retained signature and
+`local.ez.app` identity after extraction. Installation recovery fixtures passed
+and the running EZ app stayed in place. Hosted CI and live-provider authentication
+and inference were outside this verification.
+[Reconciliation record](https://github.com/qianyizhang/Saul/blob/8cd540eef197647fb010edd3148d2098b44eec21/docs/migration.md#verification--2026-10-20)

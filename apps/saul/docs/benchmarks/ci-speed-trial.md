@@ -1,6 +1,6 @@
 # Browser CI performance — 2026-11-02
 
-Routine review screenshots are now opt-in with `SAUL_CAPTURE_REVIEW=1`. All
+The trial made routine review screenshots opt-in with `SAUL_CAPTURE_REVIEW=1`. All
 behavioral/layout assertions and failure diagnostics remain enabled. Bulk OPFS
 fixture seeding and redundant PDF setup/tab cleanup are retained. No cases were
 deleted, retries remain zero, and the production worker default remains one.
@@ -74,7 +74,11 @@ screenshots, console output and a trace, without routine PNGs. The initial faile
 run is excluded from performance comparisons. The corrected case and both full
 runs passed. No deadline or assertion was weakened to resolve it.
 
-Reproduce from `apps/saul` after building, with distinct run names:
+To reproduce the trial, check out revision
+`65faec000ca413cc473045565c8ef21b0f4af6f2` in a separate worktree. Use that
+revision's dependencies and browser pin, then build from `apps/saul` and run
+with distinct output names.
+[Archived profiler](https://github.com/qianyizhang/Saul/blob/65faec000ca413cc473045565c8ef21b0f4af6f2/apps/saul/scripts/profile-e2e.mts)
 
 ```sh
 SAUL_CAPTURE_REVIEW=1 SAUL_TEST_RUN=review-on node scripts/profile-e2e.mts --workers=2

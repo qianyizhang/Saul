@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { lstat, readdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { fingerprintInputs } from '../../../scripts/build-identity.mts';
+import { nativeAssets } from '../native/installation/components.mts';
 
 const receiptName = '.build/native-build.json';
 
@@ -21,7 +22,7 @@ async function outputFingerprint(root: string): Promise<string> {
 export async function nativeBuildFingerprint(root: string): Promise<string> {
   // Development helpers embed this checkout's data root in installation-root.json.
   const appRoot = await realpath(root);
-  const sources = await fingerprintInputs(resolve(root, '../..'), [
+  const sources = await fingerprintInputs(resolve(appRoot, '../..'), [
     'apps/saul/native',
     'apps/saul/shared',
     'apps/saul/board',
@@ -33,7 +34,7 @@ export async function nativeBuildFingerprint(root: string): Promise<string> {
     'apps/saul/tsconfig.jxa.json',
     'apps/saul/tsconfig.shared.json',
     'apps/saul/package.json',
-    'contracts/history.sql',
+    ...Object.values(nativeAssets).map((source) => resolve(appRoot, source)),
     'scripts/build-identity.mts',
     'package.json',
     'pnpm-lock.yaml',

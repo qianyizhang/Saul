@@ -1,4 +1,4 @@
-import { controlSymbols } from './control-symbols.ts';
+import { controlSymbols } from '../browser/control-symbols.ts';
 import { createBoardDrag } from './board-drag.ts';
 import type { McpUiHostCapabilities } from '@modelcontextprotocol/ext-apps';
 import type { TabSnapshot, TabView } from '../shared/protocol/protocol.mts';

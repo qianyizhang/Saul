@@ -198,24 +198,19 @@ These records describe only the tested baseline, not the current build.
 
 ### Metadata review — 2026-10-20
 
-Static checks, production build, 194 unit/transport cases and 72 browser cases
-passed; five browser cases skipped. Fourteen cases reran after two test fixes.
-Reviewed value alignment, long labels, keyboard disclosure and
-360/440/1000 px light/dark layouts across Settings, reading, board and errors.
-Used disposable fixtures and approved local sockets; personal Chrome stayed loaded.
+The migration review checked value alignment, long labels, keyboard disclosure
+and 360/440/1000 px light/dark layouts across Settings, reading, board and errors.
+It used disposable fixtures and approved local sockets. Personal Chrome stayed
+loaded. [Original review](https://github.com/qianyizhang/Saul/blob/0fe5829ade6b6a6be6ae3629c6fb79ef1a45feb9/apps/saul/docs/testing.md#metadata-review--2026-10-20)
 
 ### Annotations — 2026-11-16
 
-Original implementation `f601ca1`: 32 shared and 463 unit/transport tests
-passed with repository gates; 130 browser cases passed, four opt-ins skipped.
-Light/dark editor captures checked. Journeys verified real side-panel capture,
-scoped agents, replies, restart, navigation races and atomic revision/retention
-behavior. Regressions covered queued conflicts, permanent deletion, two active
-invocations, queued cancellation, failed batch admission and native image/PDF
-serialization. The then-existing save-only recovery was tested and has since
-been removed. No timeout changes. Personal installation, installed Codex image
-delivery, live inference and Linux/Windows acceptance were not verified.
-Temporary captures were retired after review.
+At `f601ca1`, disposable journeys verified side-panel capture, scoped agents,
+replies, restart, navigation races, atomic revisions and retention. Regressions
+covered conflicts, deletion, concurrent invocations, queued cancellation, failed
+batch admission and native image/PDF serialization. Light/dark editor captures
+were reviewed. Personal installation, installed Codex image delivery, live
+inference and Linux/Windows acceptance were outside this verification.
 
 ### PDF URL attachment — 2026-10-29
 

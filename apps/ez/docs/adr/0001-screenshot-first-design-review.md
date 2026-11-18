@@ -11,8 +11,8 @@ SwiftUI in HTML just for component selection adds maintenance and risks drift;
 interactive web mockups were deferred until needed for redesign.
 
 The procedure moved to `gui-review` on 2026-10-14. Since 2026-10-27,
-`ui-discussion` owns structured maps and journeys. [Local mappings](../agent-skills.md)
-own routing; shared skills own portable report terms and presentation.
+`ui-discussion` owns structured maps and journeys. The [EZ guide](../../AGENTS.md#shared-agent-skills)
+owns routing. Shared skills own portable report terms and presentation.
 
 ## Consequences
 

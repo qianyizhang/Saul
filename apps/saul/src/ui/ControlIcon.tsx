@@ -1,4 +1,4 @@
-import { controlSymbols, type ControlSymbol } from '../design/control-symbols';
+import { controlSymbols, type ControlSymbol } from '../../browser/control-symbols';
 
 /** Decorative glyph; its button owns the accessible name and tooltip. */
 export function ControlIcon({ symbol }: { symbol: ControlSymbol }) {

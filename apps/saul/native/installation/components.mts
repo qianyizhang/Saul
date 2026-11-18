@@ -17,7 +17,7 @@ export const helperComponents = {
     assets: {
       'ui/workspace.html': 'board/workspace.html',
       'ui/workspace.css': 'board/workspace.css',
-      'ui/design-tokens.css': 'board/design-tokens.css',
+      'ui/design-tokens.css': 'assets/design-tokens.css',
     },
     generated: ['window-names.jxa', 'ui/workspace.bundle.js'],
   },

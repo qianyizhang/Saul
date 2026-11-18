@@ -1,5 +1,5 @@
 import { ControlIcon } from './ControlIcon';
-import type { ControlSymbol } from '../design/control-symbols';
+import type { ControlSymbol } from '../../browser/control-symbols';
 
 /** Short visible wording; the surrounding control retains its complete accessible name. */
 export function ActionLabel({

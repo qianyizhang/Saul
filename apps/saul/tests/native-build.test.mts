@@ -30,13 +30,14 @@ it('rebuilds a copied checkout instead of reusing another checkout data root', a
   }
 });
 
-it('invalidates helpers for Node storage or the shared schema, but not unrelated browser source', async () => {
+it('invalidates helpers for storage and board inputs, but not extension-only source', async () => {
   const repo = await mkdtemp(join(tmpdir(), 'saul-native-inputs-'));
   const root = join(repo, 'apps/saul');
   try {
     await mkdir(join(root, 'native/storage'), { recursive: true });
     await mkdir(join(root, 'src'));
     await mkdir(join(root, 'browser'));
+    await mkdir(join(root, 'assets'));
     await mkdir(join(repo, 'contracts'));
     const source = join(root, 'native/storage/db.ts');
     const schema = join(repo, 'contracts/history.sql');
@@ -49,6 +50,11 @@ it('invalidates helpers for Node storage or the shared schema, but not unrelated
     await writeFile(presentation, 'export const label = () => document.title;');
     expect(await nativeBuildFingerprint(root)).not.toBe(initial);
     await rm(presentation);
+    expect(await nativeBuildFingerprint(root)).toBe(initial);
+    const stylesheet = join(root, 'assets/design-tokens.css');
+    await writeFile(stylesheet, ':root { --fixture: 1; }');
+    expect(await nativeBuildFingerprint(root)).not.toBe(initial);
+    await rm(stylesheet);
     expect(await nativeBuildFingerprint(root)).toBe(initial);
     await writeFile(source, 'export const version = 2;');
     expect(await nativeBuildFingerprint(root)).not.toBe(initial);
