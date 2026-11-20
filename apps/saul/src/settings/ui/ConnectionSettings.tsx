@@ -14,6 +14,9 @@ import type { ModelPreset } from '../../../shared/model/presets.ts';
 import type { Configuration } from '../../configuration/definition';
 import type { PlanAccount, PlanResults } from '../../../shared/protocol/credential-plan.mts';
 import { useConnectionCatalog } from './useConnectionCatalog';
+import { ConnectionManagement, type ConnectionManagementAction } from './ConnectionManagement';
+import type { ConnectionChange } from '../connection-management';
+import { nextName } from '../draft';
 
 type Logout = PlanResults['logout'];
 const message = (cause: unknown) => (cause instanceof Error ? cause.message : 'Connection failed.');
@@ -28,6 +31,7 @@ function ConnectionRow({
   onRevealed,
   setup,
   remove,
+  manage,
   integrations,
 }: {
   connection: ConnectionDefinition;
@@ -39,6 +43,7 @@ function ConnectionRow({
   onRevealed: () => void;
   setup: () => void;
   remove: () => void;
+  manage: (action: ConnectionManagementAction) => void;
   integrations: () => void;
 }) {
   const [status, setStatus] = useState<ConnectionStatus>();
@@ -99,6 +104,22 @@ function ConnectionRow({
             <button
               type="button"
               className="btn"
+              disabled={locked || dirty}
+              onClick={() => manage('rename')}
+            >
+              Rename connection
+            </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={locked || dirty}
+              onClick={() => manage('move')}
+            >
+              Move presets
+            </button>
+            <button
+              type="button"
+              className="btn"
               disabled={!enabled || locked || dirty}
               onClick={setup}
             >
@@ -116,6 +137,14 @@ function ConnectionRow({
               onClick={remove}
             >
               {connection.kind === 'chatgpt-plan' ? 'Sign out' : 'Remove key'}
+            </button>
+            <button
+              type="button"
+              className="btn danger"
+              disabled={locked || dirty}
+              onClick={() => manage('delete')}
+            >
+              Delete connection
             </button>
           </div>
         </details>
@@ -182,6 +211,7 @@ export function ConnectionSettings({
   disabled,
   dirty,
   commit,
+  manageConnection,
   integrations,
   onDirty,
   focusConnection,
@@ -192,12 +222,18 @@ export function ConnectionSettings({
   disabled: boolean;
   dirty: boolean;
   commit: (connections: ConnectionDefinition[]) => Promise<void>;
+  manageConnection: (change: ConnectionChange) => Promise<void>;
   integrations: () => void;
   onDirty: (dirty: boolean) => void;
   focusConnection?: string;
   onConnectionFocused: () => void;
 }) {
   const [target, setTarget] = useState<ConnectionDefinition>();
+  const [management, setManagement] = useState<{
+    key: string;
+    action: ConnectionManagementAction;
+  }>();
+  const [returnTo, setReturnTo] = useState<string>();
   const [adding, setAdding] = useState(false);
   const [kind, setKind] = useState<'plan' | 'api' | 'custom'>('plan');
   const [name, setName] = useState('');
@@ -217,6 +253,7 @@ export function ConnectionSettings({
   const [newId, setNewId] = useState('');
   const loginController = useRef<AbortController | null>(null);
   const suggestedNameInput = useRef<HTMLInputElement>(null);
+  const addButton = useRef<HTMLButtonElement>(null);
   useEffect(() => () => loginController.current?.abort(), []);
   const enabled = settings.sharedCredentials === 'saul';
   const selectedAccount = accounts.find((account) => account.id === accountId);
@@ -225,6 +262,13 @@ export function ConnectionSettings({
   const preparingRegistration = !!registration && !registration.accountId;
   const finishingRegistration = !!registration?.accountId;
   const boundPlan = kind === 'plan' && !!target?.accountId;
+  const managed = settings.connections.find((connection) => connection.key === management?.key);
+  const defaultPlanName = nextName('ChatGPT plan', settings.connections);
+  const returningAfterDelete =
+    !!returnTo && !settings.connections.some((connection) => connection.key === returnTo);
+  useEffect(() => {
+    if (returningAfterDelete) addButton.current?.focus();
+  }, [returningAfterDelete]);
   useEffect(() => {
     if (preparingRegistration) suggestedNameInput.current?.focus();
   }, [preparingRegistration]);
@@ -268,7 +312,7 @@ export function ConnectionSettings({
           throw new Error('This account already has a connection.');
         definition = {
           key: id,
-          name: target?.name ?? (name.trim() || 'ChatGPT plan'),
+          name: target?.name ?? (name.trim() || defaultPlanName),
           kind: 'chatgpt-plan',
           accountId: account.id,
         };
@@ -403,8 +447,9 @@ export function ConnectionSettings({
     <section hidden={!visible} className="settings-section" aria-label="Connections">
       <div className="row between">
         <h2 className="view-title">Connections</h2>
-        {!adding && (
+        {!adding && !management && (
           <button
+            ref={addButton}
             type="button"
             className="btn"
             disabled={disabled || dirty || busy || !enabled || settings.connections.length >= 32}
@@ -430,7 +475,22 @@ export function ConnectionSettings({
           </button>
         </div>
       )}
-      {adding ? (
+      {management && managed ? (
+        <ConnectionManagement
+          key={management.action}
+          action={management.action}
+          connection={managed}
+          settings={settings}
+          disabled={disabled || dirty}
+          commit={manageConnection}
+          close={() => {
+            setReturnTo(management.key);
+            setManagement(undefined);
+            onDirty(false);
+          }}
+          openMove={() => setManagement({ key: management.key, action: 'move' })}
+        />
+      ) : adding ? (
         <fieldset className="stack settings-fields" disabled={busy || disabled}>
           <h3>
             {preparingRegistration
@@ -542,7 +602,7 @@ export function ConnectionSettings({
                         Connection name
                         <input
                           maxLength={80}
-                          placeholder="ChatGPT plan"
+                          placeholder={defaultPlanName}
                           value={name}
                           onChange={(e) => setName(e.target.value)}
                         />
@@ -644,12 +704,20 @@ export function ConnectionSettings({
             locked={busy || disabled}
             dirty={dirty}
             logout={connection.accountId ? logouts.get(connection.accountId) : undefined}
-            reveal={focusConnection === connection.key}
-            onRevealed={onConnectionFocused}
+            reveal={(focusConnection ?? returnTo) === connection.key}
+            onRevealed={() => {
+              setReturnTo(undefined);
+              onConnectionFocused();
+            }}
             setup={() => {
               if (!dirty && !disabled) open(connection);
             }}
             remove={() => void remove(connection)}
+            manage={(action) => {
+              setError('');
+              setManagement({ key: connection.key, action });
+              onDirty(true);
+            }}
             integrations={integrations}
           />
         ))

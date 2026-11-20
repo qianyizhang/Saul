@@ -41,6 +41,7 @@ export function useSettingsEditor(onDirty?: (dirty: boolean) => void) {
     resetInvalidSettings: editor.resetInvalidSettings,
     setCredentialOwner: editor.setCredentialOwner,
     commitConnections: editor.commitConnections,
+    manageConnection: editor.manageConnection,
     reload: async () => {
       if (
         editor.getSnapshot().dirty &&

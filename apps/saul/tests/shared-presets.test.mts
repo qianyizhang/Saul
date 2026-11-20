@@ -22,6 +22,44 @@ it('rejects incomplete old helper replies instead of synthesizing connections', 
   ).not.toThrow();
 });
 
+it('blocks deleting a connection used by shared or browser-local presets', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'saul-connection-delete-'));
+  try {
+    const store = new SharedPresetsStore(join(directory, 'settings.json'));
+    const original = store.read();
+    const preset = {
+      id: '559977a6-69e5-4014-a562-29b72522780f',
+      name: 'Plan',
+      model: 'fixture',
+      effort: '',
+      fast: false,
+    };
+    const shared = store.save(original.revision, [preset]);
+    const onlyAPI = shared.connections.filter((connection) => connection.key !== 'gpt-plan');
+    expect(() => store.save(shared.revision, [preset], onlyAPI)).toThrow('Move the presets');
+    expect(store.read()).toEqual(shared);
+
+    const onlyPlan = shared.connections.filter((connection) => connection.key !== 'openai-api');
+    const local = store.saveScope('settings', 0, {
+      configuration: { presets: [{ connectionKey: 'openai-api' }] },
+    });
+    expect(() => store.save(shared.revision, [preset], onlyPlan)).toThrow('browser-local presets');
+    expect(store.read()).toEqual(shared);
+    expect(
+      store.commit(
+        'settings',
+        local.revision,
+        { configuration: { presets: [] } },
+        shared.revision,
+        [preset],
+        onlyPlan,
+      ).library.connections,
+    ).toEqual(onlyPlan);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 it('shares edits, migrates once, keeps accounts outside presets, and refuses a stale settings save', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'saul-shared-presets-'));
   try {

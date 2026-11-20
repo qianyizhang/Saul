@@ -123,6 +123,20 @@ public final class SharedPresetsStore {
         }
         let definitions = connections ?? current.connections
         try ConnectionDefinition.validate(definitions)
+        let deleted = Set(current.connections.map(\.key)).subtracting(definitions.map(\.key))
+        guard !presets.contains(where: { deleted.contains($0.connectionKey) }) else {
+            throw EZError("Move the presets that use this connection before deleting it.")
+        }
+        if !deleted.isEmpty,
+            let saul = (document["apps"] as? [String: Any])?["saul"] as? [String: Any],
+            let settings = saul["settings"] as? [String: Any],
+            let value = settings["value"] as? [String: Any],
+            let configuration = value["configuration"] as? [String: Any],
+            let local = configuration["presets"] as? [[String: Any]],
+            local.contains(where: { ($0["connectionKey"] as? String).map(deleted.contains) == true })
+        {
+            throw EZError("Move the browser-local presets in Saul before deleting this connection.")
+        }
         for existing in current.connections {
             guard let next = definitions.first(where: { $0.key == existing.key }) else { continue }
             guard next.kind == existing.kind,

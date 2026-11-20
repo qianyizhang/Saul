@@ -3,17 +3,25 @@ import { connectionCapabilities } from '../../../shared/protocol/shared-presets-
 import type { Configuration } from '../../configuration/definition';
 import type { SettingsEdit } from '../draft';
 import { officialOpenAI } from '../../../shared/protocol/credentials-contract.mts';
+import { ConnectionManagement, type ConnectionManagementAction } from './ConnectionManagement';
+import type { ConnectionChange } from '../connection-management';
 
 export function StandaloneConnectionSettings({
   settings,
   edit,
   disabled,
+  managementDisabled,
+  manageConnection,
+  onDirty,
   visible,
   integrations,
 }: {
   settings: Configuration;
   edit: (edit: SettingsEdit) => void;
   disabled: boolean;
+  managementDisabled: boolean;
+  manageConnection: (change: ConnectionChange) => Promise<void>;
+  onDirty: (dirty: boolean) => void;
   visible: boolean;
   integrations: () => void;
 }) {
@@ -21,6 +29,7 @@ export function StandaloneConnectionSettings({
   const [key, setKey] = useState('gpt-plan'),
     [profileId, setProfileId] = useState(''),
     [showKey, setShowKey] = useState(false);
+  const [management, setManagement] = useState<ConnectionManagementAction>();
   const connection = connections.find((p) => p.key === key);
   const boundId = settings.connectionProfiles?.[key];
   const official = settings.profiles?.find(
@@ -46,6 +55,28 @@ export function StandaloneConnectionSettings({
     ...connections.map((p) => ({ key: p.key, name: p.name })),
     { key: 'local-api-connections', name: 'API connections' },
   ];
+  if (management && connection)
+    return (
+      <section hidden={!visible} className="settings-section" aria-label="Connections">
+        <h2 className="view-title">Connections</h2>
+        <ConnectionManagement
+          key={management}
+          action={management}
+          connection={connection}
+          settings={settings}
+          disabled={managementDisabled}
+          commit={async (change) => {
+            await manageConnection(change);
+            if (change.action === 'delete') setKey('local-api-connections');
+          }}
+          close={() => {
+            setManagement(undefined);
+            onDirty(false);
+          }}
+          openMove={() => setManagement('move')}
+        />
+      </section>
+    );
   return (
     <section hidden={!visible} className="settings-section" aria-label="Connections">
       <h2 className="view-title">Connections</h2>
@@ -93,6 +124,30 @@ export function StandaloneConnectionSettings({
                   onChange={(e) => edit({ type: 'connection-name', key, name: e.target.value })}
                 />
               </label>
+              <div className="row">
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={managementDisabled}
+                  onClick={() => {
+                    setManagement('move');
+                    onDirty(true);
+                  }}
+                >
+                  Move presets
+                </button>
+                <button
+                  type="button"
+                  className="btn danger"
+                  disabled={managementDisabled}
+                  onClick={() => {
+                    setManagement('delete');
+                    onDirty(true);
+                  }}
+                >
+                  Delete connection
+                </button>
+              </div>
               <dl className="saul-metadata">
                 <dt>Key</dt>
                 <dd>{connection.key}</dd>

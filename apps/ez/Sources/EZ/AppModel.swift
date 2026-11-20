@@ -510,6 +510,12 @@ import SaulNativeValues
         await refreshConnection(connection, intent: .setup)
     }
 
+    func manageConnection(_ key: String, _ change: ConnectionChange) throws {
+        var updated = configuration
+        try updated.changeConnection(key, change)
+        try saveConfiguration(updated)
+    }
+
     func removeConnectionCredential(_ connection: ConnectionDefinition) async throws {
         guard configuration.connections.contains(where: { $0.matchesRoute(connection) }) else {
             throw EZError("The connection changed. Reload saved settings.")

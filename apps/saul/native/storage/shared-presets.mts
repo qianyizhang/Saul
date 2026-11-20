@@ -179,6 +179,27 @@ export class SharedPresetsStore {
     const definitions = connections ?? current.connections;
     validateConnections(definitions);
     validateConnectionChanges(current.connections, definitions);
+    const deleted = new Set(
+      current.connections
+        .filter((item) => !definitions.some((next) => next.key === item.key))
+        .map((item) => item.key),
+    );
+    if (presets.some((preset) => deleted.has(preset.connectionKey ?? 'gpt-plan')))
+      throw new Error('Move the presets that use this connection before deleting it.');
+    if (deleted.size) {
+      const configuration = this.scope(document, 'settings').value?.configuration;
+      if (
+        isRecord(configuration) &&
+        Array.isArray(configuration.presets) &&
+        configuration.presets.some(
+          (preset: unknown) =>
+            isRecord(preset) &&
+            typeof preset.connectionKey === 'string' &&
+            deleted.has(preset.connectionKey),
+        )
+      )
+        throw new Error('Move the browser-local presets in Saul before deleting this connection.');
+    }
     const saved = {
       ...(isRecord(document.modelPresets) ? document.modelPresets : {}),
       revision: revision + 1,

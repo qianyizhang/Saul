@@ -53,6 +53,10 @@ export function Settings({
   const test = (mode: 'endpoint' | 'generation') =>
     providerTest.test(mode, settings, selectedPreset?.id);
   const locked = testing || speechBusy;
+  const connectionEdited = (value: boolean) => {
+    setConnectionDirty(value);
+    onDirty?.(value || dirty);
+  };
   if (!loaded)
     return error ? (
       <div className="stack settings-layout">
@@ -122,6 +126,9 @@ export function Settings({
             settings={settings}
             edit={draft.edit}
             disabled={locked}
+            managementDisabled={locked || dirty || draft.blocked}
+            manageConnection={draft.manageConnection}
+            onDirty={connectionEdited}
             visible={section === 'connections'}
             integrations={() => onSectionChange('preferences')}
           />
@@ -132,12 +139,10 @@ export function Settings({
             visible={section === 'connections'}
             dirty={dirty}
             commit={draft.commitConnections}
+            manageConnection={draft.manageConnection}
             focusConnection={focusConnection}
             onConnectionFocused={connectionFocused}
-            onDirty={(value) => {
-              setConnectionDirty(value);
-              onDirty?.(value || dirty);
-            }}
+            onDirty={connectionEdited}
             integrations={() => onSectionChange('preferences')}
           />
         )}

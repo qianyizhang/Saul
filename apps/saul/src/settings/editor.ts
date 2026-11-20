@@ -10,6 +10,8 @@ import {
   type SettingsEdit,
 } from './draft';
 import { reviewSettings, type RecoveryChoice, type SettingsReview } from './recovery';
+import { changeConnection, type ConnectionChange } from './connection-management';
+import type { Configuration } from '../configuration/definition';
 
 type Ready = Extract<SettingsState, { state: 'ready' }>;
 type Operation = 'save' | 'review' | 'reload' | 'reset' | 'connections' | 'credentials';
@@ -106,7 +108,7 @@ export function createSettingsEditor(
     return phase === 'editing' && !operation && !review;
   }
   async function guardedCommit(
-    patch: { sharedCredentials?: 'saul' | 'disconnected'; connections?: ConnectionDefinition[] },
+    update: (settings: Configuration) => Configuration,
     kind: 'credentials' | 'connections',
   ) {
     if (!editable() || dirty || needsReview || !baseline) {
@@ -117,7 +119,7 @@ export function createSettingsEditor(
     const token = begin(kind)!;
     let submitted = false;
     try {
-      const settings = { ...settingsForSave(form), ...patch };
+      const settings = update(settingsForSave(form));
       submitted = true;
       const result = await request({
         action: 'commit',
@@ -283,8 +285,10 @@ export function createSettingsEditor(
       }
     },
     setCredentialOwner: (sharedCredentials: 'saul' | 'disconnected') =>
-      guardedCommit({ sharedCredentials }, 'credentials'),
+      guardedCommit((settings) => ({ ...settings, sharedCredentials }), 'credentials'),
     commitConnections: (connections: ConnectionDefinition[]) =>
-      guardedCommit({ connections }, 'connections'),
+      guardedCommit((settings) => ({ ...settings, connections }), 'connections'),
+    manageConnection: (change: ConnectionChange) =>
+      guardedCommit((settings) => changeConnection(settings, change), 'connections'),
   };
 }

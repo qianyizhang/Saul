@@ -80,7 +80,8 @@ struct SettingsView: View {
                         .accessibilityHidden(!isConfiguration)
                     ConnectionsView(
                         model: model, hasUnsavedChanges: $connectionDirty,
-                        visible: model.settingsSection == .connections
+                        visible: model.settingsSection == .connections,
+                        otherDraftIsDirty: configurationEditor.hasUnsavedChanges
                     )
                     .opacity(model.settingsSection == .connections ? 1 : 0)
                     .allowsHitTesting(model.settingsSection == .connections)
@@ -96,6 +97,9 @@ struct SettingsView: View {
                 }
             }
         }.frame(width: 880, height: 720).tint(AppStyle.accent)
+            .onChange(of: model.configuration.presets) { _, _ in
+                configurationEditor.syncSavedPreset(model.configuration)
+            }
             .labelStyle(EverydayLabelStyle(minimum: model.minimumMode))
             .disclosureGroupStyle(FullRowDisclosureStyle())
             .task {

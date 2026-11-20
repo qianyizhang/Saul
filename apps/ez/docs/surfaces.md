@@ -73,7 +73,9 @@ latency. There is no fallback API billing.
 
 Settings has Overview, Presets, Actions, Preferences, Connections and Shortcuts.
 Connections shows capability, account or endpoint/key suffix, status and Check.
-Add a connection for another identity; More holds sign-in/key replacement.
+Add a connection for another identity. Use **More** to rename a connection,
+move presets to another connection, or delete an unused connection. Sign-in
+and key replacement also live in **More**.
 Run and preset guidance use the connection saved on that preset. Check forces
 discovery for its connection; a successful plan Check clears only that
 account's pause and leaves Retry to the user. A sign-out warning about remote

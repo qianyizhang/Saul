@@ -15,6 +15,11 @@ apps; Disconnect app only removes that app's binding. Account registrations rema
 distinct even when their email labels match. Never merge tokens or change a saved
 connection's account to resolve duplicate labels.
 
+To switch presets to another saved account, choose **More → Move presets** on
+the old connection. Select the destination, review the presets that will move,
+and apply. Use **Rename connection** to change the local label. **Delete
+connection** is available once the old connection has no preset references.
+
 The account picker and saved connection show the confirmed app name beside the
 email. Look for that name in **ChatGPT Settings → Usage → Connected App Limits**.
 If you kept the default name or used a different name, leave the confirmation

@@ -14,8 +14,10 @@ struct ConnectionsView: View {
     @ObservedObject var model: AppModel
     @Binding var hasUnsavedChanges: Bool
     let visible: Bool
+    let otherDraftIsDirty: Bool
     @State private var editing = false
     @State private var target: ConnectionDefinition?
+    @State private var management: (key: String, action: ConnectionManagementView.Action)?
     @State private var kind = "plan"
     @State private var name = ""
     @State private var endpoint = "https://api.openai.com/v1"
@@ -32,6 +34,11 @@ struct ConnectionsView: View {
     private var needsPlanPermission: Bool {
         selectedProfile?.signedIn == true && selectedProfile?.planEnabled == false
     }
+    private var editorOpen: Bool { editing || management != nil }
+    private var managementDisabled: Bool { model.configurationLocked || otherDraftIsDirty }
+    private var defaultPlanName: String {
+        ConnectionDefinition.nextName("ChatGPT plan", among: model.configuration.connections)
+    }
 
     var body: some View {
         ScrollView {
@@ -39,7 +46,7 @@ struct ConnectionsView: View {
                 HStack {
                     Text("Connections").font(AppStyle.subject)
                     Spacer()
-                    if !editing {
+                    if !editorOpen {
                         Menu("Add connection", systemImage: "plus") {
                             Button("ChatGPT plan") { open(nil, type: "plan") }
                             Button("OpenAI API") { open(nil, type: "api") }
@@ -57,7 +64,18 @@ struct ConnectionsView: View {
                         loginTask?.cancel()
                     }
                 }
-                if editing {
+                if let management,
+                    let connection = model.configuration.connections.first(where: { $0.key == management.key }
+                    )
+                {
+                    ConnectionManagementView(
+                        action: management.action, connection: connection, configuration: model.configuration,
+                        disabled: managementDisabled,
+                        commit: { try model.manageConnection(connection.key, $0) },
+                        close: { self.management = nil },
+                        openMove: { self.management = (connection.key, .move) }
+                    ).id(management.action)
+                } else if editing {
                     setupForm
                 } else {
                     ForEach(model.configuration.connections) { connection in
@@ -74,7 +92,7 @@ struct ConnectionsView: View {
                 await model.refreshConnection(connection)
             }
         }
-        .onChange(of: editing, initial: true) { _, value in hasUnsavedChanges = value }
+        .onChange(of: editorOpen, initial: true) { _, value in hasUnsavedChanges = value }
         .onDisappear {
             loginTask?.cancel()
             loginTask = nil
@@ -116,6 +134,10 @@ struct ConnectionsView: View {
                 Text(connection.name).font(.headline)
                 Spacer()
                 Menu {
+                    Button("Rename connection") { openManagement(.rename, for: connection) }
+                        .disabled(managementDisabled)
+                    Button("Move presets") { openManagement(.move, for: connection) }
+                        .disabled(managementDisabled)
                     Button(connection.kind == .chatGPTPlan ? "Sign in again" : "Replace key") {
                         open(connection)
                     }
@@ -125,6 +147,10 @@ struct ConnectionsView: View {
                     Button(connection.kind == .chatGPTPlan ? "Sign out" : "Remove key", role: .destructive) {
                         removing = connection
                     }
+                    Button("Delete connection", role: .destructive) {
+                        openManagement(.delete, for: connection)
+                    }
+                    .disabled(managementDisabled)
                 } label: {
                     Image(systemName: "ellipsis").frame(width: 28, height: 24)
                 }
@@ -179,6 +205,12 @@ struct ConnectionsView: View {
                 Text(warning).font(AppStyle.caption).foregroundStyle(.orange).textSelection(.enabled)
             }
         }.padding(.vertical, 8)
+    }
+    private func openManagement(
+        _ action: ConnectionManagementView.Action, for connection: ConnectionDefinition
+    ) {
+        error = nil
+        management = (connection.key, action)
     }
     private func identity(_ connection: ConnectionDefinition, status: ConnectionStatus?) -> String {
         if connection.kind == .chatGPTPlan {
@@ -250,7 +282,7 @@ struct ConnectionsView: View {
     private var connectionNameField: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Connection name").font(AppStyle.caption)
-            TextField("Connection name", text: $name, prompt: Text(kind == "plan" ? "ChatGPT plan" : "Name"))
+            TextField("Connection name", text: $name, prompt: Text(kind == "plan" ? defaultPlanName : "Name"))
                 .textFieldStyle(.roundedBorder)
         }
     }
@@ -395,11 +427,10 @@ struct ConnectionsView: View {
                     else {
                         throw EZError("Sign in and allow plan use before saving this connection.")
                     }
+                    let enteredName = name.trimmingCharacters(in: .whitespacesAndNewlines)
                     definition = ConnectionDefinition(
                         key: target?.key ?? newID,
-                        name: target?.name
-                            ?? (name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                ? "ChatGPT plan" : name.trimmingCharacters(in: .whitespacesAndNewlines)),
+                        name: target?.name ?? (enteredName.isEmpty ? defaultPlanName : enteredName),
                         kind: .chatGPTPlan, accountId: profile.id)
                 } else {
                     definition = ConnectionDefinition(

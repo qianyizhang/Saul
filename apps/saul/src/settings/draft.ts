@@ -89,11 +89,11 @@ export type SettingsEdit =
   | { type: 'default-recipe'; id: string }
   | { type: 'remove-recipe' };
 
-function nextName(base: string, items: { name: string }[]): string {
+export function nextName(base: string, items: { name: string }[]): string {
   let name = base;
   for (
     let suffix = 2;
-    items.some((item) => item.name.toLowerCase() === name.toLowerCase());
+    items.some((item) => item.name.trim().toLowerCase() === name.toLowerCase());
     suffix++
   )
     name = `${base} ${suffix}`;

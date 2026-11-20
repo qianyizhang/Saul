@@ -492,6 +492,110 @@ test('registering a new app copies the name and requires explicit confirmation t
   ).toBe(1);
 });
 
+test('connection management renames, selectively moves presets, and deletes an unused connection', async ({
+  sandbox,
+}, info) => {
+  const { worker, popup } = await sandbox.launch();
+  await configureConnections(worker);
+  const presets = [
+    {
+      id: 'c71d7862-0625-478b-84ac-195326a7138e',
+      name: 'Summaries',
+      model: 'future-model',
+      effort: 'medium',
+      fast: true,
+    },
+    {
+      id: 'c19e0727-9408-4d00-b494-f8c7b07069ff',
+      name: 'Notes',
+      model: 'future-model',
+      effort: '',
+      fast: false,
+    },
+  ].map((preset) => ({ ...preset, connectionKey: 'gpt-plan' }));
+  await worker.evaluate((linked) => {
+    (globalThis as FixtureGlobal).connectionFixture.library.presets.push(...linked);
+  }, presets);
+  await popup.reload();
+  await popup.setViewportSize({ width: 390, height: 820 });
+  await popup.emulateMedia({ colorScheme: 'dark' });
+  await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(popup, 'Connections');
+  const readLibrary = () =>
+    worker.evaluate(() => (globalThis as FixtureGlobal).connectionFixture.library);
+  async function openManagement(connection: string, action: string) {
+    const row = popup.getByRole('article', { name: connection, exact: true });
+    await row.getByLabel(`More for ${connection}`).click();
+    await row.getByRole('button', { name: action, exact: true }).click();
+    return popup.getByRole('form', { name: action, exact: true });
+  }
+
+  const rename = await openManagement('ChatGPT plan', 'Rename connection');
+  await rename.getByLabel('Connection name').fill('Old plan');
+  await rename.getByRole('button', { name: 'Save name' }).click();
+  await expect(popup.getByRole('article', { name: 'Old plan', exact: true })).toBeVisible();
+  expect((await readLibrary()).presets.slice(-2)).toEqual(presets);
+
+  const move = await openManagement('Old plan', 'Move presets');
+  await move.getByLabel('Move to').selectOption('openai-api');
+  await move.getByRole('checkbox', { name: 'Notes' }).uncheck();
+  await popup.screenshot({ path: info.outputPath('move-presets-dark.png'), fullPage: true });
+  expect(await popup.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await move.getByRole('button', { name: 'Move presets' }).click();
+  await expect(move).toHaveCount(0);
+  expect((await readLibrary()).presets.slice(-2)).toEqual([
+    { ...presets[0], connectionKey: 'openai-api' },
+    presets[1],
+  ]);
+
+  let deletion = await openManagement('Old plan', 'Delete connection');
+  await expect(deletion.getByText('Notes', { exact: true })).toBeVisible();
+  await expect(deletion.getByRole('button', { name: 'Delete connection' })).toHaveCount(0);
+  await deletion.getByRole('button', { name: 'Move presets' }).click();
+  await move.getByLabel('Move to').selectOption('openai-api');
+  await move.getByRole('button', { name: 'Move presets' }).click();
+  await expect(move).toHaveCount(0);
+
+  deletion = await openManagement('Old plan', 'Delete connection');
+  await deletion.getByRole('button', { name: 'Delete connection' }).click();
+  await expect(popup.getByRole('article', { name: 'Old plan', exact: true })).toHaveCount(0);
+  await expect(deletion).toHaveCount(0);
+  expect((await readLibrary()).presets.slice(-2)).toEqual(
+    presets.map((preset) => ({ ...preset, connectionKey: 'openai-api' })),
+  );
+  const requests = await worker.evaluate(
+    () => (globalThis as FixtureGlobal).connectionFixture.requests,
+  );
+  expect(
+    requests.some(
+      (request) => request.action === 'logout' || request.action === 'connection-key-remove',
+    ),
+  ).toBe(false);
+});
+
+test('standalone Saul can delete an unused connection definition', async ({ sandbox }) => {
+  const { worker, popup } = await sandbox.launch();
+  await configureConnections(worker);
+  await worker.evaluate(async () => {
+    const config = (await chrome.storage.local.get('saul_user_settings'))
+      .saul_user_settings as Configuration;
+    await chrome.storage.local.set({
+      saul_user_settings: { ...config, sharedCredentials: 'disconnected' },
+    });
+  });
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(popup, 'Connections');
+  await popup.getByRole('button', { name: 'Delete connection', exact: true }).click();
+  const deletion = popup.getByRole('form', { name: 'Delete connection', exact: true });
+  await deletion.getByRole('button', { name: 'Delete connection', exact: true }).click();
+  await expect(deletion).toHaveCount(0);
+  const connections = await worker.evaluate(
+    () => (globalThis as FixtureGlobal).connectionFixture.library.connections,
+  );
+  expect(connections.map((connection) => connection.key)).toEqual(['openai-api']);
+});
+
 test('a managed preset links to its connection, where Check replaces a passive request', async ({
   sandbox,
 }, info) => {

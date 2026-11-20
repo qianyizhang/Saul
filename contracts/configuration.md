@@ -43,6 +43,14 @@ refresh and lifetime. Catalog membership does not itself establish protocol
 support. Use [frozen attempt routing](actions-and-attempts.md#execution) for
 execution and retry.
 
+- **Rename connection** changes its display name and preserves the key.
+- **Move presets** changes the selected presets’ connection keys in one settings
+  save. The destination must support their capabilities. The move preserves preset
+  IDs, model choices and options. Unavailable choices stay visible for repair.
+- **Delete connection** removes the definition after its saved preset references
+  have been moved or removed, including browser-local preset references in Saul’s
+  settings. Sign-out and API key removal are separate credential operations.
+
 ## Unified configuration scopes
 
 The scoped sections are `apps.saul.settings`, `apps.saul.calls` and

@@ -63,6 +63,7 @@ function project(settings: Configuration, library: SharedPresets): Configuration
   const connectionProfiles = { ...settings.connectionProfiles };
   // Adopt only the already-selected official OpenAI connection. Never borrow a key from another endpoint.
   if (
+    connections.some((connection) => connection.key === 'openai-api') &&
     !connectionProfiles['openai-api'] &&
     settings.openaiCompatible.baseUrl.replace(/\/+$/, '') === 'https://api.openai.com/v1'
   )

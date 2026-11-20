@@ -28,6 +28,13 @@ import SaulNativeValues
         if action == nil { setAction(configuration.actions.first, in: configuration) }
     }
 
+    mutating func syncSavedPreset(_ configuration: Configuration) {
+        guard !presetIsDirty, let id = preset?.id,
+            let saved = configuration.presets.first(where: { $0.id == id }), saved != originalPreset
+        else { return }
+        setPreset(saved, in: configuration)
+    }
+
     mutating func request(_ destination: Destination, model: AppModel) {
         let dirty: Bool
         switch destination {

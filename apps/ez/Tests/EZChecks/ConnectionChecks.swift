@@ -252,6 +252,56 @@ import SaulTestSupport
                 _ = try store.save([], revision: renamed.revision, connections: connections)
             }
         },
+        CheckCase(
+            "connections: rename and selective moves preserve preset settings, and deletion checks references"
+        ) {
+            directory in
+            let url = directory.appendingPathComponent("settings.json")
+            let store = SharedPresetsStore(url: url)
+            let writing = ModelPreset(
+                name: "Writing", model: "test", effort: "medium", fast: true, connectionKey: "openai-api")
+            let drawing = ModelPreset(
+                name: "Drawing", model: "image", effort: "", fast: false, connectionKey: "openai-api",
+                capability: .draw)
+            var settings = Configuration(presets: [writing, drawing])
+            settings.connections[0].accountId = "fixture"
+            let first = try store.save(settings.presets, revision: 0, connections: settings.connections)
+            try settings.changeConnection("openai-api", .rename("Studio"))
+            try expectEqual(settings.presets, [writing, drawing], "Rename changed preset references")
+            try expectThrows(EZError.self) {
+                try settings.changeConnection(
+                    "openai-api", .move(destination: "gpt-plan", presets: [writing.id, drawing.id]))
+            }
+            try expectEqual(settings.presets, [writing, drawing], "Incompatible move partially saved")
+            try settings.changeConnection("openai-api", .move(destination: "gpt-plan", presets: [writing.id]))
+            var moved = writing
+            moved.connectionKey = "gpt-plan"
+            try expectEqual(settings.presets, [moved, drawing], "Move changed other preset settings")
+            try expectThrows(EZError.self) { try settings.changeConnection("openai-api", .delete) }
+            try expectThrows(EZError.self) {
+                _ = try store.save(
+                    settings.presets, revision: first.revision, connections: [settings.connections[0]])
+            }
+            let saved = try store.save(
+                settings.presets, revision: first.revision, connections: settings.connections)
+            let document = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
+            var withLocal = document ?? [:]
+            withLocal["apps"] = [
+                "saul": [
+                    "settings": [
+                        "revision": 1,
+                        "value": ["configuration": ["presets": [["connectionKey": "openai-api"]]]],
+                    ]
+                ]
+            ]
+            let withLocalBytes = try JSONSerialization.data(withJSONObject: withLocal)
+            try withLocalBytes.write(to: url)
+            try expectThrows(EZError.self) {
+                _ = try store.save([moved], revision: saved.revision, connections: [settings.connections[0]])
+            }
+            try expectEqual(
+                try Data(contentsOf: url), withLocalBytes, "Rejected deletion changed saved settings")
+        },
         CheckCase("speech: native preview requires completed audio and produces a playable WAV") { _ in
             var audio = SpeechAudio()
             try expect(try audio.consume(["type": "session.created"]) == nil, "Session created output")
