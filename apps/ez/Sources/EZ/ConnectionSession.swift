@@ -9,7 +9,7 @@ import SaulNativeValues
 
     struct Client {
         var accounts: @MainActor () async throws -> [SaulAccount] = { [] }
-        var signIn: @MainActor (String, Bool) async throws -> String? = { _, _ in
+        var signIn: @MainActor (String, String?) async throws -> String? = { _, _ in
             throw EZError("Sign-in is unavailable.")
         }
         var saveKey: @MainActor (ConnectionDefinition, String) async throws -> Void = { _, _ in
@@ -91,9 +91,10 @@ import SaulNativeValues
         onChange?()
     }
 
-    func signIn(_ account: String, adding: Bool, connections: [ConnectionDefinition]) async throws -> String?
-    {
-        let account = try await client.signIn(account, adding)
+    func signIn(
+        _ account: String, suggestedAppName: String?, connections: [ConnectionDefinition]
+    ) async throws -> String? {
+        let account = try await client.signIn(account, suggestedAppName)
         accountRevision += 1
         guard !closed else { return nil }
         if let account {

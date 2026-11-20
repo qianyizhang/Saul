@@ -147,6 +147,19 @@ func rejects(_ operation: () throws -> Void) throws {
       ])
     }
     try rejects { try request(["action": "login", "consent": 1]) }
+    let namedRegistration = ["action": "login", "suggestedAppName": "Saul 0123456789AB"]
+    try request(namedRegistration, version: CredentialRequest.version)
+    try rejects { try request(namedRegistration) }
+    try rejects {
+      try request(
+        ["action": "login", "suggestedAppName": "Saul 0123456789AB\n"],
+        version: CredentialRequest.version)
+    }
+    try rejects {
+      try request(
+        namedRegistration.merging(["accountId": "fixture"]) { _, new in new },
+        version: CredentialRequest.version)
+    }
     let response: [String: Any] = [
       "model": "fixture", "input": [["role": "user", "content": "hello"]], "store": false,
       "stream": true,

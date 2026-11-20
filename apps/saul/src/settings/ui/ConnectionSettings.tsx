@@ -204,6 +204,7 @@ export function ConnectionSettings({
   const [endpoint, setEndpoint] = useState('https://api.openai.com/v1');
   const [key, setKey] = useState('');
   const [accountId, setAccountId] = useState('');
+  const [suggestedAppName, setSuggestedAppName] = useState('');
   const [accounts, setAccounts] = useState<PlanAccount[]>([]);
   const [logouts, setLogouts] = useState<ReadonlyMap<string, Logout>>(() => new Map());
   const [busy, setBusy] = useState(false);
@@ -225,6 +226,7 @@ export function ConnectionSettings({
     setKey('');
     setName(connection?.name ?? '');
     setAccountId(connection?.accountId ?? '');
+    setSuggestedAppName('');
     setEndpoint(connection?.baseUrl ?? 'https://api.openai.com/v1');
     setKind(
       connection?.kind === 'openai-api'
@@ -290,18 +292,18 @@ export function ConnectionSettings({
       setBusy(false);
     }
   };
-  const signIn = async (addingAccount = false) => {
+  const signIn = async (newAppName?: string) => {
     setBusy(true);
     setError('');
     const ac = new AbortController();
     loginController.current = ac;
     try {
       const selected = target?.accountId ?? accountId;
-      if (!addingAccount && !selected) throw new Error('Choose an account to sign in again.');
+      if (!newAppName && !selected) throw new Error('Choose an account to sign in again.');
       const result = await planCall(
         {
           action: 'login',
-          ...(!addingAccount ? { accountId: selected } : {}),
+          ...(newAppName ? { suggestedAppName: newAppName } : { accountId: selected }),
           consent: true,
         },
         AbortSignal.any([ac.signal, AbortSignal.timeout(320_000)]),
@@ -316,9 +318,11 @@ export function ConnectionSettings({
       setAccountId(result.account.id);
     } catch (cause) {
       setError(message(cause));
+      if (!ac.signal.aborted) await loadAccounts().catch(() => {});
     } finally {
       loginController.current = null;
       setBusy(false);
+      setSuggestedAppName('');
     }
   };
   const remove = async (connection: ConnectionDefinition) => {
@@ -430,9 +434,44 @@ export function ConnectionSettings({
                 Sign in and allow plan use
               </button>
               {!target?.accountId && (
-                <button type="button" className="btn" onClick={() => void signIn(true)}>
-                  Add another account
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="btn"
+                    aria-expanded={!!suggestedAppName}
+                    onClick={() =>
+                      setSuggestedAppName(
+                        suggestedAppName
+                          ? ''
+                          : `Saul ${crypto.randomUUID().replaceAll('-', '').slice(0, 12).toUpperCase()}`,
+                      )
+                    }
+                  >
+                    Add another account
+                  </button>
+                  {suggestedAppName && (
+                    <>
+                      <label className="field">
+                        Suggested app name
+                        <input
+                          readOnly
+                          value={suggestedAppName}
+                          onFocus={(e) => e.target.select()}
+                        />
+                      </label>
+                      <p className="small">
+                        Copy this name and paste it into the app name field in ChatGPT.
+                      </p>
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => void signIn(suggestedAppName)}
+                      >
+                        Continue to ChatGPT
+                      </button>
+                    </>
+                  )}
+                </>
               )}
             </>
           ) : (

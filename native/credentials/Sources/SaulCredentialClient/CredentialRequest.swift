@@ -24,7 +24,7 @@ public struct CredentialRequest: Sendable {
     else { throw invalid() }
     let operations: [String: Set<String>] = [
       "accounts": [], "status": [], "select": ["accountId"],
-      "login": ["accountId", "consent"], "logout": ["accountId"],
+      "login": ["accountId", "consent", "suggestedAppName"], "logout": ["accountId"],
       "models": ["accountId"],
       "generate": [
         "accountId", "model", "effort", "fast", "systemPrompt", "userPrompt", "attachments",
@@ -83,6 +83,12 @@ public struct CredentialRequest: Sendable {
       throw invalid()
     }
     if action == "login", !text("accountId", max: 256, required: false) { throw invalid() }
+    if let raw = value["suggestedAppName"] {
+      guard version.doubleValue == Double(Self.version), value["accountId"] == nil,
+        let name = raw as? String, name.utf8.count == 17,
+        name.range(of: "^Saul [0-9A-F]{12}$", options: .regularExpression) != nil
+      else { throw invalid() }
+    }
     if action == "api-key-save" {
       guard text("key", max: 512), let key = value["key"] as? String,
         key.utf8.allSatisfy({ $0 > 32 && $0 < 127 })
@@ -201,7 +207,10 @@ public struct CredentialRequest: Sendable {
     case "accounts": return .accounts
     case "status": return .status
     case "select": return try .select(accountID: string("accountId"))
-    case "login": return .login(accountID: account, consent: value["consent"] as? Bool == true)
+    case "login":
+      return .login(
+        accountID: account, consent: value["consent"] as? Bool == true,
+        suggestedAppName: value["suggestedAppName"] as? String)
     case "logout": return try .logout(accountID: string("accountId"))
     case "models": return try .models(accountID: string("accountId"))
     case "generate":

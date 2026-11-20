@@ -32,13 +32,18 @@ import SaulTestSupport
                 requests[0]["accountId"] as? String, "chosen-registration",
                 "Reauthorization created a registration")
             try expectEqual(requests[0]["consent"] as? Bool, true, "Plan permission was not requested")
+            try expect(requests[0]["suggestedAppName"] == nil, "Reauthorization sent a new name")
             try await expectAsyncThrows(CredentialStorageError.self) {
                 _ = try await client.signIn(accountID: "", authorize: { _ in false })
             }
             try expectEqual(requests.count, 1, "Empty selection reached the owner")
             _ = try await client.signIn(
-                accountID: "chosen-registration", addingAccount: true, authorize: { _ in false })
+                accountID: "chosen-registration", suggestedAppName: "Saul 0123456789AB",
+                authorize: { _ in false })
             try expect(requests[1]["accountId"] == nil, "Explicit Add reused an existing registration")
+            try expectEqual(
+                requests[1]["suggestedAppName"] as? String, "Saul 0123456789AB",
+                "Explicit Add lost the suggested app name")
         },
         CheckCase("connections: stored names upgrade once without losing identity or conflicting originals") {
             directory in

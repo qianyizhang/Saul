@@ -400,11 +400,11 @@ import SaulNativeValues
 
     func loadConnectionAccounts() async throws { try await session.loadAccounts() }
 
-    func signInConnection(accountID: String, addingAccount: Bool) async throws -> String? {
+    func signInConnection(accountID: String, suggestedAppName: String?) async throws -> String? {
         try session.begin(.signIn, blocked: busy || launcherPending)
         defer { session.endOperation() }
         return try await session.signIn(
-            accountID, adding: addingAccount, connections: configuration.connections)
+            accountID, suggestedAppName: suggestedAppName, connections: configuration.connections)
     }
 
     func initializeStarterPreset() {

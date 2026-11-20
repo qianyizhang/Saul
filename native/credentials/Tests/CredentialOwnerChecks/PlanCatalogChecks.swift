@@ -30,6 +30,26 @@ private let planUsageLimit = """
 
 @MainActor func planCatalogChecks() -> [CheckCase] {
   [
+    CheckCase("connections: the saved registration name appears on the bound connection") {
+      directory in
+      let http = HTTPFixture { _ in throw CheckFailure("Reading an app name made an HTTP request") }
+      defer { http.close() }
+      let fixture = try PlanCatalogFixture(directory, http: http)
+      var state = try await fixture.storage.read()
+      try expect(
+        state.profiles.allSatisfy { $0.suggestedAppName == nil }, "Old account names were invented")
+      state.profiles[0].suggestedAppName = "Saul 0123456789AB"
+      try fixture.storage.write(state)
+      let status = try await fixture.run(["action": "connection-status", "connectionKey": "plan-a"])
+      let bound = status.first?["connection"] as? [String: Any]
+      try expectEqual(
+        bound?["identity"] as? String, "a@example.test · Saul 0123456789AB", "Bound name was lost")
+      let listed = try await fixture.run(["action": "accounts"])
+      let accounts = listed.first?["accounts"] as? [[String: Any]]
+      try expectEqual(
+        accounts?.first?["label"] as? String, bound?["identity"] as? String,
+        "The picker and the bound connection showed different names")
+    },
     CheckCase("connections: only successful explicit Check recovers the bound plan registration") {
       directory in
       var response = planModels

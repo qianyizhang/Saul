@@ -36,7 +36,7 @@ export function validPdfUrlAttachment(value: unknown): value is PdfUrlAttachment
 }
 export type PlanRequest =
   | { action: 'accounts' }
-  | { action: 'login'; accountId?: string; consent?: boolean }
+  | { action: 'login'; accountId?: string; consent?: boolean; suggestedAppName?: string }
   | { action: 'logout'; accountId: string }
   | { action: 'models'; accountId: string }
   | {
@@ -75,7 +75,7 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
   if (!isRecord(v)) throw new Error('Invalid plan request');
   const operations: Record<string, string[]> = {
     accounts: [],
-    login: ['accountId', 'consent'],
+    login: ['accountId', 'consent', 'suggestedAppName'],
     logout: ['accountId'],
     models: ['accountId'],
     generate: [
@@ -98,7 +98,12 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
   if (
     v.action === 'login' &&
     ((v.accountId !== undefined && !text(v.accountId, 256)) ||
-      (v.consent !== undefined && typeof v.consent !== 'boolean'))
+      (v.consent !== undefined && typeof v.consent !== 'boolean') ||
+      (v.suggestedAppName !== undefined &&
+        (v.accountId !== undefined ||
+          typeof v.suggestedAppName !== 'string' ||
+          v.suggestedAppName.length !== 17 ||
+          !/^Saul [0-9A-F]{12}$/.test(v.suggestedAppName))))
   )
     throw new Error('Invalid sign-in request');
   if (

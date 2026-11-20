@@ -111,7 +111,8 @@ import SaulNativeValues
         else { return ["connected": false, "identity": "Choose an account"] }
         return [
           "connected": account.credentials?.canUsePlan == true,
-          "identity": account.email ?? "Signed-in account",
+          "identity": account.suggestedAppName == nil
+            ? (account.email ?? "Signed-in account") : account.label,
           "signedIn": account.credentials != nil,
         ]
       }
@@ -138,7 +139,7 @@ import SaulNativeValues
           try auth.select(id)
           return try self.status(auth)
         })
-    case .login(let id, let consent):
+    case .login(let id, let consent, let suggestedAppName):
       emit(
         try await locked { auth in
           if let id {
@@ -146,7 +147,7 @@ import SaulNativeValues
             try auth.select(id)
           }
           try await auth.signIn(
-            newAccount: id == nil, enablePlan: consent
+            newAccount: id == nil, enablePlan: consent, suggestedAppName: suggestedAppName
           ) { url in
             self.emit(["type": "authorize", "url": url.absoluteString])
             return true

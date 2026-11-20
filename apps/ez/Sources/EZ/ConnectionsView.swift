@@ -14,6 +14,7 @@ struct ConnectionsView: View {
     @State private var endpoint = "https://api.openai.com/v1"
     @State private var key = ""
     @State private var account = ""
+    @State private var suggestedAppName: String?
     @State private var newID = ""
     private var busy: Bool { model.credentialBusy }
     @State private var error: String?
@@ -35,7 +36,6 @@ struct ConnectionsView: View {
                 if loginTask != nil {
                     Button("Cancel sign-in") {
                         loginTask?.cancel()
-                        loginTask = nil
                     }
                 }
                 if editing {
@@ -167,6 +167,7 @@ struct ConnectionsView: View {
         error = nil
         name = connection?.name ?? ""
         account = connection?.accountId ?? ""
+        suggestedAppName = nil
         endpoint = connection?.endpoint ?? "https://api.openai.com/v1"
         kind =
             connection?.kind == .openAIAPI
@@ -199,8 +200,30 @@ struct ConnectionsView: View {
                 Button("Sign in and allow plan use") { signIn() }.disabled(
                     !model.allowsExternalServices || account.isEmpty)
                 if target?.accountId == nil {
-                    Button("Add another account") { signIn(addingAccount: true) }.disabled(
-                        !model.allowsExternalServices)
+                    DisclosureGroup(
+                        "Add another account",
+                        isExpanded: Binding(
+                            get: { suggestedAppName != nil },
+                            set: { expanded in
+                                if expanded {
+                                    let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "")
+                                        .prefix(12)
+                                    suggestedAppName = "Saul \(suffix)"
+                                } else {
+                                    suggestedAppName = nil
+                                }
+                            })
+                    ) {
+                        if let suggestedAppName {
+                            LabeledContent("Suggested app name") {
+                                Text(suggestedAppName).textSelection(.enabled)
+                            }
+                            Text("Copy this name and paste it into the app name field in ChatGPT.")
+                                .font(AppStyle.caption).foregroundStyle(.secondary)
+                            Button("Continue to ChatGPT") { signIn(suggestedAppName: suggestedAppName) }
+                        }
+                    }
+                    .disabled(!model.allowsExternalServices)
                 }
             } else {
                 if kind == "custom" {
@@ -227,19 +250,27 @@ struct ConnectionsView: View {
                 }
                 if busy { ProgressView().controlSize(.small) }
             }
-        }.disabled(busy || model.configurationLocked)
+        }.disabled(busy || loginTask != nil || model.configurationLocked)
     }
-    private func signIn(addingAccount: Bool = false) {
+    private func signIn(suggestedAppName: String? = nil) {
         error = nil
         loginTask = Task {
-            defer { loginTask = nil }
+            defer {
+                loginTask = nil
+                self.suggestedAppName = nil
+            }
             do {
                 if let id = try await model.signInConnection(
-                    accountID: target?.accountId ?? account, addingAccount: addingAccount)
+                    accountID: target?.accountId ?? account, suggestedAppName: suggestedAppName)
                 {
                     account = id
                 }
-            } catch { if !Task.isCancelled { self.error = error.localizedDescription } }
+            } catch {
+                if !Task.isCancelled {
+                    self.error = error.localizedDescription
+                    try? await model.loadConnectionAccounts()
+                }
+            }
         }
     }
     private func save() {

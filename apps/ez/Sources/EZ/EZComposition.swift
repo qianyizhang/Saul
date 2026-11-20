@@ -34,9 +34,9 @@ import SaulNativeValues
                     try await auth.load()
                     return auth.accounts
                 },
-                signIn: { account, adding in
+                signIn: { account, suggestedAppName in
                     let reply = try await auth.signIn(
-                        accountID: account, addingAccount: adding,
+                        accountID: account, suggestedAppName: suggestedAppName,
                         authorize: { NSWorkspace.shared.open($0) })
                     return (reply["account"] as? [String: Any])?["id"] as? String
                 },

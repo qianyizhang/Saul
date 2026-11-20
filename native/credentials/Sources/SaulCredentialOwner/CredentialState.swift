@@ -14,7 +14,10 @@ public struct AccountProfile: Codable, Identifiable, Sendable {
   public var subject: String?
   public var email: String?
   public var credentials: Credentials?
-  public var label: String { "\(email ?? "Pending sign-in") · \(clientID.suffix(6))" }
+  public var suggestedAppName: String?
+  public var label: String {
+    "\(email ?? "Pending sign-in") · \(suggestedAppName ?? String(clientID.suffix(6)))"
+  }
 }
 public struct AuthState: Codable, Sendable {
   public var hostID = "urn:uuid:" + UUID().uuidString.lowercased()

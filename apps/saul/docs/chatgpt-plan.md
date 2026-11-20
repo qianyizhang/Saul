@@ -6,7 +6,7 @@ Saul supports the direct **Sign in with ChatGPT** preview for local and open-sou
 
 1. Build and install the selected apps and helpers using the [setup guide](../../../docs/setup.md).
 2. Open **Settings → Preferences → Integrations → Connect to Saul** in Chrome. EZ uses the same signed owner by default; reconnect it in Preferences → Integrations if disconnected.
-3. Open **Settings → Connections → ChatGPT plan → Set up** in either app. Choose an existing account and Save to reuse its sign-in. **Sign in and allow plan use** reauthorizes the selected registration. **Add another account** explicitly creates a registration and opens browser consent.
+3. Open **Settings → Connections → ChatGPT plan → Set up** in either app. Choose an existing account and Save to reuse its sign-in. **Sign in and allow plan use** reauthorizes the selected registration. To create a registration, open **Add another account**, copy the suggested app name, and select **Continue to ChatGPT**. Paste the name into ChatGPT's app name field before approving.
 4. In **Presets**, choose the saved connection, an available model, effort and speed, then Save. Catalog checks do not generate. Unavailable saved model options block until explicitly changed.
 
 A connection saved in either app is available to both. Managed connections pin the
@@ -14,6 +14,12 @@ registration, and the signed Saul owner serializes refresh. Signing out affects 
 apps; Disconnect app only removes that app's binding. Account registrations remain
 distinct even when their email labels match. Never merge tokens or change a saved
 connection's account to resolve duplicate labels.
+
+The account picker and saved connection show the suggested app name beside
+the email. If you used that name at consent, look for the same name in
+**ChatGPT Settings → Usage → Connected App Limits**. Older picker labels ending
+in six characters show the end of the issued client ID. ChatGPT's sign-in
+callback supplies no name for those existing entries.
 
 To use a plan connection for built-in **Summarize**, select its saved **Model
 preset** in **Settings → Calls** and Save. Custom Call presets retain the runtime

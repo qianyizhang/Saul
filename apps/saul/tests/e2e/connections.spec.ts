@@ -4,6 +4,7 @@ import { DEFAULT_CONFIGURATION } from '../../src/configuration/definition';
 import type { Configuration } from '../../src/configuration/definition';
 import type { SharedPresets } from '../../shared/protocol/shared-presets-contract.mts';
 import type { StorageHelperRequest } from '../../shared/protocol/storage-protocol.mts';
+import type { PlanAccount } from '../../shared/protocol/credential-plan.mts';
 import type {
   CredentialRequest,
   CredentialEvent,
@@ -23,6 +24,7 @@ type ConnectionFixture = {
   signedOut: boolean;
   holdSignedOutStatus: boolean;
   heldStatuses: (() => void)[];
+  newAccounts: PlanAccount[];
 };
 type FixtureGlobal = typeof globalThis & { connectionFixture: ConnectionFixture };
 
@@ -37,6 +39,7 @@ async function configureConnections(worker: Worker) {
       signedOut: false,
       holdSignedOutStatus: false,
       heldStatuses: [],
+      newAccounts: [],
       cancellations: [],
       library: {
         revision: 1,
@@ -132,6 +135,7 @@ async function configureConnections(worker: Worker) {
                     signedIn: true,
                     planEnabled: true,
                   },
+                  ...state.newAccounts,
                   {
                     id: 'fixture-spare',
                     label: 'alex@example.com · spare',
@@ -142,15 +146,16 @@ async function configureConnections(worker: Worker) {
               };
             else if (r.action === 'login') {
               if (r.accountId === 'fixture-account') state.signedOut = false;
-              event = {
-                type: 'result',
-                account: {
-                  id: r.accountId ?? 'fixture-new',
-                  label: 'alex@example.com',
-                  signedIn: true,
-                  planEnabled: true,
-                },
+              const registered = {
+                id: r.accountId ?? `fixture-new-${state.newAccounts.length}`,
+                label: r.suggestedAppName
+                  ? `alex@example.com · ${r.suggestedAppName}`
+                  : 'alex@example.com',
+                signedIn: true,
+                planEnabled: true,
               };
+              if (!r.accountId) state.newAccounts.push(registered);
+              event = { type: 'result', account: registered };
             } else if (r.action === 'logout') {
               if (state.rejectLogout) {
                 send({ type: 'error', message: 'Could not write the local account change.' });
@@ -177,7 +182,8 @@ async function configureConnections(worker: Worker) {
                         connected: !state.signedOut,
                         identity: state.signedOut
                           ? 'alex@example.com · registration'
-                          : 'alex@example.com',
+                          : (state.newAccounts.find((a) => a.id === provider.accountId)?.label ??
+                            'alex@example.com'),
                         signedIn: !state.signedOut,
                       }
                     : {
@@ -300,18 +306,6 @@ test('managed connections preserve setup after failure and report removed models
     )
     .toEqual({ action: 'login', accountId: 'fixture-spare', consent: true });
   await popup.screenshot({ path: info.outputPath('reuse-account.png') });
-  await popup.getByRole('button', { name: 'Add another account', exact: true }).click();
-  await expect
-    .poll(() =>
-      worker.evaluate(() =>
-        (
-          globalThis as unknown as { connectionFixture: { requests: CredentialRequest[] } }
-        ).connectionFixture.requests
-          .filter((r) => r.action === 'login')
-          .at(-1),
-      ),
-    )
-    .toEqual({ action: 'login', consent: true });
   await popup.getByRole('button', { name: 'Cancel', exact: true }).click();
   await popup.getByRole('button', { name: '＋ Add', exact: true }).click();
   await popup.getByRole('combobox', { name: 'Type', exact: true }).selectOption('custom');
@@ -421,6 +415,45 @@ test('managed connections preserve setup after failure and report removed models
   const saves = saved.requests.filter((r) => r.action === 'connection-key-save');
   expect(saves).toHaveLength(2);
   expect(saves[0]).toEqual(saves[1]);
+});
+
+test('new plan registrations show the same suggested app name before and after sign-in', async ({
+  sandbox,
+}, info) => {
+  const { worker, popup } = await sandbox.launch();
+  await configureConnections(worker);
+  await popup.reload();
+  await popup.setViewportSize({ width: 390, height: 850 });
+  await popup.emulateMedia({ colorScheme: 'dark' });
+  await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(popup, 'Connections');
+  await popup.getByRole('button', { name: '＋ Add', exact: true }).click();
+  const addAccount = popup.getByRole('button', { name: 'Add another account', exact: true });
+  await addAccount.click();
+  await expect(addAccount).toBeFocused();
+  const name = popup.getByRole('textbox', { name: 'Suggested app name', exact: true });
+  await expect(name).toHaveValue(/^Saul [0-9A-F]{12}$/);
+  const suggestion = await name.inputValue();
+  expect(await popup.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await popup.screenshot({ path: info.outputPath('suggested-app-name-dark.png'), fullPage: true });
+  await popup.getByRole('button', { name: 'Continue to ChatGPT', exact: true }).click();
+  const account = popup.getByRole('combobox', { name: 'Account', exact: true });
+  await expect(account).toHaveValue('fixture-new-0');
+  await expect(account.locator('option:checked')).toHaveText(`alex@example.com · ${suggestion}`);
+  const requests = await worker.evaluate(() =>
+    (globalThis as FixtureGlobal).connectionFixture.requests.filter((r) => r.action === 'login'),
+  );
+  expect(requests).toEqual([{ action: 'login', suggestedAppName: suggestion, consent: true }]);
+  await addAccount.click();
+  await expect(name).not.toHaveValue(suggestion);
+  await addAccount.click();
+  await popup.getByLabel('Name', { exact: true }).fill('Current plan');
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  const connection = popup.getByRole('article', { name: 'Current plan', exact: true });
+  await expect(connection.getByText(`alex@example.com · ${suggestion}`)).toBeVisible();
+  await popup.setViewportSize({ width: 640, height: 760 });
+  await popup.emulateMedia({ colorScheme: 'light' });
+  await popup.screenshot({ path: info.outputPath('saved-app-name-light.png'), fullPage: true });
 });
 
 test('a managed preset links to its connection, where Check replaces a passive request', async ({

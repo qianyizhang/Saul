@@ -43,9 +43,10 @@ import SaulNativeValues
     if select { next.selectedID = profile.id }
     try save(next)
   }
-  public func signIn(newAccount: Bool = false, enablePlan: Bool = false, openBrowser: (URL) -> Bool)
-    async throws
-  {
+  public func signIn(
+    newAccount: Bool = false, enablePlan: Bool = false, suggestedAppName: String? = nil,
+    openBrowser: (URL) -> Bool
+  ) async throws {
     guard listener == nil else { throw OwnerRequestError("A sign-in is already in progress.") }
     try save(state)  // Persist the installation identity before leaving for the browser.
     let previous = newAccount ? nil : selected
@@ -92,7 +93,10 @@ import SaulNativeValues
       throw OwnerRequestError("Sign-in returned a different client registration.")
     }
     var profile =
-      previous ?? AccountProfile(clientID: issuedID, subject: nil, email: nil, credentials: nil)
+      previous
+      ?? AccountProfile(
+        clientID: issuedID, subject: nil, email: nil, credentials: nil,
+        suggestedAppName: suggestedAppName)
     // Preserve registration before the first exchange, including invalid_grant recovery.
     try upsert(profile, select: state.selectedID == nil)
     let token = try await tokenRequest([
