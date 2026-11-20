@@ -265,6 +265,8 @@ import SaulTestSupport
                 capability: .draw)
             var settings = Configuration(presets: [writing, drawing])
             settings.connections[0].accountId = "fixture"
+            try expectEqual(settings.presets(using: "gpt-plan").count, 0, "Empty connection had presets")
+            try expectEqual(settings.presets(using: "openai-api").count, 2, "Connection count was incorrect")
             let first = try store.save(settings.presets, revision: 0, connections: settings.connections)
             try settings.changeConnection("openai-api", .rename("Studio"))
             try expectEqual(settings.presets, [writing, drawing], "Rename changed preset references")
@@ -277,6 +279,8 @@ import SaulTestSupport
             var moved = writing
             moved.connectionKey = "gpt-plan"
             try expectEqual(settings.presets, [moved, drawing], "Move changed other preset settings")
+            try expectEqual(settings.presets(using: "gpt-plan"), [moved], "Destination count missed the move")
+            try expectEqual(settings.presets(using: "openai-api"), [drawing], "Source count missed the move")
             try expectThrows(EZError.self) { try settings.changeConnection("openai-api", .delete) }
             try expectThrows(EZError.self) {
                 _ = try store.save(

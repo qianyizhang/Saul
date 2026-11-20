@@ -34,6 +34,10 @@ extension ConnectionDefinition {
 }
 
 extension Configuration {
+    public func presets(using connectionKey: String) -> [ModelPreset] {
+        presets.filter { $0.connectionKey == connectionKey }
+    }
+
     public mutating func changeConnection(_ key: String, _ change: ConnectionChange) throws {
         guard let index = connections.firstIndex(where: { $0.key == key }) else {
             throw EZError("This connection is unavailable. Reload saved settings.")
@@ -48,7 +52,7 @@ extension Configuration {
             guard let target = connections.first(where: { $0.key == destination }), key != target.key,
                 !ids.isEmpty
             else { throw EZError("Choose a destination and presets that still use this connection.") }
-            let selected = presets.filter { ids.contains($0.id) && $0.connectionKey == key }
+            let selected = presets(using: key).filter { ids.contains($0.id) }
             guard selected.count == ids.count else {
                 throw EZError("Choose presets that still use this connection.")
             }
@@ -59,7 +63,7 @@ extension Configuration {
                 presets[index].connectionKey = target.key
             }
         case .delete:
-            guard !presets.contains(where: { $0.connectionKey == key }) else {
+            guard presets(using: key).isEmpty else {
                 throw EZError("Move the presets that use this connection before deleting it.")
             }
             connections.remove(at: index)

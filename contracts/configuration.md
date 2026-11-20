@@ -47,6 +47,9 @@ execution and retry.
 - **Move presets** changes the selected presets’ connection keys in one settings
   save. The destination must support their capabilities. The move preserves preset
   IDs, model choices and options. Unavailable choices stay visible for repair.
+  Connections shows how many presets in that app use each connection. **Move
+  presets** appears for sources with at least one preset; an empty connection
+  can still be a destination. Saul also counts its browser-local presets.
 - **Delete connection** removes the definition after its saved preset references
   have been moved or removed, including browser-local preset references in Saul’s
   settings. Sign-out and API key removal are separate credential operations.

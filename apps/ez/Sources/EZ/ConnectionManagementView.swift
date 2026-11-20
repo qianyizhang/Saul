@@ -36,7 +36,7 @@ struct ConnectionManagementView: View {
         _name = State(initialValue: connection.name)
     }
 
-    private var linked: [ModelPreset] { configuration.presets.filter { $0.connectionKey == connection.key } }
+    private var linked: [ModelPreset] { configuration.presets(using: connection.key) }
     private var destinations: [ConnectionDefinition] {
         configuration.connections.filter { candidate in
             candidate.key != connection.key && linked.contains { candidate.supportsMove(of: $0) }

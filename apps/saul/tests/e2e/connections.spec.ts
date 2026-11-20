@@ -514,13 +514,29 @@ test('connection management renames, selectively moves presets, and deletes an u
     },
   ].map((preset) => ({ ...preset, connectionKey: 'gpt-plan' }));
   await worker.evaluate((linked) => {
-    (globalThis as FixtureGlobal).connectionFixture.library.presets.push(...linked);
+    const library = (globalThis as FixtureGlobal).connectionFixture.library;
+    library.presets.push(...linked);
+    library.connections.push({
+      key: 'studio-api',
+      name: 'Studio API',
+      kind: 'openai-api',
+      baseUrl: 'https://api.openai.com/v1',
+    });
   }, presets);
   await popup.reload();
   await popup.setViewportSize({ width: 390, height: 820 });
   await popup.emulateMedia({ colorScheme: 'dark' });
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await settingsSection(popup, 'Connections');
+  const source = popup.getByRole('article', { name: 'ChatGPT plan', exact: true });
+  const destination = popup.getByRole('article', { name: 'Studio API', exact: true });
+  const destinationMenu = destination.getByLabel('More for Studio API');
+  await expect(source.getByText('2 presets', { exact: true })).toBeVisible();
+  await expect(destination.getByText('0 presets', { exact: true })).toBeVisible();
+  await destinationMenu.click();
+  await expect(destination.getByRole('button', { name: 'Delete connection' })).toBeVisible();
+  await expect(destination.getByRole('button', { name: 'Move presets' })).toHaveCount(0);
+  await destinationMenu.click();
   const readLibrary = () =>
     worker.evaluate(() => (globalThis as FixtureGlobal).connectionFixture.library);
   async function openManagement(connection: string, action: string) {
@@ -537,31 +553,40 @@ test('connection management renames, selectively moves presets, and deletes an u
   expect((await readLibrary()).presets.slice(-2)).toEqual(presets);
 
   const move = await openManagement('Old plan', 'Move presets');
-  await move.getByLabel('Move to').selectOption('openai-api');
+  await move.getByLabel('Move to').selectOption('studio-api');
   await move.getByRole('checkbox', { name: 'Notes' }).uncheck();
   await popup.screenshot({ path: info.outputPath('move-presets-dark.png'), fullPage: true });
   expect(await popup.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await move.getByRole('button', { name: 'Move presets' }).click();
   await expect(move).toHaveCount(0);
   expect((await readLibrary()).presets.slice(-2)).toEqual([
-    { ...presets[0], connectionKey: 'openai-api' },
+    { ...presets[0], connectionKey: 'studio-api' },
     presets[1],
   ]);
+  const oldPlan = popup.getByRole('article', { name: 'Old plan', exact: true });
+  await expect(oldPlan.getByText('1 preset', { exact: true })).toBeVisible();
+  await expect(destination.getByText('1 preset', { exact: true })).toBeVisible();
+  await destinationMenu.click();
+  await expect(destination.getByRole('button', { name: 'Move presets' })).toBeVisible();
+  await destinationMenu.click();
 
   let deletion = await openManagement('Old plan', 'Delete connection');
   await expect(deletion.getByText('Notes', { exact: true })).toBeVisible();
   await expect(deletion.getByRole('button', { name: 'Delete connection' })).toHaveCount(0);
   await deletion.getByRole('button', { name: 'Move presets' }).click();
-  await move.getByLabel('Move to').selectOption('openai-api');
+  await move.getByLabel('Move to').selectOption('studio-api');
   await move.getByRole('button', { name: 'Move presets' }).click();
   await expect(move).toHaveCount(0);
 
+  await expect(oldPlan.getByText('0 presets', { exact: true })).toBeVisible();
+  await expect(destination.getByText('2 presets', { exact: true })).toBeVisible();
+  await popup.screenshot({ path: info.outputPath('preset-counts-dark.png'), fullPage: true });
   deletion = await openManagement('Old plan', 'Delete connection');
   await deletion.getByRole('button', { name: 'Delete connection' }).click();
   await expect(popup.getByRole('article', { name: 'Old plan', exact: true })).toHaveCount(0);
   await expect(deletion).toHaveCount(0);
   expect((await readLibrary()).presets.slice(-2)).toEqual(
-    presets.map((preset) => ({ ...preset, connectionKey: 'openai-api' })),
+    presets.map((preset) => ({ ...preset, connectionKey: 'studio-api' })),
   );
   const requests = await worker.evaluate(
     () => (globalThis as FixtureGlobal).connectionFixture.requests,
@@ -586,6 +611,12 @@ test('standalone Saul can delete an unused connection definition', async ({ sand
   await popup.reload();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await settingsSection(popup, 'Connections');
+  const empty = popup.getByRole('button', { name: 'ChatGPT plan · 0 presets', exact: true });
+  await expect(empty).toBeVisible();
+  await expect(popup.getByRole('button', { name: 'Move presets', exact: true })).toHaveCount(0);
+  await popup.getByRole('button', { name: /^OpenAI API · [1-9]\d* presets?$/ }).click();
+  await expect(popup.getByRole('button', { name: 'Move presets', exact: true })).toBeVisible();
+  await empty.click();
   await popup.getByRole('button', { name: 'Delete connection', exact: true }).click();
   const deletion = popup.getByRole('form', { name: 'Delete connection', exact: true });
   await deletion.getByRole('button', { name: 'Delete connection', exact: true }).click();

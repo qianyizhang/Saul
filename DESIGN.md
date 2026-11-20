@@ -81,7 +81,7 @@ both modes, or **Unavailable** when identity is missing.
 
 Connections owns identity, endpoint and credentials; Presets owns the selected
 connection, capability, model and applicable options. Connection rows show
-name, capability chips, account or endpoint/key mask, then status and Check.
+name and preset count, capability chips, account or endpoint/key mask, then status and Check.
 Mask keys as `sk-***abcd`. Keep technical IDs and secret fields out of the
 summary. Check is not generation: distinguish auth, helper and catalog errors
 and offer repair. Put binding and migration under Preferences → Integrations.

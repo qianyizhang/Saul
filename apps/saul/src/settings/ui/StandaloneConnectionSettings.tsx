@@ -4,7 +4,11 @@ import type { Configuration } from '../../configuration/definition';
 import type { SettingsEdit } from '../draft';
 import { officialOpenAI } from '../../../shared/protocol/credentials-contract.mts';
 import { ConnectionManagement, type ConnectionManagementAction } from './ConnectionManagement';
-import type { ConnectionChange } from '../connection-management';
+import {
+  presetCountLabel,
+  presetsUsingConnection,
+  type ConnectionChange,
+} from '../connection-management';
 
 export function StandaloneConnectionSettings({
   settings,
@@ -51,10 +55,15 @@ export function StandaloneConnectionSettings({
   const editProfile = (patch: Partial<Configuration['openaiCompatible']>) => {
     if (profile) edit({ type: 'connection', id: profile.id, patch });
   };
-  const options = [
-    ...connections.map((p) => ({ key: p.key, name: p.name })),
+  const options: { key: string; name: string; presetCount?: number }[] = [
+    ...connections.map((p) => ({
+      key: p.key,
+      name: p.name,
+      presetCount: presetsUsingConnection(settings, p.key).length,
+    })),
     { key: 'local-api-connections', name: 'API connections' },
   ];
+  const selectedPresetCount = options.find((option) => option.key === key)?.presetCount ?? 0;
   if (management && connection)
     return (
       <section hidden={!visible} className="settings-section" aria-label="Connections">
@@ -92,6 +101,9 @@ export function StandaloneConnectionSettings({
                 onClick={() => setKey(p.key)}
               >
                 {p.name}
+                {p.presetCount !== undefined && (
+                  <span className="small muted"> · {presetCountLabel(p.presetCount)}</span>
+                )}
               </button>
             ))}
           </div>
@@ -108,6 +120,7 @@ export function StandaloneConnectionSettings({
               {options.map((p) => (
                 <option key={p.key} value={p.key}>
                   {p.name}
+                  {p.presetCount !== undefined && ` · ${presetCountLabel(p.presetCount)}`}
                 </option>
               ))}
             </select>
@@ -125,17 +138,19 @@ export function StandaloneConnectionSettings({
                 />
               </label>
               <div className="row">
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={managementDisabled}
-                  onClick={() => {
-                    setManagement('move');
-                    onDirty(true);
-                  }}
-                >
-                  Move presets
-                </button>
+                {selectedPresetCount > 0 && (
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={managementDisabled}
+                    onClick={() => {
+                      setManagement('move');
+                      onDirty(true);
+                    }}
+                  >
+                    Move presets
+                  </button>
+                )}
                 <button
                   type="button"
                   className="btn danger"

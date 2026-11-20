@@ -15,7 +15,11 @@ import type { Configuration } from '../../configuration/definition';
 import type { PlanAccount, PlanResults } from '../../../shared/protocol/credential-plan.mts';
 import { useConnectionCatalog } from './useConnectionCatalog';
 import { ConnectionManagement, type ConnectionManagementAction } from './ConnectionManagement';
-import type { ConnectionChange } from '../connection-management';
+import {
+  presetCountLabel,
+  presetsUsingConnection,
+  type ConnectionChange,
+} from '../connection-management';
 import { nextName } from '../draft';
 
 type Logout = PlanResults['logout'];
@@ -23,6 +27,7 @@ const message = (cause: unknown) => (cause instanceof Error ? cause.message : 'C
 
 function ConnectionRow({
   connection,
+  presetCount,
   enabled,
   locked,
   dirty,
@@ -35,6 +40,7 @@ function ConnectionRow({
   integrations,
 }: {
   connection: ConnectionDefinition;
+  presetCount: number;
   enabled: boolean;
   locked: boolean;
   dirty: boolean;
@@ -97,7 +103,10 @@ function ConnectionRow({
   return (
     <article ref={row} tabIndex={-1} className="connection-row" aria-label={connection.name}>
       <div className="row between">
-        <strong>{connection.name}</strong>
+        <div className="row">
+          <strong>{connection.name}</strong>
+          <span className="small muted">{presetCountLabel(presetCount)}</span>
+        </div>
         <details className="connection-more">
           <summary aria-label={`More for ${connection.name}`}>···</summary>
           <div className="stack">
@@ -109,14 +118,16 @@ function ConnectionRow({
             >
               Rename connection
             </button>
-            <button
-              type="button"
-              className="btn"
-              disabled={locked || dirty}
-              onClick={() => manage('move')}
-            >
-              Move presets
-            </button>
+            {presetCount > 0 && (
+              <button
+                type="button"
+                className="btn"
+                disabled={locked || dirty}
+                onClick={() => manage('move')}
+              >
+                Move presets
+              </button>
+            )}
             <button
               type="button"
               className="btn"
@@ -700,6 +711,7 @@ export function ConnectionSettings({
               revision,
             ])}
             connection={connection}
+            presetCount={presetsUsingConnection(settings, connection.key).length}
             enabled={enabled}
             locked={busy || disabled}
             dirty={dirty}

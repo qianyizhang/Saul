@@ -119,6 +119,7 @@ struct ConnectionsView: View {
         }
     }
     private func connectionRow(_ connection: ConnectionDefinition) -> some View {
+        let presetCount = model.configuration.presets(using: connection.key).count
         let status = model.connectionStatus(connection.key)
         let checking = model.checkingConnections.contains(connection.key)
         let checkingExplicitly = model.connectionChecks.isCheckingExplicitly(connection.key)
@@ -130,14 +131,18 @@ struct ConnectionsView: View {
             && (connected
                 || (status == nil && (connection.kind == .openAIAPI || connection.accountId != nil)))
         return VStack(alignment: .leading, spacing: 8) {
-            HStack {
+            HStack(alignment: .firstTextBaseline) {
                 Text(connection.name).font(.headline)
+                Text(presetCount == 1 ? "1 preset" : "\(presetCount) presets")
+                    .font(AppStyle.caption).foregroundStyle(.secondary)
                 Spacer()
                 Menu {
                     Button("Rename connection") { openManagement(.rename, for: connection) }
                         .disabled(managementDisabled)
-                    Button("Move presets") { openManagement(.move, for: connection) }
-                        .disabled(managementDisabled)
+                    if presetCount > 0 {
+                        Button("Move presets") { openManagement(.move, for: connection) }
+                            .disabled(managementDisabled)
+                    }
                     Button(connection.kind == .chatGPTPlan ? "Sign in again" : "Replace key") {
                         open(connection)
                     }

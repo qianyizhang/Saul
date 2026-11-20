@@ -17,6 +17,8 @@ export const presetsUsingConnection = (settings: Configuration, key: string) =>
       (preset.connectionKey ?? (preset.provider === 'chatgpt-plan' ? 'gpt-plan' : '')) === key,
   );
 
+export const presetCountLabel = (count: number) => `${count} ${count === 1 ? 'preset' : 'presets'}`;
+
 export function compatibleDestination(preset: ModelPreset, connection: ConnectionDefinition) {
   return (
     connectionCapabilities(connection).includes(preset.capability ?? 'write') &&
