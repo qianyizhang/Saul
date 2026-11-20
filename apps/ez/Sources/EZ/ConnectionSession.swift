@@ -9,8 +9,11 @@ import SaulNativeValues
 
     struct Client {
         var accounts: @MainActor () async throws -> [SaulAccount] = { [] }
-        var signIn: @MainActor (String, String?) async throws -> String? = { _, _ in
+        var signIn: @MainActor (String, String?, Bool) async throws -> String? = { _, _, _ in
             throw EZError("Sign-in is unavailable.")
+        }
+        var confirmAppName: @MainActor (String, String) async throws -> Void = { _, _ in
+            throw EZError("App name confirmation is unavailable.")
         }
         var saveKey: @MainActor (ConnectionDefinition, String) async throws -> Void = { _, _ in
             throw EZError("Credential storage is unavailable.")
@@ -92,9 +95,9 @@ import SaulNativeValues
     }
 
     func signIn(
-        _ account: String, suggestedAppName: String?, connections: [ConnectionDefinition]
+        _ account: String, suggestedAppName: String?, consent: Bool, connections: [ConnectionDefinition]
     ) async throws -> String? {
-        let account = try await client.signIn(account, suggestedAppName)
+        let account = try await client.signIn(account, suggestedAppName, consent)
         accountRevision += 1
         guard !closed else { return nil }
         if let account {

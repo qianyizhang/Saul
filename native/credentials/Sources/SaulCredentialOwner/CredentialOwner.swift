@@ -109,10 +109,18 @@ import SaulNativeValues
         guard let id = definition.accountId,
           let account = auth.state.profiles.first(where: { $0.id == id })
         else { return ["connected": false, "identity": "Choose an account"] }
+        let email = account.email ?? "Signed-in account"
+        let identity =
+          if account.confirmedAppName != nil {
+            account.label
+          } else if account.suggestedAppName != nil {
+            "\(email) · ChatGPT app name unconfirmed"
+          } else {
+            email
+          }
         return [
           "connected": account.credentials?.canUsePlan == true,
-          "identity": account.suggestedAppName == nil
-            ? (account.email ?? "Signed-in account") : account.label,
+          "identity": identity,
           "signedIn": account.credentials != nil,
         ]
       }
@@ -144,10 +152,9 @@ import SaulNativeValues
         try await locked { auth in
           if let id {
             try self.invalidatePlanCatalog(id)
-            try auth.select(id)
           }
           try await auth.signIn(
-            newAccount: id == nil, enablePlan: consent, suggestedAppName: suggestedAppName
+            accountID: id, enablePlan: consent, suggestedAppName: suggestedAppName
           ) { url in
             self.emit(["type": "authorize", "url": url.absoluteString])
             return true
@@ -158,6 +165,9 @@ import SaulNativeValues
           try self.storage.pause(account.id, value: false)
           return ["type": "result", "account": self.summary(account)]
         })
+    case .confirmAppName(let id, let name):
+      try await locked { auth in try auth.confirmAppName(accountID: id, name: name) }
+      result()
     case .logout(let id):
       emit(
         try await locked { auth in

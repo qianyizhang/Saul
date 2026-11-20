@@ -25,6 +25,7 @@ type ConnectionFixture = {
   holdSignedOutStatus: boolean;
   heldStatuses: (() => void)[];
   newAccounts: PlanAccount[];
+  sparePlanEnabled: boolean;
 };
 type FixtureGlobal = typeof globalThis & { connectionFixture: ConnectionFixture };
 
@@ -40,6 +41,7 @@ async function configureConnections(worker: Worker) {
       holdSignedOutStatus: false,
       heldStatuses: [],
       newAccounts: [],
+      sparePlanEnabled: false,
       cancellations: [],
       library: {
         revision: 1,
@@ -140,22 +142,26 @@ async function configureConnections(worker: Worker) {
                     id: 'fixture-spare',
                     label: 'alex@example.com · spare',
                     signedIn: true,
-                    planEnabled: true,
+                    planEnabled: state.sparePlanEnabled,
                   },
                 ],
               };
             else if (r.action === 'login') {
               if (r.accountId === 'fixture-account') state.signedOut = false;
+              if (r.accountId === 'fixture-spare') state.sparePlanEnabled = r.consent === true;
               const registered = {
                 id: r.accountId ?? `fixture-new-${state.newAccounts.length}`,
-                label: r.suggestedAppName
-                  ? `alex@example.com · ${r.suggestedAppName}`
-                  : 'alex@example.com',
+                label: r.suggestedAppName ? 'alex@example.com · newReg' : 'alex@example.com',
                 signedIn: true,
                 planEnabled: true,
               };
               if (!r.accountId) state.newAccounts.push(registered);
               event = { type: 'result', account: registered };
+            } else if (r.action === 'confirm-app-name') {
+              const account = state.newAccounts.find((candidate) => candidate.id === r.accountId);
+              if (!account) throw new Error('Unknown new account');
+              account.label = 'alex@example.com · ' + r.suggestedAppName;
+              event = { type: 'result' };
             } else if (r.action === 'logout') {
               if (state.rejectLogout) {
                 send({ type: 'error', message: 'Could not write the local account change.' });
@@ -270,14 +276,9 @@ test('managed connections preserve setup after failure and report removed models
   await popup.screenshot({ path: info.outputPath('connections-light.png') });
   await plan.getByLabel('More for ChatGPT plan').click();
   await plan.getByRole('button', { name: 'Sign in again', exact: true }).click();
-  await expect(popup.getByRole('combobox', { name: 'Account', exact: true })).toBeDisabled();
-  await expect(popup.getByRole('combobox', { name: 'Account', exact: true })).toHaveValue(
-    'fixture-account',
-  );
-  await expect(popup.getByRole('button', { name: 'Add another account', exact: true })).toHaveCount(
-    0,
-  );
-  await popup.getByRole('button', { name: 'Sign in and allow plan use', exact: true }).click();
+  await expect(popup.getByRole('combobox', { name: 'Saved account' })).toHaveCount(0);
+  await expect(popup.getByRole('button', { name: 'Register a new app' })).toHaveCount(0);
+  await popup.getByRole('button', { name: 'Sign in again', exact: true }).click();
   await expect
     .poll(() =>
       worker.evaluate(() =>
@@ -286,14 +287,12 @@ test('managed connections preserve setup after failure and report removed models
         ).connectionFixture.requests.filter((r) => r.action === 'login'),
       ),
     )
-    .toEqual([{ action: 'login', accountId: 'fixture-account', consent: true }]);
-  await popup.getByRole('button', { name: 'Cancel', exact: true }).click();
+    .toEqual([{ action: 'login', accountId: 'fixture-account', consent: false }]);
+  await expect(plan).toBeVisible();
   await popup.getByRole('button', { name: '＋ Add', exact: true }).click();
-  await expect(
-    popup.getByRole('button', { name: 'Sign in and allow plan use', exact: true }),
-  ).toBeDisabled();
-  await popup.getByRole('combobox', { name: 'Account', exact: true }).selectOption('fixture-spare');
-  await popup.getByRole('button', { name: 'Sign in and allow plan use', exact: true }).click();
+  await expect(popup.getByRole('button', { name: 'Save connection', exact: true })).toHaveCount(0);
+  await popup.getByRole('combobox', { name: 'Saved account' }).selectOption('fixture-spare');
+  await popup.getByRole('button', { name: 'Enable plan use', exact: true }).click();
   await expect
     .poll(() =>
       worker.evaluate(() =>
@@ -417,10 +416,11 @@ test('managed connections preserve setup after failure and report removed models
   expect(saves[0]).toEqual(saves[1]);
 });
 
-test('new plan registrations show the same suggested app name before and after sign-in', async ({
+test('registering a new app copies the name and requires explicit confirmation to display it', async ({
   sandbox,
 }, info) => {
   const { worker, popup } = await sandbox.launch();
+  await popup.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await configureConnections(worker);
   await popup.reload();
   await popup.setViewportSize({ width: 390, height: 850 });
@@ -428,32 +428,68 @@ test('new plan registrations show the same suggested app name before and after s
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await settingsSection(popup, 'Connections');
   await popup.getByRole('button', { name: '＋ Add', exact: true }).click();
-  const addAccount = popup.getByRole('button', { name: 'Add another account', exact: true });
-  await addAccount.click();
-  await expect(addAccount).toBeFocused();
-  const name = popup.getByRole('textbox', { name: 'Suggested app name', exact: true });
+  const register = popup.getByRole('button', { name: 'Register a new app', exact: true });
+  await register.click();
+  const name = popup.getByRole('textbox', { name: 'Name to paste in ChatGPT', exact: true });
   await expect(name).toHaveValue(/^Saul [0-9A-F]{12}$/);
   const suggestion = await name.inputValue();
+  await expect(popup.getByRole('button', { name: 'Save connection', exact: true })).toHaveCount(0);
   expect(await popup.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await popup.screenshot({ path: info.outputPath('suggested-app-name-dark.png'), fullPage: true });
-  await popup.getByRole('button', { name: 'Continue to ChatGPT', exact: true }).click();
-  const account = popup.getByRole('combobox', { name: 'Account', exact: true });
-  await expect(account).toHaveValue('fixture-new-0');
-  await expect(account.locator('option:checked')).toHaveText(`alex@example.com · ${suggestion}`);
-  const requests = await worker.evaluate(() =>
-    (globalThis as FixtureGlobal).connectionFixture.requests.filter((r) => r.action === 'login'),
-  );
-  expect(requests).toEqual([{ action: 'login', suggestedAppName: suggestion, consent: true }]);
-  await addAccount.click();
-  await expect(name).not.toHaveValue(suggestion);
-  await addAccount.click();
-  await popup.getByLabel('Name', { exact: true }).fill('Current plan');
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await popup.screenshot({
+    path: info.outputPath('register-with-chatgpt-dark.png'),
+    fullPage: true,
+  });
+  await popup.getByRole('button', { name: 'Copy name and open ChatGPT', exact: true }).click();
+  const finishSetup = popup.getByRole('heading', { name: 'Finish ChatGPT setup' });
+  await expect(finishSetup).toBeVisible();
+  await expect(
+    popup.getByText('Account · alex@example.com · newReg', { exact: true }),
+  ).toBeVisible();
+  await expect(popup.getByRole('combobox', { name: 'Saved account', exact: true })).toHaveCount(0);
+  expect(await popup.evaluate(() => navigator.clipboard.readText())).toBe(suggestion);
+  const confirmed = popup.getByRole('checkbox', { name: 'I used ' + suggestion + ' in ChatGPT' });
+  await expect(confirmed).not.toBeChecked();
+  await popup.screenshot({
+    path: info.outputPath('finish-chatgpt-setup-dark.png'),
+    fullPage: true,
+  });
+  await confirmed.check();
+  await popup.getByLabel('Connection name', { exact: true }).fill('Current plan');
+  await popup.getByRole('button', { name: 'Save connection', exact: true }).click();
   const connection = popup.getByRole('article', { name: 'Current plan', exact: true });
-  await expect(connection.getByText(`alex@example.com · ${suggestion}`)).toBeVisible();
+  await expect(connection.getByText('alex@example.com · ' + suggestion)).toBeVisible();
+  const requests = await worker.evaluate(() =>
+    (globalThis as FixtureGlobal).connectionFixture.requests.filter(
+      (r) => r.action === 'login' || r.action === 'confirm-app-name',
+    ),
+  );
+  expect(requests).toEqual([
+    { action: 'login', suggestedAppName: suggestion, consent: false },
+    { action: 'confirm-app-name', accountId: 'fixture-new-0', suggestedAppName: suggestion },
+  ]);
   await popup.setViewportSize({ width: 640, height: 760 });
   await popup.emulateMedia({ colorScheme: 'light' });
   await popup.screenshot({ path: info.outputPath('saved-app-name-light.png'), fullPage: true });
+
+  await popup.getByRole('button', { name: '＋ Add', exact: true }).click();
+  await register.click();
+  const secondSuggestion = await name.inputValue();
+  expect(secondSuggestion).not.toBe(suggestion);
+  await popup.getByRole('button', { name: 'Copy name and open ChatGPT', exact: true }).click();
+  await expect(finishSetup).toBeVisible();
+  await popup.getByLabel('Connection name', { exact: true }).fill('Kept default');
+  await popup.getByRole('button', { name: 'Save connection', exact: true }).click();
+  const unnamed = popup.getByRole('article', { name: 'Kept default' });
+  await expect(unnamed.getByRole('status')).toHaveText('✓ Connected');
+  await expect(unnamed.getByText(secondSuggestion, { exact: false })).toHaveCount(0);
+  expect(
+    await worker.evaluate(
+      () =>
+        (globalThis as FixtureGlobal).connectionFixture.requests.filter(
+          (r) => r.action === 'confirm-app-name',
+        ).length,
+    ),
+  ).toBe(1);
 });
 
 test('a managed preset links to its connection, where Check replaces a passive request', async ({

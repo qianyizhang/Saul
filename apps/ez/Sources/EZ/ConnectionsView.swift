@@ -1,9 +1,16 @@
 import AppKit
 import EZCore
+import SaulCredentialClient
 import SaulNativeValues
 import SwiftUI
 
 struct ConnectionsView: View {
+    private struct Registration {
+        let name: String
+        var accountID: String?
+        var confirmed = false
+    }
+
     @ObservedObject var model: AppModel
     @Binding var hasUnsavedChanges: Bool
     let visible: Bool
@@ -14,12 +21,17 @@ struct ConnectionsView: View {
     @State private var endpoint = "https://api.openai.com/v1"
     @State private var key = ""
     @State private var account = ""
-    @State private var suggestedAppName: String?
+    @State private var registration: Registration?
     @State private var newID = ""
     private var busy: Bool { model.credentialBusy }
     @State private var error: String?
     @State private var removing: ConnectionDefinition?
     @State private var loginTask: Task<Void, Never>?
+    private var selectedProfile: SaulAccount? { model.profiles.first { $0.id == account } }
+    private var planReady: Bool { selectedProfile?.signedIn == true && selectedProfile?.planEnabled == true }
+    private var needsPlanPermission: Bool {
+        selectedProfile?.signedIn == true && selectedProfile?.planEnabled == false
+    }
 
     var body: some View {
         ScrollView {
@@ -27,10 +39,17 @@ struct ConnectionsView: View {
                 HStack {
                     Text("Connections").font(AppStyle.subject)
                     Spacer()
-                    Button("Add", systemImage: "plus") { open(nil) }
+                    if !editing {
+                        Menu("Add connection", systemImage: "plus") {
+                            Button("ChatGPT plan") { open(nil, type: "plan") }
+                            Button("OpenAI API") { open(nil, type: "api") }
+                            Button("Custom endpoint") { open(nil, type: "custom") }
+                        }
                         .disabled(
-                            busy || model.configurationLocked || !model.sharedCredentialsConnected
+                            busy || loginTask != nil || model.configurationLocked
+                                || !model.sharedCredentialsConnected
                                 || model.configuration.connections.count >= 32)
+                    }
                 }
                 if let error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
                 if loginTask != nil {
@@ -121,7 +140,10 @@ struct ConnectionsView: View {
                         .background(DesignTokens.subtle, in: RoundedRectangle(cornerRadius: 4))
                 }
             }
-            Text(identity(connection, status: status)).font(AppStyle.caption).textSelection(.enabled)
+            let accountIdentity = identity(connection, status: status)
+            if accountIdentity != connection.name {
+                Text(accountIdentity).font(AppStyle.caption).textSelection(.enabled)
+            }
             HStack {
                 if checking { ProgressView().controlSize(.small) }
                 Text(
@@ -142,7 +164,12 @@ struct ConnectionsView: View {
                     Button("Check") { Task { await model.refreshConnection(connection, intent: .check) } }
                         .disabled(checkingExplicitly || busy)
                 } else {
-                    Button("Set up") { open(connection) }.disabled(busy)
+                    Button(
+                        connection.kind == .chatGPTPlan && connection.accountId != nil
+                            ? "Sign in again" : "Set up"
+                    ) {
+                        open(connection)
+                    }.disabled(busy)
                 }
             }
             if let problem {
@@ -160,20 +187,20 @@ struct ConnectionsView: View {
         }
         return connection.endpoint + (status?.keySuffix.map { " · sk-***\($0)" } ?? "")
     }
-    private func open(_ connection: ConnectionDefinition?) {
+    private func open(_ connection: ConnectionDefinition?, type: String = "plan") {
         target = connection
         editing = true
         key = ""
         error = nil
         name = connection?.name ?? ""
         account = connection?.accountId ?? ""
-        suggestedAppName = nil
+        registration = nil
         endpoint = connection?.endpoint ?? "https://api.openai.com/v1"
         kind =
             connection?.kind == .openAIAPI
-            ? (endpoint == "https://api.openai.com/v1" ? "api" : "custom") : "plan"
+            ? (endpoint == "https://api.openai.com/v1" ? "api" : "custom") : type
         newID = "connection-" + UUID().uuidString.lowercased()
-        guard model.allowsExternalServices else { return }
+        guard kind == "plan", model.allowsExternalServices else { return }
         Task {
             do {
                 try await model.loadConnectionAccounts()
@@ -181,51 +208,20 @@ struct ConnectionsView: View {
         }
     }
     private var setupForm: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(target.map { "Set up \($0.name)" } ?? "Add connection").font(.headline)
-            if target == nil {
-                Picker("Type", selection: $kind) {
-                    Text("ChatGPT plan").tag("plan")
-                    Text("OpenAI API").tag("api")
-                    Text("Custom endpoint").tag("custom")
-                }
-                Text("Name").font(AppStyle.caption)
-                TextField("Connection name", text: $name).textFieldStyle(.roundedBorder)
-            }
+        VStack(alignment: .leading, spacing: 16) {
             if kind == "plan" {
-                Picker("Account", selection: $account) {
-                    Text("Choose an account").tag("")
-                    ForEach(model.profiles) { profile in Text(profile.label).tag(profile.id) }
-                }.disabled(target?.accountId != nil)
-                Button("Sign in and allow plan use") { signIn() }.disabled(
-                    !model.allowsExternalServices || account.isEmpty)
-                if target?.accountId == nil {
-                    DisclosureGroup(
-                        "Add another account",
-                        isExpanded: Binding(
-                            get: { suggestedAppName != nil },
-                            set: { expanded in
-                                if expanded {
-                                    let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "")
-                                        .prefix(12)
-                                    suggestedAppName = "Saul \(suffix)"
-                                } else {
-                                    suggestedAppName = nil
-                                }
-                            })
-                    ) {
-                        if let suggestedAppName {
-                            LabeledContent("Suggested app name") {
-                                Text(suggestedAppName).textSelection(.enabled)
-                            }
-                            Text("Copy this name and paste it into the app name field in ChatGPT.")
-                                .font(AppStyle.caption).foregroundStyle(.secondary)
-                            Button("Continue to ChatGPT") { signIn(suggestedAppName: suggestedAppName) }
-                        }
-                    }
-                    .disabled(!model.allowsExternalServices)
+                if let registration, registration.accountID == nil {
+                    registrationForm(registration.name)
+                } else {
+                    planForm
                 }
             } else {
+                Text(
+                    target.map { "Set up \($0.name)" }
+                        ?? (kind == "api" ? "Add OpenAI API" : "Add custom endpoint")
+                )
+                .font(.headline)
+                if target == nil { connectionNameField }
                 if kind == "custom" {
                     Text("Endpoint").font(AppStyle.caption)
                     TextField("https://example.com/v1", text: $endpoint).textFieldStyle(.roundedBorder)
@@ -240,32 +236,146 @@ struct ConnectionsView: View {
                         : "Uses this endpoint's billing. Keys stay bound to this endpoint."
                 )
                 .font(AppStyle.caption).foregroundStyle(.secondary)
+                HStack {
+                    Button("Save connection") { save() }.buttonStyle(.borderedProminent)
+                    Button("Cancel") { closeEditor() }
+                }
+            }
+            if loginTask != nil { ProgressView("Waiting for ChatGPT…").controlSize(.small) }
+        }
+        .frame(maxWidth: 480, alignment: .leading)
+        .disabled(busy || loginTask != nil || model.configurationLocked)
+    }
+
+    private var connectionNameField: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Connection name").font(AppStyle.caption)
+            TextField("Connection name", text: $name, prompt: Text(kind == "plan" ? "ChatGPT plan" : "Name"))
+                .textFieldStyle(.roundedBorder)
+        }
+    }
+
+    private var planForm: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(
+                registration?.accountID != nil
+                    ? "Finish ChatGPT setup" : (target.map { "Set up \($0.name)" } ?? "Add ChatGPT plan")
+            ).font(.headline)
+            if target?.accountId != nil || registration?.accountID != nil {
+                LabeledContent("Account", value: selectedProfile?.label ?? "Loading…")
+            } else {
+                Picker(
+                    "Saved account",
+                    selection: Binding(
+                        get: { account },
+                        set: { id in
+                            account = id
+                            if registration?.accountID != id { registration = nil }
+                            error = nil
+                        }
+                    )
+                ) {
+                    Text("Choose an account").tag("")
+                    ForEach(
+                        model.profiles.filter { profile in
+                            !model.configuration.connections.contains { $0.accountId == profile.id }
+                        }
+                    ) { profile in Text(profile.label).tag(profile.id) }
+                }
+            }
+            if target?.accountId == nil && planReady {
+                if let name = registration?.name {
+                    Toggle(
+                        "I used \(name) in ChatGPT",
+                        isOn: Binding(
+                            get: { registration?.confirmed ?? false },
+                            set: { registration?.confirmed = $0 }
+                        ))
+                }
+                if target == nil { connectionNameField }
             }
             HStack {
-                Button("Save") { save() }.buttonStyle(.borderedProminent)
-                Button("Cancel") {
-                    editing = false
-                    key = ""
+                if target?.accountId == nil && planReady {
+                    Button("Save connection") { save() }.buttonStyle(.borderedProminent)
+                } else if selectedProfile != nil || target?.accountId != nil {
+                    Button(needsPlanPermission ? "Enable plan use" : "Sign in again") { signIn() }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!model.allowsExternalServices)
+                }
+                Button("Cancel") { closeEditor() }
+            }
+            if target?.accountId == nil && registration == nil {
+                Divider()
+                Button("Register a new app") {
+                    let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(12)
+                    registration = Registration(name: "Saul \(suffix)")
+                    error = nil
+                }.disabled(!model.allowsExternalServices)
+            }
+        }
+    }
+
+    private func registrationForm(_ name: String) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Register with ChatGPT").font(.headline)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Name to paste in ChatGPT").font(AppStyle.caption).foregroundStyle(.secondary)
+                Text(name).font(.body.monospaced()).textSelection(.enabled)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background(DesignTokens.subtle, in: RoundedRectangle(cornerRadius: 8))
+            Text("ChatGPT starts with Saul. Replace it with the copied name before you approve.")
+                .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Button("Copy name and open ChatGPT") {
+                    guard TextClipboard.write(name) else {
+                        error = "Could not copy the app name. Try again."
+                        return
+                    }
+                    signIn(suggestedAppName: name)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!model.allowsExternalServices)
+                Button("Back") {
+                    registration = nil
                     error = nil
                 }
-                if busy { ProgressView().controlSize(.small) }
             }
-        }.disabled(busy || loginTask != nil || model.configurationLocked)
+        }
     }
+
+    private func closeEditor() {
+        editing = false
+        registration = nil
+        key = ""
+        error = nil
+    }
+
     private func signIn(suggestedAppName: String? = nil) {
         error = nil
+        let consent = suggestedAppName == nil && needsPlanPermission
         loginTask = Task {
-            defer {
-                loginTask = nil
-                self.suggestedAppName = nil
-            }
+            defer { loginTask = nil }
             do {
-                if let id = try await model.signInConnection(
-                    accountID: target?.accountId ?? account, suggestedAppName: suggestedAppName)
-                {
-                    account = id
+                guard
+                    let id = try await model.signInConnection(
+                        accountID: target?.accountId ?? account, suggestedAppName: suggestedAppName,
+                        consent: consent)
+                else { return }
+                if let suggestedAppName {
+                    registration = Registration(name: suggestedAppName, accountID: id)
+                }
+                account = id
+                if let target, target.accountId != nil, planReady {
+                    closeEditor()
+                    await model.refreshConnection(target)
+                } else if !planReady {
+                    error = "ChatGPT plan use is still disabled for this account."
                 }
             } catch {
+                if suggestedAppName != nil { registration = nil }
                 if !Task.isCancelled {
                     self.error = error.localizedDescription
                     try? await model.loadConnectionAccounts()
@@ -273,6 +383,7 @@ struct ConnectionsView: View {
             }
         }
     }
+
     private func save() {
         error = nil
         Task {
@@ -286,7 +397,9 @@ struct ConnectionsView: View {
                     }
                     definition = ConnectionDefinition(
                         key: target?.key ?? newID,
-                        name: target?.name ?? (name.isEmpty ? String(profile.label.prefix(80)) : name),
+                        name: target?.name
+                            ?? (name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                ? "ChatGPT plan" : name.trimmingCharacters(in: .whitespacesAndNewlines)),
                         kind: .chatGPTPlan, accountId: profile.id)
                 } else {
                     definition = ConnectionDefinition(
@@ -297,9 +410,10 @@ struct ConnectionsView: View {
                             : endpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/")))
                 }
                 try ConnectionDefinition.validate([definition])
-                try await model.saveConnection(definition, key: kind == "plan" ? nil : key)
-                editing = false
-                key = ""
+                try await model.saveConnection(
+                    definition, key: kind == "plan" ? nil : key,
+                    confirmedAppName: registration?.confirmed == true ? registration?.name : nil)
+                closeEditor()
             } catch { self.error = error.localizedDescription }
         }
     }

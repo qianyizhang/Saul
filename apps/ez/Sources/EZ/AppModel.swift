@@ -400,11 +400,13 @@ import SaulNativeValues
 
     func loadConnectionAccounts() async throws { try await session.loadAccounts() }
 
-    func signInConnection(accountID: String, suggestedAppName: String?) async throws -> String? {
+    func signInConnection(accountID: String, suggestedAppName: String?, consent: Bool) async throws -> String?
+    {
         try session.begin(.signIn, blocked: busy || launcherPending)
         defer { session.endOperation() }
         return try await session.signIn(
-            accountID, suggestedAppName: suggestedAppName, connections: configuration.connections)
+            accountID, suggestedAppName: suggestedAppName, consent: consent,
+            connections: configuration.connections)
     }
 
     func initializeStarterPreset() {
@@ -468,7 +470,9 @@ import SaulNativeValues
             }
         }
     }
-    func saveConnection(_ connection: ConnectionDefinition, key: String? = nil) async throws {
+    func saveConnection(
+        _ connection: ConnectionDefinition, key: String? = nil, confirmedAppName: String? = nil
+    ) async throws {
         guard configurationLoaded, let store = configurationStore else {
             throw EZError("Configuration is unavailable. Reload saved settings first.")
         }
@@ -491,6 +495,9 @@ import SaulNativeValues
             throw EZError("This account already has a connection.")
         }
         if let key { try await session.client.saveKey(connection, key) }
+        if let account = connection.accountId, let confirmedAppName {
+            try await session.client.confirmAppName(account, confirmedAppName)
+        }
         connectionChecks.invalidate(connection.key)
         do { try persistConfiguration(updated, store: store) } catch {
             if key != nil {

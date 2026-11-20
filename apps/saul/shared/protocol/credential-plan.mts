@@ -71,6 +71,8 @@ export type PlanEvent =
 
 const text = (v: unknown, max: number): v is string =>
   typeof v === 'string' && v.length > 0 && v.length <= max;
+export const validSuggestedAppName = (name: unknown): name is string =>
+  typeof name === 'string' && name.length === 17 && /^Saul [0-9A-F]{12}$/.test(name);
 export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
   if (!isRecord(v)) throw new Error('Invalid plan request');
   const operations: Record<string, string[]> = {
@@ -100,10 +102,7 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
     ((v.accountId !== undefined && !text(v.accountId, 256)) ||
       (v.consent !== undefined && typeof v.consent !== 'boolean') ||
       (v.suggestedAppName !== undefined &&
-        (v.accountId !== undefined ||
-          typeof v.suggestedAppName !== 'string' ||
-          v.suggestedAppName.length !== 17 ||
-          !/^Saul [0-9A-F]{12}$/.test(v.suggestedAppName))))
+        (v.accountId !== undefined || !validSuggestedAppName(v.suggestedAppName))))
   )
     throw new Error('Invalid sign-in request');
   if (

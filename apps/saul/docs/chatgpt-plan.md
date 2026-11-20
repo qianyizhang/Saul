@@ -6,7 +6,7 @@ Saul supports the direct **Sign in with ChatGPT** preview for local and open-sou
 
 1. Build and install the selected apps and helpers using the [setup guide](../../../docs/setup.md).
 2. Open **Settings → Preferences → Integrations → Connect to Saul** in Chrome. EZ uses the same signed owner by default; reconnect it in Preferences → Integrations if disconnected.
-3. Open **Settings → Connections → ChatGPT plan → Set up** in either app. Choose an existing account and Save to reuse its sign-in. **Sign in and allow plan use** reauthorizes the selected registration. To create a registration, open **Add another account**, copy the suggested app name, and select **Continue to ChatGPT**. Paste the name into ChatGPT's app name field before approving.
+3. Open **Settings → Connections** in either app. For a saved connection, choose **Sign in again**. For a new connection, add **ChatGPT plan** and choose a saved account or **Register a new app**. Select **Copy name and open ChatGPT**, then replace `Saul` with the copied name in ChatGPT before approving. Back in Settings, check **I used … in ChatGPT** if you pasted that name, then save the connection.
 4. In **Presets**, choose the saved connection, an available model, effort and speed, then Save. Catalog checks do not generate. Unavailable saved model options block until explicitly changed.
 
 A connection saved in either app is available to both. Managed connections pin the
@@ -15,11 +15,11 @@ apps; Disconnect app only removes that app's binding. Account registrations rema
 distinct even when their email labels match. Never merge tokens or change a saved
 connection's account to resolve duplicate labels.
 
-The account picker and saved connection show the suggested app name beside
-the email. If you used that name at consent, look for the same name in
-**ChatGPT Settings → Usage → Connected App Limits**. Older picker labels ending
-in six characters show the end of the issued client ID. ChatGPT's sign-in
-callback supplies no name for those existing entries.
+The account picker and saved connection show the confirmed app name beside the
+email. Look for that name in **ChatGPT Settings → Usage → Connected App Limits**.
+If you kept the default name or used a different name, leave the confirmation
+unchecked. Picker labels ending in six characters show the end of the issued
+client ID.
 
 To use a plan connection for built-in **Summarize**, select its saved **Model
 preset** in **Settings → Calls** and Save. Custom Call presets retain the runtime
@@ -79,8 +79,9 @@ account/model/URL result.
 Tokens stay in Keychain behind the signed owner. The
 [credential contract](../../../contracts/credentials.md) owns OAuth, refresh,
 version compatibility and sign-out. If token exchange fails after a client ID
-was issued, select the pending registration and reauthorize it using **Sign in
-and allow plan use**. Inference requires validated identity and plan permission.
+was issued, select the pending registration under **Saved account** and choose
+**Sign in again**. If the signed-in account lacks plan permission, choose
+**Enable plan use**. Inference requires validated identity and plan permission.
 
 Use **Disconnect app** in Preferences → Integrations to disconnect Chrome
 without changing EZ's access. Use **Sign out** in Connections only if you

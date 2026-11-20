@@ -31,7 +31,7 @@ import SaulTestSupport
             try expectEqual(
                 requests[0]["accountId"] as? String, "chosen-registration",
                 "Reauthorization created a registration")
-            try expectEqual(requests[0]["consent"] as? Bool, true, "Plan permission was not requested")
+            try expectEqual(requests[0]["consent"] as? Bool, false, "Ordinary reauthorization forced consent")
             try expect(requests[0]["suggestedAppName"] == nil, "Reauthorization sent a new name")
             try await expectAsyncThrows(CredentialStorageError.self) {
                 _ = try await client.signIn(accountID: "", authorize: { _ in false })
@@ -44,6 +44,9 @@ import SaulTestSupport
             try expectEqual(
                 requests[1]["suggestedAppName"] as? String, "Saul 0123456789AB",
                 "Explicit Add lost the suggested app name")
+            _ = try await client.signIn(
+                accountID: "chosen-registration", consent: true, authorize: { _ in false })
+            try expectEqual(requests[2]["consent"] as? Bool, true, "Explicit Enable plan use omitted consent")
         },
         CheckCase("connections: stored names upgrade once without losing identity or conflicting originals") {
             directory in

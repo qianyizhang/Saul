@@ -64,8 +64,10 @@ forms and answers scroll independently of actions.
 
 ## Connections and actions
 
-In **Settings → Connections → ChatGPT plan → Set up**, finish browser sign-in
-and allow plan usage. Account eligibility and rollout govern access. **More → Usage**
+In **Settings → Connections**, choose **Sign in again** on a saved connection
+or **Add connection → ChatGPT plan** to use another account. Follow the shared
+[sign-in and app naming steps](../../saul/docs/chatgpt-plan.md#setup).
+Account eligibility and rollout govern access. **More → Usage**
 opens the plan allowance view; Fast can consume more allowance without guaranteeing
 latency. There is no fallback API billing.
 

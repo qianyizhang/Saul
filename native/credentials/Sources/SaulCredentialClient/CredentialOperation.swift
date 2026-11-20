@@ -5,6 +5,7 @@ public enum CredentialOperation: Sendable {
   case accounts, status
   case select(accountID: String)
   case login(accountID: String?, consent: Bool, suggestedAppName: String?)
+  case confirmAppName(accountID: String, name: String)
   case logout(accountID: String)
   case models(accountID: String)
   case generate(PlanText)

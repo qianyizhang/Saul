@@ -8,7 +8,11 @@ import {
   validImageFormat,
   validSpeechVoice,
 } from './shared-presets-contract.mts';
-import { validatePlanRequest, type PlanRequest } from './credential-plan.mts';
+import {
+  validatePlanRequest,
+  validSuggestedAppName,
+  type PlanRequest,
+} from './credential-plan.mts';
 
 export const CREDENTIALS_VERSION = 2;
 export const CREDENTIALS_HOST = 'com.saul.credentials';
@@ -21,6 +25,7 @@ export function officialOpenAI(baseUrl: string): boolean {
 export type ConnectionCatalogIntent = 'display' | 'refresh' | 'check';
 export type CredentialRequest =
   | PlanRequest
+  | { action: 'confirm-app-name'; accountId: string; suggestedAppName: string }
   | { action: 'connection-status'; connectionKey: string }
   | ({
       action: 'connection-catalog';
@@ -71,6 +76,7 @@ export function validateCredentialRequest(value: unknown): asserts value is Cred
   const operations: Record<string, string[]> = {
     status: [],
     select: ['accountId'],
+    'confirm-app-name': ['accountId', 'suggestedAppName'],
     'api-key-status': [],
     'api-key-remove': [],
     'api-key-save': ['key'],
@@ -93,6 +99,11 @@ export function validateCredentialRequest(value: unknown): asserts value is Cred
   const fields = operations[value.action];
   if (!fields || Object.keys(value).some((key) => key !== 'action' && !fields.includes(key)))
     throw new Error('Unsupported Saul credential operation.');
+  if (
+    value.action === 'confirm-app-name' &&
+    (!text(value.accountId, 256) || !validSuggestedAppName(value.suggestedAppName))
+  )
+    throw new Error('Invalid ChatGPT app name confirmation.');
   if (
     (value.action.startsWith('connection-') || value.connectionKey !== undefined) &&
     (!text(value.connectionKey, 64) || !/^[a-z][a-z0-9-]{0,63}$/.test(value.connectionKey))

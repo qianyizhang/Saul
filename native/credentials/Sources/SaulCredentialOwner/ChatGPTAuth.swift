@@ -44,12 +44,13 @@ import SaulNativeValues
     try save(next)
   }
   public func signIn(
-    newAccount: Bool = false, enablePlan: Bool = false, suggestedAppName: String? = nil,
+    accountID: String?, enablePlan: Bool = false, suggestedAppName: String? = nil,
     openBrowser: (URL) -> Bool
   ) async throws {
     guard listener == nil else { throw OwnerRequestError("A sign-in is already in progress.") }
+    let previous = state.profiles.first { $0.id == accountID }
+    guard accountID == nil || previous != nil else { throw OwnerRequestError("Unknown account.") }
     try save(state)  // Persist the installation identity before leaving for the browser.
-    let previous = newAccount ? nil : selected
     let initialID = previous?.clientID ?? "dynamic_agent_client"
     let stateToken = try OIDC.random()
     let nonce = try OIDC.random()
@@ -72,7 +73,7 @@ import SaulNativeValues
     if previous == nil { params["agent_name_hint"] = "Saul" }
     if let hint = previous?.credentials?.idToken { params["id_token_hint"] = hint }
     if let email = previous?.email { params["login_hint"] = email }
-    if enablePlan { params["prompt"] = "consent" }
+    if enablePlan && previous?.credentials?.canUsePlan == false { params["prompt"] = "consent" }
     url.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
     guard let authorizationURL = url.url, openBrowser(authorizationURL) else {
       throw OwnerRequestError("Could not open the sign-in browser.")
@@ -92,13 +93,17 @@ import SaulNativeValues
     if let previous, issuedID != previous.clientID {
       throw OwnerRequestError("Sign-in returned a different client registration.")
     }
+    if previous == nil && state.profiles.contains(where: { $0.id == issuedID }) {
+      throw OwnerRequestError(
+        "ChatGPT returned an existing registration. Choose it under saved accounts.")
+    }
     var profile =
       previous
       ?? AccountProfile(
         clientID: issuedID, subject: nil, email: nil, credentials: nil,
         suggestedAppName: suggestedAppName)
     // Preserve registration before the first exchange, including invalid_grant recovery.
-    try upsert(profile, select: state.selectedID == nil)
+    if previous == nil { try upsert(profile) }
     let token = try await tokenRequest([
       "grant_type": "authorization_code", "client_id": issuedID, "code": code,
       "code_verifier": verifier, "redirect_uri": redirect.absoluteString,
@@ -116,6 +121,14 @@ import SaulNativeValues
     profile.credentials = try credentials(token, previous: nil, idToken: idToken)
     try Task.checkCancellation()
     try upsert(profile, select: true)
+  }
+  func confirmAppName(accountID: String, name: String) throws {
+    guard var profile = state.profiles.first(where: { $0.id == accountID }),
+      profile.subject != nil, profile.suggestedAppName == name
+    else { throw OwnerRequestError("That name does not match the saved registration.") }
+    guard profile.appNameConfirmed != true else { return }
+    profile.appNameConfirmed = true
+    try upsert(profile)
   }
   public func cancelSignIn() { listener?.cancel() }
   public func accessToken(accountID: String? = nil) async throws -> String {

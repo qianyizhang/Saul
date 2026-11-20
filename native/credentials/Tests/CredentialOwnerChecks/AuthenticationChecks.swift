@@ -7,6 +7,32 @@ import SaulTestSupport
 
 @MainActor func authenticationChecks() -> [CheckCase] {
   [
+    CheckCase(
+      "auth: ordinary sign-in reuses the client without forcing consent or changing selection"
+    ) {
+      _ in
+      var state = credentialState()
+      state.selectedID = "other"
+      var other = state.profiles[0]
+      other.clientID = "other"
+      state.profiles.append(other)
+      let store = MemoryCredentials(state)
+      let auth = ChatGPTAuth(storage: store)
+      try await auth.load()
+      var parameters: [String: String] = [:]
+      try await expectAsyncThrows(OwnerRequestError.self) {
+        try await auth.signIn(accountID: "issued", enablePlan: true) { url in
+          for item in URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? [] {
+            parameters[item.name] = item.value
+          }
+          return false
+        }
+      }
+      try expectEqual(parameters["client_id"], "issued", "Reauthorization changed registrations")
+      try expect(parameters["prompt"] == nil, "Ordinary sign-in forced consent")
+      try expectEqual(
+        store.value.selectedID, "other", "Failed sign-in selected another registration")
+    },
     CheckCase("auth: credential restore suspends without publishing partial state") { _ in
       let pending = PendingCredentialRead()
       let fixture = HTTPFixture { _ in

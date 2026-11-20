@@ -97,16 +97,19 @@ for an explicit selection. Setup writes credentials before the public definition
 a failed definition save keeps the setup draft and same ID for an explicit retry.
 It does not silently switch or delete another connection. Both setup forms reauthorize
 the selected registration, including on a new or unbound connection. Only
-**Add another account → Continue to ChatGPT** omits the account ID to create a
+**Register a new app → Copy name and open ChatGPT** omits the account ID to create a
 registration. Equal email labels never justify merging registrations or their tokens.
 
 On a new registration, version 2 clients can send a `suggestedAppName` in
-the form `Saul <12 uppercase hex digits>`. The user enters it in ChatGPT's
-consent screen. The owner retains the suggestion with the issued client ID
-before token exchange and includes it in the account label and connection
-status. ChatGPT's callback supplies no approved name. Older registrations
-keep their existing labels. Reauthorization omits the suggested name and
-preserves the saved label, even after sign-out.
+the form `Saul <12 uppercase hex digits>`. The owner retains the suggestion
+with the issued client ID before token exchange. ChatGPT's callback supplies
+no approved name. Once the user confirms they used the copied name,
+`confirm-app-name` records that confirmation for the verified registration
+under the credential lease. Account labels and connection status show the
+name only after confirmation. Older stored suggestions have no confirmation.
+Reauthorization preserves the name and selects the account only after identity
+validation. Only explicit **Enable plan use** for a signed-in account missing
+the grant requests `prompt=consent`.
 
 `connection-status` returns identity, endpoint, masked key suffix and availability.
 `connection-catalog` returns current models, last successful fetch time and a

@@ -30,7 +30,7 @@ private let planUsageLimit = """
 
 @MainActor func planCatalogChecks() -> [CheckCase] {
   [
-    CheckCase("connections: the saved registration name appears on the bound connection") {
+    CheckCase("connections: only a confirmed app name appears on the bound connection") {
       directory in
       let http = HTTPFixture { _ in throw CheckFailure("Reading an app name made an HTTP request") }
       defer { http.close() }
@@ -39,7 +39,23 @@ private let planUsageLimit = """
       try expect(
         state.profiles.allSatisfy { $0.suggestedAppName == nil }, "Old account names were invented")
       state.profiles[0].suggestedAppName = "Saul 0123456789AB"
+      state.profiles[0].subject = "verified-account"
       try fixture.storage.write(state)
+      let pending = try await fixture.run([
+        "action": "connection-status", "connectionKey": "plan-a",
+      ])
+      try expectEqual(
+        (pending.first?["connection"] as? [String: Any])?["identity"] as? String,
+        "a@example.test · ChatGPT app name unconfirmed",
+        "The suggestion appeared as an approved name")
+      try await expectAsyncThrows(OwnerRequestError.self) {
+        _ = try await fixture.run([
+          "action": "confirm-app-name", "accountId": "b", "suggestedAppName": "Saul 0123456789AB",
+        ])
+      }
+      _ = try await fixture.run([
+        "action": "confirm-app-name", "accountId": "a", "suggestedAppName": "Saul 0123456789AB",
+      ])
       let status = try await fixture.run(["action": "connection-status", "connectionKey": "plan-a"])
       let bound = status.first?["connection"] as? [String: Any]
       try expectEqual(

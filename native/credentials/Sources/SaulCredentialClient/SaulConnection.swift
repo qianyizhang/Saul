@@ -46,13 +46,13 @@ public struct SaulAccount: Codable, Equatable, Sendable, Identifiable {
   }
   /// Reauthorize an existing registration unless the user explicitly adds an account.
   public func signIn(
-    accountID: String, suggestedAppName: String? = nil,
+    accountID: String, suggestedAppName: String? = nil, consent: Bool = false,
     authorize: @escaping @MainActor (URL) -> Bool
   ) async throws -> [String: Any] {
     guard suggestedAppName != nil || !accountID.isEmpty else {
       throw CredentialStorageError("Choose an account to sign in again.")
     }
-    var request: [String: Any] = ["action": "login", "consent": true]
+    var request: [String: Any] = ["action": "login", "consent": consent]
     if let suggestedAppName {
       request["suggestedAppName"] = suggestedAppName
     } else {

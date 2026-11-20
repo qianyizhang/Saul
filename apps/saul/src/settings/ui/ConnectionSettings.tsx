@@ -125,7 +125,7 @@ function ConnectionRow({
           <code key={capability}>{capability[0]!.toUpperCase() + capability.slice(1)}</code>
         ))}
       </p>
-      <p className="connection-identity">{identity}</p>
+      {identity !== connection.name && <p className="connection-identity">{identity}</p>}
       <div className="row between">
         <span role="status">
           {!enabled
@@ -204,7 +204,11 @@ export function ConnectionSettings({
   const [endpoint, setEndpoint] = useState('https://api.openai.com/v1');
   const [key, setKey] = useState('');
   const [accountId, setAccountId] = useState('');
-  const [suggestedAppName, setSuggestedAppName] = useState('');
+  const [registration, setRegistration] = useState<{
+    name: string;
+    accountId?: string;
+    confirmed?: boolean;
+  }>();
   const [accounts, setAccounts] = useState<PlanAccount[]>([]);
   const [logouts, setLogouts] = useState<ReadonlyMap<string, Logout>>(() => new Map());
   const [busy, setBusy] = useState(false);
@@ -212,8 +216,18 @@ export function ConnectionSettings({
   const [revision, setRevision] = useState(0);
   const [newId, setNewId] = useState('');
   const loginController = useRef<AbortController | null>(null);
+  const suggestedNameInput = useRef<HTMLInputElement>(null);
   useEffect(() => () => loginController.current?.abort(), []);
   const enabled = settings.sharedCredentials === 'saul';
+  const selectedAccount = accounts.find((account) => account.id === accountId);
+  const planReady = !!(selectedAccount?.signedIn && selectedAccount.planEnabled);
+  const needsPlanPermission = !!(selectedAccount?.signedIn && !selectedAccount.planEnabled);
+  const preparingRegistration = !!registration && !registration.accountId;
+  const finishingRegistration = !!registration?.accountId;
+  const boundPlan = kind === 'plan' && !!target?.accountId;
+  useEffect(() => {
+    if (preparingRegistration) suggestedNameInput.current?.focus();
+  }, [preparingRegistration]);
   const loadAccounts = async () => {
     const reply = await planCall({ action: 'accounts' }, AbortSignal.timeout(20_000));
     setAccounts(reply.accounts);
@@ -226,7 +240,7 @@ export function ConnectionSettings({
     setKey('');
     setName(connection?.name ?? '');
     setAccountId(connection?.accountId ?? '');
-    setSuggestedAppName('');
+    setRegistration(undefined);
     setEndpoint(connection?.baseUrl ?? 'https://api.openai.com/v1');
     setKind(
       connection?.kind === 'openai-api'
@@ -254,10 +268,20 @@ export function ConnectionSettings({
           throw new Error('This account already has a connection.');
         definition = {
           key: id,
-          name: target?.name ?? (name.trim() || account.label.slice(0, 80)),
+          name: target?.name ?? (name.trim() || 'ChatGPT plan'),
           kind: 'chatgpt-plan',
           accountId: account.id,
         };
+        if (registration?.confirmed && registration.accountId === account.id) {
+          await credentialCall(
+            {
+              action: 'confirm-app-name',
+              accountId: account.id,
+              suggestedAppName: registration.name,
+            },
+            AbortSignal.timeout(20_000),
+          );
+        }
       } else {
         const url =
           kind === 'api' ? 'https://api.openai.com/v1' : endpoint.trim().replace(/\/+$/, '');
@@ -304,7 +328,7 @@ export function ConnectionSettings({
         {
           action: 'login',
           ...(newAppName ? { suggestedAppName: newAppName } : { accountId: selected }),
-          consent: true,
+          consent: !newAppName && needsPlanPermission,
         },
         AbortSignal.any([ac.signal, AbortSignal.timeout(320_000)]),
       );
@@ -315,15 +339,34 @@ export function ConnectionSettings({
           return next;
         });
       await loadAccounts();
+      if (newAppName) setRegistration({ name: newAppName, accountId: result.account.id });
       setAccountId(result.account.id);
+      if (!result.account.planEnabled)
+        setError('ChatGPT plan use is still disabled for this account.');
+      if (boundPlan && result.account.planEnabled) {
+        setAdding(false);
+        onDirty(false);
+        setRevision((v) => v + 1);
+      }
     } catch (cause) {
+      if (newAppName) setRegistration(undefined);
       setError(message(cause));
       if (!ac.signal.aborted) await loadAccounts().catch(() => {});
     } finally {
       loginController.current = null;
       setBusy(false);
-      setSuggestedAppName('');
     }
+  };
+  const copyAndSignIn = async (appName: string) => {
+    setBusy(true);
+    try {
+      await navigator.clipboard.writeText(appName);
+    } catch {
+      setError('Could not copy the app name. Try again.');
+      setBusy(false);
+      return;
+    }
+    await signIn(appName);
   };
   const remove = async (connection: ConnectionDefinition) => {
     const action =
@@ -360,14 +403,16 @@ export function ConnectionSettings({
     <section hidden={!visible} className="settings-section" aria-label="Connections">
       <div className="row between">
         <h2 className="view-title">Connections</h2>
-        <button
-          type="button"
-          className="btn"
-          disabled={disabled || dirty || busy || !enabled || settings.connections.length >= 32}
-          onClick={() => open()}
-        >
-          ＋ Add
-        </button>
+        {!adding && (
+          <button
+            type="button"
+            className="btn"
+            disabled={disabled || dirty || busy || !enabled || settings.connections.length >= 32}
+            onClick={() => open()}
+          >
+            ＋ Add
+          </button>
+        )}
       </div>
       {dirty && (
         <p className="notice">Save the current settings draft before changing connections.</p>
@@ -378,14 +423,25 @@ export function ConnectionSettings({
         </p>
       )}
       {loginController.current && (
-        <button type="button" className="btn" onClick={() => loginController.current?.abort()}>
-          Cancel sign-in
-        </button>
+        <div className="row">
+          <span role="status">Waiting for ChatGPT…</span>
+          <button type="button" className="btn" onClick={() => loginController.current?.abort()}>
+            Cancel sign-in
+          </button>
+        </div>
       )}
       {adding ? (
         <fieldset className="stack settings-fields" disabled={busy || disabled}>
-          <h3>{target ? `Set up ${target.name}` : 'Add connection'}</h3>
-          {!target && (
+          <h3>
+            {preparingRegistration
+              ? 'Register with ChatGPT'
+              : finishingRegistration
+                ? 'Finish ChatGPT setup'
+                : target
+                  ? `Set up ${target.name}`
+                  : 'Add connection'}
+          </h3>
+          {!target && !registration && (
             <label className="field">
               Type
               <select
@@ -401,81 +457,128 @@ export function ConnectionSettings({
               </select>
             </label>
           )}
-          {!target && (
-            <label className="field">
-              Name
-              <input maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />
-            </label>
-          )}
           {kind === 'plan' ? (
-            <>
-              <label className="field">
-                Account
-                <select
-                  value={accountId}
-                  disabled={!!target?.accountId}
-                  onChange={(e) => setAccountId(e.target.value)}
-                >
-                  <option value="">Choose an account</option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.label}
-                      {!a.planEnabled ? ' · plan permission required' : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                type="button"
-                className="btn"
-                disabled={!accountId}
-                onClick={() => void signIn()}
-              >
-                Sign in and allow plan use
-              </button>
-              {!target?.accountId && (
-                <>
+            preparingRegistration && registration ? (
+              <>
+                <label className="field">
+                  Name to paste in ChatGPT
+                  <input
+                    ref={suggestedNameInput}
+                    readOnly
+                    value={registration.name}
+                    onFocus={(e) => e.target.select()}
+                  />
+                </label>
+                <p className="small">
+                  ChatGPT starts with Saul. Replace it with the copied name before you approve.
+                </p>
+                <div className="row">
+                  <button
+                    type="button"
+                    className="btn primary"
+                    onClick={() => void copyAndSignIn(registration.name)}
+                  >
+                    Copy name and open ChatGPT
+                  </button>
                   <button
                     type="button"
                     className="btn"
-                    aria-expanded={!!suggestedAppName}
-                    onClick={() =>
-                      setSuggestedAppName(
-                        suggestedAppName
-                          ? ''
-                          : `Saul ${crypto.randomUUID().replaceAll('-', '').slice(0, 12).toUpperCase()}`,
-                      )
-                    }
+                    onClick={() => {
+                      setRegistration(undefined);
+                      setError('');
+                    }}
                   >
-                    Add another account
+                    Back
                   </button>
-                  {suggestedAppName && (
-                    <>
-                      <label className="field">
-                        Suggested app name
+                </div>
+              </>
+            ) : (
+              <>
+                {boundPlan || finishingRegistration ? (
+                  <p className="small">Account · {selectedAccount?.label ?? 'Loading…'}</p>
+                ) : (
+                  <label className="field">
+                    Saved account
+                    <select
+                      value={accountId}
+                      onChange={(e) => {
+                        setAccountId(e.target.value);
+                        setRegistration(undefined);
+                        setError('');
+                      }}
+                    >
+                      <option value="">Choose an account</option>
+                      {accounts
+                        .filter(
+                          (account) =>
+                            !settings.connections.some(
+                              (connection) => connection.accountId === account.id,
+                            ),
+                        )
+                        .map((account) => (
+                          <option key={account.id} value={account.id}>
+                            {account.label}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                )}
+                {!boundPlan && planReady && (
+                  <>
+                    {registration && (
+                      <label className="row">
                         <input
-                          readOnly
-                          value={suggestedAppName}
-                          onFocus={(e) => e.target.select()}
+                          type="checkbox"
+                          checked={!!registration.confirmed}
+                          onChange={(e) =>
+                            setRegistration({ ...registration, confirmed: e.target.checked })
+                          }
+                        />
+                        I used {registration.name} in ChatGPT
+                      </label>
+                    )}
+                    {!target && (
+                      <label className="field">
+                        Connection name
+                        <input
+                          maxLength={80}
+                          placeholder="ChatGPT plan"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
                         />
                       </label>
-                      <p className="small">
-                        Copy this name and paste it into the app name field in ChatGPT.
-                      </p>
-                      <button
-                        type="button"
-                        className="btn"
-                        onClick={() => void signIn(suggestedAppName)}
-                      >
-                        Continue to ChatGPT
-                      </button>
-                    </>
-                  )}
-                </>
-              )}
-            </>
+                    )}
+                  </>
+                )}
+                {(boundPlan || (!planReady && selectedAccount)) && (
+                  <button type="button" className="btn primary" onClick={() => void signIn()}>
+                    {needsPlanPermission ? 'Enable plan use' : 'Sign in again'}
+                  </button>
+                )}
+                {!boundPlan && !registration && (
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => {
+                      setError('');
+                      setRegistration({
+                        name: `Saul ${crypto.randomUUID().replaceAll('-', '').slice(0, 12).toUpperCase()}`,
+                      });
+                    }}
+                  >
+                    Register a new app
+                  </button>
+                )}
+              </>
+            )
           ) : (
             <>
+              {!target && (
+                <label className="field">
+                  Name
+                  <input maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />
+                </label>
+              )}
               {kind === 'custom' && (
                 <label className="field">
                   Endpoint
@@ -504,23 +607,27 @@ export function ConnectionSettings({
               </p>
             </>
           )}
-          <div className="row">
-            <button type="button" className="btn primary" onClick={() => void save()}>
-              Save
-            </button>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => {
-                setAdding(false);
-                onDirty(false);
-                setKey('');
-                setError('');
-              }}
-            >
-              Cancel
-            </button>
-          </div>
+          {!preparingRegistration && (
+            <div className="row">
+              {(kind !== 'plan' || (!boundPlan && planReady)) && (
+                <button type="button" className="btn primary" onClick={() => void save()}>
+                  {kind === 'plan' ? 'Save connection' : 'Save'}
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  setAdding(false);
+                  onDirty(false);
+                  setKey('');
+                  setError('');
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
         </fieldset>
       ) : (
         visible &&

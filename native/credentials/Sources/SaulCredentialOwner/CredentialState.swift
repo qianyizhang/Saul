@@ -15,8 +15,10 @@ public struct AccountProfile: Codable, Identifiable, Sendable {
   public var email: String?
   public var credentials: Credentials?
   public var suggestedAppName: String?
+  public var appNameConfirmed: Bool?
+  public var confirmedAppName: String? { appNameConfirmed == true ? suggestedAppName : nil }
   public var label: String {
-    "\(email ?? "Pending sign-in") · \(suggestedAppName ?? String(clientID.suffix(6)))"
+    "\(email ?? "Pending sign-in") · \(confirmedAppName ?? String(clientID.suffix(6)))"
   }
 }
 public struct AuthState: Codable, Sendable {

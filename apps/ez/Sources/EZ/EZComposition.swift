@@ -34,11 +34,16 @@ import SaulNativeValues
                     try await auth.load()
                     return auth.accounts
                 },
-                signIn: { account, suggestedAppName in
+                signIn: { account, suggestedAppName, consent in
                     let reply = try await auth.signIn(
-                        accountID: account, suggestedAppName: suggestedAppName,
+                        accountID: account, suggestedAppName: suggestedAppName, consent: consent,
                         authorize: { NSWorkspace.shared.open($0) })
                     return (reply["account"] as? [String: Any])?["id"] as? String
+                },
+                confirmAppName: { account, name in
+                    _ = try await auth.call([
+                        "action": "confirm-app-name", "accountId": account, "suggestedAppName": name,
+                    ])
                 },
                 saveKey: { connection, key in
                     _ = try await auth.call([
