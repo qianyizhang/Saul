@@ -100,6 +100,39 @@ it('never forwards retired credential operations, even if an old helper is insta
   }
   expect(h.connectNative).not.toHaveBeenCalled();
 });
+
+it.each([
+  [
+    'Invalid ChatGPT request.',
+    'Saul’s local storage helper is out of date. Update it, reload Saul in Chrome, and retry.',
+  ],
+  ['The page is outside the assigned scope.', 'The page is outside the assigned scope.'],
+])(
+  'reports a native annotation rejection without replaying the save (%s)',
+  async (message, expected) => {
+    vi.useFakeTimers();
+    const h = harness();
+    const runner = h.connect('chrome-extension://extension/offscreen.html');
+    const annotation = {
+      action: 'history',
+      request: {
+        ...historyRead.request,
+        message: { type: 'DB_ANNOTATION', payload: {} },
+      },
+    };
+    runner.receive(annotation);
+    const packet = h.native.postMessage.mock.calls[0]![0];
+    expect(packet.request).toEqual(annotation);
+    h.emit({ id: packet.id, event: { type: 'error', message } });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(runner.port.postMessage).toHaveBeenCalledExactlyOnceWith({
+      type: 'error',
+      message: expected,
+    });
+    expect(h.native.postMessage).toHaveBeenCalledTimes(1);
+  },
+);
+
 it('cancels a storage request after caller disconnection and ignores late results', () => {
   vi.useFakeTimers();
   const h = harness();

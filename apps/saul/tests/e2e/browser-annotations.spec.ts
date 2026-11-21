@@ -515,6 +515,7 @@ test('captures text before opening the native panel, saves drafts, replies throu
   await source.goto(fixtureServer.origin + '/article');
   await source.bringToFront();
   await expect(source.locator('saul-root')).toBeAttached();
+  const inferenceBefore = fixtureServer.requests.length;
   await source.locator('#concept').click({ clickCount: 3 });
   await source.getByRole('button', { name: 'Annotate', exact: true }).click();
   await expect
@@ -582,7 +583,7 @@ test('captures text before opening the native panel, saves drafts, replies throu
       select.value = select.options[1]!.value;
       select.dispatchEvent(new Event('change', { bubbles: true }));
     });
-    const inferenceBefore = fixtureServer.requests.length;
+    expect(fixtureServer.requests).toHaveLength(inferenceBefore);
     sandbox.rejectHistoryWriteOnce(
       ({ type, payload }) =>
         type === 'DB_ANNOTATION_ATTEMPT' && (payload as { action: string }).action === 'complete',

@@ -47,6 +47,12 @@ For optional Codex tab access, include `tabs` in step 3 and pass `--codex`, then
 | EZ                         | Keep bundle ID, URL scheme and `~/Applications/EZ.app` stable. The ignored signing pin stays under [local signing](../apps/ez/docs/releasing.md#local-signing-and-installation).       |
 | Codex                      | Existing `saul-tabs` registration blocks replacement. Omit `--codex` to preserve it. [Read-only connection check](../apps/saul/docs/native-messaging.md#connect-and-verify)            |
 
+If Saul reports an outdated storage helper, repeat the [history and settings
+helper setup](#saul-for-chrome) with the existing extension ID. Older browser
+builds may show **Invalid ChatGPT request.** when a retired helper rejects a
+local storage operation such as saving an annotation. After updating the
+helper, reload Saul in `chrome://extensions` and refresh the affected page.
+
 ### One-time helper migration
 
 - **Goal** — Convert the old flat `bridge/` layout to generations while preserving installed payloads and credentials.

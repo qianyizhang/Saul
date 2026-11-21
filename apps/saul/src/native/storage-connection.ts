@@ -43,7 +43,7 @@ export class StorageConnection {
       this.port = undefined;
       this.failPending(
         new StorageDisconnected(
-          'Saul history/configuration helper disconnected. Update the helper in Settings and retry.',
+          'Saul’s local storage helper disconnected. Check the helper installation and retry.',
         ),
       );
     });
@@ -104,8 +104,14 @@ export class StorageConnection {
       this.pending.set(id, {
         accept(event) {
           try {
-            if (isRecord(event) && event.type === 'error' && typeof event.message === 'string')
+            if (isRecord(event) && event.type === 'error' && typeof event.message === 'string') {
+              // The retired host rejected newer storage operations with this message.
+              if (event.message === 'Invalid ChatGPT request.')
+                throw new Error(
+                  'Saul’s local storage helper is out of date. Update it, reload Saul in Chrome, and retry.',
+                );
               throw new Error(event.message);
+            }
             validateStorageResult(request, event);
             settle();
             resolve(event);
