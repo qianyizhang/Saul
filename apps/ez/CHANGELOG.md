@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- New run uses a borderless Notebook editor. History opens on Answer, with
+  Details and Saved text alongside it. Long recorded text supports Find and Copy.
+
 - Failed requests stay out of History. The current result still shows the
   error and offers Retry. Diagnostics go to macOS Unified Logging.
 

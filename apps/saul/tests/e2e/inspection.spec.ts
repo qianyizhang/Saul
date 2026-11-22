@@ -44,7 +44,6 @@ test('inspection matches the submitted request, retains literal output, and surv
       .locator('pre')
       .textContent(),
   ).toBe(saved.responseRaw);
-  await inspector.getByLabel('Context / inputs', { exact: true }).click();
   await expect(
     inspector.getByRole('region', { name: 'Selected text', exact: true }).locator('pre'),
   ).toHaveText('Gradient descent');

@@ -238,7 +238,7 @@ export function SummaryInspection({
                 )}
               />
             )}
-            <InspectionText label="Response · raw text" text={item.raw} response />
+            <InspectionText label="Response · raw text" text={item.raw} />
             {item.calls?.map((call, index) => (
               <details key={index}>
                 <summary>
@@ -250,7 +250,6 @@ export function SummaryInspection({
                 <InspectionText
                   label="Intermediate output · not the final answer"
                   text={call.output}
-                  response
                 />
               </details>
             ))}
@@ -260,7 +259,6 @@ export function SummaryInspection({
                   item.status === 'completed' ? 'Final action result' : 'No completed action result'
                 }
                 text={item.status === 'completed' ? item.finalText || '' : ''}
-                response
               />
             )}
           </details>

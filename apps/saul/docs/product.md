@@ -31,7 +31,7 @@
 ### Explanation card
 
 - **Inspect input/output** reveals the selected attempt's saved instructions,
-  context fields, assembled user prompt and literal response text. Each block can
+  context fields, assembled user prompt and literal response text on one left edge. Each block can
   be selected or copied. History and past attempts use the same inspector. Status
   distinguishes prepared, completed and incomplete attempts. Missing older input
   is labelled unavailable. Inspection does not send another request.
@@ -39,7 +39,7 @@
 - Pin keeps the card open while interacting with the page.
 - Concept terms expose notes on hover, focus, or click.
 - **Simpler**, **Give an example**, and **Go deeper** retain the captured source context and include the previous explanation.
-- **Ask a follow-up** opens a draft below the saved answer. Send or Command/Ctrl+Enter submits it with the saved source, earlier exchanges and the same model choices. The question appears with its answer, and earlier answers remain in Past attempts. Closing the card preserves the draft on the page. Stop or failure preserves the last successful answer.
+- **Ask a follow-up** labels the borderless draft below an eligible saved answer. Send or Command/Ctrl+Enter submits it with the saved source, earlier exchanges and the same model choices. The question appears with its answer, and earlier answers remain in Past attempts. Closing the card preserves the draft on the page. Stop or failure preserves the last successful answer.
 - Follow-ups reject questions over 2,000 characters or compiled conversations
   over 120,000 characters. Context stays intact.
 - Copy reports clipboard failures rather than claiming success.

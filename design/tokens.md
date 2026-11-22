@@ -39,13 +39,13 @@ colors:
   window-rose-dark: '#e4a0b6'
 typography:
   subject:
-    fontFamily: 'ui-serif, Georgia, serif'
-    fontSize: 24px
-    fontWeight: 500
+    fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
+    fontSize: 32px
+    fontWeight: 600
     lineHeight: '1.3'
   body:
     fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
-    fontSize: 15px
+    fontSize: 16px
     fontWeight: 400
     lineHeight: '1.65'
   control:
@@ -59,9 +59,8 @@ typography:
     fontWeight: 400
     lineHeight: '1.5'
 rounded:
-  control: 8px
+  control: 5px
   panel: 12px
-  composer: 14px
   pill: 9999px
 spacing:
   xs: 4px
@@ -70,6 +69,7 @@ spacing:
   lg: 16px
   xl: 24px
   reading: 32px
+  control-row: 32px
 components:
   button-primary:
     backgroundColor: '{colors.primary}'

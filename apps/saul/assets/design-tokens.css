@@ -19,12 +19,12 @@
   --design-color-window-blue: light-dark(#356a99, #8ebde5);
   --design-color-window-violet: light-dark(#78539a, #c4a3e2);
   --design-color-window-rose: light-dark(#a34f69, #e4a0b6);
-  --design-font-subject: ui-serif, Georgia, serif;
-  --design-size-subject: 24px;
+  --design-font-subject: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --design-size-subject: 32px;
   --design-leading-subject: 1.3;
-  --design-weight-subject: 500;
+  --design-weight-subject: 600;
   --design-font-body: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --design-size-body: 15px;
+  --design-size-body: 16px;
   --design-leading-body: 1.65;
   --design-weight-body: 400;
   --design-font-control: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
@@ -35,9 +35,8 @@
   --design-size-caption: 12px;
   --design-leading-caption: 1.5;
   --design-weight-caption: 400;
-  --design-radius-control: 8px;
+  --design-radius-control: 5px;
   --design-radius-panel: 12px;
-  --design-radius-composer: 14px;
   --design-radius-pill: 9999px;
   --design-space-xs: 4px;
   --design-space-sm: 8px;
@@ -45,6 +44,7 @@
   --design-space-lg: 16px;
   --design-space-xl: 24px;
   --design-space-reading: 32px;
+  --design-space-control-row: 32px;
 }
 :root[data-theme='light'],
 :host([data-theme='light']) {

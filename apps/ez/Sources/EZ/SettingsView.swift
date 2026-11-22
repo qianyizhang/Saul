@@ -58,10 +58,7 @@ struct SettingsView: View {
                             model.settingsSection = section
                         } label: {
                             Text(section.title).frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 12).padding(.vertical, 10)
-                                .background(
-                                    model.settingsSection == section ? AppStyle.accent.opacity(0.12) : .clear,
-                                    in: RoundedRectangle(cornerRadius: 6))
+                                .notebookRow(selected: model.settingsSection == section)
                         }
                         .accessibilityAddTraits(model.settingsSection == section ? .isSelected : [])
                     }

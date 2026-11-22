@@ -17,15 +17,7 @@ export function textPages(text: string): string[] {
   }
   return pages;
 }
-export function InspectionText({
-  label,
-  text,
-  response = false,
-}: {
-  label: string;
-  text: string;
-  response?: boolean;
-}) {
+export function InspectionText({ label, text }: { label: string; text: string }) {
   const [copied, setCopied] = useState<{ text: string; notice: string }>();
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
@@ -67,7 +59,7 @@ export function InspectionText({
     return pieces;
   }, [part, query]);
   return (
-    <section className="saul-inspection-block" data-response={response} aria-label={label}>
+    <section className="saul-inspection-block" aria-label={label}>
       <div className="saul-inspection-heading">
         <strong>{label}</strong>
         <button

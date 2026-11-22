@@ -23,7 +23,7 @@ SwiftUI/AppKit controls.
 | Empty → type/clear; Two inputs → fill using Tab                                                              | Equal Action/Preset buttons above the full-width fields; stable labels and ordered field focus.                                                                                                                                  |
 | Many inputs → Tab through all eight, then Shift-Tab                                                          | Focused input scrolls into view; Run remains outside the scrolling form.                                                                                                                      |
 | Two inputs → Show Quick Lookup → change preset → Details → main window → reopen → Esc                        | Draft/override survive; Details adds no duplicate selector. New resets draft/override.                                                                                                        |
-| Answer → Details → Inspect; Retained draft → Edit → Hide → Reuse | Details contains the record. Answer alone offers no Edit. Edit opens the separate draft; Reuse restores the saved request without sending. Repeat in the panel; Reuse remains in its menu. |
+| Answer → Details → Saved text → Answer; Retained draft → Edit → Hide → Reuse | Verify flat named inputs and literal output, and that choosing another history row returns to Answer. Edit opens the separate draft; Reuse restores the saved request without sending. Repeat in the panel; Reuse remains in its menu. |
 | Answer → absent search → clear → Export/Cancel → Delete/Cancel                                               | Explicit no-results; clear restores rows; native save dialog; Cancel preserves history.                                                                                                       |
 | Settings → Presets → edit → switch item/Add → Keep → Actions/Connections/Shortcuts → return → Done/Keep → Save | Section changes preserve drafts; item changes/dismissal cannot discard silently. Save disables on success. Repeat for Actions; check invalid template/save failure when changing those paths. |
 | Settings → Shortcuts → record New → Esc                                                                      | Recording cancels; no lookup action or binding change.                                                                                                                                        |
@@ -109,7 +109,7 @@ open 'dist/EZ Surface Preview.app' --args --unsaved-attempt
 The first synthetic terminal save fails. Check text and Draw:
 
 1. Answer and History show Unsaved and the result explains the storage error.
-   Inspect does not claim saved output.
+   Request text identifies the transient request.
 2. Copy/Export or Download still works while the output is visible. Both
    surfaces keep the error visible in Min and Standard, light and dark.
 3. Choose New and Run an explicit request. It gets a new history entry. On

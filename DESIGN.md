@@ -10,15 +10,15 @@ assets. This guide owns visual and interaction rules. Use the
 
 ## Colors and typography
 
-Use green for actions, focus and meaningful emphasis. Neutral canvas, surface
-and subtle layers separate content; reserve wash for accent states. Pair light
+Reserve green for the primary action, keyboard focus, links and meaningful activity.
+Use neutral text and a subtle fill for everyday navigation, hover and selection. Pair light
 roles with their `-dark` values. Dark neutrals stay achromatic. Use text with
 warning and danger cues; check normal text at 4.5:1 and meaningful control/focus
 cues at 3:1 against adjacent colors.
 
-Use serif subjects and system sans for answers, navigation and controls. Map
-web serif to SwiftUI system serif. Captions remain readable; support wrapping,
-selectable text, zoom and platform scaling.
+Use one system sans family. Give subjects weight and space, set writing and answers
+in the same body role, and use the control role for navigation, pickers and tabs.
+Use captions for secondary facts. Support wrapping, selection, zoom and platform scaling.
 
 Use images where they are part of the work: a source capture as evidence or a
 generated image as a result. Keep decorative imagery out of reading and lookup
@@ -40,6 +40,25 @@ them a full-row target. Opening one preserves focus context, draft and selection
 Stale saves retain the draft and require an explicit recovery path. Failed saves
 remain visible in the affected reader and never appear saved or recoverable;
 see [attempt guarantees](contracts/actions-and-attempts.md#execution).
+
+## Notebook
+
+A writing surface and its saved answer share a comfortable reading column. Keep
+the editor borderless, with a persistent field name, several lines of breathing
+room and a visible focus rule. Put run choices above the editor and the billing
+route beside Send. Settings fields still need visible boundaries where many
+editable values appear together.
+
+Use the shared control-row height, spacing and radius for ordinary desktop
+controls. Make the entire row clickable. Use the same neutral selection treatment
+for a sidebar item and a reader tab. Keep compact controls in narrow overlays
+and dense boards, and preserve larger touch targets.
+
+Show one level of inspection at a time. Place literal input fields, prompt and
+response on one left edge with a name and Copy for each. Separate sections with
+spacing or a quiet rule. Give long text a bounded reading area with Find and
+full-text Copy. The native layout and compact panel adaptation are described in
+[EZ surfaces](apps/ez/docs/surfaces.md#reading-and-inspection).
 
 ## Min Mode
 
@@ -101,7 +120,7 @@ labels, readable values and metrics grouped by unit. Wrap long values; show
 unknown values explicitly. Separate requested speed from actual tier. Current
 draft choices are shown while composing or behind **Next lookup**.
 
-Offer collapsed inspection for the selected attempt and earlier attempts in
+Offer on-demand inspection for the selected attempt and earlier attempts in
 both modes. Use labelled selectable blocks for instructions, context/inputs,
 assembled prompt and literal response. Preserve whitespace and markup; allow
 per-block Copy with error feedback. Show unavailable, partial and prepared data

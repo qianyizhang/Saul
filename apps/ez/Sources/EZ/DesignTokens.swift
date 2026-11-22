@@ -168,13 +168,16 @@ enum DesignTokens {
             return NSColor(
                 srgbRed: 0.6392156862745098, green: 0.30980392156862746, blue: 0.4117647058823529, alpha: 1)
         })
-    static let `subject` = Font.system(size: 24, weight: .medium, design: .serif)
-    static let `body` = Font.system(size: 15, weight: .regular, design: .default)
-    static let `control` = Font.system(size: 14, weight: .medium, design: .default)
-    static let `caption` = Font.system(size: 12, weight: .regular, design: .default)
-    static let `radiusControl`: CGFloat = 8
+    static let `subjectSize`: CGFloat = 32
+    static let `subject` = Font.system(size: `subjectSize`, weight: .semibold, design: .default)
+    static let `bodySize`: CGFloat = 16
+    static let `body` = Font.system(size: `bodySize`, weight: .regular, design: .default)
+    static let `controlSize`: CGFloat = 14
+    static let `control` = Font.system(size: `controlSize`, weight: .medium, design: .default)
+    static let `captionSize`: CGFloat = 12
+    static let `caption` = Font.system(size: `captionSize`, weight: .regular, design: .default)
+    static let `radiusControl`: CGFloat = 5
     static let `radiusPanel`: CGFloat = 12
-    static let `radiusComposer`: CGFloat = 14
     static let `radiusPill`: CGFloat = 9999
     static let `spaceXs`: CGFloat = 4
     static let `spaceSm`: CGFloat = 8
@@ -182,4 +185,5 @@ enum DesignTokens {
     static let `spaceLg`: CGFloat = 16
     static let `spaceXl`: CGFloat = 24
     static let `spaceReading`: CGFloat = 32
+    static let `spaceControlRow`: CGFloat = 32
 }

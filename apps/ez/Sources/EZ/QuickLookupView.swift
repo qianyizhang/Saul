@@ -85,7 +85,7 @@ struct QuickLookupView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else if let entry = model.selectedEntry {
                 Label(entry.actionName, systemImage: entry.actionSymbol)
-                    .font(AppStyle.caption).foregroundStyle(AppStyle.accent).lineLimit(1)
+                    .font(AppStyle.control).foregroundStyle(.secondary).lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading).frame(height: 24)
             }
             Button {

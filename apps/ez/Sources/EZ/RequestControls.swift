@@ -21,7 +21,7 @@ struct LookupChoices: View {
             ) { model.chooseLookupPreset(UUID(uuidString: $0)) }
             .frame(maxWidth: .infinity)
             .disabled(model.busy || model.credentialBusy || model.launcherPending)
-        }.frame(height: 44)
+        }.frame(maxWidth: 368, alignment: .leading).frame(height: AppStyle.rowHeight)
     }
 
     private var actions: [LookupChoice] {
@@ -119,10 +119,12 @@ struct RequestDetails: View {
                 if showsAnswer, let entry = model.selectedEntry {
                     Text("Answer details").font(.headline)
                     LookupDetails(entry: entry)
-                    InputOutputInspector(
-                        entry: entry, minimum: model.minimumMode,
-                        transientFailure: model.isTransientFailure(entry)
-                    ).id(entry.id)
+                    DisclosureGroup(model.inspectionTitle(for: entry)) {
+                        InputOutputInspector(
+                            entry: entry, minimum: model.minimumMode,
+                            transientFailure: model.isTransientFailure(entry)
+                        ).id(entry.id)
+                    }.disclosureGroupStyle(FullRowDisclosureStyle())
                     Divider()
                     DisclosureGroup("Next lookup") { draftDetails.padding(.top, 8) }
                         .font(AppStyle.caption)
@@ -208,18 +210,15 @@ struct ActionInputs: View {
                         VStack(spacing: 8) {
                             ForEach(model.inputFields, id: \.self) { field in
                                 VStack(alignment: .leading, spacing: 4) {
-                                    if model.inputFields.count > 1 || model.currentAction?.imageInput != nil {
-                                        Text(field).font(AppStyle.caption).foregroundStyle(
-                                            AppStyle.secondaryText)
-                                    }
+                                    Text(field).font(AppStyle.control).foregroundStyle(.secondary)
                                     TextField(
-                                        model.inputFields.count > 1 ? "" : field,
+                                        "",
                                         text: Binding(
                                             get: { model.inputValues[field] ?? "" },
                                             set: { model.setInput($0, for: field) }), axis: .vertical
                                     )
-                                    .textFieldStyle(.roundedBorder).lineLimit(2...(compact ? 3 : 4))
-                                    .font(.system(size: 14)).accessibilityLabel(field)
+                                    .lineLimit(compact ? 2 : 4, reservesSpace: true)
+                                    .notebookEditor(focused: focusedField == field).accessibilityLabel(field)
                                     .focused($focusedField, equals: field)
                                     .multilineDraftReturn()
                                 }.id(field)
@@ -230,10 +229,9 @@ struct ActionInputs: View {
                         if let field { proxy.scrollTo(field) }
                     }
                 }.frame(
-                    height: (compact
+                    height: compact
                         ? QuickLookupLayout.inputHeight(fieldCount: model.inputFields.count)
-                        : min(180, CGFloat(model.inputFields.count) * (model.inputFields.count > 1 ? 74 : 54)))
-                        + (model.currentAction?.imageInput != nil && model.inputFields.count == 1 ? 20 : 0)
+                        : min(248, CGFloat(model.inputFields.count) * 124)
                 )
             }
         }

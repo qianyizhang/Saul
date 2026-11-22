@@ -24,25 +24,20 @@ export function InputOutputInspector({ run }: { run: RunResult }) {
           {input ? (
             <>
               <TextBlock label="Instructions" text={input.systemPrompt} />
-              <details className="saul-inspection-context">
-                <summary aria-label="Context / inputs">
-                  <ActionLabel short="Inputs" full="Context / inputs" />
-                </summary>
-                {(
-                  [
-                    ['Selected text', input.context.selection],
-                    ['Page title', input.context.pageTitle],
-                    ['Page URL', input.context.pageUrl],
-                    ['Heading', input.context.heading],
-                    ['Paragraph', input.context.paragraph],
-                    ['Surrounding text', input.context.surroundingText],
-                  ] as const
-                )
-                  .filter(([, value]) => value !== undefined && value !== '')
-                  .map(([label, value]) => (
-                    <TextBlock key={label} label={label} text={value!} />
-                  ))}
-              </details>
+              {(
+                [
+                  ['Selected text', input.context.selection],
+                  ['Page title', input.context.pageTitle],
+                  ['Page URL', input.context.pageUrl],
+                  ['Heading', input.context.heading],
+                  ['Paragraph', input.context.paragraph],
+                  ['Surrounding text', input.context.surroundingText],
+                ] as const
+              )
+                .filter(([, value]) => value !== undefined && value !== '')
+                .map(([label, value]) => (
+                  <TextBlock key={label} label={label} text={value!} />
+                ))}
               <TextBlock label="Prompt · user" text={input.userPrompt} />
             </>
           ) : (
@@ -50,7 +45,7 @@ export function InputOutputInspector({ run }: { run: RunResult }) {
               The exact input was not recorded for this older attempt.
             </p>
           )}
-          <TextBlock label="Response · raw text" text={run.responseRaw} response />
+          <TextBlock label="Response · raw text" text={run.responseRaw} />
         </div>
       )}
     </details>

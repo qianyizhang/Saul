@@ -26,6 +26,17 @@
 .saul-tooltip p {
   margin: 0;
 }
+.saul-draft {
+  border: 0;
+  border-bottom: 1px solid var(--design-color-line);
+  padding: var(--design-space-xs) 0;
+  background: transparent;
+  font: var(--design-size-body)/var(--design-leading-body) var(--design-font-body);
+}
+.saul-draft:focus-visible {
+  outline: 0;
+  box-shadow: 0 2px var(--design-color-primary);
+}
 :host button:focus-visible {
   outline: 2px solid var(--design-color-primary);
   outline-offset: 3px;

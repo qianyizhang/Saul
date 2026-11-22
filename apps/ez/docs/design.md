@@ -53,7 +53,7 @@ changes/dismissal. Overview routes current choices to their editor. Use the shar
 ## Controls and metadata
 
 - Both composers put equal Action and Preset choice buttons above the full-width
-  inputs. Each shows the role and current value. Open the button to search the
+  inputs. The role, value and chevron share one horizontal control row. Open the button to search the
   complete catalog in its configured order; current and unavailable rows are marked.
   Long names and reasons remain available in tooltips and accessibility. Keep Fast
   visible and show the connection and billing route while composing. Other native
@@ -66,8 +66,9 @@ changes/dismissal. Overview routes current choices to their editor. Use the shar
   actual tier as Not reported. Standard footer shows first-text and total time.
 - Main composer information describes Next lookup. Quick Lookup shows Answer
   details when selected, with Next lookup collapsed in both modes.
-- Multi-input fields keep labels after typing; single-input fields use a compact
-  placeholder. Reserve hint space and scroll keyboard-focused fields into view.
+- Give every draft field a persistent name, including a single text input. Apply the
+  [Notebook editor](../../../DESIGN.md#notebook) to the composer and follow-ups.
+  Keep focused fields reachable in long forms and budget fewer lines in Quick Lookup.
   Fixed shortcut references also use aligned label/value rows.
 
 ## Activity and answer presentation
@@ -82,7 +83,7 @@ Original/Corrected: removed text has warm tint/strikethrough; additions green/un
 Labels make color nonessential. Wide layouts align paragraph rows in one scroll
 area; narrow layouts show Corrected first and disclose Original. Notes sit under
 Why these changes. Unrecognized formats keep ordinary reading with long original
-text collapsed. Literal output remains in Details → Inspect in both modes.
+text collapsed. Literal output is available in the reader’s Saved text view in both modes.
 [SpellingComparison](../Sources/EZCore/SpellingComparison.swift) compares only
 completed single-input results with recognized headings; long or ambiguous
 inputs keep readable fallback text. It removes Markdown decoration only for the

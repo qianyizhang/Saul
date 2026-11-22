@@ -13,7 +13,7 @@ struct FollowUpComposer: View {
             && !entry.response.isEmpty
         {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Ask a follow-up").font(AppStyle.caption).foregroundStyle(.secondary)
+                Text("Ask a follow-up").font(AppStyle.control).foregroundStyle(.secondary)
                 HStack(alignment: .bottom, spacing: 8) {
                     TextField(
                         "Question",
@@ -22,7 +22,7 @@ struct FollowUpComposer: View {
                             set: { model.followUpDrafts[entry.id] = $0 }
                         ), axis: .vertical
                     )
-                    .lineLimit(1...4).textFieldStyle(.roundedBorder)
+                    .lineLimit(1...4).notebookEditor(focused: focused)
                     .accessibilityLabel("Ask a follow-up")
                     .focused($focused)
                     .multilineDraftReturn()

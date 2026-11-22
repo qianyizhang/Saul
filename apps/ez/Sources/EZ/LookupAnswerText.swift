@@ -7,6 +7,7 @@ struct LookupAnswerText: View {
     let entry: HistoryEntry
     let activity: ResponseActivity?
     var compact = false
+    var showsShortSubject = true
     var imageData: Data?
     var imageLoading = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -47,9 +48,9 @@ struct LookupAnswerText: View {
                         Text(entry.displayQuery).font(AppStyle.body).lineSpacing(5)
                             .textSelection(.enabled).padding(.top, 8)
                     }.font(AppStyle.caption).foregroundStyle(.secondary)
-                } else {
+                } else if showsShortSubject {
                     Text(entry.displayQuery)
-                        .font(compact ? .system(size: 18, weight: .medium, design: .serif) : AppStyle.subject)
+                        .font(compact ? .system(size: 18, weight: .medium) : AppStyle.subject)
                         .textSelection(.enabled)
                 }
                 if entry.response.isEmpty && entry.status == "pending" {

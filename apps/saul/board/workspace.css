@@ -11,7 +11,7 @@
   --warning: var(--design-color-warning);
   color: var(--ink);
   background: var(--bg);
-  font-size: calc(var(--design-size-control) * 13 / 14);
+  font-size: var(--design-size-control);
 }
 :root[data-theme='light'] {
   color-scheme: light;
@@ -85,16 +85,20 @@ select {
   border-radius: var(--design-radius-control);
 }
 button {
-  padding: 8px 12px;
+  min-height: var(--design-space-control-row);
+  padding: 4px var(--design-space-sm);
   cursor: pointer;
-  font-weight: 600;
+  font-weight: var(--design-weight-control);
 }
 button:hover:enabled {
-  border-color: var(--accent);
+  background: var(--design-color-subtle);
 }
 button:disabled {
   opacity: 0.45;
   cursor: default;
+}
+button.primary:hover:enabled {
+  background: var(--design-color-primary-hover);
 }
 button.primary {
   background: var(--accent);

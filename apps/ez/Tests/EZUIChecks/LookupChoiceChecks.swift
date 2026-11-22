@@ -71,7 +71,7 @@ import SwiftUI
                     role: "Preset", options: [LookupChoice(id: "preset", name: "Everyday", badge: "Fast")],
                     selection: "preset", choose: choose
                 ).frame(maxWidth: .infinity)
-            }.frame(height: 44).padding(14))
+            }.frame(height: AppStyle.rowHeight).padding(14))
         window.makeKeyAndOrderFront(nil)
     }
 

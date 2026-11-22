@@ -22,7 +22,8 @@ and persistence; [design](design.md) owns presentation.
   Reuse restores saved input without sending.
 - The main reader shows available Copy or Download, Reuse, Export and Delete in
   one row in both modes. Delete appears for history records at the far edge and
-  confirms shared deletion. Details holds the record and inspection, followed by the follow-up.
+  confirms shared deletion. Answer contains the reading view and eligible follow-up.
+  Details contains recorded choices and metrics. Saved text opens the literal record.
   Quick Lookup hides inputs while reading in Min Mode and keeps its utilities
   menu and workspace handoff. New/Stop remain reachable.
 - Settings → Preferences and the panel menu change the same local
@@ -98,11 +99,13 @@ and [native configuration](architecture.md#unified-configuration).
 
 ## Reading and inspection
 
-**Details → Inspect** shows saved instructions, input fields, assembled prompt
-and literal response with per-section Copy, including incomplete answers. It is
-also available in Quick Lookup's Details popover, opened by the footer's information
-button. That popover separates the selected answer's actual choices from Next lookup
-settings. Metrics are saved with new
+The main window opens each selection on **Answer**. **Details** and **Saved text**
+are sibling views of the same attempt. **Request text** identifies a pending,
+unsaved or transient failed request. Switching views preserves per-answer drafts.
+Saved text lists instructions, each named input, the assembled prompt and literal
+response with per-section Copy. Long text has a bounded native Find view.
+Quick Lookup offers the same text in its Details popover, alongside recorded
+choices and the separate Next lookup settings. Metrics are saved with new
 lookups; older history may have none. See [metrics](architecture.md#metrics-and-activity)
 for their meaning.
 

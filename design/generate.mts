@@ -155,7 +155,8 @@ export function compileDesign(source: string, { native = false } = {}): Compiled
       const weight = weights.get(value.fontWeight ?? 400);
       if (!weight) throw new Error(`${name}: unsupported native font weight`);
       lines.push(
-        `    static let ${swiftMember(name)} = Font.system(size: ${dimension(value.fontSize, name)}, weight: .${weight}, design: .${design})`,
+        `    static let ${swiftMember(`${name}-size`)}: CGFloat = ${dimension(value.fontSize, name)}`,
+        `    static let ${swiftMember(name)} = Font.system(size: ${swiftMember(`${name}-size`)}, weight: .${weight}, design: .${design})`,
       );
     }
     for (const [group, values] of [

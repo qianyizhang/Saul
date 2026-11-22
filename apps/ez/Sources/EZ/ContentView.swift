@@ -5,6 +5,8 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject var model: AppModel
     @State private var lookupToDelete: HistoryRow?
+    @State private var page = NotebookPage.answer
+
     var body: some View {
         // Keep the system sidebar toolbar's own icon-only style outside the columns.
         NavigationSplitView {
@@ -45,7 +47,10 @@ struct ContentView: View {
                         }
                     }
                     .padding(30)
-                    .frame(maxWidth: model.selectedEntry?.mode == .spelling ? 1140 : 820, alignment: .leading)
+                    .frame(
+                        maxWidth: (model.selectedEntry?.mode == .spelling && page == .answer)
+                            || model.usesSketch ? 1140 : 684, alignment: .leading
+                    )
                     .frame(maxWidth: .infinity)
                 }
                 if let warning = model.storageWarning {
@@ -57,7 +62,8 @@ struct ContentView: View {
                     banner(error, symbol: "exclamationmark.circle", color: .red) { model.error = nil }
                 }
                 if model.selectedEntry != nil && model.showsMainComposer && !model.usesSketch {
-                    composer.padding(20)
+                    Divider()
+                    composer.padding(20).frame(maxWidth: 664)
                 } else if model.selectedEntry != nil && !model.showsMainComposer {
                     if model.busy {
                         HStack {
@@ -83,6 +89,7 @@ struct ContentView: View {
             .background(Color(nsColor: .textBackgroundColor))
             .labelStyle(EverydayLabelStyle(minimum: model.minimumMode))
         }
+        .onChange(of: model.selectedEntry?.id) { _, _ in page = .answer }
         .tint(AppStyle.accent)
         .disclosureGroupStyle(FullRowDisclosureStyle())
         .alert(
@@ -104,28 +111,27 @@ struct ContentView: View {
     }
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("ez").font(.system(size: model.minimumMode ? 26 : 35, weight: .bold, design: .rounded))
-                    .foregroundStyle(
-                        AppStyle.accent)
-                if !model.minimumMode {
-                    Text("a little clarity.").font(.system(size: 11)).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            Text("ez").font(.system(size: 22, weight: .bold))
+                .padding(.top, 20).padding(.horizontal, 18).padding(.bottom, 8)
+            VStack(alignment: .leading, spacing: 0) {
+                FullRowButton {
+                    model.newQuery()
+                } label: {
+                    Label("New run", systemImage: "square.and.pencil").labelStyle(.titleAndIcon)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .notebookRow(selected: model.selection == nil)
                 }
-            }.padding(.top, model.minimumMode ? 20 : 28).padding(.horizontal, 18)
-            Button {
-                model.newQuery()
-            } label: {
-                Label(model.minimumMode ? "New" : "New run", systemImage: "plus").frame(
-                    maxWidth: .infinity, alignment: .leading
-                )
-                .padding(.vertical, 6)
-            }.help("New run").accessibilityLabel("New run").buttonStyle(.bordered)
-                .disabled(model.busy || model.launcherPending).padding(.horizontal, 16)
-            TextField("Search history", text: $model.search).textFieldStyle(.roundedBorder).padding(
-                .horizontal, 16)
+                .accessibilityAddTraits(model.selection == nil ? .isSelected : [])
+                .disabled(model.busy || model.launcherPending)
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass").accessibilityHidden(true)
+                    TextField("Search history", text: $model.search).textFieldStyle(.plain)
+                        .accessibilityLabel("Search history")
+                }.padding(.horizontal, 8).frame(minHeight: AppStyle.rowHeight).foregroundStyle(.secondary)
+            }.font(AppStyle.control).padding(.horizontal, 10).padding(.bottom, 8)
             HStack {
-                Text("History").font(AppStyle.caption)
+                Text("History").font(AppStyle.control)
                 Spacer()
                 if !model.minimumMode {
                     Text("\(model.historyTotal)").font(.caption.monospacedDigit())
@@ -134,7 +140,7 @@ struct ContentView: View {
             List(selection: $model.selection) {
                 ForEach(model.filteredEntries) { entry in
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(entry.displayQuery).font(.system(size: 13, weight: .medium)).lineLimit(2)
+                        Text(entry.displayQuery).font(AppStyle.control).lineLimit(2)
                         HStack(spacing: 4) {
                             if !model.minimumMode {
                                 Image(systemName: entry.actionSymbol)
@@ -147,7 +153,7 @@ struct ContentView: View {
                                     model.minimumMode
                                         ? entry.status.capitalized : "· \(entry.status.capitalized)")
                             }
-                        }.font(.system(size: 10)).foregroundStyle(.secondary)
+                        }.font(AppStyle.caption).foregroundStyle(.secondary)
                     }.padding(.vertical, 5).tag(entry.id)
                         .onAppear {
                             if entry.id == model.entries.last?.id { model.loadMoreHistory() }
@@ -187,7 +193,7 @@ struct ContentView: View {
                         Text(
                             "Settings"
                         ).font(
-                            .system(size: 12, weight: .medium))
+                            AppStyle.control)
                         if model.connecting || !model.minimumMode {
                             Text(model.connecting ? "Connecting…" : "Connections, presets & actions")
                                 .font(AppStyle.caption).foregroundStyle(.secondary)
@@ -202,29 +208,41 @@ struct ContentView: View {
     private var welcome: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("New run").font(AppStyle.subject)
-            if !model.minimumMode {
-                Text(
-                    model.currentAction == nil
-                        ? "Add an action to start your next run."
-                        : "Choose an action, fill in its inputs, and run it."
-                )
-                .font(AppStyle.body).foregroundStyle(.secondary)
+            if model.currentAction == nil {
+                Text("Add an action to start your next run.").font(AppStyle.body).foregroundStyle(.secondary)
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
     private func answer(_ entry: HistoryEntry) -> some View {
         VStack(alignment: .leading, spacing: 20) {
-            HStack {
-                Label(entry.actionName, systemImage: entry.actionSymbol)
-                    .font(AppStyle.caption).foregroundStyle(AppStyle.accent)
-                Spacer()
-                if !model.minimumMode {
-                    Text(entry.createdAt, style: .time).font(.caption).foregroundStyle(.secondary)
+            Text(entry.displayQuery).font(AppStyle.subject)
+                .lineLimit(2).textSelection(.enabled).help(entry.displayQuery)
+            HStack(spacing: 4) {
+                ForEach(NotebookPage.allCases, id: \.self) { item in
+                    let title = item == .text ? model.inspectionTitle(for: entry) : item.rawValue
+                    FullRowButton {
+                        page = item
+                    } label: {
+                        Text(title).notebookRow(selected: page == item)
+                    }
+                    .accessibilityAddTraits(page == item ? .isSelected : [])
                 }
             }
-            LookupAnswerText(
-                entry: entry, activity: model.selectedResponseActivity,
-                imageData: model.imageData(for: entry), imageLoading: model.imageLoading)
+            Divider()
+            switch page {
+            case .answer:
+                LookupAnswerText(
+                    entry: entry, activity: model.selectedResponseActivity, showsShortSubject: false,
+                    imageData: model.imageData(for: entry), imageLoading: model.imageLoading)
+            case .details:
+                MetadataRow("Action", value: entry.actionName)
+                LookupDetails(entry: entry)
+            case .text:
+                InputOutputInspector(
+                    entry: entry, minimum: model.minimumMode,
+                    transientFailure: model.isTransientFailure(entry)
+                ).id(entry.id)
+            }
             RetryAttemptNotice(model: model, entry: entry)
             if let parentID = entry.parentID {
                 Button("Previous answer") { model.selection = parentID }.buttonStyle(.borderless)
@@ -244,13 +262,7 @@ struct ContentView: View {
                 }
                 answerActions(entry)
             }
-            DisclosureGroup("Details") {
-                LookupDetails(entry: entry).padding(.top, 8)
-                InputOutputInspector(
-                    entry: entry, minimum: model.minimumMode,
-                    transientFailure: model.isTransientFailure(entry))
-            }.font(AppStyle.caption).id(entry.id)
-            FollowUpComposer(model: model, entry: entry).id(entry.id)
+            if page == .answer { FollowUpComposer(model: model, entry: entry).id(entry.id) }
         }
     }
 
@@ -283,7 +295,7 @@ struct ContentView: View {
                     deleteButton(HistoryRow(entry)).foregroundStyle(DesignTokens.danger)
                 }
             }
-            .buttonStyle(.borderless).font(AppStyle.caption)
+            .buttonStyle(.borderless).tint(.primary).font(AppStyle.control)
         }
     }
 
@@ -305,12 +317,12 @@ struct ContentView: View {
                 }
             }
             LookupChoices(model: model)
+            Divider()
             ActionInputs(model: model)
             if model.currentAction != nil {
-                Divider()
                 HStack(spacing: 8) {
-                    LookupBillingLabel(model: model)
                     Spacer(minLength: 2)
+                    LookupBillingLabel(model: model)
                     NextLookupDetailsButton(model: model)
                     if model.busy {
                         AttemptControls(model: model)
@@ -318,14 +330,14 @@ struct ContentView: View {
                         Button {
                             model.send()
                         } label: {
-                            ControlLabel(symbol: .run, iconOnly: model.minimumMode)
+                            ControlLabel(symbol: .send).frame(width: 18, height: 24)
                         }
                         .accessibilityLabel("Run action").buttonStyle(.borderedProminent).disabled(
                             !model.canSend
                         )
                         .help("Run · \(model.shortcuts.binding(for: .send).display)")
                     }
-                }.controlSize(.small)
+                }.controlSize(.regular)
                 if !composerHint.isEmpty {
                     Text(composerHint).font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -344,11 +356,7 @@ struct ContentView: View {
                     }.disabled(model.busy)
                 }
             }
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(16).background(
-            Color(nsColor: .controlBackgroundColor),
-            in: RoundedRectangle(cornerRadius: AppStyle.composerRadius)
-        )
-        .overlay(RoundedRectangle(cornerRadius: AppStyle.composerRadius).stroke(.quaternary, lineWidth: 1))
+        }.frame(maxWidth: .infinity, alignment: .leading)
     }
     private var composerHint: String {
         if let issue = model.connectionIssue { return issue }
@@ -370,4 +378,10 @@ struct ContentView: View {
             }.buttonStyle(.plain).accessibilityLabel("Dismiss message")
         }.padding(12).background(color.opacity(0.07)).padding(.horizontal, 20)
     }
+}
+
+private enum NotebookPage: String, CaseIterable {
+    case answer = "Answer"
+    case details = "Details"
+    case text
 }

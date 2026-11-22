@@ -290,7 +290,7 @@ export function ExplanationCard({
           <label className="flex-1 min-w-0 text-xs text-muted">
             Ask a follow-up
             <textarea
-              className="mt-1 block w-full resize-none rounded-control border border-line bg-surface p-2 text-sm text-ink focus-visible:outline-2 focus-visible:outline-accent"
+              className="saul-draft mt-1 block w-full resize-none text-ink"
               rows={2}
               maxLength={2000}
               value={followUpDraft}

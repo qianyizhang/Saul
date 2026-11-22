@@ -12,13 +12,13 @@ struct QuickLookupLayout: Equatable {
     var showsImageInput = false
 
     static func inputHeight(fieldCount: Int) -> CGFloat {
-        min(150, CGFloat(fieldCount) * (fieldCount > 1 ? 70 : 50))
+        min(160, CGFloat(fieldCount) * 80)
     }
 
     var minimumHeight: CGFloat {
         max(
             200,
-            150 + (showsChoices ? 50 : 0) + Self.inputHeight(fieldCount: fieldCount)
+            150 + (showsChoices ? 42 : 0) + Self.inputHeight(fieldCount: fieldCount)
                 + (showsImageInput ? 150 : 0) + (showsNotice ? 98 : 0) + (showsAnswer ? 118 : 0)
                 + (showsFollowUp ? 72 : 0))
     }

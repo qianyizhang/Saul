@@ -88,7 +88,7 @@ private struct DraftFixture: View {
     var body: some View {
         VStack {
             TextField("Draft", text: Binding(get: { host.draft }, set: { host.draft = $0 }), axis: .vertical)
-                .textFieldStyle(.roundedBorder).lineLimit(1...4)
+                .lineLimit(1...4).notebookEditor(focused: focused)
                 .focused($focused).multilineDraftReturn()
             Button("Send") { host.sends += 1 }
                 .keyboardShortcut(.return, modifiers: .command)

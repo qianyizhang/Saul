@@ -56,21 +56,23 @@ final class ChoiceAnchor: NSButton, NSPopoverDelegate {
     init() {
         super.init(frame: .zero)
         title = ""
-        bezelStyle = .regularSquare
+        isBordered = false
+        showsBorderOnlyWhileMouseInside = true
+        focusRingType = .exterior
         target = self
         action = #selector(toggleChooser)
         setContentHuggingPriority(.defaultLow, for: .horizontal)
         setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        roleLabel.font = .systemFont(ofSize: 10)
-        valueLabel.font = .systemFont(ofSize: 13, weight: .medium)
+        roleLabel.font = .systemFont(ofSize: DesignTokens.controlSize)
+        valueLabel.font = .systemFont(ofSize: DesignTokens.controlSize, weight: .medium)
         valueLabel.lineBreakMode = .byTruncatingTail
         valueLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        badgeLabel.font = .systemFont(ofSize: 10, weight: .semibold)
+        badgeLabel.font = .systemFont(ofSize: DesignTokens.captionSize, weight: .semibold)
         let labels = NSStackView(views: [roleLabel, valueLabel])
-        labels.orientation = .vertical
-        labels.alignment = .leading
-        labels.spacing = 2
+        labels.orientation = .horizontal
+        labels.alignment = .firstBaseline
+        labels.spacing = DesignTokens.spaceSm
         let chevron = NSImageView()
         chevron.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)
         let accessories = NSStackView(views: [badgeLabel, chevron])
@@ -82,10 +84,10 @@ final class ChoiceAnchor: NSButton, NSPopoverDelegate {
             addSubview(group)
         }
         NSLayoutConstraint.activate([
-            labels.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            labels.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             labels.trailingAnchor.constraint(lessThanOrEqualTo: accessories.leadingAnchor, constant: -8),
             labels.centerYAnchor.constraint(equalTo: centerYAnchor),
-            accessories.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            accessories.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             accessories.centerYAnchor.constraint(equalTo: centerYAnchor),
             chevron.widthAnchor.constraint(equalToConstant: 10),
         ])
@@ -342,12 +344,12 @@ private final class ChoiceResults: NSViewController, NSSearchFieldDelegate, NSTa
         iconView.contentTintColor = option.unavailable == nil ? .labelColor : .secondaryLabelColor
         iconView.widthAnchor.constraint(equalToConstant: 18).isActive = true
         let title = rowText(option.name)
-        title.font = .systemFont(ofSize: 12, weight: current ? .semibold : .regular)
+        title.font = .systemFont(ofSize: DesignTokens.controlSize, weight: current ? .semibold : .regular)
         title.textColor = option.unavailable == nil ? .labelColor : .secondaryLabelColor
         let subtitle = rowText(
             [option.badge, option.unavailable == nil ? nil : "Unavailable", option.detail]
                 .compactMap { $0 }.joined(separator: " · "))
-        subtitle.font = .systemFont(ofSize: 10)
+        subtitle.font = .systemFont(ofSize: DesignTokens.captionSize)
         subtitle.textColor = .secondaryLabelColor
         let labels = NSStackView(views: [title, subtitle])
         labels.orientation = .vertical
