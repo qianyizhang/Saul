@@ -152,7 +152,7 @@ struct SettingsView: View {
 
     private var preferencesBody: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Preferences").font(AppStyle.subject)
+            Text("Preferences").font(.headline)
             Button("Reveal history") { model.revealHistory() }
             Toggle("Min Mode", isOn: $model.minimumMode).toggleStyle(.switch)
             if !model.minimumMode {

@@ -44,7 +44,7 @@ struct ConnectionsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 HStack {
-                    Text("Connections").font(AppStyle.subject)
+                    Text("Connections").font(.headline)
                     Spacer()
                     if !editorOpen {
                         Menu("Add connection", systemImage: "plus") {

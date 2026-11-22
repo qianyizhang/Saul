@@ -23,13 +23,23 @@ extension View {
     }
 
     func notebookRow(selected: Bool) -> some View {
-        font(AppStyle.control).padding(.horizontal, DesignTokens.spaceSm)
+        modifier(NotebookRow(selected: selected))
+    }
+}
+
+private struct NotebookRow: ViewModifier {
+    let selected: Bool
+    @State private var hovered = false
+
+    func body(content: Content) -> some View {
+        content.font(AppStyle.control).padding(.horizontal, DesignTokens.spaceSm)
             .frame(minHeight: AppStyle.rowHeight)
             .background(
-                selected ? Color.primary.opacity(0.08) : Color.clear,
+                Color.primary.opacity(selected ? 0.08 : hovered ? 0.05 : 0),
                 in: RoundedRectangle(cornerRadius: AppStyle.controlRadius)
             )
             .contentShape(Rectangle())
+            .onHover { hovered = $0 }
     }
 }
 

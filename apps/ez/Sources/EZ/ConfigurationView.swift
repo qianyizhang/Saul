@@ -104,11 +104,10 @@ struct ConfigurationView: View {
                             FullRowButton {
                                 selectPreset(item)
                             } label: {
-                                Text(item.name).frame(maxWidth: .infinity, alignment: .leading).padding(6)
-                                    .background(
-                                        preset?.id == item.id ? AppStyle.accent.opacity(0.12) : .clear,
-                                        in: RoundedRectangle(cornerRadius: 6))
+                                Text(item.name).frame(maxWidth: .infinity, alignment: .leading)
+                                    .notebookRow(selected: preset?.id == item.id)
                             }
+                            .accessibilityAddTraits(preset?.id == item.id ? .isSelected : [])
                         }
                         if model.configuration.presets.isEmpty {
                             Text("No presets yet").foregroundStyle(.secondary)
@@ -284,11 +283,10 @@ struct ConfigurationView: View {
                                 selectAction(item)
                             } label: {
                                 Label(item.name, systemImage: item.symbol)
-                                    .frame(maxWidth: .infinity, alignment: .leading).padding(6)
-                                    .background(
-                                        action?.id == item.id ? AppStyle.accent.opacity(0.12) : .clear,
-                                        in: RoundedRectangle(cornerRadius: 6))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .notebookRow(selected: action?.id == item.id)
                             }
+                            .accessibilityAddTraits(action?.id == item.id ? .isSelected : [])
                         }
                         if model.configuration.actions.isEmpty {
                             Text("No actions yet").foregroundStyle(.secondary)
