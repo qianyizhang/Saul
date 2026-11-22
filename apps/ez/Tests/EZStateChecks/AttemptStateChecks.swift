@@ -91,7 +91,8 @@ import SaulTestSupport
                 control.providerCalls += 1
                 return .text(try await control.generate(entry, update))
             },
-            append: { try await control.append($0) })
+            append: { try await control.append($0) },
+            delete: { try control.history.delete($0) })
         state = try StateFixture(directory: directory, attemptExecution: execution)
         model.chooseAction(state.single.id)
         model.query = "Frozen question"
@@ -121,15 +122,17 @@ import SaulTestSupport
 
 @MainActor func attemptStateChecks() -> [CheckCase] {
     [
-        attemptCase("retry freezes the request and keeps the failed result and unrelated draft") { f in
+        attemptCase("retry freezes the request while the failure stays out of history") { f in
             f.control.generate = { _, _ in throw EZError("Provider unavailable") }
             f.model.send()
             try await f.terminal.wait()
             let failed = f.model.selectedEntry!
-            f.model.newQuery()
-            f.model.chooseAction(f.state.multi.id)
-            f.model.setInput("do not send", for: "fuzzy term")
-            f.model.setInput("current draft", for: "fuzzy context")
+            try expectEqual(f.model.entries.count, 0, "Failed result entered the sidebar")
+            try expectEqual(f.model.historyTotal, 0, "Failed result entered the sidebar count")
+            try expect(!f.model.canDeleteLookup(failed.recordID), "Transient failure offered shared deletion")
+            await f.model.refreshHistory()?.value
+            try expectEqual(f.model.selectedEntry?.id, failed.id, "Refresh discarded the current error")
+            f.model.query = "Unrelated draft"
             let draft = f.model.inputValues
             var seen: HistoryEntry?
             f.control.generate = { entry, _ in
@@ -147,8 +150,7 @@ import SaulTestSupport
             try expectEqual(seen?.connectionSnapshot, failed.connectionSnapshot, "Retry changed connection")
             try expectEqual(f.model.inputValues, draft, "Retry changed the unrelated draft")
             try expectEqual(saved.status, "completed", "Retry did not finish")
-            try expectEqual(
-                f.model.entries.first { $0.id == failed.id }?.status, "failed", "Failure was lost")
+            try expectEqual(f.model.entries.map(\.id), [saved.id], "Retry left the failed row in the sidebar")
             try expectEqual(f.control.providerCalls, 2, "Retry sent more than one request")
             f.model.retry(saved.id)
             try expectEqual(f.control.providerCalls, 2, "Completed answer offered a retry")
@@ -165,7 +167,7 @@ import SaulTestSupport
             try expect(f.model.retryFailure != nil, "Changed account was accepted")
             try expectEqual(f.control.providerCalls, 1, "Changed route reached provider")
             try f.model.saveConfiguration(f.state.configuration)
-            f.control.failedWrites = [3]
+            f.control.failedWrites = [2]
             f.terminal = CheckSignal()
             f.model.retry(failed.id)
             try await f.terminal.wait()
@@ -506,8 +508,11 @@ import SaulTestSupport
             try expectEqual(
                 history.first { $0.id == unsaved.id }?.status, "interrupted", "Failed save rewrote history")
         },
-        attemptCase("provider failure and partial output survive failed terminal save") { f in
-            f.control.failedWrites = [2]
+        attemptCase("provider failure and partial output survive failed pending-row cleanup") { f in
+            _ = try historySQL(
+                f.state.history.url,
+                "CREATE TRIGGER fail_delete BEFORE DELETE ON ez_entry BEGIN SELECT RAISE(ABORT,'Synthetic cleanup failure'); END"
+            )
             f.control.generate = { _, update in
                 update(try response("Partial answer", completed: false))
                 throw EZError("Synthetic provider failure")
@@ -518,9 +523,13 @@ import SaulTestSupport
             try expectEqual(entry.status, "unsaved", "Unpersisted provider failure marked saved")
             try expect(entry.error?.contains("Synthetic provider failure") == true, "Provider error was lost")
             try expect(
-                entry.error?.contains("Synthetic history write failure") == true, "Save error was lost")
+                entry.error?.contains("Synthetic cleanup failure") == true, "Cleanup error was lost")
             try expectEqual(entry.response, "Partial answer", "Partial output lost")
-            try expectEqual(f.control.appends.count, 2, "Terminal write was replayed")
+            try expectEqual(
+                f.control.appends.map(\.status), ["pending"], "Provider error was written to history")
+            let rawStatus = try historySQL(
+                f.state.history.url, "SELECT json_extract(data, '$.status') FROM ez_entry")
+            try expectEqual(rawStatus, "pending", "Cleanup failure replaced the recoverable pending row")
             try expectEqual(f.control.providerCalls, 1, "Failed provider request was replayed")
         },
         attemptCase("Stop retains partial output and ignores old progress during a new attempt") { f in
@@ -664,6 +673,12 @@ private struct AttemptContract: Decodable {
                 try expectEqual(
                     entry?.status == "completed" && saved?.status == "completed",
                     scenario.expected.savedSuccess, "Saved success")
+                if scenario.providerOutcome == .error || scenario.providerOutcome == .eof {
+                    try expectEqual(entry?.status, "failed", "Missing transient failure")
+                    try expect(saved == nil, "Failed request remained in reopened history")
+                    try expectEqual(
+                        f.control.appends.map(\.status), ["pending"], "Failure was written to history")
+                }
                 if let cause = scenario.expected.terminationCause {
                     let status = cause == .stopped ? "cancelled" : "interrupted"
                     try expectEqual(entry?.status, status, "Visible termination cause")

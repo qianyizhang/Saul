@@ -125,7 +125,8 @@ import SwiftUI
                         throw EZError("Synthetic final-save failure.")
                     }
                     try await writer.append(entry)
-                })
+                },
+                delete: { try await writer.delete($0) })
         }
         let model = fixtureModel(directory: directory, attemptExecution: execution, connections: fixtures)
         _model = StateObject(wrappedValue: model)

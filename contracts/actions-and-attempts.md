@@ -31,7 +31,9 @@ commit. Explicit Stop records cancellation; loss or recovery of an active
 attempt records interruption. Both may retain partial output and allow an
 explicit retry. Older interrupted records retain their saved status because
 their cause is unknown. Provider and storage failures remain separate.
-Keep partial output when it can be saved. A failed save can lose unsaved output;
+EZ removes its pending row when generation or completion validation fails.
+It keeps the error and any partial output in the current result for explicit
+Retry. Saul retains its own failed attempts. A failed save can lose unsaved output;
 report it as unsaved. There is no save-only recovery queue or automatic
 inference replay after import, restart or uncertain loss. Another generation
 requires explicit action. Saved history and configuration remain intact unless

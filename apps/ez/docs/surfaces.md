@@ -21,8 +21,8 @@ and persistence; [design](design.md) owns presentation.
 - Both composers put Action and Preset above inputs. Edit/Hide keeps the draft;
   Reuse restores saved input without sending.
 - The main reader shows available Copy or Download, Reuse, Export and Delete in
-  one row in both modes. Delete is separated at the far edge and confirms shared
-  deletion. Details holds the record and inspection, followed by the follow-up.
+  one row in both modes. Delete appears for history records at the far edge and
+  confirms shared deletion. Details holds the record and inspection, followed by the follow-up.
   Quick Lookup hides inputs while reading in Min Mode and keeps its utilities
   menu and workspace handoff. New/Stop remain reachable.
 - Settings → Preferences and the panel menu change the same local
@@ -33,7 +33,9 @@ and persistence; [design](design.md) owns presentation.
 - Both surfaces offer follow-ups for saved completed native Write answers and
   Previous answer navigation. Draw has no text follow-up. Follow-up context and
   limits belong to [architecture](architecture.md#follow-ups).
-- A failed history write shows Unsaved and the storage error. Use Copy, Export or
+- A failed request shows the error and Retry in the current result. Its History
+  row drops out after cleanup. A failed history write or cleanup shows Unsaved
+  and the storage error. Use Copy, Export or
   Download when output is available. A new Run makes a new request.
   See [persistence](architecture.md#persistence-contract).
 

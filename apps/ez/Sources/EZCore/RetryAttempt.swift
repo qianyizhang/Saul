@@ -23,17 +23,17 @@ extension HistoryEntry {
             saved.key == preset.connectionKey, saved.matchesRoute(connection)
         else {
             throw EZError(
-                "The saved connection is unavailable or changed. Review the saved request and choose a connection."
+                "The original connection is unavailable or changed. Review the request and choose a connection."
             )
         }
         guard matchesFrozenPreset(preset), connection.capabilities.contains(capability),
             !usesWebSearch || connection.kind == .openAIAPI
         else {
-            throw EZError("The saved request is incompatible with this connection. Review the saved request.")
+            throw EZError("The original request is incompatible with this connection. Review the request.")
         }
         if (inputImage != nil || actionSnapshot?.imageInput != nil) && image == nil {
             throw EZError(
-                "The saved input image is unavailable. Review the saved request and attach it again.")
+                "The original input image is unavailable. Review the request and attach it again.")
         }
         if let image { _ = try image.validatedData() }
         if capability == .draw {

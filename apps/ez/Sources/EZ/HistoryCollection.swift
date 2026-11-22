@@ -23,6 +23,7 @@ import SaulNativeValues
     private var reading: Task<Void, Never>?
     private var detailRead: Task<Void, Never>?
     private var active: HistoryEntry?
+    private var failedSelection: HistoryEntry?
     private var changes: [HistoryStore.RecordID: Change] = [:]
     private var details: [UUID: HistoryEntry] = [:]
     private var detailOrder: [UUID] = []
@@ -40,8 +41,12 @@ import SaulNativeValues
     private(set) var detailLoading = false
     private(set) var detailError: String?
     var hasMore: Bool { next != nil }
-    var selected: HistoryEntry? { selectedID.flatMap { details[$0] } }
-    func knownDetail(_ id: UUID) -> HistoryEntry? { details[id] }
+    var selected: HistoryEntry? { selectedID.flatMap(knownDetail) }
+    func knownDetail(_ id: UUID) -> HistoryEntry? {
+        if failedSelection?.id == id { return failedSelection }
+        return details[id]
+    }
+    func isTransientFailure(_ id: HistoryStore.RecordID) -> Bool { failedSelection?.recordID == id }
     private func remember(_ entry: HistoryEntry) {
         details[entry.id] = entry
         detailOrder.removeAll { $0 == entry.id }
@@ -92,6 +97,7 @@ import SaulNativeValues
 
     func show(_ values: [HistoryEntry]) {
         entries = values.map(HistoryRow.init)
+        failedSelection = nil
         details = [:]
         detailOrder = []
         for entry in values { remember(entry) }
@@ -109,6 +115,7 @@ import SaulNativeValues
                 ?? (selectedID == id ? selectedIdentity : nil) ?? .native(id)
         }
         selectedID = id
+        if failedSelection?.id != id { failedSelection = nil }
         selectedIdentity = identity
         detailError = nil
         detailLoading = false
@@ -116,7 +123,7 @@ import SaulNativeValues
             onChange?()
             return nil
         }
-        if !force, details[id] != nil {
+        if failedSelection != nil || (!force && details[id] != nil) {
             onChange?()
             return nil
         }
@@ -160,6 +167,7 @@ import SaulNativeValues
     }
 
     func record(_ entry: HistoryEntry, active isActive: Bool) {
+        if isActive && active?.id != entry.id { mutationVersion += 1 }
         active = isActive ? entry : nil
         remember(entry)
         if !isActive {
@@ -181,6 +189,28 @@ import SaulNativeValues
         }
         onChange?()
     }
+
+    func discardFailed(_ entry: HistoryEntry) {
+        active = nil
+        forget(entry.recordID)
+        if selectedID == entry.id {
+            failedSelection = entry
+            select(entry.id)
+        } else {
+            onChange?()
+        }
+    }
+
+    private func forget(_ id: HistoryStore.RecordID) {
+        mutationVersion += 1
+        if reading != nil { changes[id] = .delete }
+        let matchesQuery = details.values.contains { $0.recordID == id && matches($0) }
+        let previousCount = entries.count
+        entries.removeAll { $0.recordID == id }
+        details = details.filter { $0.value.recordID != id }
+        detailOrder.removeAll { details[$0] == nil }
+        if entries.count != previousCount || matchesQuery { total = max(0, total - 1) }
+    }
     private func matches(_ entry: HistoryEntry) -> Bool {
         query.isEmpty || entry.query.localizedCaseInsensitiveContains(query)
             || entry.response.localizedCaseInsensitiveContains(query)
@@ -194,14 +224,7 @@ import SaulNativeValues
             let outcome: Result<Void, Error>
             do {
                 try await delete(id)
-                mutationVersion += 1
-                if reading != nil { changes[id] = .delete }
-                let matchesQuery = details.values.contains { $0.recordID == id && matches($0) }
-                let removed = entries.filter { $0.recordID == id }
-                entries.removeAll { $0.recordID == id }
-                details = details.filter { $0.value.recordID != id }
-                detailOrder.removeAll { details[$0] == nil }
-                total = max(0, total - (removed.isEmpty && !matchesQuery ? 0 : 1))
+                forget(id)
                 outcome = .success(())
             } catch { outcome = .failure(error) }
             deleting = nil
@@ -272,7 +295,7 @@ import SaulNativeValues
                         return nil
                     }
                     if !updates.isEmpty {
-                        currentTotal = try await count(search, local.map(\.recordID))
+                        currentTotal = try await count(search, Array(updates.keys))
                         try Task.checkCancellation()
                         guard token == generation else { return }
                         if version != mutationVersion { continue }

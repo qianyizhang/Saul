@@ -57,7 +57,8 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
     }
     try ConfigurationStore(directory: directory).save(config)
     let store = try HistoryStore(directory: directory)
-    let execution = AttemptExecution(generate: generate, append: { try store.append($0) })
+    let execution = AttemptExecution(
+        generate: generate, append: { try store.append($0) }, delete: { try store.delete($0) })
     let model = fixtureModel(directory: directory, attemptExecution: execution, connections: connections)
     model.chooseAction(config.actions.first { $0.capability == .draw }!.id)
     model.query = "Trees share nutrients. 中文\n"

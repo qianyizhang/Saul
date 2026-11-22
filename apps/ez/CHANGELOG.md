@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Failed requests stay out of History. The current result still shows the
+  error and offers Retry. Diagnostics go to macOS Unified Logging.
+
 ## 0.3.0 — 2026-11-16
 
 - Search the Action and Preset catalogs from both lookup composers.

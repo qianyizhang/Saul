@@ -57,7 +57,8 @@ import SaulTestSupport
             try await openStarted.wait()
             let refresh = model.refreshHistory()
             try expect(refresh != nil && model.entries.isEmpty, "Read did not wait for history preparation")
-            try expect(!model.canDeleteLookup, "History mutation was enabled before preparation")
+            try expect(
+                !model.canDeleteLookup(original.recordID), "History mutation was enabled before preparation")
             await release.signal()
             await refresh?.value
             try expectEqual(model.entries.map(\.status), ["interrupted"], "Old pending row did not recover")
@@ -121,7 +122,9 @@ import SaulTestSupport
                 throw CheckFailure("Delete was not admitted")
             }
             await Task.yield()
-            try expect(!f.model.canDeleteLookup, "Delete did not keep ownership until SQLite settled")
+            try expect(
+                !f.model.canDeleteLookup(saved.recordID), "Delete did not keep ownership until SQLite settled"
+            )
             try expectEqual(f.model.selection, saved.id, "Delete changed selection before commit")
             try blocker.run("ROLLBACK")
             await deleting.value
@@ -218,7 +221,8 @@ import SaulTestSupport
                     append: { entry in
                         if failsSave, entry.status != "pending" { throw EZError("Fixture save failed") }
                         try store.append(entry)
-                    })
+                    },
+                    delete: { try store.delete($0) })
                 let readStarted = CheckSignal()
                 var release: CheckedContinuation<[HistoryEntry], Never>?
                 let model = fixtureModel(

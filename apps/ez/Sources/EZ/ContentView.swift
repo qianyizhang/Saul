@@ -93,7 +93,7 @@ struct ContentView: View {
             ), presenting: lookupToDelete
         ) { entry in
             Button("Delete", role: .destructive) { model.deleteLookup(entry.recordID) }
-                .disabled(!model.canDeleteLookup)
+                .disabled(!model.canDeleteLookup(entry.recordID))
             Button("Cancel", role: .cancel) {}
         } message: { entry in
             Text(
@@ -246,7 +246,9 @@ struct ContentView: View {
             }
             DisclosureGroup("Details") {
                 LookupDetails(entry: entry).padding(.top, 8)
-                InputOutputInspector(entry: entry, minimum: model.minimumMode)
+                InputOutputInspector(
+                    entry: entry, minimum: model.minimumMode,
+                    transientFailure: model.isTransientFailure(entry))
             }.font(AppStyle.caption).id(entry.id)
             FollowUpComposer(model: model, entry: entry).id(entry.id)
         }
@@ -256,8 +258,8 @@ struct ContentView: View {
         let allowsDownload = entry.capability == .draw && model.imageData(for: entry) != nil
         let allowsCopy = entry.capability == .write && !entry.response.isEmpty
         let allowsReuse = model.canReuse(entry)
-        if allowsDownload || allowsCopy || allowsReuse || entry.capability == .write || model.canDeleteLookup
-        {
+        let allowsDelete = model.canDeleteLookup(entry.recordID)
+        if allowsDownload || allowsCopy || allowsReuse || entry.capability == .write || allowsDelete {
             HStack(spacing: 12) {
                 if allowsDownload {
                     Button("Download") { model.downloadImage(entry) }
@@ -271,13 +273,13 @@ struct ContentView: View {
                 }
                 if allowsReuse {
                     Button("Reuse") { model.reuse(entry) }
-                        .help("Restore this saved request as an editable draft")
+                        .help("Restore this request as an editable draft")
                 }
                 if entry.capability == .write {
                     Button("Export…") { model.export(entry) }.help("Export this lookup as Markdown")
                 }
                 Spacer(minLength: 4)
-                if model.canDeleteLookup {
+                if allowsDelete {
                     deleteButton(HistoryRow(entry)).foregroundStyle(DesignTokens.danger)
                 }
             }
@@ -290,7 +292,7 @@ struct ContentView: View {
             lookupToDelete = entry
         } label: {
             Label(model.minimumMode ? "Delete" : "Delete lookup", systemImage: "trash")
-        }.disabled(!model.canDeleteLookup)
+        }.disabled(!model.canDeleteLookup(entry.recordID))
     }
     private var composer: some View {
         VStack(alignment: .leading, spacing: 12) {

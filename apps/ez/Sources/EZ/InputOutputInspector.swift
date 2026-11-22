@@ -5,7 +5,17 @@ import SwiftUI
 
 struct InputOutputInspector: View {
     let entry: HistoryEntry
-    var minimum = false
+    let minimum: Bool
+    let transientFailure: Bool
+
+    private var textOrigin: String {
+        if transientFailure { return "Text from the failed request." }
+        switch entry.status {
+        case "unsaved": return "This answer has not been saved."
+        case "pending": return "Text for this running lookup."
+        default: return "Saved text for this lookup."
+        }
+    }
 
     var body: some View {
         DisclosureGroup("Inspect") {
@@ -13,14 +23,8 @@ struct InputOutputInspector: View {
                 Text(entry.status.capitalized)
                     .font(AppStyle.caption).foregroundStyle(.secondary)
                 if !minimum {
-                    Text(
-                        entry.status == "unsaved"
-                            ? "This answer has not been saved. Input fields are included in the assembled prompt."
-                            : entry.status == "pending"
-                                ? "Text for this running lookup. Input fields are included in the assembled prompt."
-                                : "Saved text for this lookup. Input fields are included in the assembled prompt."
-                    )
-                    .font(AppStyle.caption).foregroundStyle(.secondary)
+                    Text("\(textOrigin) Input fields are included in the assembled prompt.")
+                        .font(AppStyle.caption).foregroundStyle(.secondary)
                 }
                 if let error = entry.error {
                     Text(error).font(AppStyle.caption).foregroundStyle(.red)
@@ -39,7 +43,7 @@ struct InputOutputInspector: View {
                             InspectionTextBlock(label: field, text: values[field] ?? "")
                         }
                     } else {
-                        Text("No separate input fields were recorded. See the saved prompt below.")
+                        Text("See the assembled prompt below for the input.")
                             .font(AppStyle.caption).foregroundStyle(.secondary)
                     }
                 }

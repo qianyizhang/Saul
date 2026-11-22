@@ -98,23 +98,31 @@ guard and deletion share a write transaction; neither delete decodes unrelated r
 `AttemptExecution` waits for the writer to acknowledge pending input before
 credentials or transmission. Stop during that initial save prevents the send. If
 the pending write finishes, EZ settles it as cancelled. Stop during generation
-rejects later callbacks and saves the partial outcome. Once the terminal write
-starts, the attempt shows Saving and Stop is unavailable. Only acknowledgment
-of that write shows saved success. After an unacknowledged write, EZ does not
-retry the write or send. Unsaved output stays copyable until history is reloaded;
-an inactive pending row reads as interrupted. Successful deletion alone clears
-the visible result.
+rejects later callbacks and saves the partial outcome. Stop is unavailable
+while the writer settles the attempt. Only acknowledgment of a terminal save
+shows saved success. Generation and completion errors remove the pending row
+and its attachments. The current result keeps the error, frozen Retry inputs
+and any partial output in memory until selection changes. Previously saved
+failures keep their history records.
+
+Console's macOS Unified Log shows failed lookups under subsystem `local.ez.app`
+and category `Lookup`. It includes the failure stage and error domain/code, with
+the error description marked private. If removing the pending row fails, EZ
+reports the cleanup error and leaves the original row recoverable as interrupted.
+An unacknowledged write does not trigger another write or send. Unsaved output
+stays copyable until history is reloaded. Shared deletion clears a selected
+history result only after the store acknowledges it.
 
 Normal Quit stops admission, cancels generation and rejects late callbacks. It
 waits up to six seconds for history preparation, deletion or the attempt's
-decided terminal write, then exits. An already accepted completion remains the
+decided save or cleanup, then exits. An already accepted completion remains the
 outcome during this wait; active generation settles as interrupted. A forced
 exit or expired deadline can leave a pending row for the next launch to recover.
 No request is replayed. See the
 [decision record](adr/0003-settle-attempts-with-async-history.md).
 
 **Retry same request** creates a new attempt from the frozen prompt, action,
-preset, connection and image. Revalidate saved bytes and immutable route through
+preset, connection and image. Revalidate image bytes and immutable route through
 the normal pending-save boundary, without touching the editor or previous
 result. Changed/missing inputs offer review. Completed and Unsaved entries
 do not offer Retry. See [surfaces](surfaces.md#reading-and-inspection).

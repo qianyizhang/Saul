@@ -9,6 +9,8 @@ struct AttemptControls: View {
             Text("Saving request…").font(AppStyle.caption).foregroundStyle(.secondary)
         } else if model.savingAttempt {
             Text("Saving…").font(AppStyle.caption).foregroundStyle(.secondary)
+        } else if model.discardingAttempt {
+            Text("Finishing…").font(AppStyle.caption).foregroundStyle(.secondary)
         }
         if model.canStop {
             Button {

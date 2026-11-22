@@ -10,14 +10,15 @@ import SaulTestSupport
 
 @MainActor func searchImageStateChecks() -> [CheckCase] {
     [
-        CheckCase("retry: image edits reload their frozen source and block when it is missing") { directory in
+        CheckCase("retry: failed image edits retain their frozen source for Retry without saving it") {
+            directory in
             let store = try HistoryStore(directory: directory)
             var received: [HistoryEntry] = []
             let execution = AttemptExecution(
                 generate: { entry, _ in
                     received.append(entry)
                     throw EZError("Synthetic image failure")
-                }, append: { try store.append($0) })
+                }, append: { try store.append($0) }, delete: { try store.delete($0) })
             let model = try newMemeModel(directory, execution: execution)
             defer { model.shutdown() }
             model.attachImage(data: fixturePNG, name: "source.png")
@@ -30,6 +31,7 @@ import SaulTestSupport
             model.send()
             try await done.wait()
             let failed = model.selectedEntry!
+            try expect(try store.entry(failed.recordID) == nil, "Failed image edit retained its stored input")
             model.removeImageInput()
             done = CheckSignal()
             model.retry(failed.id)
@@ -39,12 +41,7 @@ import SaulTestSupport
                 received[1].inputImage?.data, received[0].inputImage?.data, "Retry used live sketch")
             try expectEqual(received[1].query, received[0].query, "Image prompt changed")
             try expect(!model.hasImageInput, "Image retry changed the draft")
-            try store.delete(failed.recordID)
-            model.retry(failed.id)
-            try expectEqual(received.count, 2, "Missing input reached image provider")
-            try expect(
-                model.retryFailure?.message.contains("input image") == true, "Missing input was not explained"
-            )
+            try expect(try store.load().isEmpty, "Repeated image failures accumulated in history")
         },
         CheckCase("sketch: draw from blank, retain failed draft, and reuse the exact flattened source") {
             directory in
@@ -58,7 +55,7 @@ import SaulTestSupport
                         try store.inputImage(for: pending)?.data, bytes, "Sketch sent before save")
                     sent = bytes
                     throw EZError("Synthetic image request failure")
-                }, append: { try store.append($0) })
+                }, append: { try store.append($0) }, delete: { try store.delete($0) })
             let model = try newMemeModel(directory, execution: execution)
             defer { model.shutdown() }
             try expect(!model.canSend, "An empty sketch could run")
@@ -167,7 +164,7 @@ import SaulTestSupport
                         try store.inputImage(for: pending)?.data, fixturePNG,
                         "Input was not saved before send")
                     return .image(fixturePNG)
-                }, append: { try store.append($0) })
+                }, append: { try store.append($0) }, delete: { try store.delete($0) })
             let model = try newMemeModel(directory, execution: execution)
             defer { model.shutdown() }
             try expect(!model.canSend, "Missing image did not block Run")
@@ -207,7 +204,8 @@ import SaulTestSupport
                     calls += 1
                     return .image(fixturePNG)
                 },
-                append: { try store.append($0) })
+                append: { try store.append($0) },
+                delete: { try store.delete($0) })
             let model = try newMemeModel(directory, execution: execution)
             defer { model.shutdown() }
             model.attachImage(data: fixturePNG, name: "source.png")
@@ -236,7 +234,8 @@ import SaulTestSupport
                         throw EZError("Synthetic terminal-save failure")
                     }
                     try store.append(entry)
-                })
+                },
+                delete: { try store.delete($0) })
             let model = try newMemeModel(directory, execution: execution)
             defer { model.shutdown() }
             model.attachImage(data: fixturePNG, name: "source.png")
@@ -272,7 +271,7 @@ import SaulTestSupport
                                 .utf8))
                     update(response)
                     return .text(response)
-                }, append: { try store.append($0) })
+                }, append: { try store.append($0) }, delete: { try store.delete($0) })
             var config = Configuration.starters(model: "fixture", effort: "low", fast: false)
             config.addSearchAndMeme()
             for index in config.presets.indices where config.presets[index].model.isEmpty {

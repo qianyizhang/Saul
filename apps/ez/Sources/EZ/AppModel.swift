@@ -84,9 +84,12 @@ import SaulNativeValues
     var credentialBusy: Bool { session.operation != nil }
     @Published private(set) var runningAttempt: AttemptExecution.Progress?
     var busy: Bool { runningAttempt != nil }
-    var canStop: Bool { runningAttempt.map { $0.phase != .saving } == true && !quitting }
+    var canStop: Bool {
+        runningAttempt.map { $0.phase == .preparing || $0.phase == .generating } == true && !quitting
+    }
     var preparingAttempt: Bool { runningAttempt?.phase == .preparing }
     var savingAttempt: Bool { runningAttempt?.phase == .saving }
+    var discardingAttempt: Bool { runningAttempt?.phase == .discarding }
     private(set) var quitting = false
     @Published private var launcherWork: Task<Void, Never>?
     var launcherPending: Bool { launcherWork != nil }
@@ -661,7 +664,7 @@ import SaulNativeValues
                 throw EZError(configurationError ?? "Configuration is unavailable. Open Settings.")
             }
             guard let preset = original.presetSnapshot else {
-                throw EZError("The saved preset is unavailable. Review the saved request.")
+                throw EZError("The original preset is unavailable. Review the request.")
             }
             let route = try resolveRoute(preset)
             if let issue = connectionIssue(for: preset) { throw EZError(issue) }
@@ -734,12 +737,16 @@ import SaulNativeValues
         await historyCollection.waitForSettlement()
     }
 
-    var canDeleteLookup: Bool {
+    func isTransientFailure(_ entry: HistoryEntry) -> Bool {
+        historyCollection.isTransientFailure(entry.recordID)
+    }
+
+    func canDeleteLookup(_ id: HistoryStore.RecordID) -> Bool {
         !quitting && !busy && !launcherPending && historyCollection.ready && lock != nil
-            && historyCollection.deleting == nil
+            && historyCollection.deleting == nil && !historyCollection.isTransientFailure(id)
     }
     @discardableResult func deleteLookup(_ id: HistoryStore.RecordID) -> Task<Void, Never>? {
-        guard canDeleteLookup,
+        guard canDeleteLookup(id),
             let entry = entries.first(where: { $0.recordID == id })
                 ?? selectedEntry.flatMap({ $0.recordID == id ? HistoryRow($0) : nil })
         else { return nil }
@@ -820,13 +827,24 @@ import SaulNativeValues
             runningAttempt = nil
         case .saved(let saved):
             receiveTerminal(saved)
-        case .saveFailed(var unsaved, let message):
-            unsaved.status = "unsaved"
-            let failure = "Could not save this lookup. \(message)"
-            unsaved.error = unsaved.error.map { "\($0)\n\(failure)" } ?? failure
-            if selection != unsaved.id { error = failure }
-            receiveTerminal(unsaved)
+        case .discarded(let failed):
+            if selection != failed.id { error = failed.error }
+            historyCollection.discardFailed(failed)
+            runningAttempt = nil
+        case .discardFailed(let failed, let message):
+            receiveStorageFailure(failed, message: "Could not remove the pending lookup. \(message)")
+        case .saveFailed(let unsaved, let message):
+            receiveStorageFailure(unsaved, message: "Could not save this lookup. \(message)")
         }
+    }
+
+    private func receiveStorageFailure(_ entry: HistoryEntry, message: String) {
+        var unsaved = entry
+        unsaved.status = "unsaved"
+        unsaved.inputImage?.data = nil
+        unsaved.error = entry.error.map { "\($0)\n\(message)" } ?? message
+        if selection != entry.id { error = message }
+        receiveTerminal(unsaved)
     }
 
     private func receiveTerminal(_ entry: HistoryEntry) {

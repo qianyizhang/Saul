@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Owns admission, generation and the decision to save a terminal outcome.
 @MainActor public final class AttemptExecution {
@@ -13,7 +14,7 @@ import Foundation
 
     public struct Progress {
         public enum Phase {
-            case preparing, generating, saving
+            case preparing, generating, saving, discarding
         }
         public let entry: HistoryEntry
         public let phase: Phase
@@ -24,6 +25,8 @@ import Foundation
         case running(Progress)
         case notSent(id: UUID, message: String)
         case saved(HistoryEntry)
+        case discarded(HistoryEntry)
+        case discardFailed(HistoryEntry, message: String)
         case saveFailed(HistoryEntry, message: String)
     }
 
@@ -31,21 +34,17 @@ import Foundation
         case idle
         case preparing(HistoryEntry, Task<Void, Never>, cancelled: Outcome?)
         case generating(HistoryEntry, Task<Void, Never>)
-        case saving(Task<Void, Never>)
+        case settling(Task<Void, Never>)
     }
 
     private enum Outcome {
         case completed, stopped, interrupted
-        case failed(String)
 
         func record(in entry: inout HistoryEntry) {
             switch self {
             case .completed: entry.status = "completed"
             case .stopped: entry.status = "cancelled"
             case .interrupted: entry.status = "interrupted"
-            case .failed(let message):
-                entry.status = "failed"
-                entry.error = message
             }
         }
     }
@@ -53,14 +52,19 @@ import Foundation
     public var onChange: (@MainActor (Update) -> Void)?
     private let generate: Generation
     private let append: @MainActor (HistoryEntry) async throws -> Void
+    private let delete: @MainActor (HistoryStore.RecordID) async throws -> Void
+    private let log = Logger(subsystem: "local.ez.app", category: "Lookup")
     private var phase = Phase.idle
     private var shuttingDown = false
 
     public init(
-        generate: @escaping Generation, append: @escaping @MainActor (HistoryEntry) async throws -> Void
+        generate: @escaping Generation,
+        append: @escaping @MainActor (HistoryEntry) async throws -> Void,
+        delete: @escaping @MainActor (HistoryStore.RecordID) async throws -> Void
     ) {
         self.generate = generate
         self.append = append
+        self.delete = delete
     }
 
     public func start(_ entry: HistoryEntry) throws {
@@ -85,7 +89,7 @@ import Foundation
     public func waitForSettlement() async {
         while !Task.isCancelled {
             switch phase {
-            case .preparing(_, let task, _), .saving(let task): await task.value
+            case .preparing(_, let task, _), .settling(let task): await task.value
             case .idle, .generating: return
             }
         }
@@ -100,7 +104,7 @@ import Foundation
         case .generating(let entry, let task):
             task.cancel()
             save(entry, outcome: outcome)
-        case .idle, .preparing, .saving:
+        case .idle, .preparing, .settling:
             break
         }
     }
@@ -140,7 +144,7 @@ import Foundation
                 do {
                     try response.requireCompleted(webSearchRequired: entry.usesWebSearch)
                 } catch {
-                    save(current, outcome: .failed(error.localizedDescription))
+                    discard(current, error: error, stage: "completion")
                     return
                 }
             case .image(let data):
@@ -150,7 +154,11 @@ import Foundation
         } catch {
             guard case .generating(let current, _) = phase, current.id == entry.id else { return }
             let cancelled = error is CancellationError || (error as? URLError)?.code == .cancelled
-            save(current, outcome: cancelled ? .interrupted : .failed(error.localizedDescription))
+            if cancelled {
+                save(current, outcome: .interrupted)
+            } else {
+                discard(current, error: error, stage: "generation")
+            }
         }
     }
 
@@ -180,13 +188,41 @@ import Foundation
         outcome.record(in: &terminal)
         terminal.durationSeconds = Date().timeIntervalSince(terminal.createdAt)
         let task = Task { await persist(terminal) }
-        phase = .saving(task)
+        settle(pending, phase: .saving, task: task)
+    }
+
+    private func discard(_ pending: HistoryEntry, error: Error, stage: String) {
+        let cause = error as NSError
+        log.error(
+            "Lookup failed during \(stage, privacy: .public): \(cause.domain, privacy: .public) (\(cause.code)). \(cause.localizedDescription, privacy: .private)"
+        )
+        var terminal = pending
+        terminal.status = "failed"
+        terminal.error = cause.localizedDescription
+        terminal.durationSeconds = Date().timeIntervalSince(terminal.createdAt)
+        let task = Task {
+            let update: Update
+            do {
+                try await delete(terminal.recordID)
+                update = .discarded(terminal)
+            } catch {
+                log.error("Could not remove pending lookup: \(error.localizedDescription, privacy: .private)")
+                update = .discardFailed(terminal, message: error.localizedDescription)
+            }
+            phase = .idle
+            onChange?(update)
+        }
+        settle(pending, phase: .discarding, task: task)
+    }
+
+    private func settle(_ pending: HistoryEntry, phase progress: Progress.Phase, task: Task<Void, Never>) {
+        phase = .settling(task)
         // Keep the provisional answer readable. Images and completed status are
         // published by the terminal update; a progress update is not saved success.
         var preview = pending
         preview.imageData = nil
         preview.inputImage?.data = nil
-        publish(preview, phase: .saving)
+        publish(preview, phase: progress)
     }
 
     private func persist(_ snapshot: HistoryEntry) async {

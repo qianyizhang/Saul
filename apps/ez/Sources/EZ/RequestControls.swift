@@ -119,7 +119,10 @@ struct RequestDetails: View {
                 if showsAnswer, let entry = model.selectedEntry {
                     Text("Answer details").font(.headline)
                     LookupDetails(entry: entry)
-                    InputOutputInspector(entry: entry, minimum: model.minimumMode).id(entry.id)
+                    InputOutputInspector(
+                        entry: entry, minimum: model.minimumMode,
+                        transientFailure: model.isTransientFailure(entry)
+                    ).id(entry.id)
                     Divider()
                     DisclosureGroup("Next lookup") { draftDetails.padding(.top, 8) }
                         .font(AppStyle.caption)
