@@ -1,5 +1,5 @@
 import { MAX_ANNOTATION_BATCH, type AnnotationSummary } from '../../shared/protocol/annotations.ts';
-import { annotationMessage, annotations } from './client';
+import { annotationMessage } from './client';
 import { annotationPanelKey, annotationVersionKey } from './routing';
 
 type Page = { url: string; title: string; tabId: number };
@@ -25,6 +25,7 @@ interface PanelDependencies {
     url: string,
     filter: Filter,
     offset: number,
+    tabId: number,
   ) => Promise<{
     records?: AnnotationSummary[];
     nextOffset?: number;
@@ -90,7 +91,7 @@ export function createAnnotationPanelSession(deps: PanelDependencies) {
       const records: AnnotationSummary[] = [];
       let offset = 0;
       do {
-        const result = await deps.list(page.url, state.filter, offset);
+        const result = await deps.list(page.url, state.filter, offset, page.tabId);
         if (!current()) return;
         records.push(...(result.records ?? []));
         offset = result.nextOffset ?? -1;
@@ -134,7 +135,11 @@ export function createAnnotationPanelSession(deps: PanelDependencies) {
       await deps.respond({
         ...options,
         url: page.url,
-        targets: targets.map(({ id, revision }) => ({ id, revision })),
+        targets: targets.map(({ id, revision, url }) => ({
+          id,
+          revision,
+          ...(url !== page.url && { url }),
+        })),
       });
       const first = targets[0]?.id;
       if (
@@ -233,7 +238,8 @@ export function chromeAnnotationPanel(windowId: number) {
       if (tab?.id !== undefined && !tab.incognito && tab.url && /^https?:/.test(tab.url))
         return { url: tab.url, title: tab.title ?? tab.url, tabId: tab.id };
     },
-    list: (url, filter, offset) => annotations(url, { action: 'list', url, filter, offset }),
+    list: (url, filter, _offset, tabId) =>
+      annotationMessage({ action: 'page-index', url, filter, tabId }),
     async routedSelection() {
       const route: unknown = (await chrome.storage.session.get(key))[key];
       if (route && typeof route === 'object' && 'id' in route && typeof route.id === 'string')

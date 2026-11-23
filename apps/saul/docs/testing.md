@@ -99,7 +99,7 @@ pnpm exec playwright show-trace ../../.artifacts/saul/e2e/latest/results/<case>/
 ## Browser annotation checks
 
 - **Contract** — [Store and runner cases](../tests/browser-annotations.test.ts) cover revisions, scope, idempotency, retention, image requests and atomic reply completion.
-- **Browser** — [Journeys](../tests/e2e/browser-annotations.spec.ts) cover all capture targets, pre-resize capture, navigation/zoom/scroll races, restart, conflicts, delete/restore, cancellation, scoped batch failure and exact request inspection.
+- **Browser** — [Journeys](../tests/e2e/browser-annotations.spec.ts) cover the anchored card, confirmed heading groups, exact-URL isolation, repeated quotes, text and area evidence, navigation/zoom/scroll races, restart, conflicts, delete/restore, cancellation, scoped batch failure and exact request inspection.
 - **UI** — Check keyboard picking/Escape/focus and narrow/wide light/dark editor states.
 
 ## Dated evidence

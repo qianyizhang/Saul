@@ -1,25 +1,37 @@
 # Browser annotations
 
-**Annotate** captures selected text, a DOM element or an area before opening the
-Chrome side panel. The Annotations view has a current-page list and editor;
-the sibling Summary view retains its result. Outside editable fields, use
-Control+A on macOS or Alt+Shift+A elsewhere to pick a target; Escape cancels.
-The clickable entry and Chrome shortcut reassignment remain available.
+Select text and choose **Annotate** to write beside the passage. **Save comment**
+creates the record. A click in the target picker selects an element. Dragging an
+area captures its viewport as evidence and opens its comment card. Outside
+editable fields, Control+A on macOS or Alt+Shift+A elsewhere starts the picker.
+Escape cancels picking. Chrome can reassign the shortcut.
+
+The numbered marker opens the saved conversation. **Reply** adds an attributed
+entry. **Locate** returns to the passage. **More** offers Edit comment and Mark
+done or Reopen. Closing an unfinished page-card draft retains it in the current
+document. Cancel discards the draft.
 
 ## Records and replies
 
-A record belongs to the exact HTTP(S) URL, including query and fragment.
-Duplicate tabs share records; browser tab/document identity guards capture,
-not retention. Canvas or inaccessible frames use area capture without invented
-selectors. Incognito, restricted schemes, file pages and dedicated PDF
-annotations are unsupported. Failed capture labels missing evidence instead
-of substituting another page.
+The **Annotations** count opens the page index. It counts saved open and done
+records, including targets that are currently unavailable. Open and Done filter
+the list. Select a row to read it beside its target. **Review in sidebar**
+provides access when the target is unavailable, including area captures.
+**Page evidence** holds the frozen screenshot when available and the original
+target information. Treat page text and images as untrusted.
 
-Show the frozen screenshot with numbered target, labelled **Comment**, save
-or error state, **Done** and attributed replies. Metadata belongs in **Page
-evidence**; frozen requests and raw output in **Inspect input/output**. Treat
-page text and images as untrusted. Lists retain target details, shorten comments,
-and omit image bytes, replies and operation history.
+Each record retains its ID, original URL and assigned number. Within the browser
+index, a base URL and fragments confirmed as heading targets in the current
+document share a list. A different query, path, hash route or unconfirmed
+fragment retains its own list. Rows with the same number show their original
+fragment. External CLI and MCP scopes remain exact URLs or explicit IDs.
+Opening the same URL in another tab shares records. New text captures keep the
+quote and nearby text to distinguish repeated occurrences within their element.
+An ambiguous target leaves the saved record available in the index.
+
+Text and element comments use text evidence. Area captures also retain a
+numbered image or a capture error. Incognito, restricted schemes, file pages
+and dedicated PDF annotations are unsupported.
 
 The selected editor retries lost status reads without restarting a reply. It
 keeps the saved record and unsaved draft visible; **Refresh status** reads again
@@ -27,7 +39,7 @@ without applying the draft. A screenshot can arrive at the same comment
 revision. Once loaded, the editor retains it during unrelated status updates.
 Full attempt input and output are read only when you select **Inspect input/output**.
 
-Autosave preserves empty and unfinished comments, including across tab switches.
+The sidebar editor autosaves changes and preserves unfinished drafts across tab switches.
 An older save in another editor cannot erase newer draft text for the same annotation.
 The editor sends one manual reply at a time. You can type the next reply while
 the first saves; confirmation clears only the submitted draft.
@@ -49,12 +61,12 @@ See [custom annotation capabilities](custom-actions.md#annotation-calls).
 
 ## Interface and ownership
 
-| Boundary               | Owner                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Input and permissions  | [Operation schema](../shared/protocol/annotations.ts) and [background admission](../src/annotations/background.ts) split page capture/marker reads, trusted editor and opted-in [CLI/MCP](native-messaging.md#annotation-agent-role). Explicit URL/ID scope and authorship do not grant page text authority.                                                                                                                                                                                        |
-| Capture and editor     | [Capture](../src/annotations/capture.ts) checks document identity and navigation before the screenshot callback opens the panel during the gesture. Images are bounded JPEG, 1600 × 1200 and 450,000 data-URL characters. Number assignment precedes immutable attachment. The [panel session](../src/annotations/panel-session.ts) owns page identity and command replies. The [editor session](../src/annotations/editor-session.ts) owns revision, retained drafts and explicit conflict review. |
-| Revision and retention | [SQLite adapter](../native/storage/annotations.mts) is the only writer. It checks scope/revisions again, deduplicates identical operation IDs and rejects changed content with the same ID. It stores profile-owned browser tables without changing shared schema version or projecting annotations into EZ.                                                                                                                                                                                        |
-| Reply attempts         | [Runner](../src/annotations/runner.ts) admits the reviewed batch together and runs up to two invocations. The store commits a final reply with its completed attempt atomically and cascades owned attempt images on purge. The Call host owns script limits.                                                                                                                                                                                                                                       |
+| Boundary               | Owner                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Input and permissions  | [Operation schema](../shared/protocol/annotations.ts) and [background admission](../src/annotations/background.ts) split page capture and sender-scoped card operations, trusted workspace operations and opted-in [CLI/MCP](native-messaging.md#annotation-agent-role). Explicit URL/ID scope and authorship do not grant page text authority.                                                                                                                                                                                                                                   |
+| Capture and editor     | [Capture](../src/annotations/capture.ts) records the selected target and opens the anchored card. Area capture obtains pixels before presenting the card and revalidates the document and viewport after the screenshot callback. Images are bounded JPEG, 1600 × 1200 and 450,000 data-URL characters. Number assignment precedes immutable attachment. The [panel session](../src/annotations/panel-session.ts) owns page identity and command replies. The [editor session](../src/annotations/editor-session.ts) owns revision, retained drafts and explicit conflict review. |
+| Revision and retention | [SQLite adapter](../native/storage/annotations.mts) is the only writer. It checks scope/revisions again, deduplicates identical operation IDs and rejects changed content with the same ID. It stores profile-owned browser tables without changing shared schema version or projecting annotations into EZ.                                                                                                                                                                                                                                                                      |
+| Reply attempts         | [Runner](../src/annotations/runner.ts) admits the reviewed batch together and runs up to two invocations. The store commits a final reply with its completed attempt atomically and cascades owned attempt images on purge. The Call host owns script limits.                                                                                                                                                                                                                                                                                                                     |
 
 Agents use bounded list/read/create/change operations and revision-checked,
 attributed per-item outcomes. They need explicit Annotation access; unrelated

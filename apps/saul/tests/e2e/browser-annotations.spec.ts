@@ -1,10 +1,22 @@
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider, type ExtensionSandbox, type FixtureServer } from './support.ts';
+import { reviewScreenshots } from './artifacts.ts';
 import { summaryPanelDriver } from './summary-panel-driver.ts';
 import type { Annotation, AnnotationResult } from '../../shared/protocol/annotations.ts';
 import type { AnnotationEditorStatus } from '../../shared/protocol/annotation-attempts.ts';
 
 test.use({ browserToolsFixtures: true });
+async function savePageComment(page: import('@playwright/test').Page, text = 'A page comment') {
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.localName))
+    .toBe('saul-annotation-card');
+  await page.keyboard.insertText(text);
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('button', { name: 'Open annotation', exact: true })).toBeVisible();
+}
+
 test('annotation status recovers at startup and attaches an image at the same revision', async ({
   sandbox,
   fixtureServer,
@@ -91,6 +103,7 @@ test('annotation status recovers at startup and attaches an image at the same re
   await expect(source.locator('saul-root')).toBeAttached();
   await source.locator('#concept').click({ clickCount: 3 });
   await source.getByRole('button', { name: 'Annotate', exact: true }).click();
+  await savePageComment(source);
   const sidePanelCount = () =>
     worker.evaluate(
       async () => (await chrome.runtime.getContexts({ contextTypes: ['SIDE_PANEL'] })).length,
@@ -133,7 +146,7 @@ test('annotation status recovers at startup and attaches an image at the same re
     await expect.poll(comment).toBe('Recovered unsaved comment');
     await expect
       .poll(() => panel.evaluate(() => document.querySelector('.annotation-editor')?.textContent))
-      .toContain('No image saved.');
+      .toContain('Text evidence');
 
     // The generated JPEG simulates delayed viewport processing without depending
     // on a second screenshot; shared storage and its version event stay real.
@@ -190,6 +203,7 @@ async function openSelectionEditor(sandbox: ExtensionSandbox, fixtureServer: Fix
   await expect(source.locator('saul-root')).toBeAttached();
   await source.locator('#concept').click({ clickCount: 3 });
   await source.getByRole('button', { name: 'Annotate', exact: true }).click();
+  await savePageComment(source);
   // Screenshot capture may outlive Chrome's gesture. Exercise its explicit recovery action.
   await expect
     .poll(
@@ -496,7 +510,7 @@ test('queued edits preserve a concurrent comment and an older save cannot erase 
   }
 });
 
-test('captures text before opening the native panel, saves drafts, replies through a Call, and restores after restart @smoke', async ({
+test('saves a text-only comment on the page, explicitly opens the index, and restores its Call reply after restart @smoke', async ({
   sandbox,
   fixtureServer,
 }, info) => {
@@ -524,6 +538,15 @@ test('captures text before opening the native panel, saves drafts, replies throu
         async () => (await chrome.runtime.getContexts({ contextTypes: ['SIDE_PANEL'] })).length,
       ),
     )
+    .toBe(0);
+  await savePageComment(source);
+  await source.getByRole('button', { name: 'Open annotation', exact: true }).click();
+  await expect
+    .poll(() =>
+      worker.evaluate(
+        async () => (await chrome.runtime.getContexts({ contextTypes: ['SIDE_PANEL'] })).length,
+      ),
+    )
     .toBe(1);
   const panel = await summaryPanelDriver(context);
   const fill = async (selector: string, value: string) =>
@@ -544,14 +567,7 @@ test('captures text before opening the native panel, saves drafts, replies throu
         panel.evaluate(() => document.querySelector('.annotation-editor h2')?.textContent),
       )
       .toBe('Annotation 1');
-    await expect
-      .poll(() =>
-        panel.evaluate(
-          () =>
-            document.querySelector<HTMLImageElement>('.annotation-editor img')?.naturalWidth ?? 0,
-        ),
-      )
-      .toBeGreaterThan(0);
+    expect(await panel.evaluate(() => document.querySelector('.annotation-editor img'))).toBe(null);
     await fill('#annotation-comment', 'Explain the selected concept and propose a clearer label.');
     await expect
       .poll(() =>
@@ -574,7 +590,7 @@ test('captures text before opening the native panel, saves drafts, replies throu
     }, fixtureServer.origin + '/article');
     const id = saved.records![0]!.id;
     expect(saved.records![0]!.target.kind).toBe('text');
-    expect(saved.records![0]!.hasImage).toBe(true);
+    expect(saved.records![0]!.hasImage).toBe(false);
     await panel.click('Respond to annotations · 1');
     await panel.evaluate(() => {
       const select = [...document.querySelectorAll<HTMLSelectElement>('select')].find((s) =>
@@ -613,7 +629,7 @@ test('captures text before opening the native panel, saves drafts, replies throu
     expect(fixtureServer.requests).toHaveLength(inferenceBefore + 2);
     const body = fixtureServer.requests.at(-1)!.body;
     expect(body).toContain('Untrusted page evidence');
-    expect(body).toContain('image_url');
+    expect(body).not.toContain('image_url');
     expect(body).toContain('Explain the selected concept');
     await panel.evaluate(() => {
       const inspect = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
@@ -669,7 +685,7 @@ test('captures text before opening the native panel, saves drafts, replies throu
     expect(restored.comment).toContain('Explain the selected');
     expect(restored.replies).toHaveLength(1);
     expect(restored.state).toBe('done');
-    expect(restored.image).toMatch(/^data:image\/jpeg/);
+    expect(restored.image).toBeUndefined();
   } finally {
     await panel.detach();
   }
@@ -696,6 +712,7 @@ test('element and area picking preserve source DOM and Escape cancels', async ({
   await start();
   const rect = await source.locator('#concept').boundingBox();
   await source.mouse.click(rect!.x + 10, rect!.y + 10);
+  await savePageComment(source);
   await expect
     .poll(async () =>
       popup.evaluate(
@@ -730,12 +747,15 @@ test('element and area picking preserve source DOM and Escape cancels', async ({
               operation: { action: 'list', url, filter: 'all', offset: 0 },
             })
           ).result.records
-            .map((a: Annotation) => a.target.kind)
+            .map(
+              (a: { target: { kind: string }; hasImage: boolean }) =>
+                a.target.kind + ':' + a.hasImage,
+            )
             .join(','),
         fixtureServer.origin + '/article',
       ),
     )
-    .toBe('element,area');
+    .toBe('element:false,area:true');
   await expect(source.locator('#concept')).toHaveText('Gradient descent');
   await source.evaluate(() => {
     const input = document.createElement('div');
@@ -760,6 +780,7 @@ test('agent bridge opt-in, scoped append, conflicts, delete and restore share th
   await expect(page.locator('saul-root')).toBeAttached();
   await page.locator('#concept').click({ clickCount: 3 });
   await page.getByRole('button', { name: 'Annotate', exact: true }).click();
+  await savePageComment(page);
   const url = page.url();
   const request = {
     scope: { urls: [url], ids: [] as string[] },
@@ -836,7 +857,7 @@ test('agent bridge opt-in, scoped append, conflicts, delete and restore share th
     await call({ ...request, operation: { action: 'read', id: a.id, image: true } })
   ).record!;
   expect(restored.replies[0]!.author.kind).toBe('agent');
-  expect(restored.image).toMatch(/^data:image/);
+  expect(restored.image).toBeUndefined();
 });
 
 for (const race of ['navigation', 'scroll', 'zoom'] as const)
@@ -885,8 +906,15 @@ for (const race of ['navigation', 'scroll', 'zoom'] as const)
       },
       { destination: fixtureServer.origin + '/anchors', race },
     );
-    await page.locator('#concept').click({ clickCount: 3 });
-    await page.getByRole('button', { name: 'Annotate', exact: true }).click();
+    await worker.evaluate(async () => {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      await chrome.tabs.sendMessage(tab!.id!, { type: 'SAUL_ANNOTATE' });
+    });
+    await expect(page.getByRole('dialog', { name: 'Select an annotation target' })).toBeVisible();
+    await page.mouse.move(50, 60);
+    await page.mouse.down();
+    await page.mouse.move(260, 180, { steps: 4 });
+    await page.mouse.up();
     const url = fixtureServer.origin + '/article';
     await expect
       .poll(async () =>
@@ -935,3 +963,238 @@ for (const race of ['navigation', 'scroll', 'zoom'] as const)
       )
       .toContain(race === 'scroll' ? 'scrolled' : 'changed');
   });
+
+test('page index groups confirmed headings, preserves original IDs, and keeps unrelated routes separate', async ({
+  sandbox,
+  fixtureServer,
+}, info) => {
+  const { context, popup, worker } = await sandbox.launch();
+  const source = await context.newPage();
+  const base = fixtureServer.origin + '/heading-index';
+  fixtureServer.setDocument('/heading-index', {
+    type: 'text/html',
+    body: '<!doctype html><title>Reading</title><h2 id="intro">Intro</h2><p id="first">First passage</p><h2 id="detail">Detail</h2><p id="second">step then step then finish.</p>',
+  });
+  await source.goto(base + '#intro');
+  await source.bringToFront();
+  const urls = [
+    base + '#intro',
+    base + '#detail',
+    base + '#/different',
+    base + '?edition=2#detail',
+  ];
+  await popup.evaluate(async (urls) => {
+    for (const [i, url] of urls.entries()) {
+      const response = await chrome.runtime.sendMessage({
+        target: 'saul-annotation',
+        action: 'operate',
+        url,
+        operation: {
+          action: 'create',
+          capture: {
+            id: 'legacy-' + i,
+            url,
+            title: 'Reading',
+            comment: 'Old note ' + i,
+            target: {
+              kind: 'element',
+              selector: '#first',
+              label: 'First passage',
+              frame: 'top document',
+              rect: { x: 0, y: 0, width: 20, height: 20 },
+              viewport: { width: 800, height: 600, scale: 1, scrollX: 0, scrollY: 0 },
+            },
+          },
+        },
+      });
+      if (!response.success) throw new Error(response.error);
+    }
+  }, urls);
+  const count = source.getByRole('button', { name: 'Annotations 2', exact: true });
+  await expect(count).toBeVisible();
+  await count.click();
+  const panel = await summaryPanelDriver(context);
+  try {
+    await expect
+      .poll(() =>
+        panel.evaluate(() =>
+          Array.from(document.querySelectorAll('.annotation-item'), (e) => e.textContent),
+        ),
+      )
+      .toEqual([expect.stringContaining('#intro'), expect.stringContaining('#detail')]);
+    await panel.evaluate(() =>
+      document.querySelectorAll<HTMLButtonElement>('.annotation-item')[1]!.click(),
+    );
+    const clickCard = async (label: string) => {
+      // The card keeps its content in a closed shadow root. Use the extension's
+      // isolated test world to measure the control and send an actual pointer click.
+      const point = await worker.evaluate(async (label) => {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        const [value] = await chrome.scripting.executeScript({
+          target: { tabId: tab!.id! },
+          args: [label],
+          func: (label: string) => {
+            const host = document.querySelector<HTMLElement>('saul-annotation-card');
+            const root = host && chrome.dom.openOrClosedShadowRoot(host);
+            const control = Array.from(
+              root?.querySelectorAll<HTMLElement>('button,summary') ?? [],
+            ).find((e) => e.textContent?.trim() === label);
+            const rect = control?.getBoundingClientRect();
+            return rect && rect.width
+              ? { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+              : null;
+          },
+        });
+        return value?.result;
+      }, label);
+      if (!point) throw new Error('Missing card control ' + label);
+      await source.mouse.click(point.x, point.y);
+    };
+    const read = () =>
+      popup.evaluate(
+        async (url) =>
+          (
+            await chrome.runtime.sendMessage({
+              target: 'saul-annotation',
+              action: 'operate',
+              url,
+              operation: { action: 'read', id: 'legacy-1', image: false },
+            })
+          ).result.record as Annotation,
+        urls[1]!,
+      );
+    await expect(async () => {
+      await clickCard('Reply');
+    }).toPass({ timeout: 5000 });
+    await source.keyboard.insertText('Scoped reply');
+    await clickCard('Add reply');
+    await expect
+      .poll(async () => (await read()).replies.map((r) => r.text))
+      .toEqual(['Scoped reply']);
+    await expect(async () => {
+      await clickCard('More');
+    }).toPass({ timeout: 5000 });
+    await clickCard('Mark done');
+    await expect.poll(async () => (await read()).state).toBe('done');
+    expect((await read()).url).toBe(urls[1]);
+    if (reviewScreenshots)
+      await source.screenshot({ path: info.outputPath('page-index-card.png') });
+    await source.goto(base + '#/different');
+    await expect(source.getByRole('button', { name: 'Annotations 1', exact: true })).toBeVisible();
+    await source.goto(base + '?edition=2#detail');
+    await expect(source.getByRole('button', { name: 'Annotations 1', exact: true })).toBeVisible();
+    await source.goto(base + '#detail');
+    const pos = await source.locator('#second').evaluate((el) => {
+      const range = document.createRange();
+      range.setStart(el.firstChild!, 10);
+      range.setEnd(el.firstChild!, 14);
+      const r = range.getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    });
+    await source.mouse.dblclick(pos.x, pos.y);
+    await source.getByRole('button', { name: 'Annotate', exact: true }).click();
+    await savePageComment(source, 'Second occurrence');
+    await expect(
+      source.getByRole('button', { name: 'Open annotation 2', exact: true }),
+    ).toBeVisible();
+  } finally {
+    await panel.detach();
+  }
+});
+
+test('closing and retrying an anchored draft retains the full comment and creates one record', async ({
+  sandbox,
+  fixtureServer,
+}, info) => {
+  const { context, popup } = await sandbox.launch();
+  const page = await context.newPage();
+  await page.goto(fixtureServer.origin + '/article');
+  await page.bringToFront();
+  const activate = async () => {
+    await page.locator('#concept').click({ clickCount: 3 });
+    await page.getByRole('button', { name: 'Annotate', exact: true }).click();
+    await expect
+      .poll(() => page.evaluate(() => document.activeElement?.localName))
+      .toBe('saul-annotation-card');
+  };
+  await activate();
+  const text = 'Explain the second step. '.repeat(25);
+  await page.keyboard.insertText(text);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('saul-annotation-card')).toHaveCount(0);
+  await activate();
+  const submit = async () => {
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Enter');
+  };
+  sandbox.rejectHistoryWriteOnce(
+    ({ type, payload }) =>
+      type === 'DB_ANNOTATION' &&
+      (payload as { operation: { action: string } }).operation.action === 'create',
+  );
+  await submit();
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.localName))
+    .toBe('saul-annotation-card');
+  const list = () =>
+    popup.evaluate(
+      async (url) =>
+        (
+          await chrome.runtime.sendMessage({
+            target: 'saul-annotation',
+            action: 'operate',
+            url,
+            operation: { action: 'list', url, filter: 'all', offset: 0 },
+          })
+        ).result.records as Annotation[],
+      page.url(),
+    );
+  expect(await list()).toHaveLength(0);
+  const cardHandle = await page.context().newCDPSession(page);
+  try {
+    const readTree = async () => (await cardHandle.send('Accessibility.getFullAXTree')).nodes;
+    await expect
+      .poll(async () => (await readTree()).some((n) => n.role?.value === 'alert'))
+      .toBe(true);
+    const saveNode = (await readTree()).find(
+      (n) => n.role?.value === 'button' && n.name?.value === 'Save comment',
+    )!;
+    await cardHandle.send('DOM.focus', { backendNodeId: saveNode.backendDOMNodeId });
+    await page.keyboard.press('Enter');
+  } finally {
+    await cardHandle.detach();
+  }
+  await expect(page.getByRole('button', { name: 'Open annotation', exact: true })).toBeVisible();
+  const rows = await list();
+  expect(rows).toHaveLength(1);
+  const saved = await popup.evaluate(
+    async ({ id, url }) =>
+      (
+        await chrome.runtime.sendMessage({
+          target: 'saul-annotation',
+          action: 'operate',
+          url,
+          operation: { action: 'read', id, image: true },
+        })
+      ).result.record as Annotation,
+    { id: rows[0]!.id, url: page.url() },
+  );
+  expect(saved.comment).toBe(text);
+  expect(saved.image).toBeUndefined();
+  await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await page.getByRole('button', { name: 'Open annotation 1', exact: true }).click();
+  const visibleCard = await page.context().newCDPSession(page);
+  try {
+    await expect
+      .poll(async () =>
+        (await visibleCard.send('Accessibility.getFullAXTree')).nodes.some(
+          (n) => n.role?.value === 'button' && n.name?.value === 'Reply',
+        ),
+      )
+      .toBe(true);
+    if (reviewScreenshots) await page.screenshot({ path: info.outputPath('anchored-note.png') });
+  } finally {
+    await visibleCard.detach();
+  }
+});

@@ -5,6 +5,7 @@ import type {
 } from '../../shared/protocol/annotation-attempts.ts';
 import type {
   AnnotationCapture,
+  AnnotationChange,
   AnnotationOperation,
   AnnotationResult,
   ReviewedAnnotation,
@@ -16,16 +17,19 @@ import type { AnnotationDraftMutation } from './draft';
 
 type WorkspaceOperation<Q, R> = { input: Q; result: R };
 type Operations = {
+  'page-index': WorkspaceOperation<
+    { url: string; tabId: number; filter: 'open' | 'all' | 'deleted' | 'done' },
+    AnnotationResult
+  >;
+  'card-read': WorkspaceOperation<{ url: string; id: string }, AnnotationResult>;
+  'card-change': WorkspaceOperation<{ url: string; change: AnnotationChange }, AnnotationResult>;
   operate: WorkspaceOperation<{ url: string; operation: AnnotationOperation }, AnnotationResult>;
   status: WorkspaceOperation<AnnotationStatusRequest, AnnotationEditorStatus>;
   draft: WorkspaceOperation<{ mutation: AnnotationDraftMutation }, void>;
   inspect: WorkspaceOperation<{ id: string }, AnnotationAttempt[]>;
   stop: WorkspaceOperation<{ id: string }, void>;
   open: WorkspaceOperation<{ id?: string }, void>;
-  capture: WorkspaceOperation<
-    { capture: AnnotationCapture },
-    AnnotationResult & { panelError?: string }
-  >;
+  capture: WorkspaceOperation<{ capture: AnnotationCapture }, AnnotationResult>;
   choices: WorkspaceOperation<object, { presets: ModelPreset[]; calls: CallChoice[] }>;
   'start-capture': WorkspaceOperation<object, void>;
   'page-markers': WorkspaceOperation<object, AnnotationResult>;

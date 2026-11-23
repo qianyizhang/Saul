@@ -1,3 +1,5 @@
+import { annotationLabels } from './labels';
+import { openAnnotationCard, dismissAnnotationCard } from './page-card';
 import { annotationMessage } from './client';
 import type {
   AnnotationTarget,
@@ -56,34 +58,63 @@ export function targetFor(
   };
 }
 let capturing = false;
+function locate(a: Pick<Annotation, 'url' | 'target'>) {
+  const rect = resolveTarget(a);
+  if (rect) {
+    const el = a.target.selector && document.querySelector(a.target.selector);
+    if (el) el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+    const current = resolveTarget(a);
+    if (current && (current.top < 0 || current.bottom > innerHeight))
+      window.scrollBy({ top: current.top - innerHeight / 2, behavior: 'instant' });
+  }
+  return !!rect;
+}
+function review(
+  a: Pick<Annotation, 'id' | 'url' | 'title' | 'target' | 'comment'>,
+  editOnOpen = false,
+) {
+  locate(a);
+  openAnnotationCard({
+    capture: { id: a.id, url: a.url, title: a.title, target: a.target, comment: a.comment },
+    existing: true,
+    editOnOpen,
+    rect: () => resolveTarget(a),
+    locate: () => locate(a),
+  });
+}
 export async function captureAnnotation(target: AnnotationTarget) {
   if (capturing) return;
+  const capture = {
+    id: crypto.randomUUID(),
+    url: location.href,
+    title: document.title.slice(0, 1000),
+    target,
+    comment: '',
+  };
+  if (target.kind !== 'area') {
+    openAnnotationCard({
+      capture,
+      rect: () => resolveTarget(capture),
+      locate: () => locate(capture),
+      saved: () => showNotice('Comment saved.', capture.id),
+    });
+    return;
+  }
   capturing = true;
-  const id = crypto.randomUUID();
   const hosts = [
     ...document.querySelectorAll<HTMLElement>(
-      'saul-root,saul-annotation-overlay,saul-annotation-markers,saul-annotation-notice',
+      'saul-root,saul-annotation-card,saul-annotation-markers,saul-annotation-notice',
     ),
   ];
   const hidden = hosts.map((h) => h.style.cssText);
   hosts.forEach((h) => h.style.setProperty('display', 'none', 'important'));
   try {
-    const result = await annotationMessage({
-      action: 'capture',
-      capture: {
-        id,
-        url: location.href,
-        title: document.title.slice(0, 1000),
-        target,
-        comment: '',
-      },
-    });
-    showNotice(
-      result.panelError
-        ? 'Saved. Open the annotation editor to add your comment.'
-        : 'Annotation saved.',
-      id,
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
     );
+    const result = await annotationMessage({ action: 'capture', capture });
+    const record = result.records?.[0];
+    if (record && location.href === capture.url) review(record, true);
   } catch (e) {
     showNotice((e as Error).message);
   } finally {
@@ -96,8 +127,19 @@ export function annotateRange(range: Range) {
     range.commonAncestorContainer instanceof Element
       ? range.commonAncestorContainer
       : range.commonAncestorContainer.parentElement;
-  if (el)
-    void captureAnnotation(targetFor(el, 'text', range.getBoundingClientRect(), range.toString()));
+  if (!el) return;
+  const target = targetFor(el, 'text', range.getBoundingClientRect(), range.toString());
+  const before = range.cloneRange(),
+    after = range.cloneRange();
+  before.selectNodeContents(el);
+  before.setEnd(range.startContainer, range.startOffset);
+  after.selectNodeContents(el);
+  after.setStart(range.endContainer, range.endOffset);
+  target.quoteContext = {
+    before: before.toString().slice(-80),
+    after: after.toString().slice(0, 80),
+  };
+  void captureAnnotation(target);
 }
 function showNotice(text: string, id?: string) {
   document.querySelector('saul-annotation-notice')?.remove();
@@ -126,26 +168,67 @@ function showNotice(text: string, id?: string) {
   box.append(close);
   root.append(box);
   document.documentElement.append(host);
+  if (id)
+    setTimeout(() => {
+      if (!root.activeElement) host.remove();
+    }, 5000);
 }
 function editable(): boolean {
   let el = document.activeElement;
   while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
   return (
-    !!el?.closest('input,textarea,select,[role="textbox"]') ||
+    !!el?.closest('saul-annotation-card,input,textarea,select,[role="textbox"]') ||
     (el instanceof HTMLElement && el.isContentEditable)
   );
 }
+function headingUrl(url: string) {
+  const hash = new URL(url).hash;
+  if (!hash) return true;
+  try {
+    const name = decodeURIComponent(hash.slice(1));
+    if (!name || /^[!/]/.test(name)) return false;
+    const el = document.getElementById(name) ?? document.getElementsByName(name)[0];
+    return (
+      !!el &&
+      (el.matches('h1,h2,h3,h4,h5,h6,[role="heading"]') ||
+        !!el.closest('h1,h2,h3,h4,h5,h6,[role="heading"]') ||
+        (el.matches('section,article') &&
+          !!el.querySelector(
+            ':scope > h1,:scope > h2,:scope > h3,:scope > h4,:scope > h5,:scope > h6',
+          )) ||
+        (el.matches('a') && !!el.nextElementSibling?.matches('h1,h2,h3,h4,h5,h6')))
+    );
+  } catch {
+    return false;
+  }
+}
+function belongsHere(url: string) {
+  return (
+    url === location.href ||
+    (url.split('#')[0] === location.href.split('#')[0] &&
+      headingUrl(url) &&
+      headingUrl(location.href))
+  );
+}
 export function resolveTarget(a: Pick<Annotation, 'url' | 'target'>): DOMRect | undefined {
-  if (location.href !== a.url || a.target.kind === 'area' || !a.target.selector) return;
+  if (!belongsHere(a.url) || a.target.kind === 'area' || !a.target.selector) return;
   try {
     const matches = document.querySelectorAll(a.target.selector);
     if (matches.length !== 1) return;
     const el = matches[0]!;
     if (a.target.kind === 'text' && a.target.text) {
       const text = el.textContent ?? '',
-        exact = a.target.text,
-        start = text.indexOf(exact);
-      if (start < 0 || text.indexOf(exact, start + 1) >= 0) return;
+        exact = a.target.text;
+      let start = text.indexOf(exact);
+      if (start < 0) return;
+      if (text.indexOf(exact, start + 1) >= 0) {
+        const context = a.target.quoteContext;
+        if (!context) return;
+        const full = context.before + exact + context.after;
+        const at = text.indexOf(full);
+        if (at < 0 || text.indexOf(full, at + 1) >= 0) return;
+        start = at + context.before.length;
+      }
       const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
       let node: Node | null,
         offset = 0;
@@ -182,33 +265,78 @@ export function installAnnotationCapture() {
   let saved: AnnotationSummary[] = [],
     frame = 0,
     disposed = false;
+  const buttons = new Map<string, HTMLButtonElement>();
+  const count = document.createElement('button');
+  count.style.cssText =
+    'position:fixed;bottom:12px;right:12px;z-index:2147483645;padding:5px 9px;border:1px solid;border-radius:16px;color:CanvasText;background:Canvas;font:13px system-ui;cursor:pointer;';
+  count.hidden = true;
+  count.onclick = (event) => {
+    if (event.isTrusted)
+      void annotationMessage({ action: 'open' }).catch((e) => showNotice(String(e)));
+  };
+  markerRoot.append(count);
   const position = () => {
     cancelAnimationFrame(frame);
     frame = requestAnimationFrame(() => {
       if (disposed) return;
-      markerRoot.replaceChildren();
-      for (const a of saved) {
-        const r = resolveTarget(a);
-        if (!r || r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth)
+      count.hidden = !saved.length;
+      count.textContent = 'Annotations ' + saved.length;
+      const visible = new Set<string>();
+      for (const note of saved) {
+        if (note.state !== 'open') continue;
+        const rect = resolveTarget(note);
+        if (
+          !rect ||
+          rect.bottom < 0 ||
+          rect.top > innerHeight ||
+          rect.right < 0 ||
+          rect.left > innerWidth
+        )
           continue;
-        const button = document.createElement('button');
-        button.textContent = String(a.number);
-        button.setAttribute('aria-label', `Open annotation ${a.number}`);
-        button.style.cssText = `position:fixed;z-index:2147483645;left:${Math.max(0, Math.min(innerWidth - 28, r.right))}px;top:${Math.max(0, r.top)}px;background:Canvas;color:CanvasText;border:2px solid #1967d2;border-radius:50%;min-width:28px;min-height:28px;font:14px system-ui;`;
-        button.onclick = () =>
-          void annotationMessage({ action: 'open', id: a.id }).catch((e) =>
-            showNotice(String(e), a.id),
-          );
-        markerRoot.append(button);
+        visible.add(note.id);
+        let button = buttons.get(note.id);
+        if (!button) {
+          button = document.createElement('button');
+          button.style.cssText =
+            'position:fixed;z-index:2147483645;background:Canvas;color:CanvasText;border:2px solid #1967d2;border-radius:50%;min-width:28px;min-height:28px;font:14px system-ui;cursor:pointer;';
+          buttons.set(note.id, button);
+          markerRoot.append(button);
+        }
+        button.style.left = Math.max(0, Math.min(innerWidth - 28, rect.right)) + 'px';
+        button.style.top = Math.max(0, rect.top) + 'px';
+        button.textContent = String(note.number);
+        const label = labels.get(note.id)!;
+        button.title = label + ' · ' + note.target.label;
+        button.setAttribute('aria-label', 'Open annotation ' + label);
+        button.onclick = (event) => {
+          if (event.isTrusted) review(note);
+        };
       }
+      for (const [id, button] of buttons)
+        if (!visible.has(id)) {
+          button.remove();
+          buttons.delete(id);
+        }
     });
   };
+  let labels = new Map<string, string>();
+  let version = 0;
+  let activeUrl = location.href;
   const refresh = () => {
+    const request = ++version;
+    if (activeUrl !== location.href) {
+      dismissAnnotationCard();
+      saved = [];
+      position();
+      document.querySelector('saul-annotation-notice')?.remove();
+      activeUrl = location.href;
+    }
     const url = location.href;
     void annotationMessage({ action: 'page-markers' }).then(
       (r) => {
-        if (!disposed && url === location.href) {
+        if (!disposed && request === version && url === location.href) {
           saved = r.records ?? [];
+          labels = annotationLabels(saved);
           position();
         }
       },
@@ -342,10 +470,12 @@ export function installAnnotationCapture() {
     draw(rect);
   };
   const listener = (
-    message: { type?: string; annotation?: Annotation },
+    message: { type?: string; annotation?: Annotation; urls?: string[]; url?: string },
     _sender: chrome.runtime.MessageSender,
     reply: (value: unknown) => void,
   ) => {
+    if (message.type === 'SAUL_ANNOTATION_URLS')
+      reply({ urls: message.url === location.href ? message.urls?.filter(belongsHere) : [] });
     if (message.type === 'SAUL_ANNOTATIONS_CHANGED') refresh();
     if (message.type === 'SAUL_ANNOTATE') {
       start();
@@ -353,19 +483,20 @@ export function installAnnotationCapture() {
     }
     if (message.type === 'SAUL_ANNOTATION_STATE')
       reply(JSON.stringify({ url: location.href, viewport: viewport() }));
-    if (message.type === 'SAUL_ANNOTATION_LOCATE' && message.annotation) {
-      const rect = resolveTarget(message.annotation);
-      reply({ available: !!rect });
-      if (rect) {
-        const el = document.querySelector(message.annotation.target.selector!);
-        el?.scrollIntoView({ block: 'center', behavior: 'instant' });
-      }
+    if (message.type === 'SAUL_ANNOTATION_REVIEW' && message.annotation) {
+      if (belongsHere(message.annotation.url) && resolveTarget(message.annotation)) {
+        review(message.annotation);
+        reply({ available: true });
+      } else reply({ available: false });
     }
+    if (message.type === 'SAUL_ANNOTATION_LOCATE' && message.annotation)
+      reply({ available: locate(message.annotation) });
     return false;
   };
   chrome.runtime.onMessage.addListener(listener);
   return () => {
     disposed = true;
+    dismissAnnotationCard();
     cancelAnimationFrame(frame);
     observer.disconnect();
     markers.remove();

@@ -54,6 +54,7 @@ export const annotationStatusSchema = z
   .strict();
 export type AnnotationStatusRequest = z.infer<typeof annotationStatusSchema>;
 export interface AnnotationDbOperations {
+  DB_ANNOTATION_URLS: { payload: { url: string }; result: string[] };
   DB_ANNOTATION_IMAGE: { payload: { id: string; image?: string; error?: string }; result: void };
   DB_ANNOTATION: { payload: AnnotationRequest & { external?: true }; result: AnnotationResult };
   DB_ANNOTATION_STATUS: { payload: AnnotationStatusRequest; result: AnnotationEditorStatus };

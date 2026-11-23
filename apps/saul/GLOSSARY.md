@@ -56,3 +56,15 @@ _Avoid_: Export preview, downloaded report
 **Proposal**:
 A suggested browser reorganization awaiting the user's Apply action.
 _Avoid_: Manual edit, live layout
+
+**Annotation**:
+A saved comment on a page target, with its evidence, status and attributed replies.
+
+**Target**:
+The selected text, element or area an annotation refers to.
+
+**Annotation marker**:
+A numbered control that opens the annotation beside its target.
+
+**Page index**:
+The Annotations sidebar list of records for the current page.

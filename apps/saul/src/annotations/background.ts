@@ -8,6 +8,7 @@ import { mutateAnnotationDraft } from './draft';
 import {
   requestSchema,
   captureSchema,
+  changeSchema,
   annotationIdSchema,
   MAX_ANNOTATION_BATCH,
   reviewedAnnotationSchema,
@@ -39,7 +40,12 @@ export async function operateAnnotations(
       ...(result.outcomes ?? []).flatMap((o) => (o.record ? [o.record.url] : [])),
     ]);
     for (const tab of await chrome.tabs.query({}))
-      if (tab.id && tab.url && urls.has(tab.url) && !tab.incognito)
+      if (
+        tab.id &&
+        tab.url &&
+        [...urls].some((url) => url.split('#')[0] === tab.url!.split('#')[0]) &&
+        !tab.incognito
+      )
         void chrome.tabs
           .sendMessage(tab.id, { type: 'SAUL_ANNOTATIONS_CHANGED' })
           .catch(() => undefined);
@@ -137,8 +143,6 @@ async function takeViewportEvidence(
           reject(new Error(error?.message || 'Screenshot unavailable.'));
           return;
         }
-        // Chrome propagates the initiating gesture through its API callback.
-        void openPanel(windowId, capture.id).catch(() => undefined);
         resolve(data);
       });
     });
@@ -181,12 +185,14 @@ async function capture(request: unknown, sender: chrome.runtime.MessageSender) {
   if (capturedUrl !== url) throw new Error('Page changed before capture. Select the target again.');
   const c = { id, title, target, comment, url, tabId: tab.id!, documentId: sender.documentId };
   const windowId = tab.windowId;
-  const evidence = await takeViewportEvidence(c, windowId, tab.active);
+  const evidence =
+    target.kind === 'area' ? await takeViewportEvidence(c, windowId, tab.active) : undefined;
   const result = await operateAnnotations({
     scope: { urls: [url], ids: [] },
     author: { kind: 'user', name: 'You' },
     operation: { action: 'create', capture: c },
   });
+  if (!evidence) return result;
   let marked: string | undefined,
     error = evidence.kind === 'unavailable' ? evidence.error : undefined;
   try {
@@ -205,16 +211,48 @@ async function capture(request: unknown, sender: chrome.runtime.MessageSender) {
       },
     },
   });
-  await chrome.storage.session.set({
-    [annotationPanelKey(windowId)]: { view: 'annotations', id: c.id },
-    [annotationVersionKey]: crypto.randomUUID(),
+  return result;
+}
+async function confirmedUrls(tabId: number, url: string, candidates: string[]) {
+  const related = candidates.filter(
+    (candidate) => candidate !== url && candidate.split('#')[0] === url.split('#')[0],
+  );
+  if (!related.length) return [url];
+  const confirmation = await chrome.tabs
+    .sendMessage(tabId, { type: 'SAUL_ANNOTATION_URLS', url, urls: related })
+    .catch(() => undefined);
+  const confirmed = new Set(confirmation?.urls);
+  return [url, ...related.filter((candidate) => confirmed.has(candidate))];
+}
+async function pageIndex(tabId: number, url: string, filter: 'open' | 'done' | 'all' | 'deleted') {
+  const candidates = await runnerRequest<string[]>({
+    operation: 'db',
+    message: { type: 'DB_ANNOTATION_URLS', payload: { url } },
   });
-  const opened = (
-    await chrome.runtime.getContexts({ contextTypes: [chrome.runtime.ContextType.SIDE_PANEL] })
-  ).some((v) => v.windowId === windowId);
-  return { ...result, ...(!opened ? { panelError: 'Open the annotation editor.' } : {}) };
+  const records = [];
+  const stored = new Set(candidates);
+  for (const original of await confirmedUrls(tabId, url, candidates)) {
+    if (!stored.has(original)) continue;
+    let offset: number | undefined = 0;
+    do {
+      const result: AnnotationResult = await operateAnnotations({
+        scope: { urls: [original], ids: [] },
+        author: { kind: 'user', name: 'You' },
+        operation: { action: 'list', url: original, filter, offset },
+      });
+      records.push(...(result.records ?? []));
+      offset = result.nextOffset;
+    } while (offset !== undefined);
+  }
+  if ((await chrome.tabs.get(tabId)).url !== url)
+    throw new Error('Page changed. Refresh the index.');
+  return { records: records.sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)) };
 }
 export function initAnnotations(settings: () => Promise<Configuration>) {
+  chrome.tabs.onUpdated.addListener((id, change, tab) => {
+    if (change.url && !tab.incognito && /^https?:/.test(change.url))
+      void chrome.tabs.sendMessage(id, { type: 'SAUL_ANNOTATIONS_CHANGED' }).catch(() => undefined);
+  });
   chrome.commands.onCommand.addListener((command, tab) => {
     if (command === 'saul-annotate' && tab?.id !== undefined && !tab.incognito)
       void chrome.tabs.sendMessage(tab.id, { type: 'SAUL_ANNOTATE' }).catch(() => undefined);
@@ -231,7 +269,7 @@ export function initAnnotations(settings: () => Promise<Configuration>) {
           throw new Error('Runner only.');
         await chrome.storage.session.set({ [annotationVersionKey]: crypto.randomUUID() });
         for (const tab of await chrome.tabs.query({}))
-          if (tab.id && tab.url === request.url && !tab.incognito)
+          if (tab.id && tab.url?.split('#')[0] === request.url.split('#')[0] && !tab.incognito)
             void chrome.tabs
               .sendMessage(tab.id, { type: 'SAUL_ANNOTATIONS_CHANGED' })
               .catch(() => undefined);
@@ -240,10 +278,30 @@ export function initAnnotations(settings: () => Promise<Configuration>) {
       if (request.action === 'page-markers') {
         const url = sourcePage(sender);
         if (sender.tab?.incognito) throw new Error('Incognito annotations unavailable.');
+        return pageIndex(sender.tab!.id!, url, 'all');
+      }
+      if (request.action === 'card-read' || request.action === 'card-change') {
+        const current = sourcePage(sender);
+        const url = pageUrl.parse(request.url);
+        if (
+          sender.tab?.incognito ||
+          !(await confirmedUrls(sender.tab!.id!, current, [url])).includes(url) ||
+          (await chrome.tabs.get(sender.tab!.id!)).url !== current
+        )
+          throw new Error('Page changed. Reopen the annotation.');
+        if (request.action === 'card-read')
+          return operateAnnotations({
+            scope: { urls: [url], ids: [] },
+            author: { kind: 'user', name: 'You' },
+            operation: { action: 'read', id: annotationIdSchema.parse(request.id), image: false },
+          });
+        const change = changeSchema.parse(request.change);
+        if (!['edit', 'append', 'complete', 'reopen'].includes(change.action))
+          throw new Error('Unavailable in the page card.');
         return operateAnnotations({
           scope: { urls: [url], ids: [] },
           author: { kind: 'user', name: 'You' },
-          operation: { action: 'list', url, filter: 'open', offset: 0 },
+          operation: { action: 'change', changes: [change] },
         });
       }
       if (request.action === 'capture') {
@@ -261,6 +319,16 @@ export function initAnnotations(settings: () => Promise<Configuration>) {
         return openPanel(sender.tab!.windowId, annotationIdSchema.optional().parse(request.id));
       }
       if (!workspaceSender(sender)) throw new Error('Annotation editor only.');
+      if (request.action === 'page-index') {
+        const tab = await chrome.tabs.get(z.number().int().parse(request.tabId));
+        if (tab.incognito || tab.url !== request.url)
+          throw new Error('Page changed. Refresh the index.');
+        return pageIndex(
+          tab.id!,
+          pageUrl.parse(tab.url),
+          z.enum(['open', 'done', 'all', 'deleted']).parse(request.filter),
+        );
+      }
       if (request.action === 'draft') return mutateAnnotationDraft(request.mutation);
       if (request.action === 'operate')
         return operateAnnotations({
@@ -317,6 +385,15 @@ export function initAnnotations(settings: () => Promise<Configuration>) {
             !calls.choices.library?.some((c) => c.revision.revision === p.callRevision)
           )
             throw new Error('Choose an approved Call.');
+        }
+        const related = p.targets.flatMap((t) => (t.url ? [t.url] : []));
+        if (related.length) {
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (!tab?.id || tab.incognito || tab.url !== p.url)
+            throw new Error('Activate the annotation page.');
+          const allowed = await confirmedUrls(tab.id, p.url, related);
+          if (related.some((url) => !allowed.includes(url)))
+            throw new Error('Annotation belongs to another page.');
         }
         let currentText: string | undefined;
         if (p.current) {

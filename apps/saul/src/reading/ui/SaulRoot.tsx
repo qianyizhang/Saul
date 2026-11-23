@@ -1,3 +1,4 @@
+import { annotateRange } from '../../annotations/capture';
 import { useReadingSession } from '../content-session';
 import { FloatingTrigger } from './FloatingTrigger';
 import { ExplanationCard } from './ExplanationCard';
@@ -8,6 +9,7 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
     active,
     attachment,
     captured,
+    dismissSelection,
     busy,
     recipes,
     recipeChoice,
@@ -42,6 +44,10 @@ export function SaulRoot({ isContextValid }: { isContextValid: () => boolean }) 
       {captured && !busy && (
         <FloatingTrigger
           range={captured.range}
+          onAnnotate={() => {
+            annotateRange(captured.range);
+            dismissSelection();
+          }}
           onTrigger={() => void explain(captured, false, 'open')}
           recipes={recipes}
           recipeId={recipeChoice || defaultRecipeId}

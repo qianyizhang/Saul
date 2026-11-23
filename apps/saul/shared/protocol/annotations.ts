@@ -3,13 +3,6 @@ import { z } from 'zod';
 export const retentionMs = 7 * 24 * 60 * 60 * 1000;
 export const annotationIdSchema = z.string().min(1).max(100);
 export const MAX_ANNOTATION_BATCH = 20;
-export const reviewedAnnotationSchema = z
-  .object({
-    id: annotationIdSchema,
-    revision: z.number().int().positive(),
-  })
-  .strict();
-export type ReviewedAnnotation = z.infer<typeof reviewedAnnotationSchema>;
 const key = annotationIdSchema;
 export const pageUrl = z
   .string()
@@ -22,6 +15,14 @@ export const pageUrl = z
       return false;
     }
   }, 'Only HTTP(S) pages without embedded credentials are supported.');
+export const reviewedAnnotationSchema = z
+  .object({
+    id: annotationIdSchema,
+    url: pageUrl.optional(),
+    revision: z.number().int().positive(),
+  })
+  .strict();
+export type ReviewedAnnotation = z.infer<typeof reviewedAnnotationSchema>;
 const finite = z.number().finite();
 export const targetSchema = z
   .object({
@@ -29,6 +30,10 @@ export const targetSchema = z
     label: z.string().max(500),
     text: z.string().max(16000).optional(),
     selector: z.string().max(4096).optional(),
+    quoteContext: z
+      .object({ before: z.string().max(80), after: z.string().max(80) })
+      .strict()
+      .optional(),
     path: z.string().max(4096).optional(),
     role: z.string().max(200).optional(),
     nearbyText: z.string().max(2000).optional(),

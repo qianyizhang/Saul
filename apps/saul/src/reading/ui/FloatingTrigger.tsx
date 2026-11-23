@@ -1,4 +1,3 @@
-import { annotateRange } from '../../annotations/capture';
 import type { ReadingOperations } from '../contract';
 import React, { useRef } from 'react';
 import { useAnchoredPosition } from './useAnchoredPosition';
@@ -7,6 +6,7 @@ import { Sparkles } from 'lucide-react';
 interface FloatingTriggerProps {
   range: Range;
   onTrigger: () => void;
+  onAnnotate: () => void;
   recipes: ReadingOperations['policy']['result']['recipes'];
   outputFormat: 'png' | 'gif';
   onOutputFormat: (value: 'png' | 'gif') => void;
@@ -17,6 +17,7 @@ interface FloatingTriggerProps {
 export const FloatingTrigger: React.FC<FloatingTriggerProps> = ({
   range,
   onTrigger,
+  onAnnotate,
   recipes,
   recipeId,
   onRecipe,
@@ -34,7 +35,7 @@ export const FloatingTrigger: React.FC<FloatingTriggerProps> = ({
       style={{ ...style, maxWidth: `min(calc(100vw - 24px), ${available}px)` }}
       className="flex items-center bg-accent text-on-accent text-xs font-sans font-medium rounded-control saul-elevated border border-accent select-none max-w-[calc(100vw-24px)]"
     >
-      <button type="button" onClick={() => annotateRange(range)} className="shrink-0 px-2.5 py-1.5">
+      <button type="button" onClick={onAnnotate} className="shrink-0 px-2.5 py-1.5">
         Annotate
       </button>
       <select

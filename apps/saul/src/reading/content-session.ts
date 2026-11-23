@@ -395,7 +395,15 @@ export function useReadingSession(isContextValid: () => boolean) {
   useEffect(() => {
     let timeout: ReturnType<typeof setTimeout> | undefined;
     const inside = (e: Event) =>
-      e.composedPath().some((n) => n instanceof Element && n.tagName.toLowerCase() === 'saul-root');
+      e
+        .composedPath()
+        .some(
+          (n) =>
+            n instanceof Element &&
+            n.matches(
+              'saul-root,saul-annotation-card,saul-annotation-markers,saul-annotation-notice',
+            ),
+        );
     const editing = (e: Event) =>
       e
         .composedPath()
@@ -482,6 +490,7 @@ export function useReadingSession(isContextValid: () => boolean) {
     active,
     attachment,
     captured,
+    dismissSelection: () => setCaptured(null),
     busy,
     recipes,
     recipeChoice,

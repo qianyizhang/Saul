@@ -184,7 +184,7 @@ export class AnnotationRunner {
     if (new Set(p.targets.map(({ id }) => id)).size !== p.targets.length)
       throw new Error('Select each annotation once.');
     const records: Annotation[] = [];
-    for (const { id, revision } of p.targets) {
+    for (const { id, revision, url } of p.targets) {
       if ([...this.jobs.values()].some((job) => !job.discarded && job.attempt.annotationId === id))
         throw new Error('An annotation is already running.');
       const { record } = await this.db({
@@ -196,7 +196,7 @@ export class AnnotationRunner {
         },
       });
       if (!record || record.deletedAt !== undefined) throw new Error('Annotation unavailable.');
-      if (record.url !== p.url) throw new Error('Annotation belongs to another page.');
+      if (record.url !== (url ?? p.url)) throw new Error('Annotation belongs to another page.');
       if (record.revision !== revision)
         throw new Error('Annotation changed after review. Review it and run again.');
       if (!record.comment.trim())

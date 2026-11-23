@@ -1,3 +1,4 @@
+import { annotationLabels } from './labels';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { AnnotationAttempt } from '../../shared/protocol/annotation-attempts.ts';
 import { annotationMessage } from './client';
@@ -17,20 +18,28 @@ export function AnnotationPanel({ windowId }: { windowId: number }) {
     [textOnly, setTextOnly] = useState(false),
     [current, setCurrent] = useState(false);
   const targets = annotationTargets(snapshot);
+  const [advanced, setAdvanced] = useState(false);
+  const [fallbackId, setFallbackId] = useState<string>();
+  const selectionRequest = useRef(0);
+  const labels = useMemo(() => annotationLabels(records), [records]);
+  const selectedRecord = records.find((r) => r.id === selected);
   return (
     <section className="annotations stack" aria-label="Page annotations">
       <header>
         <h1>Annotations</h1>
         <p className="small">{page?.title ?? 'Choose an ordinary web page.'}</p>
       </header>
-      <div className="row">
-        <button className="btn primary" onClick={() => void session.capture()}>
-          Annotate
-        </button>
-        <button className="btn" onClick={() => void session.refresh()}>
-          Refresh
-        </button>
-      </div>
+      <details>
+        <summary>Page tools</summary>
+        <div className="row">
+          <button className="btn" onClick={() => void session.capture()}>
+            Annotate
+          </button>
+          <button className="btn" onClick={() => void session.refresh()}>
+            Refresh
+          </button>
+        </div>
+      </details>
       {readError && <p role="alert">{readError}</p>}
       {commandError && <p role="alert">{commandError}</p>}
       <label>
@@ -52,19 +61,40 @@ export function AnnotationPanel({ windowId }: { windowId: number }) {
       <ul className="annotation-list">
         {records.map((a) => (
           <li key={a.id} className={selected === a.id ? 'selected' : ''}>
-            <input
-              type="checkbox"
-              aria-label={`Select annotation ${a.number}`}
-              checked={checked.includes(a.id)}
-              onChange={(e) => session.check(a.id, e.target.checked)}
-            />
+            {advanced && (
+              <input
+                type="checkbox"
+                aria-label={`Select annotation ${a.number}`}
+                checked={checked.includes(a.id)}
+                onChange={(e) => session.check(a.id, e.target.checked)}
+              />
+            )}
             <button
               className="annotation-item"
               aria-pressed={selected === a.id}
-              onClick={() => session.select(a.id)}
+              onClick={() => {
+                session.select(a.id);
+                const request = ++selectionRequest.current;
+                setFallbackId(undefined);
+                if (!page || a.deletedAt) {
+                  setFallbackId(a.id);
+                  return;
+                }
+                void chrome.tabs
+                  .sendMessage(page.tabId, { type: 'SAUL_ANNOTATION_REVIEW', annotation: a })
+                  .then(
+                    (result) => {
+                      if (request === selectionRequest.current && !result?.available)
+                        setFallbackId(a.id);
+                    },
+                    () => {
+                      if (request === selectionRequest.current) setFallbackId(a.id);
+                    },
+                  );
+              }}
             >
               <strong>
-                {a.number}. {a.target.label || 'Captured target'}
+                {labels.get(a.id)}. {a.target.label || 'Captured target'}
               </strong>
               <span>{a.comment || 'Add a comment…'}</span>
               <small>
@@ -74,17 +104,20 @@ export function AnnotationPanel({ windowId }: { windowId: number }) {
           </li>
         ))}
       </ul>
-      {page && selected && (
-        <AnnotationEditor
-          key={JSON.stringify([page.url, page.tabId, selected])}
-          id={selected}
-          url={page.url}
-          tabId={page.tabId}
-          updated={session.refresh}
-        />
+      {page && selected && selectedRecord && (
+        <details key={selected} open={fallbackId === selected || undefined}>
+          <summary>Review in sidebar</summary>
+          <AnnotationEditor
+            key={JSON.stringify([page.url, page.tabId, selected])}
+            id={selected}
+            url={selectedRecord.url}
+            tabId={page.tabId}
+            updated={session.refresh}
+          />
+        </details>
       )}
       {filter !== 'deleted' && page && (
-        <details>
+        <details onToggle={(e) => setAdvanced(e.currentTarget.open)}>
           <summary>Respond to annotations · {targets.length}</summary>
           <div className="stack">
             <p>
@@ -212,19 +245,19 @@ function AnnotationEditor({
     <article className="stack annotation-editor" aria-label="Annotation editor">
       <h2>Annotation {record.number}</h2>
       {readProblem}
-      {capture.kind === 'available' ? (
-        <figure>
-          <img
-            src={capture.image}
-            alt={`Captured viewport with annotation ${record.number} outlined`}
-          />
-          <figcaption>Saved viewport · {new Date(record.createdAt).toLocaleString()}</figcaption>
-        </figure>
-      ) : (
-        <p>{capture.kind === 'unavailable' ? capture.error : 'No image saved.'}</p>
-      )}
       <details>
         <summary>Page evidence</summary>
+        {capture.kind === 'available' ? (
+          <figure>
+            <img
+              src={capture.image}
+              alt={`Captured viewport with annotation ${record.number} outlined`}
+            />
+            <figcaption>Saved viewport · {new Date(record.createdAt).toLocaleString()}</figcaption>
+          </figure>
+        ) : (
+          <p>{capture.kind === 'unavailable' ? capture.error : 'Text evidence'}</p>
+        )}
         <pre>
           {JSON.stringify(
             { url: record.url, capturedAt: record.createdAt, ...record.target },
@@ -312,37 +345,40 @@ function AnnotationEditor({
         </div>
       )}
       {record.deletedAt !== undefined && error && <p role="alert">{error}</p>}
-      <ol className="annotation-replies">
-        {record.replies.map((r) => (
-          <li key={r.id}>
-            <strong>
-              {r.author.kind} · {r.author.name}
-            </strong>
-            <p>{r.text}</p>
-            <small>{new Date(r.createdAt).toLocaleString()}</small>
-          </li>
-        ))}
-      </ol>
-      {!record.deletedAt && (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            submitReply();
-          }}
-        >
-          <label htmlFor="annotation-reply">Add a reply</label>
-          <textarea
-            id="annotation-reply"
-            value={reply}
-            onChange={(e) => setReply(e.target.value)}
-            maxLength={16000}
-            rows={2}
-          />
-          <button className="btn" disabled={replyPending || !reply.trim()}>
-            Append reply
-          </button>
-        </form>
-      )}
+      <details>
+        <summary>Replies · {record.replies.length}</summary>
+        <ol className="annotation-replies">
+          {record.replies.map((r) => (
+            <li key={r.id}>
+              <strong>
+                {r.author.kind} · {r.author.name}
+              </strong>
+              <p>{r.text}</p>
+              <small>{new Date(r.createdAt).toLocaleString()}</small>
+            </li>
+          ))}
+        </ol>
+        {!record.deletedAt && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitReply();
+            }}
+          >
+            <label htmlFor="annotation-reply">Add a reply</label>
+            <textarea
+              id="annotation-reply"
+              value={reply}
+              onChange={(e) => setReply(e.target.value)}
+              maxLength={16000}
+              rows={2}
+            />
+            <button className="btn" disabled={replyPending || !reply.trim()}>
+              Append reply
+            </button>
+          </form>
+        )}
+      </details>
       {runs.map((r) => (
         <div className="stack" key={r.id}>
           <p>

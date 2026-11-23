@@ -1,5 +1,6 @@
 import {
   annotationStore,
+  annotationUrls,
   annotationAttempts,
   annotationImage,
   annotationStatus,
@@ -296,6 +297,8 @@ export class SaulDatabase {
   }
   private executeReady(message: DbRequest, operationId: string): unknown {
     switch (message.type) {
+      case 'DB_ANNOTATION_URLS':
+        return annotationUrls(this.db, this.owner, message.payload.url);
       case 'DB_ANNOTATION_IMAGE':
         return annotationImage(this.db, this.owner, message.payload);
       case 'DB_ANNOTATION':

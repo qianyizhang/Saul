@@ -14,6 +14,7 @@ import {
   requestSchema,
   captureSchema,
   retentionMs,
+  pageUrl,
   summary,
   assertExternalAnnotationSize,
   MAX_ANNOTATION_BATCH,
@@ -29,6 +30,16 @@ function tables(db: SqlDatabase) {
   db.exec(`CREATE TABLE IF NOT EXISTS browser_annotation(owner TEXT NOT NULL,id TEXT NOT NULL,url TEXT NOT NULL,deleted_at INTEGER,body TEXT NOT NULL,PRIMARY KEY(owner,id));
     CREATE INDEX IF NOT EXISTS browser_annotation_page ON browser_annotation(owner,url);
     CREATE TABLE IF NOT EXISTS browser_annotation_attempt(owner TEXT NOT NULL,id TEXT NOT NULL,annotation_id TEXT NOT NULL,body TEXT NOT NULL,PRIMARY KEY(owner,id),FOREIGN KEY(owner,annotation_id) REFERENCES browser_annotation(owner,id) ON DELETE CASCADE);`);
+}
+export function annotationUrls(db: SqlDatabase, owner: string, url: string) {
+  const base = pageUrl.parse(url).split('#')[0]!;
+  tables(db);
+  return db
+    .selectObjects(
+      'SELECT DISTINCT url FROM browser_annotation WHERE owner=? AND (url=? OR (url>=? AND url<?))',
+      [owner, base, base + '#', base + '$'],
+    )
+    .map((row) => String(row.url));
 }
 function allowed(a: Pick<Annotation, 'id' | 'url'>, scope: AnnotationScope) {
   return scope.ids.includes(a.id) || scope.urls.includes(a.url);
