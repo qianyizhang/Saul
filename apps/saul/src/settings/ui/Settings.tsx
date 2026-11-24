@@ -221,10 +221,6 @@ export function Settings({
             visible={section === 'preferences'}
             change={draft.setCredentialOwner}
           />
-          <p className="small">
-            The signed credential helper manages shared sign-in and keys. Install or update it if
-            connections are unavailable.
-          </p>
           <NativeBridge />
           <details>
             <summary>History and configuration helper setup</summary>

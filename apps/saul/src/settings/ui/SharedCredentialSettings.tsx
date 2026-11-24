@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Configuration } from '../../configuration/definition';
 import { credentialCall } from '../../native/credentials';
-import { useMinimumMode } from '../../ui/useMinimumMode';
 
 export function SharedCredentialSettings({
   owner,
@@ -14,7 +13,6 @@ export function SharedCredentialSettings({
   visible: boolean;
   change: (owner: 'saul' | 'disconnected') => Promise<void>;
 }) {
-  const { minimum } = useMinimumMode();
   const [connected, setConnected] = useState<boolean | undefined>();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -75,12 +73,10 @@ export function SharedCredentialSettings({
           {owner === 'saul' ? 'Disconnect app' : 'Connect to Saul'}
         </button>
       </div>
-      {!minimum && (
-        <p className="small">
-          The signed Saul helper keeps credentials in this Mac’s Keychain. Sign-out and key removal
-          affect Saul and EZ.
-        </p>
-      )}
+      <p className="small standard-only">
+        The signed Saul helper keeps credentials in this Mac’s Keychain. Sign-out and key removal
+        affect Saul and EZ.
+      </p>
       {owner === 'saul' && (
         <div className="row">
           <span>

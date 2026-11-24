@@ -73,10 +73,12 @@ struct ContentView: View {
                     } else if model.hasRetainedDraft && !model.launcherPending {
                         Divider()
                         HStack {
-                            Text("Retained draft").foregroundStyle(.secondary)
+                            if !model.minimumMode { Text("Retained draft").foregroundStyle(.secondary) }
                             Spacer()
-                            Button("Edit") { model.showsMainComposer = true }
-                                .help("Edit retained draft").accessibilityLabel("Edit draft")
+                            Button(model.minimumMode ? "Edit draft" : "Edit") {
+                                model.showsMainComposer = true
+                            }
+                            .help("Edit retained draft").accessibilityLabel("Edit draft")
                         }.font(AppStyle.caption).padding(.horizontal, 24).padding(.vertical, 10)
                     }
                 }
@@ -208,7 +210,7 @@ struct ContentView: View {
     private var welcome: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("New run").font(AppStyle.subject)
-            if model.currentAction == nil {
+            if model.currentAction == nil && !model.minimumMode {
                 Text("Add an action to start your next run.").font(AppStyle.body).foregroundStyle(.secondary)
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
@@ -235,7 +237,6 @@ struct ContentView: View {
                     entry: entry, activity: model.selectedResponseActivity, showsShortSubject: false,
                     imageData: model.imageData(for: entry), imageLoading: model.imageLoading)
             case .details:
-                MetadataRow("Action", value: entry.actionName)
                 LookupDetails(entry: entry)
             case .text:
                 InputOutputInspector(
@@ -310,9 +311,11 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 12) {
             if model.selectedEntry != nil {
                 HStack {
-                    Text("Draft").font(AppStyle.caption).foregroundStyle(.secondary)
+                    if !model.minimumMode {
+                        Text("Draft").font(AppStyle.caption).foregroundStyle(.secondary)
+                    }
                     Spacer()
-                    Button("Hide") { model.showsMainComposer = false }
+                    Button(model.minimumMode ? "Hide draft" : "Hide") { model.showsMainComposer = false }
                         .buttonStyle(.borderless).help("Hide draft").accessibilityLabel("Hide draft")
                 }
             }

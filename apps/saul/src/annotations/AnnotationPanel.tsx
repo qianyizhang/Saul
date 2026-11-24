@@ -97,8 +97,9 @@ export function AnnotationPanel({ windowId }: { windowId: number }) {
                 {labels.get(a.id)}. {a.target.label || 'Captured target'}
               </strong>
               <span>{a.comment || 'Add a comment…'}</span>
-              <small>
-                {a.state === 'done' ? 'Done' : 'Open'} · {a.replyCount} replies
+              <small className={filter === 'all' ? undefined : 'standard-only'}>
+                {a.state === 'done' ? 'Done' : 'Open'}
+                <span className="standard-only"> · {a.replyCount} replies</span>
               </small>
             </button>
           </li>

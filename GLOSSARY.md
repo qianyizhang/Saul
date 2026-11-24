@@ -27,5 +27,5 @@ message or follow-up. Reuse restores an editable draft. Run again starts a fresh
 attempt from current input. Regenerate starts another attempt from the recorded
 input. Retry uses the recorded input of an unsuccessful attempt.
 
-**Min Mode** is the compact everyday presentation with routine guidance omitted.
+**Min Mode** is the compact everyday presentation with [secondary labels and descriptions omitted](DESIGN.md#min-mode).
 **Refresh** reads current state; **Reload** reads saved settings. Neither generates.

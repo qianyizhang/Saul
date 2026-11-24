@@ -30,7 +30,8 @@ and persistence; [design](design.md) owns presentation.
   [Min Mode](design.md#min-mode-and-settings) preference. Details retains exact
   model, tier and metrics.
 - Compact layout grows for forms/results/notices; long content scrolls while
-  Run/Stop stay reachable. Preset and requested speed remain identifiable.
+  Run/Stop stay reachable. The composer shows the preset and requested speed.
+  While reading in Min Mode, the saved action and preset are in Details.
 - Both surfaces offer follow-ups for saved completed native Write answers and
   Previous answer navigation. Draw has no text follow-up. Follow-up context and
   limits belong to [architecture](architecture.md#follow-ups).

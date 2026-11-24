@@ -3,6 +3,46 @@ import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider } from './support.ts';
 
+test('Min Mode omits secondary settings copy and keeps permission effects visible', async ({
+  sandbox,
+  fixtureServer,
+}, info) => {
+  const { popup } = await sandbox.launch();
+  await configureFixtureProvider(popup, fixtureServer.origin);
+  await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(popup.getByText('Configuration', { exact: true })).toBeHidden();
+  await settingsSection(popup, 'Preferences');
+  const toggle = popup.getByRole('checkbox', { name: 'Min Mode', exact: true });
+  await expect(toggle).toBeChecked();
+  const integrations = popup.locator('summary').filter({ hasText: /^Integrations$/ });
+  await integrations.focus();
+  await integrations.press('Enter');
+  const sharedCredentialDescription = popup.getByText('The signed Saul helper keeps credentials');
+  const pagePermission = popup.getByText('Clicks may submit forms or change website data.');
+  const tabPermission = popup.getByText('Local tools can read tab titles and URLs');
+  const tabTip = popup.getByText('You can use the Window tab without enabling Codex access.');
+  for (const minimum of [true, false, true]) {
+    await toggle.setChecked(minimum);
+    await expect(pagePermission).toBeVisible();
+    await expect(tabPermission).toBeVisible();
+    if (minimum) {
+      await expect(sharedCredentialDescription).toBeHidden();
+      await expect(tabTip).toBeHidden();
+    } else {
+      await expect(sharedCredentialDescription).toBeVisible();
+      await expect(tabTip).toBeVisible();
+    }
+  }
+  if (reviewScreenshots) {
+    await expect(toggle).toBeEnabled();
+    await popup.screenshot({ path: info.outputPath('integrations-min.png') });
+    await toggle.uncheck();
+    await expect(sharedCredentialDescription).toBeVisible();
+    await expect(toggle).toBeEnabled();
+    await popup.screenshot({ path: info.outputPath('integrations-standard.png') });
+  }
+});
+
 test('focused settings preserves drafts across sections and keeps Min Mode concise', async ({
   sandbox,
   fixtureServer,

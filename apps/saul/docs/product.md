@@ -80,7 +80,7 @@
 | Share window names        | [Window label ownership and native Chrome names](mcp-app.md#manual-controls).                                                                                                                                      |
 | Grant external access     | Settings → Preferences → Integrations. Access is off by default. [Native messaging](native-messaging.md#connect-and-verify)                                                                                        |
 
-- **Rows** — Readable titles with hostname fallback, full original title/URL on hover and window counts above the list. Display labels leave source metadata intact.
+- **Rows** — Readable titles with hostname fallback and full original title/URL on hover. Standard view shows window counts above the list. Display labels preserve source metadata.
 - **Refresh** — Preserve focus, scroll and surviving choices.
 
 ### Summaries

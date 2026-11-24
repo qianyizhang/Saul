@@ -26,7 +26,9 @@ struct ImageInputView: View {
                     Text(attachment.name).font(AppStyle.caption).lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
-                    Text("Drop an image").font(AppStyle.caption).foregroundStyle(.secondary)
+                    if !model.minimumMode {
+                        Text("Drop an image").font(AppStyle.caption).foregroundStyle(.secondary)
+                    }
                     Spacer(minLength: 0)
                 }
                 VStack(alignment: .trailing, spacing: 6) {

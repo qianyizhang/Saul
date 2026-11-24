@@ -93,7 +93,7 @@ export function SettingsFeedback({
       )}
       <div className="row between">
         <span className="small muted" role="status">
-          {dirty ? 'Unsaved changes' : saved ? 'Saved' : 'Configuration'}
+          {dirty ? 'Unsaved changes' : saved ? 'Saved' : null}
         </span>
         <div className="row">
           {draft.blocked && (

@@ -102,7 +102,10 @@ export function StandaloneConnectionSettings({
               >
                 {p.name}
                 {p.presetCount !== undefined && (
-                  <span className="small muted"> · {presetCountLabel(p.presetCount)}</span>
+                  <span className="small muted standard-only">
+                    {' · '}
+                    {presetCountLabel(p.presetCount)}
+                  </span>
                 )}
               </button>
             ))}
@@ -164,8 +167,8 @@ export function StandaloneConnectionSettings({
                 </button>
               </div>
               <dl className="saul-metadata">
-                <dt>Key</dt>
-                <dd>{connection.key}</dd>
+                <dt className="standard-only">Key</dt>
+                <dd className="standard-only">{connection.key}</dd>
                 <dt>Capabilities</dt>
                 <dd>
                   {connectionCapabilities(connection)
@@ -177,7 +180,7 @@ export function StandaloneConnectionSettings({
           )}
           {connection?.kind === 'chatgpt-plan' ? (
             <div className="stack">
-              <p className="notice">ChatGPT uses the signed Saul helper.</p>
+              <p className="notice standard-only">ChatGPT uses the signed Saul helper.</p>
               <button type="button" className="btn" onClick={integrations}>
                 Open Integrations
               </button>
@@ -298,7 +301,7 @@ export function StandaloneConnectionSettings({
                   </p>
                 </>
               ) : (
-                <p className="notice">Choose or add a connection for this connection.</p>
+                <p className="notice">Choose or add an API connection.</p>
               )}
             </fieldset>
           )}

@@ -28,8 +28,9 @@ surfaces.
 
 Make the subject, state and next useful action apparent. Separate the displayed
 answer, editable draft and saved configuration. Put caveats beside their claim.
-Keep labels, guidance and status that help readers act or recover. Remove
-headings and badges that only repeat information already visible.
+Let the layout explain how controls and content relate. Avoid unnecessary
+secondary labels and descriptions, including headings and badges that repeat
+information already visible. Keep the labels and status people need to act or recover.
 Use generous measure for reading, tighter spacing in popups and lookup panels,
 and dense rows for boards. Keep the primary action reachable at narrow widths.
 Use tonal layers and quiet dividers; reserve shadows for overlays. Use soft
@@ -62,12 +63,13 @@ full-text Copy. The native layout and compact panel adaptation are described in
 
 ## Min Mode
 
-Default to the expert everyday view: current content/input, choices, essential
-state and useful actions. Omit routine coaching, duplicate facts, help-only
-disclosures and documentation links. Keep uncommon operations in named
-More, Details or Settings. Standard view may show brief guidance or recorded
-metrics inline. Errors, unsaved work, unavailable choices, source information,
-billing and permission effects stay visible in both modes.
+Default to the expert everyday view with current content, inputs, choices,
+essential state and useful actions. Show no secondary labels or descriptions in
+Min Mode, including inside expanded menus and settings. Keep uncommon operations
+and recorded facts in named More, Details or Settings views. Standard view may
+show brief guidance or secondary metadata inline. Keep primary labels, errors,
+unsaved work, unavailable choices, source information, billing and permission
+effects visible in both modes.
 
 Min Mode is a reversible local presentation preference. It never sends, changes
 execution, clears drafts, alters retention or skips confirmation. Compact preset
@@ -100,7 +102,8 @@ both modes, or **Unavailable** when identity is missing.
 
 Connections owns identity, endpoint and credentials; Presets owns the selected
 connection, capability, model and applicable options. Connection rows show
-name and preset count, capability chips, account or endpoint/key mask, then status and Check.
+name, capability chips, account or endpoint/key mask, then status and Check.
+Show preset counts alongside connection names in Standard view.
 Mask keys as `sk-***abcd`. Keep technical IDs and secret fields out of the
 summary. Check is not generation: distinguish auth, helper and catalog errors
 and offer repair. Put binding and migration under Preferences → Integrations.

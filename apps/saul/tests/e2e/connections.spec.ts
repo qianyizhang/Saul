@@ -531,6 +531,10 @@ test('connection management renames, selectively moves presets, and deletes an u
   const source = popup.getByRole('article', { name: 'ChatGPT plan', exact: true });
   const destination = popup.getByRole('article', { name: 'Studio API', exact: true });
   const destinationMenu = destination.getByLabel('More for Studio API');
+  await expect(source.getByText('2 presets', { exact: true })).toBeHidden();
+  await settingsSection(popup, 'Preferences');
+  await popup.getByRole('checkbox', { name: 'Min Mode', exact: true }).uncheck();
+  await settingsSection(popup, 'Connections');
   await expect(source.getByText('2 presets', { exact: true })).toBeVisible();
   await expect(destination.getByText('0 presets', { exact: true })).toBeVisible();
   await destinationMenu.click();
@@ -611,10 +615,10 @@ test('standalone Saul can delete an unused connection definition', async ({ sand
   await popup.reload();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await settingsSection(popup, 'Connections');
-  const empty = popup.getByRole('button', { name: 'ChatGPT plan · 0 presets', exact: true });
+  const empty = popup.getByRole('button', { name: 'ChatGPT plan', exact: true });
   await expect(empty).toBeVisible();
   await expect(popup.getByRole('button', { name: 'Move presets', exact: true })).toHaveCount(0);
-  await popup.getByRole('button', { name: /^OpenAI API · [1-9]\d* presets?$/ }).click();
+  await popup.getByRole('button', { name: 'OpenAI API', exact: true }).click();
   await expect(popup.getByRole('button', { name: 'Move presets', exact: true })).toBeVisible();
   await empty.click();
   await popup.getByRole('button', { name: 'Delete connection', exact: true }).click();

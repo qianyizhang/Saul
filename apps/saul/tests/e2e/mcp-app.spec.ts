@@ -560,8 +560,10 @@ test('compact board keeps tab controls discoverable and cancels rename and move 
   await ui.getByLabel('View options', { exact: true }).click();
   const minimumMode = ui.getByRole('checkbox', { name: 'Min Mode', exact: true });
   await expect(minimumMode).toBeChecked();
+  await expect(ui.locator('#counts')).toBeHidden();
   await minimumMode.uncheck();
   await expect(ui.locator('.help.guidance')).toBeVisible();
+  await expect(ui.locator('#counts')).toBeVisible();
   // Opaque host frames cannot retain localStorage; the view discloses that limit.
   await expect(ui.locator('#preference-error')).toContainText('could not be saved');
   await host.evaluate(() => window.fixtureHost.connect());

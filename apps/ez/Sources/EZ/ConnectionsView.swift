@@ -133,8 +133,10 @@ struct ConnectionsView: View {
         return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 Text(connection.name).font(.headline)
-                Text(presetCount == 1 ? "1 preset" : "\(presetCount) presets")
-                    .font(AppStyle.caption).foregroundStyle(.secondary)
+                if !model.minimumMode {
+                    Text(presetCount == 1 ? "1 preset" : "\(presetCount) presets")
+                        .font(AppStyle.caption).foregroundStyle(.secondary)
+                }
                 Spacer()
                 Menu {
                     Button("Rename connection") { openManagement(.rename, for: connection) }

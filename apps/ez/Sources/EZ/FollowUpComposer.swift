@@ -16,7 +16,7 @@ struct FollowUpComposer: View {
                 Text("Ask a follow-up").font(AppStyle.control).foregroundStyle(.secondary)
                 HStack(alignment: .bottom, spacing: 8) {
                     TextField(
-                        "Question",
+                        "",
                         text: Binding(
                             get: { model.followUpDrafts[entry.id] ?? "" },
                             set: { model.followUpDrafts[entry.id] = $0 }

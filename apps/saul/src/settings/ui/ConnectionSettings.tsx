@@ -105,7 +105,7 @@ function ConnectionRow({
       <div className="row between">
         <div className="row">
           <strong>{connection.name}</strong>
-          <span className="small muted">{presetCountLabel(presetCount)}</span>
+          <span className="small muted standard-only">{presetCountLabel(presetCount)}</span>
         </div>
         <details className="connection-more">
           <summary aria-label={`More for ${connection.name}`}>···</summary>

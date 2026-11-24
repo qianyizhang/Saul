@@ -71,13 +71,11 @@ export function NativeBridge() {
         Allow connected local agents to read and edit annotations within assigned pages or IDs. This
         includes saved screenshots when requested.
       </p>
-      <label
-        className="toggle"
-        title="Allow local tools to read tab titles and URLs and organize tabs."
-      >
+      <label className="toggle">
         <strong>Codex tab access</strong>
         <input
           type="checkbox"
+          aria-describedby="tabs-access-effects"
           checked={enabled}
           onChange={async (e) => {
             try {
@@ -89,17 +87,17 @@ export function NativeBridge() {
           }}
         />
       </label>
-      <p className="small muted standard-only">
-        Let local tools read tab titles and URLs and organize tabs. Incognito is excluded. You can
-        use the Window tab without enabling Codex access.
+      <p id="tabs-access-effects" className="small">
+        Local tools can read tab titles and URLs and organize tabs. Incognito tabs are excluded.
       </p>
-      <label
-        className="toggle"
-        title="Allow connected local tools to read pages, click, fill fields and navigate. Clicks may submit forms or change website data."
-      >
+      <p className="small muted standard-only">
+        You can use the Window tab without enabling Codex access.
+      </p>
+      <label className="toggle">
         <strong>Page reading and actions</strong>
         <input
           type="checkbox"
+          aria-describedby="page-access-effects"
           checked={pageEnabled}
           onChange={async (e) => {
             const next = e.target.checked;
@@ -114,10 +112,9 @@ export function NativeBridge() {
           }}
         />
       </label>
-      <p className="small muted standard-only">
-        Also let connected local tools read visible web page text, click controls, fill text fields,
-        and navigate tabs. Clicks may submit forms or change website data. Requires Codex tab
-        access.
+      <p id="page-access-effects" className="small">
+        Local tools can read pages, fill fields, click and navigate. Clicks may submit forms or
+        change website data. Requires Codex tab access.
       </p>
       <div className="row between">
         <span className="badge" role="status">

@@ -37,6 +37,7 @@ struct LookupDetails: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(spacing: 8) {
+                MetadataRow("Action", value: entry.actionName)
                 MetadataRow("Created", value: entry.createdAt.formatted(date: .abbreviated, time: .shortened))
                 if let preset = entry.presetSnapshot {
                     MetadataRow("Preset", value: preset.name)

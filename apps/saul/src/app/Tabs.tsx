@@ -235,7 +235,7 @@ export function Tabs() {
       <div className="row between">
         <h2 className="view-title">
           {snapshot.windows.find((w) => w.id === windowId)?.title || 'This window'}{' '}
-          <span className="small muted">{tabs.length} tabs</span>
+          <span className="small muted standard-only">{tabs.length} tabs</span>
         </h2>
         <button
           className="btn quiet"
@@ -442,7 +442,7 @@ export function Tabs() {
                   >
                     {group.title || 'Unnamed group'}
                   </button>
-                  <span className="small muted">
+                  <span className="small muted standard-only">
                     {tabs.filter((t) => t.groupId === group.id).length}
                   </span>
                   <details className="group-actions">

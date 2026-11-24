@@ -123,7 +123,6 @@ struct SettingsView: View {
                 .textSelection(.enabled)
                 .accessibilityLabel("Version \(version) · Build \(build)")
                 .accessibilityIdentifier("ez-version")
-            if !model.minimumMode { Text("Your current reading choices.").foregroundStyle(.secondary) }
             overviewRow("Action", value: model.currentAction?.name ?? "Unavailable", destination: .actions)
             overviewRow(
                 "Preset", value: model.currentPreset?.name ?? "Unavailable", destination: .configuration)
@@ -166,9 +165,11 @@ struct SettingsView: View {
             }
             DisclosureGroup("Integrations") {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("The signed credential helper manages shared sign-in and keys.").font(
-                        AppStyle.caption)
-                    Button(model.sharedCredentialsConnected ? "Disconnect app" : "Connect to Saul") {
+                    if !model.minimumMode {
+                        Text("The signed credential helper manages shared sign-in and keys.")
+                            .font(AppStyle.caption)
+                    }
+                    Button(model.sharedCredentialsConnected ? "Disconnect from Saul" : "Connect to Saul") {
                         if model.sharedCredentialsConnected {
                             model.disconnectCredentials()
                         } else {

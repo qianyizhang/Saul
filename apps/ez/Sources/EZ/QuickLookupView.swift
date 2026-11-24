@@ -82,12 +82,8 @@ struct QuickLookupView: View {
         HStack(spacing: 8) {
             if showsInputs {
                 Text("Quick Lookup").font(AppStyle.caption).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else if let entry = model.selectedEntry {
-                Label(entry.actionName, systemImage: entry.actionSymbol)
-                    .font(AppStyle.control).foregroundStyle(.secondary).lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading).frame(height: 24)
             }
+            Spacer(minLength: 0)
             Button {
                 controller.showMain()
             } label: {
@@ -128,9 +124,7 @@ struct QuickLookupView: View {
             if model.minimumMode && model.selectedEntry != nil && !model.busy && !model.launcherPending
                 && (showsComposer || model.hasRetainedDraft)
             {
-                Button(showsInputs ? "Hide" : "Edit") { showsComposer.toggle() }
-                    .help(showsInputs ? "Hide draft" : "Edit draft")
-                    .accessibilityLabel(showsInputs ? "Hide draft" : "Edit draft")
+                Button(showsInputs ? "Hide draft" : "Edit draft") { showsComposer.toggle() }
                     .buttonStyle(.borderless)
             }
             Spacer()
@@ -154,17 +148,6 @@ struct QuickLookupView: View {
         HStack(spacing: 8) {
             if showsInputs {
                 LookupBillingLabel(model: model)
-            } else if let entry = model.selectedEntry {
-                Text(
-                    entry.presetSnapshot.map {
-                        entry.capability == .draw || (model.minimumMode && entry.requestedServiceTier == nil)
-                            ? $0.name
-                            : "\($0.name) · \(entry.requestedServiceTier == nil ? "Standard" : "Fast")"
-                    } ?? "Details"
-                )
-                .lineLimit(1).help(
-                    entry.capability == .draw
-                        ? "Draw · \(entry.imageOptions.outputFormat.uppercased())" : entry.serviceDescription)
             }
             Button {
                 showDetails.toggle()
