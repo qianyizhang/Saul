@@ -1,4 +1,5 @@
 import { closeSummaryPanel, openSummaryPanel } from './panel-route';
+import { DEEP_DIVE_LABEL, DEEP_DIVE_MENU } from '../deep-dives/model';
 
 export const SUMMARY_ACTION_ID = 'saul-summarize';
 export const SUMMARY_CLOSE_ID = 'saul-summary-close';
@@ -15,23 +16,33 @@ export function initSummaryActions() {
     void chrome.contextMenus
       .removeAll()
       .then(() => {
-        chrome.contextMenus.create(
+        const items: chrome.contextMenus.CreateProperties[] = [
           {
             id: SUMMARY_ACTION_ID,
             title: 'Call Saul',
             contexts: ['page', 'selection', 'link', 'image', 'video', 'audio'],
-            documentUrlPatterns: ['http://*/*', 'https://*/*'],
           },
-          () => {
-            if (chrome.runtime.lastError)
-              console.warn(
-                '[Saul] Could not register summary menu',
-                chrome.runtime.lastError.message,
-              );
+          {
+            id: DEEP_DIVE_MENU,
+            title: DEEP_DIVE_LABEL,
+            contexts: ['page', 'selection', 'link', 'image', 'video', 'audio'],
           },
-        );
+        ];
+        for (const item of items) {
+          chrome.contextMenus.create(
+            { ...item, documentUrlPatterns: ['http://*/*', 'https://*/*'] },
+            () => {
+              if (chrome.runtime.lastError)
+                console.warn(
+                  '[Saul] Could not register page menu',
+                  item.id,
+                  chrome.runtime.lastError.message,
+                );
+            },
+          );
+        }
       })
-      .catch((error) => console.warn('[Saul] Could not register summary menu', error));
+      .catch((error) => console.warn('[Saul] Could not register page menus', error));
   });
   chrome.contextMenus.onClicked.addListener((info, tab) => {
     if (info.menuItemId === SUMMARY_ACTION_ID) summarizeTab(tab);

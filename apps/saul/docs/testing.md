@@ -42,6 +42,12 @@
 | Playwright     | Real extension contexts and isolated SQLite, browser behavior, restart, migrations, tabs and settings. [Harness](../tests/e2e/support.ts), [fixtures](../tests/e2e/fixtures.ts)              |
 | Manual sandbox | Layout, reading flow, keyboard behavior and interaction quality                                                                                                                              |
 
+The [deep dive browser fixture](../tests/e2e/deep-dives.spec.ts) intercepts
+ChatGPT in a disposable profile. It exercises the context-menu handler,
+single send, matching message and stable URL, restarting and reopening,
+manual send, and uncertainty after the ChatGPT tab closes. Live ChatGPT markup,
+account sign-in and background submission require separate acceptance.
+
 - **Isolation** — Snapshot the build once and reuse one disposable profile across relaunch. Test-only adapters stay out of production bundles.
 - **MCP pointer fidelity** — The host loads delivered HTML under CSP in an opaque frame. Use `matchWorkspaceWindow(host)` after creating tabs/windows to align native bounds with pointer coordinates.
 

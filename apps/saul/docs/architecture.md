@@ -64,6 +64,7 @@ Content receives action names and safe choices, never storage or credentials.
 | Providers                                    | [Requests](../shared/model/execution-route.ts), [model stream](../src/providers/stream.ts) and shared bounded [SSE framing](../shared/protocol/sse.mts)                                              |
 | Call selection, capture, execution and saves | [Calls and summaries](calls.md#runtime-owners)                                                                                                                                                       |
 | Annotation captures, revisions and replies   | [Annotations](annotations.md#interface-and-ownership)                                                                                                                                                |
+| ChatGPT browser handoffs                     | [Deep dive background worker](../src/deep-dives/background.ts). Saved links and instructions belong to the originating Chrome profile. Temporary tab bindings live for the browser session.          |
 | Optional native access and tab board         | [Native messaging](native-messaging.md) and [MCP board](mcp-app.md#implementation-and-verification)                                                                                                  |
 | Plan credentials and Speak                   | [Plan and Speech guide](chatgpt-plan.md); [shared macOS owner](../../../contracts/credentials.md)                                                                                                    |
 

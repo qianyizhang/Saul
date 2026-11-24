@@ -5,6 +5,7 @@ import { captureTab, verifyCaptureTab } from '../src/calls/capture/capture';
 import { validateDigest } from '../src/calls/batch-messages';
 import { createCallAdmission } from '../src/calls/admission';
 import { initSummaryActions } from '../src/calls/summary-actions';
+import { initDeepDives } from '../src/deep-dives/background';
 import { initStorageBridge } from '../src/native/storage-bridge';
 import { initCredentialBridge } from '../src/native/credentials';
 import { nativeCredentialAccess } from '../src/configuration/credentials';
@@ -176,6 +177,7 @@ async function openSource(selectionId: string) {
 }
 export default defineBackground(() => {
   initSummaryActions();
+  initDeepDives();
   initAnnotations(currentSettings);
   const settings = settingsOwner;
   initStorageSecurity();

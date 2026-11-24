@@ -714,6 +714,7 @@ progress::-webkit-progress-value {
 }
 .history-kinds {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 16px;
 }
@@ -739,6 +740,29 @@ progress::-webkit-progress-value {
   border: 0;
   border-bottom: 1px solid var(--border);
   padding: 16px 0;
+}
+.deep-dive-list {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.deep-dive-entry h3 {
+  margin: 0;
+  font: inherit;
+  font-weight: var(--design-weight-subject);
+  overflow-wrap: anywhere;
+}
+.deep-dive-entry p {
+  margin: 0;
+}
+.deep-dive-entry details {
+  margin-top: 4px;
+}
+[data-deep-dive-settings] form {
+  margin-top: var(--design-space-md);
+}
+[data-deep-dive-settings] p {
+  margin: 0;
 }
 .summary-reader {
   max-width: 820px;

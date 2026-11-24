@@ -304,8 +304,10 @@ export async function createSandbox(options: SandboxOptions = {}) {
     });
     if (options.browserToolsFixtures)
       await bundleScript({
-        entryPoints: [fileURLToPath(new URL('./annotation-bridge-fixture.ts', import.meta.url))],
-        outfile: path.join(extension, 'annotation-bridge-fixture.js'),
+        entryPoints: ['annotation-bridge-fixture', 'context-menu-fixture'].map((name) =>
+          fileURLToPath(new URL(`./${name}.ts`, import.meta.url)),
+        ),
+        outdir: extension,
         bundle: true,
         format: 'iife',
         platform: 'browser',
@@ -315,7 +317,9 @@ export async function createSandbox(options: SandboxOptions = {}) {
     await writeFile(
       backgroundFile,
       "importScripts('./history-transport-fixture.js');\n" +
-        (options.browserToolsFixtures ? "importScripts('./annotation-bridge-fixture.js');\n" : '') +
+        (options.browserToolsFixtures
+          ? "importScripts('./annotation-bridge-fixture.js', './context-menu-fixture.js');\n"
+          : '') +
         (await readFile(backgroundFile, 'utf8')),
     );
     if (options.artifactsDir) await mkdir(options.artifactsDir, { recursive: true });

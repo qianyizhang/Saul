@@ -8,20 +8,33 @@ import { useMinimumMode } from '../ui/useMinimumMode';
 import { PresentationSettings } from '../settings/ui/PresentationSettings';
 import { NotificationSettings } from '../settings/ui/NotificationSettings';
 import { SETTINGS_SECTIONS, type SettingsSection } from '../settings/ui/settings-sections';
+import { DeepDiveHistory, DeepDiveSettings } from '../deep-dives/ui';
 
-type View = 'history' | 'tabs' | 'settings' | 'summaries' | 'summary';
+const historyViews = [
+  ['history', 'Passages'],
+  ['summaries', 'Summaries'],
+  ['deep-dives', 'Deep dives'],
+] as const;
+
+type View = (typeof historyViews)[number][0] | 'tabs' | 'settings' | 'summary';
 function viewFromHash(): View {
   const hash = location.hash.slice(1);
   if (hash.startsWith('summary/')) return 'summary';
-  return hash === 'tabs' || hash === 'settings' || hash === 'summaries' ? hash : 'history';
+  return hash === 'tabs' || hash === 'settings' || hash === 'summaries' || hash === 'deep-dives'
+    ? hash
+    : 'history';
 }
 export function Workspace({ popup = false }: { popup?: boolean }) {
   const presentation = useMinimumMode();
   const [route, setRoute] = useState(location.hash);
   const [view, setView] = useState<View>(viewFromHash);
   const settingsDirty = useRef(false);
+  const deepDiveSettingsDirty = useRef(false);
   const markSettingsDirty = useCallback((dirty: boolean) => {
     settingsDirty.current = dirty;
+  }, []);
+  const markDeepDiveSettingsDirty = useCallback((dirty: boolean) => {
+    deepDiveSettingsDirty.current = dirty;
   }, []);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('overview');
   useEffect(() => {
@@ -31,6 +44,7 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
       settings: 'Settings',
       summaries: 'Summaries',
       summary: 'Summary',
+      'deep-dives': 'Deep dives',
     };
     document.title = 'Saul · ' + labels[view];
   }, [view]);
@@ -38,11 +52,15 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
   const navigate = useCallback(
     (next: View) => {
       if (next === view) return;
-      if (settingsDirty.current && !window.confirm('Discard unsaved settings?')) {
+      if (
+        (settingsDirty.current || deepDiveSettingsDirty.current) &&
+        !window.confirm('Discard unsaved settings?')
+      ) {
         history.replaceState(null, '', `#${view}`);
         return;
       }
       settingsDirty.current = false;
+      deepDiveSettingsDirty.current = false;
       setView(next);
       if (next !== 'summary') location.hash = next;
       window.scrollTo(0, 0);
@@ -107,7 +125,9 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
           <button
             key={id}
             aria-current={
-              view === id || (id === 'history' && ['summaries', 'summary'].includes(view))
+              view === id ||
+              (id === 'history' &&
+                (view === 'summary' || historyViews.some(([kind]) => kind === view)))
                 ? 'page'
                 : undefined
             }
@@ -120,16 +140,16 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
           </button>
         ))}
       </nav>
-      {['history', 'summaries'].includes(view) && (
+      {historyViews.some(([kind]) => kind === view) && (
         <nav className="history-kinds" aria-label="History type">
-          <button aria-pressed={view === 'history'} onClick={() => navigate('history')}>
-            Passages
-          </button>
-          <button aria-pressed={view === 'summaries'} onClick={() => navigate('summaries')}>
-            Summaries
-          </button>
+          {historyViews.map(([kind, label]) => (
+            <button key={kind} aria-pressed={view === kind} onClick={() => navigate(kind)}>
+              {label}
+            </button>
+          ))}
         </nav>
       )}
+      {view === 'deep-dives' && <DeepDiveHistory />}
       {view === 'summaries' && <SummaryHistory />}
       {view === 'summary' && <SummaryReader key={route.split('?')[0]} route={route} />}
       {view === 'history' && (
@@ -161,6 +181,9 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
               <PresentationSettings preference={presentation} />
               <NotificationSettings />
             </section>
+            <div hidden={settingsSection !== 'preferences'}>
+              <DeepDiveSettings onDirty={markDeepDiveSettingsDirty} />
+            </div>
             <Settings
               onDirty={markSettingsDirty}
               section={settingsSection}

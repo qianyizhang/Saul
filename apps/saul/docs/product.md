@@ -46,6 +46,18 @@
 
 ## History
 
+Right-click an article and choose **Save & deep dive** to save its link in
+**History → Deep dives** and send your instruction and the article URL from a
+new background tab in the current Chrome profile. Sign in to ChatGPT in that
+profile for automatic sending. Edit the reusable instruction under **Settings →
+Preferences → Deep dives**. A repeated action on the same URL reuses its record.
+
+The saved chat link appears after Saul sees the matching user message in a
+ChatGPT conversation with a stable URL. If the composer needs help, open the
+ChatGPT tab and send manually. If delivery is unconfirmed, check that tab before
+sending again. Saul keeps the saved article and any confirmed chat link in the
+Chrome profile. Removing the saved entry in Saul leaves the chat in ChatGPT.
+
 | Goal                      | Outcome                                                                                                                                                                                                                                                                  |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Find saved work           | Popup opens to History. The workspace offers wider reading with the same views. Search selected text, readable answers, notes, titles and URLs. Bookmark, paginate, reopen sources or inspect past attempts.                                                             |

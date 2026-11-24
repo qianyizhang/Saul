@@ -5,6 +5,7 @@ import {
   SUMMARY_CLOSE_ID,
 } from '../src/calls/summary-actions';
 import { closeSummaryPanel, openSummaryPanel } from '../src/calls/panel-route';
+import { DEEP_DIVE_LABEL, DEEP_DIVE_MENU } from '../src/deep-dives/model';
 
 vi.mock('../src/calls/panel-route', () => ({
   openSummaryPanel: vi.fn(),
@@ -43,15 +44,20 @@ function fixture() {
   };
 }
 
-it('registers one HTTP(S) page action on installation or update, not on worker wake', async () => {
+it('registers HTTP(S) page actions on installation or update, not on worker wake', async () => {
   const f = fixture();
   expect(f.create).not.toHaveBeenCalled();
   f.install();
-  await vi.waitFor(() => expect(f.create).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(f.create).toHaveBeenCalledTimes(2));
   expect(f.removeAll).toHaveBeenCalledOnce();
   expect(f.create.mock.calls[0]![0]).toMatchObject({
     id: SUMMARY_ACTION_ID,
     title: 'Call Saul',
+    documentUrlPatterns: ['http://*/*', 'https://*/*'],
+  });
+  expect(f.create.mock.calls[1]![0]).toMatchObject({
+    id: DEEP_DIVE_MENU,
+    title: DEEP_DIVE_LABEL,
     documentUrlPatterns: ['http://*/*', 'https://*/*'],
   });
 });
@@ -97,7 +103,8 @@ it('reports Chrome menu creation errors from the callback', async () => {
   f.install();
   await vi.waitFor(() =>
     expect(warn).toHaveBeenCalledWith(
-      '[Saul] Could not register summary menu',
+      '[Saul] Could not register page menu',
+      SUMMARY_ACTION_ID,
       'Permission denied',
     ),
   );
