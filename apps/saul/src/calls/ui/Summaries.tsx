@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import type { SummaryProgress } from '../../../shared/protocol/protocol.mts';
 import { sendDigestMessage } from '../client';
 import { sendWorkspaceMessage } from '../../native/workspace-client';
-import { activeItem, type DigestOverview } from '../../../shared/model/call-batch.ts';
+import { activeItem, summaryTitle, type DigestOverview } from '../../../shared/model/call-batch.ts';
 import { callResultLabel, digestHtml, sourceUrl } from './summary-html';
 import { openSummaryPanel } from '../panel-route';
 import { ComparisonNote } from './SummaryInspection';
@@ -106,7 +106,7 @@ export function SummaryHistory({ onOpen }: { onOpen?: (id: string) => void } = {
                   );
               }}
             >
-              <strong>{entry.windowTitle}</strong>
+              <strong>{entry.title || entry.windowTitle}</strong>
               <span className="small muted standard-only">
                 {new Date(entry.createdAt).toLocaleString()}
               </span>
@@ -164,6 +164,11 @@ export function SummaryReader({
   const single = batch ? Boolean(singleItem) : tabIds?.length === 1;
   const page = singleItem || source;
   const pageUrl = page && sourceUrl(page.url);
+  const title = batch
+    ? summaryTitle(batch.items[0], batch.items.length)
+    : single
+      ? summaryTitle(source, 1)
+      : 'Summary';
   const custom = Boolean(batch?.action);
   const statusLabel = singleItem
     ? {
@@ -197,7 +202,7 @@ export function SummaryReader({
       </div>
       <header className="row between">
         <div>
-          <h2>{single ? page?.title || 'Page summary' : batch?.windowTitle || 'Summary'}</h2>
+          <h2>{title}</h2>
           {single && pageUrl ? (
             <a className="small" href={pageUrl} target="_blank" rel="noreferrer">
               Open source · {new URL(pageUrl).hostname}

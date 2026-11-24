@@ -741,6 +741,9 @@ progress::-webkit-progress-value {
   border-bottom: 1px solid var(--border);
   padding: 16px 0;
 }
+.summary-entry > strong {
+  overflow-wrap: anywhere;
+}
 .deep-dive-list {
   padding: 0;
   margin: 0;

@@ -193,11 +193,14 @@ test('programmatic summary opens immediately, runs two streams, survives closure
   });
   await reopened.getByRole('button', { name: 'Retry unfinished' }).click();
   await expect(reopened.getByRole('status')).toContainText('3 of 3 summarized');
+  const batchTitle = 'Summary source 0 + 2 more';
+  await expect(reopened.getByRole('heading', { name: batchTitle, exact: true })).toBeVisible();
   await expect(reopened.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0);
   const downloading = reopened.waitForEvent('download');
   await summaryMore(reopened);
   await reopened.getByRole('button', { name: 'Export HTML' }).click();
   const html = await readFile((await (await downloading).path())!, 'utf8');
+  expect(html).toContain(`<h1>${batchTitle}</h1>`);
   expect(html).toContain('/article#summary=0');
   expect(html.indexOf('A concise source-backed finding.')).toBeLessThan(
     html.indexOf('简明且基于来源的结论。'),
@@ -234,9 +237,10 @@ test('programmatic summary opens immediately, runs two streams, survives closure
   const id = new URL(readerUrl).hash.slice('#summary/'.length).split('?')[0]!;
   const relaunched = await sandbox.launch();
   await relaunched.popup.getByRole('button', { name: 'Summaries', exact: true }).click();
-  await expect(
-    relaunched.popup.getByRole('region', { name: 'Saved summaries' }).getByRole('button'),
-  ).toHaveCount(1);
+  const savedEntry = relaunched.popup
+    .getByRole('region', { name: 'Saved summaries' })
+    .getByRole('button');
+  await expect(savedEntry).toContainText(batchTitle);
   const batch = await relaunched.popup.evaluate(async (id) => {
     const reply = await chrome.runtime.sendMessage({
       target: 'saul-digest',

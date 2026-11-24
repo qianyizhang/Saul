@@ -32,9 +32,10 @@ overwriting completed rows or replaying inference.
 
 The reader is disposable; closing it does not Stop, delete or regenerate.
 Restart marks unfinished work interrupted. History separates **Passages** and
-**Summaries**; passage Clear all does not delete summaries. Keep progress, Stop,
-Retry unfinished, coverage, errors and Export HTML available in the reader;
-deletion is under Details. The export is self-contained and includes incomplete
+**Summaries**; passage Clear all does not delete summaries. Saved summaries use
+the first selected page’s title and show how many more pages the batch contains.
+Keep progress, Stop, Retry unfinished, coverage, errors and Export HTML available
+in the reader. Deletion is under Details. The export is self-contained and includes incomplete
 states. Tab surfaces show a compact active link. Completion never moves focus.
 
 If a reader or the Call builder temporarily loses status, it keeps the last

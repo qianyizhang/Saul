@@ -4,6 +4,7 @@ import {
   interruptItem,
   restartItem,
   retryableItem,
+  summaryTitle,
 } from '../../shared/model/call-batch.ts';
 import type {
   DigestBatch,
@@ -105,11 +106,24 @@ export function digestStore(db: SqlDatabase, request: Request, owner = ''): unkn
         .map((r) => String(r.revision));
     case 'DB_DIGEST_LIST':
       return db
-        .selectObjects('SELECT id,created_at,data FROM digest_batch ORDER BY created_at DESC')
+        .selectObjects(
+          `SELECT b.id, b.created_at,
+             json_extract(b.data, '$.windowTitle') AS window_title,
+             json_extract(i.data, '$.title') AS page_title,
+             json_extract(i.data, '$.url') AS page_url,
+             (SELECT count(*) FROM digest_item WHERE batch_id=b.id) AS item_count
+           FROM digest_batch b LEFT JOIN digest_item i ON i.batch_id=b.id
+             AND i.position=(SELECT min(position) FROM digest_item WHERE batch_id=b.id)
+           ORDER BY b.created_at DESC`,
+        )
         .map((r) => ({
           id: String(r.id),
           createdAt: Number(r.created_at),
-          windowTitle: (JSON.parse(String(r.data)) as DigestMeta).windowTitle,
+          windowTitle: String(r.window_title ?? ''),
+          title: summaryTitle(
+            { title: String(r.page_title ?? ''), url: String(r.page_url ?? '') },
+            Number(r.item_count),
+          ),
         }));
     case 'DB_DIGEST_ITEM': {
       const { id, item, source } = request.payload;

@@ -77,7 +77,19 @@ export interface DigestBatch extends DigestMeta {
   error?: string;
   items: DigestItem[];
 }
-export type DigestOverview = Pick<DigestMeta, 'id' | 'windowTitle' | 'createdAt'>;
+export type DigestOverview = Pick<DigestMeta, 'id' | 'windowTitle' | 'createdAt'> & {
+  title?: string; // Older history helpers return only the window label.
+};
+
+export function summaryTitle(first: Pick<DigestItem, 'title' | 'url'> | undefined, count: number) {
+  let title = first?.title.trim();
+  if ((!title || title === 'Untitled tab') && first) {
+    const source = URL.parse(first.url);
+    title = source?.hostname || undefined;
+  }
+  if (!title) return count > 1 ? `${count} pages` : 'Page summary';
+  return count > 1 ? `${title} + ${count - 1} more` : title;
+}
 export interface DigestComparison {
   index: number;
   text?: import('./text-change.ts').TextChange;

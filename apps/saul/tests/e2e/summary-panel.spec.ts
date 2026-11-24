@@ -159,7 +159,10 @@ test('summary side panel keeps the source active, survives tab switches and clos
     await source.close();
     await popup.getByRole('button', { name: 'History', exact: true }).click();
     await popup.getByRole('button', { name: 'Summaries', exact: true }).click();
-    await popup.getByRole('region', { name: 'Saved summaries' }).getByRole('button').click();
+    await popup
+      .getByRole('region', { name: 'Saved summaries' })
+      .getByRole('button', { name: /^Calculus reading fixture/ })
+      .click();
     await expect
       .poll(() =>
         worker.evaluate(
@@ -185,8 +188,14 @@ test('summary side panel keeps the source active, survives tab switches and clos
       .poll(() => panel.evaluate(() => document.querySelector('h2')?.textContent))
       .toBe('Saved summaries');
     await expect
-      .poll(() => panel.evaluate(() => document.querySelectorAll('.summary-entry').length))
-      .toBe(1);
+      .poll(() =>
+        panel.evaluate(() => document.querySelector('.summary-entry strong')?.textContent),
+      )
+      .toBe('Calculus reading fixture');
+    for (const theme of ['light', 'dark'] as const) {
+      await panel.appearance(theme);
+      await panel.screenshot(info.outputPath('saved-summaries-' + theme + '.png'));
+    }
     await panel.evaluate(() =>
       document.querySelector<HTMLButtonElement>('.summary-entry')!.click(),
     );
