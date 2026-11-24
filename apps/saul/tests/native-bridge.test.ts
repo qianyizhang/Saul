@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { initNativeBridge, ENABLED_KEY, STATUS_KEY } from '../src/native/bridge';
+import { initNativeBridge, STATUS_KEY } from '../src/native/bridge';
+import { localAccessKeys, readLocalAccess } from '../src/native/local-access';
+
+const ENABLED_KEY = localAccessKeys.enabled;
 
 const event = <Args extends unknown[]>() => {
   const listeners: Array<(...args: Args) => void> = [];
@@ -65,7 +68,9 @@ it('does not connect until enabled and reports readiness only after the host han
   initNativeBridge();
   await flush();
   expect(browser.runtime.connectNative).not.toHaveBeenCalled();
+  browser.storage.local.get.mockResolvedValue({ [ENABLED_KEY]: true });
   browser.storage.onChanged.fire({ [ENABLED_KEY]: { newValue: true } }, 'local');
+  await flush();
   expect(browser.runtime.connectNative).toHaveBeenCalledWith('com.saul.tabs');
   expect(browser.storage.session.set).toHaveBeenLastCalledWith({
     [STATUS_KEY]: expect.objectContaining({ state: 'connecting' }),
@@ -86,19 +91,22 @@ it('reconnects after disconnect via an alarm and stops retrying when disabled', 
   });
   browser.alarms.onAlarm.fire({ name: 'saul-native-retry' });
   expect(ports).toHaveLength(2);
+  browser.storage.local.get.mockResolvedValue({ [ENABLED_KEY]: false });
   browser.storage.onChanged.fire({ [ENABLED_KEY]: { newValue: false } }, 'local');
+  await flush();
   expect(ports[1]!.disconnect).toHaveBeenCalledOnce();
   browser.alarms.onAlarm.fire({ name: 'saul-native-retry' });
   expect(ports).toHaveLength(2);
 });
 it('does not let a stale initial settings read undo a newer user choice', async () => {
   let finishRead!: (value: object) => void;
-  browser.storage.local.get.mockReturnValue(
+  browser.storage.local.get.mockReturnValueOnce(
     new Promise((resolve) => {
       finishRead = resolve;
     }),
   );
   initNativeBridge();
+  browser.storage.local.get.mockResolvedValue({ [ENABLED_KEY]: true });
   browser.storage.onChanged.fire({ [ENABLED_KEY]: { newValue: true } }, 'local');
   finishRead({});
   await flush();
@@ -126,4 +134,33 @@ it('allows reconnect from an extension page and rejects webpage callers', async 
   expect(reply).toHaveBeenCalledWith({ success: true });
   expect(ports[0]!.disconnect).toHaveBeenCalledOnce();
   expect(ports).toHaveLength(2);
+});
+
+it('preserves legacy grants and lets explicit settings override them across master toggles', async () => {
+  browser.storage.local.get.mockResolvedValue({
+    saul_native_enabled: true,
+    saul_native_page_enabled: true,
+    saul_annotation_access: true,
+  });
+  expect(await readLocalAccess()).toEqual({
+    enabled: true,
+    organize: true,
+    pages: 'write',
+    annotations: 'write',
+  });
+  browser.storage.local.get.mockResolvedValue({
+    saul_native_enabled: true,
+    saul_native_page_enabled: true,
+    saul_annotation_access: true,
+    [localAccessKeys.enabled]: false,
+    [localAccessKeys.organize]: false,
+    [localAccessKeys.pages]: 'read',
+    [localAccessKeys.annotations]: 'off',
+  });
+  expect(await readLocalAccess()).toEqual({
+    enabled: false,
+    organize: false,
+    pages: 'read',
+    annotations: 'off',
+  });
 });

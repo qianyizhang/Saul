@@ -107,7 +107,7 @@ test('shared provider edits keep stable preset bindings and preserve Draw throug
   await settingsSection(page, 'Actions');
   await page.getByLabel('Response language', { exact: true }).selectOption('Chinese');
   await settingsSection(page, 'Connections');
-  await page.getByRole('button', { name: /^My API · [1-9]\d* presets?$/ }).click();
+  await page.getByRole('button', { name: 'My API', exact: true }).click();
   await expect(page.getByLabel('Connection name', { exact: true })).toHaveValue('My API');
   await page.getByLabel('Connection name', { exact: true }).fill('Renamed in Saul');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
@@ -155,6 +155,6 @@ test('shared provider edits keep stable preset bindings and preserve Draw throug
   });
   await page.reload();
   await settingsSection(page, 'Connections');
-  await page.getByRole('button', { name: /^Renamed in EZ · [1-9]\d* presets?$/ }).click();
+  await page.getByRole('button', { name: 'Renamed in EZ', exact: true }).click();
   await expect(page.getByLabel('Connection name', { exact: true })).toHaveValue('Renamed in EZ');
 });

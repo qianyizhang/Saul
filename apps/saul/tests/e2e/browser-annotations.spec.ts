@@ -796,8 +796,9 @@ test('agent bridge opt-in, scoped append, conflicts, delete and restore share th
       if (response.error) throw new Error(response.error);
       return response.result as AnnotationResult;
     }, request);
-  await expect(call(request)).rejects.toThrow('Enable Annotation access');
-  await worker.evaluate(() => chrome.storage.local.set({ saul_annotation_access: true }));
+  await worker.evaluate(() => chrome.storage.local.set({ saul_local_tools_enabled: true }));
+  await expect(call(request)).rejects.toThrow('Set Annotations to Read or Write');
+  await worker.evaluate(() => chrome.storage.local.set({ saul_local_tools_annotations: 'read' }));
   await expect.poll(async () => (await call(request)).records?.length).toBe(1);
   let a = (await call(request)).records![0]!;
   const append = {
@@ -815,6 +816,8 @@ test('agent bridge opt-in, scoped append, conflicts, delete and restore share th
       ],
     },
   };
+  await expect(call(append)).rejects.toThrow('Set Annotations to Write');
+  await worker.evaluate(() => chrome.storage.local.set({ saul_local_tools_annotations: 'write' }));
   expect((await call(append)).outcomes![0]!.record!.replyCount).toBe(1);
   expect((await call(append)).outcomes![0]!.record!.replyCount).toBe(1);
   expect(

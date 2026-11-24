@@ -1,3 +1,4 @@
+import { organizePermission } from '../shared/protocol/local-access.mts';
 import type { TabSnapshot } from '../shared/protocol/protocol.mts';
 export interface NativeWindowName {
   windowId: number;
@@ -134,7 +135,8 @@ export function withWindowNames(
         const changed = result.windows.filter(
           (w) => snapshot.windows.find((x) => x.id === w.windowId)?.title !== w.title,
         );
-        if (changed.length) await call('saul_windows_label', { windows: changed, dryRun: false });
+        if (changed.length && snapshot.localAccess?.tabs !== 'read')
+          await call('saul_windows_label', { windows: changed, dryRun: false });
         for (const window of snapshot.windows)
           window.title = result.windows.find((w) => w.windowId === window.id)!.title;
       }
@@ -143,6 +145,8 @@ export function withWindowNames(
     if (name === 'saul_windows_label') {
       const snapshot = validateToolResult('saul_tabs_list', await call('saul_tabs_list', {}));
       const input = validateCall('saul_windows_label', args);
+      if (input.dryRun === false && snapshot.localAccess?.tabs === 'read')
+        throw new Error(organizePermission);
       await names.apply(snapshot, input.windows, input.dryRun !== false);
     }
     return call(name, args);

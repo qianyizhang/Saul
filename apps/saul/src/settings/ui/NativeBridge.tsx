@@ -1,46 +1,99 @@
-import { ANNOTATION_ACCESS_KEY } from '../../annotations/routing';
+import { useEffect, useState } from 'react';
 import { ControlIcon } from '../../ui/ControlIcon';
 import { ActionLabel } from '../../ui/ActionLabel';
-import { PAGE_ACCESS_KEY } from '../../native/pages';
-import { useEffect, useState } from 'react';
+import { accessLevel } from '../../../shared/protocol/local-access.mts';
+import { STATUS_KEY, isNativeBridgeStatus, type NativeBridgeStatus } from '../../native/bridge';
 import {
-  ENABLED_KEY,
-  STATUS_KEY,
-  isNativeBridgeStatus,
-  type NativeBridgeStatus,
-} from '../../native/bridge';
+  localAccessKeys,
+  isLocalAccessChange,
+  readLocalAccess,
+  type LocalAccessPreferences,
+} from '../../native/local-access';
+
+const permissions = [
+  {
+    key: 'pages',
+    name: 'Pages',
+    cue: 'Write can change sites and start summaries',
+    description:
+      'Read shows live page content and allows previews. Write also allows clicks, fills, navigation and new Tab board summaries. Clicks can change site data and summaries can send page content to your provider.',
+  },
+  {
+    key: 'annotations',
+    name: 'Annotations',
+    cue: 'Read includes saved screenshots',
+    description:
+      'Read shows saved notes and screenshots within the requested scope. Write also allows adding, editing and removing saved notes.',
+  },
+] as const;
 
 export function NativeBridge() {
-  const [annotationAccess, setAnnotationAccess] = useState(false);
-  useEffect(() => {
-    void chrome.storage.local
-      .get(ANNOTATION_ACCESS_KEY)
-      .then((v) => setAnnotationAccess(v[ANNOTATION_ACCESS_KEY] === true));
-  }, []);
-  const [pageEnabled, setPageEnabled] = useState(false);
-  const [enabled, setEnabled] = useState(false);
+  const [access, setAccess] = useState<LocalAccessPreferences>();
   const [status, setStatus] = useState<NativeBridgeStatus>({ state: 'disabled' });
   const [copied, setCopied] = useState('');
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
   useEffect(() => {
-    void chrome.storage.local.get([ENABLED_KEY, PAGE_ACCESS_KEY]).then((data) => {
-      setEnabled(data[ENABLED_KEY] === true);
-      setPageEnabled(data[PAGE_ACCESS_KEY] === true);
-    });
+    let active = true;
+    let accessRevision = 0;
+    let statusRevision = 0;
     const readStatus = (value: unknown) => {
-      if (isNativeBridgeStatus(value)) setStatus(value);
+      if (active && isNativeBridgeStatus(value)) setStatus(value);
     };
-    void chrome.storage.session.get(STATUS_KEY).then((data) => readStatus(data[STATUS_KEY]));
+    const refresh = () => {
+      const revision = ++accessRevision;
+      void readLocalAccess()
+        .then((value) => {
+          if (active && revision === accessRevision) setAccess(value);
+        })
+        .catch((cause) => {
+          if (active && revision === accessRevision) setError(String(cause));
+        });
+    };
     const listener = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
-      if (area === 'session' && changes[STATUS_KEY]) readStatus(changes[STATUS_KEY].newValue);
-      if (area === 'local' && changes[PAGE_ACCESS_KEY])
-        setPageEnabled(changes[PAGE_ACCESS_KEY].newValue === true);
-      if (area === 'local' && changes[ENABLED_KEY])
-        setEnabled(changes[ENABLED_KEY].newValue === true);
+      if (area === 'session' && changes[STATUS_KEY]) {
+        statusRevision++;
+        readStatus(changes[STATUS_KEY].newValue);
+      }
+      if (area === 'local' && isLocalAccessChange(changes)) refresh();
     };
     chrome.storage.onChanged.addListener(listener);
-    return () => chrome.storage.onChanged.removeListener(listener);
+    const revision = statusRevision;
+    void chrome.storage.session.get(STATUS_KEY).then(
+      (data) => {
+        if (revision === statusRevision) readStatus(data[STATUS_KEY]);
+      },
+      (cause) => {
+        if (active && revision === statusRevision) setError(String(cause));
+      },
+    );
+    refresh();
+    return () => {
+      active = false;
+      chrome.storage.onChanged.removeListener(listener);
+    };
   }, []);
+
+  async function save<K extends keyof LocalAccessPreferences>(
+    key: K,
+    value: LocalAccessPreferences[K],
+  ) {
+    const before = access;
+    if (!before) return;
+    setAccess({ ...before, [key]: value });
+    setSaving(true);
+    try {
+      await chrome.storage.local.set({ [localAccessKeys[key]]: value });
+      setError('');
+    } catch (cause) {
+      setAccess(await readLocalAccess().catch(() => before));
+      setError(String(cause));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function copy(label: string, text: string) {
     try {
       await navigator.clipboard.writeText(text);
@@ -50,83 +103,75 @@ export function NativeBridge() {
       setError('Could not copy. Select the command and copy it manually.');
     }
   }
+
   const install = `node scripts/setup.mts --components tabs --extension-id ${chrome.runtime.id}`;
   return (
     <section className="panel stack">
       <label className="toggle">
-        <strong>Annotation access</strong>
+        <span>
+          <strong>Local tool access</strong>
+          <span className="small muted minimum-only" aria-hidden="true">
+            {' · Local programs can read tab titles and URLs'}
+          </span>
+        </span>
         <input
           type="checkbox"
-          checked={annotationAccess}
-          onChange={(e) => {
-            const next = e.target.checked;
-            void chrome.storage.local.set({ [ANNOTATION_ACCESS_KEY]: next }).then(
-              () => setAnnotationAccess(next),
-              (e) => setError(String(e)),
-            );
-          }}
+          aria-describedby="local-tool-access-effects"
+          checked={access?.enabled ?? false}
+          disabled={!access || saving}
+          onChange={(event) => void save('enabled', event.target.checked)}
         />
       </label>
-      <p className="small">
-        Allow connected local agents to read and edit annotations within assigned pages or IDs. This
-        includes saved screenshots when requested.
+      <p id="local-tool-access-effects" className="small standard-only">
+        The CLI, Codex and other programs under your OS user can read tab titles, URLs, windows and
+        groups. Incognito tabs are excluded. Saul’s Window view works independently.
       </p>
-      <label className="toggle">
-        <strong>Codex tab access</strong>
-        <input
-          type="checkbox"
-          aria-describedby="tabs-access-effects"
-          checked={enabled}
-          onChange={async (e) => {
-            try {
-              await chrome.storage.local.set({ [ENABLED_KEY]: e.target.checked });
-              setError('');
-            } catch (err) {
-              setError(String(err));
-            }
-          }}
-        />
-      </label>
-      <p id="tabs-access-effects" className="small">
-        Local tools can read tab titles and URLs and organize tabs. Incognito tabs are excluded.
-      </p>
-      <p className="small muted standard-only">
-        You can use the Window tab without enabling Codex access.
-      </p>
-      <label className="toggle">
-        <strong>Page reading and actions</strong>
-        <input
-          type="checkbox"
-          aria-describedby="page-access-effects"
-          checked={pageEnabled}
-          onChange={async (e) => {
-            const next = e.target.checked;
-            setPageEnabled(next);
-            try {
-              await chrome.storage.local.set({ [PAGE_ACCESS_KEY]: next });
-              setError('');
-            } catch (err) {
-              setPageEnabled(!next);
-              setError(String(err));
-            }
-          }}
-        />
-      </label>
-      <p id="page-access-effects" className="small">
-        Local tools can read pages, fill fields, click and navigate. Clicks may submit forms or
-        change website data. Requires Codex tab access.
-      </p>
+      <fieldset className="stack settings-fields" disabled={!access?.enabled || saving}>
+        <section className="stack" aria-labelledby="local-tools-tabs">
+          <strong id="local-tools-tabs">Tabs</strong>
+          <label className="toggle">
+            Organize tabs and windows
+            <input
+              type="checkbox"
+              checked={access?.organize ?? false}
+              onChange={(event) => void save('organize', event.target.checked)}
+            />
+          </label>
+        </section>
+        {permissions.map(({ key, name, cue, description }) => (
+          <div key={key} className="stack">
+            <label className="toggle">
+              <span>
+                <strong>{name}</strong>
+                <span className="small muted minimum-only" aria-hidden="true">{` · ${cue}`}</span>
+              </span>
+              <select
+                value={access?.[key] ?? 'off'}
+                aria-describedby={`local-tools-${key}`}
+                onChange={(event) => void save(key, accessLevel.parse(event.target.value))}
+              >
+                <option value="off">Off</option>
+                <option value="read">Read</option>
+                <option value="write">Write</option>
+              </select>
+            </label>
+            <p id={`local-tools-${key}`} className="small standard-only">
+              {description}
+            </p>
+          </div>
+        ))}
+      </fieldset>
       <div className="row between">
         <span className="badge" role="status">
           {status.state === 'connected'
             ? 'Connected to native host'
             : status.state === 'disabled'
-              ? 'Off'
+              ? 'Bridge off'
               : status.state === 'connecting'
                 ? 'Connecting…'
                 : 'Disconnected'}
         </span>
-        {enabled && (
+        {access?.enabled && (
           <button
             className="btn"
             onClick={async () => {
@@ -149,10 +194,10 @@ export function NativeBridge() {
       )}
       <details>
         <summary
-          aria-label="Connect Codex · setup and troubleshooting"
-          title="Connect Codex · setup and troubleshooting"
+          aria-label="Local tool setup and diagnostics"
+          title="Local tool setup and diagnostics"
         >
-          <ActionLabel short="Setup" full="Connect Codex · setup and troubleshooting" />
+          <ActionLabel short="Tool setup" full="Local tool setup and diagnostics" />
         </summary>
         <div className="stack" style={{ marginTop: 12 }}>
           <p className="small muted standard-only">
@@ -170,8 +215,9 @@ export function NativeBridge() {
             <ControlIcon symbol={copied === 'install' ? 'copied' : 'copy'} />
           </button>
           <p className="small muted standard-only">
-            2. Enable access above and choose Reconnect. From the monorepo root, run pnpm --dir
-            apps/saul verify:connection to check the connection.
+            2. Enable Local tool access above. Use Reconnect if the helper was just installed and
+            access was already on. From the monorepo root, run pnpm --dir apps/saul
+            verify:connection to check the connection.
           </p>
           <p className="small muted standard-only">
             3. After current work finishes, fully quit and reopen Codex to load the installed tools.

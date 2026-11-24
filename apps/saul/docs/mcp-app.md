@@ -41,6 +41,11 @@
 
 ## Proposal and approval lifetime
 
+The board uses the Chrome profile’s [Local tool permissions](native-messaging.md#local-tool-permissions).
+Tabs Read allows layout previews. Applying a proposal, manually editing the
+layout and Undo require **Organize tabs and windows**. Starting a new Summary
+from selected tabs requires **Pages → Write**.
+
 | Boundary         | Outcome                                                                                                                                                                                                                                                     |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Draft and expiry | Latest draft per session in MCP memory, capped at 32 sessions. Approval expires after five minutes. Edit or **Retry** to revalidate and issue a new token without changing Chrome. Server restart clears drafts and approvals.                              |

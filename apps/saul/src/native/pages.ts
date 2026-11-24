@@ -1,6 +1,5 @@
 import { validateCall, type ToolResults } from '../../shared/protocol/protocol.mts';
 
-export const PAGE_ACCESS_KEY = 'saul_native_page_enabled';
 type PageResult = ToolResults['saul_page_read' | 'saul_page_act' | 'saul_page_navigate'];
 
 // Serialized into Chrome's isolated world. Keep this function self-contained.
@@ -121,11 +120,6 @@ function httpUrl(value: string) {
   return url.href;
 }
 export async function handlePageCall(name: string, input: unknown): Promise<PageResult> {
-  const access = await chrome.storage.local.get(PAGE_ACCESS_KEY);
-  if (access[PAGE_ACCESS_KEY] !== true)
-    throw new Error(
-      'Enable Page reading and actions in Saul → Settings → Preferences → Integrations first',
-    );
   const args = validateCall(name, input) as { tabId: number };
   const tab = await chrome.tabs.get(args.tabId);
   const window = await chrome.windows.get(tab.windowId);

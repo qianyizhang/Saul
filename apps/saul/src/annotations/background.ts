@@ -23,7 +23,7 @@ import { callStore } from '../calls/store';
 import type { Configuration } from '../configuration/definition';
 import { z } from 'zod';
 
-import { ANNOTATION_ACCESS_KEY, annotationPanelKey, annotationVersionKey } from './routing';
+import { annotationPanelKey, annotationVersionKey } from './routing';
 export async function operateAnnotations(
   request: AnnotationRequest,
   external?: true,
@@ -53,8 +53,6 @@ export async function operateAnnotations(
   return result;
 }
 export async function agentAnnotations(request: unknown) {
-  if ((await chrome.storage.local.get(ANNOTATION_ACCESS_KEY))[ANNOTATION_ACCESS_KEY] !== true)
-    throw new Error('Enable Annotation access in Settings → Preferences → Integrations.');
   const parsed = requestSchema.parse(request);
   parsed.author = { kind: 'agent', name: parsed.author.name };
   return operateAnnotations(parsed, true);

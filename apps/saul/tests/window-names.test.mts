@@ -199,3 +199,25 @@ it('reads native names with linear Apple events and validates every target befor
   expect(applied[49].title).toBe('New 49');
   expect(writes).toBe(50);
 });
+
+it('lists actual Chrome names with Tabs Read and prevents native rename before any native effect', async () => {
+  const readOnly: TabSnapshot = {
+    ...snapshot(),
+    localAccess: { tabs: 'read', pages: 'off', annotations: 'off' },
+  };
+  const call = vi.fn(async () => structuredClone(readOnly));
+  const names = {
+    read: vi.fn(async () => ({
+      status: 'available' as const,
+      windows: [{ windowId: 1, title: 'Native reading' }],
+    })),
+    apply: vi.fn(),
+  };
+  const client = withWindowNames(call, names);
+  expect(await client('saul_tabs_list')).toMatchObject({ windows: [{ title: 'Native reading' }] });
+  await expect(
+    client('saul_windows_label', { windows: [{ windowId: 1, title: 'New' }], dryRun: false }),
+  ).rejects.toThrow('Organize tabs and windows');
+  expect(call.mock.calls).toHaveLength(2);
+  expect(names.apply).not.toHaveBeenCalled();
+});

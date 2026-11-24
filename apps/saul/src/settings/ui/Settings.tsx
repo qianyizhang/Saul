@@ -215,12 +215,15 @@ export function Settings({
         />
         <details hidden={section !== 'preferences'} className="panel">
           <summary>Integrations</summary>
-          <SharedCredentialSettings
-            owner={settings.sharedCredentials}
-            disabled={locked || dirty}
-            visible={section === 'preferences'}
-            change={draft.setCredentialOwner}
-          />
+          <section className="panel stack" aria-labelledby="provider-credentials">
+            <strong id="provider-credentials">Provider credentials</strong>
+            <SharedCredentialSettings
+              owner={settings.sharedCredentials}
+              disabled={locked || dirty}
+              visible={section === 'preferences'}
+              change={draft.setCredentialOwner}
+            />
+          </section>
           <NativeBridge />
           <details>
             <summary>History and configuration helper setup</summary>

@@ -38,6 +38,19 @@ _Avoid_: Tabs, Windows & tabs, workspace
 A named collection of tabs within one window.
 _Avoid_: Folder, window group
 
+**Local tool access**:
+The profile’s permission for local clients such as the CLI and Codex to use Saul.
+It includes tab inventory and controls access to additional browser operations.
+_Avoid_: Codex tab access
+
+**Tabs**, **Pages**, **Annotations**:
+The Local tool access groups for tab and window inventory and organization, live
+page content and interaction, and saved notes and their evidence, respectively.
+
+**Read** and **Write**:
+Read permits inspection and supported previews. Write includes Read and permits
+applying changes or taking actions in the group.
+
 **Selection**:
 The tabs explicitly chosen for an action.
 _Avoid_: Queue, batch

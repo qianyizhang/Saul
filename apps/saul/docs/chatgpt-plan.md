@@ -92,7 +92,7 @@ Use **Disconnect app** in Preferences → Integrations to disconnect Chrome
 without changing EZ's access. Use **Sign out** in Connections only if you
 intend to end the shared account session in both apps. A history or
 configuration helper removal is a separate [native helper operation](native-messaging.md).
-Codex tab access remains separately opt-in.
+Local tool access remains separately opt-in.
 
 ## Verification and limits
 

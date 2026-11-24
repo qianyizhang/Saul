@@ -90,7 +90,7 @@ Chrome profile. Removing the saved entry in Saul leaves the chat in ChatGPT.
 | Recover a manual edit     | Undo applies while the affected arrangement can be restored. Closing the source window prevents Undo. Refresh and inspect partial failures before retrying.                                                        |
 | Review a Codex suggestion | [Tab board proposal rules](mcp-app.md#proposal-and-approval-lifetime).                                                                                                                                             |
 | Share window names        | [Window label ownership and native Chrome names](mcp-app.md#manual-controls).                                                                                                                                      |
-| Grant external access     | Settings → Preferences → Integrations. Access is off by default. [Native messaging](native-messaging.md#connect-and-verify)                                                                                        |
+| Grant external access     | Settings → Preferences → Integrations → Local tool access. Access is off by default. [Native messaging](native-messaging.md#connect-and-verify)                                                                    |
 
 - **Rows** — Readable titles with hostname fallback and full original title/URL on hover. Standard view shows window counts above the list. Display labels preserve source metadata.
 - **Refresh** — Preserve focus, scroll and surviving choices.

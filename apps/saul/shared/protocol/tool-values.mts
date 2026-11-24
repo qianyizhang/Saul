@@ -1,3 +1,4 @@
+import { localToolAccess } from './local-access.mts';
 import { z } from 'zod';
 import { integer } from './tool-schema.mts';
 
@@ -37,6 +38,7 @@ export const groupView = z.object({
   collapsed: z.boolean(),
 });
 export const tabSnapshot = z.object({
+  localAccess: localToolAccess.optional(),
   windows: z.array(z.object({ id: integer, focused: z.boolean(), title: z.string().optional() })),
   tabs: z.array(tabView),
   groups: z.array(groupView),

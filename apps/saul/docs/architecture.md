@@ -45,6 +45,12 @@ browser metadata after validation; annotation results also match the requested
 operation. Workspace and diagnostic operations use their own typed registries
 and the same schema library, without a second JSON-schema interpreter.
 
+The [local tool dispatcher](../src/native/local-tool-call.ts) checks the profile’s
+[Local tool permissions](native-messaging.md#local-tool-permissions) after a
+request reaches the tab operation queue. The bridge owns connection and retry.
+The extension’s own Window view uses the same tab operations through its trusted
+workspace route.
+
 ## Trust boundaries
 
 Content messages are scoped to the sender's current main-frame HTTP(S) page;

@@ -1,3 +1,4 @@
+import { organizePermission } from '../shared/protocol/local-access.mts';
 import type {
   TabSnapshot,
   TabView,
@@ -312,6 +313,8 @@ export function createWorkspace({
         });
         return response(await state(args.session));
       }
+      const current = await state(args.session);
+      if (current.snapshot.localAccess?.tabs === 'read') throw new Error(organizePermission);
       let result: TabEditResult;
       if (name === 'saul_workspace_undo') {
         const undo = undos.get(args.session);
@@ -319,7 +322,6 @@ export function createWorkspace({
         if (!undo) throw new Error('No reversible edit is available.');
         result = await call('saul_tabs_undo', { session: args.session, token: undo });
       } else {
-        const current = await state(args.session);
         if (args.revision !== current.revision)
           throw new Error('Tabs changed. Review the refreshed board.');
         const { interactionToken, revision, ...edit } = args;
@@ -383,6 +385,7 @@ export function createWorkspace({
       throw new Error('Approval is missing or expired; open the latest proposal in the app');
     if (plan.status !== 'pending')
       throw new Error(`Proposal is ${plan.status}; make a new proposal`);
+    if (current.snapshot.localAccess?.tabs === 'read') throw new Error(organizePermission);
     plan.status = 'applying';
     delete plan.approvalToken; // Consume before any side effect, including uncertain failures.
     let expected = current.snapshot;

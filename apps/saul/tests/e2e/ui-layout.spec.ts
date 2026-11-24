@@ -32,7 +32,7 @@ test('compact workspace supports reading, tab controls and reachable settings', 
     await popup.screenshot({ path: info.outputPath('03-history.png'), fullPage: true });
   await popup.getByRole('button', { name: 'Window', exact: true }).click();
   await expect(popup.locator('.tab-row').first()).toBeVisible();
-  await expect(popup.getByLabel('Codex tab access')).toBeHidden();
+  await expect(popup.getByLabel('Local tool access')).toBeHidden();
   await expect(popup.getByRole('button', { name: 'Group', exact: true })).toHaveCount(0);
   if (reviewScreenshots)
     await popup.screenshot({ path: info.outputPath('04-tabs.png'), fullPage: true });
@@ -48,14 +48,14 @@ test('compact workspace supports reading, tab controls and reachable settings', 
   await connection.focus();
   await popup.keyboard.press('Enter');
   await popup.getByText('Integrations', { exact: true }).click();
-  await expect(popup.getByLabel('Codex tab access')).toBeVisible();
-  await popup.getByLabel('Connect Codex · setup and troubleshooting', { exact: true }).click();
+  await expect(popup.getByLabel('Local tool access')).toBeVisible();
+  await popup.getByLabel('Local tool setup and diagnostics', { exact: true }).click();
   await expect(
     popup
       .locator('code')
       .filter({ hasText: 'node scripts/setup.mts --components tabs --extension-id' }),
   ).toBeVisible();
-  await popup.getByLabel('Connect Codex · setup and troubleshooting', { exact: true }).click();
+  await popup.getByLabel('Local tool setup and diagnostics', { exact: true }).click();
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await settingsSection(popup, 'Presets');
   await expect(popup.getByLabel('Connection', { exact: true })).toBeVisible();

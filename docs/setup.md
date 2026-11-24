@@ -8,7 +8,7 @@
 | ----------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
 | `extension` | Saul Chrome UI                                               | Chrome, Node 24 and pinned pnpm to build, `chatgpt` helper to use shared storage                       |
 | `chatgpt`   | History, configuration and presets for all browser providers | Actual extension ID, Node 24 and native host registration                                              |
-| `tabs`      | Optional CLI/MCP tab access and native Chrome window names   | Actual extension ID and Node 24. Codex only for MCP registration                                       |
+| `tabs`      | Optional Local tool access and native Chrome window names    | Actual extension ID and Node 24. Codex only for MCP registration                                       |
 | `actions`   | Optional [custom Calls](../apps/saul/docs/custom-actions.md) | Actual extension ID, Node 24 and a saved model preset                                                  |
 | `ez`        | Native EZ and its signed credential owner                    | macOS 14+, Swift 6.3+ and [Apple signing](../apps/ez/docs/releasing.md#local-signing-and-installation) |
 
@@ -27,7 +27,7 @@ Run these commands from the repository root.
 3. **Install the required history and settings helper.** Run `node scripts/setup.mts --components chatgpt --extension-id YOUR_ID` with that ID, even if you use an API key instead of a ChatGPT plan.
 4. **Check the install.** Run the extension and `chatgpt` checks under [Verify and remove](#verify-and-remove). Open Saul’s **History** in Chrome and confirm that it loads without a storage error. An empty history is valid on first install.
 
-For optional Codex tab access, include `tabs` in step 3 and pass `--codex`, then [connect and verify](../apps/saul/docs/native-messaging.md#connect-and-verify). To use a ChatGPT plan, follow [plan setup](../apps/saul/docs/chatgpt-plan.md#setup).
+For optional Local tool access, include `tabs` in step 3. Add `--codex` for a new Codex MCP registration, then [connect and verify](../apps/saul/docs/native-messaging.md#connect-and-verify). To use a ChatGPT plan, follow [plan setup](../apps/saul/docs/chatgpt-plan.md#setup).
 
 ### EZ for macOS
 
@@ -100,7 +100,7 @@ node scripts/setup.mts --components ez --verify
 
 - **Built** — A current prepared artifact exists. This does not check the copy on disk at the install path.
 - **Installed** — The commands above compare the installed payload with the current prepared build. Include `tabs` or `actions` in the helper check only if you installed them. The checks do not inspect running app versions.
-- **Connected** — Check the path you intend to use: [Codex tab access](../apps/saul/docs/native-messaging.md#connect-and-verify) or [plan account and model access](../apps/saul/docs/chatgpt-plan.md#setup). Neither check runs inference.
+- **Connected** — Check the path you intend to use: [Local tool access](../apps/saul/docs/native-messaging.md#connect-and-verify) or [plan account and model access](../apps/saul/docs/chatgpt-plan.md#setup). Neither check runs inference.
 - **Live request completed** — For Saul, use the [live digest check](../apps/saul/docs/testing.md#explicit-live-digest-check). For EZ, use [native and live acceptance](../apps/ez/docs/verification.md#native-and-live-acceptance). These checks use a live provider and can consume plan allowance or incur API charges.
 
 ## Shared Saul credentials on macOS

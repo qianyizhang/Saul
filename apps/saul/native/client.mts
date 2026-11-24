@@ -107,7 +107,7 @@ export async function callTool(name: string, input: unknown = {}): Promise<unkno
     const active = await sessions();
     if (!active.length)
       throw new Error(
-        'No Saul browser connected. Install the native host, reload Saul and enable Codex tab access in its popup.',
+        'No Saul browser connected. Install the native host and enable Local tool access in Saul → Settings → Preferences → Integrations.',
       );
     if (active.length > 1)
       throw new Error(

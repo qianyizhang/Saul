@@ -69,8 +69,8 @@ See [custom annotation capabilities](custom-actions.md#annotation-calls).
 | Reply attempts         | [Runner](../src/annotations/runner.ts) admits the reviewed batch together and runs up to two invocations. The store commits a final reply with its completed attempt atomically and cascades owned attempt images on purge. The Call host owns script limits.                                                                                                                                                                                                                                                                                                                     |
 
 Agents use bounded list/read/create/change operations and revision-checked,
-attributed per-item outcomes. They need explicit Annotation access; unrelated
-page-reading and mutation capabilities remain separate.
+attributed per-item outcomes. Their actions require the appropriate
+[Annotations permission](native-messaging.md#local-tool-permissions).
 
 ## Verification
 

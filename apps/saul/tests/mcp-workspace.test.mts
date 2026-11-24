@@ -655,3 +655,31 @@ it('manual commands require a private single-use app token and never inherit ded
   for (const name of ['saul_workspace_edit', 'saul_workspace_undo', 'saul_workspace_summarize'])
     expect(APP_TOOLS.find((t) => t.name === name)!._meta.ui.visibility).toEqual(['app']);
 });
+
+it('offers a read-only proposal but prevents Apply and manual edits from starting', async () => {
+  snapshot.localAccess = { tabs: 'read', pages: 'read', annotations: 'off' };
+  const proposal = await propose();
+  const proposalId = proposal.structuredContent.proposal!.id;
+  await expect(
+    workspace('saul_workspace_apply', {
+      session,
+      proposalId,
+      approvalToken: proposal._meta.approvalToken,
+    }),
+  ).rejects.toThrow('Organize tabs and windows');
+  await expect(
+    workspace('saul_workspace_edit', {
+      session,
+      interactionToken: proposal._meta.interactionToken,
+      revision: revision(snapshot),
+      kind: 'move',
+      tabIds: [12],
+      windowId: 2,
+    }),
+  ).rejects.toThrow('Organize tabs and windows');
+  expect(
+    call.mock.calls.every(([name]) =>
+      ['saul_sessions', 'saul_tabs_list', 'saul_summary_status'].includes(name),
+    ),
+  ).toBe(true);
+});

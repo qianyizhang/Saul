@@ -1,3 +1,4 @@
+import { organizePermission, summaryPermission } from '../shared/protocol/local-access.mts';
 import { controlSymbols } from '../browser/control-symbols.ts';
 import { createBoardDrag } from './board-drag.ts';
 import type { McpUiHostCapabilities } from '@modelcontextprotocol/ext-apps';
@@ -18,6 +19,7 @@ type MenuAction = readonly [string, () => void, boolean?];
 
 const tags = {
   counts: 'p',
+  'access-state': 'p',
   refresh: 'button',
   status: 'p',
   'send-status': 'p',
@@ -184,7 +186,8 @@ function canEdit() {
     !refreshing &&
     data?.snapshot &&
     !['pending', 'expired'].includes(data?.proposal?.status ?? '') &&
-    !draftLayout,
+    !draftLayout &&
+    data?.snapshot?.localAccess?.tabs !== 'read',
   );
 }
 function selectedIds(source = board.state.data?.snapshot) {
@@ -413,7 +416,10 @@ function renderMoveControls(
   $('destination').disabled = !editable || Boolean(pins);
   $('group-tabs').disabled = !editable || Boolean(pins);
   const { busy, ready, data } = board.state;
-  $('summarize').disabled = busy || !ready;
+  const permissions = data?.snapshot?.localAccess;
+  const summaryBlocked = permissions !== undefined && permissions.pages !== 'write';
+  $('summarize').disabled = busy || !ready || summaryBlocked;
+  $('summarize').title = summaryBlocked ? summaryPermission : 'Summarize selected tabs';
   $('pin-reason').hidden = !pins;
   const sourceWindows = new Set(
     source?.tabs.filter((t) => selection.has(t.id)).map((t) => t.windowId),
@@ -446,7 +452,8 @@ function renderMoveControls(
   $('existing-group').options[0].value = '';
   $('existing-group').hidden = !destinationGroups.length;
   $('undo').hidden = !data?.canUndo;
-  $('undo').disabled = busy || !ready;
+  $('undo').disabled = busy || !ready || permissions?.tabs === 'read';
+  $('undo').title = permissions?.tabs === 'read' ? organizePermission : 'Undo';
   $('active-summary').hidden = !data?.summary;
   $('active-summary').disabled = busy || !ready;
   if (data?.summary)
@@ -604,7 +611,10 @@ function renderProposal(
       staging ||
       Boolean(draftLayout) ||
       refreshing ||
-      !snapshot;
+      !snapshot ||
+      snapshot.localAccess?.tabs === 'read';
+    if (snapshot?.localAccess?.tabs === 'read')
+      row.append(element('span', 'small', 'Enable Organize tabs and windows to apply.'));
     apply.onclick = board.apply;
     if (!valid && !staging) {
       const renew = element('button', '', 'Retry');
@@ -683,6 +693,8 @@ function render() {
   $('counts').textContent = snapshot
     ? `${quantity(snapshot.windows.length, 'window')} · ${quantity(snapshot.tabs.length, 'tab')}`
     : '';
+  $('access-state').hidden = snapshot?.localAccess?.tabs !== 'read';
+  $('access-state').title = organizePermission;
   renderProposal(proposal, snapshot);
   const { source, windows } = layout();
   const editable = canEdit();

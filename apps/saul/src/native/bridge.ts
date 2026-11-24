@@ -1,8 +1,8 @@
 import { workspaceSender } from '../platform/chrome/sender';
 import { HOST_NAME, MAX_MESSAGE } from '../../shared/protocol/native-messaging.mts';
-import { handleTabCall } from './tabs';
+import { isLocalAccessChange, readLocalAccess } from './local-access';
+import { handleLocalToolCall } from './local-tool-call';
 
-export const ENABLED_KEY = 'saul_native_enabled';
 export const STATUS_KEY = 'saul_native_status';
 const RETRY_ALARM = 'saul-native-retry';
 export type NativeBridgeState = 'disabled' | 'connecting' | 'connected' | 'disconnected';
@@ -49,7 +49,7 @@ export function initNativeBridge() {
           try {
             response = {
               id: message.id,
-              result: await handleTabCall(message.method, message.params),
+              result: await handleLocalToolCall(message.method, message.params),
             };
           } catch (error) {
             response = {
@@ -84,6 +84,7 @@ export function initNativeBridge() {
     });
   };
   const setEnabled = (value: boolean) => {
+    if (enabled === value && value) return;
     enabled = value;
     if (enabled) {
       // Alarms survive service-worker suspension; the native port keeps it alive
@@ -108,7 +109,7 @@ export function initNativeBridge() {
       return false;
     }
     if (!enabled) {
-      reply({ success: false, error: 'Enable Codex access first.' });
+      reply({ success: false, error: 'Enable Local tool access first.' });
       return false;
     }
     const previous = port;
@@ -123,14 +124,20 @@ export function initNativeBridge() {
     return false;
   });
   let revision = 0;
+  function refreshAccess() {
+    const current = ++revision;
+    void readLocalAccess()
+      .then(({ enabled }) => {
+        if (revision === current) setEnabled(enabled);
+      })
+      .catch((error) => {
+        if (revision !== current) return;
+        setEnabled(false);
+        void status('disabled', String(error));
+      });
+  }
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes[ENABLED_KEY]) {
-      revision++;
-      setEnabled(changes[ENABLED_KEY].newValue === true);
-    }
+    if (area === 'local' && isLocalAccessChange(changes)) refreshAccess();
   });
-  const initialRevision = revision;
-  void chrome.storage.local.get(ENABLED_KEY).then((data) => {
-    if (revision === initialRevision) setEnabled(data[ENABLED_KEY] === true);
-  });
+  refreshAccess();
 }

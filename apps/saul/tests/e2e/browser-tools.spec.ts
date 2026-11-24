@@ -14,7 +14,7 @@ function call<K extends ToolName>(
     async ({ name, args }) => {
       const url = chrome.runtime.getURL('browser-tools-fixture.js');
       const fixture = await import(/* @vite-ignore */ url);
-      return fixture.handleTabCall(name, args);
+      return fixture.handleLocalToolCall(name, args);
     },
     { name, args },
   );
@@ -38,13 +38,17 @@ test('page access is opt-in; reads, previews, fills, clicks and navigation rejec
       ).value;
     });
   });
+  await popup.evaluate(() => chrome.storage.local.set({ saul_local_tools_enabled: true }));
   const inventory = await call(popup, 'saul_tabs_list', {});
   const tabId = inventory.tabs.find((tab) => tab.url === page.url())!.id;
-  await expect(call(popup, 'saul_page_read', { tabId })).rejects.toThrow('Enable Page reading');
+  await expect(call(popup, 'saul_page_read', { tabId })).rejects.toThrow(
+    'Set Pages to Read or Write',
+  );
   await popup.goto(popup.url().replace('popup.html', 'library.html') + '#settings');
   await settingsSection(popup, 'Preferences');
   await popup.getByText('Integrations', { exact: true }).click();
-  await popup.getByRole('checkbox', { name: 'Page reading and actions' }).check();
+  const pages = popup.getByRole('combobox', { name: 'Pages', exact: true });
+  await pages.selectOption('read');
   let read = await call(popup, 'saul_page_read', { tabId });
   expect(read.text).toContain('Gradient descent');
   expect(JSON.stringify(read)).not.toContain('private-existing-value');
@@ -60,6 +64,10 @@ test('page access is opt-in; reads, previews, fills, clicks and navigation rejec
   };
   expect(await call(popup, 'saul_page_act', fill)).toMatchObject({ dryRun: true });
   await expect(page.locator('#name')).toHaveValue('private-existing-value');
+  await expect(call(popup, 'saul_page_act', { ...fill, dryRun: false })).rejects.toThrow(
+    'Set Pages to Write',
+  );
+  await pages.selectOption('write');
   await call(popup, 'saul_page_act', { ...fill, dryRun: false });
   await expect(page.locator('#name')).toHaveValue('Ada');
   await expect(call(popup, 'saul_page_act', { ...fill, dryRun: false })).rejects.toThrow();
@@ -100,8 +108,10 @@ test('page access is opt-in; reads, previews, fills, clicks and navigation rejec
   await expect(call(popup, 'saul_page_navigate', { ...nav, dryRun: false })).rejects.toThrow(
     'URL changed',
   );
-  await popup.getByRole('checkbox', { name: 'Page reading and actions' }).uncheck();
-  await expect(call(popup, 'saul_page_read', { tabId })).rejects.toThrow('Enable Page reading');
+  await pages.selectOption('off');
+  await expect(call(popup, 'saul_page_read', { tabId })).rejects.toThrow(
+    'Set Pages to Read or Write',
+  );
 });
 
 test('new windows preserve tab IDs and order; internal pages reject content access', async ({
@@ -113,6 +123,7 @@ test('new windows preserve tab IDs and order; internal pages reject content acce
     const page = await context.newPage();
     await page.goto(fixtureServer.origin + route);
   }
+  await popup.evaluate(() => chrome.storage.local.set({ saul_local_tools_enabled: true }));
   const before = await call(popup, 'saul_tabs_list', {});
   const tabIds = before.tabs
     .filter((tab) => tab.url.startsWith(fixtureServer.origin))
@@ -120,6 +131,10 @@ test('new windows preserve tab IDs and order; internal pages reject content acce
     .reverse();
   await call(popup, 'saul_windows_create', { tabIds });
   expect((await call(popup, 'saul_tabs_list', {})).windows).toHaveLength(before.windows.length);
+  await expect(call(popup, 'saul_windows_create', { tabIds, dryRun: false })).rejects.toThrow(
+    'Organize tabs and windows',
+  );
+  await popup.evaluate(() => chrome.storage.local.set({ saul_local_tools_organize: true }));
   const moved = await call(popup, 'saul_windows_create', { tabIds, dryRun: false });
   const after = await call(popup, 'saul_tabs_list', {});
   expect(after.tabs.map((tab) => tab.id).sort()).toEqual(before.tabs.map((tab) => tab.id).sort());

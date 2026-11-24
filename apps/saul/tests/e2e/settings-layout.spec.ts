@@ -3,7 +3,7 @@ import { reviewScreenshots } from './artifacts.ts';
 import { test, expect } from './fixtures.ts';
 import { configureFixtureProvider } from './support.ts';
 
-test('Min Mode omits secondary settings copy and keeps permission effects visible', async ({
+test('Min Mode replaces permission paragraphs with compact access summaries', async ({
   sandbox,
   fixtureServer,
 }, info) => {
@@ -18,28 +18,58 @@ test('Min Mode omits secondary settings copy and keeps permission effects visibl
   await integrations.focus();
   await integrations.press('Enter');
   const sharedCredentialDescription = popup.getByText('The signed Saul helper keeps credentials');
-  const pagePermission = popup.getByText('Clicks may submit forms or change website data.');
-  const tabPermission = popup.getByText('Local tools can read tab titles and URLs');
-  const tabTip = popup.getByText('You can use the Window tab without enabling Codex access.');
+  const standardCopy = [
+    sharedCredentialDescription,
+    popup.getByText('Incognito tabs are excluded'),
+    popup.getByText('send page content to your provider'),
+    popup.getByText('Write also allows adding, editing and removing saved notes.'),
+  ];
+  const compactCopy = [
+    popup.getByText('Read includes saved screenshots'),
+    popup.getByText('Local programs can read tab titles and URLs'),
+    popup.getByText('Write can change sites and start summaries'),
+  ];
+  const master = popup.getByRole('checkbox', { name: 'Local tool access', exact: true });
+  const organize = popup.getByRole('checkbox', { name: 'Organize tabs and windows', exact: true });
+  const pages = popup.getByRole('combobox', { name: 'Pages', exact: true });
+  const annotations = popup.getByRole('combobox', { name: 'Annotations', exact: true });
+  await expect(master).not.toBeChecked();
+  await expect(pages).toBeDisabled();
+  await master.check();
+  await expect(organize).not.toBeChecked();
+  await expect(pages).toHaveValue('off');
+  await expect(annotations).toHaveValue('off');
+  await pages.selectOption('read');
+  await annotations.selectOption('write');
+  await master.uncheck();
+  await expect(pages).toBeDisabled();
+  await master.check();
+  await expect(pages).toHaveValue('read');
+  await expect(annotations).toHaveValue('write');
   for (const minimum of [true, false, true]) {
     await toggle.setChecked(minimum);
-    await expect(pagePermission).toBeVisible();
-    await expect(tabPermission).toBeVisible();
-    if (minimum) {
-      await expect(sharedCredentialDescription).toBeHidden();
-      await expect(tabTip).toBeHidden();
-    } else {
-      await expect(sharedCredentialDescription).toBeVisible();
-      await expect(tabTip).toBeVisible();
-    }
+    for (const copy of standardCopy) await expect(copy).toBeVisible({ visible: !minimum });
+    for (const copy of compactCopy) await expect(copy).toBeVisible({ visible: minimum });
+    await expect(annotations).toHaveAccessibleDescription(/screenshots/);
+    await expect(master).toHaveAccessibleDescription(/read tab titles, URLs/);
+    await expect(pages).toHaveAccessibleDescription(/change site data/);
   }
   if (reviewScreenshots) {
+    const localTools = master.locator('xpath=ancestor::section[1]');
     await expect(toggle).toBeEnabled();
-    await popup.screenshot({ path: info.outputPath('integrations-min.png') });
+    await localTools.screenshot({ path: info.outputPath('integrations-min.png') });
     await toggle.uncheck();
     await expect(sharedCredentialDescription).toBeVisible();
     await expect(toggle).toBeEnabled();
-    await popup.screenshot({ path: info.outputPath('integrations-standard.png') });
+    await localTools.screenshot({ path: info.outputPath('integrations-standard.png') });
+    await popup.setViewportSize({ width: 390, height: 720 });
+    await popup.emulateMedia({ colorScheme: 'dark' });
+    await toggle.check();
+    for (const copy of compactCopy) await expect(copy).toBeVisible();
+    expect(await popup.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await localTools.screenshot({ path: info.outputPath('integrations-min-narrow-dark.png') });
   }
 });
 
