@@ -195,8 +195,8 @@ it('shares edits, migrates once, keeps accounts outside presets, and refuses a s
     expect(store.read().presets[0]!.effort).toBe('high');
     expect(
       new SharedPresetsStore(store.path).readScope('settings').value?.summaryConnectionKey,
-    ).toBe('gpt-plan');
-    expect((await sharedPresets.load(stored)).summaryConnectionKey).toBe('gpt-plan');
+    ).toBeUndefined();
+    expect((await sharedPresets.load(stored)).summaryConnectionKey).toBeUndefined();
     expect(store.read().presets.find((p) => p.id === draw.id)).toEqual(draw);
     expect(JSON.parse(readFileSync(store.path, 'utf8')).appearance).toEqual({ theme: 'dark' });
     const current = store.read();

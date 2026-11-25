@@ -119,13 +119,13 @@ export function SummaryHistory({ onOpen }: { onOpen?: (id: string) => void } = {
 }
 export function SummaryReader({
   route,
-  sidePanel = false,
+  panelWindowId,
   visible = true,
   onClose,
   onResolved,
 }: {
   route: string;
-  sidePanel?: boolean;
+  panelWindowId?: number;
   visible?: boolean;
   onClose?: () => void;
   onResolved?: (id: string) => Promise<void>;
@@ -135,18 +135,21 @@ export function SummaryReader({
     reused,
     comparisons,
     source,
-    accounts,
-    account,
-    selectAccount,
+    setup,
+    setupTabId,
+    preset,
+    selectPreset,
+    confirmSetup,
+    cancelSetup,
     error,
     readError,
     busy,
     tabIds,
-    start,
+    runAgain,
     running,
     control,
     refresh,
-  } = useSummarySession({ route, visible, onResolved });
+  } = useSummarySession({ route, panelWindowId, visible, onResolved });
   function download() {
     if (!batch) return;
     const url = URL.createObjectURL(
@@ -162,14 +165,42 @@ export function SummaryReader({
   const settled = batch?.items.filter((i) => !activeItem(i)).length || 0;
   const singleItem = batch?.items.length === 1 ? batch.items[0] : undefined;
   const single = batch ? Boolean(singleItem) : tabIds?.length === 1;
-  const page = singleItem || source;
+  const page = setup?.source || singleItem || source;
   const pageUrl = page && sourceUrl(page.url);
   const title = batch
     ? summaryTitle(batch.items[0], batch.items.length)
     : single
-      ? summaryTitle(source, 1)
-      : 'Summary';
+      ? summaryTitle(page, 1)
+      : tabIds && tabIds.length > 1
+        ? `${tabIds.length} selected pages`
+        : 'Summary';
   const custom = Boolean(batch?.action);
+  const pickPreset = Boolean(
+    setup?.reason === 'choose' || (setup?.reason === 'changed' && !setup.presetId),
+  );
+  const showPicker = Boolean(pickPreset && setup?.presets.length);
+  const brokenPreset = setup?.reason === 'repair';
+  const editPreset = brokenPreset && setup.presetName ? setup.presetId : undefined;
+  const presetSettings = chrome.runtime.getURL(
+    '/library.html?section=' +
+      (brokenPreset && !editPreset ? 'calls' : 'models') +
+      (editPreset ? '&preset=' + encodeURIComponent(editPreset) : '') +
+      '#settings',
+  );
+  const [sourceError, setSourceError] = useState('');
+  const returnToSource = async () => {
+    if (setupTabId === undefined || !pageUrl) return;
+    try {
+      const tab = await chrome.tabs.get(setupTabId);
+      if (tab.url !== pageUrl)
+        throw new Error('The source tab has changed. Open the source to try again.');
+      await chrome.tabs.update(setupTabId, { active: true });
+      onClose?.();
+      setSourceError('');
+    } catch (cause) {
+      setSourceError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
   const statusLabel = singleItem
     ? {
         queued: custom ? 'Waiting to run…' : 'Waiting to summarize…',
@@ -203,15 +234,13 @@ export function SummaryReader({
       <header className="row between">
         <div>
           <h2>{title}</h2>
-          {single && pageUrl ? (
+          {single && pageUrl && (!setup || sourceError) ? (
             <a className="small" href={pageUrl} target="_blank" rel="noreferrer">
               Open source · {new URL(pageUrl).hostname}
             </a>
-          ) : (
-            <p className="small muted">
-              {batch ? new Date(batch.createdAt).toLocaleString() : 'Preparing selected tabs…'}
-            </p>
-          )}
+          ) : batch && !single ? (
+            <p className="small muted">{new Date(batch.createdAt).toLocaleString()}</p>
+          ) : null}
         </div>
         {batch && (
           <button
@@ -240,8 +269,8 @@ export function SummaryReader({
                   className="btn"
                   aria-label="Run again"
                   title="Run again with current settings"
-                  disabled={busy}
-                  onClick={() => void start(undefined, true)}
+                  disabled={busy || Boolean(setup)}
+                  onClick={() => void runAgain()}
                 >
                   Run again
                 </button>
@@ -263,46 +292,119 @@ export function SummaryReader({
           </button>
         </div>
       )}
-      {!batch && tabIds && (
-        <div className="stack">
-          {accounts.length > 0 && (
-            <label className="field">
-              ChatGPT plan connection
-              <select value={account} onChange={(e) => selectAccount(e.target.value)}>
-                <option value="">Choose connection…</option>
-                {accounts.map((a) => (
-                  <option key={a.key} value={a.key} disabled={!a.available}>
-                    {a.name}
-                    {!a.available ? ' · setup required' : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
+      {setup && (
+        <section className="panel stack call-setup" aria-label="Call setup">
+          <p
+            className={setup.reason === 'repair' ? 'notice error' : undefined}
+            role={brokenPreset ? 'alert' : batch ? undefined : 'status'}
+            aria-live={batch && !brokenPreset ? 'polite' : undefined}
+          >
+            {brokenPreset && setup.presetName && (
+              <>
+                <strong>{setup.presetName}</strong>
+                <br />
+              </>
+            )}
+            {setup.message}
+          </p>
+          {setup.reason === 'changed' && (
+            <>
+              {setup.routeLabel && <p>{setup.routeLabel}</p>}
+              {setup.reviewSources?.length ? (
+                <ol className="call-setup-sources" aria-label="Sources in run order">
+                  {setup.reviewSources.map((item, index) => {
+                    const url = sourceUrl(item.url);
+                    return (
+                      <li key={index}>
+                        {(batch || !single) && <strong>{item.title}</strong>}
+                        {url && (
+                          <a className="small" href={url} target="_blank" rel="noreferrer">
+                            {url}
+                          </a>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ol>
+              ) : null}
+            </>
           )}
-          {!busy && accounts.length > 0 && (
-            <button
-              className="btn primary"
-              disabled={!account}
-              onClick={() => void start(account)}
-              aria-label="Start summary"
-              title="Start summary"
-            >
-              <ActionLabel short="Summarize" full="Start summary" />
-            </button>
+          <form
+            className="stack"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (preset && showPicker) void confirmSetup();
+            }}
+          >
+            {showPicker && (
+              <label className="field">
+                Write preset
+                <select
+                  name="preset"
+                  value={preset}
+                  disabled={busy}
+                  required
+                  onChange={(event) => selectPreset(event.target.value)}
+                >
+                  <option value="">Choose preset…</option>
+                  {setup.presets.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <div className="row">
+              {showPicker && (
+                <button className="btn primary" type="submit" disabled={!preset || busy}>
+                  Save and start
+                </button>
+              )}
+              {setup.reason === 'changed' && !pickPreset && (
+                <button
+                  className="btn primary"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void confirmSetup()}
+                >
+                  Continue
+                </button>
+              )}
+              {(brokenPreset || (pickPreset && !showPicker)) && (
+                <a className="btn" href={presetSettings} target="_blank" rel="noreferrer">
+                  {editPreset ? 'Edit preset' : brokenPreset ? 'Open Calls' : 'Open presets'}
+                </a>
+              )}
+              {batch && (
+                <button className="btn quiet" type="button" disabled={busy} onClick={cancelSetup}>
+                  Cancel
+                </button>
+              )}
+              {setupTabId !== undefined && pageUrl && (
+                <button
+                  className="btn quiet"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void returnToSource()}
+                >
+                  Return to source
+                </button>
+              )}
+            </div>
+          </form>
+          {sourceError && (
+            <p role="alert" className="notice error">
+              {sourceError}
+            </p>
           )}
-          {error && (
-            <a
-              href={sidePanel ? chrome.runtime.getURL('/library.html#settings') : '#settings'}
-              target={sidePanel ? '_blank' : undefined}
-              rel={sidePanel ? 'noreferrer' : undefined}
-              aria-label="Open Settings"
-              title="Open Settings"
-            >
-              <ActionLabel short="Settings" full="Open Settings" />
-            </a>
-          )}
-          {busy && <p role="status">Starting…</p>}
-        </div>
+        </section>
+      )}
+      {!batch && !setup && busy && <p role="status">Starting…</p>}
+      {!batch && !setup && error && (
+        <a href={chrome.runtime.getURL('/library.html#settings')} target="_blank" rel="noreferrer">
+          Open Settings
+        </a>
       )}
       {batch && (
         <>
@@ -353,8 +455,8 @@ export function SummaryReader({
             {!running && (
               <button
                 className="btn quiet standard-only"
-                disabled={busy}
-                onClick={() => void start(undefined, true)}
+                disabled={busy || Boolean(setup)}
+                onClick={() => void runAgain()}
               >
                 {busy ? 'Starting…' : 'Run again'}
               </button>

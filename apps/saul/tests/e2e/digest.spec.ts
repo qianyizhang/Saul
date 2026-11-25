@@ -24,9 +24,8 @@ test('summary status recovers from lost reads without repeating a start or infer
       target?: string;
       message?: { action?: string };
     }) => {
-      if (input.target !== 'saul-digest') return original(input);
-      if (input.message?.action === 'start') probe.starts++;
-      if (input.message?.action !== 'get') return original(input);
+      if (input.target === 'saul-call-launch') probe.starts++;
+      if (input.target !== 'saul-digest' || input.message?.action !== 'get') return original(input);
       const read = ++probe.reads;
       probe.inFlight++;
       probe.maxInFlight = Math.max(probe.inFlight, probe.maxInFlight);

@@ -14,13 +14,19 @@ the side panel on Chrome gestures, keeps the source tab active and retains
 the selected result across tab switches. Native and Tab board commands use
 the full reader because they lack that gesture; existing reader URLs still work.
 
-Settings → Calls puts the Call preset first. **Summarize (default)** uses the
-selected Write preset for new runs and Run again. **Original summary setup**
-uses a bound shared plan connection (GPT-6 Luna, medium effort) until a preset
-is chosen. Standalone sign-in is retired. A missing or incompatible saved preset stays visible
-for repair; there is no fallback, account switch or billing change. Custom Call
-presets display both their approved revision's name and runtime model preset;
-switching to Summarize preserves them.
+In **Settings → Calls**, select a Call preset and its runtime Write preset.
+**Summarize (default)** needs a saved Write preset for new runs and **Run again**.
+If none is set, choose a **Write preset** in the reader and select **Save and
+start**. An unavailable or incompatible saved preset stays visible for repair.
+Custom Call presets display both their approved revision's name and runtime
+model preset. Switching to Summarize preserves the custom choices.
+
+When Saul opens older settings, it keeps an existing explicit summary preset
+reference. An older connection-only choice migrates only if exactly one Write
+preset matches that bound plan account and the old model and options
+(GPT-6 Luna, medium effort, Fast off). Otherwise choose a preset explicitly.
+Historical routes remain available through **Retry unfinished** when their
+saved bindings still resolve.
 
 Different page URLs can run concurrently, including on the same site. Start
 and Retry exclude exact URLs already queued, capturing, generating or saving
@@ -99,26 +105,29 @@ only; no “Text unchanged” verdict. Comparing or reopening does not call a mo
 are discarded. Inspection shows saved source, coverage, prepared instructions,
 the exact assembled prompt and raw output. Large blocks are displayed in bounded
 sections with search and full-text Copy. **Run again** creates a fresh capture
-and saved identity; **Retry unfinished** keeps completed results and uses frozen
-choices and captured input. No age or change threshold starts generation.
+and saved identity using the current choices. **Retry unfinished** keeps
+completed results and uses frozen choices and captured input. If the saved route
+is unavailable, Retry reports that failure. When launch settings, the chosen
+route, or any source tab changes after inspection, the reader asks for a fresh
+review before generation. No age or change threshold starts generation.
 
 ## Runtime owners
 
-| Boundary                       | Owner                                                                                                                                                                                                                                                                                                              |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Saved choice and builder draft | [Call editor](../src/calls/editor.ts) and [store](../src/calls/store.ts); draft writes do not resave choices                                                                                                                                                                                                       |
-| Admission                      | [Call admission](../src/calls/admission.ts) freezes current or saved retry input before running; execution does not read current Settings                                                                                                                                                                          |
-| One page                       | [Call executor](../src/calls/execution/module.ts) consumes a frozen Call, captured page and transient credential; detached progress never exposes DB state or secrets. It settles with validated output, failure or cancellation and publishes no later progress.                                                  |
-| Capture                        | [Tab validation](../src/calls/capture/capture.ts), [source dispatch](../src/calls/capture/source.ts) and [local PDF](../src/calls/capture/pdf.ts). The explicit bundled PDF worker avoids blob/fake-worker fallback under CSP and terminates on completion or Stop.                                                |
-| Scheduling and durable results | [Runner](../src/calls/execution/batch-runner.ts) owns exclusion, cancellation and saves. Custom Calls checkpoint every 500 ms; built-in summaries save terminal output. Stop releases the control queue while workers settle. Save acknowledgments and interrupted rows remain distinct.                           |
-| Reader                         | [Panel routing](../src/calls/panel-route.ts) opens during the initiating gesture, keeps a trusted per-window route and preserves the resolved saved ID. The [reader session](../src/calls/summary-session.ts) serializes admission and commands, adopts saved/reused results and observes only the visible result. |
+| Boundary                       | Owner                                                                                                                                                                                                                                                                                                                 |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Saved choice and builder draft | [Call editor](../src/calls/editor.ts) and [store](../src/calls/store.ts); draft writes do not resave choices                                                                                                                                                                                                          |
+| Admission                      | [Call admission](../src/calls/admission.ts) owns launch review, launch-time preset selection and validation, and freezes the current or saved retry inputs before execution.                                                                                                                                          |
+| One page                       | [Call executor](../src/calls/execution/module.ts) consumes a frozen Call, captured page and transient credential; detached progress never exposes DB state or secrets. It settles with validated output, failure or cancellation and publishes no later progress.                                                     |
+| Capture                        | [Tab validation](../src/calls/capture/capture.ts), [source dispatch](../src/calls/capture/source.ts) and [local PDF](../src/calls/capture/pdf.ts). The explicit bundled PDF worker avoids blob/fake-worker fallback under CSP and terminates on completion or Stop.                                                   |
+| Scheduling and durable results | [Runner](../src/calls/execution/batch-runner.ts) owns exclusion, cancellation and saves. Custom Calls checkpoint every 500 ms; built-in summaries save terminal output. Stop releases the control queue while workers settle. Save acknowledgments and interrupted rows remain distinct.                              |
+| Reader                         | [Panel routing](../src/calls/panel-route.ts) opens during the initiating gesture, keeps a trusted per-window route and preserves the resolved saved ID. The [reader session](../src/calls/summary-session.ts) submits launch intent, displays review, adopts saved or reused results and observes the visible result. |
 
 If site-based selection is ever added, freeze it at admission; site-specific DOM
 extraction belongs to capture. Neither is an implicit URL rule today.
 
 Only the trusted background snapshots selected tabs; only the offscreen runner
 requests their captures. Content scripts cannot start or inspect summaries.
-Built-in Summarize uses the selected provider or the original plan path; neither
-PDF mode requires the optional action host. Source text and credentials never
+New Summarize batches store the frozen Write preset. Retry can read an older
+batch’s original plan route. Both PDF modes run independently of the custom Call host. Source text and credentials never
 pass through the Tab board. Keep the persisted `digest` and `action` names and
 host identities stable without an explicit upgrade.

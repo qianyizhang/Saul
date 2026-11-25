@@ -27,10 +27,12 @@ unchecked. Picker labels ending in six characters show the end of the issued
 client ID.
 
 To use a plan connection for built-in **Summarize**, select its saved **Model
-preset** in **Settings → Calls** and Save. Custom Call presets retain the runtime
+preset** in **Settings → Calls**. If the reader prompts for a Write preset,
+choose one and select **Save and start**. Custom Call presets retain the runtime
 model preset chosen at approval. The preset's connection determines the account.
 A removed, signed-out or permission-disabled account blocks without a fallback.
-**Original summary setup** uses a bound shared plan connection.
+See [Calls and summaries](calls.md#start-stop-and-reopen) for migration of older
+summary choices.
 
 Standalone ChatGPT sign-in is retired. If you only had a standalone account,
 sign in through the signed owner and bind the connection in Settings. Legacy

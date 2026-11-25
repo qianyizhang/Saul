@@ -17,8 +17,16 @@ export function sourceUrl(url: string): string | undefined {
 /** Report the frozen call and model in both the reader and its export. */
 export function callResultLabel(batch: DigestBatch): string {
   const input = batch.action ? batch.action.input : batch.summaryInput;
-  const model = batch.action ? (input?.plan?.model ?? input?.preset?.model) : batch.model;
-  const effort = batch.action ? input?.plan?.effort : batch.effort;
+  const model = input
+    ? input.provider === 'chatgpt-plan'
+      ? input.plan?.model
+      : input.remote.model
+    : batch.model;
+  const effort = input
+    ? input.provider === 'chatgpt-plan'
+      ? input.plan?.effort
+      : undefined
+    : batch.effort;
   return [
     batch.action?.revision.name,
     input?.preset?.name ?? (batch.action ? 'Saved preset' : undefined),

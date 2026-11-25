@@ -28,9 +28,9 @@ export interface Configuration {
   /** Per-installation choice; never portable to another machine's settings. */
   sharedCredentials?: 'saul' | 'disconnected';
   summaryPdfProcessing?: 'attachment' | 'local';
-  /** Built-in Summarize's model preset. Missing retains the original summary setup. */
+  /** Legacy Calls migration input. Call selection writes go through the Calls store. */
   summaryPresetId?: string;
-  /** Managed binding for the active Original summary choice. */
+  /** Legacy Calls migration input for a connection-only summary. */
   summaryConnectionKey?: string;
   sharedPresetRevision?: number;
   connections: ConnectionDefinition[];

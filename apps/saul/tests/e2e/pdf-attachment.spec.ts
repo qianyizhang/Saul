@@ -194,9 +194,9 @@ test('a saved API preset needs local PDF parsing and receives the extracted text
   });
   await popup.getByRole('button', { name: 'Settings', exact: true }).click();
   await settingsSection(popup, 'Calls');
-  await popup.getByLabel('Model preset', { exact: true }).selectOption('preset-current');
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(popup.getByText('Saved', { exact: true })).toBeVisible();
+  const preset = popup.getByLabel('Model preset', { exact: true });
+  await preset.selectOption('preset-current');
+  await expect(preset).toHaveValue('preset-current');
 
   fixtureServer.setDocument('/api-preset.pdf', { body: pdfFixture([evidence]) });
   const source = await context.newPage();

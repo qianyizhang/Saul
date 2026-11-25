@@ -3,7 +3,13 @@ import { annotationPanelKey } from '../annotations/routing';
 import { useCallback, useEffect, useState } from 'react';
 import { useMinimumMode } from '../ui/useMinimumMode';
 import { SummaryHistory, SummaryReader } from '../calls/ui/Summaries';
-import { closeSummaryPanel, summaryPanelKey, summaryPanelRoute } from '../calls/panel-route';
+import {
+  closeSummaryPanel,
+  pendingPanelCallKey,
+  summaryPanelKey,
+  summaryPanelRoute,
+  summarySelectionRoute,
+} from '../calls/panel-route';
 
 export function SummaryPanel() {
   const [windowId, setWindowId] = useState<number>();
@@ -27,7 +33,8 @@ export function SummaryPanel() {
     async (id: string) => {
       if (windowId === undefined) throw new Error('The summary window is unavailable.');
       await chrome.storage.session.set({
-        [summaryPanelKey(windowId)]: '#summary/' + encodeURIComponent(id),
+        [summaryPanelKey(windowId)]: summarySelectionRoute(id),
+        [pendingPanelCallKey(windowId)]: null,
       });
     },
     [windowId],
@@ -54,6 +61,7 @@ export function SummaryPanel() {
     let disposed = false;
     let key: string | undefined;
     let viewKey: string | undefined;
+    let pendingKey: string | undefined;
     let revision = 0;
     let viewRevision = 0;
     let displayed = false;
@@ -62,7 +70,7 @@ export function SummaryPanel() {
       displayed = true;
       setError('');
       setRoute(next);
-      history.replaceState(null, '', next);
+      if (location.hash !== next) history.replaceState(null, '', next);
     };
     const showView = (value: unknown) =>
       setAnnotationView(
@@ -85,9 +93,9 @@ export function SummaryPanel() {
     const navigate = () => {
       revision++;
       show(location.hash);
-      if (key)
+      if (key && pendingKey)
         void chrome.storage.session
-          .set({ [key]: summaryPanelRoute(location.hash) })
+          .set({ [key]: summaryPanelRoute(location.hash), [pendingKey]: null })
           .catch((e: Error) => {
             if (!disposed) setError(e.message);
           });
@@ -101,6 +109,7 @@ export function SummaryPanel() {
       setWindowId(currentWindow.id);
       key = summaryPanelKey(currentWindow.id);
       viewKey = annotationPanelKey(currentWindow.id);
+      pendingKey = pendingPanelCallKey(currentWindow.id);
       const before = revision;
       const beforeView = viewRevision;
       const stored = await chrome.storage.session.get([key, viewKey]);
@@ -142,11 +151,11 @@ export function SummaryPanel() {
       {annotationView && windowId !== undefined && <AnnotationPanel windowId={windowId} />}
       <div hidden={annotationView}>
         {!route && !error && <p role="status">Loading summary…</p>}
-        {route?.startsWith('#summary/') ? (
+        {route?.startsWith('#summary/') && windowId !== undefined ? (
           <SummaryReader
             key={route.split('?')[0]}
             route={route}
-            sidePanel
+            panelWindowId={windowId}
             visible={!annotationView}
             onClose={close}
             onResolved={resolved}

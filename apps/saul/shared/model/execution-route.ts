@@ -238,8 +238,8 @@ export function executionModel(value: unknown): ExecutionModel {
 
 /** Original Summarize predates presets. Only a saved signed registration can use its account alone. */
 export function originalSummaryPlan(value: {
-  accountId: unknown;
-  model: unknown;
+  accountId?: unknown;
+  model?: unknown;
   effort?: unknown;
   credentialOwner?: unknown;
   connectionKey?: unknown;

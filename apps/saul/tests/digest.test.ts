@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { parseSummary } from '../src/calls/execution/summary';
 import { digestHtml } from '../src/calls/ui/summary-html';
-import { validateDigest } from '../src/calls/batch-messages';
-import { DigestRunner } from '../src/calls/execution/batch-runner';
+import { validateCallControl, validateCallLaunch } from '../src/calls/batch-messages';
+import { CallBatchRunner } from '../src/calls/execution/batch-runner';
 import { createCallExecutor } from '../src/calls/execution/module';
 import type { actionHost } from '../src/calls/host';
 import {
@@ -111,13 +111,13 @@ async function* success(): AsyncGenerator<Extract<PlanEvent, { type: 'delta' | '
   yield { type: 'delta', text: raw };
   yield { type: 'complete' };
 }
-async function waitDone(r: DigestRunner) {
+async function waitDone(r: CallBatchRunner) {
   await vi.waitFor(async () => {
     const b = (await r.request({ action: 'get', id: 'digest-test' })) as DigestBatch;
     expect(b.items.some(activeItem)).toBe(false);
   });
 }
-describe('window digests', () => {
+describe('Call batches', () => {
   it('sends saved PDF URL attachments on retry, discloses unverified contents, and compares changed processing modes without inference', async () => {
     const f = fixture();
     const source: DigestSource = {
@@ -131,16 +131,15 @@ describe('window digests', () => {
     const generate = vi.fn(async function* (_request: PlanRequest) {
       yield* success();
     });
-    const r = new DigestRunner(f.db, capture, createCallExecutor({ plan: generate }));
+    const r = new CallBatchRunner(f.db, capture, createCallExecutor({ plan: generate }));
     const b = { ...batch(), pdfProcessing: 'attachment' as const };
-    await r.request({ action: 'start', id: b.id, tabIds: [0, 1, 2], accountId: b.accountId }, b);
+    await r.request({ action: 'start', id: b.id }, b);
     await waitDone(r);
     expect(generate.mock.calls[0]?.[0]).toMatchObject({ attachments: [source.attachment] });
     expect(f.get().items[0]?.sourceKind).toBe('pdf-url');
-    const unchanged = (await r.request(
-      { action: 'resolve', id: 'new-summary', tabIds: [0, 1, 2] },
-      b,
-    )) as { comparisons: { text?: unknown; notice?: string }[] };
+    const unchanged = (await r.request({ action: 'resolve', id: 'new-summary' }, b)) as {
+      comparisons: { text?: unknown; notice?: string }[];
+    };
     expect(unchanged.comparisons[0]?.text).toBeUndefined();
     expect(unchanged.comparisons[0]?.notice).toContain('matching URL does not prove');
     capture.mockResolvedValue({
@@ -150,7 +149,7 @@ describe('window digests', () => {
       coverage: 'Local PDF',
     });
     const changed = (await r.request(
-      { action: 'resolve', id: 'new-summary', tabIds: [0, 1, 2] },
+      { action: 'resolve', id: 'new-summary' },
       { ...b, pdfProcessing: 'local' },
     )) as { comparisons: { fields: string[] }[] };
     expect(changed.comparisons[0]?.fields).toContain('PDF processing');
@@ -206,30 +205,22 @@ describe('window digests', () => {
     expect(html).toContain('queued');
   });
   it('validates action boundaries', () => {
-    expect(() =>
-      validateDigest({ action: 'start', id: 'valid', tabIds: [1], accountId: 'saved' }),
-    ).not.toThrow();
+    expect(() => validateCallControl({ action: 'get', id: 'valid' })).not.toThrow();
     for (const r of [
-      { action: 'start', id: 'valid', tabIds: [-1], accountId: 'saved' },
+      { action: 'start', id: 'valid' },
       { action: 'list', source: 'injected' },
       { action: '__proto__' },
     ])
-      expect(() => validateDigest(r)).toThrow();
+      expect(() => validateCallControl(r)).toThrow();
   });
   it('finishes in source order and duplicate IDs never regenerate', async () => {
     const f = fixture(),
       generate = vi.fn(success),
-      r = new DigestRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
-    await r.request(
-      { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
-      batch(),
-    );
+      r = new CallBatchRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
+    await r.request({ action: 'start', id: 'digest-test' }, batch());
     await waitDone(r);
     expect(f.get().items.map((i) => i.status)).toEqual(['completed', 'completed', 'completed']);
-    await r.request(
-      { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
-      batch(),
-    );
+    await r.request({ action: 'start', id: 'digest-test' }, batch());
     expect(generate).toHaveBeenCalledTimes(3);
   });
   it('stop cancels active and queued work; explicit retry uses frozen source', async () => {
@@ -248,11 +239,8 @@ describe('window digests', () => {
       }
       yield* success();
     });
-    const r = new DigestRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
-    await r.request(
-      { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
-      batch(),
-    );
+    const r = new CallBatchRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
+    await r.request({ action: 'start', id: 'digest-test' }, batch());
     await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(2));
     await r.request({ action: 'stop', id: 'digest-test' });
     expect(f.get().items.map((i) => i.status)).toEqual(['cancelled', 'cancelled', 'cancelled']);
@@ -269,11 +257,8 @@ describe('window digests', () => {
       yield { type: 'delta', text: 'partial' };
       throw new Error('Usage limit reached');
     });
-    const r = new DigestRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
-    await r.request(
-      { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
-      batch(),
-    );
+    const r = new CallBatchRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
+    await r.request({ action: 'start', id: 'digest-test' }, batch());
     await waitDone(r);
     expect(generate).toHaveBeenCalledTimes(2);
     expect(f.get().items.map((i) => i.status)).toEqual(['failed', 'failed', 'interrupted']);
@@ -289,11 +274,8 @@ describe('window digests', () => {
         }),
     );
     const generate = vi.fn(success);
-    const r = new DigestRunner(f.db, capture, createCallExecutor({ plan: generate }));
-    await r.request(
-      { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
-      batch(),
-    );
+    const r = new CallBatchRunner(f.db, capture, createCallExecutor({ plan: generate }));
+    await r.request({ action: 'start', id: 'digest-test' }, batch());
     await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(2));
     await r.request({ action: 'stop', id: 'digest-test' });
     expect(f.get().items.map((i) => i.status)).toEqual(['cancelled', 'cancelled', 'cancelled']);
@@ -314,11 +296,8 @@ describe('window digests', () => {
         yield { type: 'complete' };
       } else yield* success();
     });
-    const r = new DigestRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
-    await r.request(
-      { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
-      batch(),
-    );
+    const r = new CallBatchRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
+    await r.request({ action: 'start', id: 'digest-test' }, batch());
     await waitDone(r);
     expect(generate).toHaveBeenCalledTimes(3);
     expect(f.get().items.map((i) => i.status)).toEqual(['failed', 'completed', 'completed']);
@@ -334,11 +313,8 @@ describe('window digests', () => {
       return original(r);
     });
     const generate = vi.fn(success),
-      r = new DigestRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
-    await r.request(
-      { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
-      batch(),
-    );
+      r = new CallBatchRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
+    await r.request({ action: 'start', id: 'digest-test' }, batch());
     await waitDone(r);
     expect(generate).toHaveBeenCalledTimes(2);
     expect(
@@ -364,12 +340,8 @@ it('starts a different source while a stopped summary is still settling', async 
     }
     yield* success();
   });
-  const runner = new DigestRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
-  const start = (batch: DigestBatch) =>
-    runner.request(
-      { action: 'start', id: batch.id, tabIds: [0], accountId: batch.accountId },
-      batch,
-    );
+  const runner = new CallBatchRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
+  const start = (batch: DigestBatch) => runner.request({ action: 'start', id: batch.id }, batch);
   await start(first);
   await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(1));
   const stopping = runner.request({ action: 'stop', id: first.id });
@@ -402,11 +374,8 @@ it('bounds workers at two and retains source order when later items finish first
     completed.push(index);
     yield* success();
   };
-  const runner = new DigestRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
-  await runner.request(
-    { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
-    batch(),
-  );
+  const runner = new CallBatchRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
+  await runner.request({ action: 'start', id: 'digest-test' }, batch());
   await vi.waitFor(() => expect(releases.size).toBe(2));
   expect(releases.has(2)).toBe(false);
   releases.get(1)!();
@@ -458,11 +427,8 @@ it('a storage failure aborts a sibling stream before a new control can proceed',
     signal!.throwIfAborted();
     yield* success();
   };
-  const runner = new DigestRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
-  await runner.request(
-    { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
-    batch(),
-  );
+  const runner = new CallBatchRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
+  await runner.request({ action: 'start', id: 'digest-test' }, batch());
   await vi.waitFor(() => expect(f.capture).toHaveBeenCalledTimes(2));
   firstRelease();
   await waitDone(runner);
@@ -476,16 +442,13 @@ it('a storage failure aborts a sibling stream before a new control can proceed',
 it('reuses saved output before inference, measures changed input, and keeps a cache when capture fails', async () => {
   const f = fixture(),
     generate = vi.fn(success);
-  const runner = new DigestRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
-  await runner.request(
-    { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'account' },
-    batch(),
-  );
+  const runner = new CallBatchRunner(f.db, f.capture, createCallExecutor({ plan: generate }));
+  await runner.request({ action: 'start', id: 'digest-test' }, batch());
   await waitDone(runner);
   const next = batch();
   next.id = 'new-click';
   const same = (await runner.request(
-    { action: 'resolve', id: next.id, tabIds: [0, 1, 2] },
+    { action: 'resolve', id: next.id },
     next,
   )) as import('../shared/model/call-batch.ts').DigestResolution;
   expect(same.batch?.id).toBe('digest-test');
@@ -497,39 +460,44 @@ it('reuses saved output before inference, measures changed input, and keeps a ca
     truncated: false,
   });
   const changed = (await runner.request(
-    { action: 'resolve', id: next.id, tabIds: [0, 1, 2] },
+    { action: 'resolve', id: next.id },
     next,
   )) as import('../shared/model/call-batch.ts').DigestResolution;
   expect(changed.comparisons[0]?.text).toMatchObject({ kind: 'changed', added: 4 });
   f.capture.mockRejectedValue(new Error('Source tab unavailable'));
   const unavailable = (await runner.request(
-    { action: 'resolve', id: next.id, tabIds: [0, 1, 2] },
+    { action: 'resolve', id: next.id },
     next,
   )) as import('../shared/model/call-batch.ts').DigestResolution;
   expect(unavailable.batch?.id).toBe('digest-test');
   expect(unavailable.comparisons[0]?.error).toContain('Source tab unavailable');
-  const reused = (await runner.request(
-    { action: 'start', id: next.id, tabIds: [0, 1, 2], accountId: 'other' },
-    next,
-  )) as DigestBatch;
+  const reused = (await runner.request({ action: 'start', id: next.id }, next)) as DigestBatch;
   expect(reused.id).toBe('digest-test');
   expect(generate).toHaveBeenCalledTimes(3);
   expect(f.get().items.every((item) => item.status === 'completed')).toBe(true);
 });
-it('validates inspection indices, comparison selections and explicit regeneration flags', () => {
-  for (const request of [
-    { action: 'inspect', id: 'saved', index: -1 },
-    { action: 'inspect', id: 'saved', index: 0, tabId: -1 },
-    { action: 'resolve', id: 'new', tabIds: [1, 1] },
-    { action: 'start', id: 'new', tabIds: [1], accountId: 'a', regenerate: 'true' },
+it('validates source selection, explicit review and public reader commands', () => {
+  expect(() => validateCallControl({ action: 'inspect', id: 'saved', index: 0 })).not.toThrow();
+  expect(() => validateCallControl({ action: 'inspect', id: 'saved', index: -1 })).toThrow();
+  expect(() =>
+    validateCallControl({ action: 'inspect', id: 'saved', index: 0, tabId: -1 }),
+  ).toThrow();
+  const start = { id: 'new', tabIds: [1, 2] };
+  expect(() => validateCallLaunch(start)).not.toThrow();
+  for (const invalid of [
+    { ...start, tabIds: [1, 1] },
+    { ...start, tabIds: [-1] },
+    { ...start, accountId: 'other' },
+    { ...start, review: { presetId: 'other' } },
+    { ...start, previousBatchId: 'new' },
   ])
-    expect(() => validateDigest(request)).toThrow();
-  expect(() => validateDigest({ action: 'inspect', id: 'saved', index: 0 })).not.toThrow();
+    expect(() => validateCallLaunch(invalid)).toThrow();
 });
 
 function customBatch(revision = 'a'.repeat(64)): DigestBatch {
   return {
     ...batch(),
+    summaryInput: undefined,
     action: {
       revision: {
         contractVersion: 1,
@@ -570,22 +538,16 @@ it('runs custom actions per page with two-page concurrency and pins code and pre
   });
   const builtIn = vi.fn(success);
   const model = vi.fn<typeof import('../src/providers/stream').streamModel>(success);
-  const runner = new DigestRunner(
+  const runner = new CallBatchRunner(
     f.db,
     f.capture,
     createCallExecutor({ plan: builtIn, model, script: custom }),
   );
   const original = customBatch();
-  await runner.request(
-    { action: 'start', id: original.id, tabIds: [0, 1, 2], accountId: 'ignored' },
-    original,
-  );
+  await runner.request({ action: 'start', id: original.id }, original);
   await vi.waitFor(() => expect(releases.size).toBe(2));
   const newChoice = customBatch('b'.repeat(64));
-  const resolution = await runner.request(
-    { action: 'resolve', id: 'new', tabIds: [0, 1, 2] },
-    newChoice,
-  );
+  const resolution = await runner.request({ action: 'resolve', id: 'new' }, newChoice);
   expect(resolution).toEqual({ comparisons: [] });
   releases.get(1)!();
   await vi.waitFor(() => expect(releases.has(2)).toBe(true));
@@ -612,11 +574,12 @@ it('keeps custom intermediate output separate from a failed final result without
     yield { type: 'delta' as const, text: 'intermediate model response' };
     yield { type: 'complete' as const };
   };
-  const runner = new DigestRunner(f.db, f.capture, createCallExecutor({ model, script: custom }));
-  await runner.request(
-    { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'unused' },
-    customBatch(),
+  const runner = new CallBatchRunner(
+    f.db,
+    f.capture,
+    createCallExecutor({ model, script: custom }),
   );
+  await runner.request({ action: 'start', id: 'digest-test' }, customBatch());
   await waitDone(runner);
   expect(custom).toHaveBeenCalledTimes(2);
   expect(f.get().items[0]).toMatchObject({ status: 'failed', raw: 'intermediate model response' });
@@ -641,11 +604,8 @@ it('a custom terminal save failure aborts its sibling and removes the unsaved fi
     signal.throwIfAborted();
     return { type: 'result', text: 'unreachable' };
   });
-  const runner = new DigestRunner(f.db, f.capture, createCallExecutor({ script: custom }));
-  await runner.request(
-    { action: 'start', id: 'digest-test', tabIds: [0, 1, 2], accountId: 'unused' },
-    customBatch(),
-  );
+  const runner = new CallBatchRunner(f.db, f.capture, createCallExecutor({ script: custom }));
+  await runner.request({ action: 'start', id: 'digest-test' }, customBatch());
   await waitDone(runner);
   const current = (await runner.request({ action: 'get', id: 'digest-test' })) as DigestBatch;
   expect(current.error).toContain('disk full');
@@ -687,8 +647,12 @@ it.each(['preset', 'script'] as const)(
     const selected = customBatch();
     const saved =
       kind === 'script' ? selected : { ...batch(), summaryInput: selected.action!.input };
-    const runner = new DigestRunner(f.db, f.capture, createCallExecutor({ model, script: host }));
-    await runner.request({ action: 'start', id: saved.id, tabIds: [0, 1, 2] }, saved, 'credential');
+    const runner = new CallBatchRunner(
+      f.db,
+      f.capture,
+      createCallExecutor({ model, script: host }),
+    );
+    await runner.request({ action: 'start', id: saved.id }, saved, 'credential');
     await vi.waitFor(() => expect(model).toHaveBeenCalledTimes(2));
     await runner.request({ action: 'stop', id: saved.id });
     expect(f.get().items.map((item) => item.status)).toEqual([
@@ -733,8 +697,8 @@ it('a custom checkpoint failure cancels execution and siblings without saving a 
     type: 'result',
     text: await options!.generate!({ instructions: 'Work' }, options!.signal!),
   });
-  const runner = new DigestRunner(f.db, f.capture, createCallExecutor({ model, script: host }));
-  await runner.request({ action: 'start', id: 'digest-test', tabIds: [0, 1, 2] }, customBatch());
+  const runner = new CallBatchRunner(f.db, f.capture, createCallExecutor({ model, script: host }));
+  await runner.request({ action: 'start', id: 'digest-test' }, customBatch());
   await vi.waitFor(
     async () => {
       const current = (await runner.request({ action: 'get', id: 'digest-test' })) as DigestBatch;
@@ -780,8 +744,8 @@ it('pauses unstarted pages on a Call failure before a pending checkpoint settles
     }
     return { type: 'result', text: 'Completed sibling' };
   });
-  const runner = new DigestRunner(f.db, f.capture, createCallExecutor({ script: host }));
-  await runner.request({ action: 'start', id: 'digest-test', tabIds: [0, 1, 2] }, customBatch());
+  const runner = new CallBatchRunner(f.db, f.capture, createCallExecutor({ script: host }));
+  await runner.request({ action: 'start', id: 'digest-test' }, customBatch());
   try {
     await vi.waitFor(() => expect(releaseCheckpoint).toBeTypeOf('function'), { timeout: 2000 });
     failFirst();
@@ -825,11 +789,11 @@ it.each(['failed', 'cancelled'] as const)(
       });
       return { type: 'result', text: 'unreachable' };
     };
-    const runner = new DigestRunner(f.db, f.capture, createCallExecutor({ script: host }));
+    const runner = new CallBatchRunner(f.db, f.capture, createCallExecutor({ script: host }));
     const saved = customBatch();
     saved.items = saved.items.slice(0, 1);
     let stopping: Promise<unknown> | undefined;
-    await runner.request({ action: 'start', id: saved.id, tabIds: [0] }, saved);
+    await runner.request({ action: 'start', id: saved.id }, saved);
     try {
       await vi.waitFor(() => expect(releaseCheckpoint).toBeTypeOf('function'), { timeout: 2000 });
       if (status === 'cancelled') stopping = runner.request({ action: 'stop', id: saved.id });

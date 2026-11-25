@@ -18,9 +18,11 @@ import type { SettingsPreferences } from '../draft';
 
 export function Settings({
   onDirty,
+  initialPresetId,
   section = 'overview',
   onSectionChange = () => {},
 }: {
+  initialPresetId?: string;
   onDirty?: (dirty: boolean) => void;
   section?: SettingsSection;
   onSectionChange?: (section: SettingsSection) => void;
@@ -45,6 +47,14 @@ export function Settings({
   const [actionBuilding, setActionBuilding] = useState(false);
   const configuration = configurationFor(settings);
   const selectedPreset = draft.selectedPreset;
+  const appliedPresetLink = useRef(false);
+  const selectPreset = draft.edit;
+  const linkedPreset = configuration.presets.find((preset) => preset.id === initialPresetId)?.id;
+  useEffect(() => {
+    if (!loaded || appliedPresetLink.current || !linkedPreset) return;
+    appliedPresetLink.current = true;
+    selectPreset({ type: 'select-preset', id: linkedPreset });
+  }, [linkedPreset, loaded, selectPreset]);
   const error = draft.error || providerTest.error;
   function update(patch: Partial<SettingsPreferences>) {
     draft.edit({ type: 'settings', patch });
@@ -175,8 +185,7 @@ export function Settings({
           <h2 className="view-title">Calls</h2>
           <CallSettings
             presets={configuration.presets}
-            summaryPresetId={settings.summaryPresetId ?? ''}
-            onSummaryPresetChange={(id) => update({ summaryPresetId: id || undefined })}
+            visible={section === 'calls'}
             settingsDirty={dirty}
             onBuildingChange={setActionBuilding}
           >

@@ -1,3 +1,4 @@
+import { MISSING_CALL_BATCH } from '../../shared/model/call-batch.ts';
 import type { SqlDatabase } from './sql.ts';
 import {
   activeItem,
@@ -22,7 +23,7 @@ CREATE TABLE digest_item (batch_id TEXT NOT NULL REFERENCES digest_batch(id) ON 
 export function digestStore(db: SqlDatabase, request: Request, owner = ''): unknown {
   const get = (id: string): DigestBatch => {
     const row = db.selectObject('SELECT data FROM digest_batch WHERE id=?', [id]);
-    if (!row) throw new Error('This digest no longer exists.');
+    if (!row) throw new Error(MISSING_CALL_BATCH);
     return {
       ...(JSON.parse(String(row.data)) as DigestMeta),
       items: db

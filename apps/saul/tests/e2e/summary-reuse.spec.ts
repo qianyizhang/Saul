@@ -93,10 +93,24 @@ test('summary reuse compares input without inference; inspection searches large 
       await changed.screenshot({ path: info.outputPath(`summary-inspection-${colorScheme}.png`) });
   }
   expect(await requests()).toBe(initial);
-  await summaryMore(changed);
-  await changed.getByRole('button', { name: 'Run again', exact: true }).click();
-  await expect.poll(() => new URL(changed.url()).hash).not.toBe(savedRoute);
-  await expect(changed.getByRole('status')).toHaveText('Summary ready');
+  const sourceUrl = source.url();
+  await source.close();
+  const replacement = await context.newPage();
+  await replacement.goto(sourceUrl);
+  await replacement.evaluate(() => {
+    const block = document.createElement('p');
+    block.textContent = 'Evidence available only in the replacement tab.';
+    (document.querySelector('article') || document.body).prepend(block);
+  });
+  const rerun = await openDigestReader(context, popup, worker, sourceUrl);
+  await expect(rerun.getByRole('complementary', { name: 'Saved summary reused' })).toBeVisible();
+  await expect(rerun).toHaveURL(new RegExp(savedRoute + '$'));
+  await rerun.reload();
+  await expect(rerun.getByRole('status')).toHaveText('Summary ready');
+  await summaryMore(rerun);
+  await rerun.getByRole('button', { name: 'Run again', exact: true }).click();
+  await expect.poll(() => new URL(rerun.url()).hash).not.toBe(savedRoute);
+  await expect(rerun.getByRole('status')).toHaveText('Summary ready');
   const generations = await worker.evaluate(() =>
     (
       globalThis as unknown as {
@@ -105,18 +119,18 @@ test('summary reuse compares input without inference; inspection searches large 
     ).digestFixture.requests.filter((r) => r.action === 'generate'),
   );
   expect(generations).toHaveLength(2);
-  expect(generations[1]!.userPrompt).toContain('newly verified finding');
+  expect(generations[1]!.userPrompt).toContain('Evidence available only in the replacement tab.');
   await first.reload();
   await expect(first.getByRole('heading', { level: 2 })).toHaveText('Calculus reading fixture');
   await expect(first.getByRole('status')).toHaveText('Summary ready');
-  await changed.locator('.saul-inspector > summary').click();
-  await changed.getByRole('button', { name: 'Compare current page' }).click();
-  await changed.getByLabel('Current input', { exact: true }).click();
-  await source.close();
-  await changed.getByRole('button', { name: 'Compare current page' }).click();
-  await expect(changed.locator('.saul-inspector')).toContainText('Current input not verified');
+  await rerun.locator('.saul-inspector > summary').click();
+  await rerun.getByRole('button', { name: 'Compare current page' }).click();
+  await rerun.getByLabel('Current input', { exact: true }).click();
+  await replacement.close();
+  await rerun.getByRole('button', { name: 'Compare current page' }).click();
+  await expect(rerun.locator('.saul-inspector')).toContainText('Current input not verified');
   await expect(
-    changed.getByRole('region', { name: 'Captured page text', exact: true }).locator('pre'),
+    rerun.getByRole('region', { name: 'Captured page text', exact: true }).locator('pre'),
   ).toBeVisible();
 });
 
@@ -198,25 +212,21 @@ test('different pages summarize together while repeated actions reopen the match
     'Existing summary reopened',
   );
   expect(new URL(active.url()).hash).toBe(id);
+  expect(await planRequests()).toEqual(beforeReuse);
   const conflict = await popup.evaluate(
-    (tabId) =>
+    ({ tabId, previousBatchId }) =>
       chrome.runtime.sendMessage({
-        target: 'saul-digest',
-        message: {
-          action: 'start',
-          id: crypto.randomUUID(),
-          tabIds: [tabId],
-          accountId: 'fixture',
-          connectionKey: 'gpt-plan',
-          regenerate: true,
-        },
+        target: 'saul-call-launch',
+        message: { id: crypto.randomUUID(), tabIds: [tabId], previousBatchId },
       }),
-    tabId,
+    { tabId, previousBatchId: decodeURIComponent(id.slice('#summary/'.length)) },
   );
   expect(conflict).toMatchObject({
     success: false,
     error: expect.stringContaining('A summary is already running for one of these pages.'),
   });
+  const afterConflict = await planRequests();
+  expect(afterConflict.filter((action) => action === 'generate')).toEqual(['generate', 'generate']);
   await active.getByRole('button', { name: 'Stop', exact: true }).click();
   await expect(active.getByRole('status')).toHaveText('Summary stopped');
   await expect(first.getByRole('status')).toHaveText('Summary stopped');
@@ -228,7 +238,7 @@ test('different pages summarize together while repeated actions reopen the match
     'Saved attempt reopened',
   );
   expect(new URL(stopped.url()).hash).toBe(id);
-  expect(await planRequests()).toEqual(beforeReuse);
+  expect(await planRequests()).toEqual(afterConflict);
   await stopped.getByRole('button', { name: 'Retry unfinished' }).click();
   await expect.poll(activeStreams).toBe(2);
   await worker.evaluate(() => {

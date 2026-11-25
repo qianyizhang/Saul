@@ -1,3 +1,4 @@
+import { callChoiceKey } from '../../../shared/model/custom-call.ts';
 import { ActionLabel } from '../../ui/ActionLabel';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ModelPreset } from '../../../shared/model/presets.ts';
@@ -80,15 +81,13 @@ function PresetField({
 
 export function CallSettings({
   presets,
-  summaryPresetId,
-  onSummaryPresetChange,
+  visible,
   settingsDirty,
   onBuildingChange,
   children,
 }: {
   presets: ModelPreset[];
-  summaryPresetId: string;
-  onSummaryPresetChange: (id: string) => void;
+  visible: boolean;
   settingsDirty: boolean;
   onBuildingChange?: (building: boolean) => void;
   children: ReactNode;
@@ -121,22 +120,25 @@ export function CallSettings({
       onSnapshot: setStatus,
     });
     observer.current = current;
-    void current.refresh();
     return () => {
       observer.current = null;
       current.dispose();
     };
   }, []);
   useEffect(() => {
+    if (visible) void observer.current?.refresh();
+  }, [visible]);
+  const builtinPresetId = state?.builtinPresetId;
+  useEffect(() => {
     if (!state || formSeeded.current) return;
     formSeeded.current = true;
     setForm((current) => ({
       prompt: state.prompt || '',
-      actionPreset: state.selected?.presetId || summaryPresetId || writePresets[0]?.id || '',
-      builderPreset: summaryPresetId || writePresets[0]?.id || '',
+      actionPreset: state.selected?.presetId || builtinPresetId || writePresets[0]?.id || '',
+      builderPreset: builtinPresetId || writePresets[0]?.id || '',
       ...current,
     }));
-  }, [state, summaryPresetId, writePresets]);
+  }, [state, builtinPresetId, writePresets]);
   async function request(message: Exclude<CallEditRequest, { action: 'status' }>) {
     const current = observer.current;
     if (!current) return;
@@ -175,13 +177,9 @@ export function CallSettings({
           <select
             aria-label="Call preset"
             disabled={!canEditCall}
-            value={
-              state.selected ? `${state.selected.revision.revision}:${state.selected.presetId}` : ''
-            }
+            value={state.selected ? callChoiceKey(state.selected) : ''}
             onChange={(event) => {
-              const choice = state.library?.find(
-                (c) => `${c.revision.revision}:${c.presetId}` === event.target.value,
-              );
+              const choice = state.library?.find((c) => callChoiceKey(c) === event.target.value);
               void request(
                 choice
                   ? {
@@ -196,7 +194,7 @@ export function CallSettings({
             <option value="">Summarize (default)</option>
             {(state.library || []).map((choice) => {
               const model = writePresets.find((p) => p.id === choice.presetId);
-              const key = `${choice.revision.revision}:${choice.presetId}`;
+              const key = callChoiceKey(choice);
               return (
                 <option key={key} value={key} disabled={!model}>
                   {choice.revision.name} · {model?.name ?? 'Unavailable preset'}
@@ -209,11 +207,13 @@ export function CallSettings({
       {state && !state.selected && (
         <PresetField
           label="Model preset"
-          value={summaryPresetId}
+          value={builtinPresetId ?? ''}
           presets={writePresets}
-          onChange={onSummaryPresetChange}
-          placeholder="Original summary setup"
-          disabled={busy || building}
+          onChange={(presetId) => {
+            if (presetId && state.choiceSource)
+              void request({ action: 'builtin-preset', presetId, baseline: state.choiceSource });
+          }}
+          disabled={!canEditCall}
         />
       )}
       {settingsDirty && (
@@ -384,7 +384,7 @@ export function CallSettings({
                   <ActionLabel short="Restore" full="Restore previous call" />
                 </button>
               )}
-              {(state?.selected || state?.blocked) && (
+              {(state?.selected || state?.canRecover) && (
                 <button
                   type="button"
                   className="btn"

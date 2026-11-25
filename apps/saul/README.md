@@ -15,7 +15,7 @@
 | Chrome extension and required history/configuration helper | [Selective setup](../../docs/setup.md)            |
 | ChatGPT plan connection                                    | [Plan setup](docs/chatgpt-plan.md#setup)          |
 | Optional tab access, page tools or Codex connection        | [Native browser access](docs/native-messaging.md) |
-| Optional custom Call actions                               | [Call presets](docs/custom-actions.md)            |
+| Optional custom Calls                                      | [Custom Calls](docs/custom-actions.md)            |
 
 ## Develop
 

@@ -5,6 +5,9 @@ export interface CallChoice {
   presetId: string;
 }
 
+export function callChoiceKey(choice: CallChoice) {
+  return `${choice.revision.revision}:${choice.presetId}`;
+}
 export interface FrozenCustomCall extends CallChoice {
   input?: FrozenModel;
 }

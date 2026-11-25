@@ -1,3 +1,4 @@
+import { revisionOf } from '../../shared/model/revision.ts';
 import type { Configuration } from './definition';
 import { validateSettingsRequest, type SettingsState } from '../settings/contract';
 import { InvalidStoredSettingsError, decodeConfiguration, settingsFromStored } from './record';
@@ -15,20 +16,6 @@ export interface CredentialAccess {
   prepare(settings: Configuration, current: Configuration): Promise<Configuration>;
 }
 
-async function revisionOf(stored: unknown): Promise<string> {
-  // Hash the raw record, including unknown fields, without exposing credentials
-  // in a revision or rewriting legacy records merely because they were read.
-  // Chrome may reorder object keys on storage round trips; array order matters.
-  const serialized = JSON.stringify(stored, (_key, value: unknown) =>
-    value && typeof value === 'object' && !Array.isArray(value)
-      ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
-      : value,
-  );
-  const bytes = new TextEncoder().encode(serialized ?? 'absent');
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
 export interface ConfigurationStorage {
   /** Return a detached raw record, or undefined for a new installation. */
   read(): Promise<unknown>;
@@ -44,6 +31,7 @@ export function createConfigurationStore(
   storage: ConfigurationStorage,
   shared?: SharedConfigurationAccess,
   credentials?: CredentialAccess,
+  callsMigrated?: () => Promise<boolean>,
 ): (request: unknown) => Promise<SettingsState> {
   let pending: Promise<unknown> = Promise.resolve();
   return (value) => {
@@ -101,10 +89,14 @@ export function createConfigurationStore(
         // Normalize and validate in the write owner, not only in the form.
         // The revision token names the loaded state. A draft cannot pick a
         // different shared revision or bypass the shared commit by omitting it.
+        const keepLegacyCalls =
+          (loaded?.summaryPresetId || loaded?.summaryConnectionKey) && !(await callsMigrated?.());
         let settings = decodeConfiguration(
           Object.assign({}, request.settings, {
             sharedPresetRevision: loaded?.sharedPresetRevision,
             scopedConfigRevision: loaded?.scopedConfigRevision,
+            summaryPresetId: keepLegacyCalls ? loaded?.summaryPresetId : undefined,
+            summaryConnectionKey: keepLegacyCalls ? loaded?.summaryConnectionKey : undefined,
           }),
         );
         validateSettingsConnections(settings);

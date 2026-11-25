@@ -14,8 +14,8 @@ export type FrozenCall =
         | { kind: 'preset'; input: FrozenModel }
         | {
             kind: 'plan';
-            accountId: string;
-            model: string;
+            accountId?: string;
+            model?: string;
             effort?: string;
             credentialOwner: 'local' | 'saul';
             connectionKey?: string;

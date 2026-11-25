@@ -2,9 +2,10 @@ import { readCredentialRoute } from '../src/providers/credential-route';
 import { initAnnotations } from '../src/annotations/background';
 import { callStore } from '../src/calls/store';
 import { captureTab, verifyCaptureTab } from '../src/calls/capture/capture';
-import { validateDigest } from '../src/calls/batch-messages';
-import { createCallAdmission } from '../src/calls/admission';
+import { validateCallControl, validateCallLaunch } from '../src/calls/batch-messages';
+import { createCallAdmission, retryCallCredential } from '../src/calls/admission';
 import { initSummaryActions } from '../src/calls/summary-actions';
+import { pendingPanelCallKey, summaryPanelKey } from '../src/calls/panel-route';
 import { initDeepDives } from '../src/deep-dives/background';
 import { initStorageBridge } from '../src/native/storage-bridge';
 import { initCredentialBridge } from '../src/native/credentials';
@@ -13,7 +14,7 @@ import { initSpeechBridge } from '../src/speech/bridge';
 import { initActionBridge } from '../src/native/actions';
 import { validateCallEditRequest } from '../src/calls/contract';
 import type { CallEditorBridgeRequest } from '../src/calls/editor-client';
-import { prepareCallModel } from '../src/calls/configuration';
+import { prepareWritePreset } from '../src/configuration/resolve';
 import { sharedPresets } from '../src/configuration/shared';
 import { createConfigurationStore, SETTINGS_STORAGE_KEY } from '../src/configuration/store';
 import {
@@ -50,10 +51,21 @@ const settingsOwner = createConfigurationStore(
   chromeConfigurationStorage,
   sharedPresets,
   nativeCredentialAccess,
+  callStore.migrationComplete,
 );
-const admitCall = createCallAdmission({
+const launchCall = createCallAdmission({
   readSettings: () => settingsOwner({ action: 'read' }),
-  readChoices: callStore.readChoices,
+  readChoices: () => callStore.readChoices(currentSettings),
+  saveChoices: callStore.saveChoices,
+  lookup: (id, snapshot) =>
+    runnerRequest({ operation: 'digest', message: { action: 'resolve', id }, snapshot }),
+  start: (snapshot, credential, regenerate) =>
+    runnerRequest({
+      operation: 'digest',
+      message: { action: 'start', id: snapshot.id, regenerate },
+      snapshot,
+      credential,
+    }),
   readBatch: (id) => db({ type: 'DB_DIGEST_GET', payload: { id } }),
 });
 async function currentSettings() {
@@ -256,10 +268,14 @@ export default defineBackground(() => {
   chrome.tabs.onRemoved.addListener((tabId) => {
     void chrome.storage.session.remove(sourceKey(tabId));
   });
+  chrome.windows.onRemoved.addListener((windowId) => {
+    void chrome.storage.session.remove([summaryPanelKey(windowId), pendingPanelCallKey(windowId)]);
+  });
   chrome.runtime.onMessage.addListener((request, sender, reply) => {
     if (
       ![
         'saul-digest',
+        'saul-call-launch',
         'saul-action',
         'saul-call-editor',
         'saul-digest-capture',
@@ -295,7 +311,7 @@ export default defineBackground(() => {
         const message: CallEditorBridgeRequest = request.message;
         switch (message?.action) {
           case 'read-choices':
-            return callStore.readChoices();
+            return callStore.readChoices(currentSettings);
           case 'save-choices':
             return callStore.saveChoices(message.source, message.choices);
           case 'read-draft':
@@ -303,7 +319,7 @@ export default defineBackground(() => {
           case 'save-draft':
             return callStore.saveDraft(message.draft);
           case 'prepare-preset':
-            return prepareCallModel(await currentSettings(), message.presetId);
+            return prepareWritePreset(await currentSettings(), message.presetId);
           default:
             throw new Error('Invalid Call storage request.');
         }
@@ -351,9 +367,21 @@ export default defineBackground(() => {
         validateCallEditRequest(request.message);
         return runnerRequest({ operation: 'action', message: request.message });
       }
+      if (request.target === 'saul-call-launch') {
+        validateCallLaunch(request.message);
+        return launchCall(request.message);
+      }
       if (request.target === 'saul-digest') {
-        validateDigest(request.message);
-        return runnerRequest({ operation: 'digest', ...(await admitCall(request.message)) });
+        validateCallControl(request.message);
+        const message = request.message;
+        const credential =
+          message.action === 'retry'
+            ? await retryCallCredential(
+                await db({ type: 'DB_DIGEST_GET', payload: { id: message.id } }),
+                currentSettings,
+              )
+            : undefined;
+        return runnerRequest({ operation: 'digest', message, credential });
       }
       if (request.type === 'WORKSPACE_TABS') return workspaceCall(request);
       if (request.target === 'saul-open-source') {

@@ -3,11 +3,11 @@ import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 import { starterConfiguration } from '../src/configuration/definition';
 import {
   preparePreset,
+  prepareWritePreset,
   prepareFrozenPreset,
   SELECT_NEW_PRESET,
 } from '../src/configuration/resolve';
 import { prepareRecipeRun } from '../src/reading/configuration';
-import { prepareCallModel } from '../src/calls/configuration';
 import { planEvents } from '../src/providers/chatgpt-plan';
 
 function settings() {
@@ -29,7 +29,7 @@ afterEach(() => vi.unstubAllGlobals());
 it('Reading and custom Summarize use the same frozen choices and never persist a key', () => {
   const value = settings();
   const reading = prepareRecipeRun(value, context, value.configuration!.selectedRecipeId);
-  const action = prepareCallModel(value, value.configuration!.presets[0]!.id);
+  const action = prepareWritePreset(value, value.configuration!.presets[0]!.id);
   for (const field of ['provider', 'remote', 'plan', 'preset', 'credentialOwner'] as const)
     expect(action.choices[field]).toEqual(reading.input[field]);
   expect(action.choices).not.toHaveProperty('context');

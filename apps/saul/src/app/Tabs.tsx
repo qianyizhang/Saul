@@ -324,7 +324,7 @@ export function Tabs() {
             </select>
             <button
               className="btn primary"
-              title="Summarize loaded text using your ChatGPT account"
+              title="Run the selected Call on these tabs"
               disabled={busy}
               onClick={() => {
                 setBusy(true);

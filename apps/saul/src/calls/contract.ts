@@ -1,9 +1,10 @@
-import type { CallChoice } from '../../shared/model/custom-call.ts';
+import { callChoiceKey, type CallChoice } from '../../shared/model/custom-call.ts';
 import type { ActionRevision } from '../../shared/protocol/action-protocol.mts';
 import { validRevision, validateActionModule } from '../../shared/protocol/action-protocol.mts';
-import { record } from '../reading/contract';
+import { isRecord as record } from '../../shared/model/value.mts';
 
 export interface CallChoices {
+  builtinPresetId?: string;
   library?: CallChoice[];
   selected?: CallChoice;
   previous?: CallChoice;
@@ -17,10 +18,17 @@ export interface CallDraft {
 export type SavedCallDraft = CallDraft & { building?: boolean };
 export interface CallEditorState extends SavedCallDraft, CallChoices {
   blocked?: boolean;
+  canRecover?: boolean;
+  choiceSource?: CallChoiceSource;
 }
-export type CallChoiceSource = { kind: 'chrome' } | { kind: 'shared'; revision: number };
+export type CallChoiceSource = {
+  kind: 'chrome' | 'shared';
+  revision: number;
+  migrationBlocked?: string;
+};
 export type SavedCallChoices = { source: CallChoiceSource } & (
-  { state: 'ready'; choices: CallChoices } | { state: 'invalid'; error: string }
+  | { state: 'ready'; choices: CallChoices }
+  | { state: 'invalid'; error: string; recovery?: CallChoices }
 );
 export interface CallEditorStorage {
   readChoices(): Promise<SavedCallChoices>;
@@ -37,7 +45,8 @@ export type CallEditRequest =
   | { action: 'load'; revision: string; presetId: string }
   | { action: 'select'; revision: string; presetId: string }
   | { action: 'restore' }
-  | { action: 'builtin' };
+  | { action: 'builtin' }
+  | { action: 'builtin-preset'; presetId: string; baseline: CallChoiceSource };
 export const LEGACY_CALL_STATE_KEY = 'saul_summary_action_v1';
 export const CALL_FORM_LIMITS = { prompt: 8000, presetId: 128, path: 4096 } as const;
 export const BUILDER_PROMPT = `You write Saul action contract 1 modules. Return ONLY a JSON object with exactly:
@@ -64,6 +73,7 @@ export function validateCallEditRequest(value: unknown): asserts value is CallEd
     select: ['revision', 'presetId'],
     restore: [],
     builtin: [],
+    'builtin-preset': ['presetId', 'baseline'],
   };
   if (
     !Object.hasOwn(keys, value.action) ||
@@ -71,6 +81,18 @@ export function validateCallEditRequest(value: unknown): asserts value is CallEd
   )
     throw new Error('Invalid action request.');
   for (const key of keys[value.action]!) {
+    if (key === 'baseline') {
+      const source = value.baseline;
+      if (
+        !record(source) ||
+        (source.kind !== 'chrome' && source.kind !== 'shared') ||
+        !Number.isSafeInteger(source.revision) ||
+        Number(source.revision) < 0 ||
+        Object.keys(source).length !== 2
+      )
+        throw new Error('Invalid Call selection revision.');
+      continue;
+    }
     const text = value[key];
     if (
       typeof text !== 'string' ||
@@ -95,6 +117,7 @@ export function validateCallEditorState(value: unknown): asserts value is CallEd
     Object.keys(value).some(
       (k) =>
         ![
+          'builtinPresetId',
           'library',
           'selected',
           'previous',
@@ -104,6 +127,8 @@ export function validateCallEditorState(value: unknown): asserts value is CallEd
           'error',
           'building',
           'blocked',
+          'canRecover',
+          'choiceSource',
         ].includes(k),
     )
   )
@@ -120,11 +145,18 @@ export function validateCallEditorState(value: unknown): asserts value is CallEd
     const { contractVersion, name, description, language, source } = v;
     validateActionModule({ contractVersion, name, description, language, source });
   };
+  if (
+    value.builtinPresetId !== undefined &&
+    (typeof value.builtinPresetId !== 'string' ||
+      !value.builtinPresetId.trim() ||
+      value.builtinPresetId.length > CALL_FORM_LIMITS.presetId)
+  )
+    throw new Error('Invalid summary model preset reference.');
   if (value.library !== undefined) {
     if (!Array.isArray(value.library) || value.library.length > 128)
       throw new Error('Keep at most 128 call presets.');
     for (const choice of value.library) validateCallEditorState({ selected: choice });
-    const ids = value.library.map((c: CallChoice) => `${c.revision.revision}:${c.presetId}`);
+    const ids = value.library.map(callChoiceKey);
     if (new Set(ids).size !== ids.length) throw new Error('Duplicate call presets.');
   }
   for (const key of ['selected', 'previous'] as const)

@@ -1,12 +1,13 @@
-import { id, record } from '../reading/contract';
-import type { DigestRequest } from '../../shared/model/call-batch.ts';
-export function validateDigest(v: unknown): asserts v is DigestRequest {
-  if (!record(v)) throw new Error('Invalid digest request');
+import { isRecord as record } from '../../shared/model/value.mts';
+import type { CallControl, CallLaunch } from '../../shared/model/call-batch.ts';
+export const isCallBatchId = (v: unknown): v is string =>
+  typeof v === 'string' && v.length > 0 && v.length <= 128;
+
+export function validateCallControl(v: unknown): asserts v is CallControl {
+  if (!record(v)) throw new Error('Invalid Call command.');
   const keys: Record<string, string[]> = {
     list: [],
     active: [],
-    start: ['id', 'tabIds', 'accountId', 'connectionKey', 'regenerate'],
-    resolve: ['id', 'tabIds'],
     inspect: ['id', 'index', 'tabId'],
     get: ['id'],
     stop: ['id'],
@@ -17,25 +18,34 @@ export function validateDigest(v: unknown): asserts v is DigestRequest {
     typeof v.action !== 'string' ||
     !Object.hasOwn(keys, v.action) ||
     Object.keys(v).some((k) => k !== 'action' && !keys[v.action as string]!.includes(k)) ||
-    (!['list', 'active'].includes(v.action) && !id(v.id)) ||
-    (['start', 'resolve'].includes(v.action) &&
-      (!Array.isArray(v.tabIds) ||
-        !v.tabIds.length ||
-        v.tabIds.length > 1000 ||
-        new Set(v.tabIds).size !== v.tabIds.length ||
-        !v.tabIds.every((id) => Number.isSafeInteger(id) && id >= 0))) ||
-    (v.action === 'start' &&
-      ((v.accountId !== undefined &&
-        (typeof v.accountId !== 'string' || !v.accountId || v.accountId.length > 256)) ||
-        (v.connectionKey !== undefined &&
-          (typeof v.connectionKey !== 'string' ||
-            !/^[a-z][a-z0-9-]{0,63}$/.test(v.connectionKey))) ||
-        (v.regenerate !== undefined && typeof v.regenerate !== 'boolean'))) ||
+    (!['list', 'active'].includes(v.action) && !isCallBatchId(v.id)) ||
     (v.action === 'inspect' &&
       (!Number.isSafeInteger(v.index) ||
         (v.index as number) < 0 ||
         (v.index as number) >= 1000 ||
         (v.tabId !== undefined && (!Number.isSafeInteger(v.tabId) || (v.tabId as number) < 0))))
   )
-    throw new Error('Invalid digest request');
+    throw new Error('Invalid Call command.');
+}
+
+export function validateCallLaunch(v: unknown): asserts v is CallLaunch {
+  if (
+    !record(v) ||
+    !Object.keys(v).every((k) => ['id', 'tabIds', 'review', 'previousBatchId'].includes(k)) ||
+    !isCallBatchId(v.id) ||
+    (v.previousBatchId !== undefined &&
+      (!isCallBatchId(v.previousBatchId) || v.previousBatchId === v.id)) ||
+    !Array.isArray(v.tabIds) ||
+    !v.tabIds.length ||
+    v.tabIds.length > 1000 ||
+    new Set(v.tabIds).size !== v.tabIds.length ||
+    !v.tabIds.every((t) => Number.isSafeInteger(t) && t >= 0) ||
+    (v.review !== undefined &&
+      (!record(v.review) ||
+        typeof v.review.stamp !== 'string' ||
+        !/^[0-9a-f]{64}$/.test(v.review.stamp) ||
+        (v.review.presetId !== undefined && !isCallBatchId(v.review.presetId)) ||
+        !Object.keys(v.review).every((k) => k === 'stamp' || k === 'presetId')))
+  )
+    throw new Error('Invalid Call launch.');
 }

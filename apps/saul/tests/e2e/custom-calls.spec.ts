@@ -153,7 +153,7 @@ test('Call Saul uses the saved shared selection when Chrome cannot mirror the ch
       // real local action helper and page execution uses the real history path.
       const write = chrome.storage.local.set.bind(chrome.storage.local);
       await write({ saul_calls_unified: true, saul_summary_action_v1: {} });
-      let value: unknown = { library: [] };
+      let value: unknown = { schema: 2, library: [] };
       let revision = 1;
       setStorageControlFixture(
         async (
@@ -232,6 +232,11 @@ test('creates and explicitly loads a real local action, renders safely, isolates
     await configureFixtureProvider(popup, fixtureServer.origin);
     await popup.getByRole('button', { name: 'Settings', exact: true }).click();
     await settingsSection(popup, 'Calls');
+    const summaryModel = popup.getByLabel('Model preset', { exact: true });
+    await summaryModel.selectOption('preset-current');
+    await expect
+      .poll(async () => (await request(popup, { action: 'status' })).builtinPresetId)
+      .toBe('preset-current');
     await popup.getByLabel('Customize Call Saul', { exact: true }).click();
     await popup
       .getByLabel('Call request', { exact: true })
@@ -267,6 +272,7 @@ test('creates and explicitly loads a real local action, renders safely, isolates
     await expect
       .poll(async () => (await request(popup, { action: 'status' })).selected)
       .toBeUndefined();
+    await expect(summaryModel).toHaveValue('preset-current');
     await popup.getByLabel('Call preset', { exact: true }).selectOption(savedChoice);
     await expect
       .poll(async () => (await request(popup, { action: 'status' })).selected?.revision.name)

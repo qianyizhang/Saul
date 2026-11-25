@@ -1,18 +1,8 @@
 import { getWindowLabels } from '../../native/window-labels';
-import { SUMMARY_PROMPT } from '../execution/summary';
-import type {
-  DigestBatch,
-  DigestItem,
-  DigestCapture,
-  PdfProcessing,
-} from '../../../shared/model/call-batch.ts';
+import type { DigestBatch, DigestItem, DigestCapture } from '../../../shared/model/call-batch.ts';
 
-export async function snapshotSelection(
-  id: string,
-  tabIds: number[],
-  accountId: string,
-  pdfProcessing: PdfProcessing = 'attachment',
-): Promise<DigestBatch> {
+export type CallSources = Pick<DigestBatch, 'windowId' | 'windowTitle' | 'items'>;
+export async function readCallSources(tabIds: number[]): Promise<CallSources> {
   const tabs = await Promise.all(tabIds.map((id) => chrome.tabs.get(id)));
   const windowIds = [...new Set(tabs.map((t) => t.windowId))];
   for (const windowId of windowIds) {
@@ -28,16 +18,9 @@ export async function snapshotSelection(
   const windowName = (id: number) =>
     labels[id] || 'Window ' + (windows.findIndex((w) => w.id === id) + 1);
   return {
-    id,
     windowId: windowIds[0]!,
-    accountId,
-    pdfProcessing,
     windowTitle:
       windowIds.length === 1 ? windowName(windowIds[0]!) : tabs.length + ' selected tabs',
-    createdAt: Date.now(),
-    model: 'gpt-6-luna',
-    effort: 'medium',
-    prompt: SUMMARY_PROMPT,
     items: tabs.map((tab, index) => ({
       index,
       tabId: tab.id!,

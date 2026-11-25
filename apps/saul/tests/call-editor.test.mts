@@ -13,10 +13,9 @@ import { ActionStore } from '../.build/native/action-store.mjs';
 import { ActionRuntime } from '../.build/native/action-runtime.mjs';
 import type { DbCall, RunInput } from '../shared/protocol/history-types.ts';
 import type { ModelEvent } from '../shared/model/model-events.ts';
-import { prepareCallModel } from '../src/calls/configuration';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 import { starterConfiguration } from '../src/configuration/definition';
-import { prepareFrozenPreset } from '../src/configuration/resolve';
+import { prepareFrozenPreset, prepareWritePreset } from '../src/configuration/resolve';
 
 vi.mock('../src/calls/host', () => ({ actionHost: vi.fn() }));
 let saved: CallEditorState;
@@ -223,7 +222,10 @@ it('does not adopt a loaded candidate when saving selection fails', async () => 
 });
 
 it('keeps an acknowledged shared Call selected even when Chrome cannot save a draft', async () => {
-  let config: { revision: number; value: object } = { revision: 1, value: { library: [] } };
+  let config: { revision: number; value: object } = {
+    revision: 1,
+    value: { schema: 2, library: [] },
+  };
   const writes: object[] = [];
   local.saul_calls_unified = true;
   vi.stubGlobal('chrome', {
@@ -338,14 +340,14 @@ it('freezes preset choices, excludes credentials from saved input and blocks cha
     temperature: 0.6,
   };
   settings.configuration = starterConfiguration(settings);
-  const prepared = prepareCallModel(settings, 'preset-current');
+  const prepared = prepareWritePreset(settings, 'preset-current');
   expect(prepared.credential).toBe('PRIVATE-FIXTURE-KEY');
   expect(JSON.stringify(prepared.choices)).not.toContain('PRIVATE-FIXTURE-KEY');
   settings.configuration.presets[0]!.model = 'new-model';
   expect(prepareFrozenPreset(settings, prepared.choices).input.remote.model).toBe('chosen');
   settings.openaiCompatible.baseUrl = 'https://other.example/v1';
   expect(() => prepareFrozenPreset(settings, prepared.choices)).toThrow('Select a new preset');
-  expect(() => prepareCallModel(settings, 'missing')).toThrow('existing saved preset');
+  expect(() => prepareWritePreset(settings, 'missing')).toThrow('existing saved preset');
 });
 
 it('keeps every saved call preset selectable across restart and built-in selection', async () => {
@@ -409,4 +411,96 @@ it('adopts both choices from the old Chrome record without letting it become a s
     previous,
     library: [previous, selected],
   });
+});
+
+it('stores custom choices once and keeps the built-in model across custom selection and restore', async () => {
+  const manager = editor();
+  const initial = await manager.request({ action: 'status' });
+  await manager.request({
+    action: 'builtin-preset',
+    presetId: 'summary',
+    baseline: initial.choiceSource!,
+  });
+  const { candidate } = await manager.request({ action: 'stage', json: JSON.stringify(module) });
+  const selected = await manager.request({
+    action: 'load',
+    revision: candidate!.revision,
+    presetId: 'runner',
+  });
+  const key = `${candidate!.revision}:runner`;
+  expect(local.saul_call_choices_v1).toMatchObject({
+    value: {
+      schema: 2,
+      library: [selected.selected],
+      selected: key,
+      builtinPresetId: 'summary',
+    },
+  });
+  await manager.request({ action: 'builtin' });
+  expect(local.saul_call_choices_v1).toMatchObject({
+    value: { library: [selected.selected], previous: key, builtinPresetId: 'summary' },
+  });
+  const restarted = editor();
+  expect(await restarted.request({ action: 'status' })).toMatchObject({
+    builtinPresetId: 'summary',
+    previous: selected.selected,
+  });
+  expect(await restarted.request({ action: 'restore' })).toMatchObject({
+    builtinPresetId: 'summary',
+    selected: selected.selected,
+  });
+});
+
+it('requires a fresh Settings selection revision after another surface changes the default', async () => {
+  const manager = editor();
+  const baseline = (await manager.request({ action: 'status' })).choiceSource!;
+  const saved = await manager.request({ action: 'builtin-preset', presetId: 'first', baseline });
+  expect(saved.builtinPresetId).toBe('first');
+  expect(saved.choiceSource?.revision).toBeGreaterThan(baseline.revision);
+  expect(
+    await manager.request({ action: 'builtin-preset', presetId: 'stale', baseline }),
+  ).toMatchObject({
+    builtinPresetId: 'first',
+    error: 'Saved Calls changed. Review the current selection.',
+  });
+});
+
+it('blocks ordinary preset saves on damaged choices and recovers the readable library explicitly', async () => {
+  const revision = await runtime.load((await store.stage(module)).revision);
+  const retained = { revision, presetId: 'runner' };
+  const damaged = {
+    revision: 4,
+    value: {
+      schema: 2,
+      library: [retained],
+      previous: `${revision.revision}:runner`,
+      selected: 'missing',
+      builtinPresetId: 'summary',
+    },
+  };
+  local.saul_call_choices_v1 = damaged;
+  const manager = editor();
+  const status = await manager.request({ action: 'status' });
+  expect(status).toMatchObject({ blocked: true, canRecover: true });
+  expect(
+    await manager.request({
+      action: 'builtin-preset',
+      presetId: 'must-not-overwrite',
+      baseline: status.choiceSource!,
+    }),
+  ).toMatchObject({ blocked: true });
+  expect(local.saul_call_choices_v1).toEqual(damaged);
+  expect(await manager.request({ action: 'builtin' })).toMatchObject({
+    library: [retained],
+    builtinPresetId: 'summary',
+    previous: retained,
+  });
+
+  const future = { revision: 6, value: { schema: 3, library: [], newField: 'future-data' } };
+  local.saul_call_choices_v1 = future;
+  expect(await manager.request({ action: 'builtin' })).toMatchObject({
+    blocked: true,
+    canRecover: false,
+  });
+  expect(local.saul_call_choices_v1).toEqual(future);
 });

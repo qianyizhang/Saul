@@ -1,5 +1,5 @@
 import type { ModelPreset } from '../../shared/model/presets.ts';
-import type { Configuration } from './definition';
+import { configurationFor, type Configuration } from './definition';
 import {
   executionModel,
   SELECT_NEW_PRESET,
@@ -177,4 +177,10 @@ function credentialForChoices(settings: Configuration, input: FrozenModel): stri
   if (!selected.remote.apiKey && !loopback(endpoint))
     throw new Error('API key is missing. Configure it in Saul Settings.');
   return selected.remote.apiKey;
+}
+
+export function prepareWritePreset(settings: Configuration, presetId: string) {
+  const preset = configurationFor(settings).presets.find((p) => p.id === presetId);
+  if (!preset) throw new Error('Choose an existing saved preset in Settings → Presets.');
+  return preparePreset(settings, preset, 'write');
 }

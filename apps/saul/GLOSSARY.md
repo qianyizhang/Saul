@@ -11,11 +11,15 @@ The page-level command, named for _Better Call Saul_. It runs the selected Call
 over captured page context; a selection of tabs runs once per page.
 
 **Call**:
-A configurable operation over captured page context. Summarize is the first and
-default Call. A custom Call can prepare text and chain model requests within one
-page run, sharing cancellation and producing one final result. Page scope does
-not imply complete capture; coverage and truncation remain explicit.
+A configurable operation over captured context. Summarize is the default page
+Call. A custom Call can prepare text and chain model requests within one run,
+sharing cancellation and producing one final result. For page Calls, coverage
+and truncation remain explicit.
 _Avoid_: Action (when referring to page-level Calls)
+
+**Annotation Call**:
+A Call the annotation editor runs once per selected annotation using that
+annotation's evidence and comment. See [Annotation Calls](docs/custom-actions.md#annotation-calls).
 
 **Action**:
 In Saul, an operation over local context, such as selected text. It uses the
@@ -24,6 +28,10 @@ In Saul, an operation over local context, such as selected text. It uses the
 **Call preset**:
 A saved Call choice and its model preset. The model preset selects connection,
 model and options; the Call defines what to do with the page.
+
+**Write preset**:
+A model preset with the Write capability. Every new page Call uses one.
+Choosing a default Write preset for Summarize leaves other Calls’ choices intact.
 
 **Window**:
 A Chrome window containing an ordered set of tabs and tab groups. In Saul's
@@ -52,7 +60,7 @@ Read permits inspection and supported previews. Write includes Read and permits
 applying changes or taking actions in the group.
 
 **Selection**:
-The tabs explicitly chosen for an action.
+The tabs explicitly chosen for a tab operation.
 _Avoid_: Queue, batch
 
 **Summary**:

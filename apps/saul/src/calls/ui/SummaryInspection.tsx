@@ -196,7 +196,10 @@ export function SummaryInspection({
             <summary aria-label="Saved instructions" title="Saved instructions">
               <ActionLabel short="Saved" full="Saved instructions" />
             </summary>
-            <InspectionText label="Instructions" text={batch.prompt} />
+            <InspectionText
+              label="Instructions"
+              text={batch.action?.revision.source ?? batch.prompt ?? ''}
+            />
             {batch.action && (
               <p className="small muted">
                 {batch.action.revision.name} · contract 1 · revision{' '}

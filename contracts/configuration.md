@@ -76,8 +76,10 @@ Shared definitions come only from `modelPresets`. Saul's scope owns local
 settings, actions, bindings and app-local presets. Its `connectionProfiles`
 maps shared keys to local profiles without copying secrets, adopting only an
 already selected official endpoint or an explicit profile choice; a credential
-remains bound to its connection and endpoint. Call source/revision and preset
-references live in the Calls scope. Builder drafts and active execution stay
+remains bound to its connection and endpoint. The Calls scope owns the current
+Summarize Write preset reference and the custom Call library. Selection and
+previous choice reference entries in that library. Preset definitions stay
+with their shared or app-local owner. Builder drafts and active execution stay
 in the browser runtime. API-only Saul can use local settings without the
 configuration helper; after adoption, helper loss blocks saves. EZ's scope owns
 its actions and configuration choices. Min Mode, native shortcuts, window
@@ -91,6 +93,12 @@ suffixes; IDs and action references are preserved or remapped locally. Deleted
 presets stay deleted; referencing actions require an explicit new choice.
 Legacy EZ definitions seed the shared list only if absent. EZ retains its old
 configuration file for recovery.
+
+Saul preserves an explicit legacy Summarize preset reference when moving it to
+the Calls scope. It migrates a legacy connection-only choice only when one
+existing Write preset exactly matches the old bound account, model and options.
+Otherwise the user selects a preset before a new run. Saved attempts retain
+their historical routes for Retry. See [Calls and summaries](../apps/saul/docs/calls.md#start-stop-and-reopen).
 
 Configuration and history consume legacy connection fields once, retaining
 IDs, model choices and user input. Conflicting old and new fields block upgrades

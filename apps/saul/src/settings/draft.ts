@@ -22,6 +22,8 @@ type RetainedSettings = Pick<
   | 'chromeAi'
   | 'sharedPresetRevision'
   | 'scopedConfigRevision'
+  | 'summaryPresetId'
+  | 'summaryConnectionKey'
 >;
 
 export type SettingsValues = Omit<Configuration, keyof RetainedSettings | 'chatgptPlan'> & {
@@ -32,7 +34,7 @@ export type SettingsValues = Omit<Configuration, keyof RetainedSettings | 'chatg
 
 export type SettingsPreferences = Pick<
   Configuration,
-  'responseLanguage' | 'contextPolicy' | 'summaryPresetId' | 'summaryPdfProcessing'
+  'responseLanguage' | 'contextPolicy' | 'summaryPdfProcessing'
 >;
 
 export interface SettingsDraft {
@@ -114,6 +116,8 @@ export function createSettingsDraft(
   previous?: SettingsDraft,
 ): SettingsDraft {
   const settings = structuredClone(source);
+  delete settings.summaryPresetId;
+  delete settings.summaryConnectionKey;
   const {
     activeProvider,
     activeProfileId: savedProfileId,

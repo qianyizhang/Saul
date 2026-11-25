@@ -1,4 +1,4 @@
-# Call Saul presets
+# Custom Calls
 
 Use [Calls and summaries](calls.md) for page selection, reader and retry behavior.
 This guide covers authoring and running trusted local modules. A custom Call runs
@@ -107,8 +107,9 @@ The helper starts on demand and exits after 60 seconds without requests, loading
 or active runs. Its next connection reloads the exact approved revision only when
 requested. An idle restart is not a retry of any job.
 
-The unified JSON `apps.saul.calls` scope owns saved call choices when the config
-helper is available; browser-only installations keep local choices. The Call editor
+The unified JSON `apps.saul.calls` scope owns saved custom Call choices and the
+current Write preset reference for Summarize when the configuration helper is
+available. Browser-only installations keep these choices locally. The Call editor
 owns selection commands and the active build. Chrome's trusted extension storage
 holds its draft separately from saved choices, through validated background messages.
 Draft saves never rewrite selection. A failed or uncertain selection save is reported
@@ -117,8 +118,9 @@ The helper owns immutable revision files under `~/.saul/actions/revisions`, outs
 installed runtime generations. History saves the exact Call source, revision,
 frozen preset and model-call input/output. Reuse includes the Call revision and
 preset ID as well as ordered URLs, so different Calls cannot reuse each other's
-answers. Model-option edits under the same preset retain the saved result; Run
-again explicitly freezes the current choices.
+answers. Model-option edits under the same preset retain the saved result.
+[Run again](calls.md#reuse-retry-and-run-again) freezes the current choices
+after any required launch review.
 
 Demand-driven cleanup during Call editing protects history-referenced revisions,
 all saved call presets, the selected and previous revisions, the current candidate and live workers. Other

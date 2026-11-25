@@ -1,5 +1,5 @@
 import { AnnotationRunner } from '../../src/annotations/runner';
-import { DigestRunner } from '../../src/calls/execution/batch-runner';
+import { CallBatchRunner } from '../../src/calls/execution/batch-runner';
 import { captureSummarySource } from '../../src/calls/capture/source';
 import { sharedDb as db } from '../../src/storage/history';
 import type { RunnerRequest } from '../../src/platform/chrome/runner';
@@ -16,7 +16,7 @@ const annotations = new AnnotationRunner(db, undefined, undefined, (url) => {
     .sendMessage({ target: 'saul-annotation', action: 'updated', url })
     .catch(() => undefined);
 });
-const digest = new DigestRunner(db, captureSummarySource);
+const calls = new CallBatchRunner(db, captureSummarySource);
 // Chrome offscreen documents expose runtime only. Trusted storage stays behind the background.
 const callEditor = new CallEditor({ db, storage: callEditorStorage, prepare: prepareCallPreset });
 const runner = new ReadingRunner(db, changed);
@@ -32,7 +32,7 @@ chrome.runtime.onMessage.addListener(
         case 'annotation':
           return annotations.request(message.message, message.prepared);
         case 'digest':
-          return digest.request(message.message, message.snapshot, message.credential);
+          return calls.request(message.message, message.snapshot, message.credential);
         case 'action':
           return callEditor.request(message.message);
         case 'submit':
@@ -52,7 +52,7 @@ chrome.runtime.onMessage.addListener(
             case 'DB_ANNOTATION_IMAGE':
               return db(request);
             case 'DB_DIGEST_GET':
-              return digest.request({ action: 'get', id: request.payload.id });
+              return calls.request({ action: 'get', id: request.payload.id });
             case 'DB_READING_RESOLVE':
               return runner.resolveReuse(request.payload);
             case 'DB_VIEW':

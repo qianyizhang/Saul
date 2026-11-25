@@ -36,7 +36,14 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
   const markDeepDiveSettingsDirty = useCallback((dirty: boolean) => {
     deepDiveSettingsDirty.current = dirty;
   }, []);
-  const [settingsSection, setSettingsSection] = useState<SettingsSection>('overview');
+  const [settingsLink] = useState(() => new URLSearchParams(location.search));
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>(() => {
+    const linkedSection = settingsLink.get('section');
+    return viewFromHash() === 'settings' &&
+      (linkedSection === 'models' || linkedSection === 'calls')
+      ? linkedSection
+      : 'overview';
+  });
   useEffect(() => {
     const labels: Record<View, string> = {
       history: 'History',
@@ -185,6 +192,7 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
               <DeepDiveSettings onDirty={markDeepDiveSettingsDirty} />
             </div>
             <Settings
+              initialPresetId={settingsLink.get('preset') ?? undefined}
               onDirty={markSettingsDirty}
               section={settingsSection}
               onSectionChange={setSettingsSection}

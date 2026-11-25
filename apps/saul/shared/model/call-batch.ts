@@ -58,25 +58,36 @@ export interface DigestItem {
   capturedAt?: number;
   sourceKind?: 'pdf-url';
 }
-export interface DigestMeta {
-  credentialOwner?: 'local' | 'saul';
-  action?: import('./custom-call.ts').FrozenCustomCall;
-  summaryInput?: import('./execution-route.ts').FrozenModel;
-  pdfProcessing?: PdfProcessing; // Missing on old batches means local parsing.
+export type DigestMeta = {
   id: string;
   windowTitle: string;
   windowId: number;
-  accountId: string;
-  connectionKey?: string;
   createdAt: number;
-  prompt: string;
-  model: string;
+  pdfProcessing?: PdfProcessing; // Missing on old batches means local parsing.
+  // Pre-preset Summarize rows keep their frozen route in these fields.
+  accountId?: string;
+  connectionKey?: string;
+  credentialOwner?: 'local' | 'saul';
+  model?: string;
   effort?: string;
-}
-export interface DigestBatch extends DigestMeta {
+} & (
+  | {
+      action: import('./custom-call.ts').FrozenCustomCall;
+      summaryInput?: undefined;
+      prompt?: string;
+    }
+  | {
+      action?: undefined;
+      summaryInput?: import('./execution-route.ts').FrozenModel;
+      prompt: string;
+    }
+);
+// Existing storage helpers report absence with this wire error.
+export const MISSING_CALL_BATCH = 'This digest no longer exists.';
+export type DigestBatch = DigestMeta & {
   error?: string;
   items: DigestItem[];
-}
+};
 export type DigestOverview = Pick<DigestMeta, 'id' | 'windowTitle' | 'createdAt'> & {
   title?: string; // Older history helpers return only the window label.
 };
@@ -109,7 +120,7 @@ export interface DigestResolution {
 }
 export interface DigestOperations {
   resolve: {
-    request: { action: 'resolve'; id: string; tabIds: number[] };
+    request: { action: 'resolve'; id: string };
     result: DigestResolution;
   };
   inspect: {
@@ -120,9 +131,6 @@ export interface DigestOperations {
     request: {
       action: 'start';
       id: string;
-      tabIds: number[];
-      accountId?: string; // Only used by the original summary setup.
-      connectionKey?: string;
       regenerate?: boolean;
     };
     result: DigestBatch;
@@ -136,6 +144,31 @@ export interface DigestOperations {
 }
 export type DigestRequest = DigestOperations[keyof DigestOperations]['request'];
 export type DigestResult<T extends DigestRequest> = DigestOperations[T['action']]['result'];
+export type CallControl = Exclude<DigestRequest, { action: 'start' | 'resolve' }>;
+export type CallLookup = Pick<DigestBatch, 'items' | 'action' | 'pdfProcessing'> & {
+  currentModel?: import('./execution-route.ts').FrozenModel | null;
+};
+
+export interface CallLaunch {
+  id: string;
+  tabIds: number[];
+  previousBatchId?: string;
+  review?: { stamp: string; presetId?: string };
+}
+export type CallLaunchResult =
+  | { kind: 'started' | 'reused'; batch: DigestBatch; comparisons: DigestComparison[] }
+  | {
+      kind: 'setup';
+      reason: 'choose' | 'repair' | 'changed';
+      stamp: string;
+      message: string;
+      presets: { id: string; name: string }[];
+      presetId?: string;
+      presetName?: string;
+      reviewSources?: { title: string; url: string }[];
+      routeLabel?: string;
+      source: { title: string; url: string };
+    };
 export const activeItem = (item: DigestItem) =>
   ['queued', 'capturing', 'running', 'saving'].includes(item.status);
 

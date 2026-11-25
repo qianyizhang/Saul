@@ -87,7 +87,15 @@ export class CallEditor {
       try {
         const saved = await this.storage.readChoices();
         const choices = await this.change(request, saved);
-        return this.snapshot(choices === undefined ? saved : { ...saved, state: 'ready', choices });
+        return this.snapshot(
+          choices === undefined
+            ? saved
+            : {
+                state: 'ready',
+                source: { ...saved.source, revision: saved.source.revision + 1 },
+                choices,
+              },
+        );
       } catch (error) {
         this.error = messageOf(error);
       }
@@ -113,21 +121,42 @@ export class CallEditor {
     }
     const draft = this.active?.draft ?? this.draft;
     return structuredClone({
-      ...(saved?.state === 'ready' ? saved.choices : { blocked: true }),
+      ...(saved?.state === 'ready'
+        ? saved.choices
+        : { blocked: true, canRecover: saved?.state === 'invalid' && Boolean(saved.recovery) }),
       ...draft,
       building: !!this.active,
-      error: this.error ?? (saved?.state === 'invalid' ? saved.error : readError) ?? draft.error,
+      choiceSource: saved && { kind: saved.source.kind, revision: saved.source.revision },
+      error:
+        this.error ??
+        (saved?.state === 'invalid' ? saved.error : saved?.source.migrationBlocked) ??
+        readError ??
+        draft.error,
     });
   }
 
   private async change(request: Change, saved: SavedCallChoices) {
-    if (request.action === 'builtin') {
-      const choices = saved.state === 'ready' ? saved.choices : { library: [] };
+    if (request.action === 'builtin' || request.action === 'builtin-preset') {
+      if (saved.state === 'invalid' && (request.action !== 'builtin' || !saved.recovery))
+        throw new Error(saved.error);
+      const choices = saved.state === 'ready' ? saved.choices : saved.recovery!;
       const { selected, ...retained } = choices;
+      if (request.action === 'builtin-preset') {
+        if (
+          request.baseline.kind !== saved.source.kind ||
+          request.baseline.revision !== saved.source.revision
+        )
+          throw new Error('Saved Calls changed. Review the current selection.');
+        await this.prepare(request.presetId);
+        retained.builtinPresetId = request.presetId;
+      }
       if (selected) retained.previous = selected;
-      if (selected || saved.state === 'invalid')
-        await this.storage.saveChoices(saved.source, retained);
       // Clear only the view's error; do not pair a selection change with a draft write.
+      if (!selected && saved.state === 'ready' && request.action === 'builtin') {
+        delete this.draft.error;
+        return;
+      }
+      await this.storage.saveChoices(saved.source, retained);
       delete this.draft.error;
       return retained;
     }
@@ -191,9 +220,14 @@ export class CallEditor {
       throw new Error('Action helper did not confirm this revision.');
     const selected = { revision: result.revision, presetId };
     const next = {
+      ...choices,
       previous: choices.selected ?? choices.previous,
       selected,
-      library: existing ? library : [...library, selected],
+      library: existing
+        ? library.map((item) =>
+            item.revision.revision === revision && item.presetId === presetId ? selected : item,
+          )
+        : [...library, selected],
     };
     await this.storage.saveChoices(saved.source, next);
     delete this.draft.error;

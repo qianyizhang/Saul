@@ -109,7 +109,7 @@ test('full reader links remain compatible and keep single-page reading clear', a
   await configuration.close();
 });
 
-test('single-page setup failure keeps the source and settings recovery visible', async ({
+test('single-page setup with no usable Write presets keeps the source and Presets visible', async ({
   sandbox,
   fixtureServer,
 }, info) => {
@@ -137,11 +137,16 @@ test('single-page setup failure keeps the source and settings recovery visible',
     tabId,
   );
   const reader = await readerPromise;
-  await expect(reader.getByRole('alert')).toBeVisible();
-  await expect(reader.getByRole('link', { name: 'Open Settings' })).toBeVisible();
+  const setup = reader.getByRole('region', { name: 'Call setup' });
+  await expect(setup.getByRole('status')).toContainText('Write');
+  await expect(setup.getByRole('link', { name: 'Open presets' })).toBeVisible();
+  await expect(setup.getByRole('button', { name: 'Return to source' })).toBeVisible();
   await expect(reader.getByRole('heading', { name: 'Calculus reading fixture' })).toBeVisible();
   if (reviewScreenshots)
     await reader.screenshot({ path: info.outputPath('single-summary-setup.png'), fullPage: true });
-  await reader.getByRole('link', { name: 'Open Settings' }).click();
-  await expect(reader).toHaveURL(/#settings$/);
+  const settingsOpened = context.waitForEvent('page');
+  await setup.getByRole('link', { name: 'Open presets' }).click();
+  const settings = await settingsOpened;
+  await expect(settings).toHaveURL(/#settings$/);
+  await expect(settings.getByRole('region', { name: 'Presets', exact: true })).toBeVisible();
 });

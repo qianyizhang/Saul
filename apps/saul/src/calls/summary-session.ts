@@ -1,58 +1,93 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { planCall } from '../providers/chatgpt-plan';
-import { requestSettings } from '../configuration/client';
-import type { Configuration } from '../configuration/definition';
-import { summaryConnections, type SummaryConnection } from './execution/summary-connection';
-import { editCall, sendDigestMessage } from './client';
+import { launchCall, sendDigestMessage } from './client';
+import { pendingPanelCallKey, summaryPanelKey, summarySelectionRoute } from './panel-route';
 import {
   activeItem,
+  MISSING_CALL_BATCH,
   type DigestBatch,
   type DigestComparison,
 } from '../../shared/model/call-batch.ts';
 import { createStatusObserver, type StatusObserver } from '../observation/status-observer';
 
-async function summaryAccounts(settings: Configuration) {
-  if (settings.sharedCredentials !== 'saul')
-    throw new Error('Connect this app in Settings → Preferences → Integrations.');
-  const result = await planCall({ action: 'accounts' });
-  return summaryConnections(settings, result.accounts);
+type LaunchRequest = Parameters<typeof launchCall>[0];
+type Setup = Extract<Awaited<ReturnType<typeof launchCall>>, { kind: 'setup' }>;
+type PendingSetup = { outcome: Setup; intent: LaunchRequest };
+
+const pendingSetupKey = 'saul-pending-call-setup';
+function restoreSetup(value: unknown, id: string, tabIds: number[]): PendingSetup | undefined {
+  const stored = value as PendingSetup | null | undefined;
+  if (
+    stored?.intent?.id === id &&
+    Array.isArray(stored.intent.tabIds) &&
+    stored.intent.tabIds.length === tabIds.length &&
+    stored.intent.tabIds.every((tabId, index) => tabId === tabIds[index]) &&
+    stored.outcome?.kind === 'setup' &&
+    typeof stored.outcome.stamp === 'string'
+  )
+    return stored;
+}
+function restoreReaderSetup(id: string, tabIds: number[] | undefined) {
+  if (!tabIds?.length) return;
+  try {
+    return restoreSetup(JSON.parse(sessionStorage.getItem(pendingSetupKey) ?? 'null'), id, tabIds);
+  } catch {
+    // A stale or unreadable draft cannot supply a review stamp.
+  }
+}
+
+function sourceTabs(state: unknown): number[] | undefined {
+  if (!state || typeof state !== 'object' || !('saulSummarySourceTabs' in state)) return;
+  const tabIds = state.saulSummarySourceTabs;
+  if (Array.isArray(tabIds) && tabIds.length && tabIds.every(Number.isSafeInteger)) return tabIds;
+}
+function replaceSummaryRoute(id: string, tabIds: number[]) {
+  history.replaceState({ saulSummarySourceTabs: tabIds }, '', '#summary/' + encodeURIComponent(id));
 }
 
 type SummaryLookup = { kind: 'found'; batch: DigestBatch } | { kind: 'missing' };
-const missingSummary = 'This digest no longer exists.';
 async function readSummary(id: string): Promise<SummaryLookup> {
   try {
     return { kind: 'found', batch: await sendDigestMessage({ action: 'get', id }) };
   } catch (cause) {
-    if (cause instanceof Error && cause.message === missingSummary) return { kind: 'missing' };
+    if (cause instanceof Error && cause.message === MISSING_CALL_BATCH) return { kind: 'missing' };
     throw cause;
   }
 }
 
 export function useSummarySession({
   route,
+  panelWindowId,
   visible,
   onResolved,
 }: {
   route: string;
+  panelWindowId?: number;
   visible: boolean;
   onResolved?: (id: string) => Promise<void>;
 }) {
   const [id, setId] = useState(() =>
     decodeURIComponent(route.split('?')[0]!.slice('#summary/'.length)),
   );
-  const [tabIds] = useState(() =>
+  const [requestedTabIds] = useState(() =>
     new URLSearchParams(route.split('?')[1]).get('tabs')?.split(',').map(Number),
+  );
+  const [sourceTabIds, setSourceTabIds] = useState(
+    () => requestedTabIds ?? sourceTabs(history.state),
   );
   const [batch, setBatch] = useState<DigestBatch>();
   const [reused, setReused] = useState(false);
   const [comparisons, setComparisons] = useState<DigestComparison[]>([]);
   const [source, setSource] = useState<{ title: string; url: string }>();
-  const [accounts, setAccounts] = useState<SummaryConnection[]>([]);
-  const [account, setAccount] = useState('');
+  const [setup, setSetup] = useState(() =>
+    panelWindowId === undefined ? restoreReaderSetup(id, requestedTabIds) : undefined,
+  );
+  const [restoringPanelSetup, setRestoringPanelSetup] = useState(
+    panelWindowId !== undefined && Boolean(requestedTabIds?.length),
+  );
+  const restoredSetup = useRef(Boolean(setup));
+  const [preset, setPreset] = useState('');
   const [error, setError] = useState('');
   const [readError, setReadError] = useState('');
-  const [initialMissing, setInitialMissing] = useState(false);
   const [busy, setBusy] = useState(false);
   const initialized = useRef(false);
   const status = useRef<{ id: string; observer: StatusObserver<SummaryLookup> } | null>(null);
@@ -96,83 +131,101 @@ export function useSummarySession({
     }
   }, []);
   const launch = useCallback(
-    async (current: () => boolean, choiceKey?: string, regenerate = false) => {
-      const [call, saved] = await Promise.all([
-        editCall({ action: 'status' }),
-        requestSettings({ action: 'read' }),
-      ]);
+    async (current: () => boolean, intent: LaunchRequest) => {
+      const result = await launchCall(intent);
       if (!current()) return;
-      if (saved.state !== 'ready') throw new Error(saved.error);
-      let runAccountId: string | undefined;
-      let connectionKey: string | undefined;
-      if (!call.selected && !saved.settings.summaryPresetId) {
-        const resolved = await summaryAccounts(saved.settings);
-        if (!current()) return;
-        const key = choiceKey ?? resolved.chosen;
-        setAccounts(resolved.choices);
-        setAccount(key);
-        const choice = resolved.choices.find((c) => c.key === key && c.available);
-        if (!choice?.accountId) {
-          if (!choiceKey && !regenerate && !resolved.error) return;
-          throw new Error(resolved.error || 'Choose a model preset in Settings → Calls.');
+      if (result.kind === 'setup') {
+        const next = { outcome: result, intent };
+        // Reopening can read saved results. Starting from a blocked setup requires review.
+        if (!intent.previousBatchId) {
+          const blocked = { outcome: result, intent: { id: intent.id, tabIds: intent.tabIds } };
+          if (panelWindowId === undefined)
+            sessionStorage.setItem(pendingSetupKey, JSON.stringify(blocked));
+          else {
+            const panelKey = summaryPanelKey(panelWindowId);
+            const route = (await chrome.storage.session.get(panelKey))[panelKey];
+            if (!current() || route !== summarySelectionRoute(intent.id, intent.tabIds)) return;
+            await chrome.storage.session.set({ [pendingPanelCallKey(panelWindowId)]: blocked });
+            if (!current()) return;
+          }
         }
-        runAccountId = choice.accountId;
-        connectionKey = choice.key;
-        const { settings, revision } = saved;
-        if (settings.summaryConnectionKey !== choice.key) {
-          const committed = await requestSettings({
-            action: 'commit',
-            baseline: revision,
-            settings: { ...settings, summaryConnectionKey: choice.key },
-          });
-          if (committed.state !== 'ready') throw new Error(committed.error);
-        }
-        if (!current()) return;
-        const catalog = await planCall({ action: 'models', accountId: runAccountId });
-        if (
-          !catalog.models.some(
-            (m) =>
-              m.slug === 'gpt-6-luna' &&
-              m.supportedReasoningEfforts.some((e) => e.effort === 'medium'),
-          )
-        )
-          throw new Error(
-            'GPT-6 Luna with medium effort is unavailable. Check models in Connections.',
-          );
+        setSource(result.source);
+        setSetup(next);
+        setPreset((selected) =>
+          !result.presetId && result.presets.some((option) => option.id === selected)
+            ? selected
+            : '',
+        );
+        return;
       }
-      const selected = tabIds || batch?.items.map((item) => item.tabId);
-      if (!selected?.length) throw new Error('The selection is missing.');
-      if (regenerate && batch) {
-        for (const [index, tabId] of selected.entries()) {
-          const tab = await chrome.tabs.get(tabId);
-          if (tab.url !== batch.items[index]?.url)
-            throw new Error('A source tab changed or closed. Use Call Saul on the page you want.');
-        }
-      }
-      if (!current()) return;
-      const targetId = regenerate ? crypto.randomUUID() : id;
-      const result = await sendDigestMessage({
-        action: 'start',
-        id: targetId,
-        tabIds: selected,
-        ...(runAccountId ? { accountId: runAccountId } : {}),
-        ...(connectionKey ? { connectionKey } : {}),
-        ...(regenerate ? { regenerate: true } : {}),
-      });
-      if (!current()) return;
-      adoptBatch(result);
-      setReused(result.id !== targetId);
-      setComparisons([]);
-      history.replaceState(null, '', '#summary/' + encodeURIComponent(result.id));
-      await onResolved?.(result.id);
+      if (!intent.previousBatchId && panelWindowId === undefined)
+        sessionStorage.removeItem(pendingSetupKey);
+      restoredSetup.current = false;
+      setSetup(undefined);
+      setPreset('');
+      adoptBatch(result.batch);
+      setReused(result.kind === 'reused');
+      setComparisons(result.comparisons);
+      setSourceTabIds(intent.tabIds);
+      replaceSummaryRoute(result.batch.id, intent.tabIds);
+      await onResolved?.(result.batch.id);
     },
-    [adoptBatch, id, tabIds, batch, onResolved],
+    [adoptBatch, onResolved, panelWindowId],
   );
-  function start(choiceKey?: string, regenerate = false) {
-    return runCommand((current) => launch(current, choiceKey, regenerate));
-  }
   useEffect(() => {
-    if (!visible) return;
+    if (!restoringPanelSetup || panelWindowId === undefined || !requestedTabIds?.length) return;
+    const key = pendingPanelCallKey(panelWindowId);
+    let active = true;
+    void chrome.storage.session.get(key).then(
+      (saved) => {
+        if (!active) return;
+        const pending = restoreSetup(saved[key], id, requestedTabIds);
+        restoredSetup.current = Boolean(pending);
+        setSetup(pending);
+        setRestoringPanelSetup(false);
+      },
+      (cause: Error) => {
+        if (active) setError(cause.message);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [id, panelWindowId, requestedTabIds, restoringPanelSetup]);
+  useEffect(() => {
+    if (!visible || restoringPanelSetup || initialized.current || !requestedTabIds?.length) return;
+    initialized.current = true;
+    if (restoredSetup.current) return;
+    void runCommand(async (current) => {
+      if (requestedTabIds.length === 1) {
+        const tab = await chrome.tabs.get(requestedTabIds[0]!).catch(() => undefined);
+        if (!current()) return;
+        if (tab) setSource({ title: tab.title || 'Untitled page', url: tab.url || '' });
+      }
+      await launch(current, { id, tabIds: requestedTabIds });
+    });
+  }, [id, launch, runCommand, requestedTabIds, restoringPanelSetup, visible]);
+  function confirmSetup() {
+    if (!setup) return;
+    return runCommand((current) =>
+      launch(current, {
+        ...setup.intent,
+        review: { stamp: setup.outcome.stamp, ...(preset ? { presetId: preset } : {}) },
+      }),
+    );
+  }
+  function runAgain() {
+    if (!batch) return;
+    setSetup(undefined);
+    setPreset('');
+    const selected = sourceTabIds ?? batch.items.map((item) => item.tabId);
+    return runCommand((current) =>
+      launch(current, { id: crypto.randomUUID(), tabIds: selected, previousBatchId: batch.id }),
+    );
+  }
+  const canObserve = !requestedTabIds?.length || Boolean(batch) || restoredSetup.current;
+  useEffect(() => {
+    if (!visible || !canObserve) return;
     const observer = createStatusObserver({
       read: () => readSummary(id),
       shouldPoll: (next) => next.kind === 'found' && next.batch.items.some(activeItem),
@@ -180,12 +233,20 @@ export function useSummarySession({
         setReadError(error ?? '');
         if (error || !value) return;
         if (value.kind === 'missing') {
-          if (!initialized.current && tabIds?.length) setInitialMissing(true);
-          else if (!pending.current) setError(missingSummary);
+          if (!pending.current && !restoredSetup.current)
+            setError('This saved Call no longer exists.');
           return;
         }
         setBatch(value.batch);
-        if (!initialized.current) {
+        const recoveringAcceptedSetup = restoredSetup.current;
+        if (recoveringAcceptedSetup) {
+          restoredSetup.current = false;
+          if (panelWindowId === undefined) sessionStorage.removeItem(pendingSetupKey);
+          setSetup(undefined);
+          setPreset('');
+          if (requestedTabIds) replaceSummaryRoute(value.batch.id, requestedTabIds);
+        }
+        if (!initialized.current || recoveringAcceptedSetup) {
           initialized.current = true;
           if (onResolved)
             void onResolved(value.batch.id).catch((cause: Error) => {
@@ -200,29 +261,7 @@ export function useSummarySession({
       observer.dispose();
       if (status.current?.observer === observer) status.current = null;
     };
-  }, [id, visible, tabIds, onResolved]);
-  useEffect(() => {
-    if (!visible || !initialMissing || initialized.current || !tabIds?.length) return;
-    initialized.current = true;
-    void runCommand(async (current) => {
-      const resolved = await sendDigestMessage({ action: 'resolve', id, tabIds });
-      if (!current()) return;
-      if (resolved.batch) {
-        adoptBatch(resolved.batch);
-        setReused(true);
-        setComparisons(resolved.comparisons);
-        history.replaceState(null, '', '#summary/' + encodeURIComponent(resolved.batch.id));
-        await onResolved?.(resolved.batch.id);
-        return;
-      }
-      if (tabIds.length === 1) {
-        const tab = await chrome.tabs.get(tabIds[0]!);
-        if (!current()) return;
-        setSource({ title: tab.title || 'Untitled page', url: tab.url || '' });
-      }
-      await launch(current);
-    });
-  }, [adoptBatch, id, initialMissing, onResolved, launch, runCommand, tabIds, visible]);
+  }, [id, visible, canObserve, onResolved, panelWindowId, requestedTabIds]);
   const running = Boolean(batch?.items.some(activeItem));
   function control(action: 'stop' | 'retry' | 'delete') {
     return runCommand(async (current) => {
@@ -247,14 +286,21 @@ export function useSummarySession({
     reused,
     comparisons,
     source,
-    accounts,
-    account,
-    selectAccount: setAccount,
+    setup: setup?.outcome,
+    setupTabId: setup?.intent.tabIds.length === 1 ? setup.intent.tabIds[0] : undefined,
+    preset,
+    selectPreset: setPreset,
+    confirmSetup,
+    cancelSetup: () => {
+      setSetup(undefined);
+      setPreset('');
+      setError('');
+    },
     error,
     readError,
     busy,
-    tabIds,
-    start,
+    tabIds: sourceTabIds,
+    runAgain,
     running,
     control,
     refresh: () => status.current?.observer.refresh(),

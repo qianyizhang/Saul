@@ -111,3 +111,39 @@ it('retains a valid record when reset is no longer needed', async () => {
   });
   expect(set).not.toHaveBeenCalled();
 });
+
+it('preserves legacy Calls data only until the durable Calls selection is migrated', async () => {
+  let migrated = false;
+  let stored: unknown = {
+    ...DEFAULT_CONFIGURATION,
+    summaryPresetId: 'old',
+    summaryConnectionKey: 'gpt-plan',
+  };
+  const owner = createConfigurationStore(
+    {
+      read: async () => stored,
+      write: async (values) => {
+        stored = values.saul_user_settings;
+      },
+    },
+    undefined,
+    undefined,
+    async () => migrated,
+  );
+  const before = await owner({ action: 'read' });
+  if (before.state !== 'ready') throw new Error(before.error);
+  const kept = await owner({
+    action: 'commit',
+    baseline: before.revision,
+    settings: { ...before.settings, summaryPresetId: 'ignored' },
+  });
+  expect(kept).toMatchObject({
+    state: 'ready',
+    settings: { summaryPresetId: 'old', summaryConnectionKey: 'gpt-plan' },
+  });
+  if (kept.state !== 'ready') throw new Error(kept.error);
+  migrated = true;
+  await owner({ action: 'commit', baseline: kept.revision, settings: kept.settings });
+  expect(stored).not.toHaveProperty('summaryPresetId');
+  expect(stored).not.toHaveProperty('summaryConnectionKey');
+});

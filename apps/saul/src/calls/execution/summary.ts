@@ -19,7 +19,7 @@ export function summaryRequestInput(item: Pick<DigestItem, 'title' | 'url'>, sou
 }
 
 import type { Pair, Summary } from '../../../shared/model/call-batch.ts';
-import { record } from '../../reading/contract';
+import { isRecord as record } from '../../../shared/model/value.mts';
 
 export const SUMMARY_PROMPT = `Summarize the supplied page for a reader deciding whether to read it fully. Be concise, concrete, and source-faithful.
 Return ONLY JSON in this exact shape (all text is plain text, no Markdown or HTML):

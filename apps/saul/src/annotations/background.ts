@@ -17,7 +17,7 @@ import {
   type AnnotationResult,
   type AnnotationRequest,
 } from '../../shared/protocol/annotations.ts';
-import { prepareCallModel } from '../calls/configuration';
+import { prepareWritePreset } from '../configuration/resolve';
 import { configurationFor } from '../configuration/definition';
 import { callStore } from '../calls/store';
 import type { Configuration } from '../configuration/definition';
@@ -353,7 +353,7 @@ export function initAnnotations(settings: () => Promise<Configuration>) {
       }
       if (request.action === 'choices') {
         const s = await settings();
-        const calls = await callStore.readChoices();
+        const calls = await callStore.readChoices(settings);
         return {
           presets: configurationFor(s).presets.filter((p) => (p.capability ?? 'write') === 'write'),
           calls: calls.state === 'ready' ? (calls.choices.library ?? []) : [],
@@ -375,9 +375,9 @@ export function initAnnotations(settings: () => Promise<Configuration>) {
           .strict()
           .parse(request.options);
         const s = await settings(),
-          prepared = prepareCallModel(s, p.presetId);
+          prepared = prepareWritePreset(s, p.presetId);
         if (p.callRevision) {
-          const calls = await callStore.readChoices();
+          const calls = await callStore.readChoices(settings);
           if (
             calls.state !== 'ready' ||
             !calls.choices.library?.some((c) => c.revision.revision === p.callRevision)

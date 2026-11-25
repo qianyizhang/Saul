@@ -1,8 +1,11 @@
 import { annotationPanelKey } from '../annotations/routing';
 import { validateCall } from '../../shared/protocol/protocol.mts';
-import { id as validId } from '../reading/contract';
+import { isCallBatchId } from './batch-messages';
 
 export const summaryPanelKey = (windowId: number) => `saul-summary-panel-${windowId}`;
+export const pendingPanelCallKey = (windowId: number) => `saul-summary-panel-setup-${windowId}`;
+export const summarySelectionRoute = (id: string, tabIds?: number[]) =>
+  '#summary/' + encodeURIComponent(id) + (tabIds ? '?tabs=' + tabIds.join(',') : '');
 
 export async function closeSummaryPanel(windowId: number): Promise<void> {
   if (!Number.isSafeInteger(windowId) || windowId < 0)
@@ -23,7 +26,7 @@ export function summaryPanelRoute(value: unknown): string {
   try {
     const [path, query] = value.split('?');
     const id = decodeURIComponent(path!.slice('#summary/'.length));
-    if (!validId(id)) return '#summaries';
+    if (!isCallBatchId(id)) return '#summaries';
     const tabs = new URLSearchParams(query).get('tabs');
     if (tabs === '') return '#summaries';
     validateCall('saul_summary_open', tabs ? { tabIds: tabs.split(',').map(Number) } : { id });
@@ -41,12 +44,12 @@ export async function openSummaryPanel(windowId: number, args: { tabIds?: number
   if (Boolean(args.id) === Boolean(args.tabIds?.length))
     throw new Error('Choose a selection or a saved summary.');
   const id = args.id || crypto.randomUUID();
-  const route =
-    '#summary/' + encodeURIComponent(id) + (args.tabIds ? '?tabs=' + args.tabIds.join(',') : '');
+  const route = summarySelectionRoute(id, args.tabIds);
   // Both requests are dispatched while the gesture is live. A popup can close
   // as the panel opens; routing must not depend on its later promise callbacks.
   const routeWritten = chrome.storage.session.set({
     [summaryPanelKey(windowId)]: route,
+    [pendingPanelCallKey(windowId)]: null,
     [annotationPanelKey(windowId)]: { view: 'summary' },
   });
   const opened = chrome.sidePanel.open({ windowId });

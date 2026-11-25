@@ -33,6 +33,14 @@ export async function installDigestProvider(
           }
         | undefined;
       if (settings.sharedCredentials !== 'saul' || savedFixture) {
+        const preset = {
+          id: '4913d272-90cc-4edc-be19-300f3f99137e',
+          name: 'Fixture summary',
+          connectionKey: 'gpt-plan',
+          model: 'gpt-6-luna',
+          effort: 'medium',
+          fast: false,
+        };
         const connections = settings.connections.map((c) =>
           c.key === 'gpt-plan' ? { ...c, accountId: accounts[0]?.id } : c,
         );
@@ -42,10 +50,12 @@ export async function installDigestProvider(
         let library: SharedPresets = savedFixture?.library ?? {
           revision: 1,
           connections,
-          presets: [],
+          presets: [preset],
         };
         const sections: Record<string, { revision: number; value?: Record<string, unknown> }> =
-          savedFixture?.sections ?? {};
+          savedFixture?.sections ?? {
+            calls: { revision: 1, value: { schema: 2, library: [], builtinPresetId: preset.id } },
+          };
         await chrome.storage.local.set({ digest_fixture_config: { library, sections } });
         setStorageControlFixture(
           async (host: string, packet: { id: string; request: StorageHelperRequest }) => {
@@ -115,6 +125,7 @@ export async function installDigestProvider(
             const request = message.request;
             if (request.action !== 'connection-catalog') state.requests.push(request);
             queueMicrotask(() => {
+              const models = ['gpt-6-luna', 'fixture-work-model'];
               if (request.action === 'connection-catalog')
                 listeners.forEach((fn) =>
                   fn({
@@ -123,7 +134,7 @@ export async function installDigestProvider(
                       type: 'result',
                       catalog: {
                         fetchedAt: Date.now(),
-                        models: ['gpt-6-luna', 'fixture-work-model'].map((id) => ({
+                        models: models.map((id) => ({
                           id,
                           name: id,
                           capabilities: ['write'],
@@ -139,18 +150,20 @@ export async function installDigestProvider(
                   type: 'result',
                   accounts: state.accounts,
                 });
-              else if (message.request.action === 'models')
+              else if (request.action === 'models')
                 emit({
                   type: 'result',
-                  models: [
-                    {
-                      slug: 'gpt-6-luna',
-                      display_name: 'Luna',
-                      supportedReasoningEfforts: [{ effort: 'medium', description: 'Medium' }],
-                      defaultReasoningEffort: 'medium',
-                      isDefault: true,
-                    },
-                  ],
+                  models: models.map((slug) => ({
+                    slug,
+                    display_name: slug,
+                    supportedReasoningEfforts: [
+                      { effort: 'medium', description: 'Medium' },
+                      { effort: 'high', description: 'High' },
+                    ],
+                    defaultReasoningEffort: 'medium',
+                    isDefault: slug === 'gpt-6-luna',
+                    ...(slug === 'fixture-work-model' ? { fastTier: 'fast' } : {}),
+                  })),
                 });
               else if (message.request.action === 'generate') {
                 if (failure) {
@@ -192,25 +205,33 @@ export async function openDigestReader(
   context: BrowserContext,
   popup: Page,
   worker: Worker,
-  url: string,
+  urls: string | string[],
 ) {
-  const tabId = await worker.evaluate(
-    async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url)!.id!,
-    url,
+  const tabIds = await worker.evaluate(
+    async (sources) => {
+      const tabs = await chrome.tabs.query({});
+      return sources.map((url) => tabs.find((tab) => tab.url === url)!.id!);
+    },
+    typeof urls === 'string' ? [urls] : urls,
   );
   await expect
-    .poll(() => worker.evaluate(async (id) => (await chrome.tabs.get(id)).status, tabId))
-    .toBe('complete');
+    .poll(() =>
+      worker.evaluate(async (ids) => {
+        const tabs = await Promise.all(ids.map((id) => chrome.tabs.get(id)));
+        return tabs.every((tab) => tab.status === 'complete');
+      }, tabIds),
+    )
+    .toBe(true);
   const opened = context.waitForEvent('page');
   await popup.evaluate(
-    (tabId) =>
+    (tabIds) =>
       chrome.runtime.sendMessage({
         type: 'WORKSPACE_TABS',
         action: 'command',
         method: 'saul_summary_open',
-        args: { tabIds: [tabId] },
+        args: { tabIds },
       }),
-    tabId,
+    tabIds,
   );
   return opened;
 }

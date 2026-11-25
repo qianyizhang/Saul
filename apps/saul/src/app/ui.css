@@ -803,6 +803,27 @@ progress::-webkit-progress-value {
 .summary-reader p {
   overflow-wrap: anywhere;
 }
+.call-setup .field {
+  max-width: 28rem;
+  min-width: 0;
+}
+.call-setup-sources {
+  max-height: 14rem;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  margin: 0;
+  padding-inline-start: 1.5rem;
+}
+.call-setup-sources:has(> :only-child) {
+  padding-inline-start: 0;
+  list-style: none;
+}
+.call-setup-sources li + li {
+  margin-top: var(--design-space-sm);
+}
+.call-setup-sources a {
+  display: block;
+}
 .summary-items > li {
   padding: 24px 0;
   border-top: 1px solid var(--border);

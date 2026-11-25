@@ -4,7 +4,6 @@ import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 import { validateSettingsRequest, type SettingsState } from '../src/settings/contract';
 import { requestSettings, SettingsDeliveryError } from '../src/configuration/client';
 import { createSettingsDraft, editSettingsDraft, settingsForSave } from '../src/settings/draft';
-import { summaryConnections } from '../src/calls/execution/summary-connection';
 import { preparePreset } from '../src/configuration/resolve';
 
 it('saves an explicit preset repair while retaining a retired legacy default', async () => {
@@ -42,7 +41,7 @@ it('saves an explicit preset repair while retaining a retired legacy default', a
   expect(() => preparePreset(saved.settings, retired)).toThrow('has been retired');
 });
 
-it('commits an unrelated edit after inspection without retargeting Original summary or API defaults', async () => {
+it('commits an unrelated edit after inspection without retargeting the saved account or API defaults', async () => {
   const source = structuredClone(DEFAULT_CONFIGURATION);
   source.chatgptPlan = { accountId: 'local-A', model: 'saved-model' };
   source.activeProfileId = 'default';
@@ -81,12 +80,6 @@ it('commits an unrelated edit after inspection without retargeting Original summ
     },
   );
   const f = fixture(source);
-  const accounts = ['local-A', 'bound-B'].map((id) => ({
-    id,
-    label: id,
-    signedIn: true,
-    planEnabled: true,
-  }));
   for (const id of ['plan-b', 'other']) {
     const before = ready(await f.owner({ action: 'read' }));
     let draft = editSettingsDraft(createSettingsDraft(before.settings), {
@@ -104,7 +97,7 @@ it('commits an unrelated edit after inspection without retargeting Original summ
     expect(saved.settings.openaiCompatible).toEqual(before.settings.openaiCompatible);
     expect(saved.settings.activeProfileId).toBe('default');
     expect(saved.settings.activeProvider).toBe(before.settings.activeProvider);
-    expect(summaryConnections(saved.settings, accounts).chosen).toBe('');
+    expect(saved.settings.chatgptPlan).toEqual(before.settings.chatgptPlan);
   }
 });
 

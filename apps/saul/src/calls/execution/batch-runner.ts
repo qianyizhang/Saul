@@ -1,6 +1,7 @@
 import type { DbCall } from '../../../shared/protocol/history-types.ts';
 import { type CallSnapshot } from '../../../shared/model/call-output.ts';
 import { createCallExecutor, type CallExecutor, type CallOutcome, type FrozenCall } from './module';
+import { executionModel, originalSummaryPlan } from '../../../shared/model/execution-route.ts';
 import { SUMMARY_PROMPT } from './summary';
 import { compareText } from '../../reading/input-change';
 import {
@@ -8,6 +9,7 @@ import {
   interruptItem,
   retryableItem,
   type DigestBatch,
+  type CallLookup,
   type DigestItem,
   type DigestRequest,
   type DigestSource,
@@ -21,7 +23,7 @@ type Capture = (
   signal?: AbortSignal,
   pdfProcessing?: PdfProcessing,
 ) => Promise<DigestSource>;
-interface DigestRun {
+interface ActiveCallBatch {
   batch: DigestBatch;
   controller: AbortController;
   task: Promise<void>;
@@ -29,9 +31,9 @@ interface DigestRun {
 const sourceBusy =
   'A summary is already running for one of these pages. Stop it or wait for it to finish.';
 
-export class DigestRunner {
+export class CallBatchRunner {
   private recovery?: Promise<void>;
-  private runs = new Map<string, DigestRun>();
+  private runs = new Map<string, ActiveCallBatch>();
   // A storage outage can leave an active row behind after its task has stopped.
   // Keep only its notice; the durable row remains the only saved result.
   private writeFailures = new Map<string, string>();
@@ -51,7 +53,11 @@ export class DigestRunner {
     return this.recovery;
   }
   // Serialize control actions; generation itself stays independent of popup lifetime.
-  request(request: DigestRequest, snapshot?: DigestBatch, credential = ''): Promise<unknown> {
+  request(
+    request: DigestRequest,
+    snapshot?: DigestBatch | CallLookup,
+    credential = '',
+  ): Promise<unknown> {
     // Read-only page comparisons must not delay Stop or other generation controls.
     if (
       request.action === 'resolve' ||
@@ -78,14 +84,14 @@ export class DigestRunner {
     this.controls = action.catch(() => undefined);
     return action;
   }
-  private abort(id: string): DigestRun | undefined {
+  private abort(id: string): ActiveCallBatch | undefined {
     const run = this.runs.get(id);
     run?.controller.abort();
     return run;
   }
   private async handle(
     r: Exclude<DigestRequest, { action: 'stop' }>,
-    snapshot?: DigestBatch,
+    snapshot?: DigestBatch | CallLookup,
     credential = '',
   ): Promise<unknown> {
     await this.recover();
@@ -101,6 +107,21 @@ export class DigestRunner {
       const batch = await this.find(snapshot);
       if (!batch) return { comparisons: [] };
       const comparisons: DigestComparison[] = [];
+      let modelChange: string | undefined;
+      if ('currentModel' in snapshot) {
+        const saved = batch.action?.input ?? batch.summaryInput;
+        try {
+          const original = saved ? executionModel(saved) : originalSummaryPlan(batch);
+          if (!snapshot.currentModel) modelChange = 'Current model preset unavailable';
+          else if (
+            saved?.preset?.id !== snapshot.currentModel.preset?.id ||
+            JSON.stringify(original) !== JSON.stringify(executionModel(snapshot.currentModel))
+          )
+            modelChange = 'Model settings';
+        } catch {
+          modelChange = 'Model settings unavailable';
+        }
+      }
       // Limit capture concurrency and discard current text after measuring it.
       const queue = [...snapshot.items];
       const compare = async () => {
@@ -112,7 +133,9 @@ export class DigestRunner {
             item,
             snapshot.pdfProcessing ?? batch.pdfProcessing ?? 'local',
           );
-          comparisons[item.index] = inspected.comparison!;
+          const comparison = inspected.comparison!;
+          if (modelChange) comparison.fields.push(modelChange);
+          comparisons[item.index] = comparison;
         }
       };
       await Promise.all([compare(), compare()]);
@@ -144,7 +167,7 @@ export class DigestRunner {
     }
     let batch: DigestBatch;
     if (r.action === 'start') {
-      if (!snapshot) throw new Error('Missing selection snapshot.');
+      if (!snapshot || !('createdAt' in snapshot)) throw new Error('Missing frozen Call.');
       const existing = this.runs.get(r.id)?.batch;
       if (existing) return structuredClone(existing);
       if (this.writeFailures.has(r.id)) return this.handle({ action: 'get', id: r.id });
@@ -194,7 +217,7 @@ export class DigestRunner {
       if (batch.items.some((item) => activeItem(item) && urls.has(item.url)))
         throw new Error(sourceBusy);
   }
-  private async find(snapshot: DigestBatch): Promise<DigestBatch | undefined> {
+  private async find(snapshot: CallLookup): Promise<DigestBatch | undefined> {
     const urls = snapshot.items.map((item) => item.url);
     for (const { batch } of this.runs.values())
       if (
@@ -231,12 +254,6 @@ export class DigestRunner {
     if (tabId === undefined) return { saved };
     const comparison: DigestComparison = { index: item.index, fields: [] };
     if (!batch.action && batch.prompt !== SUMMARY_PROMPT) comparison.fields.push('Instructions');
-    if (
-      !batch.action &&
-      !batch.summaryInput &&
-      (batch.model !== 'gpt-6-luna' || batch.effort !== 'medium')
-    )
-      comparison.fields.push('Model settings');
     if (currentItem && currentItem.title !== item.title) comparison.fields.push('Page title');
     try {
       const current = await this.capture({ ...item, tabId }, undefined, currentProcessing);

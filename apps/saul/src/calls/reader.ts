@@ -1,12 +1,12 @@
 import type { SummaryProgress } from '../../shared/protocol/protocol.mts';
 import type { DigestBatch } from '../../shared/model/call-batch.ts';
 import { runnerRequest } from '../platform/chrome/runner';
-import { id as validId } from '../reading/contract';
+import { isCallBatchId } from './batch-messages';
 
 export async function openSummaryReader(args: { tabIds?: number[]; id?: string }) {
   if (Boolean(args.id) === Boolean(args.tabIds?.length))
     throw new Error('Choose a selection or a saved summary.');
-  if (args.id && !validId(args.id)) throw new Error('Invalid summary ID.');
+  if (args.id && !isCallBatchId(args.id)) throw new Error('Invalid summary ID.');
   if (args.id)
     await runnerRequest({ operation: 'digest', message: { action: 'get', id: args.id } });
   let source: chrome.tabs.Tab | undefined;
