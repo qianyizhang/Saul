@@ -85,15 +85,19 @@ struct LookupDraft {
         sketch = SketchDraft()
     }
 
-    mutating func attach(_ image: ImageAttachment?, asSketch: Bool, restoring: Bool = false) throws {
+    mutating func attach(_ image: ImageAttachment?, asSketch: Bool) throws {
         if asSketch {
-            if restoring {
-                sketch = try SketchDraft(attachment: image)
-            } else {
-                var scene = sketch.scene
-                scene.photo = try image.map(SketchPhoto.init)
-                updateSketch { $0.commit(scene) }
-            }
+            var scene = sketch.scene
+            scene.photo = try image.map(SketchPhoto.init)
+            updateSketch { $0.commit(scene) }
+        } else {
+            attachment = image
+        }
+    }
+
+    mutating func restoreImage(_ image: ImageAttachment, sketchPhoto: SketchPhoto?) {
+        if let sketchPhoto {
+            sketch = SketchDraft(restoring: sketchPhoto)
         } else {
             attachment = image
         }

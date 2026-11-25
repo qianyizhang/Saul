@@ -227,6 +227,15 @@ async function openSelectionEditor(sandbox: ExtensionSandbox, fixtureServer: Fix
   await expect
     .poll(() => panel.evaluate(() => document.querySelector('.annotation-editor h2')?.textContent))
     .toBe('Annotation 1');
+  const editorOpen = await panel.evaluate(
+    () => document.querySelector('.annotation-editor')?.closest('details')?.open,
+  );
+  if (!editorOpen) await panel.click('Review in sidebar');
+  await expect
+    .poll(() =>
+      panel.evaluate(() => document.querySelector('.annotation-editor')?.checkVisibility()),
+    )
+    .toBe(true);
   return { panel, popup, source };
 }
 
@@ -298,7 +307,7 @@ test('reply submission admits one append and keeps the next draft', async ({
 test('queued edits preserve a concurrent comment and an older save cannot erase another editor’s draft', async ({
   sandbox,
   fixtureServer,
-}) => {
+}, info) => {
   const { panel, popup, source } = await openSelectionEditor(sandbox, fixtureServer);
   try {
     // Deliver another writer's edit between the editor's first accepted write and its read-back.
@@ -395,6 +404,55 @@ test('queued edits preserve a concurrent comment and an older save cannot erase 
         return r.result.records[0] as Annotation;
       }, source.url());
     expect((await read()).comment).toBe('Another writer’s comment');
+    await panel.click('Read latest');
+    await expect
+      .poll(() => panel.evaluate(() => document.querySelector('.annotation-editor')?.textContent))
+      .toContain('Latest saved comment: Another writer’s comment');
+    const reviewed = await read();
+    const concurrent = await popup.evaluate(
+      async ({ url, id, revision }) =>
+        chrome.runtime.sendMessage({
+          target: 'saul-annotation',
+          action: 'operate',
+          url,
+          operation: {
+            action: 'change',
+            changes: [
+              {
+                id,
+                revision,
+                operationId: 'edit-after-review',
+                action: 'edit',
+                text: 'Changed after review',
+              },
+            ],
+          },
+        }),
+      reviewed,
+    );
+    expect(concurrent).toMatchObject({
+      success: true,
+      result: { outcomes: [{ record: { comment: 'Changed after review' } }] },
+    });
+    await panel.click('Save draft against latest');
+    await expect
+      .poll(() =>
+        panel.evaluate(
+          () => document.querySelector('.annotation-editor [role="alert"]')?.textContent,
+        ),
+      )
+      .toContain('Annotation changed');
+    expect((await read()).comment).toBe('Changed after review');
+    await panel.click('Read latest');
+    await expect
+      .poll(() => panel.evaluate(() => document.querySelector('.annotation-editor')?.textContent))
+      .toContain('Latest saved comment: Changed after review');
+    if (reviewScreenshots) {
+      await panel.evaluate(() =>
+        document.querySelector('#annotation-comment')?.scrollIntoView({ block: 'start' }),
+      );
+      await panel.screenshot(info.outputPath('sidebar-review.png'));
+    }
     await panel.click('Save draft against latest');
     await expect.poll(async () => (await read()).comment).toBe('Newest local draft');
     await expect
@@ -1028,30 +1086,31 @@ test('page index groups confirmed headings, preserves original IDs, and keeps un
     await panel.evaluate(() =>
       document.querySelectorAll<HTMLButtonElement>('.annotation-item')[1]!.click(),
     );
+    const cardControl = (label: string, click = false) =>
+      worker.evaluate(
+        async ({ label, click }) => {
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          const [value] = await chrome.scripting.executeScript({
+            target: { tabId: tab!.id! },
+            args: [label, click],
+            func: (label: string, click: boolean) => {
+              const host = document.querySelector<HTMLElement>('saul-annotation-card');
+              const root = host && chrome.dom.openOrClosedShadowRoot(host);
+              const control = Array.from(
+                root?.querySelectorAll<HTMLElement>('button,summary,[role="status"],p') ?? [],
+              ).find((e) => e.textContent?.trim() === label);
+              if (!control?.checkVisibility() || control.matches(':disabled')) return false;
+              if (click) control.click();
+              return true;
+            },
+          });
+          return value?.result ?? false;
+        },
+        { label, click },
+      );
     const clickCard = async (label: string) => {
-      // The card keeps its content in a closed shadow root. Use the extension's
-      // isolated test world to measure the control and send an actual pointer click.
-      const point = await worker.evaluate(async (label) => {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        const [value] = await chrome.scripting.executeScript({
-          target: { tabId: tab!.id! },
-          args: [label],
-          func: (label: string) => {
-            const host = document.querySelector<HTMLElement>('saul-annotation-card');
-            const root = host && chrome.dom.openOrClosedShadowRoot(host);
-            const control = Array.from(
-              root?.querySelectorAll<HTMLElement>('button,summary') ?? [],
-            ).find((e) => e.textContent?.trim() === label);
-            const rect = control?.getBoundingClientRect();
-            return rect && rect.width
-              ? { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
-              : null;
-          },
-        });
-        return value?.result;
-      }, label);
-      if (!point) throw new Error('Missing card control ' + label);
-      await source.mouse.click(point.x, point.y);
+      // The card's closed shadow root is accessible only to the extension.
+      await expect.poll(() => cardControl(label, true)).toBe(true);
     };
     const read = () =>
       popup.evaluate(
@@ -1066,22 +1125,56 @@ test('page index groups confirmed headings, preserves original IDs, and keeps un
           ).result.record as Annotation,
         urls[1]!,
       );
-    await expect(async () => {
-      await clickCard('Reply');
-    }).toPass({ timeout: 5000 });
+    await clickCard('Reply');
     await source.keyboard.insertText('Scoped reply');
     await clickCard('Add reply');
     await expect
       .poll(async () => (await read()).replies.map((r) => r.text))
       .toEqual(['Scoped reply']);
-    await expect(async () => {
-      await clickCard('More');
-    }).toPass({ timeout: 5000 });
+    await expect.poll(() => cardControl('Reply added')).toBe(true);
+    await clickCard('More');
     await clickCard('Mark done');
     await expect.poll(async () => (await read()).state).toBe('done');
     expect((await read()).url).toBe(urls[1]);
     if (reviewScreenshots)
       await source.screenshot({ path: info.outputPath('page-index-card.png') });
+    const externalEdit = async (text: string) => {
+      const { id, revision, url } = await read();
+      const result = await popup.evaluate(
+        async ({ id, revision, url, text }) =>
+          chrome.runtime.sendMessage({
+            target: 'saul-annotation',
+            action: 'operate',
+            url,
+            operation: {
+              action: 'change',
+              changes: [{ id, revision, operationId: crypto.randomUUID(), action: 'edit', text }],
+            },
+          }),
+        { id, revision, url, text },
+      );
+      expect(result).toMatchObject({
+        success: true,
+        result: { outcomes: [{ record: { comment: text } }] },
+      });
+    };
+    await clickCard('Edit comment');
+    await source.keyboard.press('ControlOrMeta+a');
+    await source.keyboard.insertText('Page draft');
+    await externalEdit('Saved in another editor');
+    await clickCard('Save comment');
+    await clickCard('Read latest');
+    await expect
+      .poll(() => cardControl('Latest saved comment: Saved in another editor'))
+      .toBe(true);
+    if (reviewScreenshots)
+      await source.screenshot({ path: info.outputPath('page-card-review.png') });
+    await externalEdit('Saved after review');
+    await clickCard('Save comment');
+    await clickCard('Read latest');
+    await expect.poll(() => cardControl('Latest saved comment: Saved after review')).toBe(true);
+    await clickCard('Save comment');
+    await expect.poll(async () => (await read()).comment).toBe('Page draft');
     await source.goto(base + '#/different');
     await expect(source.getByRole('button', { name: 'Annotations 1', exact: true })).toBeVisible();
     await source.goto(base + '?edition=2#detail');

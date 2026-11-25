@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client';
 import { useEffect, useRef, useState } from 'react';
 import { annotationMessage } from './client';
+import { annotationMutationSession } from './mutation-session';
 import type {
   Annotation,
   AnnotationCapture,
@@ -19,6 +20,7 @@ type Card = {
 };
 type Draft = { id: string; mode: 'edit' | 'reply'; text: string; revision?: number };
 const drafts = new Map<string, Draft>();
+const pendingChanges = new Map<string, AnnotationChange>();
 function draftKey(card: Card) {
   const { url, target, id } = card.capture;
   return card.existing
@@ -94,46 +96,49 @@ function CommentCard({
     restored?.mode ?? (card.existing && !card.editOnOpen ? 'read' : 'edit'),
   );
   const [text, setText] = useState(restored?.text ?? '');
-  const baseRevision = useRef(restored?.revision);
+  const [reviewed, showReviewed] = useState<Annotation>();
   const [receipt, setReceipt] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(
+    pendingChanges.has(key) ? 'Save could not be confirmed. Read latest before saving again.' : '',
+  );
   const [busy, setBusy] = useState(false);
   const [version, refresh] = useState(0);
   const [missing, setMissing] = useState(false);
   const frame = useRef<HTMLElement>(null);
   const field = useRef<HTMLTextAreaElement>(null);
-  const retry = useRef<{ signature: string; id: string } | undefined>(undefined);
   const locked = useRef(false);
+  const [session] = useState(() => {
+    const session = annotationMutationSession<Annotation>({
+      id: capture.id,
+      pending: pendingChanges.get(key),
+      onPending: (change) => {
+        if (change) pendingChanges.set(key, change);
+        else pendingChanges.delete(key);
+      },
+      read: async () =>
+        (await annotationMessage({ action: 'card-read', url: capture.url, id: capture.id })).record,
+      write: (change) => annotationMessage({ action: 'card-change', url: capture.url, change }),
+      publish: setRecord,
+      invalidate: () => refresh((value) => value + 1),
+    });
+    session.setBase(restored?.revision);
+    return session;
+  });
   useEffect(() => {
     if (!card.existing && !version) return;
     let active = true;
     void annotationMessage({ action: 'card-read', url: capture.url, id: capture.id }).then(
-      (r) => {
-        if (active && r.record) {
-          setRecord(r.record);
-          if (
-            version &&
-            retry.current &&
-            r.record.operations.some((operation) => operation.id === retry.current?.id)
-          ) {
-            drafts.delete(key);
-            retry.current = undefined;
-            baseRevision.current = undefined;
-            setText('');
-            setMode('read');
-            setReceipt('Change saved');
-          } else if (version) baseRevision.current = r.record.revision;
-          setError('');
-        }
+      ({ record }) => {
+        if (active && record) session.accept(record);
       },
       (e) => {
-        if (active) setError(String(e));
+        if (active && !session.current()) setError(String(e));
       },
     );
     return () => {
       active = false;
     };
-  }, [card, capture, key, version]);
+  }, [card, capture, session, version]);
   useEffect(() => {
     const position = () => {
       const el = frame.current;
@@ -193,22 +198,9 @@ function CommentCard({
         return;
       }
       if (!record) throw new Error('Read the annotation again.');
-      const revision = baseRevision.current ?? record.revision;
-      const signature = JSON.stringify([revision, action, text]);
-      if (retry.current?.signature !== signature)
-        retry.current = { signature, id: crypto.randomUUID() };
-      const change = {
-        id: record.id,
-        revision,
-        operationId: retry.current.id,
-        action,
-        ...(['append', 'edit'].includes(action) && { text }),
-      };
-      const result = await annotationMessage({ action: 'card-change', url: capture.url, change });
-      const outcome = result.outcomes?.[0];
-      if (!outcome?.record) throw new Error(outcome?.error ?? 'Could not confirm the change.');
+      await session.change(action, action === 'edit' || action === 'append' ? text : undefined);
       drafts.delete(key);
-      baseRevision.current = undefined;
+      session.setBase(undefined);
       setReceipt(
         action === 'append'
           ? 'Reply added'
@@ -218,12 +210,46 @@ function CommentCard({
               ? 'Reopened'
               : 'Comment saved',
       );
-      refresh((value) => value + 1);
       setText('');
       setMode('read');
-      retry.current = undefined;
+      showReviewed(undefined);
     } catch (e) {
+      showReviewed(undefined);
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      locked.current = false;
+      pending(false);
+      setBusy(false);
+    }
+  }
+  function setErrorFromCause(cause: unknown) {
+    setError(String(cause));
+  }
+  async function reviewLatest() {
+    if (locked.current) return;
+    locked.current = true;
+    pending(true);
+    setBusy(true);
+    try {
+      const { record: saved, confirmed } = await session.review();
+      if (!saved) throw new Error('Annotation unavailable.');
+      if (!session.accept(saved)) throw new Error('Annotation changed. Read latest again.');
+      session.setBase(saved.revision);
+      if (confirmed && (mode === 'read' || confirmed.text === text)) {
+        session.setBase(undefined);
+        drafts.delete(key);
+        setText('');
+        setMode('read');
+        setReceipt('Change saved');
+        showReviewed(undefined);
+      } else {
+        showReviewed(saved);
+        const draft = drafts.get(key);
+        if (draft) drafts.set(key, { ...draft, revision: saved.revision });
+      }
+      setError('');
+    } catch (cause) {
+      setError(String(cause));
     } finally {
       locked.current = false;
       pending(false);
@@ -253,7 +279,7 @@ function CommentCard({
       {receipt && <small role="status">{receipt}</small>}
       {missing && <small>Target unavailable on this page.</small>}
       {record?.imageError && <small>{record.imageError}</small>}
-      {mode === 'edit' && version > 0 && record && <p>Latest saved comment: {record.comment}</p>}
+      {mode !== 'read' && reviewed && <p>Latest saved comment: {reviewed.comment}</p>}
       {mode === 'read' && record && (
         <>
           {record.state === 'done' && <small>Done</small>}
@@ -276,6 +302,7 @@ function CommentCard({
               onClick={() => {
                 setReceipt('');
                 setText('');
+                session.setBase(record.revision);
                 setMode('reply');
               }}
             >
@@ -291,14 +318,20 @@ function CommentCard({
                 onClick={() => {
                   setReceipt('');
                   setText(record.comment);
+                  session.setBase(record.revision);
                   setMode('edit');
                 }}
               >
                 Edit comment
               </button>
               <button
-                disabled={busy}
-                onClick={() => void submit(record.state === 'open' ? 'complete' : 'reopen')}
+                disabled={busy || !!error}
+                onClick={() =>
+                  session.enqueue(
+                    () => submit(record.state === 'open' ? 'complete' : 'reopen'),
+                    setErrorFromCause,
+                  )
+                }
               >
                 {record.state === 'open' ? 'Mark done' : 'Reopen'}
               </button>
@@ -310,7 +343,11 @@ function CommentCard({
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            void submit(mode === 'reply' ? 'append' : 'edit');
+            if (!card.existing || !error)
+              session.enqueue(
+                () => submit(mode === 'reply' ? 'append' : 'edit'),
+                setErrorFromCause,
+              );
           }}
         >
           <label>
@@ -323,12 +360,12 @@ function CommentCard({
               maxLength={16000}
               onChange={(e) => {
                 setText(e.target.value);
-                baseRevision.current ??= record?.revision;
+                if (session.base() === undefined) session.setBase(record?.revision);
                 drafts.set(key, {
                   id: capture.id,
                   text: e.target.value,
                   mode,
-                  revision: baseRevision.current,
+                  revision: session.base(),
                 });
               }}
             />
@@ -339,7 +376,9 @@ function CommentCard({
               disabled={busy}
               onClick={() => {
                 drafts.delete(key);
-                baseRevision.current = undefined;
+                session.setBase(undefined);
+                showReviewed(undefined);
+                if (!pendingChanges.has(key)) setError('');
                 if (!record) close();
                 else {
                   setText('');
@@ -351,7 +390,7 @@ function CommentCard({
             </button>
             <button
               className="primary"
-              disabled={busy || !text.trim() || (card.existing && !record)}
+              disabled={busy || !text.trim() || (card.existing && (!!error || !record))}
             >
               {busy ? 'Saving…' : mode === 'reply' ? 'Add reply' : 'Save comment'}
             </button>
@@ -362,7 +401,7 @@ function CommentCard({
         <p role="alert">
           {error}{' '}
           {card.existing && (
-            <button disabled={busy} onClick={() => refresh((v) => v + 1)}>
+            <button disabled={busy} onClick={() => void reviewLatest()}>
               Read latest
             </button>
           )}

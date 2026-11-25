@@ -178,6 +178,8 @@ async function configureConnections(worker: Worker) {
                 },
                 warning: 'Signed out locally. Remote revocation was not confirmed.',
               };
+            } else if (r.action === 'connection-key-status') {
+              event = { type: 'result', connection: { connected: true, endpoint: r.endpoint } };
             } else if (r.action === 'connection-status') {
               const provider = state.library.connections?.find((p) => p.key === r.connectionKey);
               event = {
@@ -242,7 +244,14 @@ async function configureConnections(worker: Worker) {
             } else if (r.action === 'connection-key-save')
               event = state.denied
                 ? { type: 'error', message: 'Synthetic key storage denied' }
-                : { type: 'result' };
+                : {
+                    type: 'result',
+                    connection: {
+                      connected: true,
+                      endpoint: r.endpoint,
+                      keySuffix: r.key.slice(-4),
+                    },
+                  };
             else event = { type: 'error', message: 'Unexpected credential operation' };
             send(event);
           });
@@ -341,14 +350,12 @@ test('managed connections preserve setup after failure and report removed models
   await expect(
     popup.getByRole('alert').filter({ hasText: 'Synthetic failure after saving' }),
   ).toBeVisible();
-  await expect(
-    popup.getByRole('button', { name: 'Reload saved settings', exact: true }),
-  ).toBeVisible();
+  await expect(popup.getByRole('button', { name: 'Finish setup' })).toBeVisible();
   await expect(
     popup
-      .getByRole('region', { name: 'Connections', exact: true })
+      .getByRole('region', { name: 'Connections' })
       .getByRole('button', { name: 'Save', exact: true }),
-  ).toBeDisabled();
+  ).toHaveCount(0);
   await popup.screenshot({ path: info.outputPath('connection-recovery.png') });
   await popup.setViewportSize({ width: 390, height: 850 });
   await popup.emulateMedia({ colorScheme: 'dark' });
@@ -356,15 +363,34 @@ test('managed connections preserve setup after failure and report removed models
   await popup.screenshot({ path: info.outputPath('connection-recovery-dark-narrow.png') });
   await popup.setViewportSize({ width: 640, height: 760 });
   await popup.emulateMedia({ colorScheme: 'light' });
-  await popup.getByRole('button', { name: 'Review latest', exact: true }).click();
-  await popup.getByRole('button', { name: 'Apply to draft', exact: true }).click();
-  await popup.getByRole('button', { name: 'Cancel', exact: true }).click();
+  const beforeRecovery = await worker.evaluate(async () => {
+    const storage = await chrome.storage.local.get('saul_pending_connection_setup');
+    return storage.saul_pending_connection_setup;
+  });
+  expect(beforeRecovery).toMatchObject({
+    phase: 'settings',
+    definition: { name: 'Local development' },
+  });
+  const savedRevision = await worker.evaluate(
+    () =>
+      (globalThis as unknown as { connectionFixture: { library: SharedPresets } }).connectionFixture
+        .library.revision,
+  );
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  // Selection is local to an open Settings editor. Recovery preserves the new editor's selection.
+  await settingsSection(popup, 'Presets');
+  await popup.getByRole('button', { name: 'Writing', exact: true }).click();
+  await settingsSection(popup, 'Connections');
+  await popup.getByRole('button', { name: 'Finish setup' }).click();
+  await expect(popup.getByRole('button', { name: 'Finish setup' })).toHaveCount(0);
   expect(
-    await popup.evaluate(
+    await worker.evaluate(
       () =>
-        (globalThis as typeof globalThis & { connectionCommitCount: number }).connectionCommitCount,
+        (globalThis as unknown as { connectionFixture: { library: SharedPresets } })
+          .connectionFixture.library.revision,
     ),
-  ).toBe(1);
+  ).toBe(savedRevision);
   const local = popup.getByRole('article', { name: 'Local development', exact: true });
   await expect(local.getByText('Write', { exact: true })).toBeVisible();
   await expect(local.getByText(/localhost:11434/)).toBeVisible();
@@ -414,6 +440,174 @@ test('managed connections preserve setup after failure and report removed models
   const saves = saved.requests.filter((r) => r.action === 'connection-key-save');
   expect(saves).toHaveLength(2);
   expect(saves[0]).toEqual(saves[1]);
+});
+
+test('Plan setup recovery enables the original account through explicit consent and finishes once', async ({
+  sandbox,
+}) => {
+  const { worker, popup } = await sandbox.launch();
+  await configureConnections(worker);
+  await worker.evaluate(async () => {
+    await chrome.storage.local.set({
+      saul_pending_connection_setup: {
+        id: 'connection-recover-plan',
+        phase: 'settings',
+        definition: {
+          key: 'connection-recover-plan',
+          name: 'Recovered plan',
+          kind: 'chatgpt-plan',
+          accountId: 'fixture-spare',
+        },
+        confirmedName: 'Saul AABBCCDDEEFF',
+      },
+    });
+  });
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(popup, 'Connections');
+  const requestEffects = () =>
+    worker.evaluate(() =>
+      (globalThis as FixtureGlobal).connectionFixture.requests.filter(
+        (r) =>
+          r.action === 'login' ||
+          r.action === 'confirm-app-name' ||
+          r.action === 'connection-key-save',
+      ),
+    );
+  const finish = popup.getByRole('button', { name: 'Finish setup', exact: true });
+  const enable = popup.getByRole('button', { name: 'Enable plan use', exact: true });
+  await expect(enable).toBeVisible();
+  await finish.click();
+  await expect(popup.getByRole('alert')).toContainText('allow plan use');
+  expect(await requestEffects()).toEqual([]);
+
+  await enable.click();
+  await expect(enable).toHaveCount(0);
+  await expect(popup.getByRole('button', { name: 'Sign in to original account' })).toHaveCount(0);
+  await expect(popup.getByRole('button', { name: 'Check original account' })).toHaveCount(0);
+  await expect(popup.getByRole('button', { name: 'Register a new app' })).toHaveCount(0);
+  const consent = { action: 'login', accountId: 'fixture-spare', consent: true };
+  expect(await requestEffects()).toEqual([consent]);
+
+  await finish.click();
+  await expect(popup.getByRole('article', { name: 'Recovered plan' })).toBeVisible();
+  await expect(finish).toHaveCount(0);
+  const saved = await worker.evaluate(async () => ({
+    pending: (await chrome.storage.local.get('saul_pending_connection_setup'))
+      .saul_pending_connection_setup,
+    library: (globalThis as FixtureGlobal).connectionFixture.library,
+  }));
+  expect(saved.pending).toBeUndefined();
+  expect(saved.library.revision).toBe(2);
+  expect(saved.library.connections).toContainEqual({
+    key: 'connection-recover-plan',
+    name: 'Recovered plan',
+    kind: 'chatgpt-plan',
+    accountId: 'fixture-spare',
+  });
+  expect(await requestEffects()).toEqual([consent]);
+});
+
+test('discarding a receipt in another window retires the submitted form when notifications coalesce', async ({
+  sandbox,
+}) => {
+  const { worker, popup, context } = await sandbox.launch();
+  await configureConnections(worker);
+  await popup.reload();
+  const other = await context.newPage();
+  await other.goto(popup.url());
+  for (const surface of [popup, other]) {
+    await surface.getByRole('button', { name: 'Settings', exact: true }).click();
+    await settingsSection(surface, 'Connections');
+  }
+  await popup.evaluate(() => {
+    const storage = chrome.storage.local;
+    const get = storage.get.bind(storage) as (key: string) => Promise<Record<string, unknown>>;
+    const set = storage.set.bind(storage) as (values: Record<string, unknown>) => Promise<void>;
+    const held = Promise.withResolvers<void>();
+    let pause = false;
+    Object.assign(globalThis, { releaseSetupReads: held.resolve });
+    storage.set = (async (values: Record<string, unknown>) => {
+      if ('saul_pending_connection_setup' in values) pause = true;
+      await set(values);
+    }) as typeof storage.set;
+    storage.get = (async (key: string) => {
+      if (pause && key === 'saul_pending_connection_setup') await held.promise;
+      return get(key);
+    }) as typeof storage.get;
+  });
+
+  await popup.getByRole('button', { name: '＋ Add', exact: true }).click();
+  await popup.getByRole('combobox', { name: 'Type', exact: true }).selectOption('api');
+  await popup.getByRole('textbox', { name: 'Name', exact: true }).fill('Pending API');
+  await popup.getByLabel('API key', { exact: true }).fill('synthetic-pending-key');
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  const discard = other.getByRole('button', { name: 'Discard setup', exact: true });
+  await expect(discard).toBeVisible();
+  await discard.click();
+  await expect(discard).toHaveCount(0);
+  await popup.evaluate(() => {
+    (globalThis as typeof globalThis & { releaseSetupReads: () => void }).releaseSetupReads();
+  });
+  await expect(popup.getByRole('button', { name: '＋ Add', exact: true })).toBeEnabled();
+  await expect(popup.getByLabel('API key', { exact: true })).toHaveCount(0);
+  await expect(popup.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
+  await popup.getByRole('button', { name: '＋ Add', exact: true }).click();
+  await popup.getByRole('combobox', { name: 'Type', exact: true }).selectOption('api');
+  await expect(popup.getByLabel('API key', { exact: true })).toHaveValue('');
+  const observed = await worker.evaluate(async () => ({
+    pending: (await chrome.storage.local.get('saul_pending_connection_setup'))
+      .saul_pending_connection_setup,
+    credentialWrites: (globalThis as FixtureGlobal).connectionFixture.requests.filter(
+      ({ action }) => action === 'connection-key-save',
+    ).length,
+  }));
+  expect(observed).toEqual({ pending: undefined, credentialWrites: 1 });
+  await other.close();
+});
+
+test('Plan recovery cannot authorize an account bound elsewhere after the recovery form opens', async ({
+  sandbox,
+}) => {
+  const { worker, popup } = await sandbox.launch();
+  await configureConnections(worker);
+  await worker.evaluate(async () => {
+    await chrome.storage.local.set({
+      saul_pending_connection_setup: {
+        id: 'connection-old-plan',
+        phase: 'settings',
+        definition: {
+          key: 'connection-old-plan',
+          name: 'Old plan setup',
+          kind: 'chatgpt-plan',
+          accountId: 'fixture-spare',
+        },
+      },
+    });
+  });
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(popup, 'Connections');
+  const enable = popup.getByRole('button', { name: 'Enable plan use', exact: true });
+  await expect(enable).toBeVisible();
+  await worker.evaluate(() => {
+    const { library } = (globalThis as FixtureGlobal).connectionFixture;
+    library.connections!.push({
+      key: 'connection-new-plan',
+      name: 'Current Plan',
+      kind: 'chatgpt-plan',
+      accountId: 'fixture-spare',
+    });
+    library.revision++;
+  });
+  await enable.click();
+  await expect(popup.getByRole('alert')).toContainText('This account already has a connection.');
+  const actions = await worker.evaluate(() =>
+    (globalThis as FixtureGlobal).connectionFixture.requests.filter(
+      ({ action }) => action === 'login' || action === 'confirm-app-name',
+    ),
+  );
+  expect(actions).toEqual([]);
 });
 
 test('registering a new app copies the name and requires explicit confirmation to display it', async ({

@@ -138,7 +138,7 @@ export function Settings({
             disabled={locked || draft.blocked}
             visible={section === 'connections'}
             dirty={dirty}
-            commit={draft.commitConnections}
+            commit={draft.finishConnection}
             manageConnection={draft.manageConnection}
             focusConnection={focusConnection}
             onConnectionFocused={connectionFocused}

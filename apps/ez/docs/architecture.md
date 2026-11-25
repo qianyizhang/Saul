@@ -20,6 +20,11 @@ needs no Codex, Node, Python, Electron or webview runtime.
 owns native presentation. [ADR 0001](adr/0001-screenshot-first-design-review.md) and
 [ADR 0002](adr/0002-model-presets-and-recipes.md) record review and template rationale.
 
+ConnectionSession owns managed setup and its app-local recovery record across
+restarts. AppModel supplies the configuration store and publishes the accepted
+settings. An explicit continuation checks the original account or endpoint.
+[Setup contract](../../../contracts/credentials.md#connection-identity-and-catalogs)
+
 ## Direct plan-backed requests
 
 EZ sends plan, official API and bound custom endpoint requests through a pipe
@@ -61,8 +66,12 @@ Follow-ups inherit search policy. There is no background research or retry.
 
 `ImageAttachment` accepts detected single-frame PNG/JPEG/WebP up to 20 MB,
 40 megapixels and 8,192 pixels per edge. Run saves exact source bytes before
-one multipart Images edit with PNG output. Reuse validates saved bytes; missing
-or invalid input needs reattachment. Make meme's stable action ID opens Sketch;
+one multipart Images edit with PNG output. Reuse immediately restores editable text
+while the history reader loads and validates the saved image. Run waits for the
+image. Reattach a missing or invalid required image, or draw a new Sketch.
+Continue without an image requires an explicit choice when the saved action
+allows it. A new draft, changed history selection, replacement image or sketch
+edit supersedes the old restore. Make meme's stable action ID opens Sketch;
 Run renders edited work to a square PNG, while plain imports keep original bytes.
 Its composition and undo history are draft-local; Reuse restores one frozen layer.
 
@@ -75,7 +84,10 @@ and marks abandoned EZ rows interrupted. Run and deletion wait for preparation
 to finish. Startup and activation reload History without changing Saul's execution. A serial
 reader uses a separate query-only connection. Full-detail snapshots release their
 SQLite transaction before decoding saved JSON; list queries project bounded row
-values. Image bytes load separately for the selected answer.
+values. Live and saved rows derive action labels and icons from the same metadata.
+History owns the selected detail and loads its output image separately. The image
+follows the selected record and the source run for Saul records. Updates to other
+rows leave a loaded image in place.
 The app discards a refresh overtaken by a later refresh or shutdown. Local
 deletion and attempt changes during a refresh supersede the affected rows.
 History lists use 100-row cursor pages with bounded titles and no answer or replay
@@ -122,9 +134,10 @@ No request is replayed. See the
 [decision record](adr/0003-settle-attempts-with-async-history.md).
 
 **Retry same request** creates a new attempt from the frozen prompt, action,
-preset, connection and image. Revalidate image bytes and immutable route through
-the normal pending-save boundary, without touching the editor or previous
-result. Changed/missing inputs offer review. Completed and Unsaved entries
+preset, connection and image. The history reader loads and validates saved input
+bytes off the main actor. Stop, a different history selection or newer draft work
+can supersede preparation. The frozen route is checked again after loading, then
+the normal pending-save boundary applies. Changed or missing inputs offer review. Completed and Unsaved entries
 do not offer Retry. See [surfaces](surfaces.md#reading-and-inspection).
 
 ## Follow-ups

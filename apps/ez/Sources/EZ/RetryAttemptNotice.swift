@@ -10,9 +10,17 @@ struct RetryAttemptNotice: View {
     var body: some View {
         if entry.isRetryable {
             VStack(alignment: .leading, spacing: 8) {
-                Button("Retry same request", systemImage: "arrow.clockwise") { model.retry(entry.id) }
-                    .disabled(!model.canRetry(entry))
-                    .help("Start a new request with the original inputs and preset")
+                if model.retryPreparingID == entry.id {
+                    HStack {
+                        ProgressView().controlSize(.small)
+                        Text("Loading saved input image…")
+                        Button("Stop") { model.stop() }
+                    }
+                } else {
+                    Button("Retry same request", systemImage: "arrow.clockwise") { model.retry(entry.id) }
+                        .disabled(!model.canRetry(entry))
+                        .help("Start a new request with the original inputs and preset")
+                }
                 if let failure = model.retryFailure, failure.entryID == entry.id {
                     Text(failure.message).foregroundStyle(.red).textSelection(.enabled)
                     Button("Review request") {

@@ -74,7 +74,8 @@ public struct SaulAccount: Codable, Equatable, Sendable, Identifiable {
     let seconds: Int64 =
       request["action"] as? String == "login"
       ? 320
-      : ["connection-catalog", "connection-status"].contains(request["action"] as? String ?? "")
+      : ["connection-catalog", "connection-status", "connection-key-status"].contains(
+        request["action"] as? String ?? "")
         ? 30 : 190
     let deadline = Task {
       try await Task.sleep(for: .seconds(seconds))

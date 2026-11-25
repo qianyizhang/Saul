@@ -10,6 +10,9 @@ import {
 } from './shared-presets-contract.mts';
 import {
   validatePlanRequest,
+  validPlanAccount,
+  validPlanAccounts,
+  validPlanModels,
   validSuggestedAppName,
   type PlanRequest,
 } from './credential-plan.mts';
@@ -33,6 +36,7 @@ export type CredentialRequest =
     } & ({ intent: ConnectionCatalogIntent; force?: never } | { intent?: never; force?: boolean }))
   | { action: 'connection-key-save'; connectionKey: string; endpoint: string; key: string }
   | { action: 'connection-key-remove'; connectionKey: string; endpoint: string }
+  | { action: 'connection-key-status'; connectionKey: string; endpoint: string }
   | { action: 'status' | 'api-key-status' | 'api-key-remove' }
   | { action: 'select'; accountId: string }
   | { action: 'api-key-save'; key: string }
@@ -84,6 +88,7 @@ export function validateCredentialRequest(value: unknown): asserts value is Cred
     'connection-catalog': ['connectionKey', 'force', 'intent'],
     'connection-key-save': ['connectionKey', 'endpoint', 'key'],
     'connection-key-remove': ['connectionKey', 'endpoint'],
+    'connection-key-status': ['connectionKey', 'endpoint'],
     'api-chat': [
       'model',
       'systemPrompt',
@@ -117,6 +122,8 @@ export function validateCredentialRequest(value: unknown): asserts value is Cred
       (value.intent !== 'display' && value.intent !== 'refresh' && value.intent !== 'check'))
   )
     throw new Error('Invalid catalog intent.');
+  if (value.action === 'connection-key-status' && !validConnectionEndpoint(value.endpoint))
+    throw new Error('Enter a valid endpoint.');
   if (value.action === 'connection-key-save' || value.action === 'connection-key-remove') {
     if (
       !validConnectionEndpoint(value.endpoint) ||
@@ -191,39 +198,6 @@ export function validateCredentialEvent(value: unknown): asserts value is Creden
       )
     )
       throw new Error('Saul returned an unexpected credential result.');
-    const account = (a: unknown): boolean =>
-      isRecord(a) &&
-      Object.keys(a).every((k) => ['id', 'label', 'signedIn', 'planEnabled'].includes(k)) &&
-      text(a.id, 256) &&
-      text(a.label, 2000) &&
-      typeof a.signedIn === 'boolean' &&
-      typeof a.planEnabled === 'boolean';
-    const model = (m: unknown): boolean =>
-      isRecord(m) &&
-      Object.keys(m).every((k) =>
-        [
-          'slug',
-          'display_name',
-          'defaultReasoningEffort',
-          'isDefault',
-          'supportedReasoningEfforts',
-          'fastTier',
-        ].includes(k),
-      ) &&
-      text(m.slug, 256) &&
-      text(m.display_name, 1000) &&
-      text(m.defaultReasoningEffort, 64, true) &&
-      typeof m.isDefault === 'boolean' &&
-      (m.fastTier === undefined || m.fastTier === 'fast' || m.fastTier === 'priority') &&
-      Array.isArray(m.supportedReasoningEfforts) &&
-      m.supportedReasoningEfforts.length <= 100 &&
-      m.supportedReasoningEfforts.every(
-        (e) =>
-          isRecord(e) &&
-          Object.keys(e).every((k) => ['effort', 'description'].includes(k)) &&
-          text(e.effort, 64) &&
-          text(e.description, 4000, true),
-      );
     if (
       value.imageBase64 !== undefined &&
       (!text(value.imageBase64, 28_000_000) || !/^[A-Za-z0-9+/]+={0,2}$/.test(value.imageBase64))
@@ -232,15 +206,9 @@ export function validateCredentialEvent(value: unknown): asserts value is Creden
     if (
       (value.connection !== undefined && !validConnectionStatus(value.connection)) ||
       (value.catalog !== undefined && !validConnectionCatalog(value.catalog)) ||
-      (value.accounts !== undefined &&
-        (!Array.isArray(value.accounts) ||
-          value.accounts.length > 1000 ||
-          !value.accounts.every(account))) ||
-      (value.account !== undefined && !account(value.account)) ||
-      (value.models !== undefined &&
-        (!Array.isArray(value.models) ||
-          value.models.length > 10000 ||
-          !value.models.every(model))) ||
+      (value.accounts !== undefined && !validPlanAccounts(value.accounts)) ||
+      (value.account !== undefined && !validPlanAccount(value.account)) ||
+      (value.models !== undefined && !validPlanModels(value.models)) ||
       (value.selectedAccountId !== undefined && !text(value.selectedAccountId, 256)) ||
       (value.apiConnected !== undefined && typeof value.apiConnected !== 'boolean') ||
       (value.warning !== undefined && !text(value.warning, 4000)) ||

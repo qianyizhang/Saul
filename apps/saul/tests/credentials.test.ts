@@ -263,3 +263,21 @@ it('connects only through the newer signed owner, without importing a key or reb
     { action: 'status' },
   ]);
 });
+
+it('requires only the connection identity and endpoint for key status', () => {
+  const request = {
+    action: 'connection-key-status',
+    connectionKey: 'new-connection',
+    endpoint: 'https://api.example.test/v1',
+  };
+  expect(() => validateCredentialRequest(request)).not.toThrow();
+  for (const patch of [
+    { connectionKey: 'Other' },
+    { connectionKey: undefined },
+    { endpoint: undefined },
+    { endpoint: 'http://api.example.test/v1' },
+    { key: 'unexpected' },
+  ]) {
+    expect(() => validateCredentialRequest({ ...request, ...patch })).toThrow();
+  }
+});

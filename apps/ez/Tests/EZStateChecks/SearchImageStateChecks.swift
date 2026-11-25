@@ -10,6 +10,131 @@ import SaulTestSupport
 
 @MainActor func searchImageStateChecks() -> [CheckCase] {
     [
+        CheckCase("image retry: paused attachment I/O leaves controls responsive and stopped work inert") {
+            directory in
+            let store = try HistoryStore(directory: directory)
+            var received: [HistoryEntry] = []
+            let execution = AttemptExecution(
+                generate: { entry, _ in
+                    received.append(entry)
+                    return .image(fixturePNG)
+                }, append: { try store.append($0) }, delete: { try store.delete($0) })
+            let delay = DelayedAttachment()
+            let model = try newMemeModel(directory, execution: execution, readInputImage: delay.read)
+            defer {
+                delay.release()
+                model.shutdown()
+            }
+            let saved = try savedMeme(model)
+            model.showHistory([saved])
+            model.selection = saved.id
+            let retry = model.retry(saved.id)
+            try await delay.entered.wait()
+            try expectEqual(model.retryPreparingID, saved.id, "Retry did not publish image preparation")
+            try expect(model.canStop && !model.busy, "Attachment I/O disabled current controls")
+            model.stop()
+            delay.release()
+            await retry?.value
+            try expect(received.isEmpty && model.retryPreparingID == nil, "Stopped Retry sent a request")
+
+            let next = model.retry(saved.id)
+            try await delay.entered.wait()
+            model.newQuery()
+            delay.release()
+            await next?.value
+            try expect(received.isEmpty && model.selection == nil, "Retry replaced a newer lookup")
+        },
+        CheckCase("image reuse: text stays editable while attachment I/O is paused") { directory in
+            let store = try HistoryStore(directory: directory)
+            var calls = 0
+            let execution = AttemptExecution(
+                generate: { _, _ in
+                    calls += 1
+                    return .image(fixturePNG)
+                }, append: { try store.append($0) }, delete: { try store.delete($0) })
+            let delay = DelayedAttachment()
+            let model = try newMemeModel(directory, execution: execution, readInputImage: delay.read)
+            defer {
+                delay.release()
+                model.shutdown()
+            }
+            let saved = try savedMeme(model)
+            let reuse = model.reuse(saved)
+            try expectEqual(model.query, "Make a Monday meme", "Reuse waited to show text")
+            try await delay.entered.wait()
+            try expect(model.restoringSavedImage && !model.canSend, "Run was available during image load")
+            model.query = "Edited during restore"
+            model.send()
+            try expectEqual(calls, 0, "Run submitted before image restore")
+            delay.release()
+            await reuse?.value
+            try expectEqual(model.query, "Edited during restore", "Late image restore reset text")
+            try expectEqual(
+                model.sketch.scene.photo?.asset.image.width, 1, "Restored thumbnail was not prepared")
+            try expect(!model.sketch.canUndo, "Restoring the photo added a draft edit")
+            try expect(model.inputImage != nil && model.canSend, "Restored input did not enable Run")
+
+            let replacement = model.reuse(saved)
+            try await delay.entered.wait()
+            model.attachImage(data: fixturePNG, name: "Replacement.png")
+            delay.release()
+            await replacement?.value
+            try expectEqual(model.inputImage?.name, "Replacement.png", "Old restore replaced new image")
+
+            let sketch = model.reuse(saved)
+            try await delay.entered.wait()
+            var scene = model.sketch.scene
+            scene.strokes.append(SketchStroke(points: [CGPoint(x: 100, y: 100)]))
+            model.commitSketch(scene)
+            delay.release()
+            await sketch?.value
+            try expectEqual(model.sketch.scene, scene, "Old restore replaced new sketch")
+
+            let historySelection = model.reuse(saved)
+            try await delay.entered.wait()
+            let other = HistoryEntry(
+                mode: .ask, query: "Other", model: "", effort: "", requestedServiceTier: nil)
+            model.showHistory([other])
+            model.selection = other.id
+            delay.release()
+            await historySelection?.value
+            try expect(model.inputImage == nil && !model.canSend, "Old restore survived a new selection")
+            try expectEqual(model.query, "Make a Monday meme", "New selection erased the text draft")
+        },
+        CheckCase("selected image: unrelated history updates keep bytes, a new source run reloads") {
+            directory in
+            var reads: [String] = []
+            var selected = HistoryEntry(
+                mode: .ask, query: "Image", model: "fixture", effort: "", requestedServiceTier: nil)
+            selected.sourceID = "selection"
+            selected.sourceRunID = "first"
+            selected.sourceCapability = .draw
+            selected.storedImage = true
+            let model = fixtureModel(
+                directory: directory,
+                readOutputImage: { entry in
+                    let run = entry.sourceRunID ?? ""
+                    reads.append(run)
+                    return Data(run.utf8)
+                })
+            defer { model.shutdown() }
+            model.showHistory([selected])
+            model.selection = selected.id
+            await model.waitForSelectedImage()
+            let unrelated = HistoryEntry(
+                mode: .ask, query: "Other", model: "", effort: "", requestedServiceTier: nil)
+            model.showHistory([selected, unrelated])
+            await model.waitForSelectedImage()
+            try expectEqual(reads, ["first"], "Unrelated history update reread the image")
+            let prior = selected
+            selected.sourceRunID = "second"
+            model.showHistory([selected, unrelated])
+            try expect(model.imageData(for: selected) == nil, "New source run exposed old bytes")
+            await model.waitForSelectedImage()
+            try expectEqual(reads, ["first", "second"], "Changed source run did not read the new image")
+            try expectEqual(model.imageData(for: selected), Data("second".utf8), "Wrong selected image bytes")
+            try expect(model.imageData(for: prior) == nil, "New bytes matched the old source run")
+        },
         CheckCase("retry: failed image edits retain their frozen source for Retry without saving it") {
             directory in
             let store = try HistoryStore(directory: directory)
@@ -107,7 +232,7 @@ import SaulTestSupport
                 try sketchDarkPixels(image, at: CGRect(x: 68, y: 824, width: 280, height: 100)) > 40,
                 "The rendered image lost the caption")
             model.newQuery()
-            model.reuse(failed)
+            await model.reuse(failed)?.value
             try expectEqual(model.inputImage?.data, sent, "Reuse did not load the exact sent image")
             try expect(
                 model.sketch.scene.photo != nil && model.sketch.scene.strokes.isEmpty
@@ -184,17 +309,30 @@ import SaulTestSupport
             let saved = model.selectedEntry!
             try expectEqual(saved.status, "completed", "Image action failed")
             model.newQuery()
-            model.reuse(saved)
+            await model.reuse(saved)?.value
             try expectEqual(model.inputImage?.data, fixturePNG, "Reuse lost sketch")
             try expectEqual(model.query, "Make a Monday meme", "Reuse lost instructions")
             try expect(model.canSend && model.selection == nil, "Reuse sent or could not prepare a draft")
             _ = try historySQL(
                 directory.appendingPathComponent("history.sqlite3"), "UPDATE ez_entry SET input_image=NULL")
             model.newQuery()
-            model.reuse(saved)
+            await model.reuse(saved)?.value
             try expect(
                 !model.canSend && model.inputImageError != nil,
                 "Missing historical source silently generated from text")
+            try expectEqual(model.query, "Make a Monday meme", "Failed restore erased saved text")
+            try expect(!model.canContinueWithoutSavedImage, "Required attachment could be skipped")
+            model.attachImage(data: fixturePNG, name: "Reattached.png")
+            try expect(model.canSend && model.inputImageError == nil, "Reattachment did not recover Run")
+
+            var optional = saved
+            optional.actionSnapshot?.imageInput = nil
+            await model.reuse(optional)?.value
+            try expect(
+                !model.canSend && model.canContinueWithoutSavedImage,
+                "A missing optional image was not presented for explicit recovery")
+            model.continueWithoutSavedImage()
+            try expect(model.canSend && model.inputImage == nil, "Explicit recovery did not enable Run")
         },
         CheckCase("image action: initial source-save failure never invokes generation") { directory in
             let store = try HistoryStore(directory: directory)
@@ -319,15 +457,50 @@ private func sketchDarkPixels(_ image: CGImage, at rect: CGRect) throws -> Int {
     return (0..<(width * height)).filter { data.load(fromByteOffset: $0 * 4, as: UInt8.self) < 40 }.count
 }
 
-@MainActor private func newMemeModel(_ directory: URL, execution: AttemptExecution) throws -> AppModel {
+@MainActor private func newMemeModel(
+    _ directory: URL, execution: AttemptExecution,
+    readInputImage: (@MainActor (HistoryEntry) async throws -> ImageAttachment?)? = nil
+) throws -> AppModel {
     var config = Configuration.starters(model: "fixture", effort: "low", fast: false)
     config.addSearchAndMeme()
     for index in config.presets.indices where config.presets[index].capability == .draw {
         config.presets[index].model = "gpt-image-2.6-flare"
     }
     try ConfigurationStore(directory: directory).save(config)
-    let model = fixtureModel(directory: directory, attemptExecution: execution)
+    let model = fixtureModel(
+        directory: directory, attemptExecution: execution, readInputImage: readInputImage)
     model.chooseAction(config.actions.first { $0.imageInput != nil }!.id)
     model.query = "Make a Monday meme"
     return model
+}
+
+// Model a non-cooperative I/O request that can still finish after cancellation.
+@MainActor private final class DelayedAttachment {
+    private(set) var entered = CheckSignal()
+    private var pending: CheckedContinuation<Void, Never>?
+
+    func read(_ entry: HistoryEntry) async throws -> ImageAttachment? {
+        await withCheckedContinuation { continuation in
+            pending = continuation
+            let entered = entered
+            Task { await entered.signal() }
+        }
+        return entry.inputImage
+    }
+
+    func release() {
+        pending?.resume()
+        pending = nil
+        entered = CheckSignal()
+    }
+}
+
+@MainActor private func savedMeme(_ model: AppModel) throws -> HistoryEntry {
+    let attachment = try ImageAttachment(data: fixturePNG, name: "Saved.png")
+    var entry = try model.currentAction!.prepare(
+        values: model.inputValues, preset: model.currentPreset!, models: [], provider: .openAIAPI,
+        image: attachment)
+    entry.connectionSnapshot = model.currentConnection
+    entry.status = "failed"
+    return entry
 }

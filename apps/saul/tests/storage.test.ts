@@ -6,6 +6,10 @@ import { randomUUID } from 'node:crypto';
 import { SharedHistory } from '../native/storage/history.mts';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 import { prepareFrozenRun } from '../src/reading/configuration';
+import { StorageConnection, StorageDisconnected } from '../src/native/storage-connection';
+import { requestHistory } from '../src/native/storage-client';
+import { storagePort } from './helpers/storage-port';
+import type { StorageHelperRequest } from '../shared/protocol/storage-protocol.mts';
 import type { RunInput, Submission } from '../shared/protocol/history-types.ts';
 const roots: string[] = [];
 const open: SharedHistory[] = [];
@@ -17,6 +21,7 @@ function history() {
   return store;
 }
 afterEach(() => {
+  vi.unstubAllGlobals();
   for (const store of open.splice(0)) store.close();
   for (const dir of roots.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
@@ -349,11 +354,14 @@ it('returns the same queued handoff and transition acknowledgements after a lost
   const store = history();
   const owner = randomUUID();
   const requestId = randomUUID();
+  const frozen = submission();
+  // Historical API routes can omit inactive Chrome AI choices.
+  delete frozen.input.local;
   const request = {
     operation: 'db' as const,
     owner,
     requestId,
-    message: { type: 'DB_SUBMIT' as const, payload: submission() },
+    message: { type: 'DB_SUBMIT' as const, payload: frozen },
   };
   const first = structuredClone(await store.run(request)) as {
     run: { id: string; input: RunInput };
@@ -379,4 +387,133 @@ it('returns the same queued handoff and transition acknowledgements after a lost
   expect(await store.run(saving)).toBe(true);
   expect(await store.run(saving)).toBe(true);
   expect(await store.run({ ...saving, requestId: randomUUID() })).toBe(false);
+});
+
+it('rejects malformed Reading lifecycle payloads before native history changes', async () => {
+  const store = history();
+  const owner = randomUUID();
+  const run = (type: string, payload: unknown) =>
+    store.run({ operation: 'db', requestId: randomUUID(), owner, message: { type, payload } });
+  const payload = submission();
+  for (const invalid of [
+    { ...payload, regenerate: 'false' },
+    { ...payload, snapshot: { ...payload.snapshot, viewport: { width: 1 } } },
+    {
+      ...payload,
+      input: { ...payload.input, context: { ...payload.input.context, selection: 1 } },
+    },
+    {
+      ...payload,
+      input: { ...payload.input, remote: { ...payload.input.remote, temperature: 'hot' } },
+    },
+  ]) {
+    await expect(run('DB_SUBMIT', invalid)).rejects.toThrow('DB_SUBMIT');
+    expect(store.connection.selectValue('SELECT count(*) FROM page')).toBe(0);
+  }
+  const { run: queued } = (await run('DB_SUBMIT', payload)) as { run: { id: string } };
+  const runId = queued.id;
+  const row = () =>
+    store.connection.selectObject('SELECT status,response_raw,latency_ms FROM llm_run WHERE id=?', [
+      runId,
+    ]);
+  expect(row()?.status).toBe('queued');
+  await expect(run('DB_CLAIM', {})).rejects.toThrow('DB_CLAIM');
+  expect(row()?.status).toBe('queued');
+  await expect(run('DB_CLAIM', { runId })).resolves.toBe(true);
+  await expect(run('DB_CHECKPOINT', { runId })).rejects.toThrow('DB_CHECKPOINT');
+  await expect(run('DB_CHECKPOINT', { runId, raw: false })).rejects.toThrow('DB_CHECKPOINT');
+  await expect(run('DB_CHECKPOINT', { runId, raw: 'partial' })).resolves.toBeUndefined();
+  await expect(run('DB_SAVING', { runId: 9 })).rejects.toThrow('DB_SAVING');
+  expect(row()).toMatchObject({ status: 'running', response_raw: 'partial', latency_ms: null });
+  await expect(run('DB_SAVING', { runId })).resolves.toBe(true);
+  const finish = { runId, status: 'completed', latencyMs: 8, raw: 'final' };
+  for (const invalid of [
+    { ...finish, status: 'not-a-status' },
+    { ...finish, status: 'running' },
+    { ...finish, latencyMs: 'oops' },
+    { ...finish, latencyMs: -1 },
+    { ...finish, latencyMs: Infinity },
+    { ...finish, latencyMs: undefined },
+  ]) {
+    await expect(run('DB_FINISH', invalid)).rejects.toThrow('DB_FINISH');
+    expect(row()).toMatchObject({ status: 'saving', response_raw: 'partial', latency_ms: null });
+  }
+  await expect(run('DB_FINISH', finish)).resolves.toBe(true);
+  expect(row()).toMatchObject({ status: 'completed', response_raw: 'final', latency_ms: 8 });
+});
+
+it('rejects malformed lifecycle acknowledgements even when native storage committed', async () => {
+  const store = history();
+  const owner = randomUUID();
+  const makeRequest = (type: string, payload: unknown) => ({
+    action: 'history' as const,
+    request: {
+      operation: 'db' as const,
+      requestId: randomUUID(),
+      owner,
+      message: { type, payload },
+    },
+  });
+  let malformed: unknown;
+  let requests = 0;
+  vi.stubGlobal('chrome', {
+    runtime: {
+      connectNative: storagePort<StorageHelperRequest>(async (_host, { request }) => {
+        if (request.action !== 'history') throw new Error('Unexpected request');
+        requests++;
+        await store.run(request.request);
+        return { event: { type: 'result', value: malformed } };
+      }),
+    },
+  });
+  const transport = new StorageConnection();
+  const rejectReply = async (type: string, payload: unknown, value: unknown) => {
+    malformed = value;
+    const result = transport.request(makeRequest(type, payload));
+    await expect(result).rejects.toThrow('The write may have been applied.');
+    await expect(result).rejects.not.toBeInstanceOf(StorageDisconnected);
+  };
+  try {
+    const payload = submission();
+    await rejectReply('DB_SUBMIT', payload, {
+      passageId: payload.snapshot.id,
+      run: {
+        id: 'run',
+        selectionId: payload.snapshot.id,
+        pageUrl: payload.snapshot.page.url,
+        input: { ...payload.input, context: { ...payload.input.context, pageTitle: 7 } },
+      },
+    });
+    const runId = store.connection.selectValue('SELECT id FROM llm_run');
+    expect(runId).toEqual(expect.any(String));
+    await rejectReply('DB_CLAIM', { runId }, 'true');
+    await rejectReply('DB_CHECKPOINT', { runId, raw: 'partial' }, false);
+    await rejectReply('DB_SAVING', { runId }, 1);
+    await rejectReply('DB_FINISH', { runId, status: 'completed', latencyMs: 8 }, { saved: true });
+    expect(requests).toBe(5);
+    expect(store.connection.selectObject('SELECT status,response_raw FROM llm_run')).toMatchObject({
+      status: 'completed',
+      response_raw: 'partial',
+    });
+  } finally {
+    transport.close();
+  }
+
+  // The offscreen client validates the bridge reply independently of native-port callers.
+  vi.stubGlobal('chrome', {
+    runtime: {
+      connect: () => {
+        let receive: (event: unknown) => void;
+        return {
+          onMessage: { addListener: (listener: typeof receive) => (receive = listener) },
+          onDisconnect: { addListener: vi.fn() },
+          postMessage: () => receive({ type: 'result' }),
+          disconnect: vi.fn(),
+        };
+      },
+    },
+  });
+  await expect(
+    requestHistory(makeRequest('DB_CHECKPOINT', { runId: 'run', raw: '' })),
+  ).rejects.toThrow('The write may have been applied.');
 });

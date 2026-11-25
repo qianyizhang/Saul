@@ -1,5 +1,4 @@
 import type { SettingsRequest, SettingsState } from './contract';
-import type { ConnectionDefinition } from '../../shared/protocol/shared-presets-contract.mts';
 import { DEFAULT_CONFIGURATION } from '../configuration/definition';
 import {
   createSettingsDraft,
@@ -10,6 +9,7 @@ import {
   type SettingsEdit,
 } from './draft';
 import { reviewSettings, type RecoveryChoice, type SettingsReview } from './recovery';
+import { setupConnections, type ConnectionSetup } from './connection-setup';
 import { changeConnection, type ConnectionChange } from './connection-management';
 import type { Configuration } from '../configuration/definition';
 
@@ -286,8 +286,33 @@ export function createSettingsEditor(
     },
     setCredentialOwner: (sharedCredentials: 'saul' | 'disconnected') =>
       guardedCommit((settings) => ({ ...settings, sharedCredentials }), 'credentials'),
-    commitConnections: (connections: ConnectionDefinition[]) =>
-      guardedCommit((settings) => ({ ...settings, connections }), 'connections'),
+    async finishConnection(setup: ConnectionSetup, reviewLatest: boolean) {
+      if (!editable() || dirty || !baseline)
+        throw new Error('Save the current settings draft first.');
+      const token = begin('connections')!;
+      try {
+        const latest = reviewLatest ? await request({ action: 'read' }) : undefined;
+        if (latest && latest.state !== 'ready') throw new Error(latest.error);
+        if (token !== generation) throw new Error('Reopen Connections to finish setup.');
+        const current = latest?.settings ?? settingsForSave(form);
+        if (current.sharedCredentials !== 'saul')
+          throw new Error('Connect to Saul before finishing setup.');
+        const connections = setupConnections(current.connections, setup);
+        if (connections === current.connections && latest) {
+          receive(latest, true);
+          return;
+        }
+        const result = await request({
+          action: 'commit',
+          baseline: latest?.revision ?? baseline,
+          settings: { ...current, connections },
+        });
+        if (result.state !== 'ready') throw new Error(result.error);
+        if (token === generation) receive(result, true);
+      } finally {
+        finish(token);
+      }
+    },
     manageConnection: (change: ConnectionChange) =>
       guardedCommit((settings) => changeConnection(settings, change), 'connections'),
   };

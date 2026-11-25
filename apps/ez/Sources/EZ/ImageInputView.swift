@@ -50,10 +50,23 @@ struct ImageInputView: View {
             .padding(8).frame(minHeight: 72)
             .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 6))
             .modifier(ImageDropTarget(model: model))
-            if let error = model.inputImageError {
-                Text(error).font(AppStyle.caption).foregroundStyle(.orange).textSelection(.enabled)
-            }
+            ImageInputFeedback(model: model)
         }.disabled(model.busy || model.launcherPending)
+    }
+}
+
+struct ImageInputFeedback: View {
+    @ObservedObject var model: AppModel
+
+    var body: some View {
+        if model.restoringSavedImage {
+            ProgressView("Loading saved input image…").controlSize(.small).font(AppStyle.caption)
+        } else if let error = model.inputImageError {
+            Text(error).font(AppStyle.caption).foregroundStyle(.orange).textSelection(.enabled)
+            if model.canContinueWithoutSavedImage {
+                Button("Continue without image") { model.continueWithoutSavedImage() }
+            }
+        }
     }
 }
 

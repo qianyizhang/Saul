@@ -4,7 +4,7 @@ import type { RunInput } from '../../shared/protocol/history-types.ts';
 import { configurationFor, renderRecipePrompt } from '../configuration/definition';
 import { preparePreset, prepareFrozenPreset } from '../configuration/resolve';
 import { validateModelPrompts } from '../../shared/model/execution-route.ts';
-import { isRecord } from '../../shared/model/value.mts';
+import { readingContext, frozenReadingRecipe } from '../../shared/protocol/reading-history.mts';
 
 export function prepareRecipeRun(
   settings: Configuration,
@@ -38,26 +38,9 @@ export function prepareFrozenRun(
   original: RunInput,
 ): { input: RunInput; credential: string } {
   validateModelPrompts(original);
-  const context: unknown = original.context;
-  const recipe: unknown = original.recipe;
-  const required = ['selection', 'pageTitle', 'pageUrl'];
-  const contextFields = [...required, 'surroundingText', 'paragraph', 'heading'];
-  const recipeFields = ['id', 'name', 'presetId', 'systemPrompt', 'template'];
   if (
-    !isRecord(context) ||
-    required.some((key) => typeof context[key] !== 'string') ||
-    Object.keys(context).some(
-      (key) =>
-        !contextFields.includes(key) ||
-        (context[key] !== undefined && typeof context[key] !== 'string'),
-    ) ||
-    (recipe !== undefined &&
-      (!isRecord(recipe) ||
-        recipeFields.some((key) => typeof recipe[key] !== 'string') ||
-        Object.keys(recipe).some((key) => key !== 'capability' && !recipeFields.includes(key)) ||
-        (recipe.capability !== undefined &&
-          recipe.capability !== 'write' &&
-          recipe.capability !== 'draw'))) ||
+    !readingContext.safeParse(original.context).success ||
+    (original.recipe !== undefined && !frozenReadingRecipe.safeParse(original.recipe).success) ||
     (original.followUpQuestion !== undefined && typeof original.followUpQuestion !== 'string')
   )
     throw new Error('Invalid saved reading input. Start a new explanation.');

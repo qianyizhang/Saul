@@ -1,4 +1,4 @@
-import type { ModelRequest } from '../model/execution-route.ts';
+import type { ReadingHistoryOperations } from './reading-history.mts';
 import type { AnnotationDbOperations } from './annotation-attempts.ts';
 import type { ModelActivity } from '../model/model-events.ts';
 import type { DigestDbOperations } from '../model/call-batch.ts';
@@ -6,7 +6,7 @@ import type { SelectionSnapshot, ResolvedContext } from '../model/reading.ts';
 import type { Recipe, ModelPreset } from '../model/presets.ts';
 
 export type RunStatus =
-  'queued' | 'running' | 'saving' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
+  'queued' | 'running' | 'saving' | ReadingHistoryOperations['DB_FINISH']['payload']['status'];
 export interface RunResult {
   id: string;
   status: RunStatus;
@@ -34,23 +34,9 @@ export interface Passage {
   completed?: RunResult;
   unread: boolean;
 }
-export interface RunInput extends ModelRequest {
-  followUpQuestion?: string;
-  context: ResolvedContext;
-  recipe?: Recipe;
-}
-export interface QueuedRun {
-  id: string;
-  selectionId: string;
-  pageUrl: string;
-  input: RunInput;
-}
-export interface Submission {
-  submissionId: string;
-  snapshot: SelectionSnapshot;
-  input: RunInput;
-  regenerate: boolean;
-}
+export type Submission = ReadingHistoryOperations['DB_SUBMIT']['payload'];
+export type RunInput = Submission['input'];
+export type QueuedRun = NonNullable<ReadingHistoryOperations['DB_SUBMIT']['result']['run']>;
 export interface HistoryItem {
   hasImage?: boolean;
   bookmarked: boolean;
@@ -68,7 +54,8 @@ export interface HistoryItem {
   unread: boolean;
 }
 
-export interface DbOperations extends DigestDbOperations, AnnotationDbOperations {
+export interface DbOperations
+  extends DigestDbOperations, AnnotationDbOperations, ReadingHistoryOperations {
   DB_IMAGE: {
     payload: { selectionId: string; runId?: string };
     result: import('../model/image.ts').GeneratedImage | undefined;
@@ -87,22 +74,7 @@ export interface DbOperations extends DigestDbOperations, AnnotationDbOperations
     payload: { snapshot: SelectionSnapshot; submissionId: string; recipeId: string };
     result: string | undefined;
   };
-  DB_SUBMIT: { payload: Submission; result: { passageId: string; run?: QueuedRun } };
   DB_RECOVER: { payload: undefined; result: void };
-  DB_CLAIM: { payload: { runId: string }; result: boolean };
-  DB_CHECKPOINT: { payload: { runId: string; raw: string }; result: void };
-  DB_FINISH: {
-    payload: {
-      runId: string;
-      raw?: string;
-      status: Extract<RunStatus, 'completed' | 'failed' | 'interrupted' | 'cancelled'>;
-      error?: string;
-      reason?: string;
-      latencyMs: number;
-    };
-    result: boolean;
-  };
-  DB_SAVING: { payload: { runId: string }; result: boolean };
   DB_PAGE: { payload: { url: string }; result: Passage[] };
   DB_PASSAGE: { payload: { selectionId: string }; result: Passage | undefined };
   DB_CONTEXT: { payload: { selectionId: string }; result: ResolvedContext };

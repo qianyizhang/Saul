@@ -47,6 +47,8 @@ import SaulNativeValues
     readHistory: (@MainActor () async throws -> [HistoryEntry])? = nil,
     readHistoryPage: (@MainActor (String, HistoryCursor?) async throws -> HistoryPage)? = nil,
     readHistoryEntry: (@MainActor (HistoryStore.RecordID) async throws -> HistoryEntry?)? = nil,
+    readInputImage: (@MainActor (HistoryEntry) async throws -> ImageAttachment?)? = nil,
+    readOutputImage: (@MainActor (HistoryEntry) async throws -> Data?)? = nil,
     historyPreparation: HistoryCollection.Preparation? = nil
 ) -> AppModel {
     let historyDirectory = historyDirectory ?? directory
@@ -80,6 +82,8 @@ import SaulNativeValues
         },
         countHistory: { try await reader.count(search: $0, excluding: $1) },
         readHistoryEntry: readHistoryEntry ?? { try await reader.entry($0) },
+        readInputImage: readInputImage ?? { try await reader.inputImage(for: $0) },
+        readOutputImage: readOutputImage ?? { try await reader.image(for: $0) },
         deleteHistory: { try await writer.delete($0) })
 }
 

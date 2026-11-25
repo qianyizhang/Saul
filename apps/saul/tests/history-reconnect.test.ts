@@ -4,6 +4,7 @@ vi.mock('../src/native/storage-client', () => ({ requestHistory: mocked.call }))
 import { StorageDisconnected } from '../src/native/storage-connection';
 import { historyCall } from '../src/storage/history';
 import {
+  historyOperationPolicy,
   validateHistoryRequest,
   type HistoryRequest,
 } from '../shared/protocol/history-protocol.mts';
@@ -44,6 +45,7 @@ it.each([
   ['DB_SUBMIT', true],
   ['DB_CLAIM', true],
   ['DB_SAVING', true],
+  ['DB_CHECKPOINT', true],
   ['DB_FINISH', true],
   ['DB_DIGEST_ITEM', true],
   ['DB_VIEW', true],
@@ -57,7 +59,7 @@ it.each([
     vi.useFakeTimers();
     mocked.call.mockRejectedValueOnce(new StorageDisconnected('lost')).mockResolvedValue(null);
     const original = request(operation);
-    validateHistoryRequest(original);
+    expect(historyOperationPolicy(operation)).toBeDefined();
     const result = historyCall(original);
     if (!reconnect) {
       await expect(result).rejects.toThrow('lost');

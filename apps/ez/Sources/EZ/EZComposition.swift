@@ -46,10 +46,23 @@ import SaulNativeValues
                     ])
                 },
                 saveKey: { connection, key in
-                    _ = try await auth.call([
+                    let reply = try await auth.call([
                         "action": "connection-key-save", "connectionKey": connection.key,
                         "endpoint": connection.endpoint, "key": key,
                     ])
+                    let status = try decode(
+                        ConnectionStatus.self, from: reply["connection"], name: "connection status")
+                    guard status.connected, status.endpoint == connection.endpoint else {
+                        throw EZError("The helper did not confirm the key for this endpoint.")
+                    }
+                },
+                keyStatus: { connection in
+                    let reply = try await auth.call([
+                        "action": "connection-key-status", "connectionKey": connection.key,
+                        "endpoint": connection.endpoint,
+                    ])
+                    return try decode(
+                        ConnectionStatus.self, from: reply["connection"], name: "connection status")
                 },
                 removeKey: { connection in
                     _ = try await auth.call([
@@ -84,6 +97,8 @@ import SaulNativeValues
             readHistory: { try await reader.page(search: $0, after: $1) },
             countHistory: { try await reader.count(search: $0, excluding: $1) },
             readHistoryEntry: { try await reader.entry($0) },
+            readInputImage: { try await reader.inputImage(for: $0) },
+            readOutputImage: { try await reader.image(for: $0) },
             deleteHistory: { try await writer.delete($0) },
             speak: speech.generate(preset:text:), allowsExternalServices: true)
     }

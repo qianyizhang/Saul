@@ -36,6 +36,7 @@ public struct CredentialRequest: Sendable {
       "connection-catalog": ["connectionKey", "force", "intent"],
       "connection-key-save": ["connectionKey", "endpoint", "key"],
       "connection-key-remove": ["connectionKey", "endpoint"],
+      "connection-key-status": ["connectionKey", "endpoint"],
       "api-chat": [
         "model", "systemPrompt", "userPrompt", "temperature", "maxTokens", "connectionKey",
         "images",
@@ -75,7 +76,7 @@ public struct CredentialRequest: Sendable {
           of: "^[a-z][a-z0-9-]{0,63}$", options: .regularExpression) != nil
       else { throw invalid() }
     }
-    if action == "connection-key-save" || action == "connection-key-remove" {
+    if ["connection-key-save", "connection-key-remove", "connection-key-status"].contains(action) {
       guard text("endpoint", max: 2048),
         action != "connection-key-save" || text("key", max: 512, empty: true)
       else { throw invalid() }
@@ -236,6 +237,8 @@ public struct CredentialRequest: Sendable {
         key: string("connectionKey"),
         intent: supplied ?? (value["force"] as? Bool == true ? .refresh : .display),
         includeDefault: supplied != nil)
+    case "connection-key-status":
+      return try .connectionKeyStatus(id: string("connectionKey"), endpoint: string("endpoint"))
     case "connection-key-save", "connection-key-remove":
       return try .connectionKey(
         id: string("connectionKey"), endpoint: string("endpoint"), key: value["key"] as? String)

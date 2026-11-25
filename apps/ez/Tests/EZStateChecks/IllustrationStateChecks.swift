@@ -79,6 +79,9 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
                         try await keys.write(key)
                         fixtures.apiConnected = true
                     },
+                    keyStatus: { connection in
+                        ConnectionStatus(connected: fixtures.apiConnected, endpoint: connection.endpoint)
+                    },
                     removeKey: { _ in
                         try await keys.write(nil)
                         fixtures.apiConnected = false
@@ -89,7 +92,7 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
             let connection = ConnectionDefinition.defaults[1]
             await keys.setFailure(true)
             try await expectAsyncThrows(EZError.self) {
-                try await model.saveConnection(connection, key: "sk-replacement")
+                try await model.saveConnection(connection, previous: connection, key: "sk-replacement")
             }
             try expect(
                 model.connectionStatus(connection.key)?.connected == true,
@@ -101,7 +104,10 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
                 model.connectionStatus(connection.key)?.connected == true,
                 "Failed removal disconnected the credential")
             await keys.setFailure(false)
-            try await model.saveConnection(connection, key: "sk-replacement")
+            guard let pending = model.pendingConnectionSetup else {
+                throw CheckFailure("Failed save lost the pending setup")
+            }
+            try await model.resumeConnectionSetup(pending.id, phase: pending.phase, key: "sk-replacement")
             try await model.removeConnectionCredential(connection)
             try expect(
                 model.connectionStatus(connection.key)?.connected == false && model.entries.isEmpty,
@@ -128,7 +134,7 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
             try expectEqual(
                 model.configuration.presets.first { $0.id == id }?.imageOptions?.outputFormat, "png",
                 "Runtime override mutated the preset")
-            model.reuse(model.selectedEntry!)
+            await model.reuse(model.selectedEntry!)?.value
             try expectEqual(model.outputFormat, "gif", "Reuse lost the frozen output format")
             model.newQuery()
             try expectEqual(model.outputFormatOverride, nil, "New run retained an old override")

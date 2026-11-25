@@ -12,8 +12,10 @@ import {
 import {
   retentionMs,
   type AnnotationCapture,
+  type AnnotationChange,
   type AnnotationRequest,
 } from '../shared/protocol/annotations.ts';
+import { annotationMutationSession } from '../src/annotations/mutation-session';
 import { AnnotationRunner } from '../src/annotations/runner';
 import { mutateAnnotationDraft } from '../src/annotations/draft';
 import { annotationDraftKey } from '../src/annotations/routing';
@@ -72,6 +74,149 @@ const request = (operation: AnnotationRequest['operation']): AnnotationRequest =
   scope: { urls: [url], ids: [] },
   author: { kind: 'user', name: 'You' },
   operation,
+});
+
+it('advances an acknowledged reply before delayed reads and preserves full comment text', async () => {
+  const db = database();
+  const comment = 'Full comment '.repeat(100);
+  annotationStore(db, 'profile', request({ action: 'create', capture: { ...capture, comment } }));
+  const read = () =>
+    annotationStore(
+      db,
+      'profile',
+      request({
+        action: 'read',
+        id: capture.id,
+        image: true,
+      }),
+    ).record!;
+  const write = vi.fn(async (change: AnnotationChange) =>
+    annotationStore(db, 'profile', request({ action: 'change', changes: [change] })),
+  );
+  const reads = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
+  const refreshes: Promise<void>[] = [];
+  const session = annotationMutationSession({
+    id: capture.id,
+    read: async () => read(),
+    write,
+    publish: () => {},
+    invalidate: () => {
+      const snapshot = read();
+      refreshes.push(
+        reads[refreshes.length]!.promise.then(() => {
+          session.accept(snapshot);
+        }),
+      );
+    },
+  });
+  session.accept(read());
+  await session.change('append', 'First reply');
+  expect(session.current()).toMatchObject({
+    revision: 2,
+    comment,
+    image: capture.image,
+    replies: [{ text: 'First reply' }],
+  });
+  await session.change('complete');
+  reads[0]!.resolve();
+  await refreshes[0];
+  expect(session.current()).toMatchObject({ revision: 3, state: 'done', comment });
+  reads[1]!.resolve();
+  await refreshes[1];
+  expect(read()).toMatchObject({ revision: 3, state: 'done', comment });
+  expect(write.mock.calls.map(([change]) => change.revision)).toEqual([1, 2]);
+});
+
+it('requires applying the draft to the exact reviewed revision after concurrent edits', async () => {
+  const db = database();
+  annotationStore(db, 'profile', request({ action: 'create', capture }));
+  const read = async () =>
+    annotationStore(
+      db,
+      'profile',
+      request({
+        action: 'read',
+        id: capture.id,
+        image: true,
+      }),
+    ).record!;
+  const write = async (change: AnnotationChange) =>
+    annotationStore(db, 'profile', request({ action: 'change', changes: [change] }));
+  const session = annotationMutationSession({
+    id: capture.id,
+    read,
+    write,
+    publish: () => {},
+    invalidate: () => {},
+  });
+  const initial = await read();
+  session.accept(initial);
+  session.setBase(initial.revision);
+  const editElsewhere = async (text: string) =>
+    write({
+      id: capture.id,
+      revision: (await read()).revision,
+      operationId: crypto.randomUUID(),
+      action: 'edit',
+      text,
+    });
+  await editElsewhere('Another editor');
+  await expect(session.change('edit', 'My draft')).rejects.toThrow('Annotation changed');
+  const { record: reviewed } = await session.review();
+  expect(reviewed?.comment).toBe('Another editor');
+  await editElsewhere('Changed again');
+  session.accept(await read());
+  await expect(session.change('edit', 'My draft', reviewed!.revision)).rejects.toThrow(
+    'Annotation changed',
+  );
+  expect((await read()).comment).toBe('Changed again');
+  const latest = await session.review();
+  await session.change('edit', 'My draft', latest.record!.revision);
+  expect((await read()).comment).toBe('My draft');
+});
+
+it('reads back uncertain delivery by operation ID without reissuing the write', async () => {
+  const db = database();
+  annotationStore(db, 'profile', request({ action: 'create', capture }));
+  const read = vi.fn(
+    async () =>
+      annotationStore(
+        db,
+        'profile',
+        request({
+          action: 'read',
+          id: capture.id,
+          image: true,
+        }),
+      ).record!,
+  );
+  const write = vi.fn(async (change: AnnotationChange) => {
+    annotationStore(db, 'profile', request({ action: 'change', changes: [change] }));
+    throw new Error('Lost acknowledgement');
+  });
+  const session = annotationMutationSession({
+    id: capture.id,
+    read,
+    write,
+    publish: () => {},
+    invalidate: () => {},
+  });
+  session.accept(await read());
+  await session.change('append', 'Saved despite lost acknowledgement');
+  expect(session.current()?.replies).toHaveLength(1);
+  expect(write).toHaveBeenCalledTimes(1);
+
+  read.mockRejectedValueOnce(new Error('Lost recovery read'));
+  await expect(session.change('append', 'Saved before delayed recovery')).rejects.toThrow(
+    'Read latest',
+  );
+  await expect(session.change('append', 'Saved before delayed recovery')).rejects.toThrow(
+    'Read latest',
+  );
+  const { confirmed, record } = await session.review();
+  expect(confirmed?.action).toBe('append');
+  expect(record?.replies).toHaveLength(2);
+  expect(write).toHaveBeenCalledTimes(2);
 });
 
 it('serializes checking a draft token with a write from another editor', async () => {

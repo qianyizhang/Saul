@@ -40,7 +40,7 @@ export function useSettingsEditor(onDirty?: (dirty: boolean) => void) {
     cancelReview: editor.cancelReview,
     resetInvalidSettings: editor.resetInvalidSettings,
     setCredentialOwner: editor.setCredentialOwner,
-    commitConnections: editor.commitConnections,
+    finishConnection: editor.finishConnection,
     manageConnection: editor.manageConnection,
     reload: async () => {
       if (

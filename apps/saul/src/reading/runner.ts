@@ -119,7 +119,7 @@ export class ReadingRunner {
     }
   }
   private async execute(task: ReadingAttempt) {
-    const started = Date.now(),
+    const started = performance.now(),
       signal = task.controller.signal;
     let stream: AsyncGenerator<ModelEvent> | undefined;
     let raw = '';
@@ -131,7 +131,7 @@ export class ReadingRunner {
       this.changed(task.pageUrl);
       stream = streamModel(input, task.credential, signal);
       let completed = false,
-        checkpoint = 0,
+        checkpoint = -Infinity,
         savedRaw = '';
       let pending: Promise<IteratorResult<ModelEvent>> | undefined;
       while (!signal.aborted) {
@@ -147,7 +147,7 @@ export class ReadingRunner {
                   new Promise<undefined>((resolve) => {
                     timer = setTimeout(
                       () => resolve(undefined),
-                      Math.max(0, 500 - (Date.now() - checkpoint)),
+                      Math.max(0, 500 - (performance.now() - checkpoint)),
                     );
                   }),
                 ]
@@ -175,10 +175,10 @@ export class ReadingRunner {
           }
           if (previous !== task.activity) this.changed(task.pageUrl);
         }
-        if (raw !== savedRaw && Date.now() - checkpoint >= 500) {
+        if (raw !== savedRaw && performance.now() - checkpoint >= 500) {
           await this.write({ type: 'DB_CHECKPOINT', payload: { runId: task.id, raw: raw } });
           savedRaw = raw;
-          checkpoint = Date.now();
+          checkpoint = performance.now();
           this.changed(task.pageUrl);
         }
       }
@@ -199,7 +199,12 @@ export class ReadingRunner {
       if (image) await this.writeImage(task.id, image, signal);
       await this.write({
         type: 'DB_FINISH',
-        payload: { runId: task.id, raw, status: 'completed', latencyMs: Date.now() - started },
+        payload: {
+          runId: task.id,
+          raw,
+          status: 'completed',
+          latencyMs: Math.round(performance.now() - started),
+        },
       });
     } catch (error) {
       if (task.discarded) return;
@@ -227,7 +232,7 @@ export class ReadingRunner {
             : error instanceof Error
               ? error.message
               : String(error),
-        latencyMs: Date.now() - started,
+        latencyMs: Math.round(performance.now() - started),
       });
     } finally {
       task.controller.abort();

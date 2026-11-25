@@ -203,8 +203,31 @@ it('persists a stranded storage failure before allowing explicit retry', async (
   expect(mocks.remote).toHaveBeenCalledTimes(2);
 });
 afterEach(() => vi.useRealTimers());
+it.each(['completed', 'failed'] as const)(
+  'persists nonnegative elapsed duration after the wall clock moves backward (%s)',
+  async (status) => {
+    vi.useFakeTimers({ toFake: ['Date', 'performance', 'setTimeout', 'clearTimeout'] });
+    vi.setSystemTime(10_000);
+    mocks.remote.mockImplementation(async function* () {
+      yield { type: 'delta', text: 'Saved response' };
+      await new Promise<void>((resolve) => setTimeout(resolve, 123));
+      vi.setSystemTime(5_000);
+      if (status === 'failed') throw new Error('Provider failure');
+      yield { type: 'complete' };
+    });
+    const db = store();
+    const runner = new ReadingRunner(db.call, () => {});
+    await runner.submit(submission('clock-change'), '');
+    await vi.advanceTimersByTimeAsync(123);
+    expect(db.rows.get('clock-change')?.status).toBe(status);
+    expect(db.call).toHaveBeenCalledWith({
+      type: 'DB_FINISH',
+      payload: expect.objectContaining({ status, latencyMs: 123 }),
+    });
+  },
+);
 it('flushes the tail of a fast burst while the provider is silent, then completes without Stop', async () => {
-  vi.useFakeTimers();
+  vi.useFakeTimers({ toFake: ['Date', 'performance', 'setTimeout', 'clearTimeout'] });
   vi.setSystemTime(10_000);
   let finish!: () => void;
   mocks.remote.mockImplementation(async function* () {
@@ -231,7 +254,7 @@ it('flushes the tail of a fast burst while the provider is silent, then complete
   expect(vi.getTimerCount()).toBe(0);
 });
 it('cleans up a pending trailing flush on Stop and retains all received text', async () => {
-  vi.useFakeTimers();
+  vi.useFakeTimers({ toFake: ['Date', 'performance', 'setTimeout', 'clearTimeout'] });
   vi.setSystemTime(10_000);
   mocks.remote.mockImplementation(async function* (_config, _system, _user, signal: AbortSignal) {
     yield { type: 'delta', text: 'A' };

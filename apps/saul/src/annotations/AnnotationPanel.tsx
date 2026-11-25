@@ -214,6 +214,9 @@ function AnnotationEditor({
     submitReply,
     error,
     readError,
+    reviewed,
+    reviewing,
+    reviewLatest,
     missing,
     runs,
     refresh,
@@ -306,14 +309,23 @@ function AnnotationEditor({
             onChange={(e) => save(e.target.value)}
           />
           <p role="status">{status}</p>
-          {error && <p role="alert">{error}</p>}
           {draft.phase === 'blocked' && (
-            <div role="alert">
-              <p>{draft.error}</p>
-              <p>Latest saved comment: {record.comment}</p>
-              <button className="btn" onClick={() => save(draft.text, true)}>
-                Save draft against latest
-              </button>
+            <div className={reviewed ? 'notice' : 'notice error'}>
+              {reviewed ? (
+                <>
+                  <p>Latest saved comment: {reviewed.comment}</p>
+                  <button className="btn" onClick={() => save(draft.text, true)}>
+                    Save draft against latest
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p role="alert">{draft.error}</p>
+                  <button className="btn" disabled={reviewing} onClick={reviewLatest}>
+                    Read latest
+                  </button>
+                </>
+              )}
             </div>
           )}
           <label className="row">
@@ -345,7 +357,14 @@ function AnnotationEditor({
           </button>
         </div>
       )}
-      {record.deletedAt !== undefined && error && <p role="alert">{error}</p>}
+      {error && (
+        <div className="notice error">
+          <p role="alert">{error}</p>
+          <button className="btn" disabled={reviewing} onClick={reviewLatest}>
+            Read latest
+          </button>
+        </div>
+      )}
       <details>
         <summary>Replies · {record.replies.length}</summary>
         <ol className="annotation-replies">

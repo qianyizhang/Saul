@@ -1,11 +1,11 @@
 # Saul workspace
 
-| App                         | Goal                                                              | Runtime                                      |
-| --------------------------- | ----------------------------------------------------------------- | -------------------------------------------- |
-| [Saul](apps/saul/README.md) | Explain selections, summarize pages and organize tabs             | Chrome extension and Node helpers            |
-| [EZ](apps/ez/README.md)     | Run definitions, spelling checks, quick answers and image actions | Native macOS app and signed credential owner |
+| App                         | Goal                                                              | Runtime                           |
+| --------------------------- | ----------------------------------------------------------------- | --------------------------------- |
+| [Saul](apps/saul/README.md) | Explain selections, summarize pages and organize tabs             | Chrome extension and Node helpers |
+| [EZ](apps/ez/README.md)     | Run definitions, spelling checks, quick answers and image actions | Native macOS app                  |
 
-- Independent installation. Shared local history and presets. App-owned drafts and active requests. [Data ownership](docs/architecture.md#data-ownership)
+- Independent installation. Shared local history and presets. An independent signed helper owns managed credentials. Each app owns its drafts and active requests. [Data ownership](docs/architecture.md#data-ownership)
 
 ## Find the right guide
 
@@ -17,6 +17,8 @@
 | Use consistent terms and controls     | [Glossary](GLOSSARY.md), [design](DESIGN.md)                                                                 |
 | Verify a change                       | [Saul testing](apps/saul/docs/testing.md), [EZ verification](apps/ez/docs/verification.md), [CI](docs/ci.md) |
 | Review or retain evidence             | [Feature review](design/SKILL.md), [artifact policy](docs/artifacts.md)                                      |
+
+Deferred cross-app refactors and their acceptance checks are in the [architecture backlog](docs/backlog.md).
 
 ## Develop
 

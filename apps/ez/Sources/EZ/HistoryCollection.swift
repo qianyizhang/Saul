@@ -16,6 +16,7 @@ import SaulNativeValues
     private let read: @MainActor (String, HistoryCursor?) async throws -> HistoryPage
     private let count: @MainActor (String, [HistoryStore.RecordID]) async throws -> Int
     private let readEntry: @MainActor (HistoryStore.RecordID) async throws -> HistoryEntry?
+    let image: LookupImageLoader
     private let delete: @MainActor (HistoryStore.RecordID) async throws -> Void
     private var opening: Task<Void, Never>?
     private(set) var ready = false
@@ -65,12 +66,20 @@ import SaulNativeValues
         read: @escaping @MainActor (String, HistoryCursor?) async throws -> HistoryPage,
         count: @escaping @MainActor (String, [HistoryStore.RecordID]) async throws -> Int,
         entry: @escaping @MainActor (HistoryStore.RecordID) async throws -> HistoryEntry?,
+        readImage: @escaping @MainActor (HistoryEntry) async throws -> Data?,
         delete: @escaping @MainActor (HistoryStore.RecordID) async throws -> Void
     ) {
         self.read = read
         self.count = count
         self.readEntry = entry
         self.delete = delete
+        image = LookupImageLoader(read: readImage)
+        image.onChange = { [weak self] in self?.onChange?() }
+    }
+
+    private func notifyChange() {
+        image.select(selected)
+        onChange?()
     }
 
     func prepare(_ preparation: Preparation, failed: @escaping @MainActor (String) -> Void) {
@@ -84,7 +93,7 @@ import SaulNativeValues
                     ready = true
                 } catch { failed(error.localizedDescription) }
                 opening = nil
-                onChange?()
+                notifyChange()
             }
         }
     }
@@ -103,7 +112,7 @@ import SaulNativeValues
         for entry in values { remember(entry) }
         total = entries.count
         next = nil
-        onChange?()
+        notifyChange()
     }
 
     @discardableResult func select(_ id: UUID?, force: Bool = false) -> Task<Void, Never>? {
@@ -120,20 +129,20 @@ import SaulNativeValues
         detailError = nil
         detailLoading = false
         guard let id else {
-            onChange?()
+            notifyChange()
             return nil
         }
         if failedSelection != nil || (!force && details[id] != nil) {
-            onChange?()
+            notifyChange()
             return nil
         }
         if let active, active.id == id {
             remember(active)
-            onChange?()
+            notifyChange()
             return nil
         }
         if details[id]?.status == "unsaved", !force {
-            onChange?()
+            notifyChange()
             return nil
         }
         guard let identity else { return nil }
@@ -147,6 +156,7 @@ import SaulNativeValues
                     remember(active)
                 } else if let entry {
                     remember(entry)
+                    if force { image.select(entry, retryUnavailable: true) }
                 } else {
                     details[id] = nil
                     detailError = "This saved lookup is unavailable."
@@ -158,11 +168,11 @@ import SaulNativeValues
             if token == detailGeneration {
                 detailLoading = false
                 detailRead = nil
-                onChange?()
+                notifyChange()
             }
         }
         detailRead = task
-        onChange?()
+        notifyChange()
         return task
     }
 
@@ -187,7 +197,7 @@ import SaulNativeValues
             entries.insert(row, at: 0)
             total += 1
         }
-        onChange?()
+        notifyChange()
     }
 
     func discardFailed(_ entry: HistoryEntry) {
@@ -197,7 +207,7 @@ import SaulNativeValues
             failedSelection = entry
             select(entry.id)
         } else {
-            onChange?()
+            notifyChange()
         }
     }
 
@@ -229,10 +239,10 @@ import SaulNativeValues
             } catch { outcome = .failure(error) }
             deleting = nil
             settled(outcome)
-            onChange?()
+            notifyChange()
         }
         deleting = task
-        onChange?()
+        notifyChange()
         return task
     }
 
@@ -275,7 +285,7 @@ import SaulNativeValues
                     reading = nil
                     loading = false
                     changes.removeAll()
-                    onChange?()
+                    notifyChange()
                 }
             }
             await waitForPreparation()
@@ -340,7 +350,7 @@ import SaulNativeValues
             } catch { if !Task.isCancelled, token == generation { settled(.failure(error)) } }
         }
         reading = task
-        onChange?()
+        notifyChange()
         return task
     }
 }

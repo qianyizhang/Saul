@@ -30,6 +30,12 @@ public actor HistoryReader {
         return try HistoryStore(reading: directory).entry(id)
     }
 
+    public func inputImage(for entry: HistoryEntry) throws -> ImageAttachment? {
+        try Task.checkCancellation()
+        guard entry.inputImage != nil else { return nil }
+        return try HistoryStore(reading: directory).inputImage(for: entry)
+    }
+
     public func image(for entry: HistoryEntry) throws -> Data? {
         try Task.checkCancellation()
         return try HistoryStore(reading: directory).image(for: entry)

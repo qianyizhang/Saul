@@ -8,6 +8,7 @@ import {
   type AnnotationStatusKey,
 } from '../../shared/protocol/annotation-attempts.ts';
 import { annotationMessage, annotations } from './client';
+import { annotationMutationSession } from './mutation-session';
 import { annotationDraftKey, annotationVersionKey } from './routing';
 import type { AnnotationChange } from '../../shared/protocol/annotations.ts';
 import { createStatusObserver, type StatusObserver } from '../observation/status-observer';
@@ -29,7 +30,12 @@ function storedDraft(value: unknown): StoredDraft | undefined {
   };
 }
 type EditorRead = { status: AnnotationEditorStatus; recovered?: StoredDraft };
-type CommentSave = { draft: CommentDraft; token: string; persisted: Promise<void> };
+type CommentSave = {
+  draft: CommentDraft;
+  token: string;
+  persisted: Promise<void>;
+  revision?: number;
+};
 
 export function useAnnotationEditorSession({
   id,
@@ -48,16 +54,29 @@ export function useAnnotationEditorSession({
     [error, setError] = useState(''),
     [readError, setReadError] = useState(''),
     [missing, setMissing] = useState(false),
-    [runs, setRuns] = useState<AnnotationAttemptStatus[]>([]);
+    [runs, setRuns] = useState<AnnotationAttemptStatus[]>([]),
+    [reviewed, showReviewed] = useState<AnnotationEditorRecord>(),
+    [reviewing, setReviewing] = useState(false);
   const currentDraft = useRef(draft);
   const replyDraft = useRef({ text: '' });
   const submittingReply = useRef(false);
-  const latestRecord = useRef<AnnotationEditorRecord | undefined>(undefined);
-  const baseRevision = useRef<number | undefined>(undefined);
-  const edits = useRef(Promise.resolve());
+  const latestDraftToken = useRef<string>(undefined);
   const pendingSave = useRef<{ value: CommentSave } | undefined>(undefined);
   const statusObserver = useRef<StatusObserver<EditorRead> | null>(null);
   const mounted = useRef(false);
+  const [session] = useState(() =>
+    annotationMutationSession<AnnotationEditorRecord>({
+      id,
+      read: async () => {
+        const status = await annotationMessage({ action: 'status', url, id });
+        if (status.kind === 'missing') return undefined;
+        return (await annotations(url, { action: 'read', id, image: false })).record;
+      },
+      write: (change) => annotations(url, { action: 'change', changes: [change] }),
+      publish: setRecord,
+      invalidate: () => void statusObserver.current?.invalidate(),
+    }),
+  );
   const draftKey = annotationDraftKey(id);
   const publishDraft = useCallback((next: CommentDraft) => {
     currentDraft.current = next;
@@ -85,24 +104,23 @@ export function useAnnotationEditorSession({
           setMissing(true);
           return;
         }
+        if (status.key.revision < (session.current()?.revision ?? 0)) return;
         known = status.key;
         setMissing(false);
         if (status.capture) setCapture(status.capture);
         setRuns(status.attempts);
         const saved = status.record;
-        if (!saved) return;
-        latestRecord.current = saved;
-        setRecord(saved);
+        if (!saved || !session.accept(saved)) return;
         const phase = currentDraft.current.phase;
         if (phase === 'loading' && recovered) {
-          baseRevision.current = recovered.revision ?? saved.revision;
+          session.setBase(recovered.revision ?? saved.revision);
           publishDraft({
             phase: 'blocked',
             text: recovered.text,
             error: 'An unsaved draft was restored. Review the current comment before saving it.',
           });
         } else if (phase === 'loading' || phase === 'saved') {
-          baseRevision.current = saved.revision;
+          session.setBase(saved.revision);
           publishDraft({ phase: 'saved', text: saved.comment });
         }
       },
@@ -120,45 +138,10 @@ export function useAnnotationEditorSession({
       observer.dispose();
       chrome.storage.onChanged.removeListener(changed);
     };
-  }, [id, url, draftKey, publishDraft]);
-  const change = async (action: AnnotationChange['action'], text?: string) => {
-    // Permanent deletion acts on the reviewed deleted record, even when its
-    // separate unsaved comment still has an older edit base.
-    const revision = action === 'purge' ? record?.revision : baseRevision.current;
-    if (revision === undefined) throw new Error('Annotation is still loading.');
-    const result = await annotations(url, {
-      action: 'change',
-      changes: [
-        {
-          id,
-          revision,
-          operationId: crypto.randomUUID(),
-          action,
-          ...(text !== undefined ? { text } : {}),
-        },
-      ],
-    });
-    const outcome = result.outcomes?.[0];
-    if (outcome?.error) throw new Error(outcome.error);
-    if (action === 'purge') {
-      void statusObserver.current?.invalidate();
-      return;
-    }
-    if (!outcome?.record) throw new Error('Annotation save was not confirmed.');
-    // Advance the edit lane to the revision this write accepted, never to a
-    // newer revision read while an unsaved local edit remains.
-    if (
-      currentDraft.current.phase !== 'saved' ||
-      baseRevision.current === undefined ||
-      baseRevision.current < outcome.record.revision
-    )
-      baseRevision.current = outcome.record.revision;
-    // Invalidate immediately, but keep the observer out of the edit queue.
-    void statusObserver.current?.invalidate();
-  };
+  }, [id, url, draftKey, publishDraft, session]);
   const enqueue = (work: () => Promise<void>) => {
-    edits.current = edits.current.then(work).catch((e) => {
-      if (mounted.current) setError(String(e));
+    session.enqueue(work, (cause) => {
+      if (mounted.current) setError(String(cause));
     });
   };
   const setReply = (text: string) => {
@@ -167,19 +150,26 @@ export function useAnnotationEditorSession({
   };
   const save = (text: string, review = false) => {
     const before = currentDraft.current;
-    if (review && record) baseRevision.current = record.revision;
+    const revision = review ? reviewed?.revision : undefined;
+    if (review && revision === undefined) return;
     const next: CommentDraft =
       before.phase === 'blocked' && !review ? { ...before, text } : { phase: 'saving', text };
     publishDraft(next);
     const token = crypto.randomUUID();
+    latestDraftToken.current = token;
     const persist = annotationMessage({
       action: 'draft',
-      mutation: { action: 'write', id, token, text, revision: baseRevision.current },
+      mutation: { action: 'write', id, token, text, revision: revision ?? session.base() },
     });
     void persist.catch(() => undefined);
     // Persist recovery text as before. Coalesce only the queued SQLite edits;
     // commands seal the current slot to keep their order relative to typing.
-    const value = { draft: next, token, persisted: persist };
+    const value = {
+      draft: next,
+      token,
+      persisted: persist,
+      revision: revision ?? pendingSave.current?.value.revision,
+    };
     if (pendingSave.current) {
       pendingSave.current.value = value;
       return;
@@ -188,25 +178,27 @@ export function useAnnotationEditorSession({
     pendingSave.current = slot;
     enqueue(async () => {
       if (pendingSave.current === slot) pendingSave.current = undefined;
-      const { draft: submitted, token, persisted } = slot.value;
+      const { draft: submitted, token, persisted, revision } = slot.value;
       try {
         await persisted;
         if (submitted.phase === 'blocked' || currentDraft.current.phase === 'blocked') return;
-        await change('edit', submitted.text);
+        await session.change('edit', submitted.text, revision);
+        if (mounted.current) showReviewed(undefined);
         if (currentDraft.current !== submitted) return;
         await annotationMessage({ action: 'draft', mutation: { action: 'clear', id, token } });
         if (currentDraft.current === submitted) {
-          const latest = latestRecord.current;
-          if (latest && latest.revision >= (baseRevision.current ?? 0)) {
+          const latest = session.current();
+          if (latest && latest.revision >= (session.base() ?? 0)) {
             // Observation may advance the clean editor only after all local text
             // was accepted. A queued or blocked draft keeps its own edit base.
-            baseRevision.current = latest.revision;
+            session.setBase(latest.revision);
             publishDraft({ phase: 'saved', text: latest.comment });
           } else publishDraft({ phase: 'saved', text: submitted.text });
         }
       } catch (cause) {
         // Whether this save or a newer queued edit was active, retain its text
         // and stop sending edits until the author explicitly reviews the base.
+        if (mounted.current) showReviewed(undefined);
         publishDraft({
           phase: 'blocked',
           text: currentDraft.current.text,
@@ -220,7 +212,7 @@ export function useAnnotationEditorSession({
     pendingSave.current = undefined;
     enqueue(async () => {
       if (currentDraft.current.phase === 'blocked' && action !== 'purge') return;
-      await change(action);
+      await session.change(action, undefined, action === 'purge' ? record?.revision : undefined);
       if (action === 'purge')
         await annotationMessage({ action: 'draft', mutation: { action: 'purge', id } });
       if (mounted.current) {
@@ -238,7 +230,7 @@ export function useAnnotationEditorSession({
     enqueue(async () => {
       try {
         if (currentDraft.current.phase === 'blocked') return;
-        await change('append', submitted.text);
+        await session.change('append', submitted.text);
         if (mounted.current) {
           if (replyDraft.current === submitted) setReply('');
           setError('');
@@ -247,6 +239,48 @@ export function useAnnotationEditorSession({
       } finally {
         submittingReply.current = false;
         if (mounted.current) setReplyPending(false);
+      }
+    });
+  };
+  const reviewLatest = () => {
+    setReviewing(true);
+    const submitted = replyDraft.current;
+    enqueue(async () => {
+      try {
+        const { record: saved, confirmed } = await session.review();
+        if (!mounted.current) return;
+        if (!saved) {
+          setMissing(true);
+          if (confirmed?.action === 'purge')
+            await annotationMessage({ action: 'draft', mutation: { action: 'purge', id } });
+          return;
+        }
+        if (!session.accept(saved)) throw new Error('Annotation changed. Read latest again.');
+        if (
+          confirmed?.action === 'append' &&
+          replyDraft.current === submitted &&
+          submitted.text === confirmed.text
+        )
+          setReply('');
+        const draftAtReview = currentDraft.current;
+        const token = latestDraftToken.current;
+        if (confirmed?.action === 'edit' && token && draftAtReview.text === confirmed.text) {
+          await annotationMessage({ action: 'draft', mutation: { action: 'clear', id, token } });
+          if (currentDraft.current === draftAtReview) {
+            session.setBase(saved.revision);
+            publishDraft({ phase: 'saved', text: saved.comment });
+            setError('');
+            return;
+          }
+        }
+        if (currentDraft.current.phase === 'blocked') showReviewed(saved);
+        else {
+          session.setBase(saved.revision);
+          publishDraft({ phase: 'saved', text: saved.comment });
+        }
+        setError('');
+      } finally {
+        if (mounted.current) setReviewing(false);
       }
     });
   };
@@ -260,6 +294,9 @@ export function useAnnotationEditorSession({
     submitReply,
     error,
     readError,
+    reviewed,
+    reviewing,
+    reviewLatest,
     missing,
     runs,
     refresh: () => statusObserver.current?.refresh(),

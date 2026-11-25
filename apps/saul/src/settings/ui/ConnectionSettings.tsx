@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   connectionCapabilities,
-  validConnectionEndpoint,
   type ConnectionDefinition,
 } from '../../../shared/protocol/shared-presets-contract.mts';
 import {
@@ -9,18 +8,16 @@ import {
   type ConnectionStatus,
 } from '../../../shared/protocol/connections-contract.mts';
 import { credentialCall } from '../../native/credentials';
-import { planCall } from '../../providers/chatgpt-plan';
 import type { ModelPreset } from '../../../shared/model/presets.ts';
-import type { Configuration } from '../../configuration/definition';
-import type { PlanAccount, PlanResults } from '../../../shared/protocol/credential-plan.mts';
+import type { PlanResults } from '../../../shared/protocol/credential-plan.mts';
 import { useConnectionCatalog } from './useConnectionCatalog';
 import { ConnectionManagement, type ConnectionManagementAction } from './ConnectionManagement';
-import {
-  presetCountLabel,
-  presetsUsingConnection,
-  type ConnectionChange,
-} from '../connection-management';
-import { nextName } from '../draft';
+import { presetCountLabel, presetsUsingConnection } from '../connection-management';
+import { changeOutsideSetup } from '../connection-setup';
+import { useConnectionSetup } from '../useConnectionSetup';
+import type { Configuration } from '../../configuration/definition';
+import type { ConnectionChange } from '../connection-management';
+import type { CommitSetup } from '../connection-setup';
 
 type Logout = PlanResults['logout'];
 const message = (cause: unknown) => (cause instanceof Error ? cause.message : 'Connection failed.');
@@ -216,6 +213,19 @@ function ConnectionRow({
   );
 }
 
+type ConnectionSettingsProps = {
+  settings: Configuration;
+  visible: boolean;
+  disabled: boolean;
+  dirty: boolean;
+  commit: CommitSetup;
+  manageConnection: (change: ConnectionChange) => Promise<void>;
+  integrations: () => void;
+  onDirty: (dirty: boolean) => void;
+  focusConnection?: string;
+  onConnectionFocused: () => void;
+};
+
 export function ConnectionSettings({
   settings,
   visible,
@@ -227,202 +237,41 @@ export function ConnectionSettings({
   onDirty,
   focusConnection,
   onConnectionFocused,
-}: {
-  settings: Configuration;
-  visible: boolean;
-  disabled: boolean;
-  dirty: boolean;
-  commit: (connections: ConnectionDefinition[]) => Promise<void>;
-  manageConnection: (change: ConnectionChange) => Promise<void>;
-  integrations: () => void;
-  onDirty: (dirty: boolean) => void;
-  focusConnection?: string;
-  onConnectionFocused: () => void;
-}) {
-  const [target, setTarget] = useState<ConnectionDefinition>();
+}: ConnectionSettingsProps) {
+  const setup = useConnectionSetup({ settings, onDirty, commit });
+  const { draft, pending, status, plan } = setup;
+  const { busy, error, revision, logouts } = status;
+  const { accounts, selectedAccount, defaultPlanName, needsPlanPermission, recoveryIntent } = plan;
   const [management, setManagement] = useState<{
     key: string;
     action: ConnectionManagementAction;
   }>();
   const [returnTo, setReturnTo] = useState<string>();
-  const [adding, setAdding] = useState(false);
-  const [kind, setKind] = useState<'plan' | 'api' | 'custom'>('plan');
-  const [name, setName] = useState('');
-  const [endpoint, setEndpoint] = useState('https://api.openai.com/v1');
-  const [key, setKey] = useState('');
-  const [accountId, setAccountId] = useState('');
-  const [registration, setRegistration] = useState<{
-    name: string;
-    accountId?: string;
-    confirmed?: boolean;
-  }>();
-  const [accounts, setAccounts] = useState<PlanAccount[]>([]);
-  const [logouts, setLogouts] = useState<ReadonlyMap<string, Logout>>(() => new Map());
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [revision, setRevision] = useState(0);
-  const [newId, setNewId] = useState('');
-  const loginController = useRef<AbortController | null>(null);
-  const suggestedNameInput = useRef<HTMLInputElement>(null);
-  const addButton = useRef<HTMLButtonElement>(null);
-  useEffect(() => () => loginController.current?.abort(), []);
+  const [recoveryKey, setRecoveryKey] = useState<{ id: string; value: string }>();
+  const pendingId = pending?.id;
+  const targetsPending = pending?.id === draft?.id && pending?.phase === 'credential';
+  const editing = !pending || targetsPending ? draft : undefined;
   const enabled = settings.sharedCredentials === 'saul';
-  const selectedAccount = accounts.find((account) => account.id === accountId);
   const planReady = !!(selectedAccount?.signedIn && selectedAccount.planEnabled);
-  const needsPlanPermission = !!(selectedAccount?.signedIn && !selectedAccount.planEnabled);
+  const target = draft?.target;
+  const registration = draft?.registration;
   const preparingRegistration = !!registration && !registration.accountId;
   const finishingRegistration = !!registration?.accountId;
-  const boundPlan = kind === 'plan' && !!target?.accountId;
+  const boundPlan = draft?.fields.kind === 'plan' && !!target?.accountId;
   const managed = settings.connections.find((connection) => connection.key === management?.key);
-  const defaultPlanName = nextName('ChatGPT plan', settings.connections);
   const returningAfterDelete =
     !!returnTo && !settings.connections.some((connection) => connection.key === returnTo);
+  useEffect(() => {
+    setRecoveryKey(undefined);
+  }, [pendingId, pending?.phase]);
+  const suggestedNameInput = useRef<HTMLInputElement>(null);
+  const addButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (returningAfterDelete) addButton.current?.focus();
   }, [returningAfterDelete]);
   useEffect(() => {
     if (preparingRegistration) suggestedNameInput.current?.focus();
   }, [preparingRegistration]);
-  const loadAccounts = async () => {
-    const reply = await planCall({ action: 'accounts' }, AbortSignal.timeout(20_000));
-    setAccounts(reply.accounts);
-  };
-  const open = (connection?: ConnectionDefinition) => {
-    setTarget(connection);
-    setAdding(true);
-    onDirty(true);
-    setError('');
-    setKey('');
-    setName(connection?.name ?? '');
-    setAccountId(connection?.accountId ?? '');
-    setRegistration(undefined);
-    setEndpoint(connection?.baseUrl ?? 'https://api.openai.com/v1');
-    setKind(
-      connection?.kind === 'openai-api'
-        ? connection.baseUrl && connection.baseUrl !== 'https://api.openai.com/v1'
-          ? 'custom'
-          : 'api'
-        : 'plan',
-    );
-    setNewId(`connection-${crypto.randomUUID()}`);
-    if (!connection || connection.kind === 'chatgpt-plan')
-      void loadAccounts().catch((cause) => setError(message(cause)));
-  };
-  const save = async () => {
-    setBusy(true);
-    setError('');
-    try {
-      const id = target?.key ?? newId;
-      let definition: ConnectionDefinition;
-      if (kind === 'plan') {
-        const account = accounts.find((a) => a.id === accountId && a.signedIn && a.planEnabled);
-        if (!account) throw new Error('Sign in and allow plan use before saving this connection.');
-        if (target?.accountId && target.accountId !== account.id)
-          throw new Error('This connection is bound to another account.');
-        if (settings.connections.some((p) => p.key !== id && p.accountId === account.id))
-          throw new Error('This account already has a connection.');
-        definition = {
-          key: id,
-          name: target?.name ?? (name.trim() || defaultPlanName),
-          kind: 'chatgpt-plan',
-          accountId: account.id,
-        };
-        if (registration?.confirmed && registration.accountId === account.id) {
-          await credentialCall(
-            {
-              action: 'confirm-app-name',
-              accountId: account.id,
-              suggestedAppName: registration.name,
-            },
-            AbortSignal.timeout(20_000),
-          );
-        }
-      } else {
-        const url =
-          kind === 'api' ? 'https://api.openai.com/v1' : endpoint.trim().replace(/\/+$/, '');
-        if (!validConnectionEndpoint(url))
-          throw new Error(
-            'Use HTTPS, or HTTP on localhost, without credentials or query parameters.',
-          );
-        definition = {
-          key: id,
-          name: target?.name ?? name.trim(),
-          kind: 'openai-api',
-          baseUrl: url,
-        };
-        if (!definition.name) throw new Error('Name this connection.');
-        await credentialCall(
-          { action: 'connection-key-save', connectionKey: id, endpoint: url, key },
-          AbortSignal.timeout(20_000),
-        );
-      }
-      await commit(
-        target
-          ? settings.connections.map((p) => (p.key === id ? definition : p))
-          : [...settings.connections, definition],
-      );
-      setAdding(false);
-      onDirty(false);
-      setKey('');
-      setRevision((v) => v + 1);
-    } catch (cause) {
-      setError(message(cause));
-    } finally {
-      setBusy(false);
-    }
-  };
-  const signIn = async (newAppName?: string) => {
-    setBusy(true);
-    setError('');
-    const ac = new AbortController();
-    loginController.current = ac;
-    try {
-      const selected = target?.accountId ?? accountId;
-      if (!newAppName && !selected) throw new Error('Choose an account to sign in again.');
-      const result = await planCall(
-        {
-          action: 'login',
-          ...(newAppName ? { suggestedAppName: newAppName } : { accountId: selected }),
-          consent: !newAppName && needsPlanPermission,
-        },
-        AbortSignal.any([ac.signal, AbortSignal.timeout(320_000)]),
-      );
-      if (result.account.signedIn)
-        setLogouts((previous) => {
-          const next = new Map(previous);
-          next.delete(result.account.id);
-          return next;
-        });
-      await loadAccounts();
-      if (newAppName) setRegistration({ name: newAppName, accountId: result.account.id });
-      setAccountId(result.account.id);
-      if (!result.account.planEnabled)
-        setError('ChatGPT plan use is still disabled for this account.');
-      if (boundPlan && result.account.planEnabled) {
-        setAdding(false);
-        onDirty(false);
-        setRevision((v) => v + 1);
-      }
-    } catch (cause) {
-      if (newAppName) setRegistration(undefined);
-      setError(message(cause));
-      if (!ac.signal.aborted) await loadAccounts().catch(() => {});
-    } finally {
-      loginController.current = null;
-      setBusy(false);
-    }
-  };
-  const copyAndSignIn = async (appName: string) => {
-    setBusy(true);
-    try {
-      await navigator.clipboard.writeText(appName);
-    } catch {
-      setError('Could not copy the app name. Try again.');
-      setBusy(false);
-      return;
-    }
-    await signIn(appName);
-  };
   const remove = async (connection: ConnectionDefinition) => {
     const action =
       connection.kind === 'chatgpt-plan' ? 'Sign out of this account' : 'Remove this API key';
@@ -432,39 +281,19 @@ export function ConnectionSettings({
       )
     )
       return;
-    setBusy(true);
-    setError('');
-    try {
-      if (connection.kind === 'chatgpt-plan') {
-        if (!connection.accountId) throw new Error('This connection has no account.');
-        const result = await planCall({ action: 'logout', accountId: connection.accountId });
-        if (result.account.id !== connection.accountId || result.account.signedIn)
-          throw new Error('The helper did not confirm local sign-out.');
-        setLogouts((previous) => new Map(previous).set(result.account.id, result));
-      } else
-        await credentialCall({
-          action: 'connection-key-remove',
-          connectionKey: connection.key,
-          endpoint: connection.baseUrl ?? 'https://api.openai.com/v1',
-        });
-      setRevision((v) => v + 1);
-    } catch (cause) {
-      setError(message(cause));
-    } finally {
-      setBusy(false);
-    }
+    await setup.disconnect(connection);
   };
   return (
     <section hidden={!visible} className="settings-section" aria-label="Connections">
       <div className="row between">
         <h2 className="view-title">Connections</h2>
-        {!adding && !management && (
+        {!draft && !management && !pending && (
           <button
             ref={addButton}
             type="button"
             className="btn"
             disabled={disabled || dirty || busy || !enabled || settings.connections.length >= 32}
-            onClick={() => open()}
+            onClick={() => setup.open()}
           >
             ＋ Add
           </button>
@@ -478,10 +307,68 @@ export function ConnectionSettings({
           {error}
         </p>
       )}
-      {loginController.current && (
+      {pending && !editing && (
+        <fieldset className="stack settings-fields" disabled={busy || dirty || disabled}>
+          <h3>Finish setting up {pending.definition.name}</h3>
+          <p>{pending.definition.baseUrl ?? pending.definition.accountId}</p>
+          <p role="status">
+            {pending.phase === 'settings'
+              ? pending.definition.kind === 'openai-api'
+                ? 'The helper accepted the key. Finish setup checks the saved connection.'
+                : 'Account setup finished. Finish setup checks the saved connection.'
+              : 'The credential change was not confirmed. Review before submitting it again.'}
+          </p>
+          {pending.phase === 'credential' && pending.definition.kind === 'openai-api' && (
+            <label className="field">
+              API key
+              <input
+                type="password"
+                autoComplete="off"
+                value={recoveryKey?.id === pending.id ? recoveryKey.value : ''}
+                onChange={(e) => setRecoveryKey({ id: pending.id, value: e.target.value })}
+              />
+            </label>
+          )}
+          <div className="row">
+            {pending.definition.kind === 'chatgpt-plan' && recoveryIntent && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => void setup.repairAccount(pending, recoveryIntent)}
+              >
+                {
+                  {
+                    check: 'Check original account',
+                    enable: 'Enable plan use',
+                    'sign-in': 'Sign in to original account',
+                  }[recoveryIntent]
+                }
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn primary"
+              onClick={() =>
+                void setup.resume(
+                  pending,
+                  pending.phase === 'credential' && recoveryKey?.id === pending.id
+                    ? recoveryKey.value
+                    : '',
+                )
+              }
+            >
+              {pending.phase === 'settings' ? 'Finish setup' : 'Submit again'}
+            </button>
+            <button type="button" className="btn" onClick={() => void setup.discard(pending)}>
+              Discard setup
+            </button>
+          </div>
+        </fieldset>
+      )}
+      {status.signingIn && (
         <div className="row">
           <span role="status">Waiting for ChatGPT…</span>
-          <button type="button" className="btn" onClick={() => loginController.current?.abort()}>
+          <button type="button" className="btn" onClick={setup.cancelSignIn}>
             Cancel sign-in
           </button>
         </div>
@@ -493,7 +380,9 @@ export function ConnectionSettings({
           connection={managed}
           settings={settings}
           disabled={disabled || dirty}
-          commit={manageConnection}
+          commit={(change) =>
+            changeOutsideSetup(change.key, managed, () => manageConnection(change))
+          }
           close={() => {
             setReturnTo(management.key);
             setManagement(undefined);
@@ -501,7 +390,7 @@ export function ConnectionSettings({
           }}
           openMove={() => setManagement({ key: management.key, action: 'move' })}
         />
-      ) : adding ? (
+      ) : editing ? (
         <fieldset className="stack settings-fields" disabled={busy || disabled}>
           <h3>
             {preparingRegistration
@@ -516,11 +405,10 @@ export function ConnectionSettings({
             <label className="field">
               Type
               <select
-                value={kind}
-                onChange={(e) => {
-                  setKind(e.target.value as typeof kind);
-                  setError('');
-                }}
+                value={editing.fields.kind}
+                onChange={(e) =>
+                  setup.update({ kind: e.target.value as typeof editing.fields.kind })
+                }
               >
                 <option value="plan">ChatGPT plan</option>
                 <option value="api">OpenAI API</option>
@@ -528,7 +416,7 @@ export function ConnectionSettings({
               </select>
             </label>
           )}
-          {kind === 'plan' ? (
+          {editing.fields.kind === 'plan' ? (
             preparingRegistration && registration ? (
               <>
                 <label className="field">
@@ -547,18 +435,11 @@ export function ConnectionSettings({
                   <button
                     type="button"
                     className="btn primary"
-                    onClick={() => void copyAndSignIn(registration.name)}
+                    onClick={() => void setup.copyAndSignIn()}
                   >
                     Copy name and open ChatGPT
                   </button>
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => {
-                      setRegistration(undefined);
-                      setError('');
-                    }}
-                  >
+                  <button type="button" className="btn" onClick={setup.backFromRegistration}>
                     Back
                   </button>
                 </div>
@@ -571,12 +452,8 @@ export function ConnectionSettings({
                   <label className="field">
                     Saved account
                     <select
-                      value={accountId}
-                      onChange={(e) => {
-                        setAccountId(e.target.value);
-                        setRegistration(undefined);
-                        setError('');
-                      }}
+                      value={editing.fields.accountId}
+                      onChange={(e) => setup.update({ accountId: e.target.value })}
                     >
                       <option value="">Choose an account</option>
                       {accounts
@@ -601,9 +478,7 @@ export function ConnectionSettings({
                         <input
                           type="checkbox"
                           checked={!!registration.confirmed}
-                          onChange={(e) =>
-                            setRegistration({ ...registration, confirmed: e.target.checked })
-                          }
+                          onChange={(e) => setup.confirmRegistration(e.target.checked)}
                         />
                         I used {registration.name} in ChatGPT
                       </label>
@@ -614,29 +489,20 @@ export function ConnectionSettings({
                         <input
                           maxLength={80}
                           placeholder={defaultPlanName}
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
+                          value={editing.fields.name}
+                          onChange={(e) => setup.update({ name: e.target.value })}
                         />
                       </label>
                     )}
                   </>
                 )}
                 {(boundPlan || (!planReady && selectedAccount)) && (
-                  <button type="button" className="btn primary" onClick={() => void signIn()}>
+                  <button type="button" className="btn primary" onClick={() => void setup.signIn()}>
                     {needsPlanPermission ? 'Enable plan use' : 'Sign in again'}
                   </button>
                 )}
                 {!boundPlan && !registration && (
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => {
-                      setError('');
-                      setRegistration({
-                        name: `Saul ${crypto.randomUUID().replaceAll('-', '').slice(0, 12).toUpperCase()}`,
-                      });
-                    }}
-                  >
+                  <button type="button" className="btn" onClick={setup.register}>
                     Register a new app
                   </button>
                 )}
@@ -647,16 +513,20 @@ export function ConnectionSettings({
               {!target && (
                 <label className="field">
                   Name
-                  <input maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />
+                  <input
+                    maxLength={80}
+                    value={editing.fields.name}
+                    onChange={(e) => setup.update({ name: e.target.value })}
+                  />
                 </label>
               )}
-              {kind === 'custom' && (
+              {editing.fields.kind === 'custom' && (
                 <label className="field">
                   Endpoint
                   <input
-                    value={endpoint}
+                    value={editing.fields.endpoint}
                     disabled={!!target?.baseUrl}
-                    onChange={(e) => setEndpoint(e.target.value)}
+                    onChange={(e) => setup.update({ endpoint: e.target.value })}
                     placeholder="https://example.com/v1"
                   />
                 </label>
@@ -666,13 +536,15 @@ export function ConnectionSettings({
                 <input
                   type="password"
                   autoComplete="off"
-                  value={key}
-                  onChange={(e) => setKey(e.target.value)}
-                  placeholder={kind === 'custom' ? 'Optional for localhost' : 'API key'}
+                  value={editing.fields.key}
+                  onChange={(e) => setup.update({ key: e.target.value })}
+                  placeholder={
+                    editing.fields.kind === 'custom' ? 'Optional for localhost' : 'API key'
+                  }
                 />
               </label>
               <p className="small">
-                {kind === 'api'
+                {editing.fields.kind === 'api'
                   ? 'OpenAI API billing is separate from your ChatGPT plan.'
                   : 'Uses this endpoint’s billing. Keys stay bound to this endpoint.'}
               </p>
@@ -680,21 +552,12 @@ export function ConnectionSettings({
           )}
           {!preparingRegistration && (
             <div className="row">
-              {(kind !== 'plan' || (!boundPlan && planReady)) && (
-                <button type="button" className="btn primary" onClick={() => void save()}>
-                  {kind === 'plan' ? 'Save connection' : 'Save'}
+              {(editing.fields.kind !== 'plan' || (!boundPlan && planReady)) && (
+                <button type="button" className="btn primary" onClick={() => void setup.save()}>
+                  {editing.fields.kind === 'plan' ? 'Save connection' : 'Save'}
                 </button>
               )}
-              <button
-                type="button"
-                className="btn"
-                onClick={() => {
-                  setAdding(false);
-                  onDirty(false);
-                  setKey('');
-                  setError('');
-                }}
-              >
+              <button type="button" className="btn" onClick={setup.close}>
                 Cancel
               </button>
             </div>
@@ -713,7 +576,7 @@ export function ConnectionSettings({
             connection={connection}
             presetCount={presetsUsingConnection(settings, connection.key).length}
             enabled={enabled}
-            locked={busy || disabled}
+            locked={busy || disabled || !!pending}
             dirty={dirty}
             logout={connection.accountId ? logouts.get(connection.accountId) : undefined}
             reveal={(focusConnection ?? returnTo) === connection.key}
@@ -722,11 +585,11 @@ export function ConnectionSettings({
               onConnectionFocused();
             }}
             setup={() => {
-              if (!dirty && !disabled) open(connection);
+              if (!dirty && !disabled) setup.open(connection);
             }}
             remove={() => void remove(connection)}
             manage={(action) => {
-              setError('');
+              setup.clearError();
               setManagement({ key: connection.key, action });
               onDirty(true);
             }}

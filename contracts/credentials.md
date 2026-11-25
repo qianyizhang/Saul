@@ -94,7 +94,13 @@ that document. Key replacement cannot change the endpoint. Removal leaves a
 retired binding so the same ID cannot later send another key to another origin.
 Plan definitions pin their account registration; an unbound migrated entry asks
 for an explicit selection. Setup writes credentials before the public definition;
-a failed definition save keeps the setup draft and same ID for an explicit retry.
+each app retains its own public setup details until the definition is confirmed or
+the user discards setup. The record holds the connection ID, proposed and previous
+definition, credential step and optional confirmed app name. The API key goes
+directly to the signed owner. After restarting, **Finish setup** checks current
+settings and the original binding. It skips settings already applied and checks the original definition
+before adding a connection or completing its binding. A lost credential acknowledgement
+requires an explicit credential action. Discard clears the local setup record.
 It does not silently switch or delete another connection. Both setup forms reauthorize
 the selected registration, including on a new or unbound connection. Only
 **Register a new app → Copy name and open ChatGPT** omits the account ID to create a
@@ -112,7 +118,10 @@ validation. Only explicit **Enable plan use** for a signed-in account missing
 the grant requests `prompt=consent`.
 
 `connection-status` returns identity, endpoint, masked key suffix and availability.
-`connection-catalog` returns current models, last successful fetch time and a
+During setup, `connection-key-status` accepts a connection ID and its fixed endpoint.
+It checks the local binding before a public definition exists, returning availability
+and endpoint only. A different stored endpoint fails the check. No provider call is
+involved. `connection-catalog` returns current models, last successful fetch time and a
 separate refresh error. The owner keeps only `connection-catalogs.json`, a bounded,
 owner-only current cache, and never stores prompts or tokens there. Discovery uses
 the same cross-process lease as refresh. HTTP redirects are refused. Custom HTTPS

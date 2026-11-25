@@ -193,11 +193,6 @@ public final class HistoryStore {
         return try rows("SELECT image FROM ez_entry WHERE id=?", [entry.id.uuidString.lowercased()]).first?[
             "image"] as? Data
     }
-    public static func readInputImage(for entry: HistoryEntry, directory: URL) throws -> ImageAttachment? {
-        guard entry.inputImage != nil else { return nil }
-        return try HistoryStore(reading: directory).inputImage(for: entry)
-    }
-
     public func inputImage(for entry: HistoryEntry) throws -> ImageAttachment? {
         guard let metadata = entry.inputImage else { return nil }
         if metadata.data != nil {

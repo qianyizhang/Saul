@@ -55,6 +55,28 @@ import SaulTestSupport
             let deleted = try await reader.entry(original.recordID)
             try expect(deleted == nil, "Deleted detail was cached by the reader")
         },
+        CheckCase("history pages: live and persisted action rows share their complete projection") {
+            directory in
+            let store = try HistoryStore(directory: directory)
+            for (capability, legacyMode, symbol) in [
+                (ActionCapability.draw, QueryMode.dictionary, "photo"),
+                (.write, nil, "text.badge.plus"),
+            ] {
+                var entry = HistoryEntry(
+                    mode: .dictionary, query: "Expanded prompt", model: "fixture", effort: "",
+                    requestedServiceTier: nil)
+                entry.status = "completed"
+                entry.actionSnapshot = Action(
+                    name: "Custom \(capability.rawValue)", presetID: UUID(),
+                    template: "{{first}} then {{second}}", legacyMode: legacyMode, capability: capability)
+                entry.inputValues = ["second": "Suffix", "first": String(repeating: "👩🏽‍💻", count: 511)]
+                let live = HistoryRow(entry)
+                try expectEqual(live.actionSymbol, symbol, "Live icon fixture is invalid")
+                try store.append(entry)
+                let persisted = try store.page().rows.first { $0.id == entry.id }
+                try expectEqual(persisted, live, "Reload changed the complete row")
+            }
+        },
         CheckCase("history pages: browser and native rows share order and latest completed projection") {
             directory in
             let store = try HistoryStore(directory: directory)

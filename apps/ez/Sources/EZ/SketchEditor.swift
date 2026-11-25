@@ -60,9 +60,7 @@ struct SketchEditor: View {
                         .labelStyle(.iconOnly).help("Remove selected item")
                 }
             }
-            if let error = model.inputImageError {
-                Text(error).font(AppStyle.caption).foregroundStyle(.orange).textSelection(.enabled)
-            }
+            ImageInputFeedback(model: model)
         }
         .controlSize(.small)
         .disabled(!model.canEditSketch)
@@ -212,6 +210,7 @@ struct SketchEditor: View {
                 selection = scene.hit(at: start)
                 if let selection { gestureEdit = .move(selection) }
             }
+            if gestureEdit != nil { model.beginSketchEdit() }
         }
         switch gestureEdit {
         case .draw(var stroke):

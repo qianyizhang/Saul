@@ -199,6 +199,8 @@ struct ActionInputs: View {
                     ImageInputView(
                         model: model, label: label, onEditSketch: model.usesSketch ? onEditSketch : nil)
                 }
+            } else if model.restoringSavedImage || model.canContinueWithoutSavedImage {
+                ImageInputFeedback(model: model)
             }
             if model.inputFields.isEmpty {
                 Button(model.minimumMode ? "Actions" : "Configure actions") {

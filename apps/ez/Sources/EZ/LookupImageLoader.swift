@@ -17,52 +17,69 @@ extension AppModel {
     }
 }
 
-/// Loading a selected image is independent of the active provider attempt.
+/// HistoryCollection keeps this loader in sync with the selected detail.
 @MainActor final class LookupImageLoader {
-    private enum State {
-        case empty
-        case loading(Task<Void, Never>)
-        case ready(UUID, Data)
+    private struct Key: Equatable {
+        let record: HistoryStore.RecordID
+        let run: String?
+
+        init(_ entry: HistoryEntry) {
+            record = entry.recordID
+            run = entry.sourceRunID
+        }
     }
 
-    private var state: State = .empty {
-        didSet { onChange() }
-    }
-    private let reader: HistoryReader
-    private let onChange: () -> Void
+    private var closed = false
+    private var key: Key?
+    private var bytes: Data?
+    private var work: Task<Void, Never>?
+    private let read: @MainActor (HistoryEntry) async throws -> Data?
+    var onChange: (() -> Void)?
 
-    init(directory: URL, onChange: @escaping () -> Void) {
-        reader = HistoryReader(directory: directory)
-        self.onChange = onChange
+    init(read: @escaping @MainActor (HistoryEntry) async throws -> Data?) {
+        self.read = read
     }
 
-    var isLoading: Bool {
-        if case .loading = state { return true }
-        return false
-    }
+    var isLoading: Bool { work != nil }
 
     func data(for entry: HistoryEntry) -> Data? {
         guard entry.hasImage else { return nil }
-        if let data = entry.imageData { return data }
-        guard case .ready(let id, let data) = state, id == entry.id else { return nil }
-        return data
+        return entry.imageData ?? (key == Key(entry) ? bytes : nil)
     }
 
-    func select(_ entry: HistoryEntry?) {
-        if case .loading(let task) = state { task.cancel() }
-        guard let entry, entry.hasImage else {
-            state = .empty
+    func select(_ entry: HistoryEntry?, retryUnavailable: Bool = false) {
+        guard !closed, let entry, entry.hasImage else {
+            guard key != nil else { return }
+            work?.cancel()
+            work = nil
+            bytes = nil
+            key = nil
             return
         }
+        let next = Key(entry)
         if let data = entry.imageData {
-            state = .ready(entry.id, data)
-            return
-        }
-        state = .loading(
-            Task { [weak self, reader] in
-                let data = try? await reader.image(for: entry)
+            work?.cancel()
+            work = nil
+            key = next
+            bytes = data
+        } else if key != next || (retryUnavailable && bytes == nil && work == nil) {
+            work?.cancel()
+            key = next
+            bytes = nil
+            work = Task { [weak self, read] in
+                let data = try? await read(entry)
                 guard !Task.isCancelled, let self else { return }
-                state = data.map { .ready(entry.id, $0) } ?? .empty
-            })
+                bytes = data
+                work = nil
+                onChange?()
+            }
+        }
     }
+
+    func close() {
+        closed = true
+        select(nil)
+    }
+
+    func wait() async { await work?.value }
 }

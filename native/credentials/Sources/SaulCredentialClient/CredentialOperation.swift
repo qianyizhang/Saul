@@ -13,6 +13,7 @@ public enum CredentialOperation: Sendable {
   case apiKey(String?)
   case connectionStatus(key: String)
   case connectionCatalog(key: String, intent: CredentialCatalogIntent, includeDefault: Bool)
+  case connectionKeyStatus(id: String, endpoint: String)
   case connectionKey(id: String, endpoint: String, key: String?)
   case apiChat(APIChat)
   case apiRealtime(model: String, voice: String, connectionKey: String?)

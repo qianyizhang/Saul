@@ -17,7 +17,8 @@ struct ConnectionsView: View {
     let otherDraftIsDirty: Bool
     @State private var editing = false
     @State private var target: ConnectionDefinition?
-    @State private var management: (key: String, action: ConnectionManagementView.Action)?
+    @State private var management:
+        (connection: ConnectionDefinition, action: ConnectionManagementView.Action)?
     @State private var kind = "plan"
     @State private var name = ""
     @State private var endpoint = "https://api.openai.com/v1"
@@ -29,7 +30,12 @@ struct ConnectionsView: View {
     @State private var error: String?
     @State private var removing: ConnectionDefinition?
     @State private var loginTask: Task<Void, Never>?
-    private var selectedProfile: SaulAccount? { model.profiles.first { $0.id == account } }
+    private var eligibleProfiles: [SaulAccount] {
+        model.profiles.filter { profile in
+            !model.configuration.connections.contains { $0.accountId == profile.id && $0.key != target?.key }
+        }
+    }
+    private var selectedProfile: SaulAccount? { eligibleProfiles.first { $0.id == account } }
     private var planReady: Bool { selectedProfile?.signedIn == true && selectedProfile?.planEnabled == true }
     private var needsPlanPermission: Bool {
         selectedProfile?.signedIn == true && selectedProfile?.planEnabled == false
@@ -46,7 +52,7 @@ struct ConnectionsView: View {
                 HStack {
                     Text("Connections").font(.headline)
                     Spacer()
-                    if !editorOpen {
+                    if !editorOpen && model.pendingConnectionSetup == nil {
                         Menu("Add connection", systemImage: "plus") {
                             Button("ChatGPT plan") { open(nil, type: "plan") }
                             Button("OpenAI API") { open(nil, type: "api") }
@@ -64,16 +70,16 @@ struct ConnectionsView: View {
                         loginTask?.cancel()
                     }
                 }
-                if let management,
-                    let connection = model.configuration.connections.first(where: { $0.key == management.key }
-                    )
-                {
+                if let pending = model.pendingConnectionSetup {
+                    setupRecovery(pending)
+                } else if let management {
                     ConnectionManagementView(
-                        action: management.action, connection: connection, configuration: model.configuration,
+                        action: management.action, connection: management.connection,
+                        configuration: model.configuration,
                         disabled: managementDisabled,
-                        commit: { try model.manageConnection(connection.key, $0) },
+                        commit: { try model.manageConnection(management.connection, $0) },
                         close: { self.management = nil },
-                        openMove: { self.management = (connection.key, .move) }
+                        openMove: { self.management = (management.connection, .move) }
                     ).id(management.action)
                 } else if editing {
                     setupForm
@@ -91,6 +97,14 @@ struct ConnectionsView: View {
                 guard !Task.isCancelled else { return }
                 await model.refreshConnection(connection)
             }
+        }
+        .onChange(of: model.pendingConnectionSetup?.id) { _, _ in
+            editing = false
+            management = nil
+            key = ""
+        }
+        .onChange(of: model.pendingConnectionSetup?.phase) { _, phase in
+            if phase == .settings { key = "" }
         }
         .onChange(of: editorOpen, initial: true) { _, value in hasUnsavedChanges = value }
         .onDisappear {
@@ -118,6 +132,64 @@ struct ConnectionsView: View {
             )
         }
     }
+    private func setupRecovery(_ pending: ConnectionSetup) -> some View {
+        let repair = model.connectionSetupRepairChoice
+        let requestingKey =
+            pending.definition.kind == .openAIAPI && (pending.phase == .credential || repair == .replaceKey)
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("Finish setting up \(pending.definition.name)").font(.headline)
+            Text(pending.definition.accountId ?? pending.definition.endpoint).textSelection(.enabled)
+            if pending.phase == .credential {
+                Text("The credential change was not confirmed. Review before submitting it again.")
+            } else if repair == nil {
+                Text(
+                    pending.definition.kind == .openAIAPI
+                        ? "The helper accepted the key. Finish setup checks it and saves the connection."
+                        : "The credential step finished. Finish setup checks plan access and saves the connection."
+                )
+            }
+            if requestingKey { SecureField("API key", text: $key) }
+            HStack {
+                Button(pending.phase == .settings ? "Finish setup" : "Submit again") {
+                    continueSetup(pending, requiresKey: pending.phase == .credential)
+                }
+                if let repair {
+                    Button(repair.title) {
+                        continueSetup(pending, requiresKey: requestingKey, repair: repair)
+                    }
+                }
+                Button("Discard setup") {
+                    do {
+                        try model.discardConnectionSetup(pending.id, phase: pending.phase)
+                        closeEditor()
+                    } catch { self.error = error.localizedDescription }
+                }
+            }
+        }.disabled(managementDisabled || !model.sharedCredentialsConnected)
+    }
+
+    private func continueSetup(
+        _ pending: ConnectionSetup, requiresKey: Bool, repair: ConnectionSession.SetupRepairChoice? = nil
+    ) {
+        let suppliedKey = requiresKey ? key : nil
+        let signingIn = repair == .signIn || repair == .enablePlan
+        error = nil
+        let task = Task {
+            defer { if signingIn { loginTask = nil } }
+            do {
+                if let repair {
+                    try await model.repairConnectionSetup(pending.id, choice: repair, key: suppliedKey)
+                } else {
+                    try await model.resumeConnectionSetup(pending.id, phase: pending.phase, key: suppliedKey)
+                }
+                closeEditor()
+            } catch {
+                if !Task.isCancelled { self.error = error.localizedDescription }
+            }
+        }
+        if signingIn { loginTask = task }
+    }
+
     private func connectionRow(_ connection: ConnectionDefinition) -> some View {
         let presetCount = model.configuration.presets(using: connection.key).count
         let status = model.connectionStatus(connection.key)
@@ -217,7 +289,7 @@ struct ConnectionsView: View {
         _ action: ConnectionManagementView.Action, for connection: ConnectionDefinition
     ) {
         error = nil
-        management = (connection.key, action)
+        management = (connection, action)
     }
     private func identity(_ connection: ConnectionDefinition, status: ConnectionStatus?) -> String {
         if connection.kind == .chatGPTPlan {
@@ -316,9 +388,7 @@ struct ConnectionsView: View {
                 ) {
                     Text("Choose an account").tag("")
                     ForEach(
-                        model.profiles.filter { profile in
-                            !model.configuration.connections.contains { $0.accountId == profile.id }
-                        }
+                        eligibleProfiles
                     ) { profile in Text(profile.label).tag(profile.id) }
                 }
             }
@@ -395,12 +465,14 @@ struct ConnectionsView: View {
     private func signIn(suggestedAppName: String? = nil) {
         error = nil
         let consent = suggestedAppName == nil && needsPlanPermission
+        let previous = target
+        let accountID = previous?.accountId ?? account
         loginTask = Task {
             defer { loginTask = nil }
             do {
                 guard
                     let id = try await model.signInConnection(
-                        accountID: target?.accountId ?? account, suggestedAppName: suggestedAppName,
+                        accountID: accountID, previous: previous, suggestedAppName: suggestedAppName,
                         consent: consent)
                 else { return }
                 if let suggestedAppName {
@@ -425,32 +497,32 @@ struct ConnectionsView: View {
 
     private func save() {
         error = nil
+        let previous = target
+        let suppliedKey = kind == "plan" ? nil : key
+        let confirmedName = registration?.confirmed == true ? registration?.name : nil
+        let definition: ConnectionDefinition
+        if kind == "plan" {
+            guard let profile = selectedProfile, profile.signedIn, profile.planEnabled else {
+                error = "Sign in and allow plan use before saving this connection."
+                return
+            }
+            let enteredName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            definition = ConnectionDefinition(
+                key: previous?.key ?? newID,
+                name: previous?.name ?? (enteredName.isEmpty ? defaultPlanName : enteredName),
+                kind: .chatGPTPlan, accountId: profile.id)
+        } else {
+            definition = ConnectionDefinition(
+                key: previous?.key ?? newID, name: previous?.name ?? name,
+                kind: .openAIAPI,
+                baseUrl: kind == "api"
+                    ? "https://api.openai.com/v1"
+                    : endpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/")))
+        }
         Task {
             do {
-                let definition: ConnectionDefinition
-                if kind == "plan" {
-                    guard let profile = model.profiles.first(where: { $0.id == account }), profile.signedIn,
-                        profile.planEnabled
-                    else {
-                        throw EZError("Sign in and allow plan use before saving this connection.")
-                    }
-                    let enteredName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-                    definition = ConnectionDefinition(
-                        key: target?.key ?? newID,
-                        name: target?.name ?? (enteredName.isEmpty ? defaultPlanName : enteredName),
-                        kind: .chatGPTPlan, accountId: profile.id)
-                } else {
-                    definition = ConnectionDefinition(
-                        key: target?.key ?? newID, name: target?.name ?? name,
-                        kind: .openAIAPI,
-                        baseUrl: kind == "api"
-                            ? "https://api.openai.com/v1"
-                            : endpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/")))
-                }
-                try ConnectionDefinition.validate([definition])
                 try await model.saveConnection(
-                    definition, key: kind == "plan" ? nil : key,
-                    confirmedAppName: registration?.confirmed == true ? registration?.name : nil)
+                    definition, previous: previous, key: suppliedKey, confirmedAppName: confirmedName)
                 closeEditor()
             } catch { self.error = error.localizedDescription }
         }

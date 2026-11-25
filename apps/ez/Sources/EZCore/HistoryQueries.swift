@@ -1,5 +1,6 @@
 import CSQLite
 import Foundation
+import SaulNativeValues
 
 extension HistoryStore {
     private static let browserFrom = """
@@ -96,10 +97,10 @@ extension HistoryStore {
                     SELECT selected.*,
                       CASE WHEN kind='native' THEN ez_history_label(json_extract(e.data,'$.query'),
                         json_extract(e.data,'$.followUpQuestion'),json_extract(e.data,'$.recipeSnapshot.template'),
-                        json_extract(e.data,'$.inputValues')) ELSE substr(s.text,1,512) END AS label,
-                      CASE WHEN kind='native' THEN COALESCE(json_extract(e.data,'$.recipeSnapshot.name'),
-                        json_extract(e.data,'$.mode')) ELSE 'Saul' END AS name,
-                      CASE WHEN kind='native' THEN json_extract(e.data,'$.recipeSnapshot.symbol') ELSE 'doc.text' END AS symbol,
+                        json_extract(e.data,'$.inputValues')) ELSE ez_history_label(s.text,NULL,NULL,NULL) END AS label,
+                      json_extract(e.data,'$.recipeSnapshot.name') AS name,
+                      json_extract(e.data,'$.recipeSnapshot.capability') AS capability,
+                      json_extract(e.data,'$.recipeSnapshot.legacyMode') AS legacy_mode,
                       json_extract(e.data,'$.mode') AS mode,json_extract(e.data,'$.schemaVersion') AS schema_version,
                       CASE WHEN kind='native' THEN CASE json_extract(e.data,'$.status') WHEN 'pending' THEN 'interrupted'
                         ELSE json_extract(e.data,'$.status') END ELSE r.status END AS status
@@ -116,7 +117,7 @@ extension HistoryStore {
                 guard let uuid = (row["stable_id"] as? String).flatMap(UUID.init(uuidString:)),
                     let time = row["time"] as? Int64, let kind = row["kind"] as? String,
                     let id = row["key"] as? String, let label = row["label"] as? String,
-                    let name = row["name"] as? String, let status = row["status"] as? String
+                    let status = row["status"] as? String
                 else { throw EZError("Invalid saved history list record. Original data preserved.") }
                 if kind == "native", row["schema_version"] as? Int64 != 1 {
                     throw EZError("Unsupported history entry version. Original data preserved.")
@@ -125,7 +126,11 @@ extension HistoryStore {
                 return HistoryRow(
                     id: uuid, recordID: kind == "native" ? .native(uuid) : .browser(selectionID: id),
                     createdAt: Date(timeIntervalSince1970: Double(time) / 1000), displayQuery: label,
-                    actionName: name, actionSymbol: row["symbol"] as? String ?? mode.symbol, status: status)
+                    mode: mode, actionName: row["name"] as? String,
+                    actionCapability: (row["capability"] as? String).flatMap(
+                        ActionCapability.init(rawValue:)),
+                    actionLegacyMode: (row["legacy_mode"] as? String).flatMap(QueryMode.init(rawValue:)),
+                    status: status)
             }
             let last = page.last
             let next =
@@ -172,19 +177,13 @@ extension HistoryStore {
                 (
                     "ez_history_label", 4,
                     { context, _, args in
-                        let query = historyString(args?[0]) ?? ""
-                        var label = query
-                        if let question = historyString(args?[1]) {
-                            label = question
-                        } else if let template = historyString(args?[2]),
-                            let encoded = historyString(args?[3]),
-                            let fields = try? PromptTemplate(template).fields,
-                            let values = try? JSONDecoder().decode(
-                                [String: String].self, from: Data(encoded.utf8))
-                        {
-                            label = fields.compactMap { values[$0] }.joined(separator: " · ")
+                        let values = historyString(args?[3]).flatMap {
+                            try? JSONDecoder().decode([String: String].self, from: Data($0.utf8))
                         }
-                        historyResult(context, String(label.prefix(512)))
+                        let label = HistoryEntry.displayQuery(
+                            query: historyString(args?[0]) ?? "", question: historyString(args?[1]),
+                            template: historyString(args?[2]), values: values)
+                        historyResult(context, HistoryRow.boundedLabel(label))
                     }
                 ),
             ]

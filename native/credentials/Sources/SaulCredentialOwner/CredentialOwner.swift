@@ -131,6 +131,11 @@ import SaulNativeValues
         for index in catalog.models.indices { catalog.models[index].isDefault = nil }
       }
       result(["catalog": try JSONSerialization.jsonObject(with: JSONEncoder().encode(catalog))])
+    case .connectionKeyStatus(let id, let endpoint):
+      let status = try await withLease {
+        try storage.connectionStatus(id, endpoint: endpoint)
+      }
+      result(["connection": status])
     case .connectionKey(let id, let endpoint, let key):
       let status = try await withLease {
         if key != nil { try invalidateAPICatalog(id) }

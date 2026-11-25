@@ -32,7 +32,15 @@ import SwiftUI
                     ]
                 return ConnectionCatalog(models: models, fetchedAt: Date().timeIntervalSince1970)
             })
-        let model = fixtureModel(directory: directory, connectionChecks: checks)
+        let recovery = CommandLine.arguments.contains("--connection-recovery")
+        var verifiedKey = false
+        let model = fixtureModel(
+            directory: directory, connectionChecks: checks,
+            client: .init(
+                saveKey: { _, key in verifiedKey = key == "fixture-repair" },
+                keyStatus: { connection in
+                    ConnectionStatus(connected: verifiedKey, endpoint: connection.endpoint)
+                }))
         var config = Configuration.starters(model: "fixture-luna", effort: "medium", fast: true)
         config.connections[0].accountId = "fixture-account"
         config.connections[1].baseUrl = "https://api.openai.com/v1"
@@ -47,6 +55,17 @@ import SwiftUI
         let connections = config.connections
         Task {
             for connection in connections { await checks.refresh(connection) }
+            if recovery {
+                model.settingsSection = .connections
+                let custom = ConnectionDefinition(
+                    key: "fixture-recovery", name: "Offline custom endpoint", kind: .openAIAPI,
+                    baseUrl: "https://fixture.example/v1")
+                do {
+                    try await model.saveConnection(custom, previous: nil, key: "fixture-initial")
+                } catch {
+                    model.error = error.localizedDescription
+                }
+            }
         }
         _model = StateObject(wrappedValue: model)
         controller = QuickLookupController(model: model)

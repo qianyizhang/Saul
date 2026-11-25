@@ -36,15 +36,15 @@ struct SketchDraft {
         scene = next
     }
 
-    init(attachment: ImageAttachment?) throws {
-        if let attachment { scene.photo = try SketchPhoto(attachment) }
+    init(restoring photo: SketchPhoto) {
+        scene.photo = photo
     }
 
     init() {}
 }
 
-struct SketchPhoto: Equatable {
-    struct Asset: Equatable {
+struct SketchPhoto: Equatable, Sendable {
+    struct Asset: Equatable, Sendable {
         let id = UUID()
         let attachment: ImageAttachment
         let image: CGImage
@@ -55,6 +55,18 @@ struct SketchPhoto: Equatable {
     let asset: Asset
     var frame: CGRect
     let originalFrame: CGRect
+
+    static func prepareRestoration(_ attachment: ImageAttachment) async throws -> Self {
+        let work = Task.detached {
+            try Task.checkCancellation()
+            return try Self(attachment)
+        }
+        return try await withTaskCancellationHandler {
+            try await work.value
+        } onCancel: {
+            work.cancel()
+        }
+    }
 
     init(_ attachment: ImageAttachment) throws {
         guard let data = attachment.data,

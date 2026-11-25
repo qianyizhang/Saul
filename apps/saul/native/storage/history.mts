@@ -17,7 +17,7 @@ import { searchableResponse } from './search.ts';
 import { migrate } from './schema.ts';
 import type { SqlDatabase, SqlValue } from './sql.ts';
 import type { DbRequest } from '../../shared/protocol/history-types.ts';
-import type { HistoryRequest } from '../../shared/protocol/history-protocol.mts';
+import { validateHistoryRequest } from '../../shared/protocol/history-protocol.mts';
 
 // Freeze the schema with this loaded runtime, including during later checkout builds.
 const historySchema = readFileSync(new URL('./history.sql', import.meta.url), 'utf8');
@@ -97,7 +97,8 @@ export class SharedHistory {
     }
     this.browser = new SaulDatabase(this.connection);
   }
-  async run(request: HistoryRequest): Promise<unknown> {
+  async run(request: unknown): Promise<unknown> {
+    validateHistoryRequest(request);
     if (request.operation === 'db')
       return new SaulDatabase(this.connection, request.owner).execute(
         request.message as DbRequest,

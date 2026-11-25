@@ -40,7 +40,11 @@ public struct Action: Codable, Equatable, Identifiable, Sendable {
         imageInput = try c.decodeIfPresent(String.self, forKey: .imageInput)
     }
 
-    public var symbol: String { capability == .draw ? "photo" : legacyMode?.symbol ?? "text.badge.plus" }
+    public var symbol: String { Self.symbol(capability: capability, legacyMode: legacyMode) }
+
+    static func symbol(capability: ActionCapability, legacyMode: QueryMode?) -> String {
+        capability == .draw ? "photo" : legacyMode?.symbol ?? "text.badge.plus"
+    }
 
     public func validateInputs() throws {
         if webSearch && capability != .write { throw EZError("Web search requires Write.") }

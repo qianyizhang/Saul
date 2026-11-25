@@ -31,11 +31,84 @@ private func denied(_ operation: () throws -> Void) throws {
     let legacy = CheckCase("credentials: legacy sources and pauses remain intact") { directory in
       try await legacyChecks(in: directory)
     }
+    let connectionKeyStatus = CheckCase("credentials: endpoint-scoped key status") { directory in
+      try await connectionKeyStatusChecks(in: directory)
+    }
     exit(
       await CheckRunner.run(
-        [legacy] + identityChecks() + authenticationChecks() + illustrationChecks()
+        [legacy, connectionKeyStatus] + identityChecks() + authenticationChecks()
+          + illustrationChecks()
           + planCatalogChecks()
           + compatibleChatChecks() + cacheRecoveryChecks() + apiModelCapabilityChecks()))
+  }
+
+  @MainActor private static func connectionKeyStatusChecks(in root: URL) async throws {
+    try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path)
+    let records = Records()
+    let storage = SharedAuthStorage(records: records, directory: root)
+    let endpoint = "https://api.example.test/v1"
+    let other = "https://other.example.test/v1"
+    let customID = "new-connection"
+    var replies: [[String: Any]] = []
+    let http = HTTPFixture { _ in throw CheckFailure("Key status made a provider request") }
+    defer { http.close() }
+    let owner = CredentialOwner(
+      storage: storage, http: ConnectionHTTP(session: http.session),
+      connectionDefinitions: {
+        throw CheckFailure("Key status must not use shared connection definitions")
+      },
+      emit: { replies.append($0) })
+    func request(_ action: String, _ fields: [String: Any], caller: CredentialCaller = .saul)
+      async throws
+    {
+      let frame = try JSONSerialization.data(withJSONObject: [
+        "version": CredentialRequest.version, "id": "status",
+        "request":
+          fields.merging(["action": action]) { _, new in new },
+      ])
+      try await owner.run(CredentialRequest.decode(frame, caller: caller))
+    }
+    func check(_ id: String, _ endpoint: String, connected: Bool, caller: CredentialCaller)
+      async throws
+    {
+      replies.removeAll()
+      try await request(
+        "connection-key-status", ["connectionKey": id, "endpoint": endpoint], caller: caller)
+      try expectEqual(replies.count, 1, "Expected one key status reply")
+      let reply = replies.first?["connection"] as? [String: Any]
+      try expect(reply?["endpoint"] as? String == endpoint, "Wrong status endpoint")
+      try expect(reply?["connected"] as? Bool == connected, "Wrong key availability")
+      try expect(reply?.count == 2, "Exposed unexpected key status data")
+    }
+    func reject(_ fields: [String: Any]) async throws {
+      do { try await request("connection-key-status", fields) } catch is CredentialStorageError {
+        return
+      }
+      throw CheckFailure("Expected key status denial")
+    }
+    try await check(customID, endpoint, connected: false, caller: .saul)
+    try await reject(["connectionKey": customID])
+    try await reject(["endpoint": endpoint])
+    try await reject(["connectionKey": customID, "endpoint": endpoint, "key": "unexpected"])
+    try await reject(["connectionKey": customID, "endpoint": "http://api.example.test/v1"])
+    try await reject(["connectionKey": "openai-api", "endpoint": endpoint])
+
+    try await request(
+      "connection-key-save",
+      [
+        "connectionKey": customID, "endpoint": endpoint, "key": "synthetic-status-key",
+      ])
+    let saved = records.values
+    records.denyWrite = true
+    try await check(customID, endpoint, connected: true, caller: .ez)
+    try await reject(["connectionKey": customID, "endpoint": other])
+    try expect(records.values == saved, "Status changed credential records")
+    records.denyWrite = false
+    try await request("connection-key-remove", ["connectionKey": customID, "endpoint": endpoint])
+    try await check(customID, endpoint, connected: false, caller: .saul)
+    try await reject(["connectionKey": customID, "endpoint": other])
+    try await check("openai-api", "https://api.openai.com/v1", connected: false, caller: .ez)
+    try expect(http.requests.isEmpty, "Key status made a provider request")
   }
 
   @MainActor private static func legacyChecks(in root: URL) async throws {

@@ -168,9 +168,21 @@ it('blocks another connection commit after a server error with an uncertain writ
     await store(r);
     throw new Error('Shared configuration may already be saved; reload before saving again.');
   });
-  await expect(editor.commitConnections(connections)).rejects.toThrow('may already be saved');
+  await expect(
+    editor.manageConnection({
+      action: 'rename',
+      key: connections[0]!.key,
+      name: 'Renamed connection',
+    }),
+  ).rejects.toThrow('may already be saved');
   expect(editor.getSnapshot().blocked).toBe(true);
-  await expect(editor.commitConnections(connections)).rejects.toThrow('Save or reload');
+  await expect(
+    editor.manageConnection({
+      action: 'rename',
+      key: connections[0]!.key,
+      name: 'Renamed connection',
+    }),
+  ).rejects.toThrow('Save or reload');
   expect(request.mock.calls.filter(([r]) => r.action === 'commit')).toHaveLength(1);
   await editor.reload();
   expect(editor.getSnapshot()).toMatchObject({ blocked: false, configuration: { connections } });
@@ -252,7 +264,9 @@ it('guards immediate connection commits while dirty and retains a failed local v
   const { editor, request } = fixture();
   await editor.open();
   editor.edit(language('Chinese'));
-  await expect(editor.commitConnections([])).rejects.toThrow('Save or reload');
+  await expect(editor.manageConnection({ action: 'delete', key: 'example' })).rejects.toThrow(
+    'Save or reload',
+  );
   editor.edit({ type: 'preset-name', name: '' });
   await editor.save();
   expect(editor.getSnapshot()).toMatchObject({ dirty: true, blocked: false, saved: false });

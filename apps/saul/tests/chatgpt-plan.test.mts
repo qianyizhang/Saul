@@ -153,6 +153,12 @@ it('validates replies by operation instead of treating missing fields as empty r
   expect(() =>
     validatePlanResult({ action: 'accounts' }, { type: 'result', accounts: [] }),
   ).not.toThrow();
+  expect(() =>
+    validatePlanResult(
+      { action: 'accounts' },
+      { type: 'result', accounts: [], token: 'unexpected' },
+    ),
+  ).toThrow('invalid reply');
   expect(() => validatePlanRequest({ action: 'toString' })).toThrow('Unsupported');
 });
 it('bounds whole SSE records across lines and chunks, not batches of complete records', async () => {
@@ -209,4 +215,56 @@ it('finishes at response.completed even while the HTTP connection stays open', a
   ]);
   expect(cancel).toHaveBeenCalledOnce();
   expect(body.locked).toBe(false);
+});
+
+it('uses the same account and model fields at both credential reply boundaries', async () => {
+  const { validatePlanResult } = await import('../shared/protocol/credential-plan.mts');
+  const { validateCredentialEvent } = await import('../shared/protocol/credentials-contract.mts');
+  const account = { id: 'a', label: 'x'.repeat(2000), signedIn: true, planEnabled: true };
+  const model = {
+    slug: 'm',
+    display_name: 'Model',
+    isDefault: true,
+    defaultReasoningEffort: '',
+    supportedReasoningEfforts: [{ effort: 'low', description: '' }],
+    fastTier: 'priority',
+  };
+  for (const [value, valid] of [
+    [account, true],
+    [{ ...account, label: 'x'.repeat(2001) }, false],
+    [{ ...account, token: 'private' }, false],
+  ] as const) {
+    const reply = { type: 'result', accounts: [value] };
+    for (const check of [
+      () => validateCredentialEvent(reply),
+      () => validatePlanResult({ action: 'accounts' }, reply),
+    ]) {
+      if (valid) expect(check).not.toThrow();
+      else expect(check).toThrow();
+    }
+  }
+  for (const [value, valid] of [
+    [model, true],
+    [{ ...model, fastTier: 'express' }, false],
+    [
+      {
+        ...model,
+        supportedReasoningEfforts: [{ effort: 'low', description: '', token: 'private' }],
+      },
+      false,
+    ],
+    [
+      { ...model, supportedReasoningEfforts: Array(101).fill({ effort: 'low', description: '' }) },
+      false,
+    ],
+  ] as const) {
+    const reply = { type: 'result', models: [value] };
+    for (const check of [
+      () => validateCredentialEvent(reply),
+      () => validatePlanResult({ action: 'models', accountId: 'a' }, reply),
+    ]) {
+      if (valid) expect(check).not.toThrow();
+      else expect(check).toThrow();
+    }
+  }
 });

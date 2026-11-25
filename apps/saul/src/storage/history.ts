@@ -1,16 +1,14 @@
 import { requestHistory } from '../native/storage-client';
 import { StorageDisconnected } from '../native/storage-connection';
 import MigrationWorker from './migration-worker?worker';
-import type { DbCall, DbRequest, DbType } from '../../shared/protocol/history-types.ts';
+import type { DbCall, DbRequest } from '../../shared/protocol/history-types.ts';
 import {
-  HISTORY_OPERATIONS,
-  type HistoryOperationPolicy,
+  historyOperationPolicy,
   type HistoryRequest,
 } from '../../shared/protocol/history-protocol.mts';
-const policies: Record<DbType, HistoryOperationPolicy> &
-  Record<Exclude<keyof typeof HISTORY_OPERATIONS, DbType>, never> = HISTORY_OPERATIONS;
 function canReconnectHistory(operation: string): boolean {
-  return Object.hasOwn(policies, operation) && policies[operation as DbType] !== 'explicit-write';
+  const policy = historyOperationPolicy(operation);
+  return policy === 'read' || policy === 'repeatable-write';
 }
 let ready: Promise<void> | undefined;
 let owner = '';

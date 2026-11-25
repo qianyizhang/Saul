@@ -19,7 +19,8 @@ and persistence; [design](design.md) owns presentation.
 - Selecting another action or New restores its default preset. Unavailable choices
   block; never substitute account, model, billing or tier.
 - Both composers put Action and Preset above inputs. Edit/Hide keeps the draft;
-  Reuse restores saved input without sending.
+  Reuse opens saved text without sending. Keep editing while an attached image
+  loads. Run becomes available after image recovery and the other request checks.
 - The main reader shows available Copy or Download, Reuse, Export and Delete in
   one row in both modes. Delete appears for history records at the far edge and
   confirms shared deletion. Answer contains the reading view and eligible follow-up.
@@ -36,7 +37,8 @@ and persistence; [design](design.md) owns presentation.
   Previous answer navigation. Draw has no text follow-up. Follow-up context and
   limits belong to [architecture](architecture.md#follow-ups).
 - A failed request shows the error and Retry in the current result. Its History
-  row drops out after cleanup. A failed history write or cleanup shows Unsaved
+  row drops out after cleanup. Stop is available while Retry loads the saved image.
+  A failed history write or cleanup shows Unsaved
   and the storage error. Use Copy, Export or
   Download when output is available. A new Run makes a new request.
   See [persistence](architecture.md#persistence-contract).

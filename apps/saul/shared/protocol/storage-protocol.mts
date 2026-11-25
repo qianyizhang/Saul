@@ -1,4 +1,8 @@
-import { validateHistoryRequest, type HistoryRequest } from './history-protocol.mts';
+import {
+  validateHistoryRequest,
+  validateHistoryResult,
+  type HistoryRequest,
+} from './history-protocol.mts';
 import { isRecord } from '../model/value.mts';
 import {
   validScopedConfig,
@@ -116,6 +120,8 @@ export function validateStorageResult<T extends StorageHelperRequest>(
   request: T,
   value: unknown,
 ): asserts value is StorageResult<T> {
+  if (request.action === 'history' && request.request.operation === 'db')
+    validateHistoryResult(request.request.message.type, value);
   const validators: Record<
     StorageHelperRequest['action'],
     (v: Record<string, unknown>) => boolean

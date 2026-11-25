@@ -112,6 +112,11 @@ three connections with the same identity. Delete, Clear, Bookmark, migration
 transfers and unknown operations do not reconnect automatically. Request IDs
 live with run or submission rows; helper loss has no local fallback.
 
+The [Reading history schemas](../shared/protocol/reading-history.mts) check
+submit, claim, checkpoint, saving and finish payloads before SQLite applies them.
+The browser checks the matching acknowledgements before using them. A malformed
+acknowledgement leaves the write unconfirmed and does not trigger reconnect.
+
 Reuse resolves in SQLite before credentials, including deleted-submission
 tombstones. Anchors use exact URL, quote context and offsets. Changed context may
 match only with the same text and offsets plus matching DOM location or unchanged
@@ -128,6 +133,12 @@ execution and returns frozen choices with a separate transient credential.
 [Settings editor](../src/settings/editor.ts) owns each draft/baseline/review
 session. [React adapter](../src/settings/ui/useSettingsEditor.ts) owns lifetime, unload
 warnings and confirmation; stale callbacks cannot replace a newer session.
+
+Managed Connections owns sign-in, credential changes and [restartable setup](../src/settings/connection-setup.ts).
+The Settings editor commits against a settings revision. Each explicit continuation
+checks the pending action, credential availability and current public definition.
+The shared [credential contract](../../../contracts/credentials.md#connection-identity-and-catalogs)
+defines what the browser can retain.
 
 The background checks an opaque local fingerprint and serializes credential
 preparation, shared commit and local commit in that order. These

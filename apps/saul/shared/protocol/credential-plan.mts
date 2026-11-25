@@ -69,8 +69,8 @@ export type PlanEvent =
   | { type: 'authorize'; url: string }
   | { type: 'error'; message: string; reason?: string };
 
-const text = (v: unknown, max: number): v is string =>
-  typeof v === 'string' && v.length > 0 && v.length <= max;
+const text = (v: unknown, max: number, empty = false): v is string =>
+  typeof v === 'string' && (empty || v.length > 0) && v.length <= max;
 export const validSuggestedAppName = (name: unknown): name is string =>
   typeof name === 'string' && name.length === 17 && /^Saul [0-9A-F]{12}$/.test(name);
 export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
@@ -124,39 +124,66 @@ export function validatePlanRequest(v: unknown): asserts v is PlanRequest {
     throw new Error('Invalid generation request');
 }
 
-const record = isRecord;
-const account = (v: unknown) =>
-  record(v) &&
-  text(v.id, 256) &&
-  text(v.label, 1000) &&
-  typeof v.signedIn === 'boolean' &&
-  typeof v.planEnabled === 'boolean';
-const model = (v: unknown) =>
-  record(v) &&
-  text(v.slug, 256) &&
-  text(v.display_name, 1000) &&
-  Array.isArray(v.supportedReasoningEfforts) &&
-  v.supportedReasoningEfforts.every(
-    (level) => record(level) && text(level.effort, 64) && typeof level.description === 'string',
+export const validPlanAccount = (a: unknown): a is PlanAccount =>
+  isRecord(a) &&
+  Object.keys(a).every((k) => ['id', 'label', 'signedIn', 'planEnabled'].includes(k)) &&
+  text(a.id, 256) &&
+  text(a.label, 2000) &&
+  typeof a.signedIn === 'boolean' &&
+  typeof a.planEnabled === 'boolean';
+export const validPlanModel = (m: unknown): m is PlanModel =>
+  isRecord(m) &&
+  Object.keys(m).every((k) =>
+    [
+      'slug',
+      'display_name',
+      'defaultReasoningEffort',
+      'isDefault',
+      'supportedReasoningEfforts',
+      'fastTier',
+    ].includes(k),
   ) &&
-  typeof v.defaultReasoningEffort === 'string' &&
-  v.defaultReasoningEffort.length <= 64 &&
-  (v.fastTier === undefined || text(v.fastTier, 256)) &&
-  typeof v.isDefault === 'boolean';
+  text(m.slug, 256) &&
+  text(m.display_name, 1000) &&
+  text(m.defaultReasoningEffort, 64, true) &&
+  typeof m.isDefault === 'boolean' &&
+  (m.fastTier === undefined || m.fastTier === 'fast' || m.fastTier === 'priority') &&
+  Array.isArray(m.supportedReasoningEfforts) &&
+  m.supportedReasoningEfforts.length <= 100 &&
+  m.supportedReasoningEfforts.every(
+    (e) =>
+      isRecord(e) &&
+      Object.keys(e).every((k) => ['effort', 'description'].includes(k)) &&
+      text(e.effort, 64) &&
+      text(e.description, 4000, true),
+  );
+
+export const validPlanAccounts = (value: unknown): value is PlanAccount[] =>
+  Array.isArray(value) && value.length <= 1000 && value.every(validPlanAccount);
+export const validPlanModels = (value: unknown): value is PlanModel[] =>
+  Array.isArray(value) && value.length <= 10000 && value.every(validPlanModel);
 export function validatePlanResult<T extends PlanControlRequest>(
   request: T,
   value: unknown,
 ): asserts value is PlanResult<T> {
+  const fields = (...allowed: string[]) =>
+    isRecord(value) && Object.keys(value).every((key) => key === 'type' || allowed.includes(key));
   const validators: Record<PlanControlRequest['action'], (v: Record<string, unknown>) => boolean> =
     {
-      accounts: (v) => Array.isArray(v.accounts) && v.accounts.every(account),
-      login: (v) => account(v.account),
+      accounts: (v) =>
+        fields('accounts', 'apiConnected', 'selectedAccountId') &&
+        validPlanAccounts(v.accounts) &&
+        (v.apiConnected === undefined || typeof v.apiConnected === 'boolean') &&
+        (v.selectedAccountId === undefined || text(v.selectedAccountId, 256)),
+      login: (v) => fields('account') && validPlanAccount(v.account),
       logout: (v) =>
-        account(v.account) && (v.warning === undefined || typeof v.warning === 'string'),
-      models: (v) => Array.isArray(v.models) && v.models.every(model),
+        fields('account', 'warning') &&
+        validPlanAccount(v.account) &&
+        (v.warning === undefined || text(v.warning, 4000)),
+      models: (v) => fields('models') && validPlanModels(v.models),
     };
   if (
-    !record(value) ||
+    !isRecord(value) ||
     value.type !== 'result' ||
     !Object.hasOwn(validators, request.action) ||
     !validators[request.action](value)

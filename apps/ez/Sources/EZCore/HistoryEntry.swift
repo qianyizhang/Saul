@@ -64,15 +64,28 @@ public struct HistoryEntry: Codable, Identifiable, Equatable, Sendable {
         let requested = requestedServiceTier == nil ? "Standard requested" : "Fast requested"
         return actualServiceTier.map { "\(requested) · Served: \($0)" } ?? requested
     }
-    public var actionName: String { sourceID == nil ? actionSnapshot?.name ?? mode.rawValue : "Saul" }
-    public var actionSymbol: String { sourceID == nil ? actionSnapshot?.symbol ?? mode.symbol : "doc.text" }
+    private var actionPresentation: HistoryActionPresentation {
+        HistoryActionPresentation(
+            recordID: recordID, mode: mode, name: actionSnapshot?.name,
+            capability: actionSnapshot?.capability, legacyMode: actionSnapshot?.legacyMode)
+    }
+    public var actionName: String { actionPresentation.name }
+    public var actionSymbol: String { actionPresentation.symbol }
     public var displayQuery: String {
-        if let sourceText { return sourceText }
-        if let followUpQuestion { return followUpQuestion }
-        guard let action = actionSnapshot, let values = inputValues,
-            let template = try? PromptTemplate(action.template)
-        else { return query }
-        return template.fields.compactMap { values[$0] }.joined(separator: " · ")
+        sourceText
+            ?? Self.displayQuery(
+                query: query, question: followUpQuestion, template: actionSnapshot?.template,
+                values: inputValues)
+    }
+
+    static func displayQuery(query: String, question: String?, template: String?, values: [String: String]?)
+        -> String
+    {
+        if let question { return question }
+        guard let template, let values, let fields = try? PromptTemplate(template).fields else {
+            return query
+        }
+        return fields.compactMap { values[$0] }.joined(separator: " · ")
     }
     public func prepareFollowUp(_ question: String, models: [ModelOption], provider: GenerationProviderID)
         throws -> HistoryEntry

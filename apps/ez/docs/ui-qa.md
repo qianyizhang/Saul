@@ -65,7 +65,10 @@ inline citations and failures. Use Meme blank to draw and undo back to a blocked
 Run; use Meme to move/resize the image, add or edit text, then undo and redo.
 Paste and drop prepare a draft. In Quick Lookup, Edit sketch opens the same draft.
 Run with instructions containing `[fail]` and reopen Edit draft: objects and undo
-remain. Meme result → Reuse opens one image. Meme invalid covers inline import errors.
+remain. Meme result → Reuse opens saved text and restores one frozen image. Edit
+the text while loading, then confirm Run waits for the image. A replacement photo
+or sketch edit during loading wins over the saved image. Meme invalid covers
+inline import errors.
 Check both surfaces, modes, appearances and minimum size. In **Selector hitboxes**,
 open Settings → Presets → Speech preview and verify the voice and preview field.
 With `--actions`, use `[slow]` or `[fail]` in a Write or Draw prompt to drive
