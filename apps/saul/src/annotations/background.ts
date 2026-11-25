@@ -225,7 +225,10 @@ async function confirmedUrls(tabId: number, url: string, candidates: string[]) {
 async function pageIndex(tabId: number, url: string, filter: 'open' | 'done' | 'all' | 'deleted') {
   const candidates = await runnerRequest<string[]>({
     operation: 'db',
-    message: { type: 'DB_ANNOTATION_URLS', payload: { url } },
+    message: {
+      type: 'DB_ANNOTATION_URLS',
+      payload: { url, visibility: filter === 'deleted' ? 'masked' : undefined },
+    },
   });
   const records = [];
   const stored = new Set(candidates);
@@ -343,6 +346,7 @@ export function initAnnotations(settings: () => Promise<Configuration>) {
               url: request.url,
               id: request.id,
               known: request.known,
+              visibility: request.visibility,
             }),
           },
         });

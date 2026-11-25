@@ -6,6 +6,7 @@ struct ContentView: View {
     @ObservedObject var model: AppModel
     @State private var lookupToDelete: HistoryRow?
     @State private var page = NotebookPage.answer
+    @State private var showsRecentlyDeleted = false
 
     var body: some View {
         // Keep the system sidebar toolbar's own icon-only style outside the columns.
@@ -101,15 +102,26 @@ struct ContentView: View {
                 set: { if !$0 { lookupToDelete = nil } }
             ), presenting: lookupToDelete
         ) { entry in
-            Button("Delete", role: .destructive) { model.deleteLookup(entry.recordID) }
+            if model.canStopAndDeleteLookup(entry.recordID) {
+                Button("Stop and delete", role: .destructive) { model.stopAndDeleteLookup(entry.recordID) }
+            } else {
+                Button("Delete", role: .destructive) {
+                    model.deleteLookup(entry.recordID, expectedRevision: entry.revision)
+                }
                 .disabled(!model.canDeleteLookup(entry.recordID))
+            }
             Button("Cancel", role: .cancel) {}
         } message: { entry in
             Text(
-                "Delete “\(entry.displayQuery)” and its saved answer from shared history in EZ and Saul? This cannot be undone."
+                "Move “\(entry.displayQuery)” to Recently deleted in EZ and Saul? You can restore it for 365 days."
             )
         }
         .sheet(isPresented: $model.showSettings) { SettingsView(model: model) }
+        .sheet(isPresented: $showsRecentlyDeleted) {
+            if let library = model.library {
+                RecentlyDeletedView(model: model, library: library)
+            }
+        }
     }
 
     private var sidebar: some View {
@@ -184,6 +196,17 @@ struct ContentView: View {
                         }.frame(maxHeight: .infinity, alignment: .top).padding(.top, 16)
                     }
                 }
+            if model.library != nil {
+                FullRowButton {
+                    showsRecentlyDeleted = true
+                } label: {
+                    Label("Recently deleted", systemImage: "trash")
+                        .labelStyle(.titleAndIcon)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .notebookRow(selected: false)
+                }
+                .padding(.horizontal, 10)
+            }
             Spacer(minLength: 0)
             Divider()
             FullRowButton {
@@ -305,7 +328,7 @@ struct ContentView: View {
             lookupToDelete = entry
         } label: {
             Label(model.minimumMode ? "Delete" : "Delete lookup", systemImage: "trash")
-        }.disabled(!model.canDeleteLookup(entry.recordID))
+        }.disabled(!model.canDeleteLookup(entry.recordID) && !model.canStopAndDeleteLookup(entry.recordID))
     }
     private var composer: some View {
         VStack(alignment: .leading, spacing: 12) {

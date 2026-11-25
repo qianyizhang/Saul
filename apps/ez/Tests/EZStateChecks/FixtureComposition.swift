@@ -49,7 +49,8 @@ import SaulNativeValues
     readHistoryEntry: (@MainActor (HistoryStore.RecordID) async throws -> HistoryEntry?)? = nil,
     readInputImage: (@MainActor (HistoryEntry) async throws -> ImageAttachment?)? = nil,
     readOutputImage: (@MainActor (HistoryEntry) async throws -> Data?)? = nil,
-    historyPreparation: HistoryCollection.Preparation? = nil
+    historyPreparation: HistoryCollection.Preparation? = nil,
+    includesLibrary: Bool = false
 ) -> AppModel {
     let historyDirectory = historyDirectory ?? directory
     let reader = HistoryReader(directory: historyDirectory)
@@ -81,10 +82,11 @@ import SaulNativeValues
             return try await reader.page(search: search, after: cursor)
         },
         countHistory: { try await reader.count(search: $0, excluding: $1) },
-        readHistoryEntry: readHistoryEntry ?? { try await reader.entry($0) },
+        readHistoryEntry: readHistoryEntry ?? { try await reader.entryForSelection($0) },
         readInputImage: readInputImage ?? { try await reader.inputImage(for: $0) },
         readOutputImage: readOutputImage ?? { try await reader.image(for: $0) },
-        deleteHistory: { try await writer.delete($0) })
+        deleteHistory: { try await writer.delete($0, settledPending: $1, expectedRevision: $2) },
+        library: includesLibrary ? LibraryMaintenance(reader: reader, writer: writer) : nil)
 }
 
 extension Configuration {

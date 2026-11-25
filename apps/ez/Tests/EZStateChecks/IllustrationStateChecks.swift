@@ -58,7 +58,7 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
     try ConfigurationStore(directory: directory).save(config)
     let store = try HistoryStore(directory: directory)
     let execution = AttemptExecution(
-        generate: generate, append: { try store.append($0) }, delete: { try store.delete($0) })
+        generate: generate, append: { try store.append($0) }, delete: { try store.discardPending($0) })
     let model = fixtureModel(directory: directory, attemptExecution: execution, connections: connections)
     model.chooseAction(config.actions.first { $0.capability == .draw }!.id)
     model.query = "Trees share nutrients. 中文\n"
@@ -187,7 +187,7 @@ private actor IllustrationKeyFixture: OpenAIKeyStorage {
             defer { model.shutdown() }
             _ = try historySQL(
                 directory.appendingPathComponent("history.sqlite3"),
-                "CREATE TRIGGER fail_save BEFORE INSERT ON ez_entry WHEN json_extract(NEW.data,'$.status') != 'pending' BEGIN SELECT RAISE(ABORT,'Synthetic final save failure'); END"
+                "CREATE TRIGGER fail_save BEFORE UPDATE ON ez_entry WHEN json_extract(NEW.data,'$.status') != 'pending' BEGIN SELECT RAISE(ABORT,'Synthetic final save failure'); END"
             )
             let (done, observer) = completionSignal(model)
             defer { observer.cancel() }

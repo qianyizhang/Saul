@@ -1,8 +1,9 @@
 import { SharedHistory } from '../../.build/native/history.mjs';
 import {
   validateHistoryRequest,
-  type HistoryRequest,
+  decomposeHistoryCommand,
 } from '../../shared/protocol/history-protocol.mts';
+import type { DbRequest } from '../../shared/protocol/history-types.ts';
 import { randomUUID } from 'node:crypto';
 import { chromium, expect, type BrowserContext } from '@playwright/test';
 import { createServer } from 'node:http';
@@ -185,7 +186,6 @@ export interface SandboxOptions {
   headless?: boolean;
   artifactsDir?: string;
   databaseFixtures?: boolean;
-  legacyHistoryFixture?: boolean;
   browserToolsFixtures?: boolean;
   handleProcessSignals?: boolean;
 }
@@ -196,8 +196,7 @@ export async function createSandbox(options: SandboxOptions = {}) {
   const profile = path.join(root, 'profile');
   const history = new SharedHistory(path.join(root, 'history'));
   const token = randomUUID();
-  let rejectWrite:
-    ((message: Extract<HistoryRequest, { operation: 'db' }>['message']) => boolean) | undefined;
+  let rejectWrite: ((message: DbRequest) => boolean) | undefined;
   const historyServer = createServer(async (request, response) => {
     response.setHeader('Access-Control-Allow-Origin', '*');
     try {
@@ -218,7 +217,8 @@ export async function createSandbox(options: SandboxOptions = {}) {
         ).runHistoryFixture(history, data as import('./database-harness').DatabaseFixtureRequest);
       else if (request.url === '/' + token) {
         validateHistoryRequest(data);
-        if (data.operation === 'db' && rejectWrite?.(data.message)) {
+        const feature = rejectWrite && decomposeHistoryCommand(data.command);
+        if (feature && rejectWrite?.(feature)) {
           rejectWrite = undefined;
           throw new Error('Fixture rejected the storage write.');
         }
@@ -240,11 +240,6 @@ export async function createSandbox(options: SandboxOptions = {}) {
   // relaunches and prevents later builds in a shared checkout changing the test.
   try {
     await cp(extensionBuild, extension, { recursive: true });
-    if (options.legacyHistoryFixture)
-      await writeFile(
-        path.join(extension, 'history-migration-fixture.html'),
-        '<!doctype html><title>Legacy history fixture</title>',
-      );
     const require = createRequire(import.meta.resolve('wxt'));
     const { build } = await import(require.resolve('vite'));
     if (options.databaseFixtures)
@@ -252,7 +247,7 @@ export async function createSandbox(options: SandboxOptions = {}) {
         path.join(extension, 'database-fixture.html'),
         '<!doctype html><title>Saul database fixture</title>',
       );
-    if (options.legacyHistoryFixture || options.browserToolsFixtures || options.databaseFixtures)
+    if (options.browserToolsFixtures || options.databaseFixtures)
       await build({
         configFile: false,
         publicDir: false,
@@ -260,13 +255,6 @@ export async function createSandbox(options: SandboxOptions = {}) {
         build: {
           lib: {
             entry: {
-              ...(options.legacyHistoryFixture
-                ? {
-                    'history-migration-fixture': fileURLToPath(
-                      new URL('./history-migration-fixture.ts', import.meta.url),
-                    ),
-                  }
-                : {}),
               ...(options.browserToolsFixtures
                 ? {
                     'browser-tools-fixture': fileURLToPath(

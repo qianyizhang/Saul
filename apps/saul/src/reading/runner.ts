@@ -18,6 +18,7 @@ import {
 import { TagStreamParser } from '../../shared/model/tag-stream-parser.ts';
 
 type ReadingQuery =
+  | 'DB_HISTORY_PAGE'
   | 'DB_GET_HISTORY'
   | 'DB_RUNS'
   | 'DB_PAGE'
@@ -32,7 +33,7 @@ type ReadingAttempt = QueuedRun & {
   credential: string;
   controller: AbortController;
   phase: 'queued' | 'generating' | 'saving' | 'settling';
-  discarded?: true;
+  task?: Promise<void>;
   activity: ModelActivity;
 };
 type WriteFailure = { runId: string; error: string; latencyMs: number };
@@ -108,7 +109,7 @@ export class ReadingRunner {
       ).length;
       if (count >= 2) continue;
       attempt.phase = 'generating';
-      void this.execute(attempt);
+      attempt.task = this.execute(attempt);
     }
   }
   private async write<K extends DbType>(message: DbRequest<K>) {
@@ -207,7 +208,6 @@ export class ReadingRunner {
         },
       });
     } catch (error) {
-      if (task.discarded) return;
       const storageFailure = error instanceof ReadingWriteError;
       task.phase = 'settling';
       await this.finishFailure(task, {
@@ -247,13 +247,12 @@ export class ReadingRunner {
     try {
       await this.db({ type: 'DB_FINISH', payload: { ...result, runId: attempt.id } });
     } catch (error) {
-      if (!attempt.discarded)
-        this.stranded.set(attempt.selectionId, {
-          runId: attempt.id,
-          error:
-            result.reason === 'save-failed' ? result.error! : new ReadingWriteError(error).message,
-          latencyMs: result.latencyMs,
-        });
+      this.stranded.set(attempt.selectionId, {
+        runId: attempt.id,
+        error:
+          result.reason === 'save-failed' ? result.error! : new ReadingWriteError(error).message,
+        latencyMs: result.latencyMs,
+      });
     }
   }
   private release(attempt: ReadingAttempt) {
@@ -279,9 +278,7 @@ export class ReadingRunner {
   }
   stop(selectionId: string) {
     return this.control(async () => {
-      const attempt = [...this.attempts.values()].find(
-        (a) => !a.discarded && a.selectionId === selectionId,
-      );
+      const attempt = [...this.attempts.values()].find((a) => a.selectionId === selectionId);
       if (!attempt || attempt.phase === 'saving' || attempt.phase === 'settling') return;
       attempt.controller.abort();
       if (attempt.phase === 'queued') {
@@ -296,25 +293,56 @@ export class ReadingRunner {
       }
     });
   }
-  remove(selectionId?: string) {
+  remove(selectionId?: string, expectedRevision?: number, stopRunId?: string) {
     return this.control(async () => {
-      // Delete first: foreign keys and conditional writes make every late event inert.
+      if (selectionId && stopRunId) {
+        const passage = await this.db({ type: 'DB_PASSAGE', payload: { selectionId } });
+        if (!passage || passage.latest.id !== stopRunId)
+          throw new Error('History changed. Refresh the record before deleting.');
+      }
+
+      // Serialize stop and delete with admission in this profile. The store
+      // checks the affected scope again atomically, including other profiles.
+      const affected = [...this.attempts.values()].filter(
+        (attempt) => !selectionId || (stopRunId !== undefined && attempt.id === stopRunId),
+      );
+      const settle = affected.map((attempt) => {
+        if (attempt.task) {
+          if (attempt.phase === 'generating') attempt.controller.abort();
+          return attempt.task;
+        }
+        attempt.phase = 'settling';
+        attempt.controller.abort();
+        return this.finishFailure(attempt, {
+          status: 'cancelled',
+          reason: 'stopped',
+          error: 'Stopped before generation.',
+          latencyMs: 0,
+        }).finally(() => this.release(attempt));
+      });
+      await Promise.all(settle);
+      for (const [passage, failure] of this.stranded) {
+        if (selectionId && (passage !== selectionId || failure.runId !== stopRunId)) continue;
+        await this.db({
+          type: 'DB_FINISH',
+          payload: { ...failure, status: 'failed', reason: 'save-failed' },
+        });
+        this.stranded.delete(passage);
+      }
+      if (selectionId && stopRunId) {
+        const passage = await this.db({ type: 'DB_PASSAGE', payload: { selectionId } });
+        if (!passage || passage.latest.id !== stopRunId)
+          throw new Error('History changed. Refresh the record before deleting.');
+        expectedRevision = passage.revision;
+      }
       await this.db(
         selectionId
-          ? { type: 'DB_DELETE_SELECTION', payload: { selectionId } }
+          ? {
+              type: 'DB_DELETE_SELECTION',
+              payload: { selectionId, expectedRevision },
+            }
           : { type: 'DB_CLEAR_HISTORY', payload: undefined },
       );
-      for (const attempt of this.attempts.values())
-        if (!selectionId || attempt.selectionId === selectionId) {
-          attempt.discarded = true;
-          attempt.controller.abort();
-          if (attempt.phase === 'queued') {
-            attempt.credential = '';
-            this.attempts.delete(attempt.id);
-          }
-        }
-      if (selectionId) this.stranded.delete(selectionId);
-      else this.stranded.clear();
       this.changed('*');
       this.pump();
     });
@@ -322,7 +350,11 @@ export class ReadingRunner {
   resolveReuse(payload: DbRequest<'DB_READING_RESOLVE'>['payload']) {
     return this.control(() => this.db({ type: 'DB_READING_RESOLVE', payload }));
   }
-  async updateReadState(message: DbRequest<'DB_VIEW' | 'DB_SET_BOOKMARK'>) {
+  async updateReadState(
+    message: DbRequest<
+      'DB_VIEW' | 'DB_SET_BOOKMARK' | 'DB_RESTORE_SELECTION' | 'DB_PURGE_SELECTION'
+    >,
+  ) {
     await this.recover();
     await this.db(message);
     this.changed('*');
@@ -331,6 +363,18 @@ export class ReadingRunner {
   async query(message: DbRequest<ReadingQuery>) {
     await this.recover();
     switch (message.type) {
+      case 'DB_HISTORY_PAGE': {
+        const page = await this.db(message);
+        return message.payload.visibility === 'masked'
+          ? page
+          : {
+              ...page,
+              items: page.items.map((item) => ({
+                ...item,
+                latest: this.projectAttempt(item.selectionId, item.latest),
+              })),
+            };
+      }
       case 'DB_GET_HISTORY':
         return (await this.db(message)).map((item) => ({
           ...item,

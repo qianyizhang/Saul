@@ -1,6 +1,6 @@
 # Expose History through records, entries and views
 
-Accepted 2026-11-25. Implementation pending.
+Accepted 2026-11-25. Implemented in schema v5.
 
 Saul’s native history catalogue exposes 37 operations spanning saved work, execution transitions,
 annotations and Call batches. EZ accesses the same database in Swift. Many wire operations reuse

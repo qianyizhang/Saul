@@ -18,7 +18,7 @@ import SaulTestSupport
                 generate: { entry, _ in
                     received.append(entry)
                     return .image(fixturePNG)
-                }, append: { try store.append($0) }, delete: { try store.delete($0) })
+                }, append: { try store.append($0) }, delete: { try store.discardPending($0) })
             let delay = DelayedAttachment()
             let model = try newMemeModel(directory, execution: execution, readInputImage: delay.read)
             defer {
@@ -51,7 +51,7 @@ import SaulTestSupport
                 generate: { _, _ in
                     calls += 1
                     return .image(fixturePNG)
-                }, append: { try store.append($0) }, delete: { try store.delete($0) })
+                }, append: { try store.append($0) }, delete: { try store.discardPending($0) })
             let delay = DelayedAttachment()
             let model = try newMemeModel(directory, execution: execution, readInputImage: delay.read)
             defer {
@@ -143,7 +143,7 @@ import SaulTestSupport
                 generate: { entry, _ in
                     received.append(entry)
                     throw EZError("Synthetic image failure")
-                }, append: { try store.append($0) }, delete: { try store.delete($0) })
+                }, append: { try store.append($0) }, delete: { try store.discardPending($0) })
             let model = try newMemeModel(directory, execution: execution)
             defer { model.shutdown() }
             model.attachImage(data: fixturePNG, name: "source.png")
@@ -180,7 +180,7 @@ import SaulTestSupport
                         try store.inputImage(for: pending)?.data, bytes, "Sketch sent before save")
                     sent = bytes
                     throw EZError("Synthetic image request failure")
-                }, append: { try store.append($0) }, delete: { try store.delete($0) })
+                }, append: { try store.append($0) }, delete: { try store.discardPending($0) })
             let model = try newMemeModel(directory, execution: execution)
             defer { model.shutdown() }
             try expect(!model.canSend, "An empty sketch could run")
@@ -289,7 +289,7 @@ import SaulTestSupport
                         try store.inputImage(for: pending)?.data, fixturePNG,
                         "Input was not saved before send")
                     return .image(fixturePNG)
-                }, append: { try store.append($0) }, delete: { try store.delete($0) })
+                }, append: { try store.append($0) }, delete: { try store.discardPending($0) })
             let model = try newMemeModel(directory, execution: execution)
             defer { model.shutdown() }
             try expect(!model.canSend, "Missing image did not block Run")
@@ -343,7 +343,7 @@ import SaulTestSupport
                     return .image(fixturePNG)
                 },
                 append: { try store.append($0) },
-                delete: { try store.delete($0) })
+                delete: { try store.discardPending($0) })
             let model = try newMemeModel(directory, execution: execution)
             defer { model.shutdown() }
             model.attachImage(data: fixturePNG, name: "source.png")
@@ -373,7 +373,7 @@ import SaulTestSupport
                     }
                     try store.append(entry)
                 },
-                delete: { try store.delete($0) })
+                delete: { try store.discardPending($0) })
             let model = try newMemeModel(directory, execution: execution)
             defer { model.shutdown() }
             model.attachImage(data: fixturePNG, name: "source.png")
@@ -409,7 +409,7 @@ import SaulTestSupport
                                 .utf8))
                     update(response)
                     return .text(response)
-                }, append: { try store.append($0) }, delete: { try store.delete($0) })
+                }, append: { try store.append($0) }, delete: { try store.discardPending($0) })
             var config = Configuration.starters(model: "fixture", effort: "low", fast: false)
             config.addSearchAndMeme()
             for index in config.presets.indices where config.presets[index].model.isEmpty {

@@ -1,18 +1,19 @@
 import { afterEach, expect, it, vi } from 'vitest';
-const mocked = vi.hoisted(() => ({ call: vi.fn() }));
-vi.mock('../src/native/storage-client', () => ({ requestHistory: mocked.call }));
+import type { HistoryRequest } from '../shared/protocol/history-protocol.mts';
+import {
+  historyRequestPolicy,
+  validateHistoryRequest,
+} from '../shared/protocol/history-protocol.mts';
 import { StorageDisconnected } from '../src/native/storage-connection';
 import { historyCall } from '../src/storage/history';
-import {
-  historyOperationPolicy,
-  validateHistoryRequest,
-  type HistoryRequest,
-} from '../shared/protocol/history-protocol.mts';
-const request = (type: string): HistoryRequest => ({
-  operation: 'db',
+
+const mocked = vi.hoisted(() => ({ call: vi.fn() }));
+vi.mock('../src/native/storage-client', () => ({ requestHistory: mocked.call }));
+const request = (command: HistoryRequest['command']): HistoryRequest => ({
+  operation: 'history',
   owner: crypto.randomUUID(),
-  requestId: crypto.randomUUID(),
-  message: { type },
+  operationId: crypto.randomUUID(),
+  command,
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -24,63 +25,68 @@ it('reconnects with the same operation identity and stops after three connection
     .mockRejectedValueOnce(new StorageDisconnected('lost'))
     .mockRejectedValueOnce(new StorageDisconnected('lost'))
     .mockResolvedValue([]);
-  const original = request('DB_GET_HISTORY');
+  const original = request({ kind: 'list', view: 'library.records', query: {} });
   const result = historyCall(original);
   await vi.runAllTimersAsync();
   await expect(result).resolves.toEqual([]);
   expect(mocked.call).toHaveBeenCalledTimes(3);
   expect(mocked.call.mock.calls.every(([value]) => value.request === original)).toBe(true);
 });
-it('does not repeat an uncertain Clear or an ordinary storage failure', async () => {
-  mocked.call.mockRejectedValueOnce(new StorageDisconnected('lost'));
-  await expect(historyCall(request('DB_CLEAR_HISTORY'))).rejects.toThrow('lost');
-  expect(mocked.call).toHaveBeenCalledTimes(1);
+it('never repeats uncertain destructive changes or an ordinary storage failure', async () => {
+  for (const command of [
+    { kind: 'clear', collection: 'library' },
+    { kind: 'mask', target: { collection: 'library', id: 'saved' } },
+    { kind: 'purge', target: { collection: 'calls', id: 'run' } },
+    { kind: 'restore', target: { collection: 'annotations', id: 'note' } },
+    {
+      kind: 'commit',
+      change: 'library.bookmark',
+      input: { selectionId: 'saved', bookmarked: true },
+    },
+  ] as const) {
+    const original = request(command);
+    expect(historyRequestPolicy(original)).toBe('explicit-write');
+    mocked.call.mockRejectedValueOnce(new StorageDisconnected('lost'));
+    await expect(historyCall(original)).rejects.toThrow('may have been applied');
+    expect(mocked.call).toHaveBeenCalledTimes(1);
+    mocked.call.mockClear();
+  }
   mocked.call.mockRejectedValueOnce(new Error('disk full'));
-  await expect(historyCall(request('DB_FINISH'))).rejects.toThrow('disk full');
-  expect(mocked.call).toHaveBeenCalledTimes(2);
+  await expect(
+    historyCall(request({ kind: 'commit', change: 'reading.claim', input: { runId: 'r' } })),
+  ).rejects.toThrow('disk full');
+  expect(mocked.call).toHaveBeenCalledTimes(1);
+});
+it('rejects unsupported views and changes', () => {
+  expect(() => validateHistoryRequest(request({ kind: 'list', view: 'future' }))).toThrow();
+  expect(() => validateHistoryRequest(request({ kind: 'commit', change: 'future' }))).toThrow();
 });
 
-it.each([
-  ['DB_GET_HISTORY', true],
-  ['DB_SUBMIT', true],
-  ['DB_CLAIM', true],
-  ['DB_SAVING', true],
-  ['DB_CHECKPOINT', true],
-  ['DB_FINISH', true],
-  ['DB_DIGEST_ITEM', true],
-  ['DB_VIEW', true],
-  ['DB_SET_BOOKMARK', false],
-  ['DB_DELETE_SELECTION', false],
-  ['DB_CLEAR_HISTORY', false],
-  ['DB_DIGEST_DELETE', false],
-] as const)(
-  'reconnects safe operations but leaves explicit mutations uncertain: %s',
-  async (operation, reconnect) => {
-    vi.useFakeTimers();
-    mocked.call.mockRejectedValueOnce(new StorageDisconnected('lost')).mockResolvedValue(null);
-    const original = request(operation);
-    expect(historyOperationPolicy(operation)).toBeDefined();
-    const result = historyCall(original);
-    if (!reconnect) {
-      await expect(result).rejects.toThrow('lost');
-      expect(mocked.call).toHaveBeenCalledTimes(1);
-    } else {
-      await vi.runAllTimersAsync();
-      await expect(result).resolves.toBeNull();
-      expect(mocked.call).toHaveBeenCalledTimes(2);
-      expect(mocked.call.mock.calls.every(([value]) => value.request === original)).toBe(true);
-    }
-  },
-);
-
-it('rejects unknown operations and never reconnects them or migration transfers', async () => {
-  expect(() => validateHistoryRequest(request('DB_FUTURE'))).toThrow('Invalid history operation');
-  for (const message of [
-    request('DB_FUTURE'),
-    { operation: 'import-begin', id: crypto.randomUUID() } as const,
-  ]) {
-    mocked.call.mockRejectedValueOnce(new StorageDisconnected('lost'));
-    await expect(historyCall(message)).rejects.toThrow('lost');
+it('shares a single profile lookup across concurrent offscreen reads and retries a failed lookup', async () => {
+  vi.resetModules();
+  const owner = crypto.randomUUID();
+  const sendMessage = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('Profile unavailable'))
+    .mockResolvedValue({ success: true, result: owner });
+  vi.stubGlobal('chrome', { runtime: { sendMessage } });
+  try {
+    const { sharedDb } = await import('../src/storage/history');
+    const read = () => sharedDb({ type: 'DB_UNREAD', payload: undefined });
+    await expect(read()).rejects.toThrow('Profile unavailable');
+    mocked.call.mockResolvedValue(0);
+    expect(await Promise.all([read(), read()])).toEqual([0, 0]);
+    expect(sendMessage.mock.calls).toEqual([
+      [{ target: 'saul-history-identity' }],
+      [{ target: 'saul-history-identity' }],
+    ]);
+    for (const [payload] of mocked.call.mock.calls)
+      expect(payload.request).toMatchObject({
+        operation: 'history',
+        owner,
+        command: { view: 'library.unread' },
+      });
+  } finally {
+    vi.unstubAllGlobals();
   }
-  expect(mocked.call).toHaveBeenCalledTimes(2);
 });

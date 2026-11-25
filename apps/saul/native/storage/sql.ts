@@ -1,4 +1,5 @@
 export type SqlValue = string | number | bigint | null | Uint8Array;
+export type Row = Record<string, SqlValue>;
 export interface SqlDatabase {
   exec(sql: string): unknown;
   exec(options: { sql: string; bind?: SqlValue[] }): unknown;

@@ -1,41 +1,5 @@
 import { test, expect } from '@playwright/test';
 import { createSandbox } from './support.ts';
-import { readFile } from 'node:fs/promises';
-import { runDatabaseFixture, type MigrationReport } from './database-harness.ts';
-test('transactional legacy migration preserves responses/bookmarks, rolls back failure and rejects future schemas', async ({}, info) => {
-  const sandbox = await createSandbox({
-    databaseFixtures: true,
-    artifactsDir: info.outputPath('browser'),
-  });
-  try {
-    const { popup } = await sandbox.launch();
-    const legacy = await readFile(
-      new URL('../fixtures/legacy-schema.sql', import.meta.url),
-      'utf8',
-    );
-    const report = await runDatabaseFixture<MigrationReport>(popup, { action: 'migrate', legacy });
-    expect(report.rollback.failed).toBe(true);
-    expect(report.rollback.version).toBe(0);
-    expect(report.rollback.columns).not.toContain('viewed_at');
-    expect(report.rollback.bookmark).toBe(1);
-    expect(report.upgraded).toEqual({
-      version: 3,
-      response: 'A <term note="Slope">gradient</term>.',
-      viewed: 4,
-      bookmark: 1,
-      search: 1,
-    });
-    expect(report.upgradedV1).toEqual({
-      version: 3,
-      response: report.upgraded.response,
-      tables: 2,
-    });
-    expect(report.rejected).toBe(true);
-  } finally {
-    await sandbox.close(info.status !== info.expectedStatus);
-  }
-});
-
 test('bounded text maps reject partial captures and uncertain matches', async ({}, info) => {
   const sandbox = await createSandbox({
     databaseFixtures: true,

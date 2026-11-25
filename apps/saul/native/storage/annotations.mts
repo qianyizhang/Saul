@@ -1,3 +1,7 @@
+import { annotationSchemas } from '../../shared/protocol/history-feature-schemas.mts';
+import { writableSnapshot } from './stored-snapshot.ts';
+import { historyCursor } from './history-cursor.ts';
+import { entryMask, maskFilter, type HistoryVisibility } from './visibility.ts';
 import { createHash } from 'node:crypto';
 import {
   activeAnnotationAttempt,
@@ -25,18 +29,57 @@ import {
   type AnnotationSummary,
 } from '../../shared/protocol/annotations.ts';
 
-/** Additive, browser-owned tables in the existing shared database; EZ does not project these records. */
-function tables(db: SqlDatabase) {
-  db.exec(`CREATE TABLE IF NOT EXISTS browser_annotation(owner TEXT NOT NULL,id TEXT NOT NULL,url TEXT NOT NULL,deleted_at INTEGER,body TEXT NOT NULL,PRIMARY KEY(owner,id));
-    CREATE INDEX IF NOT EXISTS browser_annotation_page ON browser_annotation(owner,url);
-    CREATE TABLE IF NOT EXISTS browser_annotation_attempt(owner TEXT NOT NULL,id TEXT NOT NULL,annotation_id TEXT NOT NULL,body TEXT NOT NULL,PRIMARY KEY(owner,id),FOREIGN KEY(owner,annotation_id) REFERENCES browser_annotation(owner,id) ON DELETE CASCADE);`);
+type StoredReply = Annotation['replies'][number] & { generated?: true };
+type StoredAnnotation = Omit<Annotation, 'replies'> & { replies: StoredReply[] };
+
+function projectedAnnotation(
+  db: SqlDatabase,
+  owner: string,
+  annotation: StoredAnnotation,
+  visibility: HistoryVisibility,
+): Annotation {
+  const entries = new Map(
+    db
+      .selectObjects(
+        `SELECT e.id,e.masked_at,t.body
+      FROM history_entry e LEFT JOIN browser_annotation_attempt t
+        ON t.owner=e.owner AND t.annotation_id=e.record_id AND t.id=e.id
+      WHERE e.collection='annotations' AND e.owner=? AND e.record_id=?`,
+        [owner, annotation.id],
+      )
+      .map((row) => [String(row.id), row]),
+  );
+  return {
+    ...annotation,
+    replies: annotation.replies.flatMap(({ generated, ...reply }) => {
+      const entry = entries.get(reply.id);
+      if (!entry) return [];
+      if (visibility === 'visible' && entry.masked_at != null) return [];
+      if (visibility === 'masked' && annotation.deletedAt === undefined && entry.masked_at == null)
+        return [];
+      const text = generated
+        ? entry.body
+          ? (JSON.parse(String(entry.body)) as AnnotationAttempt).raw
+          : undefined
+        : reply.text;
+      const maskedAt = annotation.deletedAt ?? entry.masked_at;
+      return text === undefined
+        ? []
+        : [{ ...reply, text, ...(maskedAt != null ? { maskedAt: Number(maskedAt) } : {}) }];
+    }),
+  };
 }
-export function annotationUrls(db: SqlDatabase, owner: string, url: string) {
+
+export function annotationUrls(
+  db: SqlDatabase,
+  owner: string,
+  url: string,
+  visibility: HistoryVisibility = 'visible',
+) {
   const base = pageUrl.parse(url).split('#')[0]!;
-  tables(db);
   return db
     .selectObjects(
-      'SELECT DISTINCT url FROM browser_annotation WHERE owner=? AND (url=? OR (url>=? AND url<?))',
+      `SELECT DISTINCT url FROM browser_annotation WHERE owner=? AND ${maskFilter('deleted_at', visibility)} AND (url=? OR (url>=? AND url<?))`,
       [owner, base, base + '#', base + '$'],
     )
     .map((row) => String(row.url));
@@ -49,11 +92,11 @@ export function annotationStore(
   owner: string,
   request: AnnotationDbOperations['DB_ANNOTATION']['payload'],
   now = Date.now(),
+  visibility: HistoryVisibility = 'visible',
 ): AnnotationResult {
-  tables(db);
   const { external, ...input } = request;
   return db.transaction(() => {
-    const result = applyAnnotationOperation(db, owner, input, now);
+    const result = applyAnnotationOperation(db, owner, input, now, visibility);
     // Reject before the transaction commits, even when each item fits by itself.
     if (external) assertExternalAnnotationSize(result, input.operation);
     return result;
@@ -64,23 +107,26 @@ function applyAnnotationOperation(
   owner: string,
   request: AnnotationRequest,
   now: number,
+  visibility: HistoryVisibility = 'visible',
+  generated = false,
 ): AnnotationResult {
   const { scope, author, operation: op } = requestSchema.parse(request);
-  db.exec({
-    sql: 'DELETE FROM browser_annotation WHERE owner=? AND deleted_at<=?',
-    bind: [owner, now - retentionMs],
-  });
+  if (op.action !== 'list' && op.action !== 'read')
+    db.exec({
+      sql: 'DELETE FROM browser_annotation WHERE owner=? AND deleted_at<=?',
+      bind: [owner, now - retentionMs],
+    });
   const read = (id: string) => {
-    const row = db.selectObject('SELECT body FROM browser_annotation WHERE owner=? AND id=?', [
-      owner,
-      id,
-    ]);
+    const row = db.selectObject(
+      'SELECT body FROM browser_annotation WHERE owner=? AND id=? AND (deleted_at IS NULL OR deleted_at>?)',
+      [owner, id, now - retentionMs],
+    );
     if (!row) throw new Error('Annotation unavailable. It may have been permanently deleted.');
-    const a = JSON.parse(String(row.body)) as Annotation;
+    const a = JSON.parse(String(row.body)) as StoredAnnotation;
     if (!allowed(a, scope)) throw new Error('Annotation is outside the assigned scope.');
     return a;
   };
-  const write = (a: Annotation) =>
+  const write = (a: StoredAnnotation) =>
     db.exec({
       sql: 'INSERT INTO browser_annotation(owner,id,url,deleted_at,body) VALUES (?,?,?,?,?) ON CONFLICT(owner,id) DO UPDATE SET deleted_at=excluded.deleted_at,body=excluded.body',
       bind: [owner, a.id, a.url, a.deletedAt ?? null, JSON.stringify(a)],
@@ -92,15 +138,18 @@ function applyAnnotationOperation(
     const rows = db.selectObjects(
       `SELECT json_remove(body,'$.image','$.operations','$.replies') AS summary,
           json_type(body,'$.image')='text' AS has_image,
-          json_array_length(body,'$.replies') AS reply_count
+          (SELECT count(*) FROM json_each(body,'$.replies') reply WHERE reply.type='object'
+            AND ${op.filter === 'deleted' || visibility === 'all' ? '1' : `${entryMask('annotations', 'browser_annotation.id', "json_extract(reply.value,'$.id')", 'browser_annotation.owner')} IS NULL`}) AS reply_count
         FROM browser_annotation WHERE owner=? AND url=?
+          AND (deleted_at IS NULL OR deleted_at>?)
           AND (? OR id IN (SELECT value FROM json_each(?)))
-          AND ${op.filter === 'deleted' ? 'deleted_at IS NOT NULL' : 'deleted_at IS NULL'}
+          AND ${maskFilter('deleted_at', op.filter === 'deleted' ? 'masked' : visibility)}
           AND (? IN ('all','deleted') OR json_extract(body,'$.state')=?)
         ORDER BY rowid LIMIT 26 OFFSET ?`,
       [
         owner,
         op.url,
+        now - retentionMs,
         Number(scopedPage),
         JSON.stringify(scope.ids),
         op.filter,
@@ -126,8 +175,13 @@ function applyAnnotationOperation(
   }
   if (op.action === 'read') {
     const a = read(op.id);
+    if (
+      (a.deletedAt !== undefined && visibility === 'visible') ||
+      (a.deletedAt === undefined && visibility === 'masked')
+    )
+      throw new Error('Annotation is unavailable in this History view.');
     if (!op.image) delete a.image;
-    return { record: a };
+    return { record: projectedAnnotation(db, owner, a, visibility) };
   }
   if (op.action === 'create') {
     if (!scope.urls.includes(op.capture.url))
@@ -148,7 +202,7 @@ function applyAnnotationOperation(
           [owner, op.capture.url],
         ),
       ) + 1;
-    const a: Annotation = {
+    const a: StoredAnnotation = {
       ...op.capture,
       number,
       revision: 1,
@@ -162,9 +216,10 @@ function applyAnnotationOperation(
     write(a);
     return { records: [summary(a)] };
   }
-  return {
-    outcomes: op.changes.map((change) => {
-      try {
+  const purged = new Set<string>();
+  const outcomes = op.changes.map((change) => {
+    try {
+      return db.transaction(() => {
         const a = read(change.id);
         const signature = createHash('sha256')
           .update(JSON.stringify({ action: change.action, text: change.text }))
@@ -190,7 +245,28 @@ function applyAnnotationOperation(
             if (!change.text?.trim()) throw new Error('Reply must not be empty.');
             if (a.replies.length >= 100)
               throw new Error('This annotation has reached 100 replies.');
-            a.replies.push({ id: change.operationId, text: change.text, author, createdAt: now });
+            a.replies.push({
+              id: change.operationId,
+              text: generated ? '' : change.text,
+              author,
+              createdAt: now,
+              ...(generated ? { generated: true } : {}),
+            });
+            if (generated) {
+              db.exec({
+                sql: `UPDATE history_entry SET position=(SELECT revision+1 FROM history_record
+                  WHERE collection='annotations' AND id=? AND owner=?)
+                  WHERE collection='annotations' AND record_id=? AND owner=? AND id=?`,
+                bind: [a.id, owner, a.id, owner, change.operationId],
+              });
+            } else {
+              db.exec({
+                sql: `INSERT INTO history_entry(collection,record_id,id,owner,position)
+                  SELECT 'annotations',?,?,?,revision+1 FROM history_record
+                  WHERE collection='annotations' AND id=? AND owner=?`,
+                bind: [a.id, change.operationId, owner, a.id, owner],
+              });
+            }
             break;
           case 'complete':
             a.state = 'done';
@@ -200,13 +276,14 @@ function applyAnnotationOperation(
             break;
           case 'delete':
             a.deletedAt = now;
-            db.exec({
-              sql: `UPDATE browser_annotation_attempt
-                  SET body=json_set(body,'$.status','cancelled','$.error','Annotation deleted.')
-                  WHERE owner=? AND annotation_id=?
-                    AND json_extract(body,'$.status') IN ('queued','running','saving')`,
-              bind: [owner, a.id],
-            });
+            if (
+              db.selectValue(
+                `SELECT 1 FROM browser_annotation_attempt WHERE owner=? AND annotation_id=?
+               AND json_extract(body,'$.status') IN ('queued','running','saving') LIMIT 1`,
+                [owner, a.id],
+              )
+            )
+              throw new Error('Stop the active annotation request before deleting it.');
             break;
           case 'restore':
             delete a.deletedAt;
@@ -218,6 +295,7 @@ function applyAnnotationOperation(
               sql: 'DELETE FROM browser_annotation WHERE owner=? AND id=?',
               bind: [owner, a.id],
             });
+            purged.add(a.id);
             return { id: a.id };
           case 'remove-image':
             delete a.image;
@@ -229,10 +307,17 @@ function applyAnnotationOperation(
         a.revision++;
         write(a);
         return { id: a.id, record: summary(a) };
-      } catch (e) {
-        return { id: change.id, error: (e as Error).message };
-      }
-    }),
+      });
+    } catch (e) {
+      return { id: change.id, error: (e as Error).message };
+    }
+  });
+  // A compound write can purge a record after producing an earlier summary of it.
+  // Only its identity may leave the transaction or be saved in the operation receipt.
+  return {
+    outcomes: outcomes.map((outcome) =>
+      'record' in outcome && purged.has(outcome.id) ? { id: outcome.id } : outcome,
+    ),
   };
 }
 
@@ -241,6 +326,7 @@ export function annotationStatus(
   owner: string,
   input: AnnotationDbOperations['DB_ANNOTATION_STATUS']['payload'],
   now = Date.now(),
+  visibility: HistoryVisibility = 'visible',
 ): AnnotationEditorStatus {
   const { id, url, known } = annotationStatusSchema.parse(input);
   // An unused workspace may not have initialized its annotation tables.
@@ -258,6 +344,7 @@ export function annotationStatus(
         CASE WHEN json_type(body,'$.image')='text' THEN 'available'
              WHEN json_type(body,'$.imageError')='text' THEN 'unavailable' ELSE 'none' END AS capture
       FROM browser_annotation WHERE owner=? AND id=? AND url=?
+        AND ${maskFilter('deleted_at', visibility)}
         AND (deleted_at IS NULL OR deleted_at>?)
     )
     SELECT revision,capture,
@@ -270,8 +357,10 @@ export function annotationStatus(
            json_extract(t.body,'$.input.preset.name') AS preset_name,
            substr(json_extract(t.body,'$.error'),1,2000) AS error
           FROM browser_annotation_attempt t
+          JOIN history_entry e ON e.collection='annotations' AND e.owner=t.owner AND e.record_id=t.annotation_id AND e.id=t.id
           WHERE t.owner=selected.owner AND t.annotation_id=selected.id
-          ORDER BY t.rowid DESC LIMIT 10)) AS attempts
+            AND ${visibility === 'visible' ? 'e.masked_at IS NULL' : '1'}
+          ORDER BY e.position DESC LIMIT 10)) AS attempts
     FROM selected`,
     [
       owner,
@@ -304,7 +393,16 @@ export function annotationStatus(
     kind: 'found',
     key,
     attempts,
-    ...(row.record ? { record: JSON.parse(String(row.record)) as AnnotationEditorRecord } : {}),
+    ...(row.record
+      ? {
+          record: projectedAnnotation(
+            db,
+            owner,
+            JSON.parse(String(row.record)) as StoredAnnotation,
+            visibility,
+          ) as AnnotationEditorRecord,
+        }
+      : {}),
     ...(typeof row.image === 'string'
       ? { capture: { kind: 'available', image: row.image } }
       : typeof row.image_error === 'string'
@@ -319,13 +417,14 @@ export function annotationAttempts(
   db: SqlDatabase,
   owner: string,
   p: AnnotationDbOperations['DB_ANNOTATION_ATTEMPT']['payload'],
+  visibility: HistoryVisibility = 'visible',
 ): AnnotationAttempt[] {
-  tables(db);
   return db.transaction(() => {
-    db.exec({
-      sql: 'DELETE FROM browser_annotation WHERE owner=? AND deleted_at<=?',
-      bind: [owner, Date.now() - retentionMs],
-    });
+    if (p.action !== 'read')
+      db.exec({
+        sql: 'DELETE FROM browser_annotation WHERE owner=? AND deleted_at<=?',
+        bind: [owner, Date.now() - retentionMs],
+      });
     const validate = (a: AnnotationAttempt) => {
       if (
         !a ||
@@ -365,15 +464,19 @@ export function annotationAttempts(
     if (p.action === 'save' || p.action === 'complete') {
       const a = p.attempt;
       validate(a);
-      const previous = db.selectValue(
-        `SELECT json_extract(t.body,'$.status')
+      const stored = db.selectValue(
+        `SELECT t.body
           FROM browser_annotation_attempt t JOIN browser_annotation a
             ON t.owner=a.owner AND t.annotation_id=a.id
           WHERE t.owner=? AND t.id=? AND t.annotation_id=? AND a.deleted_at IS NULL`,
         [owner, a.id, a.annotationId],
       );
-      if (previous === undefined || previous === null)
+      if (typeof stored !== 'string')
         throw new Error('Annotation or attempt is no longer available.');
+      const saved = JSON.parse(stored) as AnnotationAttempt;
+      const previous = saved.status;
+      if (saved.calls)
+        writableSnapshot(annotationSchemas.attempt.shape.calls, JSON.stringify(saved.calls));
       // A lost terminal acknowledgement must never turn saved completion into failure.
       if (previous !== 'queued' && previous !== 'running') return [];
       if (p.action === 'complete') {
@@ -399,6 +502,8 @@ export function annotationAttempts(
             },
           },
           Date.now(),
+          'visible',
+          true,
         );
         if (result.outcomes?.[0]?.error) throw new Error(result.outcomes[0].error);
       } else if (!['running', 'failed', 'interrupted', 'cancelled'].includes(a.status)) {
@@ -406,7 +511,17 @@ export function annotationAttempts(
       }
       db.exec({
         sql: 'UPDATE browser_annotation_attempt SET body=? WHERE owner=? AND id=?',
-        bind: [JSON.stringify(a), owner, a.id],
+        bind: [
+          JSON.stringify({
+            ...saved,
+            status: a.status,
+            raw: a.raw,
+            calls: a.calls,
+            error: a.error,
+          }),
+          owner,
+          a.id,
+        ],
       });
       return [];
     }
@@ -437,14 +552,24 @@ export function annotationAttempts(
     if (p.action !== 'read') throw new Error('Unknown annotation attempt operation.');
     return db
       .selectObjects(
-        'SELECT body FROM browser_annotation_attempt WHERE owner=?' +
-          (p.annotationId ? ' AND annotation_id=?' : '') +
-          (p.id ? ' AND id=?' : '') +
-          ' ORDER BY rowid DESC LIMIT 10',
-        [owner, ...(p.annotationId ? [p.annotationId] : []), ...(p.id ? [p.id] : [])],
+        `SELECT t.body,COALESCE(a.deleted_at,e.masked_at) AS masked_at FROM browser_annotation_attempt t
+         JOIN browser_annotation a ON a.owner=t.owner AND a.id=t.annotation_id
+         JOIN history_entry e ON e.collection='annotations' AND e.owner=t.owner AND e.record_id=t.annotation_id AND e.id=t.id
+         WHERE t.owner=? AND (a.deleted_at IS NULL OR a.deleted_at>?)
+           AND ${maskFilter('COALESCE(a.deleted_at,e.masked_at)', visibility)}` +
+          (p.annotationId ? ' AND t.annotation_id=?' : '') +
+          (p.id ? ' AND t.id=?' : '') +
+          ' ORDER BY e.position DESC LIMIT 10',
+        [
+          owner,
+          Date.now() - retentionMs,
+          ...(p.annotationId ? [p.annotationId] : []),
+          ...(p.id ? [p.id] : []),
+        ],
       )
       .map((r) => {
-        const attempt = JSON.parse(String(r.body)) as AnnotationAttempt;
+        const attempt = JSON.parse(String(r.body)) as AnnotationAttempt & { maskedAt?: number };
+        if (r.masked_at != null) attempt.maskedAt = Number(r.masked_at);
         if (!p.id) delete attempt.image;
         return attempt;
       });
@@ -456,14 +581,13 @@ export function annotationImage(
   owner: string,
   p: AnnotationDbOperations['DB_ANNOTATION_IMAGE']['payload'],
 ) {
-  tables(db);
   db.transaction(() => {
     const row = db.selectObject(
       'SELECT body FROM browser_annotation WHERE owner=? AND id=? AND deleted_at IS NULL',
       [owner, p.id],
     );
     if (!row) throw new Error('Capture no longer exists.');
-    const a = JSON.parse(String(row.body)) as Annotation;
+    const a = JSON.parse(String(row.body)) as StoredAnnotation;
     if (a.image || a.imageError) return;
     if (p.image) captureSchema.shape.image.parse(p.image);
     if (p.error && (typeof p.error !== 'string' || p.error.length > 2000))
@@ -475,4 +599,91 @@ export function annotationImage(
       bind: [JSON.stringify(a), owner, p.id],
     });
   });
+}
+
+export function annotationConversation(
+  db: SqlDatabase,
+  owner: string,
+  {
+    id,
+    scope,
+    limit = 25,
+    cursor,
+  }: { id: string; scope: AnnotationScope; limit?: number; cursor?: string },
+  visibility: HistoryVisibility,
+) {
+  const row = db.selectObject('SELECT body FROM browser_annotation WHERE owner=? AND id=?', [
+    owner,
+    id,
+  ]);
+  if (!row) throw new Error('Annotation is unavailable.');
+  const a = JSON.parse(String(row.body)) as StoredAnnotation;
+  if (!allowed(a, scope)) throw new Error('Annotation is outside the assigned scope.');
+  if (visibility === 'visible' && a.deletedAt !== undefined) return { items: [] };
+  const pagination = historyCursor(
+    [
+      owner,
+      'annotations.conversation',
+      id,
+      visibility,
+      [...scope.urls].sort(),
+      [...scope.ids].sort(),
+    ],
+    cursor,
+  );
+  const after = pagination.read() ?? -1;
+  const pageSize = Math.max(1, Math.min(100, limit));
+  const positions = new Map(
+    db
+      .selectObjects(
+        "SELECT id,position FROM history_entry WHERE collection='annotations' AND record_id=? AND owner=?",
+        [id, owner],
+      )
+      .map((entry) => [String(entry.id), Number(entry.position)]),
+  );
+  const items = projectedAnnotation(db, owner, a, visibility)
+    .replies.filter((reply) => (positions.get(reply.id) ?? -1) > after)
+    .slice(0, pageSize + 1);
+  const hasMore = items.length > pageSize;
+  if (hasMore) items.pop();
+  const last = items.at(-1);
+  return {
+    items,
+    ...(hasMore && last
+      ? {
+          cursor: pagination.write(positions.get(last.id)!),
+        }
+      : {}),
+  };
+}
+
+export function annotationActivity(
+  db: SqlDatabase,
+  owner: string,
+  { annotationId, limit = 25, cursor }: { annotationId: string; limit?: number; cursor?: string },
+  visibility: HistoryVisibility,
+) {
+  const pagination = historyCursor(
+    [owner, 'annotations.activity', annotationId, visibility],
+    cursor,
+  );
+  const before = pagination.read();
+  const pageSize = Math.max(1, Math.min(100, limit));
+  const rows = db.selectObjects(
+    `SELECT t.body,e.position,COALESCE(a.deleted_at,e.masked_at) AS masked_at FROM browser_annotation_attempt t
+      JOIN browser_annotation a ON a.owner=t.owner AND a.id=t.annotation_id
+      JOIN history_entry e ON e.collection='annotations' AND e.owner=t.owner AND e.record_id=t.annotation_id AND e.id=t.id
+      WHERE t.owner=? AND t.annotation_id=? AND ${maskFilter('COALESCE(a.deleted_at,e.masked_at)', visibility)}
+      ${before === undefined ? '' : ' AND e.position<?'}
+      ORDER BY e.position DESC LIMIT ?`,
+    [owner, annotationId, ...(before === undefined ? [] : [before]), pageSize + 1],
+  );
+  const next = rows.length > pageSize;
+  if (next) rows.pop();
+  const items = rows.map((row) => {
+    const attempt = JSON.parse(String(row.body)) as AnnotationAttempt;
+    delete attempt.image;
+    return { ...attempt, ...(row.masked_at == null ? {} : { maskedAt: Number(row.masked_at) }) };
+  });
+  return { items, ...(next ? { cursor: pagination.write(Number(rows.at(-1)!.position)) } : {}) };
 }

@@ -1,5 +1,9 @@
+import { historyCursor } from './history-cursor.ts';
+import { entryMask, maskFilter, recordMask, type HistoryVisibility } from './visibility.ts';
 import {
   annotationStore,
+  annotationConversation,
+  annotationActivity,
   annotationUrls,
   annotationAttempts,
   annotationImage,
@@ -14,7 +18,6 @@ import { TagStreamParser } from '../../shared/model/tag-stream-parser.ts';
 import type {
   DbOperations,
   DbRequest,
-  DbType,
   HistoryItem,
   Passage,
   RunResult,
@@ -26,28 +29,51 @@ import { inspectionInput } from '../../shared/model/inspection.ts';
 import type { SelectionSnapshot } from '../../shared/model/reading.ts';
 
 type Row = Record<string, SqlValue>;
-const latest = `(SELECT rowid FROM llm_run WHERE selection_id = s.id ORDER BY created_at DESC, rowid DESC LIMIT 1)`;
-const success = `(SELECT rowid FROM llm_run WHERE selection_id = s.id AND status = 'completed' ORDER BY created_at DESC, rowid DESC LIMIT 1)`;
-const passageSelect = `SELECT s.*, p.url, p.title, p.canonical_url, b.selection_id IS NOT NULL AS bookmarked,
+const browserMask = (id: string) => recordMask('library-browser', id);
+const nativeMask = (id: string) => recordMask('library-native', id);
+const nativeEntryMask = (id: string) =>
+  `COALESCE(${nativeMask(id)},${entryMask('library-native', id, id)})`;
+const nativeHasEntry = (id: string) =>
+  `EXISTS(SELECT 1 FROM history_entry WHERE collection='library-native' AND record_id=${id} AND history_entry.id=${id} AND owner='')`;
+const runMask = entryMask('library-browser', 'llm_run.selection_id', 'llm_run.id');
+const effectiveRunMask = `COALESCE(${browserMask('llm_run.selection_id')},${runMask})`;
+const runProjection = (visibility: HistoryVisibility) =>
+  visibility === 'visible' ? `${runMask} IS NULL` : '1';
+const latest = (visibility: HistoryVisibility) =>
+  `(SELECT rowid FROM llm_run WHERE selection_id=s.id AND ${runProjection(visibility)} ORDER BY created_at DESC,rowid DESC LIMIT 1)`;
+const success = (visibility: HistoryVisibility) =>
+  `(SELECT rowid FROM llm_run WHERE selection_id=s.id AND ${runProjection(visibility)} AND status='completed' ORDER BY created_at DESC,rowid DESC LIMIT 1)`;
+const passageSelect = (visibility: HistoryVisibility) => `SELECT s.*,
+ (SELECT revision FROM history_record WHERE collection='library-browser' AND id=s.id AND owner='') AS revision,
+ p.url, p.title, p.canonical_url, s.bookmarked_at IS NOT NULL AS bookmarked,
+ COALESCE(${browserMask('s.id')},${entryMask('library-browser', 's.id', 'r.id')}) AS run_masked_at,
+ COALESCE(${browserMask('s.id')},${entryMask('library-browser', 's.id', 'c.id')}) AS completed_masked_at,
  r.id AS run_id, r.status, r.response_structured IS NOT NULL AS has_image, r.response_raw, r.error_message, r.reason, r.model, r.provider, r.latency_ms, r.created_at AS run_created_at, r.viewed_at, r.input_json,
  c.id AS completed_id, c.response_structured IS NOT NULL AS completed_image, c.response_raw AS completed_raw, c.model AS completed_model, c.provider AS completed_provider, c.latency_ms AS completed_latency, c.created_at AS completed_at, c.viewed_at AS completed_viewed, c.input_json AS completed_input
  FROM selection s JOIN page p ON p.id = s.page_id
- LEFT JOIN bookmark b ON b.selection_id = s.id
- JOIN llm_run r ON r.rowid = ${latest}
- LEFT JOIN llm_run c ON c.rowid = ${success}`;
+ JOIN llm_run r ON r.rowid = ${latest(visibility)}
+ LEFT JOIN llm_run c ON c.rowid = ${success(visibility)}`;
 
 export class SaulDatabase {
   private db: SqlDatabase;
   private owner: string;
-  constructor(db: SqlDatabase, owner = '') {
+  private readonly visibility: HistoryVisibility;
+  constructor(db: SqlDatabase, owner: string, visibility: HistoryVisibility = 'visible') {
     this.db = db;
     this.owner = owner;
+    this.visibility = visibility;
   }
   private rows(sql: string, bind: SqlValue[] = []): Row[] {
     return this.db.selectObjects(sql, bind);
   }
   private write(sql: string, bind: SqlValue[] = []) {
     this.db.exec({ sql, bind });
+  }
+  private browserEntryFilter(): string {
+    if (this.visibility === 'masked')
+      return `(${browserMask('llm_run.selection_id')} IS NOT NULL OR ${runMask} IS NOT NULL)`;
+    if (this.visibility === 'all') return '1';
+    return `${browserMask('llm_run.selection_id')} IS NULL AND ${runMask} IS NULL`;
   }
   private run(row: Row): RunResult {
     const input: RunInput | undefined = row.input_json
@@ -56,6 +82,7 @@ export class SaulDatabase {
     return {
       id: String(row.id),
       status: row.status as RunResult['status'],
+      ...(row.masked_at != null ? { maskedAt: Number(row.masked_at) } : {}),
       hasImage: row.status === 'completed' && Boolean(row.has_image ?? row.response_structured),
       capability: input?.preset?.capability,
       imageOptions: input?.preset?.imageOptions,
@@ -80,6 +107,7 @@ export class SaulDatabase {
       ? {
           id: String(row.completed_id),
           status: 'completed',
+          ...(row.completed_masked_at != null ? { maskedAt: Number(row.completed_masked_at) } : {}),
           hasImage: Boolean(row.completed_image),
           capability: completedInput?.preset?.capability,
           imageOptions: completedInput?.preset?.imageOptions,
@@ -99,6 +127,7 @@ export class SaulDatabase {
         }
       : undefined;
     return {
+      revision: Number(row.revision),
       snapshot: {
         id: String(row.id),
         text: String(row.text),
@@ -119,7 +148,12 @@ export class SaulDatabase {
         capturedAt: Number(row.created_at),
       },
       bookmarked: Boolean(row.bookmarked),
-      latest: this.run({ ...row, id: row.run_id ?? null, created_at: row.run_created_at ?? null }),
+      latest: this.run({
+        ...row,
+        id: row.run_id ?? null,
+        created_at: row.run_created_at ?? null,
+        masked_at: row.run_masked_at ?? null,
+      }),
       completed,
       unread: !!completed && completed.viewedAt === undefined,
     };
@@ -139,7 +173,7 @@ export class SaulDatabase {
     // Text alone never matches, so separate occurrences remain separate.
     const matches = this.rows(
       `SELECT s.id FROM selection s JOIN page p ON p.id=s.page_id
-      WHERE p.url=? AND (s.id=? OR s.anchor_key=? OR
+      WHERE p.url=? AND ${browserMask('s.id')} IS NULL AND (s.id=? OR s.anchor_key=? OR
         (s.anchor_exact=? AND s.text_start=? AND s.text_end=? AND
           ((? != '' AND s.dom_path=?) OR (? != '' AND s.prefix=?))))`,
       [
@@ -159,11 +193,11 @@ export class SaulDatabase {
   }
   private submittedSelection(submissionId: string, url: string): string | undefined {
     const existing = this.rows(
-      'SELECT q.selection_id,p.url FROM submission q LEFT JOIN selection s ON s.id=q.selection_id LEFT JOIN page p ON p.id=s.page_id WHERE q.id = ?',
+      `SELECT q.selection_id,p.url,${browserMask('s.id')} AS masked FROM submission q LEFT JOIN selection s ON s.id=q.selection_id LEFT JOIN page p ON p.id=s.page_id WHERE q.id = ?`,
       [submissionId],
     )[0];
     if (!existing) return;
-    if (!existing.selection_id)
+    if (!existing.selection_id || existing.masked != null)
       throw new Error(
         'This submitted passage was deleted. Select the text again to create a new passage.',
       );
@@ -194,18 +228,37 @@ export class SaulDatabase {
         };
         return;
       }
-      const { snapshot: s, input } = payload;
+      const { snapshot: s, input, source } = payload;
+      if (source) {
+        const revision = this.db.selectValue(
+          `SELECT r.revision FROM history_record r
+           JOIN selection s ON s.id=r.id JOIN page p ON p.id=s.page_id
+           JOIN history_entry e ON e.collection=r.collection AND e.record_id=r.id AND e.owner=r.owner
+           WHERE r.collection='library-browser' AND r.owner='' AND r.id=? AND e.id=?
+             AND r.masked_at IS NULL AND e.masked_at IS NULL AND p.url=?`,
+          [source.selectionId, source.runId, s.page.url],
+        );
+        if (s.id !== source.selectionId || revision !== source.revision)
+          throw new Error('The saved source changed or was deleted. Refresh it before submitting.');
+      }
       this.write(
         `INSERT INTO page (id,url,canonical_url,title,first_seen_at,last_seen_at) VALUES (?,?,?,?,?,?) ON CONFLICT(url) DO UPDATE SET title=excluded.title,last_seen_at=excluded.last_seen_at`,
         [nanoid(), s.page.url, s.page.canonicalUrl || null, s.page.title, s.capturedAt, Date.now()],
       );
       const pageId = this.rows('SELECT id FROM page WHERE url=?', [s.page.url])[0]!.id!;
       const key = this.anchorKey(s);
-      const known = this.findSelection(s);
-      const selectionId = known || s.id;
+      const known = source?.selectionId ?? this.findSelection(s);
+      const selectionId =
+        known ||
+        (this.db.selectValue(
+          "SELECT id FROM selection WHERE id=? UNION SELECT id FROM history_tombstone WHERE collection='library-browser' AND id=?",
+          [s.id, s.id],
+        )
+          ? nanoid()
+          : s.id);
       const prior = known
         ? this.rows(
-            'SELECT input_json,status FROM llm_run WHERE selection_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1',
+            `SELECT input_json,status FROM llm_run WHERE selection_id=? AND ${runMask} IS NULL ORDER BY created_at DESC,rowid DESC LIMIT 1`,
             [selectionId],
           )[0]
         : undefined;
@@ -225,6 +278,7 @@ export class SaulDatabase {
         );
       if (
         known &&
+        prior &&
         ((!payload.regenerate && !differentRecipe) ||
           this.rows(
             "SELECT id FROM llm_run WHERE selection_id=? AND status IN ('queued','running','saving')",
@@ -258,7 +312,7 @@ export class SaulDatabase {
         );
       const runId = nanoid();
       this.write(
-        `INSERT INTO llm_run (id,selection_id,widget_id,provider,model,prompt_version,prompt_raw,context_json,response_raw,status,created_at,submission_id,input_json,owner) VALUES (?,?,'explain',?,?,'2',?,?,'','queued',?,?,?,?)`,
+        `INSERT INTO llm_run (id,selection_id,widget_id,provider,model,prompt_version,prompt_raw,context_json,response_raw,status,created_at,submission_id,input_json,owner,admission_source_id) VALUES (?,?,'explain',?,?,'2',?,?,'','queued',?,?,?,?,?)`,
         [
           runId,
           selectionId,
@@ -274,6 +328,7 @@ export class SaulDatabase {
           payload.submissionId,
           JSON.stringify(input),
           this.owner,
+          source?.runId ?? null,
         ],
       );
       this.write('INSERT INTO submission(id,selection_id,operation_id) VALUES (?,?,?)', [
@@ -288,25 +343,22 @@ export class SaulDatabase {
     });
     return result;
   }
-  public async execute<K extends DbType>(
-    message: DbRequest<K>,
-    operationId: string = crypto.randomUUID(),
-  ): Promise<DbOperations[K]['result']> {
-    // The switch is exhaustive; the generic signature preserves request/result pairs at callers.
-    return this.executeReady(message as DbRequest, operationId) as DbOperations[K]['result'];
-  }
-  private executeReady(message: DbRequest, operationId: string): unknown {
+  executeReady(message: DbRequest, operationId: string): unknown {
     switch (message.type) {
       case 'DB_ANNOTATION_URLS':
-        return annotationUrls(this.db, this.owner, message.payload.url);
+        return annotationUrls(this.db, this.owner, message.payload.url, this.visibility);
       case 'DB_ANNOTATION_IMAGE':
         return annotationImage(this.db, this.owner, message.payload);
       case 'DB_ANNOTATION':
-        return annotationStore(this.db, this.owner, message.payload);
+        return annotationStore(this.db, this.owner, message.payload, Date.now(), this.visibility);
+      case 'DB_ANNOTATION_CONVERSATION':
+        return annotationConversation(this.db, this.owner, message.payload, this.visibility);
+      case 'DB_ANNOTATION_ACTIVITY':
+        return annotationActivity(this.db, this.owner, message.payload, this.visibility);
       case 'DB_ANNOTATION_ATTEMPT':
-        return annotationAttempts(this.db, this.owner, message.payload);
+        return annotationAttempts(this.db, this.owner, message.payload, this.visibility);
       case 'DB_ANNOTATION_STATUS':
-        return annotationStatus(this.db, this.owner, message.payload);
+        return annotationStatus(this.db, this.owner, message.payload, Date.now(), this.visibility);
       case 'DB_READING_RESOLVE': {
         const { snapshot, submissionId, recipeId } = message.payload;
         const submitted = this.submittedSelection(submissionId, snapshot.page.url);
@@ -314,7 +366,7 @@ export class SaulDatabase {
         const selectionId = this.findSelection(snapshot);
         if (!selectionId) return;
         const prior = this.rows(
-          'SELECT input_json FROM llm_run WHERE selection_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1',
+          `SELECT input_json FROM llm_run WHERE selection_id=? AND ${runMask} IS NULL ORDER BY created_at DESC,rowid DESC LIMIT 1`,
           [selectionId],
         )[0];
         if (!prior) return;
@@ -336,10 +388,10 @@ export class SaulDatabase {
       case 'DB_DIGEST_INTERRUPT':
       case 'DB_DIGEST_LIST':
       case 'DB_DIGEST_ITEM':
+      case 'DB_DIGEST_ITEMS_PAGE':
       case 'DB_DIGEST_SOURCE':
       case 'DB_DIGEST_RECOVER':
-      case 'DB_DIGEST_DELETE':
-        return digestStore(this.db, message, this.owner);
+        return digestStore(this.db, message, this.owner, this.visibility);
       case 'DB_SUBMIT':
         return this.submit(message.payload, operationId);
       case 'DB_RECOVER':
@@ -447,24 +499,33 @@ export class SaulDatabase {
         return changed;
       }
       case 'DB_PAGE':
-        return this.rows(passageSelect + ' WHERE p.url=? ORDER BY s.created_at DESC,s.id DESC', [
-          message.payload.url,
-        ]).map((row) => this.passage(row));
+        return this.rows(
+          passageSelect(this.visibility) +
+            ` WHERE p.url=? AND ${maskFilter(browserMask('s.id'), this.visibility)} ORDER BY s.created_at DESC,s.id DESC`,
+          [message.payload.url],
+        ).map((row) => this.passage(row));
       case 'DB_PASSAGE': {
-        const row = this.rows(passageSelect + ' WHERE s.id=?', [message.payload.selectionId])[0];
+        const row = this.rows(
+          passageSelect(this.visibility) +
+            ` WHERE s.id=? AND ${maskFilter(browserMask('s.id'), this.visibility)}`,
+          [message.payload.selectionId],
+        )[0];
         return row ? this.passage(row) : undefined;
       }
       case 'DB_CONTEXT': {
+        const { selectionId, runId } = message.payload;
         const row = this.rows(
-          'SELECT context_json FROM llm_run WHERE selection_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1',
-          [message.payload.selectionId],
+          `SELECT context_json FROM llm_run WHERE selection_id=? AND ${this.browserEntryFilter()}` +
+            (runId ? ' AND id=?' : '') +
+            ' ORDER BY created_at DESC,rowid DESC LIMIT 1',
+          runId ? [selectionId, runId] : [selectionId],
         )[0];
         if (!row) throw new Error('This passage no longer exists.');
         return JSON.parse(String(row.context_json));
       }
       case 'DB_INPUT': {
         const row = this.rows(
-          'SELECT input_json FROM llm_run WHERE selection_id=?' +
+          `SELECT input_json FROM llm_run WHERE selection_id=? AND ${this.browserEntryFilter()}` +
             (message.payload.runId ? ' AND id=?' : '') +
             ' ORDER BY created_at DESC,rowid DESC LIMIT 1',
           message.payload.runId
@@ -477,7 +538,7 @@ export class SaulDatabase {
       case 'DB_IMAGE': {
         if (!message.payload.selectionId.startsWith('ez:')) {
           const row = this.rows(
-            "SELECT response_structured FROM llm_run WHERE selection_id=? AND status='completed'" +
+            `SELECT response_structured FROM llm_run WHERE selection_id=? AND status='completed' AND ${this.browserEntryFilter()}` +
               (message.payload.runId ? ' AND id=?' : '') +
               ' ORDER BY created_at DESC,rowid DESC LIMIT 1',
             message.payload.runId
@@ -489,9 +550,13 @@ export class SaulDatabase {
           validateGeneratedImage(image);
           return { data: image.data, mediaType: image.mediaType };
         }
-        const row = this.rows('SELECT image FROM ez_entry WHERE id=?', [
-          message.payload.selectionId.slice(3),
-        ])[0];
+        const id = message.payload.selectionId.slice(3);
+        if (message.payload.runId && message.payload.runId.replace(/^ez:/, '') !== id) return;
+        const row = this.rows(
+          `SELECT image FROM ez_entry WHERE id=? AND ${nativeHasEntry('ez_entry.id')}
+            AND ${maskFilter(nativeEntryMask('ez_entry.id'), this.visibility)}`,
+          [id],
+        )[0];
         if (!(row?.image instanceof Uint8Array)) return;
         let binary = '';
         for (const byte of row.image) binary += String.fromCharCode(byte);
@@ -500,113 +565,109 @@ export class SaulDatabase {
           mediaType: binary.startsWith('GIF8') ? 'image/gif' : 'image/png',
         };
       }
+      case 'DB_READING_ATTEMPTS_PAGE': {
+        const { selectionId, limit = 25, cursor } = message.payload;
+        const pagination = historyCursor(
+          [this.owner, 'reading.attempts', selectionId, this.visibility],
+          cursor,
+        );
+        const before = pagination.read();
+        if (selectionId.startsWith('ez:')) {
+          const entry = this.ezHistory(selectionId.slice(3));
+          return { items: entry && before === undefined ? [entry.latest] : [] };
+        }
+        const pageSize = Math.max(1, Math.min(100, limit));
+        const rows = this.rows(
+          `SELECT llm_run.id,status,response_raw,model,provider,created_at,latency_ms,error_message,reason,
+            viewed_at,input_json,response_structured IS NOT NULL AS has_image,${effectiveRunMask} AS masked_at,e.position
+           FROM llm_run JOIN history_entry e ON e.collection='library-browser'
+             AND e.record_id=llm_run.selection_id AND e.owner='' AND e.id=llm_run.id
+           WHERE llm_run.selection_id=? AND ${this.browserEntryFilter()}${before === undefined ? '' : ' AND e.position<?'}
+           ORDER BY e.position DESC LIMIT ?`,
+          [selectionId, ...(before === undefined ? [] : [before]), pageSize + 1],
+        );
+        const next = rows.length > pageSize;
+        if (next) rows.pop();
+        return {
+          items: rows.map((row) => this.run(row)),
+          ...(next ? { cursor: pagination.write(Number(rows.at(-1)!.position)) } : {}),
+        };
+      }
       case 'DB_RUNS':
         if (message.payload.selectionId.startsWith('ez:')) {
           const item = this.ezHistory(message.payload.selectionId.slice(3));
           return item ? [item.latest] : [];
         }
         return this.rows(
-          'SELECT id,status,response_raw,model,provider,created_at,latency_ms,error_message,reason,viewed_at,input_json,response_structured IS NOT NULL AS has_image FROM llm_run WHERE selection_id=? ORDER BY created_at DESC,rowid DESC',
+          `SELECT id,status,response_raw,model,provider,created_at,latency_ms,error_message,reason,viewed_at,input_json,response_structured IS NOT NULL AS has_image, ${effectiveRunMask} AS masked_at FROM llm_run WHERE selection_id=? AND ${this.browserEntryFilter()} ORDER BY created_at DESC,rowid DESC`,
           [message.payload.selectionId],
         ).map((row) => this.run(row));
       case 'DB_VIEW':
         if (message.payload.selectionId.startsWith('ez:')) return;
         this.write(
-          "UPDATE llm_run SET viewed_at=? WHERE id=? AND selection_id=? AND status='completed'",
+          `UPDATE llm_run SET viewed_at=? WHERE id=? AND selection_id=? AND status='completed' AND ${this.browserEntryFilter()}`,
           [Date.now(), message.payload.runId, message.payload.selectionId],
         );
         return;
       case 'DB_UNREAD':
         return Number(
           this.db.selectValue(
-            `SELECT count(*) FROM selection s JOIN llm_run c ON c.rowid=${success} WHERE c.viewed_at IS NULL`,
+            `SELECT count(*) FROM selection s JOIN llm_run c ON c.rowid=${success('visible')} WHERE c.viewed_at IS NULL AND ${browserMask('s.id')} IS NULL`,
           ),
         );
       case 'DB_GET_HISTORY':
         return this.db.transaction(() => this.history(message.payload), 'deferred');
       case 'DB_SET_BOOKMARK':
         if (message.payload.selectionId.startsWith('ez:')) {
-          this.write('UPDATE ez_entry SET bookmarked=? WHERE id=?', [
-            message.payload.bookmarked ? 1 : 0,
-            message.payload.selectionId.slice(3),
-          ]);
+          this.write(
+            `UPDATE ez_entry SET bookmarked=? WHERE id=? AND ${nativeHasEntry('ez_entry.id')}
+              AND ${nativeEntryMask('ez_entry.id')} IS NULL`,
+            [message.payload.bookmarked ? 1 : 0, message.payload.selectionId.slice(3)],
+          );
           return;
         }
         this.write(
+          `UPDATE selection SET bookmarked_at=${message.payload.bookmarked ? 'COALESCE(bookmarked_at,?)' : 'NULL'}
+            WHERE id=? AND ${browserMask('selection.id')} IS NULL`,
           message.payload.bookmarked
-            ? 'INSERT OR IGNORE INTO bookmark(selection_id,created_at) VALUES (?,?)'
-            : 'DELETE FROM bookmark WHERE selection_id=?',
-          message.payload.bookmarked
-            ? [message.payload.selectionId, Date.now()]
+            ? [Date.now(), message.payload.selectionId]
             : [message.payload.selectionId],
         );
         return;
+      case 'DB_DIGEST_DELETE':
       case 'DB_DELETE_SELECTION':
-        if (message.payload.selectionId.startsWith('ez:')) {
-          const id = message.payload.selectionId.slice(3);
-          if (
-            this.rows(
-              "SELECT id FROM ez_entry WHERE id=? AND json_extract(data,'$.status')='pending'",
-              [id],
-            ).length
-          )
-            throw new Error('Stop the running request in EZ before deleting it.');
-          this.write('DELETE FROM ez_entry WHERE id=?', [id]);
-          return;
-        }
-        this.db.transaction(() => {
-          if (
-            this.rows(
-              "SELECT id FROM llm_run WHERE selection_id=? AND owner!=? AND status IN ('queued','running','saving')",
-              [message.payload.selectionId, this.owner],
-            ).length
-          )
-            throw new Error(
-              'Stop the running request in its browser profile before deleting this history.',
-            );
-          this.write('DELETE FROM selection WHERE id=?', [message.payload.selectionId]);
-        });
-        return;
       case 'DB_CLEAR_HISTORY':
-        this.db.transaction(() => {
-          if (
-            this.rows("SELECT id FROM ez_entry WHERE json_extract(data,'$.status')='pending'")
-              .length ||
-            this.rows(
-              "SELECT id FROM llm_run WHERE owner!=? AND status IN ('queued','running','saving')",
-              [this.owner],
-            ).length
-          )
-            throw new Error(
-              'Stop active requests in EZ and other browser profiles before clearing shared history.',
-            );
-          this.db.exec('DELETE FROM interaction; DELETE FROM page; DELETE FROM ez_entry;');
-        });
-        return;
+      case 'DB_RESTORE_SELECTION':
+      case 'DB_PURGE_SELECTION':
+      case 'DB_HISTORY_PAGE':
+        throw new Error('This operation requires the History repository.');
       case 'DB_EXPORT_MARKDOWN':
         return this.exportMarkdown();
     }
   }
-  private history({
-    limit = 50,
-    offset = 0,
-    searchQuery = '',
-    bookmarksOnly = false,
-  }: DbOperations['DB_GET_HISTORY']['payload']): HistoryItem[] {
+  history(
+    {
+      limit = 50,
+      offset = 0,
+      searchQuery = '',
+      bookmarksOnly = false,
+    }: DbOperations['DB_GET_HISTORY']['payload'],
+    before?: { createdAt: number; id: string; app: string },
+  ): HistoryItem[] {
     const bind: SqlValue[] = [],
-      filters: string[] = [];
-    if (bookmarksOnly) filters.push('b.selection_id IS NOT NULL');
+      filters = [maskFilter(browserMask('s.id'), this.visibility)];
+    if (bookmarksOnly) filters.push('s.bookmarked_at IS NOT NULL');
     const query = searchQuery.trim();
     if (query) {
       const tokens = (query.match(/[\p{L}\p{N}_]+/gu) || [])
         .map((t) => '"' + t + '"*')
         .join(' AND ');
       const pattern = '%' + query.replace(/[\\%_]/g, (v) => '\\' + v) + '%';
-      const literal = `s.text LIKE ? ESCAPE '\\' OR p.title LIKE ? ESCAPE '\\' OR p.url LIKE ? ESCAPE '\\' OR s.id IN (SELECT selection_id FROM llm_run JOIN explanation_fts f ON f.rowid=llm_run.rowid WHERE f.body LIKE ? ESCAPE '\\')`;
+      const literal = `s.text LIKE ? ESCAPE '\\' OR p.title LIKE ? ESCAPE '\\' OR p.url LIKE ? ESCAPE '\\' OR s.id IN (SELECT selection_id FROM llm_run JOIN explanation_fts f ON f.rowid=llm_run.rowid WHERE ${runProjection(this.visibility)} AND f.body LIKE ? ESCAPE '\\')`;
       filters.push(
         '(' +
           (tokens
-            ? `s.rowid IN (SELECT rowid FROM selection_fts WHERE selection_fts MATCH ?) OR s.id IN (SELECT selection_id FROM llm_run WHERE rowid IN (SELECT rowid FROM explanation_fts WHERE explanation_fts MATCH ?)) OR `
+            ? `s.rowid IN (SELECT rowid FROM selection_fts WHERE selection_fts MATCH ?) OR s.id IN (SELECT selection_id FROM llm_run WHERE ${runProjection(this.visibility)} AND rowid IN (SELECT rowid FROM explanation_fts WHERE explanation_fts MATCH ?)) OR `
             : '') +
           literal +
           ')',
@@ -619,26 +680,38 @@ export class SaulDatabase {
       : '';
     const pattern = '%' + query.replace(/[\\%_]/g, (v) => '\\' + v) + '%';
     const candidates = this.rows(
-      `SELECT s.id,s.created_at,'saul' AS app FROM selection s JOIN page p ON p.id=s.page_id LEFT JOIN bookmark b ON b.selection_id=s.id WHERE EXISTS(SELECT 1 FROM llm_run WHERE selection_id=s.id)` +
+      `SELECT * FROM (SELECT s.id,s.created_at,'saul' AS app,${browserMask('s.id')} AS masked_at,
+        (SELECT revision FROM history_record WHERE collection='library-browser' AND id=s.id AND owner='') AS revision FROM selection s JOIN page p ON p.id=s.page_id WHERE ${latest(this.visibility)} IS NOT NULL` +
         (filters.length ? ' AND ' + filters.join(' AND ') : '') +
-        ` UNION ALL SELECT id,created_at,'ez' AS app FROM ez_entry WHERE json_extract(data,'$.status')!='pending'` +
+        ` UNION ALL SELECT id,created_at,'ez' AS app,${nativeMask('ez_entry.id')},
+        (SELECT revision FROM history_record WHERE collection='library-native' AND id=ez_entry.id AND owner='') FROM ez_entry WHERE json_extract(data,'$.status')!='pending'
+        AND ${nativeHasEntry('ez_entry.id')} AND ${maskFilter(nativeMask('ez_entry.id'), this.visibility)}
+        ${this.visibility === 'visible' ? `AND ${nativeEntryMask('ez_entry.id')} IS NULL` : ''}` +
         (bookmarksOnly ? ' AND bookmarked=1' : '') +
         nativeQuery +
-        ' ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?',
+        ')' +
+        (before ? ' WHERE (created_at,id,app) < (?,?,?)' : '') +
+        ' ORDER BY created_at DESC,id DESC,app DESC LIMIT ? OFFSET ?',
       [
         ...bind,
         ...(query ? [pattern, pattern, pattern] : []),
+        ...(before ? [before.createdAt, before.id, before.app] : []),
         Math.max(1, Math.min(5000, Math.trunc(limit))),
         Math.max(0, Math.trunc(offset)),
       ],
     );
     return candidates.map((row) => {
-      if (row.app === 'ez') return this.ezHistory(String(row.id))!;
-      const p = this.passage(this.rows(passageSelect + ' WHERE s.id=?', [row.id!])[0]!);
+      if (row.app === 'ez')
+        return { ...this.ezHistory(String(row.id))!, revision: Number(row.revision) };
+      const p = this.passage(
+        this.rows(passageSelect(this.visibility) + ' WHERE s.id=?', [row.id!])[0]!,
+      );
       const shown = p.completed || p.latest;
       return {
         selectionId: p.snapshot.id,
         selectedText: p.snapshot.text,
+        revision: Number(row.revision),
+        ...(row.masked_at != null ? { maskedAt: Number(row.masked_at) } : {}),
         pageTitle: p.snapshot.page.title,
         pageUrl: p.snapshot.page.url,
         responseRaw: shown.responseRaw,
@@ -656,7 +729,10 @@ export class SaulDatabase {
   }
   private ezHistory(id: string): HistoryItem | undefined {
     const row = this.rows(
-      'SELECT data,created_at,bookmarked,image IS NOT NULL AS has_image FROM ez_entry WHERE id=?',
+      `SELECT data,created_at,bookmarked,image IS NOT NULL AS has_image,${nativeMask('ez_entry.id')} AS masked_at,
+        ${nativeEntryMask('ez_entry.id')} AS entry_masked_at
+        FROM ez_entry WHERE id=? AND ${nativeHasEntry('ez_entry.id')}
+          AND ${maskFilter(nativeEntryMask('ez_entry.id'), this.visibility)}`,
       [id],
     )[0];
     if (!row) return;
@@ -682,6 +758,7 @@ export class SaulDatabase {
     };
     const run: RunResult = {
       id: 'ez:' + id,
+      ...(row.entry_masked_at != null ? { maskedAt: Number(row.entry_masked_at) } : {}),
       hasImage: !!row.has_image,
       capability: entry.presetSnapshot?.capability,
       imageOptions: entry.presetSnapshot?.imageOptions,
@@ -703,6 +780,7 @@ export class SaulDatabase {
     };
     return {
       selectionId: 'ez:' + id,
+      ...(row.masked_at != null ? { maskedAt: Number(row.masked_at) } : {}),
       selectedText:
         entry.followUpQuestion || Object.values(entry.inputValues || {}).join(' · ') || entry.query,
       pageTitle: 'EZ' + (entry.recipeSnapshot?.name ? ' · ' + entry.recipeSnapshot.name : ''),
@@ -738,7 +816,7 @@ export class SaulDatabase {
           continue;
         }
         const runs = this.rows(
-          'SELECT id,status,response_raw,model,provider,created_at,latency_ms,error_message,reason,viewed_at,input_json,response_structured IS NOT NULL AS has_image FROM llm_run WHERE selection_id=? ORDER BY created_at DESC,rowid DESC',
+          `SELECT id,status,response_raw,model,provider,created_at,latency_ms,error_message,reason,viewed_at,input_json,response_structured IS NOT NULL AS has_image, ${effectiveRunMask} AS masked_at FROM llm_run WHERE selection_id=? AND ${this.browserEntryFilter()} ORDER BY created_at DESC,rowid DESC`,
           [item.selectionId],
         );
         for (const run of runs) {

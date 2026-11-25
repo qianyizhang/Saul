@@ -1,8 +1,9 @@
-import type { SaulDatabase } from '../native/storage/db.ts';
+import { executeHistory } from './helpers/history-db';
 import type { SqlDatabase } from '../native/storage/sql.ts';
-type FixtureStore = { connection: SqlDatabase; browser: Pick<SaulDatabase, 'execute'> };
-import { HistoryConnection } from '../native/storage/history.mts';
-import { migrate } from '../native/storage/schema.ts';
+type FixtureStore = {
+  connection: SqlDatabase;
+  run(request: unknown): Promise<{ value: unknown }>;
+};
 import { searchableResponse } from '../native/storage/search.ts';
 import type { RunInput } from '../shared/protocol/history-types.ts';
 import type { DatabaseFixtureRequest, HistorySeed } from './e2e/database-harness';
@@ -72,24 +73,24 @@ async function measure(repository: FixtureStore) {
     sqlite: db.selectValue('SELECT sqlite_version()'),
   };
   report.history = await times(() =>
-    repository.browser.execute({ type: 'DB_GET_HISTORY', payload: { limit: 50 } }),
+    executeHistory(repository, { type: 'DB_GET_HISTORY', payload: { limit: 50 } }),
   );
   report.historyOffset = await times(() =>
-    repository.browser.execute({ type: 'DB_GET_HISTORY', payload: { limit: 50, offset: 9000 } }),
+    executeHistory(repository, { type: 'DB_GET_HISTORY', payload: { limit: 50, offset: 9000 } }),
   );
   report.page = await times(() =>
-    repository.browser.execute({ type: 'DB_PAGE', payload: { url: 'https://scale.test/page-0' } }),
+    executeHistory(repository, { type: 'DB_PAGE', payload: { url: 'https://scale.test/page-0' } }),
   );
   report.search = await times(
     () =>
-      repository.browser.execute({
+      executeHistory(repository, {
         type: 'DB_GET_HISTORY',
         payload: { searchQuery: 'gradient', limit: 50 },
       }),
     3,
   );
   report.export = await times(
-    () => repository.browser.execute({ type: 'DB_EXPORT_MARKDOWN', payload: undefined }),
+    () => executeHistory(repository, { type: 'DB_EXPORT_MARKDOWN', payload: undefined }),
     1,
   );
   report.plan = db.selectObjects('EXPLAIN QUERY PLAN ' + baseline);
@@ -108,7 +109,7 @@ async function measure(repository: FixtureStore) {
 async function scale(repository: FixtureStore, runs: number) {
   const db = repository.connection;
   db.transaction(() => {
-    db.exec('DELETE FROM interaction; DELETE FROM page; DELETE FROM submission;');
+    db.exec('DELETE FROM page; DELETE FROM submission;');
     for (let page = 0; page < 100; page++)
       db.exec({
         sql: 'INSERT INTO page(id,url,title,first_seen_at,last_seen_at) VALUES (?,?,?,1,1)',
@@ -134,74 +135,10 @@ async function scale(repository: FixtureStore, runs: number) {
   });
   return measure(repository);
 }
-async function migrationChecks(legacy: string) {
-  const db = new HistoryConnection(':memory:');
-  try {
-    db.exec('PRAGMA foreign_keys=ON');
-    db.exec(legacy);
-    db.exec(`INSERT INTO page VALUES ('p','https://legacy.test','https://canonical.test','Old title',1,2);
- INSERT INTO selection(id,page_id,text,prefix,suffix,created_at) VALUES ('s','p','gradient','before ',' after',3);
- INSERT INTO llm_run(id,selection_id,widget_id,provider,model,prompt_version,prompt_raw,context_json,response_raw,status,created_at) VALUES ('r','s','explain','openai-compatible','old','1','original','{}','A <term note="Slope">gradient</term>.','completed',4);
- INSERT INTO bookmark VALUES ('s',5);`);
-    // A real conflicting DDL statement fails midway through the migration.
-    db.exec('CREATE INDEX run_latest ON llm_run(model)');
-    let failed = false;
-    try {
-      migrate(db);
-    } catch {
-      failed = true;
-    }
-    const rollback = {
-      failed,
-      version: db.selectValue('PRAGMA user_version'),
-      columns: db.selectObjects('PRAGMA table_info(llm_run)').map((r) => r.name),
-      original: db.selectValue('SELECT response_raw FROM llm_run'),
-      bookmark: db.selectValue('SELECT count(*) FROM bookmark'),
-    };
-    db.exec('DROP INDEX run_latest');
-    migrate(db);
-    migrate(db);
-    const upgraded = {
-      version: db.selectValue('PRAGMA user_version'),
-      response: db.selectValue('SELECT response_raw FROM llm_run'),
-      viewed: db.selectValue('SELECT viewed_at FROM llm_run'),
-      bookmark: db.selectValue('SELECT count(*) FROM bookmark'),
-      search: db.selectValue(
-        "SELECT count(*) FROM explanation_fts WHERE explanation_fts MATCH 'Slope'",
-      ),
-    };
-    // A version-1 installation must add only digest tables, preserving reading data.
-    db.exec('DROP TABLE digest_item; DROP TABLE digest_batch; PRAGMA user_version=1');
-    migrate(db);
-    const upgradedV1 = {
-      version: db.selectValue('PRAGMA user_version'),
-      response: db.selectValue('SELECT response_raw FROM llm_run'),
-      tables: db.selectValue(
-        "SELECT count(*) FROM sqlite_master WHERE name IN ('digest_batch','digest_item')",
-      ),
-    };
-    db.exec('PRAGMA user_version=99');
-    let rejected = false;
-    try {
-      migrate(db);
-    } catch {
-      rejected = true;
-    }
-    return { rollback, upgraded, upgradedV1, rejected };
-  } finally {
-    db.close();
-  }
-}
 export async function runHistoryFixture(
   repository: FixtureStore,
   data: DatabaseFixtureRequest,
 ): Promise<unknown> {
-  if (data.action === 'reset-migration') {
-    if (repository.connection.selectValue('SELECT count(*) FROM selection') !== 0)
-      throw new Error('Migration fixture requires an empty target');
-    repository.connection.exec('DELETE FROM history_migration');
-    return;
-  }
   if (data.action === 'seed-native') {
     const id = '11111111-2222-3333-4444-555555555555';
     const entry = {
@@ -226,9 +163,7 @@ export async function runHistoryFixture(
   }
   return data.action === 'scale'
     ? scale(repository, data.runs!)
-    : data.action === 'migrate'
-      ? migrationChecks(data.legacy!)
-      : data.action === 'seed-history'
-        ? seedHistory(repository, data.seed)
-        : repository.browser.execute(data.message);
+    : data.action === 'seed-history'
+      ? seedHistory(repository, data.seed)
+      : executeHistory(repository, data.message);
 }

@@ -86,20 +86,21 @@ import SaulNativeValues
             initialConfiguration: .starters(
                 model: prefs.string(forKey: "model") ?? "",
                 effort: prefs.string(forKey: "effort") ?? "low", fast: prefs.bool(forKey: "fast")),
-            historyPreparation: .open { try await writer.prepare(migrating: directory) },
+            historyPreparation: .open { try await writer.prepare() },
             upgradeActions: true,
             minimumMode: prefs.object(forKey: "minimumMode") as? Bool ?? true,
             setMinimumMode: { prefs.set($0, forKey: "minimumMode") },
             attemptExecution: AttemptExecution(
                 generate: generation.generate(entry:onUpdate:),
                 append: { try await writer.append($0) },
-                delete: { try await writer.delete($0) }),
+                delete: { try await writer.discard($0) }),
             readHistory: { try await reader.page(search: $0, after: $1) },
             countHistory: { try await reader.count(search: $0, excluding: $1) },
-            readHistoryEntry: { try await reader.entry($0) },
+            readHistoryEntry: { try await reader.entryForSelection($0) },
             readInputImage: { try await reader.inputImage(for: $0) },
             readOutputImage: { try await reader.image(for: $0) },
-            deleteHistory: { try await writer.delete($0) },
+            deleteHistory: { try await writer.delete($0, settledPending: $1, expectedRevision: $2) },
+            library: LibraryMaintenance(reader: reader, writer: writer),
             speak: speech.generate(preset:text:), allowsExternalServices: true)
     }
 

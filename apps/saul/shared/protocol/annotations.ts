@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const retentionMs = 7 * 24 * 60 * 60 * 1000;
+export const retentionMs = 365 * 24 * 60 * 60 * 1000;
 export const annotationIdSchema = z.string().min(1).max(100);
 export const MAX_ANNOTATION_BATCH = 20;
 const key = annotationIdSchema;
@@ -62,6 +62,7 @@ export interface AnnotationReply {
   text: string;
   author: AnnotationAuthor;
   createdAt: number;
+  maskedAt?: number;
 }
 export interface Annotation {
   id: string;
@@ -143,7 +144,14 @@ export const operationSchema = z.discriminatedUnion('action', [
       offset: z.number().int().nonnegative().default(0),
     })
     .strict(),
-  z.object({ action: z.literal('read'), id: key, image: z.boolean().default(false) }).strict(),
+  z
+    .object({
+      action: z.literal('read'),
+      id: key,
+      image: z.boolean().default(false),
+      visibility: z.literal('masked').optional(),
+    })
+    .strict(),
   z.object({ action: z.literal('create'), capture: captureSchema }).strict(),
   z.object({ action: z.literal('change'), changes: z.array(changeSchema).min(1).max(50) }).strict(),
 ]);
@@ -162,7 +170,14 @@ export interface AnnotationResult {
   nextOffset?: number;
   outcomes?: { id: string; record?: AnnotationSummary; error?: string }[];
 }
-const annotationRecordSchema = captureSchema.extend({
+export const annotationReplySchema = z.strictObject({
+  id: key,
+  text: z.string().max(16000),
+  author: authorSchema,
+  createdAt: finite,
+  maskedAt: finite.optional(),
+});
+export const annotationRecordSchema = captureSchema.extend({
   comment: z.string().max(16000),
   number: z.number().int().positive(),
   revision: z.number().int().positive(),
@@ -172,13 +187,7 @@ const annotationRecordSchema = captureSchema.extend({
   state: z.enum(['open', 'done']),
   deletedAt: finite.optional(),
   editedBy: authorSchema.optional(),
-  replies: z
-    .array(
-      z
-        .object({ id: key, text: z.string().max(16000), author: authorSchema, createdAt: finite })
-        .strict(),
-    )
-    .max(100),
+  replies: annotationReplySchema.array().max(100),
   operations: z.array(
     z.object({ id: key, signature: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
   ),
@@ -225,19 +234,22 @@ export function validAnnotationResult(value: unknown, operation?: AnnotationOper
     }
     case 'change': {
       const parsed = annotationResults.change.safeParse(value);
-      return (
-        parsed.success &&
-        parsed.data.outcomes.length === operation.changes.length &&
-        parsed.data.outcomes.every((outcome, index) => {
-          const change = operation.changes[index];
-          return (
-            change?.id === outcome.id &&
-            ('record' in outcome
-              ? outcome.record.id === outcome.id
-              : 'error' in outcome || change.action === 'purge')
-          );
-        })
+      if (!parsed.success || parsed.data.outcomes.length !== operation.changes.length) return false;
+      const purged = new Set(
+        parsed.data.outcomes.flatMap((outcome, index) =>
+          operation.changes[index]?.action === 'purge' &&
+          !('error' in outcome) &&
+          !('record' in outcome)
+            ? [outcome.id]
+            : [],
+        ),
       );
+      return parsed.data.outcomes.every((outcome, index) => {
+        const change = operation.changes[index];
+        if (change?.id !== outcome.id) return false;
+        if ('record' in outcome) return !purged.has(outcome.id) && outcome.record.id === outcome.id;
+        return 'error' in outcome || purged.has(outcome.id);
+      });
     }
   }
 }

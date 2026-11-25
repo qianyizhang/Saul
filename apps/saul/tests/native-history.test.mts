@@ -26,7 +26,7 @@ it('a loaded history runtime retains its schema when a later build replaces its 
       cwd: fileURLToPath(new URL('../', import.meta.url)),
       encoding: 'utf8',
     });
-    expect(output.trim()).toBe('4');
+    expect(output.trim()).toBe('5');
   } finally {
     await rm(root, { recursive: true, force: true });
   }

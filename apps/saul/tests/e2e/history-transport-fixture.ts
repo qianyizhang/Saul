@@ -57,9 +57,7 @@ function installHistoryTransport(endpoint: string) {
                   };
                   emit({
                     id,
-                    event: value.success
-                      ? { type: 'result', value: value.result }
-                      : { type: 'error', message: value.error },
+                    event: value.success ? value.result : { type: 'error', message: value.error },
                   });
                 })
                 .catch((error) => emit({ id, event: { type: 'error', message: String(error) } }));

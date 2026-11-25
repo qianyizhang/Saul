@@ -92,7 +92,7 @@ import SaulTestSupport
                 return .text(try await control.generate(entry, update))
             },
             append: { try await control.append($0) },
-            delete: { try control.history.delete($0) })
+            delete: { try control.history.discardPending($0) })
         state = try StateFixture(directory: directory, attemptExecution: execution)
         model.chooseAction(state.single.id)
         model.query = "Frozen question"
@@ -568,6 +568,25 @@ import SaulTestSupport
                 try f.state.history.entry(.native(firstID))?.response, "Stopped partial",
                 "Late callbacks rewrote stopped answer")
         },
+        attemptCase("stop and delete waits for the attempt to settle, then masks it") { f in
+            let started = CheckSignal()
+            f.control.generate = { _, _ in
+                await started.signal()
+                try await Task.sleep(for: .seconds(30))
+                return try response("Late result")
+            }
+            f.model.send()
+            try await started.wait()
+            guard let id = f.model.selectedEntry?.recordID else {
+                throw CheckFailure("Active lookup not selected")
+            }
+            try expect(f.model.canStopAndDeleteLookup(id), "Active lookup cannot stop and delete")
+            await f.model.stopAndDeleteLookup(id)?.value
+            try expect(f.model.selection == nil, "Masked attempt remained selected")
+            try expect(try f.state.history.get(id) == nil, "Stopped attempt remained visible")
+            let masked = try f.state.history.get(id, visibility: .masked)
+            try expectEqual(masked?.value.status, "cancelled", "Mask arrived before cancellation")
+        },
         attemptCase("stream ending without completion is not a successful answer") { f in
             f.control.generate = { _, _ in
                 let partial = try response("Only partial", completed: false)
@@ -585,7 +604,7 @@ import SaulTestSupport
             let id = f.model.selection!
             _ = try historySQL(
                 f.state.history.url,
-                "CREATE TRIGGER fail_delete BEFORE DELETE ON ez_entry BEGIN SELECT RAISE(ABORT,'Synthetic delete failure'); END"
+                "CREATE TRIGGER fail_delete BEFORE UPDATE OF masked_at ON history_record BEGIN SELECT RAISE(ABORT,'Synthetic delete failure'); END"
             )
             await f.model.deleteLookup(.native(id))?.value
             try expectEqual(f.model.selection, id, "Failed deletion changed selection")

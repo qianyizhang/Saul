@@ -6,6 +6,8 @@ import { useRefreshOnFocus } from '../ui/useRefreshOnFocus';
 import {
   fetchHistory,
   deleteHistorySelection,
+  restoreHistorySelection,
+  purgeHistorySelection,
   clearAllHistory,
   exportKnowledgeMarkdown,
   setHistoryBookmark,
@@ -19,16 +21,20 @@ export function Library({
   compact = false,
   refreshKey = 0,
   minimum = true,
+  deleted = false,
 }: {
   compact?: boolean;
   refreshKey?: number;
   minimum?: boolean;
+  deleted?: boolean;
 }) {
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [query, setQuery] = useState('');
   const [bookmarks, setBookmarks] = useState(false);
-  const [page, setPage] = useState(0);
-  const [more, setMore] = useState(false);
+  const [cursors, setCursors] = useState<string[]>([]);
+  const [nextCursor, setNextCursor] = useState<string>();
+  const cursor = cursors.at(-1);
+  const page = cursors.length;
   const [expanded, setExpanded] = useState<string | null>(null);
   const [runs, setRuns] = useState<RunResult[]>([]);
   const [busy, setBusy] = useState(true);
@@ -45,15 +51,15 @@ export function Library({
     setError('');
     const timer = setTimeout(
       () => {
-        fetchHistory(size + 1, page * size, query, bookmarks)
-          .then((rows) => {
+        fetchHistory(size, cursor, query, bookmarks && !deleted, deleted ? 'masked' : 'visible')
+          .then(({ items, cursor: next }) => {
             if (request.current !== id) return;
-            if (!rows.length && page > 0) {
-              setPage(page - 1);
+            if (!items.length && cursor !== undefined) {
+              setCursors((previous) => previous.slice(0, -1));
               return;
             }
-            setItems(rows.slice(0, size));
-            setMore(rows.length > size);
+            setItems(items);
+            setNextCursor(next);
           })
           .catch((err) => {
             if (request.current === id) setError(err.message);
@@ -68,7 +74,7 @@ export function Library({
       clearTimeout(timer);
       request.current++;
     };
-  }, [query, bookmarks, page, revision, size, refreshKey]);
+  }, [query, bookmarks, deleted, cursor, revision, size, refreshKey]);
   async function expand(item: HistoryItem) {
     const revision = ++expandedRequest.current;
     if (expanded === item.selectionId) {
@@ -89,8 +95,13 @@ export function Library({
       });
       if (revision !== expandedRequest.current) return;
       setRuns(runs);
+      refresh((n) => n + 1);
       setItems((rows) =>
-        rows.map((row) => (row.selectionId === item.selectionId ? { ...row, unread: false } : row)),
+        rows.map((row) =>
+          row.selectionId === item.selectionId && row.completed?.id === item.completed?.id
+            ? { ...row, unread: false }
+            : row,
+        ),
       );
     } catch (e) {
       if (revision === expandedRequest.current) setError((e as Error).message);
@@ -112,41 +123,45 @@ export function Library({
     <div className="stack">
       <div className="row between standard-only">
         <div>
-          <h2 className="view-title">History</h2>
-          <p className="muted small">
-            Select text on a page, then choose Explain. Find it here alongside EZ history.
-          </p>
+          <h2 className="view-title">{deleted ? 'Recently deleted' : 'History'}</h2>
+          {!deleted && (
+            <p className="muted small">
+              Select text on a page, then choose Explain. Find it here alongside EZ history.
+            </p>
+          )}
         </div>
       </div>
       <div className="row library-search">
         <input
           className="search grow"
-          aria-label="Search history"
-          placeholder="Search history"
+          aria-label={deleted ? 'Search recently deleted' : 'Search history'}
+          placeholder={deleted ? 'Search recently deleted' : 'Search history'}
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
-            setPage(0);
+            setCursors([]);
           }}
         />
-        <button
-          className="btn icon"
-          aria-label="Bookmarks"
-          title="Bookmarks"
-          aria-pressed={bookmarks}
-          onClick={() => {
-            setBookmarks(!bookmarks);
-            setPage(0);
-          }}
-        >
-          <Bookmark size={16} fill={bookmarks ? 'currentColor' : 'none'} />
-        </button>
+        {!deleted && (
+          <button
+            className="btn icon"
+            aria-label="Bookmarks"
+            title="Bookmarks"
+            aria-pressed={bookmarks}
+            onClick={() => {
+              setBookmarks(!bookmarks);
+              setCursors([]);
+            }}
+          >
+            <Bookmark size={16} fill={bookmarks ? 'currentColor' : 'none'} />
+          </button>
+        )}
       </div>
       {error && (
         <div role="alert" className="notice error">
           {error}{' '}
           <button className="btn" onClick={() => refresh((n) => n + 1)}>
-            Retry
+            Refresh
           </button>
         </div>
       )}
@@ -157,90 +172,137 @@ export function Library({
       ) : !error && !items.length ? (
         <div className="empty">
           <p>
-            {query
-              ? 'No matching highlights.'
-              : bookmarks
-                ? 'No bookmarks yet.'
-                : 'No highlights recorded yet.'}
+            {deleted
+              ? query
+                ? 'No matching deleted records.'
+                : 'No recently deleted records.'
+              : query
+                ? 'No matching highlights.'
+                : bookmarks
+                  ? 'No bookmarks yet.'
+                  : 'No highlights recorded yet.'}
           </p>
-          <p className="muted small standard-only">
-            {query
-              ? 'Try another word, source title, or phrase.'
-              : bookmarks
-                ? 'Use the bookmark button on a saved explanation.'
-                : 'Highlight text on a webpage and click Explain, or press Alt+Shift+E.'}
-          </p>
+          {!deleted && (
+            <p className="muted small standard-only">
+              {query
+                ? 'Try another word, source title, or phrase.'
+                : bookmarks
+                  ? 'Use the bookmark button on a saved explanation.'
+                  : 'Highlight text on a webpage and click Explain, or press Alt+Shift+E.'}
+            </p>
+          )}
         </div>
       ) : (
         !error && (
           <div className="stack history-list" aria-busy={busy}>
-            {items.map((item) => (
-              <HistoryEntry
-                key={item.selectionId}
-                item={item}
-                expanded={expanded === item.selectionId}
-                minimum={minimum}
-                busy={actionBusy}
-                runs={runs}
-                onExpand={() => void expand(item)}
-                onBookmark={() =>
-                  void action(() => setHistoryBookmark(item.selectionId, !item.bookmarked))
-                }
-                onDelete={() => void action(() => deleteHistorySelection(item.selectionId))}
-                onOpenSource={() => void action(() => openHistorySource(item.selectionId))}
-              />
-            ))}
+            {items.map((item) =>
+              deleted ? (
+                <article className="history-entry" key={item.selectionId}>
+                  <p className="history-preview">{item.selectedText}</p>
+                  <p className="small muted">{item.pageTitle || item.pageUrl}</p>
+                  {item.maskedAt !== undefined && (
+                    <p className="small muted">
+                      Deleted {new Date(item.maskedAt).toLocaleDateString()}
+                    </p>
+                  )}
+                  <div className="row wrap">
+                    <button
+                      className="btn"
+                      disabled={actionBusy || busy}
+                      onClick={() => void action(() => restoreHistorySelection(item))}
+                    >
+                      Restore
+                    </button>
+                    <button
+                      className="btn danger"
+                      disabled={actionBusy || busy}
+                      onClick={() => {
+                        if (
+                          window.confirm('Permanently delete this saved record from Saul and EZ?')
+                        )
+                          void action(() => purgeHistorySelection(item));
+                      }}
+                    >
+                      Delete permanently
+                    </button>
+                  </div>
+                </article>
+              ) : (
+                <HistoryEntry
+                  key={item.selectionId}
+                  item={item}
+                  expanded={expanded === item.selectionId}
+                  minimum={minimum}
+                  busy={actionBusy || busy}
+                  runs={runs}
+                  onExpand={() => void expand(item)}
+                  onBookmark={() => void action(() => setHistoryBookmark(item))}
+                  onDelete={() => void action(() => deleteHistorySelection(item))}
+                  onOpenSource={() => void action(() => openHistorySource(item.selectionId))}
+                />
+              ),
+            )}
           </div>
         )
       )}
-      {(page > 0 || more) && (
+      {(page > 0 || nextCursor) && (
         <div className="row between">
-          <button className="btn" disabled={!page || busy} onClick={() => setPage((n) => n - 1)}>
+          <button
+            className="btn"
+            disabled={!page || busy}
+            onClick={() => setCursors((previous) => previous.slice(0, -1))}
+          >
             Previous
           </button>
           <span className="small muted">Page {page + 1}</span>
-          <button className="btn" disabled={!more || busy} onClick={() => setPage((n) => n + 1)}>
+          <button
+            className="btn"
+            disabled={!nextCursor || busy}
+            onClick={() => nextCursor && setCursors((previous) => [...previous, nextCursor])}
+          >
             Next
           </button>
         </div>
       )}
-      <details className="library-tools">
-        <summary aria-label="Export and manage history" title="Export and manage history">
-          <ActionLabel short="Manage" full="Export and manage history" />
-        </summary>
-        <div className="row between">
-          <button
-            className="btn"
-            disabled={actionBusy}
-            aria-label="Export to Markdown"
-            title="Export to Markdown"
-            onClick={() => action(async () => downloadMarkdown(await exportKnowledgeMarkdown()))}
-          >
-            <Download size={16} />
-            <ActionLabel short="Export" full="Export to Markdown" />
-          </button>
-          <button
-            className="btn danger"
-            disabled={actionBusy}
-            onClick={() => {
-              if (
-                window.confirm('Delete saved history and bookmarks from EZ and Saul on this Mac?')
-              )
-                action(async () => {
-                  await clearAllHistory();
-                  setPage(0);
-                });
-            }}
-            aria-label="Clear All"
-            title="Clear All"
-          >
-            <ActionLabel short="Clear" full="Clear All" />
-          </button>
-        </div>
-        <p className="small muted standard-only">
-          Export includes the entire library, regardless of the current filter.
-        </p>
-      </details>
+      {!deleted && (
+        <details className="library-tools">
+          <summary aria-label="Export and manage history" title="Export and manage history">
+            <ActionLabel short="Manage" full="Export and manage history" />
+          </summary>
+          <div className="row between">
+            <button
+              className="btn"
+              disabled={actionBusy}
+              aria-label="Export to Markdown"
+              title="Export to Markdown"
+              onClick={() => action(async () => downloadMarkdown(await exportKnowledgeMarkdown()))}
+            >
+              <Download size={16} />
+              <ActionLabel short="Export" full="Export to Markdown" />
+            </button>
+            <button
+              className="btn danger"
+              disabled={actionBusy}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    'Permanently clear saved and recently deleted Library records from Saul and EZ on this Mac? Active Saul reading attempts will stop.',
+                  )
+                )
+                  action(async () => {
+                    await clearAllHistory();
+                    setCursors([]);
+                  });
+              }}
+              aria-label="Clear History"
+              title="Clear History"
+            >
+              Clear History
+            </button>
+          </div>
+          <p className="small muted standard-only">Export includes all saved Library records.</p>
+        </details>
+      )}
     </div>
   );
 }

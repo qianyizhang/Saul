@@ -29,62 +29,6 @@ import SaulTestSupport
             try second.delete(entry.recordID)
             try expect(try first.load().isEmpty, "Deletion must be shared")
         },
-        CheckCase("history: migrates original snapshots once and removes the old files") { directory in
-            let legacy = directory.appendingPathComponent("old")
-            let shared = directory.appendingPathComponent("shared")
-            try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)
-            var entry = HistoryEntry(
-                mode: .ask, query: "legacy 你好", model: "m", effort: "", requestedServiceTier: nil)
-            entry.createdAt = Date(timeIntervalSince1970: 42)
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
-            var original = try encoder.encode(entry)
-            entry.response = "Final snapshot"
-            entry.status = "completed"
-            original.append(0x0A)
-            original.append(try encoder.encode(entry))
-            let source = legacy.appendingPathComponent("history.jsonl")
-            try original.write(to: source)
-            let store = try HistoryStore(directory: shared, migrating: legacy)
-            try expectEqual(try store.load(), [entry], "Latest original snapshot lost")
-            try expect(!FileManager.default.fileExists(atPath: source.path), "Original JSONL was not retired")
-            try expect(
-                !FileManager.default.fileExists(atPath: legacy.appendingPathComponent("history.lock").path),
-                "Original lock was not retired")
-            try store.delete(entry.recordID)
-            try original.write(to: source)
-            let reopened = try HistoryStore(directory: shared, migrating: legacy)
-            try expect(try reopened.load().isEmpty, "A cleanup retry resurrected a deleted record")
-        },
-        CheckCase("history: migrates image attachments into SQLite and removes sidecars") { directory in
-            let legacy = directory.appendingPathComponent("old")
-            let images = legacy.appendingPathComponent("images")
-            try FileManager.default.createDirectory(at: images, withIntermediateDirectories: true)
-            var entry = HistoryEntry(
-                mode: .ask, query: "Image context", model: "image", effort: "", requestedServiceTier: nil)
-            entry.createdAt = Date(timeIntervalSince1970: 42)
-            entry.status = "completed"
-            entry.inputImage = try ImageAttachment(data: fixturePNG, name: "source.png")
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
-            guard var json = try JSONSerialization.jsonObject(with: encoder.encode(entry)) as? [String: Any]
-            else { throw CheckFailure("Expected original JSON") }
-            json["imageFile"] = entry.id.uuidString.lowercased() + ".png"
-            try JSONSerialization.data(withJSONObject: json).write(
-                to: legacy.appendingPathComponent("history.jsonl"))
-            try fixturePNG.write(to: images.appendingPathComponent(entry.id.uuidString.lowercased() + ".png"))
-            try fixturePNG.write(
-                to: images.appendingPathComponent(entry.id.uuidString.lowercased() + "-input"))
-            let store = try HistoryStore(
-                directory: directory.appendingPathComponent("shared"), migrating: legacy)
-            let saved = try store.load()[0]
-            try expect(saved.storedImage, "Migrated output image is not visible")
-            try expectEqual(try store.image(for: saved), fixturePNG, "Output image changed")
-            try expectEqual(try store.inputImage(for: saved)?.data, fixturePNG, "Input image changed")
-            try expect(
-                try FileManager.default.contentsOfDirectory(atPath: legacy.path).isEmpty,
-                "Migration left sidecars or backups")
-        },
         CheckCase("history: Saul Draw images retain exact bytes and the displayed attempt") { directory in
             let store = try HistoryStore(directory: directory)
             let path = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent(
@@ -109,18 +53,6 @@ import SaulTestSupport
             try store.delete(entry.recordID)
             try expect(try store.load().isEmpty, "Deleting browser image kept its history")
         },
-        CheckCase("history: damaged original blocks migration without dropping records") { directory in
-            let legacy = directory.appendingPathComponent("old")
-            try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)
-            let source = legacy.appendingPathComponent("history.jsonl")
-            let bytes = Data("{\"unfinished\":".utf8)
-            try bytes.write(to: source)
-            try expectThrows(EZError.self) { _ = try HistoryStore(directory: directory, migrating: legacy) }
-            try expectEqual(try Data(contentsOf: source), bytes, "Failed migration changed original bytes")
-            try expect(
-                try HistoryStore(directory: directory).load().isEmpty,
-                "Failed migration committed records")
-        },
         CheckCase("history: abandoned pending snapshots remain interrupted") { directory in
             let store = try HistoryStore(directory: directory)
             try store.append(
@@ -139,11 +71,15 @@ import SaulTestSupport
             let entry = HistoryEntry(
                 mode: .ask, query: "only entry", model: "m", effort: "", requestedServiceTier: nil)
             try store.delete(entry.recordID)
-            try store.append(entry)
-            try store.delete(entry.recordID)
+            var saved = entry
+            saved.status = "completed"
+            try store.append(saved)
+            try store.delete(saved.recordID)
             try expect(try store.load().isEmpty, "Last deletion was not empty")
-            try store.append(entry)
-            try expectEqual(try store.load().count, 1, "Append after deletion failed")
+            try expectThrows(EZError.self) { try store.append(saved) }
+            let revision = try store.get(saved.recordID, visibility: .masked)?.revision
+            _ = try store.restore(.record(saved.recordID), write: HistoryWrite(expectedRevision: revision))
+            try expectEqual(try store.load().count, 1, "Restore after deletion failed")
         },
         CheckCase("history: reads and deletes Saul records without changing frozen text") { directory in
             let store = try HistoryStore(directory: directory)
@@ -172,6 +108,7 @@ import SaulTestSupport
             var native = HistoryEntry(
                 mode: .ask, query: "Native", model: "m", effort: "", requestedServiceTier: nil)
             native.id = entry.id
+            native.status = "completed"
             try store.append(native)
             _ = try historySQL(store.url, #"INSERT INTO ez_entry VALUES ('unrelated',0,'{}',NULL,NULL,0)"#)
             try store.delete(native.recordID)
@@ -179,7 +116,7 @@ import SaulTestSupport
                 try historySQL(store.url, "SELECT count(*) FROM selection"), "1",
                 "A native ID deleted browser history")
             try expectEqual(
-                try historySQL(store.url, "SELECT id FROM ez_entry"), "unrelated",
+                try historySQL(store.url, "SELECT id FROM ez_entry WHERE id='unrelated'"), "unrelated",
                 "An unrelated damaged row blocked or changed native deletion")
             _ = try historySQL(
                 store.url,
@@ -197,11 +134,15 @@ import SaulTestSupport
             }
             _ = try historySQL(store.url, "UPDATE llm_run SET status='interrupted' WHERE id='active'")
             try store.delete(entry.recordID)
+            try expect(try store.get(entry.recordID) == nil, "Cross-app mask left browser history visible")
+            let masked = try store.get(entry.recordID, visibility: .masked)
+            _ = try store.purge(
+                .record(entry.recordID), write: HistoryWrite(expectedRevision: masked?.revision))
             try expectEqual(
                 try historySQL(store.url, "SELECT count(*) FROM llm_run"), "0",
-                "Cross-app deletion left browser runs")
+                "Cross-app purge left browser runs")
             try expectEqual(
-                try historySQL(store.url, "SELECT id FROM ez_entry"), "unrelated",
+                try historySQL(store.url, "SELECT id FROM ez_entry WHERE id='unrelated'"), "unrelated",
                 "Browser deletion changed an unrelated damaged native row")
         },
         CheckCase("history: read snapshot shares a writer reservation and releases locks before projection") {

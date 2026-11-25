@@ -35,6 +35,50 @@ import SaulTestSupport
                 f.model.inputValues == draft && f.model.error != nil,
                 "Failed deletion hid error or discarded draft")
         },
+        CheckCase(
+            "state: Library rejects a stale delete and can mask, restore and purge the refreshed record"
+        ) {
+            directory in
+            let folder = directory.appendingPathComponent("shared")
+            let url = try historyVersionFourFixture(folder, seed: true)
+            let model = fixtureModel(directory: directory, historyDirectory: folder, includesLibrary: true)
+            defer { model.shutdown() }
+            await model.refreshHistory()?.value
+            guard let original = model.entries.first, let library = model.library,
+                let revision = original.revision
+            else { throw CheckFailure("Library did not open shared record") }
+            model.selection = original.id
+            await model.waitForHistorySelection()
+            _ = try historySQL(
+                url,
+                """
+                INSERT INTO llm_run(id,selection_id,widget_id,provider,model,prompt_version,prompt_raw,context_json,response_raw,status,created_at)
+                VALUES ('new-run','shared-selection','explain','openai-compatible','fixture','1','','{}','Newer answer','completed',8)
+                """)
+            await model.refreshHistory()?.value
+            await model.deleteLookup(original.recordID, expectedRevision: revision)?.value
+            try expect(
+                model.error?.contains("History changed") == true, "Stale confirmation masked newer work")
+            try expectEqual(
+                model.selectedEntry?.sourceRunID, "new-run", "Stale confirmation cleared the answer")
+
+            await model.deleteLookup(original.recordID)?.value
+            try expect(model.entries.isEmpty && model.selection == nil, "Mask left visible Library history")
+            let deleted = try await library.list(after: nil)
+            guard let masked = deleted.rows.first else { throw CheckFailure("Recently deleted is empty") }
+            try expectEqual(masked.recordID, original.recordID, "Mask changed identity")
+            try await library.restore(masked)
+            await model.refreshHistory()?.value
+            try expectEqual(model.entries.first?.recordID, original.recordID, "Restore changed identity")
+
+            await model.deleteLookup(original.recordID)?.value
+            let remasked = try await library.list(after: nil)
+            guard let purged = remasked.rows.first else { throw CheckFailure("Second mask was missing") }
+            try await library.purge(purged)
+            try expectEqual(try await library.list(after: nil).total, 0, "Permanent delete retained history")
+            try expectEqual(
+                try historySQL(url, "SELECT count(*) FROM llm_run"), "0", "Permanent delete retained runs")
+        },
         CheckCase("state: preparing history gates Run and refresh, then recovers pending rows") { directory in
             let original = HistoryEntry(
                 mode: .ask, query: "Before quit", model: "m", effort: "", requestedServiceTier: nil)
@@ -48,7 +92,7 @@ import SaulTestSupport
                 historyPreparation: .open {
                     await openStarted.signal()
                     try await release.wait()
-                    try await writer.prepare(migrating: nil)
+                    try await writer.prepare()
                 })
             defer {
                 model.shutdown()
@@ -222,7 +266,7 @@ import SaulTestSupport
                         if failsSave, entry.status != "pending" { throw EZError("Fixture save failed") }
                         try store.append(entry)
                     },
-                    delete: { try store.delete($0) })
+                    delete: { try store.discardPending($0) })
                 let readStarted = CheckSignal()
                 var release: CheckedContinuation<[HistoryEntry], Never>?
                 let model = fixtureModel(

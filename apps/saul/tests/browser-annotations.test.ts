@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { DatabaseSync } from 'node:sqlite';
+import { HistoryConnection, initializeHistorySchema } from '../native/storage/history.mts';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -19,40 +19,22 @@ import { annotationMutationSession } from '../src/annotations/mutation-session';
 import { AnnotationRunner } from '../src/annotations/runner';
 import { mutateAnnotationDraft } from '../src/annotations/draft';
 import { annotationDraftKey } from '../src/annotations/routing';
-import type { SqlDatabase, SqlValue } from '../native/storage/sql.ts';
+import type { SqlDatabase } from '../native/storage/sql.ts';
 import type { DbCall, RunInput, DbRequest } from '../shared/protocol/history-types.ts';
 import { responsesBody } from '../shared/protocol/responses.mts';
 import { validatePlanRequest } from '../shared/protocol/credential-plan.mts';
 import { validateCall } from '../shared/protocol/protocol.mts';
 const files: string[] = [];
-const connections: DatabaseSync[] = [];
+const connections: HistoryConnection[] = [];
 afterEach(() => {
   connections.splice(0).forEach((c) => c.close());
   files.splice(0).forEach((p) => rmSync(p, { recursive: true, force: true }));
 });
 function database(path = ':memory:'): SqlDatabase {
-  const c = new DatabaseSync(path);
+  const c = new HistoryConnection(path);
   connections.push(c);
-  c.exec('PRAGMA foreign_keys=ON');
-  return {
-    exec: (q) => (typeof q === 'string' ? c.exec(q) : c.prepare(q.sql).run(...(q.bind ?? []))),
-    selectObjects: (q, b = []) => c.prepare(q).all(...b) as Record<string, SqlValue>[],
-    selectObject: (q, b = []) => c.prepare(q).get(...b) as Record<string, SqlValue> | undefined,
-    selectValue: (q, b = []) =>
-      Object.values(c.prepare(q).get(...b) ?? {})[0] as SqlValue | undefined,
-    changes: () => Number(c.prepare('SELECT changes() n').get()!.n),
-    transaction: (fn) => {
-      c.exec('BEGIN IMMEDIATE');
-      try {
-        const r = fn();
-        c.exec('COMMIT');
-        return r;
-      } catch (e) {
-        c.exec('ROLLBACK');
-        throw e;
-      }
-    },
-  };
+  initializeHistorySchema(c);
+  return c;
 }
 const url = 'https://example.com/page?q=1#section';
 const capture: AnnotationCapture = {
@@ -266,7 +248,10 @@ it('serializes checking a draft token with a write from another editor', async (
 it('projects annotation status without writes, repeated image bytes, or attempt transcripts', () => {
   const db = database();
   const readOnly: SqlDatabase = {
-    ...db,
+    selectValue: db.selectValue.bind(db),
+    selectObject: db.selectObject.bind(db),
+    selectObjects: db.selectObjects.bind(db),
+    changes: db.changes.bind(db),
     exec: () => {
       throw new Error('Status must not write');
     },
@@ -472,7 +457,7 @@ it('rejects oversized external reads and change acknowledgements without losing 
   );
   expect(annotationStore(sql, 'p', read).record).toEqual(saved);
 });
-it('persists exact URLs, attributed replies, conflicts, retries and seven-day deletion through SQLite', () => {
+it('persists exact URLs, attributed replies, conflicts, retries and 365-day deletion through SQLite', () => {
   const directory = mkdtempSync(join(tmpdir(), 'saul-annotation-'));
   files.push(directory);
   const path = join(directory, 'history.sqlite3');
@@ -836,7 +821,7 @@ it.each(['saving the transcript', 'streaming the model'] as const)(
   },
 );
 
-it('deletion settles saved queued attempts and rejects late replies', () => {
+it('deletion requires settled attempts, masks their activity and rejects late replies', () => {
   const db = database();
   annotationStore(db, 'p', request({ action: 'create', capture }));
   const attempt = {
@@ -851,18 +836,20 @@ it('deletion settles saved queued attempts and rejects late replies', () => {
     raw: '',
   };
   annotationAttempts(db, 'p', { action: 'admit', attempts: [attempt] });
-  annotationStore(
-    db,
-    'p',
-    request({
-      action: 'change',
-      changes: [{ id: capture.id, revision: 1, operationId: 'delete-active', action: 'delete' }],
-    }),
-  );
-  expect(() => annotationAttempts(db, 'p', { action: 'recover' })).not.toThrow();
-  expect(annotationAttempts(db, 'p', { action: 'read', id: 'in-flight' })[0]!.status).toBe(
-    'cancelled',
-  );
+  const deleting = request({
+    action: 'change',
+    changes: [{ id: capture.id, revision: 1, operationId: 'delete-active', action: 'delete' }],
+  });
+  expect(annotationStore(db, 'p', deleting).outcomes?.[0]?.error).toMatch(/Stop the active/);
+  annotationAttempts(db, 'p', {
+    action: 'save',
+    attempt: { ...attempt, status: 'cancelled' },
+  });
+  expect(annotationStore(db, 'p', deleting).outcomes?.[0]?.error).toBeUndefined();
+  expect(annotationAttempts(db, 'p', { action: 'read', id: 'in-flight' })).toEqual([]);
+  expect(
+    annotationAttempts(db, 'p', { action: 'read', id: 'in-flight' }, 'masked')[0]?.status,
+  ).toBe('cancelled');
   expect(() =>
     annotationAttempts(db, 'p', {
       action: 'complete',
@@ -870,6 +857,56 @@ it('deletion settles saved queued attempts and rejects late replies', () => {
       revision: 1,
     }),
   ).toThrow(/no longer available/);
+});
+
+it('stops and settles the owning annotation runner before masking its record', async () => {
+  const sql = database();
+  annotationStore(sql, 'p', request({ action: 'create', capture }));
+  const db: DbCall = async (message) => {
+    const m = message as DbRequest;
+    if (m.type === 'DB_ANNOTATION') return annotationStore(sql, 'p', m.payload) as never;
+    if (m.type === 'DB_ANNOTATION_ATTEMPT') return annotationAttempts(sql, 'p', m.payload) as never;
+    throw new Error('Unexpected operation');
+  };
+  const started = Promise.withResolvers<void>();
+  const runner = new AnnotationRunner(db, async function* (_input, _credential, signal) {
+    if (!signal) throw new Error('Annotation execution needs a cancellation signal');
+    started.resolve();
+    await new Promise<void>((resolve) =>
+      signal.addEventListener('abort', () => resolve(), { once: true }),
+    );
+    yield { type: 'delta', text: 'Late output' };
+  });
+  const { ids } = await runner.request(
+    {
+      action: 'respond',
+      url,
+      targets: [{ id: capture.id, revision: 1 }],
+      presetId: 'p',
+      textOnly: true,
+      current: false,
+    },
+    { choices: { remote: { model: 'gpt-6' } } as RunInput, credential: '' },
+  );
+  await started.promise;
+  const result = await runner.operate(
+    request({
+      action: 'change',
+      changes: [{ id: capture.id, revision: 1, operationId: 'stop-then-delete', action: 'delete' }],
+    }),
+  );
+  expect(result.outcomes).toMatchObject([{ record: { deletedAt: expect.any(Number) } }]);
+  expect(annotationAttempts(sql, 'p', { action: 'read', id: ids[0] }, 'masked')).toMatchObject([
+    { status: 'cancelled' },
+  ]);
+  const hidden = annotationStore(
+    sql,
+    'p',
+    request({ action: 'read', id: capture.id, image: false }),
+    undefined,
+    'masked',
+  );
+  expect(hidden.record?.replies).toEqual([]);
 });
 
 it('shares the two-invocation limit across separately admitted annotation batches', async () => {

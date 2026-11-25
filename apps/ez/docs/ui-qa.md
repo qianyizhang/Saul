@@ -137,3 +137,16 @@ completion/metrics, then restart for account/history restoration.
 [Verification](verification.md) owns dated results and remaining acceptance gaps.
 Run `make check` for offline regression, then only affected native journeys for
 layout/focus/interaction changes. These journeys are manual, not an unattended suite.
+
+
+## Recently deleted
+
+The Surface Preview seeds two masked synthetic lookups. Open **Recently deleted**
+from the main sidebar. Select a lookup and restore it, then confirm it returns
+to its original history position. Delete it again and check that the prompt uses
+the reversible action. Test the destructive confirmations separately using
+the disposable preview database. **Clear History** covers the shared Library.
+For an active local lookup, use **Stop and delete** from its History row and
+check that the request settles before the row moves. Restore prepares no provider
+work. Check the sheet with Min Mode, dark appearance, keyboard selection and a
+long title.

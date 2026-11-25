@@ -422,7 +422,11 @@ export function SummaryReader({
               </p>
               {comparisons.map((comparison) => (
                 <div key={comparison.index}>
-                  {!single && <p className="small">{batch.items[comparison.index]?.title}</p>}
+                  {!single && (
+                    <p className="small">
+                      {batch.items.find((item) => item.index === comparison.index)?.title}
+                    </p>
+                  )}
                   <ComparisonNote comparison={comparison} />
                 </div>
               ))}

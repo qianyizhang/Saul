@@ -1,5 +1,4 @@
 import CSQLite
-import Darwin
 import Foundation
 import SaulNativeValues
 
@@ -15,8 +14,7 @@ public final class HistoryStore {
     var database: OpaquePointer?
     private let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
-    public init(directory: URL = HistoryStore.defaultDirectory, migrating legacyDirectory: URL? = nil) throws
-    {
+    public init(directory: URL = HistoryStore.defaultDirectory) throws {
         try Self.regular(directory, directory: true)
         try FileManager.default.createDirectory(
             at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
@@ -28,25 +26,12 @@ public final class HistoryStore {
             try execute("PRAGMA foreign_keys=ON; PRAGMA secure_delete=ON;")
             try transaction {
                 let version = try rows("PRAGMA user_version").first?["user_version"] as? Int64 ?? 0
-                guard version == 0 || version == 3 || version == 4 else {
+                guard [0, 3, 4, 5].contains(version) else {
                     throw EZError("Unsupported shared history version.")
                 }
-                if version == 0 {
-                    let installed = Bundle.main.resourceURL.flatMap {
-                        Bundle(url: $0.appendingPathComponent("EZ_EZCore.bundle"))
-                    }
-                    guard
-                        let schema = (installed ?? Bundle.module).url(
-                            forResource: "history", withExtension: "sql")
-                    else { throw EZError("Shared history schema is missing.") }
-                    try execute(String(contentsOf: schema, encoding: .utf8))
-                    try execute("PRAGMA user_version=4")
-                } else if version == 3 {
-                    try upgradeConnectionNames()
-                    try execute("PRAGMA user_version=4")
-                }
+                if version < 5 { try upgradeSchema(from: version) }
             }
-            if let legacyDirectory { try migrate(from: legacyDirectory) }
+            try expireMasks()
         } catch {
             sqlite3_close(database)
             database = nil
@@ -90,6 +75,27 @@ public final class HistoryStore {
     }
     deinit { sqlite3_close(database) }
 
+    private func upgradeSchema(from version: Int64) throws {
+        let installed = Bundle.main.resourceURL.flatMap {
+            Bundle(url: $0.appendingPathComponent("EZ_EZCore.bundle"))
+        }
+        guard let schema = (installed ?? Bundle.module).url(forResource: "history", withExtension: "sql")
+        else { throw EZError("Shared history schema is missing.") }
+        let sections = try String(contentsOf: schema, encoding: .utf8)
+            .components(separatedBy: "\n-- Migrate v4 to v5\n")
+        guard sections.count == 2 else { throw EZError("Shared history schema is incomplete.") }
+        let upgrade = sections[1].components(separatedBy: "\n-- Shared history v5\n")
+        guard upgrade.count == 2 else { throw EZError("Shared history schema is incomplete.") }
+        if version == 0 {
+            try execute(sections[0])
+        } else {
+            if version == 3 { try upgradeConnectionNames() }
+            try execute(upgrade[0])
+        }
+        try execute(upgrade[1])
+        try execute("PRAGMA user_version=5")
+    }
+
     private func upgradeConnectionNames() throws {
         for (table, field, upgrade) in [
             ("ez_entry", "data", HistoryConnectionMigration.history),
@@ -126,190 +132,46 @@ public final class HistoryStore {
         )
     }
     public func append(_ entry: HistoryEntry) throws {
-        guard entry.sourceID == nil else { throw EZError("Open this saved request in Saul to run it again.") }
-        guard entry.schemaVersion == 1 else { throw EZError("Unsupported history entry version.") }
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        let data = try encoder.encode(entry)
-        let image = entry.imageData
-        let input = try entry.inputImage?.data.map { _ in try entry.inputImage!.validatedData() }
-        try execute(
-            "INSERT INTO ez_entry(id,created_at,data,image,input_image) VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data,image=COALESCE(excluded.image,ez_entry.image),input_image=COALESCE(excluded.input_image,ez_entry.input_image)",
-            [
-                entry.id.uuidString.lowercased(), Int64(entry.createdAt.timeIntervalSince1970 * 1000),
-                String(decoding: data, as: UTF8.self), image, input,
-            ])
+        let previous = try recordMetadata(entry.recordID)?.revision
+        _ = try commit(entry.recordID, snapshot: entry, write: HistoryWrite(expectedRevision: previous))
     }
-    public func delete(_ id: RecordID) throws {
-        switch id {
-        case .native(let id): try execute("DELETE FROM ez_entry WHERE id=?", [id.uuidString.lowercased()])
-        case .browser(let selectionID):
-            try transaction {
-                let active = try rows(
-                    "SELECT 1 FROM llm_run WHERE selection_id=? AND status IN ('queued','running','saving') LIMIT 1",
-                    [selectionID])
-                guard active.isEmpty else {
-                    throw EZError("Stop the running request in Saul before deleting this history.")
-                }
-                try execute("DELETE FROM selection WHERE id=?", [selectionID])
-            }
+
+    public func delete(_ id: RecordID, settledPending: Bool = false, expectedRevision: Int64? = nil) throws {
+        guard let revision = try expectedRevision ?? recordMetadata(id)?.revision else { return }
+        let write = HistoryWrite(expectedRevision: revision)
+        if settledPending, case .native = id {
+            _ = try maskLocallySettledAttempt(id, write: write)
+        } else {
+            _ = try mask(.record(id), write: write)
         }
     }
 
     public func load() throws -> [HistoryEntry] { try snapshot().entries() }
 
     func requireCurrentSchema() throws {
-        guard try rows("PRAGMA user_version").first?["user_version"] as? Int64 == 4 else {
+        guard try rows("PRAGMA user_version").first?["user_version"] as? Int64 == 5 else {
             throw EZError("Unsupported shared history version.")
         }
     }
 
-    func snapshot() throws -> HistorySnapshot {
-        try transaction(.deferred) {
-            try requireCurrentSchema()
-            return HistorySnapshot(
-                native: try rows("SELECT data,image IS NOT NULL AS has_image FROM ez_entry"),
-                browser: try rows(
-                    "SELECT s.id,s.text,p.url,p.title,r.id AS run_id,r.response_structured IS NOT NULL AS has_image,r.input_json,r.prompt_raw,r.response_raw,r.model,r.status,r.error_message,r.created_at,r.latency_ms FROM selection s JOIN page p ON p.id=s.page_id JOIN llm_run r ON r.rowid=(SELECT rowid FROM llm_run WHERE selection_id=s.id AND status NOT IN ('queued','running','saving') ORDER BY created_at DESC,rowid DESC LIMIT 1)"
-                ))
-        }
+    public func image(for entry: HistoryEntry, visibility: HistoryVisibility = .visible) throws -> Data? {
+        try attachment(.output(entry.recordID, browserAttempt: entry.sourceRunID), visibility: visibility)
     }
-    public func image(for entry: HistoryEntry) throws -> Data? {
-        if let data = entry.imageData { return data }
-        if let source = entry.sourceID, let run = entry.sourceRunID {
-            guard
-                let json = try rows(
-                    "SELECT response_structured FROM llm_run WHERE selection_id=? AND id=? AND status='completed'",
-                    [source, run]
-                ).first?["response_structured"] as? String,
-                let image = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
-                image["complete"] as? Bool == true,
-                ["image/png", "image/gif"].contains(image["mediaType"] as? String ?? ""),
-                let encoded = image["data"] as? String, encoded.utf8.count <= 28_000_000,
-                let data = Data(base64Encoded: encoded), !data.isEmpty, data.count <= 20 * 1024 * 1024
-            else { return nil }
-            return data
-        }
-        return try rows("SELECT image FROM ez_entry WHERE id=?", [entry.id.uuidString.lowercased()]).first?[
-            "image"] as? Data
-    }
-    public func inputImage(for entry: HistoryEntry) throws -> ImageAttachment? {
+
+    public func inputImage(for entry: HistoryEntry, visibility: HistoryVisibility = .visible) throws
+        -> ImageAttachment?
+    {
         guard let metadata = entry.inputImage else { return nil }
-        if metadata.data != nil {
-            _ = try metadata.validatedData()
-            return metadata
+        guard let data = try attachment(.input(entry.recordID), visibility: visibility) else {
+            throw EZError("The saved input image is unavailable.")
         }
-        guard
-            let data = try rows(
-                "SELECT input_image FROM ez_entry WHERE id=?", [entry.id.uuidString.lowercased()]
-            ).first?["input_image"] as? Data
-        else { throw EZError("The saved input image is unavailable.") }
         let image = try ImageAttachment(data: data, name: metadata.name)
         guard image.mediaType == metadata.mediaType else {
             throw EZError("The saved input image format changed.")
         }
         return image
     }
-    private func migrate(from directory: URL) throws {
-        let source = directory.appendingPathComponent("history.jsonl")
-        guard FileManager.default.fileExists(atPath: source.path) else { return }
-        try Self.regular(source)
-        let images = directory.appendingPathComponent("images", isDirectory: true)
-        if FileManager.default.fileExists(atPath: images.path) { try Self.regular(images, directory: true) }
-        let lockURL = directory.appendingPathComponent("history.lock")
-        try Self.regular(lockURL)
-        let lock = Darwin.open(lockURL.path, O_CREAT | O_RDWR | O_NOFOLLOW, 0o600)
-        guard lock >= 0 else { throw EZError("Cannot lock original history for migration.") }
-        defer { Darwin.close(lock) }
-        guard flock(lock, LOCK_EX) == 0 else { throw EZError("Cannot lock original history for migration.") }
-        defer { flock(lock, LOCK_UN) }
-        let marker = "ez-jsonl"
-        if try rows("SELECT id FROM history_migration WHERE id=?", [marker]).isEmpty {
-            let data = try Data(contentsOf: source)
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            struct OldImage: Decodable { let imageFile: String? }
-            var entries: [UUID: (entry: HistoryEntry, imageFile: String?)] = [:]
-            for line in data.split(separator: 0x0A)
-            where !line.allSatisfy({ [0x20, 0x09, 0x0D].contains($0) }) {
-                do {
-                    guard let raw = try JSONSerialization.jsonObject(with: Data(line)) as? [String: Any]
-                    else {
-                        throw EZError("Invalid original history record.")
-                    }
-                    let upgraded = try HistoryConnectionMigration.history(raw)
-                    let entry = try decoder.decode(
-                        HistoryEntry.self, from: JSONSerialization.data(withJSONObject: upgraded))
-                    guard entry.schemaVersion == 1 else {
-                        throw EZError("Unsupported original history version.")
-                    }
-                    entries[entry.id] = (entry, try decoder.decode(OldImage.self, from: Data(line)).imageFile)
-                } catch {
-                    throw EZError(
-                        "Original EZ history contains damaged records. Migration stopped; the original file was retained. \(error.localizedDescription)"
-                    )
-                }
-            }
-            try transaction {
-                for original in entries.values {
-                    var entry = original.entry
-                    if entry.status == "pending" { entry.status = "interrupted" }
-                    if let filename = original.imageFile {
-                        guard filename == entry.id.uuidString.lowercased() + ".png" else {
-                            throw EZError("Invalid original image reference.")
-                        }
-                        let path = images.appendingPathComponent(filename)
-                        try Self.regular(path)
-                        entry.imageData = try Data(contentsOf: path)
-                    }
-                    if let metadata = entry.inputImage {
-                        let path = images.appendingPathComponent(entry.id.uuidString.lowercased() + "-input")
-                        try Self.regular(path)
-                        let attachment = try ImageAttachment(
-                            data: Data(contentsOf: path), name: metadata.name)
-                        guard attachment.mediaType == metadata.mediaType else {
-                            throw EZError("Original input image format changed.")
-                        }
-                        entry.inputImage = attachment
-                    }
-                    guard
-                        try rows("SELECT id FROM ez_entry WHERE id=?", [entry.id.uuidString.lowercased()])
-                            .isEmpty
-                    else {
-                        throw EZError(
-                            "Original EZ history conflicts with a shared record. Original files retained.")
-                    }
-                    try append(entry)
-                    let stored = try rows(
-                        "SELECT data,image,input_image FROM ez_entry WHERE id=?",
-                        [entry.id.uuidString.lowercased()]
-                    ).first
-                    guard let json = stored?["data"] as? String else {
-                        throw EZError("History migration verification failed.")
-                    }
-                    var expected = entry
-                    expected.imageData = nil
-                    expected.inputImage?.data = nil
-                    guard try decoder.decode(HistoryEntry.self, from: Data(json.utf8)) == expected,
-                        entry.imageData == stored?["image"] as? Data,
-                        entry.inputImage?.data == stored?["input_image"] as? Data
-                    else { throw EZError("History migration verification failed. Original files retained.") }
-                }
-                try execute("INSERT INTO history_migration VALUES (?)", [marker])
-            }
-        }
-        // The durable marker prevents re-import if cleanup is interrupted after commit.
-        if FileManager.default.fileExists(atPath: images.path) {
-            for path in try FileManager.default.contentsOfDirectory(
-                at: images, includingPropertiesForKeys: [.isSymbolicLinkKey])
-            {
-                try Self.regular(path)
-            }
-            try FileManager.default.removeItem(at: images)
-        }
-        try FileManager.default.removeItem(at: source)
-        try FileManager.default.removeItem(at: lockURL)
-    }
+
     private static func regular(_ url: URL, directory: Bool = false) throws {
         guard
             FileManager.default.fileExists(atPath: url.path)
@@ -366,7 +228,7 @@ public final class HistoryStore {
         }
         return statement
     }
-    private func execute(_ sql: String, _ values: [Any?] = []) throws {
+    func execute(_ sql: String, _ values: [Any?] = []) throws {
         if values.isEmpty {
             guard sqlite3_exec(database, sql, nil, nil, nil) == SQLITE_OK else { throw failure() }
             return

@@ -9,6 +9,7 @@ import {
 import { isRecord } from '../../shared/model/value.mts';
 
 export class StorageDisconnected extends Error {}
+class MissingStorageAcknowledgement extends Error {}
 
 type Pending = {
   accept(event: unknown): void;
@@ -34,7 +35,11 @@ export class StorageConnection {
           throw new Error('Invalid storage reply envelope.');
         this.pending.get(reply.id)?.accept(reply.event);
       } catch (cause) {
-        this.close(new Error('Saul storage helper returned an invalid reply.', { cause }));
+        this.close(
+          new MissingStorageAcknowledgement('Saul storage helper returned an invalid reply.', {
+            cause,
+          }),
+        );
       }
     });
     port.onDisconnect.addListener(() => {
@@ -83,7 +88,19 @@ export class StorageConnection {
       };
       const fail = (error: Error) => {
         settle();
-        reject(error);
+        if (
+          error instanceof MissingStorageAcknowledgement &&
+          request.action === 'history' &&
+          !('view' in request.request.command)
+        )
+          reject(
+            new Error(
+              error.message +
+                ' The write may have been applied. Refresh the affected History view before trying again.',
+              { cause: error },
+            ),
+          );
+        else reject(error);
       };
       const cancel = () => {
         try {
@@ -98,7 +115,7 @@ export class StorageConnection {
         reject(signal?.reason);
       };
       const timer = setTimeout(() => {
-        fail(new Error('Saul storage request timed out.'));
+        fail(new MissingStorageAcknowledgement('Saul storage request timed out.'));
         cancel();
       }, 190_000);
       this.pending.set(id, {

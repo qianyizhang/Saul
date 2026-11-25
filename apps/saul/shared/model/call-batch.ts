@@ -40,6 +40,7 @@ export type DigestSource = DigestTextSource | DigestPdfSource;
 export type DigestCapture =
   DigestTextSource | { pdf: { url: string; title?: string; unverified?: boolean } };
 export interface DigestItem {
+  maskedAt?: number;
   finalText?: string;
   progress?: string;
   calls?: import('./call-output.ts').CallSnapshot['calls'];
@@ -85,10 +86,12 @@ export type DigestMeta = {
 // Existing storage helpers report absence with this wire error.
 export const MISSING_CALL_BATCH = 'This digest no longer exists.';
 export type DigestBatch = DigestMeta & {
+  maskedAt?: number;
   error?: string;
   items: DigestItem[];
 };
 export type DigestOverview = Pick<DigestMeta, 'id' | 'windowTitle' | 'createdAt'> & {
+  maskedAt?: number;
   title?: string; // Older history helpers return only the window label.
 };
 
@@ -173,6 +176,10 @@ export const activeItem = (item: DigestItem) =>
   ['queued', 'capturing', 'running', 'saving'].includes(item.status);
 
 export interface DigestDbOperations {
+  DB_DIGEST_ITEMS_PAGE: {
+    payload: { id: string; limit?: number; cursor?: string };
+    result: { items: DigestItem[]; cursor?: string };
+  };
   DB_DIGEST_ACTION_REVISIONS: { payload: undefined; result: string[] };
   DB_DIGEST_FIND: {
     payload: { urls: string[]; actionRevision?: string; actionPresetId?: string };

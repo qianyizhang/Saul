@@ -30,6 +30,8 @@ export function HistoryEntry({
   onDelete: () => void;
   onOpenSource: () => void;
 }) {
+  const running = ['queued', 'running', 'saving'].includes(item.latest.status);
+  const deleteLabel = running ? 'Stop and delete' : 'Delete highlight';
   return (
     <article className="history-entry">
       <div className="row between" style={{ alignItems: 'flex-start' }}>
@@ -50,8 +52,8 @@ export function HistoryEntry({
         {!minimum && (
           <button
             className="btn icon danger"
-            title="Delete"
-            aria-label="Delete highlight"
+            title={deleteLabel}
+            aria-label={deleteLabel}
             disabled={busy}
             onClick={onDelete}
           >
@@ -131,11 +133,11 @@ export function HistoryEntry({
             {minimum && (
               <button
                 className="btn danger"
-                aria-label="Delete highlight"
+                aria-label={deleteLabel}
                 disabled={busy}
                 onClick={onDelete}
               >
-                <Trash2 size={16} /> Delete
+                <Trash2 size={16} /> {running ? 'Stop and delete' : 'Delete'}
               </button>
             )}
           </details>

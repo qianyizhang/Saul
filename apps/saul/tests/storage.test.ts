@@ -1,18 +1,21 @@
+import { executeHistory } from './helpers/history-db';
 import { afterEach, expect, it, vi } from 'vitest';
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { SharedHistory } from '../native/storage/history.mts';
-import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
-import { prepareFrozenRun } from '../src/reading/configuration';
+import { HistoryConnection, SharedHistory } from '../native/storage/history.mts';
 import { StorageConnection, StorageDisconnected } from '../src/native/storage-connection';
 import { requestHistory } from '../src/native/storage-client';
 import { storagePort } from './helpers/storage-port';
 import type { StorageHelperRequest } from '../shared/protocol/storage-protocol.mts';
-import type { RunInput, Submission } from '../shared/protocol/history-types.ts';
+import { createHistoryRequest } from '../shared/protocol/history-protocol.mts';
+import type { DbRequest, RunInput, Submission } from '../shared/protocol/history-types.ts';
 const roots: string[] = [];
 const open: SharedHistory[] = [];
+async function valueOf(store: SharedHistory, request: unknown) {
+  return (await store.run(request)).value ?? undefined;
+}
 function history() {
   const dir = mkdtempSync(join(tmpdir(), 'shared-history-'));
   roots.push(dir);
@@ -54,11 +57,11 @@ function submission(id = 'selection'): Submission {
 async function complete(store: SharedHistory, frozen?: { query: string; response: string }) {
   const payload = submission();
   if (frozen) payload.input.userPrompt = frozen.query;
-  const result = await store.browser.execute({ type: 'DB_SUBMIT', payload });
+  const result = await executeHistory(store, { type: 'DB_SUBMIT', payload });
   const id = result.run!.id;
-  await store.browser.execute({ type: 'DB_CLAIM', payload: { runId: id } });
-  await store.browser.execute({ type: 'DB_SAVING', payload: { runId: id } });
-  await store.browser.execute({
+  await executeHistory(store, { type: 'DB_CLAIM', payload: { runId: id } });
+  await executeHistory(store, { type: 'DB_SAVING', payload: { runId: id } });
+  await executeHistory(store, {
     type: 'DB_FINISH',
     payload: {
       runId: id,
@@ -109,7 +112,7 @@ it.each(historyContract.cases)('shared History contract: $name', async (fixture)
       ],
     });
     await expect(
-      store.browser.execute({ type: 'DB_DELETE_SELECTION', payload: { selectionId: 'ez:' + id } }),
+      executeHistory(store, { type: 'DB_DELETE_SELECTION', payload: { selectionId: 'ez:' + id } }),
     ).rejects.toThrow('Stop the running request in EZ');
     expect(Number(store.connection.selectValue('SELECT count(*) FROM ez_entry'))).toBe(
       fixture.entries,
@@ -118,24 +121,24 @@ it.each(historyContract.cases)('shared History contract: $name', async (fixture)
   }
   const runId = await complete(store, historyContract);
   if (fixture.kind === 'repeat-save') {
-    await store.browser.execute({
+    await executeHistory(store, {
       type: 'DB_FINISH',
       payload: { runId, status: 'completed', raw: historyContract.response, latencyMs: 5 },
     });
   } else if (fixture.kind === 'delete') {
-    await store.browser.execute({
+    await executeHistory(store, {
       type: 'DB_DELETE_SELECTION',
       payload: { selectionId: 'selection' },
     });
     // Late completion cannot recreate a deleted browser attempt.
-    await store.browser.execute({
+    await executeHistory(store, {
       type: 'DB_FINISH',
       payload: { runId, status: 'completed', raw: historyContract.response, latencyMs: 5 },
     });
   } else throw new Error('Unknown History contract case');
   const reopened = new SharedHistory(store.directory);
   open.push(reopened);
-  const rows = await reopened.browser.execute({ type: 'DB_GET_HISTORY', payload: {} });
+  const rows = await executeHistory(reopened, { type: 'DB_GET_HISTORY', payload: {} });
   expect(rows).toHaveLength(fixture.entries!);
   if (rows.length) {
     expect(rows[0]!.responseRaw).toBe(historyContract.response);
@@ -147,18 +150,18 @@ it('shares browser history across connections with exact frozen prompts, full-te
   const run = await complete(first);
   const second = new SharedHistory(first.directory);
   open.push(second);
-  const rows = await second.browser.execute({
+  const rows = await executeHistory(second, {
     type: 'DB_GET_HISTORY',
     payload: { searchQuery: 'Slope' },
   });
   expect(rows).toHaveLength(1);
   expect(rows[0]!.latest.id).toBe(run);
   expect(rows[0]!.latest.inspection!.systemPrompt).toBe('Frozen instructions');
-  await second.browser.execute({
+  await executeHistory(second, {
     type: 'DB_DELETE_SELECTION',
     payload: { selectionId: 'selection' },
   });
-  expect(await first.browser.execute({ type: 'DB_GET_HISTORY', payload: {} })).toEqual([]);
+  expect(await executeHistory(first, { type: 'DB_GET_HISTORY', payload: {} })).toEqual([]);
 });
 it('returns one history snapshot when another connection deletes a listed passage', async () => {
   const reading = history();
@@ -180,11 +183,11 @@ it('returns one history snapshot when another connection deletes a listed passag
     });
   const request = { type: 'DB_GET_HISTORY', payload: {} } as const;
   try {
-    expect((await reading.browser.execute(request)).map((row) => row.selectionId)).toEqual([
+    expect((await executeHistory(reading, request)).map((row) => row.selectionId)).toEqual([
       'selection',
     ]);
     expect(deleted).toBe(true);
-    expect(await reading.browser.execute(request)).toEqual([]);
+    expect(await executeHistory(reading, request)).toEqual([]);
   } finally {
     interleave.mockRestore();
   }
@@ -201,6 +204,7 @@ it('projects native entries into the same ordered/searchable library, including 
     query: 'Native prompt',
     response: 'Native answer 你好',
     model: 'native-model',
+    durationSeconds: 1.1234567,
     effort: 'low',
     status: 'completed',
     instructions: 'Native instructions',
@@ -211,189 +215,94 @@ it('projects native entries into the same ordered/searchable library, including 
     sql: 'INSERT INTO ez_entry(id,created_at,data,image) VALUES (?,?,?,?)',
     bind: [id, 2, JSON.stringify(entry), new Uint8Array([1, 2, 3])],
   });
-  const rows = await store.browser.execute({ type: 'DB_GET_HISTORY', payload: {} });
-  expect(rows.map((r) => r.selectedText)).toEqual(['native input', '你好 gradient']);
+  const page = (await valueOf(
+    store,
+    createHistoryRequest(randomUUID(), randomUUID(), {
+      type: 'DB_HISTORY_PAGE',
+      payload: { limit: 10 },
+    }),
+  )) as { items: { selectedText: string; latest: { latencyMs?: number } }[] };
+  expect(page.items.map((row) => row.selectedText)).toEqual(['native input', '你好 gradient']);
+  expect(page.items[0]?.latest.latencyMs).toBeCloseTo(1123.4567);
   expect(
-    await store.browser.execute({ type: 'DB_IMAGE', payload: { selectionId: 'ez:' + id } }),
+    await executeHistory(store, { type: 'DB_IMAGE', payload: { selectionId: 'ez:' + id } }),
   ).toEqual({ data: 'AQID', mediaType: 'image/png' });
-  await store.browser.execute({
+  await executeHistory(store, {
     type: 'DB_SET_BOOKMARK',
     payload: { selectionId: 'ez:' + id, bookmarked: true },
   });
   expect(
-    await store.browser.execute({
+    await executeHistory(store, {
       type: 'DB_GET_HISTORY',
       payload: { bookmarksOnly: true, searchQuery: '你好' },
     }),
   ).toHaveLength(1);
-  await store.browser.execute({
+  await executeHistory(store, {
     type: 'DB_DELETE_SELECTION',
     payload: { selectionId: 'ez:' + id },
   });
-  expect(store.connection.selectValue('SELECT count(*) FROM ez_entry')).toBe(0);
-});
-it('imports old SQLite records once, verifies them before acknowledging, and removes temporary imports', async () => {
-  const source = history();
-  await complete(source);
-  const input = submission().input;
-  const imported = JSON.stringify({
-    ...input,
-    remote: { ...input.remote, apiKey: 'synthetic legacy inline credential' },
-  });
-  source.connection.exec({ sql: 'UPDATE llm_run SET input_json=?', bind: [imported] });
-  source.connection.exec('DROP TABLE ez_entry;DROP TABLE history_migration;PRAGMA user_version=2;');
-  const bytes = readFileSync(join(source.directory, 'history.sqlite3'));
-  const target = history();
-  const id = randomUUID();
-  await target.run({ operation: 'import-begin', id });
-  await target.run({ operation: 'import-chunk', id, offset: 0, data: bytes.toString('base64') });
-  expect(await target.run({ operation: 'import-finish', id, size: bytes.length })).toEqual({
-    imported: true,
-  });
-  expect(
-    await target.browser.execute({ type: 'DB_GET_HISTORY', payload: { searchQuery: 'Slope' } }),
-  ).toHaveLength(1);
-  const frozen = await target.browser.execute({
-    type: 'DB_INPUT',
-    payload: { selectionId: 'selection' },
-  });
-  expect(() => prepareFrozenRun(DEFAULT_CONFIGURATION, frozen!)).toThrow(
-    'Invalid saved API choices',
-  );
-  expect(target.connection.selectValue('SELECT input_json FROM llm_run')).toBe(imported);
-  await target.browser.execute({ type: 'DB_CLEAR_HISTORY', payload: undefined });
-  expect(await target.run({ operation: 'import-begin', id })).toEqual({ imported: true });
-  expect(readdirSync(target.directory).some((x) => x.startsWith('.history-import-'))).toBe(false);
-});
-it('rejects incomplete imports and newer schemas without silently saving elsewhere', async () => {
-  const store = history();
-  const id = randomUUID();
-  await store.run({ operation: 'import-begin', id });
-  await expect(store.run({ operation: 'import-finish', id, size: 12 })).rejects.toThrow(
-    'incomplete',
-  );
-  expect(store.connection.selectValue('SELECT count(*) FROM history_migration')).toBe(0);
-  store.connection.exec('PRAGMA user_version=99');
-  expect(() => new SharedHistory(store.directory)).toThrow('Unsupported');
-});
-
-it('recovery is scoped to one Chrome profile and does not interrupt another profile', async () => {
-  const store = history();
-  const a = '11111111-1111-1111-1111-111111111111',
-    b = '22222222-2222-2222-2222-222222222222';
-  const result = (await store.run({
-    operation: 'db',
-    requestId: randomUUID(),
-    owner: a,
-    message: { type: 'DB_SUBMIT', payload: submission() },
-  })) as { run: { id: string } };
-  await store.run({
-    operation: 'db',
-    requestId: randomUUID(),
-    owner: b,
-    message: { type: 'DB_RECOVER', payload: undefined },
-  });
-  expect(
-    store.connection.selectValue('SELECT status FROM llm_run WHERE id=?', [result.run.id]),
-  ).toBe('queued');
-  await store.run({
-    operation: 'db',
-    requestId: randomUUID(),
-    owner: a,
-    message: { type: 'DB_RECOVER', payload: undefined },
-  });
-  expect(
-    store.connection.selectValue('SELECT status FROM llm_run WHERE id=?', [result.run.id]),
-  ).toBe('interrupted');
-});
-
-it('refuses clearing shared history while another app owns a pending request', async () => {
-  const store = history();
-  await complete(store);
-  const id = randomUUID();
-  store.connection.exec({
-    sql: 'INSERT INTO ez_entry(id,created_at,data) VALUES (?,?,?)',
-    bind: [id, 2, JSON.stringify({ status: 'pending' })],
-  });
-  await expect(
-    store.browser.execute({ type: 'DB_CLEAR_HISTORY', payload: undefined }),
-  ).rejects.toThrow('Stop active requests');
-  expect(store.connection.selectValue('SELECT count(*) FROM selection')).toBe(1);
   expect(store.connection.selectValue('SELECT count(*) FROM ez_entry')).toBe(1);
-});
-
-it('blocks deletion of another profile’s active passage and permits its owner to delete it', async () => {
-  const store = history();
-  const owner = '11111111-1111-1111-1111-111111111111';
-  const other = '22222222-2222-2222-2222-222222222222';
-  await store.run({
-    operation: 'db',
-    requestId: randomUUID(),
-    owner,
-    message: { type: 'DB_SUBMIT', payload: submission() },
-  });
-  await expect(
-    store.run({
-      operation: 'db',
-      requestId: randomUUID(),
-      owner: other,
-      message: { type: 'DB_DELETE_SELECTION', payload: { selectionId: 'selection' } },
+  expect(
+    await executeHistory(store, {
+      type: 'DB_GET_HISTORY',
+      payload: { searchQuery: 'Native prompt' },
     }),
-  ).rejects.toThrow('browser profile');
-  expect(store.connection.selectValue('SELECT count(*) FROM selection')).toBe(1);
-  await store.run({
-    operation: 'db',
-    requestId: randomUUID(),
-    owner,
-    message: { type: 'DB_DELETE_SELECTION', payload: { selectionId: 'selection' } },
-  });
-  expect(store.connection.selectValue('SELECT count(*) FROM selection')).toBe(0);
+  ).toEqual([]);
 });
-
-it('returns the same queued handoff and transition acknowledgements after a lost reply', async () => {
+it('scopes recovery by profile and requires even the owner to settle an active passage before masking', async () => {
   const store = history();
   const owner = randomUUID();
-  const requestId = randomUUID();
-  const frozen = submission();
-  // Historical API routes can omit inactive Chrome AI choices.
-  delete frozen.input.local;
-  const request = {
-    operation: 'db' as const,
-    owner,
-    requestId,
-    message: { type: 'DB_SUBMIT' as const, payload: frozen },
+  const other = randomUUID();
+  const call = (who: string, message: DbRequest) =>
+    valueOf(store, createHistoryRequest(who, randomUUID(), message));
+  const queued = (await call(owner, { type: 'DB_SUBMIT', payload: submission() })) as {
+    run: { id: string };
   };
-  const first = structuredClone(await store.run(request)) as {
-    run: { id: string; input: RunInput };
-  };
-  request.message.payload.input.systemPrompt = 'Changed after submission';
-  const repeated = (await store.run(request)) as typeof first;
-  expect(repeated.run).toEqual(first.run);
+  await call(other, { type: 'DB_RECOVER', payload: undefined });
+  const state = () =>
+    store.connection.selectValue('SELECT status FROM llm_run WHERE id=?', [queued.run.id]);
+  expect(state()).toBe('queued');
+  for (const who of [owner, other])
+    await expect(
+      call(who, { type: 'DB_DELETE_SELECTION', payload: { selectionId: 'selection' } }),
+    ).rejects.toThrow(/stop|active/i);
+  await call(owner, { type: 'DB_RECOVER', payload: undefined });
+  expect(state()).toBe('interrupted');
+  await call(owner, { type: 'DB_DELETE_SELECTION', payload: { selectionId: 'selection' } });
+  expect(await call(owner, { type: 'DB_GET_HISTORY', payload: {} })).toEqual([]);
+  expect(store.connection.selectValue('SELECT count(*) FROM selection')).toBe(1);
+});
+
+it('resolves identical writes after a lost reply and rejects changed input under the same identity', async () => {
+  const store = history();
+  const owner = randomUUID();
+  const payload = submission();
+  delete payload.input.local;
+  const request = createHistoryRequest(owner, randomUUID(), { type: 'DB_SUBMIT', payload });
+  const accepted = (await valueOf(store, request)) as { run: { id: string } };
+  expect(await valueOf(store, request)).toEqual(accepted);
   expect(store.connection.selectValue('SELECT count(*) FROM llm_run')).toBe(1);
-  const claim = {
-    operation: 'db' as const,
-    owner,
-    requestId: randomUUID(),
-    message: { type: 'DB_CLAIM' as const, payload: { runId: first.run.id } },
-  };
-  expect(await store.run(claim)).toBe(true);
-  expect(await store.run(claim)).toBe(true);
-  expect(await store.run({ ...claim, requestId: randomUUID() })).toBe(false);
-  const saving = {
-    ...claim,
-    requestId: randomUUID(),
-    message: { type: 'DB_SAVING' as const, payload: claim.message.payload },
-  };
-  expect(await store.run(saving)).toBe(true);
-  expect(await store.run(saving)).toBe(true);
-  expect(await store.run({ ...saving, requestId: randomUUID() })).toBe(false);
+  const different = createHistoryRequest(owner, request.operationId, {
+    type: 'DB_SUBMIT',
+    payload: { ...payload, input: { ...payload.input, systemPrompt: 'changed' } },
+  });
+  await expect(valueOf(store, different)).rejects.toThrow();
+  for (const type of ['DB_CLAIM', 'DB_SAVING'] as const) {
+    const transition = createHistoryRequest(owner, randomUUID(), {
+      type,
+      payload: { runId: accepted.run.id },
+    });
+    expect(await valueOf(store, transition)).toBe(true);
+    expect(await valueOf(store, transition)).toBe(true);
+    expect(await valueOf(store, { ...transition, operationId: randomUUID() })).toBe(false);
+  }
 });
 
 it('rejects malformed Reading lifecycle payloads before native history changes', async () => {
   const store = history();
   const owner = randomUUID();
   const run = (type: string, payload: unknown) =>
-    store.run({ operation: 'db', requestId: randomUUID(), owner, message: { type, payload } });
+    valueOf(store, createHistoryRequest(owner, randomUUID(), { type, payload } as DbRequest));
   const payload = submission();
   for (const invalid of [
     { ...payload, regenerate: 'false' },
@@ -407,7 +316,7 @@ it('rejects malformed Reading lifecycle payloads before native history changes',
       input: { ...payload.input, remote: { ...payload.input.remote, temperature: 'hot' } },
     },
   ]) {
-    await expect(run('DB_SUBMIT', invalid)).rejects.toThrow('DB_SUBMIT');
+    await expect(run('DB_SUBMIT', invalid)).rejects.toThrow(/invalid/i);
     expect(store.connection.selectValue('SELECT count(*) FROM page')).toBe(0);
   }
   const { run: queued } = (await run('DB_SUBMIT', payload)) as { run: { id: string } };
@@ -417,13 +326,13 @@ it('rejects malformed Reading lifecycle payloads before native history changes',
       runId,
     ]);
   expect(row()?.status).toBe('queued');
-  await expect(run('DB_CLAIM', {})).rejects.toThrow('DB_CLAIM');
+  await expect(run('DB_CLAIM', {})).rejects.toThrow(/invalid/i);
   expect(row()?.status).toBe('queued');
   await expect(run('DB_CLAIM', { runId })).resolves.toBe(true);
-  await expect(run('DB_CHECKPOINT', { runId })).rejects.toThrow('DB_CHECKPOINT');
-  await expect(run('DB_CHECKPOINT', { runId, raw: false })).rejects.toThrow('DB_CHECKPOINT');
+  await expect(run('DB_CHECKPOINT', { runId })).rejects.toThrow(/invalid/i);
+  await expect(run('DB_CHECKPOINT', { runId, raw: false })).rejects.toThrow(/invalid/i);
   await expect(run('DB_CHECKPOINT', { runId, raw: 'partial' })).resolves.toBeUndefined();
-  await expect(run('DB_SAVING', { runId: 9 })).rejects.toThrow('DB_SAVING');
+  await expect(run('DB_SAVING', { runId: 9 })).rejects.toThrow(/invalid/i);
   expect(row()).toMatchObject({ status: 'running', response_raw: 'partial', latency_ms: null });
   await expect(run('DB_SAVING', { runId })).resolves.toBe(true);
   const finish = { runId, status: 'completed', latencyMs: 8, raw: 'final' };
@@ -435,7 +344,7 @@ it('rejects malformed Reading lifecycle payloads before native history changes',
     { ...finish, latencyMs: Infinity },
     { ...finish, latencyMs: undefined },
   ]) {
-    await expect(run('DB_FINISH', invalid)).rejects.toThrow('DB_FINISH');
+    await expect(run('DB_FINISH', invalid)).rejects.toThrow(/invalid/i);
     expect(row()).toMatchObject({ status: 'saving', response_raw: 'partial', latency_ms: null });
   }
   await expect(run('DB_FINISH', finish)).resolves.toBe(true);
@@ -447,12 +356,7 @@ it('rejects malformed lifecycle acknowledgements even when native storage commit
   const owner = randomUUID();
   const makeRequest = (type: string, payload: unknown) => ({
     action: 'history' as const,
-    request: {
-      operation: 'db' as const,
-      requestId: randomUUID(),
-      owner,
-      message: { type, payload },
-    },
+    request: createHistoryRequest(owner, randomUUID(), { type, payload } as DbRequest),
   });
   let malformed: unknown;
   let requests = 0;
@@ -516,4 +420,51 @@ it('rejects malformed lifecycle acknowledgements even when native storage commit
   await expect(
     requestHistory(makeRequest('DB_CHECKPOINT', { runId: 'run', raw: '' })),
   ).rejects.toThrow('The write may have been applied.');
+});
+
+it('converts the shared v4 fixture atomically and preserves its bookmark and frozen input on reopen', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'history-cutover-'));
+  roots.push(directory);
+  const old = new HistoryConnection(join(directory, 'history.sqlite3'));
+  const sql = (file: string) =>
+    readFileSync(new URL('../../../contracts/fixtures/' + file, import.meta.url), 'utf8');
+  old.exec(sql('history-v4.sql'));
+  old.exec(sql('history-v4-record.sql'));
+  // A real failure after the bookmark column change must leave v4 wholly intact.
+  old.exec('CREATE TABLE history_event (unrelated TEXT)');
+  expect(() => new SharedHistory(directory)).toThrow();
+  expect(old.selectValue('PRAGMA user_version')).toBe(4);
+  expect(old.selectValue('SELECT created_at FROM bookmark')).toBe(4);
+  expect(old.selectObjects('PRAGMA table_info(selection)').map((row) => row.name)).not.toContain(
+    'bookmarked_at',
+  );
+  old.exec('DROP TABLE history_event');
+  old.close();
+  const store = new SharedHistory(directory);
+  open.push(store);
+  const owner = randomUUID();
+  const call = (command: Parameters<typeof createHistoryRequest>[2]) =>
+    valueOf(store, createHistoryRequest(owner, randomUUID(), command));
+  expect(
+    await call({ type: 'DB_GET_HISTORY', payload: { searchQuery: 'Legacy', bookmarksOnly: true } }),
+  ).toMatchObject([{ selectionId: 'shared-selection', responseRaw: 'Legacy answer 🌱' }]);
+  expect(
+    await call({
+      type: 'DB_INPUT',
+      payload: { selectionId: 'shared-selection', runId: 'shared-run' },
+    }),
+  ).toMatchObject({ userPrompt: 'Exact old prompt' });
+  await call({
+    type: 'DB_SET_BOOKMARK',
+    payload: { selectionId: 'shared-selection', bookmarked: true },
+  });
+  const reopened = new SharedHistory(directory);
+  open.push(reopened);
+  expect(reopened.connection.selectValue('SELECT bookmarked_at FROM selection')).toBe(4);
+  expect(
+    reopened.connection.selectObjects(
+      "SELECT name FROM sqlite_schema WHERE name IN ('interaction','bookmark','history_migration')",
+    ),
+  ).toEqual([]);
+  expect(reopened.connection.selectValue('PRAGMA user_version')).toBe(5);
 });

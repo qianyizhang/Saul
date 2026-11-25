@@ -3,39 +3,75 @@ import Foundation
 import SaulNativeValues
 
 extension HistoryStore {
-    private static let browserFrom = """
-        selection s JOIN page p ON p.id=s.page_id JOIN llm_run r
-        ON r.rowid=(SELECT rowid FROM llm_run WHERE selection_id=s.id
-        AND status NOT IN ('queued','running','saving') ORDER BY created_at DESC,rowid DESC LIMIT 1)
+    static let nativeFrom = """
+        ez_entry e JOIN history_record h ON h.collection='library-native' AND h.id=e.id AND h.owner=''
+        JOIN history_entry d ON d.collection=h.collection AND d.record_id=h.id AND d.owner=h.owner AND d.id=e.id
         """
-    private static let browserColumns = """
+
+    private static func nativeEntryFilter(_ visibility: HistoryVisibility) -> String {
+        visibility == .visible
+            ? "d.masked_at IS NULL"
+            : HistoryVisibility.all.predicate("d.masked_at")
+    }
+
+    private static func browserFrom(_ visibility: HistoryVisibility) -> String {
+        """
+        selection s JOIN history_record h ON h.collection='library-browser' AND h.id=s.id AND h.owner=''
+        JOIN page p ON p.id=s.page_id JOIN llm_run r
+        ON r.rowid=(SELECT candidate.rowid FROM llm_run candidate JOIN history_entry detail
+            ON detail.collection='library-browser' AND detail.record_id=s.id
+            AND detail.id=candidate.id AND detail.owner='' WHERE candidate.selection_id=s.id
+            AND \(visibility == .visible ? "detail.masked_at IS NULL" : HistoryVisibility.all.predicate("detail.masked_at"))
+        AND status NOT IN ('queued','running','saving') ORDER BY created_at DESC,candidate.rowid DESC LIMIT 1)
+        """
+    }
+    static let browserColumns = """
         s.id,s.text,p.url,p.title,r.id AS run_id,r.response_structured IS NOT NULL AS has_image,
         r.input_json,r.prompt_raw,r.response_raw,r.model,r.status,r.error_message,r.created_at,r.latency_ms
         """
 
-    private static var matchesSQL: String {
+    private static func matchesSQL(_ visibility: HistoryVisibility) -> String {
         let input = "CASE WHEN json_valid(r.input_json) THEN r.input_json ELSE '{}' END"
+        let effectiveMask = HistoryVisibility.effectiveMask(parent: "h.masked_at", child: "d.masked_at")
         return """
             WITH records AS (
               SELECT 'native' AS kind,e.id AS key,upper(json_extract(e.data,'$.id')) AS stable_id,
                 CAST(strftime('%s',json_extract(e.data,'$.createdAt')) AS INTEGER)*1000 AS time,
-                json_extract(e.data,'$.query') AS query,json_extract(e.data,'$.response') AS answer
-              FROM ez_entry e
+                json_extract(e.data,'$.query') AS query,json_extract(e.data,'$.response') AS answer,
+                \(effectiveMask) AS masked_at, h.revision, NULL AS run_id
+              FROM \(Self.nativeFrom)
+              WHERE \(visibility.predicate("h.masked_at")) AND \(Self.nativeEntryFilter(visibility))
               UNION ALL
               SELECT 'browser',s.id,ez_history_uuid(s.id),r.created_at,
-                COALESCE(json_extract(\(input),'$.userPrompt'),s.text),r.response_raw
-              FROM \(Self.browserFrom)
+                COALESCE(json_extract(\(input),'$.userPrompt'),s.text),r.response_raw,h.masked_at,h.revision,r.id
+              FROM \(Self.browserFrom(visibility))
+              WHERE \(visibility.predicate("h.masked_at")) AND (
+                ?1='' OR EXISTS (
+                  SELECT 1 FROM llm_run candidate JOIN history_entry search_entry
+                  ON search_entry.collection='library-browser' AND search_entry.record_id=s.id
+                  AND search_entry.owner='' AND search_entry.id=candidate.id
+                  WHERE candidate.selection_id=s.id AND candidate.status NOT IN ('queued','running','saving')
+                    AND \(visibility == .visible ? "search_entry.masked_at IS NULL" : HistoryVisibility.all.predicate("search_entry.masked_at"))
+                    AND (ez_history_contains(
+                      COALESCE(json_extract(
+                        CASE WHEN json_valid(candidate.input_json) THEN candidate.input_json ELSE '{}' END,
+                        '$.userPrompt'
+                      ),s.text),?1) OR ez_history_contains(candidate.response_raw,?1))
+                )
+              )
             ), matches AS (
-              SELECT kind,key,stable_id,time FROM records
-              WHERE ?='' OR ez_history_contains(query,?) OR ez_history_contains(answer,?)
+              SELECT kind,key,stable_id,time,masked_at,revision,run_id FROM records
+              WHERE kind='browser' OR ?1='' OR ez_history_contains(query,?1) OR ez_history_contains(answer,?1)
             )
             """
     }
 
-    public func count(search: String, excluding identities: [RecordID] = []) throws -> Int {
+    public func count(
+        search: String, excluding identities: [RecordID] = [], visibility: HistoryVisibility = .visible
+    ) throws -> Int {
         sqlite3_progress_handler(database, 1000, { _ in Task.isCancelled ? 1 : 0 }, nil)
         defer { sqlite3_progress_handler(database, 0, nil, nil) }
-        var values: [Any?] = [search, search, search]
+        var values: [Any?] = [search]
         let exclusions = identities.map { identity -> String in
             switch identity {
             case .native(let id): values += ["native", id.uuidString.lowercased()]
@@ -47,40 +83,131 @@ extension HistoryStore {
         return try transaction(.deferred) {
             try requireCurrentSchema()
             return Int(
-                try rows(Self.matchesSQL + "SELECT count(*) AS total FROM matches" + predicate, values)
-                    .first?["total"] as? Int64 ?? 0)
+                try rows(
+                    Self.matchesSQL(visibility) + "SELECT count(*) AS total FROM matches" + predicate, values
+                )
+                .first?["total"] as? Int64 ?? 0)
         }
     }
 
     public func entry(_ id: RecordID) throws -> HistoryEntry? {
-        let snapshot = try transaction(.deferred) {
+        try get(id)?.value
+    }
+
+    public func get(
+        _ id: RecordID, view: HistoryDetailView = .lookup, visibility: HistoryVisibility = .visible
+    ) throws
+        -> HistoryRecord<HistoryEntry>?
+    {
+        let saved: (HistorySnapshot, Int64, Date?)? = try transaction(.deferred) {
             try requireCurrentSchema()
+            guard let metadata = try recordMetadata(id, visibility: visibility) else { return nil }
+            let snapshot: HistorySnapshot
             switch id {
             case .native(let uuid):
-                return HistorySnapshot(
+                snapshot = HistorySnapshot(
                     native: try rows(
-                        "SELECT data,image IS NOT NULL AS has_image FROM ez_entry WHERE id=?",
+                        "SELECT e.data,e.image IS NOT NULL AS has_image FROM \(Self.nativeFrom) WHERE e.id=? AND \(Self.nativeEntryFilter(visibility))",
                         [uuid.uuidString.lowercased()]), browser: [])
             case .browser(let key):
-                return HistorySnapshot(
+                snapshot = HistorySnapshot(
                     native: [],
                     browser: try rows(
-                        "SELECT \(Self.browserColumns) FROM \(Self.browserFrom) WHERE s.id=?", [key]))
+                        "SELECT \(Self.browserColumns) FROM \(Self.browserFrom(visibility)) WHERE s.id=?",
+                        [key]))
             }
+            return (snapshot, metadata.revision, metadata.maskedAt)
         }
-        return try snapshot.entries().first
+        guard let (snapshot, revision, maskedAt) = saved, let value = try snapshot.entries().first else {
+            return nil
+        }
+        return HistoryRecord(id: id, revision: revision, maskedAt: maskedAt, value: value)
+    }
+
+    public func entries(
+        _ record: RecordID, view: HistoryEntryView = .attempts,
+        visibility: HistoryVisibility = .visible, after cursor: HistoryEntryCursor? = nil
+    ) throws -> HistoryEntryPage {
+        if let cursor, cursor.record != record || cursor.visibility != visibility {
+            throw EZError("History entry scope changed. Reload the results.")
+        }
+        return try transaction(.deferred) {
+            try requireCurrentSchema()
+            let after = cursor?.position ?? -1
+            let values: [Any?] = [record.key, after]
+            let mask = HistoryVisibility.effectiveMask(parent: "h.masked_at", child: "d.masked_at")
+            let kind = record.collection.rawValue
+            let metadata = """
+                JOIN history_record h ON h.collection='\(kind)' AND h.id=? AND h.owner=''
+                JOIN history_entry d ON d.collection=h.collection AND d.record_id=h.id AND d.owner=h.owner
+                """
+            let filter = "d.position>? AND \(visibility.predicate(mask)) ORDER BY d.position LIMIT 101"
+            let results: [[String: Any]]
+            switch record {
+            case .native:
+                results = try rows(
+                    """
+                    SELECT e.data,e.image IS NOT NULL AS has_image,d.id AS entry_id,d.position,\(mask) AS effective_mask
+                    FROM ez_entry e \(metadata)
+                    WHERE e.id=h.id AND d.id=e.id AND \(filter)
+                    """, values)
+            case .browser:
+                results = try rows(
+                    """
+                    SELECT \(Self.browserColumns),d.id AS entry_id,d.position,\(mask) AS effective_mask
+                    FROM selection s JOIN page p ON p.id=s.page_id \(metadata)
+                    JOIN llm_run r ON r.selection_id=s.id AND r.id=d.id
+                    WHERE s.id=h.id AND r.status NOT IN ('queued','running','saving') AND \(filter)
+                    """, values)
+            }
+            let entries = try results.prefix(100).map { row -> HistoryRecordEntry in
+                guard let key = row["entry_id"] as? String, let position = row["position"] as? Int64 else {
+                    throw EZError("Invalid saved history entry.")
+                }
+                let snapshot: HistorySnapshot
+                let identity: HistoryEntryID
+                switch record {
+                case .native(let id):
+                    snapshot = HistorySnapshot(native: [row], browser: [])
+                    identity = .native(id)
+                case .browser:
+                    snapshot = HistorySnapshot(native: [], browser: [row])
+                    identity = .browser(key)
+                }
+                guard let entry = try snapshot.entries().first else {
+                    throw EZError("Invalid saved history entry.")
+                }
+                return HistoryRecordEntry(
+                    id: identity, position: position,
+                    maskedAt: (row["effective_mask"] as? Int64).map(HistoryVisibility.date), value: entry)
+            }
+            let next =
+                results.count > 100
+                ? entries.last.map {
+                    HistoryEntryCursor(record: record, position: $0.position, visibility: visibility)
+                }
+                : nil
+            return HistoryEntryPage(entries: entries, next: next)
+        }
     }
 
     public func page(search: String = "", after cursor: HistoryCursor? = nil) throws -> HistoryPage {
-        if let cursor, cursor.search != search {
+        try list(.library, search: search, after: cursor)
+    }
+
+    public func list(
+        _ view: HistoryListView, search: String = "", visibility: HistoryVisibility = .visible,
+        after cursor: HistoryCursor? = nil
+    ) throws -> HistoryPage {
+        if let cursor, cursor.search != search || cursor.visibility != visibility {
             throw EZError("History search changed. Reload the results.")
         }
         sqlite3_progress_handler(database, 1000, { _ in Task.isCancelled ? 1 : 0 }, nil)
         defer { sqlite3_progress_handler(database, 0, nil, nil) }
         return try transaction(.deferred) {
             try requireCurrentSchema()
-            let records = Self.matchesSQL
-            var values: [Any?] = [search, search, search]
+            let records = Self.matchesSQL(visibility)
+            var values: [Any?] = [search]
             let whereCursor: String
             if let cursor {
                 whereCursor = "WHERE (time,stable_id,kind) < (?,?,?)"
@@ -107,8 +234,7 @@ extension HistoryStore {
                     FROM selected
                     LEFT JOIN ez_entry e ON kind='native' AND e.id=key
                     LEFT JOIN selection s ON kind='browser' AND s.id=key
-                    LEFT JOIN llm_run r ON r.rowid=(SELECT rowid FROM llm_run WHERE selection_id=s.id
-                        AND status NOT IN ('queued','running','saving') ORDER BY created_at DESC,rowid DESC LIMIT 1)
+                    LEFT JOIN llm_run r ON r.id=selected.run_id
                     ORDER BY time DESC,stable_id DESC,kind DESC
                     """, values)
             try Task.checkCancellation()
@@ -130,7 +256,8 @@ extension HistoryStore {
                     actionCapability: (row["capability"] as? String).flatMap(
                         ActionCapability.init(rawValue:)),
                     actionLegacyMode: (row["legacy_mode"] as? String).flatMap(QueryMode.init(rawValue:)),
-                    status: status)
+                    status: status, maskedAt: (row["masked_at"] as? Int64).map(HistoryVisibility.date),
+                    revision: row["revision"] as? Int64)
             }
             let last = page.last
             let next =
@@ -139,17 +266,33 @@ extension HistoryStore {
                     guard let time = row["time"] as? Int64, let id = row["stable_id"] as? String,
                         let kind = row["kind"] as? String
                     else { return nil }
-                    return HistoryCursor(milliseconds: time, id: id, kind: kind, search: search)
+                    return HistoryCursor(
+                        milliseconds: time, id: id, kind: kind, search: search, visibility: visibility)
                 } : nil
             let total: Int64
             if let count = keys.first?["total"] as? Int64 {
                 total = count
             } else {
                 total =
-                    try rows(records + "SELECT count(*) AS total FROM matches", [search, search, search])
+                    try rows(records + "SELECT count(*) AS total FROM matches", [search])
                     .first?["total"] as? Int64 ?? 0
             }
             return HistoryPage(rows: items, next: next, total: Int(total))
+        }
+    }
+
+    func snapshot() throws -> HistorySnapshot {
+        try transaction(.deferred) {
+            try requireCurrentSchema()
+            return HistorySnapshot(
+                native: try rows(
+                    """
+                    SELECT e.data,e.image IS NOT NULL AS has_image FROM \(Self.nativeFrom)
+                    WHERE h.masked_at IS NULL AND d.masked_at IS NULL
+                    """),
+                browser: try rows(
+                    "SELECT \(Self.browserColumns) FROM \(Self.browserFrom(.visible)) WHERE h.masked_at IS NULL"
+                ))
         }
     }
 

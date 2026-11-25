@@ -7,7 +7,7 @@ interface MarkerMeasurement {
   attached: number;
 }
 
-test('record SQLite WASM OPFS scale', async ({}, info) => {
+test('record native SQLite history scale', async ({}, info) => {
   test.setTimeout(300_000);
   const sandbox = await createSandbox({
     databaseFixtures: true,

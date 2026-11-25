@@ -41,7 +41,7 @@ type AnnotationJob = {
   credential: string;
   controller: AbortController;
   phase: 'queued' | 'generating' | 'saving' | 'settling';
-  discarded?: true;
+  task?: Promise<void>;
 };
 
 const instructions =
@@ -97,27 +97,32 @@ export class AnnotationRunner {
       !request.operation.changes.some((change) => ['delete', 'purge'].includes(change.action))
     )
       return this.db({ type: 'DB_ANNOTATION', payload: request });
+    const affected = new Set(
+      request.operation.changes
+        .filter((change) => ['delete', 'purge'].includes(change.action))
+        .map((change) => change.id),
+    );
+    // A Call's callback cannot wait for the operation that invoked it.
+    if (signal) return this.db({ type: 'DB_ANNOTATION', payload: request });
     return this.control(async () => {
-      signal?.throwIfAborted();
-      const result = await this.db({ type: 'DB_ANNOTATION', payload: request });
-      if (request.operation.action !== 'change') return result;
-      for (const change of request.operation.changes) {
-        if (
-          !['delete', 'purge'].includes(change.action) ||
-          !result.outcomes?.some((outcome) => outcome.id === change.id && !outcome.error)
-        )
-          continue;
-        for (const job of this.jobs.values()) {
-          if (job.attempt.annotationId !== change.id) continue;
-          job.discarded = true;
+      await this.recover();
+      const settle = [...this.jobs.values()]
+        .filter((job) => affected.has(job.attempt.annotationId))
+        .map((job) => {
+          if (job.task) {
+            if (job.phase === 'generating') job.controller.abort();
+            return job.task;
+          }
+          job.phase = 'settling';
           job.controller.abort();
-          if (job.phase === 'queued') this.release(job);
-        }
-        for (const [id, failure] of this.failedWrites)
-          if (failure.annotationId === change.id) this.failedWrites.delete(id);
-      }
+          return this.fail(job, {
+            status: 'cancelled',
+            error: 'Stopped before generation.',
+          }).finally(() => this.release(job));
+        });
+      await Promise.all(settle);
       this.drain();
-      return result;
+      return this.db({ type: 'DB_ANNOTATION', payload: request });
     });
   }
 
@@ -185,7 +190,7 @@ export class AnnotationRunner {
       throw new Error('Select each annotation once.');
     const records: Annotation[] = [];
     for (const { id, revision, url } of p.targets) {
-      if ([...this.jobs.values()].some((job) => !job.discarded && job.attempt.annotationId === id))
+      if ([...this.jobs.values()].some((job) => job.attempt.annotationId === id))
         throw new Error('An annotation is already running.');
       const { record } = await this.db({
         type: 'DB_ANNOTATION',
@@ -260,10 +265,10 @@ export class AnnotationRunner {
     let slots = 2 - [...this.jobs.values()].filter((job) => job.phase !== 'queued').length;
     for (const job of this.jobs.values()) {
       if (slots <= 0) break;
-      if (job.phase !== 'queued' || job.discarded) continue;
+      if (job.phase !== 'queued') continue;
       slots--;
       job.phase = 'generating';
-      void this.run(job).finally(() => {
+      job.task = this.run(job).finally(() => {
         this.release(job);
         this.drain();
       });
@@ -280,15 +285,13 @@ export class AnnotationRunner {
     job: AnnotationJob,
     failure: { status: 'failed' | 'cancelled'; error: string },
   ) {
-    if (job.discarded) return;
     try {
       await this.store({ action: 'save', attempt: { ...job.attempt, ...failure } });
     } catch (cause) {
-      if (!job.discarded)
-        this.failedWrites.set(job.attempt.id, {
-          annotationId: job.attempt.annotationId,
-          error: new AnnotationWriteError(cause).message,
-        });
+      this.failedWrites.set(job.attempt.id, {
+        annotationId: job.attempt.annotationId,
+        error: new AnnotationWriteError(cause).message,
+      });
     }
   }
 

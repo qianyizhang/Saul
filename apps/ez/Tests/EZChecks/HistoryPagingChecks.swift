@@ -70,7 +70,9 @@ import SaulTestSupport
                     name: "Custom \(capability.rawValue)", presetID: UUID(),
                     template: "{{first}} then {{second}}", legacyMode: legacyMode, capability: capability)
                 entry.inputValues = ["second": "Suffix", "first": String(repeating: "👩🏽‍💻", count: 511)]
-                let live = HistoryRow(entry)
+                var projection = entry
+                projection.observedRevision = 1
+                let live = HistoryRow(projection)
                 try expectEqual(live.actionSymbol, symbol, "Live icon fixture is invalid")
                 try store.append(entry)
                 let persisted = try store.page().rows.first { $0.id == entry.id }
@@ -102,10 +104,19 @@ import SaulTestSupport
                 )
             }
             let page = try store.page()
-            let all = try store.load()
+            let all = try store.load().map { entry in
+                var projection = entry
+                projection.observedRevision = try store.get(entry.recordID)?.revision
+                return HistoryRow(projection)
+            }
             try expectEqual(
-                page.rows, all.map(HistoryRow.init), "Mixed-source list differs from saved-history projection"
+                page.rows, all, "Mixed-source list differs from saved-history projection"
             )
+            try expectEqual(try store.page(search: "Old").total, 1, "Search missed an older saved attempt")
+            let older = HistoryTarget.entry(.browser(selectionID: "s"), .browser("older"))
+            let revision = try store.get(.browser(selectionID: "s"))?.revision
+            _ = try store.mask(older, write: HistoryWrite(expectedRevision: revision))
+            try expectEqual(try store.page(search: "Old").total, 0, "Search included a masked older attempt")
             let found = try store.page(search: "needle")
             try expectEqual(found.total, 1, "Browser answer search missed the full text")
             let detail = try store.entry(found.rows[0].recordID)

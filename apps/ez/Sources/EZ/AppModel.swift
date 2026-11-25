@@ -120,6 +120,10 @@ import SaulNativeValues
     let allowsExternalServices: Bool
     let speak: (@MainActor (ModelPreset, String) async throws -> Data)?
     private let historyCollection: HistoryCollection
+    let library: LibraryMaintenance?
+    var canMaintainLibrary: Bool {
+        !quitting && !busy && !launcherPending && historyCollection.ready && lock != nil
+    }
     private let readInputImage: @MainActor (HistoryEntry) async throws -> ImageAttachment?
     private enum Submission {
         case lookup
@@ -143,13 +147,15 @@ import SaulNativeValues
         readHistoryEntry: @escaping @MainActor (HistoryStore.RecordID) async throws -> HistoryEntry?,
         readInputImage: @escaping @MainActor (HistoryEntry) async throws -> ImageAttachment?,
         readOutputImage: @escaping @MainActor (HistoryEntry) async throws -> Data?,
-        deleteHistory: @escaping @MainActor (HistoryStore.RecordID) async throws -> Void,
+        deleteHistory: @escaping @MainActor (HistoryStore.RecordID, Bool, Int64?) async throws -> Void,
+        library: LibraryMaintenance? = nil,
         speak: (@MainActor (ModelPreset, String) async throws -> Data)? = nil,
         allowsExternalServices: Bool = false
     ) {
         self.session = session
         self.allowsExternalServices = allowsExternalServices
         self.speak = speak
+        self.library = library
         self.attemptExecution = attemptExecution
         self.minimumMode = minimumMode
         self.setMinimumMode = setMinimumMode
@@ -392,6 +398,19 @@ import SaulNativeValues
     private func startLookup(_ entry: HistoryEntry, source: Submission = .lookup) throws {
         guard canStartLookup, let attemptExecution else { return }
         cancelRetryPreparation()
+        var entry = entry
+        switch source {
+        case .retry(let previous):
+            if historyCollection.knownDetail(previous)?.transientFailure != true {
+                entry.admissionSourceID = previous.uuidString.lowercased()
+            }
+        case .followUp(let previous):
+            entry.admissionSourceID = previous.uuidString.lowercased()
+        case .lookup:
+            if let reused = draft.reusedEntry, !reused.transientFailure {
+                entry.admissionSourceID = reused.id.uuidString.lowercased()
+            }
+        }
         submitting = (entry.id, selection, source)
         do {
             try attemptExecution.start(entry)
@@ -731,7 +750,12 @@ import SaulNativeValues
             retryPreparingID = id
             let task = Task { [weak self, readInputImage] in
                 do {
-                    let image = try await readInputImage(original)
+                    let image: ImageAttachment?
+                    if original.transientFailure {
+                        image = original.inputImage
+                    } else {
+                        image = try await readInputImage(original)
+                    }
                     try Task.checkCancellation()
                     let preparation = Task.detached {
                         try Task.checkCancellation()
@@ -812,6 +836,28 @@ import SaulNativeValues
             return nil
         }
         guard canReuse(entry) else { return nil }
+        if let library, !entry.transientFailure {
+            let originalDraftRevision = draftRevision
+            return Task { [weak self] in
+                do {
+                    guard let current = try await library.reader.get(entry.recordID)?.value, let self else {
+                        self?.error = "The saved lookup is unavailable. Refresh History."
+                        return
+                    }
+                    guard !Task.isCancelled, canReuse(current), selection == entry.id,
+                        draftRevision == originalDraftRevision
+                    else { return }
+                    await reuseVisible(current)?.value
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    self?.error = error.localizedDescription
+                }
+            }
+        }
+        return reuseVisible(entry)
+    }
+
+    private func reuseVisible(_ entry: HistoryEntry) -> Task<Void, Never>? {
         var saved = entry
         if saved.actionSnapshot == nil {
             let preset = ModelPreset(
@@ -833,7 +879,13 @@ import SaulNativeValues
         let restoreAsSketch = usesSketch
         let task = Task { [weak self, readInputImage, saved] in
             do {
-                guard let attachment = try await readInputImage(saved) else {
+                let restored: ImageAttachment?
+                if saved.transientFailure {
+                    restored = saved.inputImage
+                } else {
+                    restored = try await readInputImage(saved)
+                }
+                guard let attachment = restored else {
                     throw EZError("The saved input image is unavailable.")
                 }
                 try Task.checkCancellation()
@@ -897,16 +949,39 @@ import SaulNativeValues
         historyCollection.isTransientFailure(entry.recordID)
     }
 
+    func canStopAndDeleteLookup(_ id: HistoryStore.RecordID) -> Bool {
+        guard canStop, let active = runningAttempt?.entry else { return false }
+        if active.recordID == id { return true }
+        guard case .native(let uuid) = id else { return false }
+        return active.admissionSourceID == uuid.uuidString.lowercased()
+    }
+
+    @discardableResult func stopAndDeleteLookup(_ id: HistoryStore.RecordID) -> Task<Void, Never>? {
+        guard canStopAndDeleteLookup(id) else { return nil }
+        attemptExecution?.stop()
+        return Task { [weak self] in
+            guard let self else { return }
+            await attemptExecution?.waitForSettlement()
+            await deleteLookup(id)?.value
+        }
+    }
+
     func canDeleteLookup(_ id: HistoryStore.RecordID) -> Bool {
         !quitting && !busy && !launcherPending && historyCollection.ready && lock != nil
             && historyCollection.deleting == nil && !historyCollection.isTransientFailure(id)
     }
-    @discardableResult func deleteLookup(_ id: HistoryStore.RecordID) -> Task<Void, Never>? {
+    @discardableResult func deleteLookup(
+        _ id: HistoryStore.RecordID, expectedRevision: Int64? = nil
+    ) -> Task<Void, Never>? {
         guard canDeleteLookup(id),
             let entry = entries.first(where: { $0.recordID == id })
                 ?? selectedEntry.flatMap({ $0.recordID == id ? HistoryRow($0) : nil })
         else { return nil }
-        return historyCollection.remove(id) { [weak self] result in
+        let revision = expectedRevision ?? entry.revision
+        return historyCollection.remove(
+            id, settledPending: entry.status == "unsaved", expectedRevision: revision
+        ) {
+            [weak self] result in
             guard let self else { return }
             switch result {
             case .success:

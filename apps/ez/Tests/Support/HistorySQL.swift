@@ -53,3 +53,25 @@ public final class HistoryFixtureWriter {
         }
     }
 }
+
+public func historyVersionFourFixture(_ directory: URL, seed: Bool = false) throws -> URL {
+    let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appendingPathComponent("../../../../contracts/fixtures").standardizedFileURL
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let url = directory.appendingPathComponent("history.sqlite3")
+    var database: OpaquePointer?
+    guard sqlite3_open_v2(url.path, &database, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK
+    else {
+        sqlite3_close(database)
+        throw CheckFailure("Cannot create v4 history fixture")
+    }
+    defer { sqlite3_close(database) }
+    let files = seed ? ["history-v4.sql", "history-v4-record.sql"] : ["history-v4.sql"]
+    for file in files {
+        let sql = try String(contentsOf: fixtures.appendingPathComponent(file), encoding: .utf8)
+        guard sqlite3_exec(database, sql, nil, nil, nil) == SQLITE_OK else {
+            throw CheckFailure(String(cString: sqlite3_errmsg(database)))
+        }
+    }
+    return url
+}

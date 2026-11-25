@@ -41,7 +41,7 @@ export type StorageHelperRequest =
       connections?: ConnectionDefinition[];
     };
 export interface StorageResults {
-  history: { value: unknown };
+  history: { value: unknown; revision?: number };
   'config-read': { config: ScopedConfig };
   'config-save': { config: ScopedConfig };
   'config-commit': { config: ScopedConfig; library: SharedPresets };
@@ -120,8 +120,7 @@ export function validateStorageResult<T extends StorageHelperRequest>(
   request: T,
   value: unknown,
 ): asserts value is StorageResult<T> {
-  if (request.action === 'history' && request.request.operation === 'db')
-    validateHistoryResult(request.request.message.type, value);
+  if (request.action === 'history') validateHistoryResult(request.request, value);
   const validators: Record<
     StorageHelperRequest['action'],
     (v: Record<string, unknown>) => boolean

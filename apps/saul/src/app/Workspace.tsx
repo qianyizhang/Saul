@@ -14,13 +14,18 @@ const historyViews = [
   ['history', 'Passages'],
   ['summaries', 'Summaries'],
   ['deep-dives', 'Deep dives'],
+  ['recently-deleted', 'Recently deleted'],
 ] as const;
 
 type View = (typeof historyViews)[number][0] | 'tabs' | 'settings' | 'summary';
 function viewFromHash(): View {
   const hash = location.hash.slice(1);
   if (hash.startsWith('summary/')) return 'summary';
-  return hash === 'tabs' || hash === 'settings' || hash === 'summaries' || hash === 'deep-dives'
+  return hash === 'tabs' ||
+    hash === 'settings' ||
+    hash === 'summaries' ||
+    hash === 'deep-dives' ||
+    hash === 'recently-deleted'
     ? hash
     : 'history';
 }
@@ -52,6 +57,7 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
       summaries: 'Summaries',
       summary: 'Summary',
       'deep-dives': 'Deep dives',
+      'recently-deleted': 'Recently deleted',
     };
     document.title = 'Saul · ' + labels[view];
   }, [view]);
@@ -159,8 +165,14 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
       {view === 'deep-dives' && <DeepDiveHistory />}
       {view === 'summaries' && <SummaryHistory />}
       {view === 'summary' && <SummaryReader key={route.split('?')[0]} route={route} />}
-      {view === 'history' && (
-        <Library compact={popup} refreshKey={readingRevision} minimum={presentation.minimum} />
+      {(view === 'history' || view === 'recently-deleted') && (
+        <Library
+          key={view}
+          compact={popup}
+          refreshKey={readingRevision}
+          minimum={presentation.minimum}
+          deleted={view === 'recently-deleted'}
+        />
       )}
       {view === 'tabs' && <Tabs />}
       {view === 'settings' && (

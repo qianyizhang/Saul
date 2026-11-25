@@ -40,10 +40,12 @@ type CommentSave = {
 export function useAnnotationEditorSession({
   id,
   url,
+  deleted = false,
   updated,
 }: {
   id: string;
   url: string;
+  deleted?: boolean;
   updated: () => void;
 }) {
   const [record, setRecord] = useState<AnnotationEditorRecord>(),
@@ -64,13 +66,14 @@ export function useAnnotationEditorSession({
   const pendingSave = useRef<{ value: CommentSave } | undefined>(undefined);
   const statusObserver = useRef<StatusObserver<EditorRead> | null>(null);
   const mounted = useRef(false);
+  const visibility = deleted ? 'masked' : undefined;
   const [session] = useState(() =>
     annotationMutationSession<AnnotationEditorRecord>({
       id,
       read: async () => {
-        const status = await annotationMessage({ action: 'status', url, id });
+        const status = await annotationMessage({ action: 'status', url, id, visibility });
         if (status.kind === 'missing') return undefined;
-        return (await annotations(url, { action: 'read', id, image: false })).record;
+        return (await annotations(url, { action: 'read', id, image: false, visibility })).record;
       },
       write: (change) => annotations(url, { action: 'change', changes: [change] }),
       publish: setRecord,
@@ -91,7 +94,10 @@ export function useAnnotationEditorSession({
           currentDraft.current.phase === 'loading'
             ? storedDraft((await chrome.storage.local.get(draftKey))[draftKey])
             : undefined;
-        return { status: await annotationMessage({ action: 'status', url, id, known }), recovered };
+        return {
+          status: await annotationMessage({ action: 'status', url, id, known, visibility }),
+          recovered,
+        };
       },
       shouldPoll: ({ status }) =>
         status.kind === 'found' && status.attempts.some(activeAnnotationAttempt),
@@ -138,7 +144,7 @@ export function useAnnotationEditorSession({
       observer.dispose();
       chrome.storage.onChanged.removeListener(changed);
     };
-  }, [id, url, draftKey, publishDraft, session]);
+  }, [id, url, visibility, draftKey, publishDraft, session]);
   const enqueue = (work: () => Promise<void>) => {
     session.enqueue(work, (cause) => {
       if (mounted.current) setError(String(cause));

@@ -20,14 +20,54 @@ public actor HistoryReader {
         return try HistoryStore(reading: directory).page(search: search, after: cursor)
     }
 
+    public func list(
+        _ view: HistoryListView, search: String = "", visibility: HistoryVisibility = .visible,
+        after cursor: HistoryCursor? = nil
+    ) throws -> HistoryPage {
+        try Task.checkCancellation()
+        return try HistoryStore(reading: directory).list(
+            view, search: search, visibility: visibility, after: cursor)
+    }
+
+    public func get(
+        _ id: HistoryStore.RecordID, view: HistoryDetailView = .lookup,
+        visibility: HistoryVisibility = .visible
+    ) throws -> HistoryRecord<HistoryEntry>? {
+        try Task.checkCancellation()
+        return try HistoryStore(reading: directory).get(id, view: view, visibility: visibility)
+    }
+
+    public func entries(
+        _ id: HistoryStore.RecordID, view: HistoryEntryView = .attempts,
+        visibility: HistoryVisibility = .visible,
+        after cursor: HistoryEntryCursor? = nil
+    ) throws -> HistoryEntryPage {
+        try Task.checkCancellation()
+        return try HistoryStore(reading: directory).entries(
+            id, view: view, visibility: visibility, after: cursor)
+    }
+
+    public func attachment(_ ref: HistoryAttachmentRef, visibility: HistoryVisibility = .visible) throws
+        -> Data?
+    {
+        try Task.checkCancellation()
+        return try HistoryStore(reading: directory).attachment(ref, visibility: visibility)
+    }
+
     public func count(search: String, excluding identities: [HistoryStore.RecordID]) throws -> Int {
         try Task.checkCancellation()
         return try HistoryStore(reading: directory).count(search: search, excluding: identities)
     }
 
     public func entry(_ id: HistoryStore.RecordID) throws -> HistoryEntry? {
-        try Task.checkCancellation()
-        return try HistoryStore(reading: directory).entry(id)
+        try get(id)?.value
+    }
+
+    public func entryForSelection(_ id: HistoryStore.RecordID) throws -> HistoryEntry? {
+        guard let saved = try get(id) else { return nil }
+        var entry = saved.value
+        entry.observedRevision = saved.revision
+        return entry
     }
 
     public func inputImage(for entry: HistoryEntry) throws -> ImageAttachment? {

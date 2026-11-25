@@ -98,7 +98,7 @@ export class CallBatchRunner {
     if (r.action === 'active') return structuredClone([...this.runs.values()].at(-1)?.batch);
     if (r.action === 'inspect') {
       const batch = await this.db({ type: 'DB_DIGEST_GET', payload: { id: r.id } });
-      const item = batch.items[r.index];
+      const item = batch.items.find(({ index }) => index === r.index);
       if (!item) throw new Error('This summary source does not exist.');
       return this.inspect(batch, item, r.tabId);
     }
@@ -107,6 +107,7 @@ export class CallBatchRunner {
       const batch = await this.find(snapshot);
       if (!batch) return { comparisons: [] };
       const comparisons: DigestComparison[] = [];
+      const savedItems = new Map(batch.items.map((item) => [item.index, item]));
       let modelChange: string | undefined;
       if ('currentModel' in snapshot) {
         const saved = batch.action?.input ?? batch.summaryInput;
@@ -126,20 +127,32 @@ export class CallBatchRunner {
       const queue = [...snapshot.items];
       const compare = async () => {
         for (let item = queue.shift(); item; item = queue.shift()) {
+          const saved = savedItems.get(item.index);
+          if (!saved) {
+            comparisons.push({
+              index: item.index,
+              fields: [],
+              error: 'The saved source is unavailable.',
+            });
+            continue;
+          }
           const inspected = await this.inspect(
             batch,
-            batch.items[item.index]!,
+            saved,
             item.tabId,
             item,
             snapshot.pdfProcessing ?? batch.pdfProcessing ?? 'local',
           );
           const comparison = inspected.comparison!;
           if (modelChange) comparison.fields.push(modelChange);
-          comparisons[item.index] = comparison;
+          comparisons.push(comparison);
         }
       };
       await Promise.all([compare(), compare()]);
-      return { batch: structuredClone(batch), comparisons };
+      return {
+        batch: structuredClone(batch),
+        comparisons: comparisons.sort((a, b) => a.index - b.index),
+      };
     }
     if (r.action === 'list') return this.db({ type: 'DB_DIGEST_LIST', payload: undefined });
     if (r.action === 'get') {

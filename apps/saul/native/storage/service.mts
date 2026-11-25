@@ -21,7 +21,7 @@ export class HistoryConfigService {
     switch (request.action) {
       case 'history':
         this.history ??= new SharedHistory();
-        emit({ type: 'result', value: (await this.history.run(request.request)) ?? null });
+        emit(await this.history.run(request.request));
         return;
       case 'config-read':
         emit({ type: 'result', config: this.presets.readScope(request.section) });

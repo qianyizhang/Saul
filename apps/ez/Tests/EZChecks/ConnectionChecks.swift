@@ -87,35 +87,42 @@ import SaulTestSupport
         },
         CheckCase("connections: history upgrades only connection fields and rolls back conflicting snapshots")
         { directory in
-            let store = try HistoryStore(directory: directory)
-            var entry = HistoryEntry(
-                mode: .ask, query: "Saved", model: "saved-model", effort: "", requestedServiceTier: nil)
-            entry.connectionSnapshot = ConnectionDefinition(
-                key: "personal", name: "Personal", kind: .chatGPTPlan, accountId: "account-one")
-            try store.append(entry)
+            let path = try historyVersionFourFixture(directory)
+            let id = UUID().uuidString
+            let legacy = """
+                {"schemaVersion":1,"id":"\(id)","createdAt":"2026-11-25T06:00:00Z","mode":"Ask",
+                 "status":"completed","query":"Saved","response":"Answer","model":"saved-model","effort":"",
+                 "providerSnapshot":{"key":"personal","name":"Personal","kind":"chatgpt-plan","accountId":"account-one"},
+                 "inputValues":{"providerKey":"literal input"}}
+                """
             _ = try historySQL(
-                store.url,
-                "UPDATE ez_entry SET data=json_remove(json_set(data,'$.providerSnapshot',json_extract(data,'$.connectionSnapshot'),'$.inputValues.providerKey','literal input'),'$.connectionSnapshot')"
-            )
-            _ = try historySQL(store.url, "PRAGMA user_version=3")
+                path, "INSERT INTO ez_entry(id,created_at,data) VALUES ('\(id.lowercased())',1,'\(legacy)')")
+            _ = try historySQL(path, "PRAGMA user_version=3")
             let reopened = try HistoryStore(directory: directory)
             let restored = try reopened.load()[0]
             try expectEqual(restored.connectionSnapshot?.accountId, "account-one", "History identity changed")
             try expectEqual(restored.inputValues?["providerKey"], "literal input", "User input was renamed")
             try expectEqual(
-                try historySQL(store.url, "PRAGMA user_version"), "4", "History upgrade was not recorded")
+                try historySQL(path, "PRAGMA user_version"), "5", "History upgrade was not recorded")
+
+            let conflictDirectory = directory.appendingPathComponent("conflicting")
+            let conflict = try historyVersionFourFixture(conflictDirectory)
             _ = try historySQL(
-                store.url,
-                "UPDATE ez_entry SET data=json_set(data,'$.providerSnapshot',json_extract(data,'$.connectionSnapshot'))"
+                conflict,
+                "INSERT INTO ez_entry(id,created_at,data) VALUES ('\(id.lowercased())',1,'\(legacy)')")
+            _ = try historySQL(
+                conflict,
+                "UPDATE ez_entry SET data=json_set(data,'$.connectionSnapshot',json_extract(data,'$.providerSnapshot'))"
             )
-            _ = try historySQL(store.url, "PRAGMA user_version=3")
-            let before = try historySQL(store.url, "SELECT data FROM ez_entry")
-            try expectThrows(EZError.self) { _ = try HistoryStore(directory: directory) }
+            _ = try historySQL(conflict, "PRAGMA user_version=3")
+            let before = try historySQL(conflict, "SELECT data FROM ez_entry")
+            try expectThrows(EZError.self) { _ = try HistoryStore(directory: conflictDirectory) }
             try expectEqual(
-                try historySQL(store.url, "SELECT data FROM ez_entry"), before,
+                try historySQL(conflict, "SELECT data FROM ez_entry"), before,
                 "Failed upgrade rewrote history")
             try expectEqual(
-                try historySQL(store.url, "PRAGMA user_version"), "3", "Failed upgrade advanced schema")
+                try historySQL(conflict, "PRAGMA user_version"), "3",
+                "Failed upgrade advanced schema")
         },
         CheckCase(
             "connections: live catalogs retain last good data and distinguish removal from failed refresh"

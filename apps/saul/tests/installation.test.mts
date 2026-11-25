@@ -185,13 +185,13 @@ it('rejects retired credential calls but keeps history and configuration on the 
       await exchange({
         action: 'history',
         request: {
-          operation: 'db',
+          operation: 'history',
           owner: randomUUID(),
-          requestId: randomUUID(),
-          message: { type: 'DB_GET_HISTORY', payload: {} },
+          operationId: randomUUID(),
+          command: { kind: 'list', view: 'library.records', query: {} },
         },
       }),
-    ).toMatchObject({ event: { type: 'result', value: [] } });
+    ).toMatchObject({ event: { type: 'result', value: { items: [] } } });
     child.stdin.end();
     expect((await exited)[0]).toBe(0);
     expect(fs.readdirSync(credentials).sort()).toEqual([...preserved.keys()].sort());

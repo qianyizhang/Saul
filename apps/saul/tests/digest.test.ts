@@ -118,6 +118,28 @@ async function waitDone(r: CallBatchRunner) {
   });
 }
 describe('Call batches', () => {
+  it('inspects a surviving item at its original index when another item is hidden', async () => {
+    const f = fixture();
+    const record = batch();
+    const item = record.items[2]!;
+    const source = {
+      text: 'Third page evidence',
+      coverage: 'Visible',
+      capturedAt: 1,
+      truncated: false,
+    };
+    await f.mock({ type: 'DB_DIGEST_CREATE', payload: record });
+    await f.mock({ type: 'DB_DIGEST_ITEM', payload: { id: record.id, item, source } });
+    f.get().items = f.get().items.filter((entry) => entry.index !== 1);
+    const runner = new CallBatchRunner(f.db, f.capture);
+    expect(await runner.request({ action: 'inspect', id: record.id, index: 2 })).toEqual({
+      saved: source,
+    });
+    await expect(runner.request({ action: 'inspect', id: record.id, index: 1 })).rejects.toThrow(
+      'source does not exist',
+    );
+  });
+
   it('sends saved PDF URL attachments on retry, discloses unverified contents, and compares changed processing modes without inference', async () => {
     const f = fixture();
     const source: DigestSource = {

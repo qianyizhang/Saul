@@ -17,9 +17,7 @@ change frozen Retry/Reuse/Follow-up inputs or saved record identities.
 
 ## Accepted interface
 
-Accepted 2026-11-25 for the next shared schema. The SQLite file and the two independently installed
-adapters above are in use today. The interface, retention policy and cutover below are build
-requirements. [Decision and rationale](../docs/adr/0007-history-records-and-entries.md)
+Schema v5 uses this interface for the shared SQLite store. [Decision and rationale](../docs/adr/0007-history-records-and-entries.md)
 
 A **collection** defines scope and access. A **record** has a stable, opaque identity within that scope.
 An **entry** is an independently identifiable contribution to a record. An **event** records a

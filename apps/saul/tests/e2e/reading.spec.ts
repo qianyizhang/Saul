@@ -182,14 +182,12 @@ test('queue limits, frozen configuration, repeated Explain, stop, and deletion d
     await expect.poll(() => server.requests.length).toBe(3);
     expect(JSON.parse(server.requests[2]!.body).model).toBe('test-model');
     // Deleting the last, running passage prevents its eventual terminal event recreating it.
-    const row = (await history(popup)).find((passage) => passage.selectedText === 'Learning rate');
-    if (!row) throw new Error('Expected the Learning rate passage in history');
-    await popup.evaluate(async (id) => {
-      await chrome.runtime.sendMessage({
-        target: 'saul-workspace',
-        message: { type: 'DB_DELETE_SELECTION', payload: { selectionId: id } },
-      });
-    }, row.selectionId);
+    await popup.getByRole('button', { name: 'History', exact: true }).click();
+    const row = popup.locator('.history-entry').filter({ hasText: 'Learning rate' });
+    await row.locator('.history-title').click();
+    await row.locator('.history-more > summary').click();
+    await row.getByRole('button', { name: 'Stop and delete', exact: true }).last().click();
+    await expect(row).toHaveCount(0);
     server.setGated(false);
     server.releaseAll();
     await expect.poll(async () => (await history(popup)).length).toBe(2);

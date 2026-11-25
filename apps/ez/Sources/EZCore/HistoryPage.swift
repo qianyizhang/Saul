@@ -10,6 +10,8 @@ public struct HistoryRow: Identifiable, Equatable, Sendable {
     public let actionName: String
     public let actionSymbol: String
     public let status: String
+    public let maskedAt: Date?
+    public let revision: Int64?
 
     public init(_ entry: HistoryEntry) {
         let time = entry.createdAt.timeIntervalSince1970
@@ -19,13 +21,13 @@ public struct HistoryRow: Identifiable, Equatable, Sendable {
             displayQuery: entry.displayQuery, mode: entry.mode, actionName: entry.actionSnapshot?.name,
             actionCapability: entry.actionSnapshot?.capability,
             actionLegacyMode: entry.actionSnapshot?.legacyMode,
-            status: entry.status)
+            status: entry.status, revision: entry.observedRevision)
     }
 
     init(
         id: UUID, recordID: HistoryStore.RecordID, createdAt: Date, displayQuery: String,
         mode: QueryMode, actionName: String?, actionCapability: ActionCapability?,
-        actionLegacyMode: QueryMode?, status: String
+        actionLegacyMode: QueryMode?, status: String, maskedAt: Date? = nil, revision: Int64? = nil
     ) {
         self.id = id
         self.recordID = recordID
@@ -37,6 +39,8 @@ public struct HistoryRow: Identifiable, Equatable, Sendable {
         self.actionName = presentation.name
         self.actionSymbol = presentation.symbol
         self.status = status
+        self.maskedAt = maskedAt
+        self.revision = revision
     }
 
     static func boundedLabel(_ label: String) -> String { String(label.prefix(512)) }
@@ -70,11 +74,16 @@ public struct HistoryCursor: Equatable, Sendable {
     public let id: String
     public let kind: String
     public let search: String
-    public init(milliseconds: Int64, id: String, kind: String, search: String = "") {
+    let visibility: HistoryVisibility
+    public init(
+        milliseconds: Int64, id: String, kind: String, search: String = "",
+        visibility: HistoryVisibility = .visible
+    ) {
         self.milliseconds = milliseconds
         self.id = id
         self.kind = kind
         self.search = search
+        self.visibility = visibility
     }
 }
 

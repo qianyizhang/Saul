@@ -1,9 +1,5 @@
-import { upgradeHistoryConnections } from './connection-upgrade.ts';
-import { DIGEST_SCHEMA } from './call-batches.ts';
-import type { SqlDatabase } from './sql.ts';
-import { searchableResponse } from './search.ts';
+-- Frozen bootstrap used by the previous v4 release. For cutover tests only.
 
-const LEGACY_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS page (
     id              TEXT PRIMARY KEY,
     url             TEXT NOT NULL UNIQUE,
@@ -83,51 +79,26 @@ END;
 CREATE TRIGGER IF NOT EXISTS explanation_ad AFTER DELETE ON llm_run BEGIN
   DELETE FROM explanation_fts WHERE rowid = old.rowid;
 END;
-`;
 
-export const SCHEMA_VERSION = 3;
-
-export function migrate(db: SqlDatabase): void {
-  const version = Number(db.selectValue('PRAGMA user_version') || 0);
-  if (version > SCHEMA_VERSION)
-    throw new Error(
-      `Database version ${version} is newer than this Saul release. Downgrades are unsupported.`,
-    );
-  if (version === SCHEMA_VERSION) return;
-  // The unversioned release is version 0. DDL, backfill, and version advance
-  // share one transaction; a failed upgrade leaves the original database intact.
-  db.transaction(() => {
-    if (version < 1) {
-      db.exec(LEGACY_SCHEMA_SQL);
-      db.exec(`
-      ALTER TABLE selection ADD COLUMN anchor_exact TEXT;
-      ALTER TABLE selection ADD COLUMN anchor_key TEXT;
-      ALTER TABLE llm_run ADD COLUMN submission_id TEXT;
-      ALTER TABLE llm_run ADD COLUMN input_json TEXT;
-      ALTER TABLE llm_run ADD COLUMN viewed_at INTEGER;
-      ALTER TABLE llm_run ADD COLUMN reason TEXT;
-      CREATE TABLE submission (id TEXT PRIMARY KEY, selection_id TEXT REFERENCES selection(id) ON DELETE SET NULL);
-      CREATE UNIQUE INDEX run_submission ON llm_run(submission_id);
-      CREATE INDEX selection_page ON selection(page_id);
-      CREATE UNIQUE INDEX selection_anchor ON selection(page_id, anchor_key);
-      CREATE INDEX selection_recent ON selection(created_at DESC, id DESC);
-      CREATE INDEX run_latest ON llm_run(selection_id, created_at DESC);
-      CREATE INDEX run_success ON llm_run(selection_id, created_at DESC) WHERE status = 'completed';
-      CREATE INDEX run_unread ON llm_run(status, viewed_at, selection_id);
-      UPDATE llm_run SET viewed_at = created_at WHERE status = 'completed';
-      UPDATE llm_run SET status = 'interrupted', reason = 'upgrade', error_message = 'Interrupted before upgrade. Retry explicitly.' WHERE status IN ('running', 'aborted');
-    `);
-      for (const row of db.selectObjects(
-        'SELECT rowid,response_raw FROM llm_run WHERE rowid NOT IN (SELECT rowid FROM explanation_fts)',
-      )) {
-        db.exec({
-          sql: 'INSERT INTO explanation_fts(rowid,body) VALUES (?,?)',
-          bind: [row.rowid!, searchableResponse(String(row.response_raw || ''))],
-        });
-      }
-    }
-    if (version < 2) db.exec(DIGEST_SCHEMA);
-    if (version < 3) upgradeHistoryConnections(db, false);
-    db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
-  });
-}
+ALTER TABLE selection ADD COLUMN anchor_exact TEXT;
+ALTER TABLE selection ADD COLUMN anchor_key TEXT;
+ALTER TABLE llm_run ADD COLUMN submission_id TEXT;
+ALTER TABLE llm_run ADD COLUMN input_json TEXT;
+ALTER TABLE llm_run ADD COLUMN viewed_at INTEGER;
+ALTER TABLE llm_run ADD COLUMN reason TEXT;
+ALTER TABLE llm_run ADD COLUMN owner TEXT NOT NULL DEFAULT '';
+ALTER TABLE llm_run ADD COLUMN transition_id TEXT;
+CREATE TABLE submission (id TEXT PRIMARY KEY, selection_id TEXT REFERENCES selection(id) ON DELETE SET NULL, operation_id TEXT);
+CREATE UNIQUE INDEX run_submission ON llm_run(submission_id);
+CREATE INDEX selection_page ON selection(page_id);
+CREATE UNIQUE INDEX selection_anchor ON selection(page_id, anchor_key);
+CREATE INDEX selection_recent ON selection(created_at DESC, id DESC);
+CREATE INDEX run_latest ON llm_run(selection_id, created_at DESC);
+CREATE INDEX run_success ON llm_run(selection_id, created_at DESC) WHERE status = 'completed';
+CREATE INDEX run_unread ON llm_run(status, viewed_at, selection_id);
+CREATE TABLE digest_batch (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, data TEXT NOT NULL);
+CREATE TABLE digest_item (batch_id TEXT NOT NULL REFERENCES digest_batch(id) ON DELETE CASCADE, position INTEGER NOT NULL, data TEXT NOT NULL, source TEXT, PRIMARY KEY(batch_id,position));
+ALTER TABLE digest_batch ADD COLUMN owner TEXT NOT NULL DEFAULT '';
+CREATE TABLE ez_entry (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, data TEXT NOT NULL CHECK(json_valid(data)), image BLOB, input_image BLOB, bookmarked INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX ez_recent ON ez_entry(created_at DESC,id DESC);
+CREATE TABLE history_migration (id TEXT PRIMARY KEY);

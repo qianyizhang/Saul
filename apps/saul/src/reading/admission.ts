@@ -15,6 +15,12 @@ export function createReadingAdmission(readSettings: () => Promise<Configuration
   const readInput = (selectionId: string, runId?: string) =>
     db({ type: 'DB_INPUT', payload: { selectionId, runId } });
 
+  const savedSource = (passage: Passage, runId: string): NonNullable<Submission['source']> => {
+    if (passage.revision === undefined)
+      throw new Error('Refresh the saved passage before using its previous attempt.');
+    return { selectionId: passage.snapshot.id, runId, revision: passage.revision };
+  };
+
   return {
     async submit(request: ReadingRequest<'submit'>, url: string): Promise<ReadingAdmission> {
       if (request.snapshot.page.url !== url)
@@ -42,10 +48,16 @@ export function createReadingAdmission(readSettings: () => Promise<Configuration
         if (passageId) return { kind: 'reused', passageId };
       }
       settings ??= await readSettings();
-      const prepared =
+      const passage =
         regenerate && !recipeId
-          ? await retry(snapshot.id, undefined, settings)
-          : prepareRecipeRun(settings, context, recipeId || defaultRecipe(settings));
+          ? await db({ type: 'DB_PASSAGE', payload: { selectionId: snapshot.id } })
+          : undefined;
+      if (regenerate && !recipeId && !passage)
+        throw new Error('This saved passage is unavailable. Select the text and choose an action.');
+      const source = passage ? savedSource(passage, passage.latest.id) : undefined;
+      const prepared = source
+        ? await retry(source.selectionId, source.runId, settings)
+        : prepareRecipeRun(settings, context, recipeId || defaultRecipe(settings));
       if (outputFormat !== undefined) {
         if (prepared.input.preset?.capability !== 'draw')
           throw new Error('Output format requires a Draw action.');
@@ -58,7 +70,13 @@ export function createReadingAdmission(readSettings: () => Promise<Configuration
       }
       return {
         kind: 'ready',
-        submission: { snapshot, input: prepared.input, submissionId, regenerate },
+        submission: {
+          snapshot,
+          input: prepared.input,
+          submissionId,
+          regenerate,
+          ...(source ? { source } : {}),
+        },
         credential: prepared.credential,
       };
     },
@@ -68,6 +86,7 @@ export function createReadingAdmission(readSettings: () => Promise<Configuration
     ): Promise<ReadingAdmission> {
       const { instruction, recipeId, selectionId, submissionId } = request;
       const { snapshot } = passage;
+      let source = savedSource(passage, passage.latest.id);
       const prepare = async () => {
         if (instruction !== undefined) {
           if (['queued', 'running', 'saving'].includes(passage.latest.status))
@@ -75,6 +94,7 @@ export function createReadingAdmission(readSettings: () => Promise<Configuration
           const answer = passage.completed;
           if (!answer || (request.runId && request.runId !== answer.id))
             throw new Error('The answer changed. Review it before asking a follow-up.');
+          source = savedSource(passage, answer.id);
           const original = await readInput(selectionId, answer.id);
           if (!original)
             throw new Error('This older answer has no saved context. Start a new explanation.');
@@ -85,14 +105,17 @@ export function createReadingAdmission(readSettings: () => Promise<Configuration
             instruction,
           );
         }
-        if (!recipeId) return retry(selectionId, passage.latest.id);
-        const context = await db({ type: 'DB_CONTEXT', payload: { selectionId } });
+        if (!recipeId) return retry(selectionId, source.runId);
+        const context = await db({
+          type: 'DB_CONTEXT',
+          payload: { selectionId, runId: source.runId },
+        });
         return prepareRecipeRun(await readSettings(), context, recipeId);
       };
       const { input, credential } = await prepare();
       return {
         kind: 'ready',
-        submission: { snapshot, input, submissionId, regenerate: true },
+        submission: { snapshot, input, submissionId, regenerate: true, source },
         credential,
       };
     },
@@ -117,7 +140,7 @@ export function createReadingAdmission(readSettings: () => Promise<Configuration
     },
   };
 
-  async function retry(selectionId: string, runId?: string, settings?: Configuration) {
+  async function retry(selectionId: string, runId: string, settings?: Configuration) {
     const original = await readInput(selectionId, runId);
     if (!original)
       throw new Error(

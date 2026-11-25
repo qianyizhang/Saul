@@ -78,13 +78,12 @@ Its composition and undo history are draft-local; Reuse restores one frozen laye
 ## Persistence contract
 
 [Shared history](../../../contracts/history.md) owns storage and deletion guarantees.
-EZ upserts one snapshot per UUID; native `schemaVersion: 1` JSON and image blobs
-commit together. On launch, the writer prepares or migrates the database under the session lock
+EZ commits one native snapshot entry per lookup UUID. Native `schemaVersion: 1`
+JSON and image blobs commit with the record revision and operation receipt. On launch, the writer prepares or migrates the database under the session lock
 and marks abandoned EZ rows interrupted. Run and deletion wait for preparation
 to finish. Startup and activation reload History without changing Saul's execution. A serial
-reader uses a separate query-only connection. Full-detail snapshots release their
-SQLite transaction before decoding saved JSON; list queries project bounded row
-values. Live and saved rows derive action labels and icons from the same metadata.
+reader uses a separate query-only connection. Full-detail reads pair the saved snapshot with its record revision, then decode
+after releasing the transaction. Library list queries project bounded row values. Live and saved rows derive action labels and icons from the same metadata.
 History owns the selected detail and loads its output image separately. The image
 follows the selected record and the source run for Saul records. Updates to other
 rows leave a loaded image in place.
@@ -92,7 +91,7 @@ The app discards a refresh overtaken by a later refresh or shutdown. Local
 deletion and attempt changes during a refresh supersede the affected rows.
 History lists use 100-row cursor pages with bounded titles and no answer or replay
 payload. Scrolling loads the next page; Load more also retries a failed page.
-Search matches all stored query and answer text using the same Foundation
+Search matches visible stored query and answer text using the same Foundation
 localized case-insensitive substring comparison as before. The count is all
 matches, not loaded rows. Native timestamps retain saved JSON precision; browser
 rows retain the latest eligible attempt's timestamp and stable identity.

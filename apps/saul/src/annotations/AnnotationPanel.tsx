@@ -53,7 +53,7 @@ export function AnnotationPanel({ windowId }: { windowId: number }) {
       </label>
       {filter === 'deleted' && (
         <p className="small">
-          Deleted annotations and images are retained for seven days. Restore them or delete
+          Deleted annotations and images are retained for 365 days. Restore them or delete
           permanently.
         </p>
       )}
@@ -109,8 +109,9 @@ export function AnnotationPanel({ windowId }: { windowId: number }) {
         <details key={selected} open={fallbackId === selected || undefined}>
           <summary>Review in sidebar</summary>
           <AnnotationEditor
-            key={JSON.stringify([page.url, page.tabId, selected])}
+            key={JSON.stringify([page.url, page.tabId, selected, filter === 'deleted'])}
             id={selected}
+            deleted={filter === 'deleted'}
             url={selectedRecord.url}
             tabId={page.tabId}
             updated={session.refresh}
@@ -197,11 +198,13 @@ function AnnotationEditor({
   id,
   url,
   tabId,
+  deleted,
   updated,
 }: {
   id: string;
   url: string;
   tabId: number;
+  deleted: boolean;
   updated: () => void;
 }) {
   const {
@@ -223,7 +226,7 @@ function AnnotationEditor({
     stop,
     save,
     act,
-  } = useAnnotationEditorSession({ id, url, updated });
+  } = useAnnotationEditorSession({ id, url, deleted, updated });
   const [located, setLocated] = useState<string>();
   const [inspect, setInspect] = useState<AnnotationAttempt>();
   const [inspectError, setInspectError] = useState('');
@@ -343,7 +346,9 @@ function AnnotationEditor({
               </button>
             )}
             <button className="btn" onClick={() => act('delete')}>
-              Delete annotation
+              {runs.some((run) => ['queued', 'running', 'saving'].includes(run.status))
+                ? 'Stop and delete'
+                : 'Delete annotation'}
             </button>
           </div>
         </>

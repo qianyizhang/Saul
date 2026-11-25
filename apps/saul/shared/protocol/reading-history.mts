@@ -16,7 +16,7 @@ const provider = z.enum(['openai-compatible', 'chatgpt-plan', 'chrome-ai']);
 const credentialOwner = z.enum(['local', 'saul']).optional();
 const runId = { runId: id };
 
-const snapshot = z.strictObject({
+export const readingSnapshot = z.strictObject({
   id,
   text: z.string(),
   page: z.strictObject({
@@ -63,7 +63,7 @@ export const frozenReadingRecipe = z.strictObject({
   systemPrompt: z.string(),
 });
 
-const input = z.strictObject({
+export const savedReadingInput = z.strictObject({
   provider,
   credentialOwner,
   remote: z.strictObject({
@@ -106,12 +106,18 @@ const input = z.strictObject({
   recipe: frozenReadingRecipe.optional(),
 });
 
-const queuedRun = z.strictObject({ id, selectionId: id, pageUrl: id, input });
+const queuedRun = z.strictObject({ id, selectionId: id, pageUrl: id, input: savedReadingInput });
 
 export const READING_HISTORY_OPERATIONS = {
   DB_SUBMIT: {
     policy: 'repeatable-write',
-    input: z.strictObject({ submissionId: id, snapshot, input, regenerate: z.boolean() }),
+    input: z.strictObject({
+      submissionId: id,
+      snapshot: readingSnapshot,
+      input: savedReadingInput,
+      regenerate: z.boolean(),
+      source: z.strictObject({ selectionId: id, runId: id, revision: offset }).optional(),
+    }),
     result: z
       .strictObject({ passageId: id, run: queuedRun.optional() })
       .refine(({ passageId, run }) => !run || run.selectionId === passageId),

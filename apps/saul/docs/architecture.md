@@ -11,7 +11,7 @@ describe what users can do.
 | Content script     | [Content](../entrypoints/content.tsx)         | Capture the main-frame selection, render the shadow-root UI and restore markers.     |
 | Service worker     | [Background](../entrypoints/background.ts)    | Validate callers; route reading and settings, badge, notification and native access. |
 | Offscreen document | [Offscreen](../entrypoints/offscreen/main.ts) | Run reading, Calls and annotation replies independently of views.                    |
-| Native helper      | [History](../native/storage/history.mts)      | Access SQLite through native messaging; OPFS is migration input only.                |
+| Native helper      | [History](../native/storage/history.mts)      | Access the shared SQLite History store through native messaging.                     |
 
 ### Source and build ownership
 
@@ -108,9 +108,8 @@ are on demand. Deletion invalidates late writes and cascades saved output.
 
 [History](../../../contracts/history.md) uses the [native operation catalogue](../shared/protocol/history-protocol.mts)
 for admission and reconnect. Eligible reads and repeatable writes try at most
-three connections with the same identity. Delete, Clear, Bookmark, migration
-transfers and unknown operations do not reconnect automatically. Request IDs
-live with run or submission rows; helper loss has no local fallback.
+three connections with the same identity. Destructive changes and Bookmark require explicit recovery after a lost reply.
+The shared store binds each write identity to its input and acknowledgement.
 
 The [Reading history schemas](../shared/protocol/reading-history.mts) check
 submit, claim, checkpoint, saving and finish payloads before SQLite applies them.

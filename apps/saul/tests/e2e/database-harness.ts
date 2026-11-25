@@ -3,8 +3,6 @@ import type { DbRequest } from '../../shared/protocol/history-types.ts';
 
 export type DatabaseFixtureRequest =
   | { action: 'seed-native' }
-  | { action: 'reset-migration' }
-  | { action: 'migrate'; legacy: string }
   | { action: 'scale'; runs: number }
   | { action: 'db'; message: DbRequest }
   | { action: 'seed-history'; seed: HistorySeed };
@@ -19,13 +17,6 @@ interface FixtureReply {
   success: boolean;
   result?: unknown;
   error?: string;
-}
-
-export interface MigrationReport {
-  rollback: { failed: boolean; version: number; columns: string[]; bookmark: number };
-  upgraded: { version: number; response: string; viewed: number; bookmark: number; search: number };
-  upgradedV1: { version: number; response: string; tables: number };
-  rejected: boolean;
 }
 
 export function runDatabaseFixture<T>(page: Page, request: DatabaseFixtureRequest): Promise<T> {

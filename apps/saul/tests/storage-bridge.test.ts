@@ -5,10 +5,10 @@ import { STORAGE_PORT } from '../shared/protocol/storage-protocol.mts';
 const historyRead = {
   action: 'history',
   request: {
-    operation: 'db',
-    requestId: '33333333-3333-3333-3333-333333333333',
-    owner: '11111111-1111-1111-1111-111111111111',
-    message: { type: 'DB_GET_HISTORY', payload: {} },
+    operation: 'history',
+    operationId: '33333333-3333-4333-8333-333333333333',
+    owner: '11111111-1111-4111-8111-111111111111',
+    command: { kind: 'list', view: 'library.legacy-list', query: {} },
   },
 };
 function harness() {
@@ -108,7 +108,7 @@ it.each([
   ],
   ['The page is outside the assigned scope.', 'The page is outside the assigned scope.'],
 ])(
-  'reports a native annotation rejection without replaying the save (%s)',
+  'reports a native write rejection without replaying the save (%s)',
   async (message, expected) => {
     vi.useFakeTimers();
     const h = harness();
@@ -117,7 +117,11 @@ it.each([
       action: 'history',
       request: {
         ...historyRead.request,
-        message: { type: 'DB_ANNOTATION', payload: {} },
+        command: {
+          kind: 'commit',
+          change: 'library.bookmark',
+          input: { selectionId: 'saved', bookmarked: true },
+        },
       },
     };
     runner.receive(annotation);
@@ -146,11 +150,14 @@ it('cancels a storage request after caller disconnection and ignores late result
   expect(runner.port.postMessage).not.toHaveBeenCalled();
 });
 
-it('allows trusted history operations and rejects invalid migration identities', async () => {
+it('allows trusted history operations and rejects invalid operation identities', async () => {
   vi.useFakeTimers();
   const h = harness();
   const invalid = h.connect('chrome-extension://extension/offscreen.html');
-  invalid.receive({ action: 'history', request: { operation: 'import-begin', id: '../outside' } });
+  invalid.receive({
+    action: 'history',
+    request: { ...historyRead.request, operationId: 'invalid' },
+  });
   expect(h.connectNative).not.toHaveBeenCalled();
   const runner = h.connect('chrome-extension://extension/offscreen.html');
   runner.receive(historyRead);

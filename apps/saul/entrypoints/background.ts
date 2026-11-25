@@ -392,7 +392,7 @@ export default defineBackground(() => {
       if (request.message.type === 'DB_DELETE_SELECTION')
         return runnerRequest({
           operation: 'delete',
-          selectionId: request.message.payload.selectionId,
+          ...request.message.payload,
         });
       if (request.message.type === 'DB_CLEAR_HISTORY')
         return runnerRequest({ operation: 'delete' });

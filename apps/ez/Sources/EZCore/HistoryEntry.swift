@@ -30,21 +30,27 @@ public struct HistoryEntry: Codable, Identifiable, Equatable, Sendable {
     public var instructions: String?
     public var followUpQuestion: String?
     public var parentID: UUID?
+    /// Native lookup whose saved input admitted this attempt.
+    public var admissionSourceID: String?
     public var storedImage = false
     /// Retained only for an unsaved image; saved bytes live in SQLite.
     public var imageData: Data?
     public var inputImage: ImageAttachment?
+    public internal(set) var transientFailure = false
+    public internal(set) var observedRevision: Int64?
     public var citations: [WebCitation]?
     public var webSearchCompleted: Bool?
     public var connectionSnapshot: ConnectionDefinition?
-    private enum CodingKeys: String, CodingKey {
+    private enum CodingKeys: String, CodingKey, CaseIterable {
         case sourceID, sourceText, sourceURL, sourceTitle
         case schemaVersion, id, createdAt, mode, query, response, model, effort
         case requestedServiceTier, actualServiceTier, status, error, durationSeconds, metrics
         case actionSnapshot = "recipeSnapshot"
         case presetSnapshot, inputValues, instructions, followUpQuestion, parentID,
-            connectionSnapshot, inputImage, citations, webSearchCompleted
+            connectionSnapshot, inputImage, citations, webSearchCompleted, admissionSourceID
     }
+    static let snapshotFieldNames = Set(CodingKeys.allCases.map(\.rawValue))
+
     public var capability: ActionCapability {
         sourceCapability ?? actionSnapshot?.capability ?? presetSnapshot?.capability ?? .write
     }

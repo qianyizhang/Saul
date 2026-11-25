@@ -14,6 +14,7 @@ export interface RunResult {
   hasImage?: boolean;
   capability?: 'write' | 'draw' | 'speak';
   imageOptions?: import('./shared-presets-contract.mts').SharedImageOptions;
+  maskedAt?: number;
   /** Live runner state only; never inferred from elapsed time or persisted. */
   activity?: ModelActivity;
   error?: string;
@@ -28,6 +29,7 @@ export interface RunResult {
   inspection?: Pick<RunInput, 'systemPrompt' | 'userPrompt' | 'context' | 'followUpQuestion'>;
 }
 export interface Passage {
+  revision?: number;
   snapshot: SelectionSnapshot;
   bookmarked: boolean;
   latest: RunResult;
@@ -37,7 +39,10 @@ export interface Passage {
 export type Submission = ReadingHistoryOperations['DB_SUBMIT']['payload'];
 export type RunInput = Submission['input'];
 export type QueuedRun = NonNullable<ReadingHistoryOperations['DB_SUBMIT']['result']['run']>;
+export type HistoryVisibility = 'visible' | 'masked' | 'all';
 export interface HistoryItem {
+  maskedAt?: number;
+  revision?: number;
   hasImage?: boolean;
   bookmarked: boolean;
   selectionId: string;
@@ -77,8 +82,12 @@ export interface DbOperations
   DB_RECOVER: { payload: undefined; result: void };
   DB_PAGE: { payload: { url: string }; result: Passage[] };
   DB_PASSAGE: { payload: { selectionId: string }; result: Passage | undefined };
-  DB_CONTEXT: { payload: { selectionId: string }; result: ResolvedContext };
+  DB_CONTEXT: { payload: { selectionId: string; runId?: string }; result: ResolvedContext };
   DB_INPUT: { payload: { selectionId: string; runId?: string }; result: RunInput | undefined };
+  DB_READING_ATTEMPTS_PAGE: {
+    payload: { selectionId: string; limit?: number; cursor?: string };
+    result: { items: RunResult[]; cursor?: string };
+  };
   DB_RUNS: { payload: { selectionId: string }; result: RunResult[] };
   DB_VIEW: { payload: { selectionId: string; runId: string }; result: void };
   DB_UNREAD: { payload: undefined; result: number };
@@ -86,8 +95,29 @@ export interface DbOperations
     payload: { limit?: number; offset?: number; searchQuery?: string; bookmarksOnly?: boolean };
     result: HistoryItem[];
   };
-  DB_DELETE_SELECTION: { payload: { selectionId: string }; result: void };
-  DB_SET_BOOKMARK: { payload: { selectionId: string; bookmarked: boolean }; result: void };
+  DB_HISTORY_PAGE: {
+    payload: {
+      limit?: number;
+      cursor?: string;
+      searchQuery?: string;
+      bookmarksOnly?: boolean;
+      visibility?: HistoryVisibility;
+    };
+    result: { items: HistoryItem[]; cursor?: string };
+  };
+  DB_RESTORE_SELECTION: {
+    payload: { selectionId: string; expectedRevision?: number };
+    result: void;
+  };
+  DB_PURGE_SELECTION: { payload: { selectionId: string; expectedRevision?: number }; result: void };
+  DB_DELETE_SELECTION: {
+    payload: { selectionId: string; expectedRevision?: number; stopRunId?: string };
+    result: void;
+  };
+  DB_SET_BOOKMARK: {
+    payload: { selectionId: string; bookmarked: boolean; expectedRevision?: number };
+    result: void;
+  };
   DB_CLEAR_HISTORY: { payload: undefined; result: void };
   DB_EXPORT_MARKDOWN: { payload: undefined; result: string };
 }

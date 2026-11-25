@@ -78,8 +78,7 @@ pnpm --dir apps/saul native:install --install-dir "$HOME/.saul" --restore-genera
 ### Shared history upgrade
 
 - **Compatibility** — Upgrade both apps and Saul’s history helper together before reopening a changed schema.
-- **Current schema (v4)** — Saul imports legacy profile OPFS and EZ imports prior JSONL and images. If cleanup is interrupted, reopen History or relaunch EZ.
-- **Next schema** — The accepted [personal-data cutoff](../contracts/history.md#personal-data-cutover) replaces those importers with a one-time conversion of the current shared database.
+- **Schema v5** — The first updated writer converts the existing shared SQLite database in a single transaction. It carries forward mappable saved work, attachments and bookmarks. Ambiguous legacy rows can be skipped. Reopening the database uses its schema version. Older standalone browser and EZ stores are outside this [cutover](../contracts/history.md#personal-data-cutover).
 
 ## Verify and remove
 

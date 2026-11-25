@@ -17,7 +17,7 @@ import SaulNativeValues
     private let count: @MainActor (String, [HistoryStore.RecordID]) async throws -> Int
     private let readEntry: @MainActor (HistoryStore.RecordID) async throws -> HistoryEntry?
     let image: LookupImageLoader
-    private let delete: @MainActor (HistoryStore.RecordID) async throws -> Void
+    private let delete: @MainActor (HistoryStore.RecordID, Bool, Int64?) async throws -> Void
     private var opening: Task<Void, Never>?
     private(set) var ready = false
     var settling: Bool { opening != nil || deleting != nil }
@@ -67,7 +67,7 @@ import SaulNativeValues
         count: @escaping @MainActor (String, [HistoryStore.RecordID]) async throws -> Int,
         entry: @escaping @MainActor (HistoryStore.RecordID) async throws -> HistoryEntry?,
         readImage: @escaping @MainActor (HistoryEntry) async throws -> Data?,
-        delete: @escaping @MainActor (HistoryStore.RecordID) async throws -> Void
+        delete: @escaping @MainActor (HistoryStore.RecordID, Bool, Int64?) async throws -> Void
     ) {
         self.read = read
         self.count = count
@@ -226,14 +226,17 @@ import SaulNativeValues
             || entry.response.localizedCaseInsensitiveContains(query)
     }
 
-    func remove(_ id: HistoryStore.RecordID, settled: @escaping @MainActor (Result<Void, Error>) -> Void)
+    func remove(
+        _ id: HistoryStore.RecordID, settledPending: Bool, expectedRevision: Int64?,
+        settled: @escaping @MainActor (Result<Void, Error>) -> Void
+    )
         -> Task<Void, Never>?
     {
         guard deleting == nil else { return nil }
         let task = Task {
             let outcome: Result<Void, Error>
             do {
-                try await delete(id)
+                try await delete(id, settledPending, expectedRevision)
                 forget(id)
                 outcome = .success(())
             } catch { outcome = .failure(error) }

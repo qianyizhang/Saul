@@ -40,7 +40,7 @@ chrome.runtime.onMessage.addListener(
         case 'stop':
           return runner.stop(message.selectionId);
         case 'delete':
-          return runner.remove(message.selectionId);
+          return runner.remove(message.selectionId, message.expectedRevision, message.stopRunId);
         case 'db': {
           const request = message.message;
           switch (request.type) {
@@ -55,9 +55,12 @@ chrome.runtime.onMessage.addListener(
               return calls.request({ action: 'get', id: request.payload.id });
             case 'DB_READING_RESOLVE':
               return runner.resolveReuse(request.payload);
+            case 'DB_RESTORE_SELECTION':
+            case 'DB_PURGE_SELECTION':
             case 'DB_VIEW':
             case 'DB_SET_BOOKMARK':
               return runner.updateReadState(request);
+            case 'DB_HISTORY_PAGE':
             case 'DB_GET_HISTORY':
             case 'DB_RUNS':
             case 'DB_PAGE':

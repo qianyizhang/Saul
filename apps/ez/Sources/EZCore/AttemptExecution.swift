@@ -204,6 +204,7 @@ import OSLog
             let update: Update
             do {
                 try await delete(terminal.recordID)
+                terminal.transientFailure = true
                 update = .discarded(terminal)
             } catch {
                 log.error("Could not remove pending lookup: \(error.localizedDescription, privacy: .private)")

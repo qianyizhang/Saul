@@ -1235,9 +1235,10 @@ test('closing and retrying an anchored draft retains the full comment and create
       if (url === endpoint && typeof init?.body === 'string') {
         const packet = JSON.parse(init.body);
         if (
-          packet.operation === 'db' &&
-          packet.message?.type === 'DB_ANNOTATION' &&
-          packet.message.payload?.operation?.action === 'create' &&
+          packet.operation === 'history' &&
+          packet.command?.kind === 'commit' &&
+          packet.command.change === 'annotations.change' &&
+          packet.command.input?.operation?.action === 'create' &&
           ++probe.creates === 1
         ) {
           const rejected = await fetchHistory(url, init);

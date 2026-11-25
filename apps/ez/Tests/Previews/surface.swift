@@ -126,9 +126,24 @@ import SwiftUI
                     }
                     try await writer.append(entry)
                 },
-                delete: { try await writer.delete($0) })
+                delete: { try await writer.discard($0) })
         }
-        let model = fixtureModel(directory: directory, attemptExecution: execution, connections: fixtures)
+        let model = fixtureModel(
+            directory: directory, attemptExecution: execution, connections: fixtures, includesLibrary: true)
+        do {
+            let storage = try HistoryStore(directory: directory)
+            for question in [
+                "Recently deleted fixture",
+                "Restoring this synthetic lookup preserves its answer and original position",
+            ] {
+                var entry = HistoryEntry(
+                    mode: .ask, query: question, model: "fixture", effort: "", requestedServiceTier: nil)
+                entry.status = "completed"
+                entry.response = "Only synthetic history is used by this preview."
+                try storage.append(entry)
+                try storage.delete(entry.recordID)
+            }
+        } catch { model.error = error.localizedDescription }
         _model = StateObject(wrappedValue: model)
         controller = QuickLookupController(model: model)
     }

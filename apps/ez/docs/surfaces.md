@@ -113,8 +113,12 @@ lookups; older history may have none. See [metrics](architecture.md#metrics-and-
 for their meaning.
 
 The main-window history row also offers deletion through its context menu.
-Deletion confirms removal from shared history, cannot be undone, and is blocked
-while a request or launcher submission is active. The current draft is preserved.
+Delete moves the record to **Recently deleted** in both apps for 365 days.
+**Stop and delete** settles an active EZ lookup first. EZ asks the user to stop
+active Saul work in Saul. Deletion preserves the current draft.
+**Recently deleted** offers **Restore** and **Delete permanently** for selected
+records. **Clear History** permanently removes visible and deleted records from
+the shared Library, including Saul passages and EZ lookups.
 [Persistence](architecture.md#persistence-contract) owns inference Retry, save failures
 and restart behavior.
 

@@ -44,7 +44,7 @@ import SaulTestSupport
         return entry
     }
     func selectLookup() throws -> HistoryEntry {
-        let entry = try snapshot()
+        let entry = try savedAnswer()
         try history.append(entry)
         model.showHistory([entry])
         model.selection = entry.id

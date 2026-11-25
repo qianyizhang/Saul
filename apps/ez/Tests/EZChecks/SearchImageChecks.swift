@@ -108,6 +108,7 @@ import SaulTestSupport
             let store = try HistoryStore(directory: directory)
             var entry = HistoryEntry(
                 mode: .ask, query: "meme", model: "test", effort: "", requestedServiceTier: nil)
+            entry.status = "completed"
             entry.inputImage = try ImageAttachment(data: fixturePNG, name: "my sketch.png")
             entry.imageData = fixturePNG
             try store.append(entry)
@@ -118,7 +119,13 @@ import SaulTestSupport
             try expect(saved.inputImage?.data == nil, "Metadata decoded bytes")
             try expectEqual(try store.inputImage(for: saved)?.data, fixturePNG, "Input image not restored")
             try store.delete(entry.recordID)
-            try expect(try store.load().isEmpty, "Deleted images left a history record")
+            try expect(try store.load().isEmpty, "Deleted images left a visible history record")
+            let masked = try store.get(entry.recordID, visibility: .masked)
+            _ = try store.purge(
+                .record(entry.recordID), write: HistoryWrite(expectedRevision: masked?.revision))
+            try expectEqual(
+                try historySQL(store.url, "SELECT count(*) FROM ez_entry"), "0",
+                "Image row survived permanent deletion")
             try expect(
                 !FileManager.default.fileExists(atPath: directory.appendingPathComponent("images").path),
                 "SQLite history created a deprecated image directory")

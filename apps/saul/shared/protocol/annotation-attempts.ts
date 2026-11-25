@@ -1,4 +1,10 @@
-import type { Annotation, AnnotationRequest, AnnotationResult } from './annotations.ts';
+import type {
+  Annotation,
+  AnnotationReply,
+  AnnotationRequest,
+  AnnotationResult,
+  AnnotationScope,
+} from './annotations.ts';
 import { annotationIdSchema, pageUrl } from './annotations.ts';
 import { z } from 'zod';
 export interface AnnotationAttempt {
@@ -8,6 +14,7 @@ export interface AnnotationAttempt {
   revision: number;
   status: 'queued' | 'running' | 'saving' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
   createdAt: number;
+  maskedAt?: number;
   input: import('../model/execution-route.ts').ModelRequest;
   evidence: string;
   image?: string;
@@ -43,6 +50,7 @@ export const annotationStatusSchema = z
   .object({
     url: pageUrl,
     id: annotationIdSchema,
+    visibility: z.literal('masked').optional(),
     known: z
       .object({
         revision: z.number().int().positive(),
@@ -54,7 +62,15 @@ export const annotationStatusSchema = z
   .strict();
 export type AnnotationStatusRequest = z.infer<typeof annotationStatusSchema>;
 export interface AnnotationDbOperations {
-  DB_ANNOTATION_URLS: { payload: { url: string }; result: string[] };
+  DB_ANNOTATION_ACTIVITY: {
+    payload: { annotationId: string; limit?: number; cursor?: string };
+    result: { items: AnnotationAttempt[]; cursor?: string };
+  };
+  DB_ANNOTATION_CONVERSATION: {
+    payload: { scope: AnnotationScope; id: string; limit?: number; cursor?: string };
+    result: { items: AnnotationReply[]; cursor?: string };
+  };
+  DB_ANNOTATION_URLS: { payload: { url: string; visibility?: 'masked' }; result: string[] };
   DB_ANNOTATION_IMAGE: { payload: { id: string; image?: string; error?: string }; result: void };
   DB_ANNOTATION: { payload: AnnotationRequest & { external?: true }; result: AnnotationResult };
   DB_ANNOTATION_STATUS: { payload: AnnotationStatusRequest; result: AnnotationEditorStatus };
