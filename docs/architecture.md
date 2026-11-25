@@ -39,7 +39,7 @@
 
 - **Store and adapters** — [History contract](../contracts/history.md).
 - **Upgrade and recovery** — [Shared history setup](setup.md#shared-history-upgrade).
-- **Trade-off** — [Shared history decision](adr/0001-share-local-history.md).
+- **Trade-off** — [Shared history decision](adr/0001-share-local-history.md) and [History interface decision](adr/0007-history-records-and-entries.md).
 
 ## Optional shared capabilities
 

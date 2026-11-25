@@ -51,7 +51,8 @@ The editor sends one manual reply at a time. You can type the next reply while
 the first saves; confirmation clears only the submitted draft.
 **Open** is the current default list; Done is explicit and reversible, never a
 side effect of replying. Both survive restart. **Recently deleted** offers
-Restore for seven days and Delete permanently immediately. Cleanup runs on
+Restore for seven days in the current version and Delete permanently immediately.
+The next shared schema adopts the [History retention contract](../../../contracts/history.md#deletion-and-retention). Cleanup runs on
 annotation access and offscreen startup recovery without reading pages or
 calling models. Removing a record removes its owned images.
 

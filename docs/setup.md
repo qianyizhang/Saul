@@ -78,8 +78,8 @@ pnpm --dir apps/saul native:install --install-dir "$HOME/.saul" --restore-genera
 ### Shared history upgrade
 
 - **Compatibility** — Upgrade both apps and Saul’s history helper together before reopening a changed schema.
-- **Import** — Saul reads legacy profile OPFS at first history access. EZ reads prior JSONL and images at launch.
-- **Recovery** — Preserve the original data. Reopen History or relaunch EZ after interrupted cleanup. Resolve validation errors before retrying. [Import and deletion guarantees](../contracts/history.md)
+- **Current schema (v4)** — Saul imports legacy profile OPFS and EZ imports prior JSONL and images. If cleanup is interrupted, reopen History or relaunch EZ.
+- **Next schema** — The accepted [personal-data cutoff](../contracts/history.md#personal-data-cutover) replaces those importers with a one-time conversion of the current shared database.
 
 ## Verify and remove
 

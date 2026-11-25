@@ -92,6 +92,8 @@ and [PDF checks](testing.md#pdf-summaries).
 
 ## Reuse, Retry and Run again
 
+The accepted [History interface](../../../contracts/history.md#accepted-interface) excludes masked results from automatic reuse after the cutover.
+
 A repeated exact ordered URL selection reopens its active or latest saved
 result. For custom Calls, the lookup also matches approved revision and preset ID.
 Changed built-in choices are disclosed without silently rerunning. Before any model call,
