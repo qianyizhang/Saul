@@ -1202,7 +1202,7 @@ test('closing and retrying an anchored draft retains the full comment and create
   sandbox,
   fixtureServer,
 }, info) => {
-  const { context, popup } = await sandbox.launch();
+  const { context, popup, worker } = await sandbox.launch();
   const page = await context.newPage();
   await page.goto(fixtureServer.origin + '/article');
   await page.bringToFront();
@@ -1224,12 +1224,71 @@ test('closing and retrying an anchored draft retains the full comment and create
     await page.keyboard.press('Tab');
     await page.keyboard.press('Enter');
   };
+  await worker.evaluate(async () => {
+    const { saul_test_history_url: endpoint } =
+      await chrome.storage.local.get('saul_test_history_url');
+    const fetchHistory = globalThis.fetch.bind(globalThis);
+    const gate = Promise.withResolvers<void>();
+    const probe = { creates: 0, release: gate.resolve };
+    Object.assign(globalThis, { annotationSaveProbe: probe });
+    globalThis.fetch = async (url, init) => {
+      if (url === endpoint && typeof init?.body === 'string') {
+        const packet = JSON.parse(init.body);
+        if (
+          packet.operation === 'db' &&
+          packet.message?.type === 'DB_ANNOTATION' &&
+          packet.message.payload?.operation?.action === 'create' &&
+          ++probe.creates === 1
+        ) {
+          const rejected = await fetchHistory(url, init);
+          await gate.promise;
+          return rejected;
+        }
+      }
+      return fetchHistory(url, init);
+    };
+  });
   sandbox.rejectHistoryWriteOnce(
     ({ type, payload }) =>
       type === 'DB_ANNOTATION' &&
       (payload as { operation: { action: string } }).operation.action === 'create',
   );
   await submit();
+  const pendingCard = await page.context().newCDPSession(page);
+  const readTree = async () => (await pendingCard.send('Accessibility.getFullAXTree')).nodes;
+  const createCount = () =>
+    worker.evaluate(
+      () =>
+        (globalThis as unknown as { annotationSaveProbe: { creates: number } }).annotationSaveProbe
+          .creates,
+    );
+  try {
+    await expect.poll(createCount).toBe(1);
+    await expect
+      .poll(async () =>
+        (await readTree()).some(
+          (node) =>
+            node.role?.value === 'button' &&
+            node.name?.value === 'Saving…' &&
+            node.properties?.some(
+              (property) => property.name === 'disabled' && property.value.value === true,
+            ) &&
+            node.properties?.some(
+              (property) => property.name === 'focused' && property.value.value === true,
+            ),
+        ),
+      )
+      .toBe(true);
+    await page.keyboard.press('Enter');
+    expect(await createCount()).toBe(1);
+  } finally {
+    await worker.evaluate(() => {
+      (
+        globalThis as unknown as { annotationSaveProbe: { release: () => void } }
+      ).annotationSaveProbe.release();
+    });
+    await pendingCard.detach();
+  }
   await expect
     .poll(() => page.evaluate(() => document.activeElement?.localName))
     .toBe('saul-annotation-card');
@@ -1253,10 +1312,18 @@ test('closing and retrying an anchored draft retains the full comment and create
     await expect
       .poll(async () => (await readTree()).some((n) => n.role?.value === 'alert'))
       .toBe(true);
-    const saveNode = (await readTree()).find(
-      (n) => n.role?.value === 'button' && n.name?.value === 'Save comment',
-    )!;
-    await cardHandle.send('DOM.focus', { backendNodeId: saveNode.backendDOMNodeId });
+    await expect
+      .poll(async () =>
+        (await readTree()).some(
+          (node) =>
+            node.role?.value === 'button' &&
+            node.name?.value === 'Save comment' &&
+            node.properties?.some(
+              (property) => property.name === 'focused' && property.value.value === true,
+            ),
+        ),
+      )
+      .toBe(true);
     await page.keyboard.press('Enter');
   } finally {
     await cardHandle.detach();

@@ -107,6 +107,7 @@ function CommentCard({
   const frame = useRef<HTMLElement>(null);
   const field = useRef<HTMLTextAreaElement>(null);
   const locked = useRef(false);
+  const invalidDraft = !text.trim() || (card.existing && (!!error || !record));
   const [session] = useState(() => {
     const session = annotationMutationSession<Annotation>({
       id: capture.id,
@@ -343,7 +344,7 @@ function CommentCard({
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (!card.existing || !error)
+            if (!locked.current && !invalidDraft)
               session.enqueue(
                 () => submit(mode === 'reply' ? 'append' : 'edit'),
                 setErrorFromCause,
@@ -388,10 +389,7 @@ function CommentCard({
             >
               Cancel
             </button>
-            <button
-              className="primary"
-              disabled={busy || !text.trim() || (card.existing && (!!error || !record))}
-            >
+            <button className="primary" disabled={invalidDraft} aria-disabled={busy || undefined}>
               {busy ? 'Saving…' : mode === 'reply' ? 'Add reply' : 'Save comment'}
             </button>
           </footer>
