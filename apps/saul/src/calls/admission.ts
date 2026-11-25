@@ -158,10 +158,26 @@ export function createCallAdmission({
       view.settings.state === 'ready'
         ? view.settings.settings.connections.find((c) => c.key === preset?.connectionKey)
         : undefined;
+    const availablePresets = view.selected
+      ? []
+      : presets
+          .filter((p) => {
+            if (view.settings.state !== 'ready') return false;
+            try {
+              prepareWritePreset(view.settings.settings, p.id);
+              return true;
+            } catch {
+              return false;
+            }
+          })
+          .map(({ id, name }) => ({ id, name }));
     return {
       kind: 'setup',
       reason,
-      message,
+      message:
+        reason === 'choose' && !availablePresets.length
+          ? 'Set up a Write preset in Settings to start summarizing.'
+          : message,
       source: view.source,
       stamp: view.stamp,
       presetId: view.presetId,
@@ -177,19 +193,7 @@ export function createCallAdmission({
           .filter(Boolean)
           .join(' · '),
       }),
-      presets: view.selected
-        ? []
-        : presets
-            .filter((p) => {
-              if (view.settings.state !== 'ready') return false;
-              try {
-                prepareWritePreset(view.settings.settings, p.id);
-                return true;
-              } catch {
-                return false;
-              }
-            })
-            .map(({ id, name }) => ({ id, name })),
+      presets: availablePresets,
     };
   }
   const changed = (view: Inspection) =>
