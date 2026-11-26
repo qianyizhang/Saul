@@ -15,7 +15,7 @@ import { initSpeechBridge } from '../src/speech/bridge';
 import { initActionBridge } from '../src/custom-actions/bridge';
 import { validateCallEditRequest } from '../src/calls/contract';
 import type { CallEditorBridgeRequest } from '../src/calls/editor-client';
-import { prepareWritePreset } from '../src/configuration/resolve';
+import { prepareWritePreset } from '../src/configuration/resolver';
 import { sharedPresets } from '../src/configuration/shared';
 import { createConnectionService } from '../src/connections/service';
 import { ConnectionSetupNotAdmitted } from '../src/connections/setup';

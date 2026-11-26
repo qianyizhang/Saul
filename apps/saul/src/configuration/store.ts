@@ -2,9 +2,9 @@ import type { SetupFence } from '../../shared/protocol/connection-coordination.m
 import { revisionOf } from '../../shared/model/revision.ts';
 import type { Configuration } from './definition';
 import { validateSettingsRequest, type SettingsState } from '../settings/contract';
-import { InvalidStoredSettingsError, decodeConfiguration, settingsFromStored } from './record';
+import { InvalidStoredSettingsError, decodeConfiguration, settingsFromStored } from './codec';
 import { DEFAULT_CONFIGURATION } from './definition';
-import { validateSettingsConnections } from './resolve';
+import { validateSettingsConnections } from './resolver';
 
 export const SETTINGS_STORAGE_KEY = 'saul_user_settings';
 export const RECOVERY_BACKUP_KEY = 'saul_user_settings_recovery_backup';

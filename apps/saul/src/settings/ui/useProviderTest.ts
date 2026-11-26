@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Configuration } from '../../configuration/definition';
 import { streamModel } from '../../providers/stream';
-import { preparePreset } from '../../configuration/resolve';
+import { preparePreset } from '../../configuration/resolver';
 import { configurationFor } from '../../configuration/definition';
 export function useProviderTest() {
   const [testing, setTesting] = useState(false),

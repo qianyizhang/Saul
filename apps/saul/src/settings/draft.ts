@@ -4,7 +4,7 @@ import { officialOpenAI } from '../../shared/protocol/credentials-contract.mts';
 import type { ModelPreset, ProviderType, Recipe } from '../../shared/model/presets.ts';
 import type { Configuration } from '../configuration/definition';
 import { DEFAULT_CONFIGURATION } from '../configuration/definition';
-import { validateSettingsConnections } from '../configuration/resolve';
+import { validateSettingsConnections } from '../configuration/resolver';
 import {
   configurationFor,
   illustrationPreset,

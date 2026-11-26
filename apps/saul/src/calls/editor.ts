@@ -1,5 +1,5 @@
 import type { DbCall } from '../../shared/protocol/history-types.ts';
-import type { PreparedModel } from '../configuration/resolve';
+import type { PreparedModel } from '../configuration/resolver';
 import type { ModelRequest } from '../../shared/model/execution-route.ts';
 import { streamModel } from '../providers/stream';
 import { actionHost } from '../custom-actions/host-client';

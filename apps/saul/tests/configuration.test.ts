@@ -1,9 +1,9 @@
-import { preparePreset, prepareFrozenPreset } from '../src/configuration/resolve';
+import { preparePreset, prepareFrozenPreset } from '../src/configuration/resolver';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { ResolvedContext } from '../shared/model/reading.ts';
 import type { Configuration } from '../src/configuration/definition';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
-import { decodeConfiguration } from '../src/configuration/record';
+import { decodeConfiguration } from '../src/configuration/codec';
 import { inspectPreset } from '../src/configuration/inspect';
 import { renderRecipePrompt } from '../src/reading/prompts';
 import {

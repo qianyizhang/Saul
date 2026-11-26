@@ -11,7 +11,7 @@ import {
   type ReviewedAnnotation,
 } from '../../shared/protocol/annotations.ts';
 import type { DbCall } from '../../shared/protocol/history-types.ts';
-import type { PreparedModel } from '../configuration/resolve';
+import type { PreparedModel } from '../configuration/resolver';
 import { streamModel } from '../providers/stream';
 import { actionHost } from '../custom-actions/host-client';
 

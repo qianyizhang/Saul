@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { chromeConfigurationStorage } from '../src/configuration/chrome-storage';
 import { createConfigurationStore } from '../src/configuration/store';
-import { decodeConfiguration } from '../src/configuration/record';
+import { decodeConfiguration } from '../src/configuration/codec';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 const get = vi.fn(),
   set = vi.fn();

@@ -1,6 +1,6 @@
 import type { AdmittedCall } from '../../calls/admission';
 import type { CallEditRequest } from '../../calls/contract';
-import type { PreparedModel } from '../../configuration/resolve';
+import type { PreparedModel } from '../../configuration/resolver';
 import type { DbRequest, Submission } from '../../../shared/protocol/history-types.ts';
 import { ensureOffscreenDocument } from './offscreen';
 import { request } from './messages';

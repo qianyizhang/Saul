@@ -6,7 +6,7 @@ import {
   prepareWritePreset,
   prepareFrozenPreset,
   SELECT_NEW_PRESET,
-} from '../src/configuration/resolve';
+} from '../src/configuration/resolver';
 import { prepareRecipeRun } from '../src/reading/configuration';
 import { planEvents } from '../src/providers/chatgpt-plan';
 

@@ -17,7 +17,7 @@ import {
   type AnnotationResult,
   type AnnotationRequest,
 } from '../../shared/protocol/annotations.ts';
-import { prepareWritePreset } from '../configuration/resolve';
+import { prepareWritePreset } from '../configuration/resolver';
 import { configurationFor } from '../configuration/definition';
 import type { ActionChoice } from '../../shared/model/custom-action.ts';
 import type { Configuration } from '../configuration/definition';

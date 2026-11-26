@@ -1,7 +1,7 @@
 import type { ScopedConfig } from '../../shared/protocol/shared-presets-contract.mts';
 import type { Configuration } from './definition';
 import { localProfile } from './connections';
-import { decodeConfiguration } from './record';
+import { decodeConfiguration } from './codec';
 
 // Connection secrets and the selected local account never enter the JSON file.
 export function portableSettings(settings: Configuration): Record<string, unknown> {

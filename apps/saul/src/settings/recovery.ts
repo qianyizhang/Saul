@@ -7,7 +7,7 @@ import {
 } from './draft';
 import type { BoundConnection } from '../configuration/connections';
 import { encodeDraftConnections } from './draft-storage';
-import { decodeConfiguration } from '../configuration/record';
+import { decodeConfiguration } from '../configuration/codec';
 
 type Tree = Record<string, unknown>;
 export type RecoveryChoice = 'mine' | 'latest';

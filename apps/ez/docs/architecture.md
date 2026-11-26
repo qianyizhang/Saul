@@ -12,7 +12,7 @@ needs no Codex, Node, Python, Electron or webview runtime.
 | App composition and navigation | [EZComposition](../Sources/EZ/EZComposition.swift) assembles installed adapters. [AppModel](../Sources/EZ/AppModel.swift) coordinates the workspace, Settings and shutdown. |
 | Lookup workflow | [LookupSession](../Sources/EZ/Lookup/LookupSession.swift) owns the [draft](../Sources/EZ/Lookup/LookupDraft.swift), prepares Send, Follow-up, Retry and Reuse, and cancels superseded preparation. Lookup views observe the session directly. |
 | Frozen submission | `LookupRequest` / `LookupRoute` |
-| Settings and connection session | [ConfigurationEditor](../Sources/EZ/ConfigurationEditor.swift), `ConfigurationStore`, [ConnectionSession](../Sources/EZ/Connections/ConnectionSession.swift) and `ConnectionChecks` |
+| Settings and connection session | [ConfigurationEditor](../Sources/EZ/ConfigurationEditor.swift), [ConfigurationStore](../Sources/EZCore/Configuration/ConfigurationStore.swift), [ConnectionSession](../Sources/EZ/Connections/ConnectionSession.swift) and `ConnectionChecks` |
 | Attempt and history | [AttemptExecution](../Sources/EZCore/AttemptExecution.swift) decides when to send and what to save. [HistoryCollection](../Sources/EZ/HistoryCollection.swift) owns refresh and deletion; [HistoryWriter](../Sources/EZCore/HistoryWriter.swift) serializes SQLite changes. |
 | Provider calls | [SaulGeneration](../Sources/EZCore/SaulGeneration.swift) maps the frozen request to the [signed credential owner](../../../contracts/credentials.md). `ResponsesRequest` and `ResponseAccumulator` encode requests and interpret stream evidence. |
 | Signed caller, OAuth and Keychain | [Saul credential contract](../../../contracts/credentials.md); [Keychain diagnosis](keychain.md) |

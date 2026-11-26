@@ -8,7 +8,7 @@ import {
   validateConnections,
   validateConnectionChanges,
 } from '../shared/protocol/shared-presets-contract.mts';
-import { preparePreset } from '../src/configuration/resolve';
+import { preparePreset } from '../src/configuration/resolver';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 
 const catalog = {

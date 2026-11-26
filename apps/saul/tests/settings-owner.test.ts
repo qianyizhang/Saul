@@ -4,7 +4,7 @@ import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 import { validateSettingsRequest, type SettingsState } from '../src/settings/contract';
 import { requestSettings, SettingsDeliveryError } from '../src/configuration/client';
 import { createSettingsDraft, editSettingsDraft, settingsForSave } from '../src/settings/draft';
-import { preparePreset } from '../src/configuration/resolve';
+import { preparePreset } from '../src/configuration/resolver';
 
 it('saves an explicit preset repair while retaining a retired legacy default', async () => {
   const retiredConfiguration = structuredClone(DEFAULT_CONFIGURATION);

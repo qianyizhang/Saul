@@ -5,7 +5,7 @@ import {
 } from '../shared/protocol/credentials-contract.mts';
 import { type ModelPreset } from '../shared/model/presets.ts';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
-import { prepareFrozenPreset, preparePreset } from '../src/configuration/resolve';
+import { prepareFrozenPreset, preparePreset } from '../src/configuration/resolver';
 import type { ModelRequest } from '../shared/model/execution-route.ts';
 import { streamModel } from '../src/providers/stream';
 

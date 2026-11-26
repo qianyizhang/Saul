@@ -16,7 +16,7 @@ import type { DbCall, RunInput } from '../shared/protocol/history-types.ts';
 import type { ModelEvent } from '../shared/model/model-events.ts';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 import { starterConfiguration } from '../src/configuration/definition';
-import { prepareFrozenPreset, prepareWritePreset } from '../src/configuration/resolve';
+import { prepareFrozenPreset, prepareWritePreset } from '../src/configuration/resolver';
 
 vi.mock('../src/custom-actions/host-client', () => ({ actionHost: vi.fn() }));
 let saved: CallEditorState;

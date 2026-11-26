@@ -1,7 +1,7 @@
 import { validSpeechOptions } from '../../shared/protocol/shared-presets-contract.mts';
 import type { Configuration } from '../configuration/definition';
 import { configurationFor } from '../configuration/definition';
-import { preparePreset } from '../configuration/resolve';
+import { preparePreset } from '../configuration/resolver';
 
 export const SPEECH_PORT = 'saul-speech';
 const MAX_AUDIO_BYTES = 6_000_000;

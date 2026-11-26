@@ -20,7 +20,7 @@ import {
   validConnectionCatalog,
 } from '../../shared/protocol/connections-contract.mts';
 import { configurationFor, type Configuration } from '../configuration/definition';
-import { prepareFrozenPreset, prepareWritePreset, preparePreset } from '../configuration/resolve';
+import { prepareFrozenPreset, prepareWritePreset, preparePreset } from '../configuration/resolver';
 import { nativeCredentialCall } from '../native/credentials';
 import type { SettingsState } from '../settings/contract';
 import { readCallSources } from './capture/capture';

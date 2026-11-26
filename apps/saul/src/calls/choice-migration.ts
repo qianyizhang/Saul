@@ -1,5 +1,5 @@
 import { configurationFor, type Configuration } from '../configuration/definition';
-import { preparePreset } from '../configuration/resolve';
+import { preparePreset } from '../configuration/resolver';
 
 export function legacySummaryPreset(settings: Configuration): string | undefined {
   // Retain the exact saved ID even if its preset has since been removed or changed.
