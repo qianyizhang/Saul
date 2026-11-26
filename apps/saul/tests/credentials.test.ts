@@ -209,15 +209,30 @@ it('does not replay or fall back when a native connection fails', () => {
   expect(h.connectNative).toHaveBeenCalledTimes(1);
   expect(h.native.disconnect).toHaveBeenCalled();
 });
-it('keeps login alive after popup closure and opens only the official authorize endpoint', () => {
+it('cancels sign-in on Settings closure and ignores a late authorization event', () => {
   const h = harness();
   const ui = h.connect('chrome-extension://extension/library.html');
   ui.receive({ action: 'login' });
   const id = h.native.postMessage.mock.calls[0]![0].id;
   ui.disconnect();
-  expect(h.native.disconnect).not.toHaveBeenCalled();
-  h.emit({ id, event: { type: 'authorize', url: 'https://evil.test/authorize' } });
+  expect(h.native.postMessage).toHaveBeenLastCalledWith({ version: 2, id, cancel: true });
+  expect(h.native.disconnect).toHaveBeenCalledTimes(1);
+  h.emit({
+    id,
+    event: { type: 'authorize', url: 'https://auth.openai.com/api/accounts/authorize' },
+  });
   expect(chrome.tabs.create).not.toHaveBeenCalled();
+});
+it('checks the authorization endpoint while sign-in is active', () => {
+  const h = harness();
+  const ui = h.connect('chrome-extension://extension/library.html');
+  ui.receive({ action: 'login' });
+  const id = h.native.postMessage.mock.calls[0]![0].id;
+  const url = 'https://auth.openai.com/api/accounts/authorize';
+  h.emit({ id, event: { type: 'authorize', url } });
+  expect(chrome.tabs.create).toHaveBeenCalledWith({ url });
+  h.emit({ id, event: { type: 'authorize', url: 'https://evil.test/authorize' } });
+  expect(chrome.tabs.create).toHaveBeenCalledTimes(1);
   expect(h.native.disconnect).toHaveBeenCalled();
 });
 it('cancels an ordinary operation on caller loss', () => {
