@@ -10,6 +10,7 @@ import { join, resolve } from 'node:path';
 import { endianness } from 'node:os';
 import { encodeNative, nativeDecoder, lineDecoder } from '../native/transport.mts';
 import { mcpTools, MCP_TOOLS } from '../shared/protocol/app-protocol.mts';
+import { startBoardWeb } from '../.build/native/board-http.mjs';
 import { BOARD_URI } from '../.build/native/board-resource.mjs';
 import { callTool, sessions } from '../native/client.mts';
 import { installationPlan } from '../native/installation/installer.mts';
@@ -18,6 +19,7 @@ let directory: string;
 const children: ReturnType<typeof spawn>[] = [];
 beforeEach(() => {
   directory = mkdtempSync('/tmp/saul-test-');
+  vi.stubEnv('MCP_APP_LOG_ROOT', join(directory, 'diagnostics'));
   vi.stubEnv('SAUL_RUNTIME_DIR', join(directory, 'run'));
 });
 afterEach(async () => {
@@ -280,36 +282,87 @@ describe('native transport', () => {
     expect(responses[3].result.isError).toBe(true);
     expect(responses[4].error.code).toBe(-32601);
   });
-  it('answers health and discovery while a browser call is stalled', async () => {
-    let received!: () => void;
-    const incoming = new Promise<void>((resolve) => {
-      received = resolve;
-    });
-    await host(() => {
-      received();
-      return null;
-    });
-    const child = spawn(process.execPath, ['.build/native/mcp.mjs'], { env: process.env });
-    children.push(child);
-    const responses: { id?: number; result?: { tools?: unknown[] } }[] = [];
-    child.stdout.on(
-      'data',
-      lineDecoder((message) => {
-        if (isRecord(message)) responses.push(message);
-      }),
-    );
-    const send = (id: number, method: string, params: unknown) =>
-      child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
-    send(1, 'tools/call', { name: 'saul_tabs_list', arguments: {} });
-    await incoming;
-    send(2, 'ping', {});
-    send(3, 'tools/list', {});
-    send(4, 'tools/call', { name: 'saul_sessions', arguments: {} });
-    await vi.waitFor(() => expect(responses.map((r) => r.id).sort()).toEqual([2, 3, 4]), {
-      timeout: 2000,
-    });
-    expect(responses.find((r) => r.id === 3)!.result!.tools).toHaveLength(MCP_TOOLS.length);
-  });
+  it.each(['MCP', 'HTTP'])(
+    '%s keeps discovery responsive and queues browser mutations across failure',
+    async (transport) => {
+      const arrived = Promise.withResolvers<unknown>();
+      const mutations: number[] = [];
+      const bridge = await host((message) => {
+        const params = message.params as { tabIds: number[] };
+        mutations.push(params.tabIds[0]!);
+        if (mutations.length === 1) {
+          arrived.resolve(message.id);
+          return null;
+        }
+        return { result: { dryRun: false, windowId: 1, tabIds: params.tabIds } };
+      });
+      const replies = new Map<number, Record<string, unknown>>();
+      const mcp =
+        transport === 'MCP'
+          ? spawn(process.execPath, ['.build/native/mcp.mjs'], { env: process.env })
+          : undefined;
+      if (mcp) {
+        children.push(mcp);
+        mcp.stdout.on(
+          'data',
+          lineDecoder((value) => {
+            if (isRecord(value) && typeof value.id === 'number' && isRecord(value.result))
+              replies.set(value.id, value.result);
+          }),
+        );
+      }
+      const web = transport === 'HTTP' ? await startBoardWeb() : undefined;
+      let nextID = 0;
+      async function send(name: string, args: unknown = {}) {
+        if (web)
+          return await (
+            await fetch(web.origin + '/api', {
+              method: 'POST',
+              headers: {
+                Origin: web.origin,
+                Authorization: 'Bearer ' + new URL(web.url).hash.slice(1),
+              },
+              body: JSON.stringify({ name, arguments: args }),
+            })
+          ).json();
+        const id = ++nextID;
+        mcp!.stdin.write(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id,
+            method: 'tools/call',
+            params: { name, arguments: args },
+          }) + '\n',
+        );
+        await vi.waitFor(() => expect(replies.has(id)).toBe(true), { timeout: 3000 });
+        return replies.get(id);
+      }
+      try {
+        const first = send('saul_tabs_group', { tabIds: [1], dryRun: false });
+        const requestID = await arrived.promise;
+        const second = send('saul_tabs_group', { tabIds: [2], dryRun: false });
+        const inventory = await send('saul_sessions');
+        expect(inventory.structuredContent.sessions).toHaveLength(1);
+        expect((await send('diagnostics_info')).structuredContent.instance).toBeTruthy();
+        if (mcp) {
+          mcp.stdin.write(
+            '{"jsonrpc":"2.0","id":101,"method":"ping"}\n{"jsonrpc":"2.0","id":102,"method":"tools/list"}\n',
+          );
+          await vi.waitFor(() => expect(replies.get(102)?.tools).toHaveLength(MCP_TOOLS.length));
+          expect(replies.get(101)).toEqual({});
+        }
+        expect(mutations).toEqual([1]);
+        bridge.stdin.write(
+          encodeNative({ id: requestID, error: { message: 'First grouping failed' } }),
+        );
+        expect((await first).isError).toBe(true);
+        expect((await second).structuredContent.tabIds).toEqual([2]);
+        expect(mutations).toEqual([1, 2]);
+      } finally {
+        if (web) await new Promise<void>((resolve) => web.server.close(() => resolve()));
+      }
+    },
+  );
   it('installs a standalone CLI and MCP server that work outside the checkout', async () => {
     const installDir = join(directory, "Saul's files");
     const manifestDir = join(directory, 'Native Messaging');

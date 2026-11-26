@@ -139,6 +139,43 @@ import SaulTestSupport
             f.model.chooseLookupPreset(f.alternate.id)
             try expectEqual(f.model.currentPreset, f.alternate, "A supported preset could not be selected")
         },
+        CheckCase("state: a preset stays selectable while its catalog is loading") { directory in
+            var config = Configuration.starters(model: "fixture", effort: "low", fast: false)
+            config.bindFixtureAccount()
+            try ConfigurationStore(directory: directory).save(config)
+            let requested = CheckSignal()
+            let release = CheckSignal()
+            let fixtures = FixtureConnections()
+            let checks = ConnectionChecks(
+                status: { fixtures.status($0) },
+                catalog: { connection, _ in
+                    await requested.signal()
+                    try await release.wait()
+                    return fixtures.catalog(connection)
+                })
+            let model = fixtureModel(directory: directory, connectionChecks: checks)
+            defer {
+                model.shutdown()
+                Task { await release.signal() }
+            }
+            let action = config.actions[0]
+            model.chooseAction(action.id)
+            guard let preset = model.currentPreset, let connection = model.currentConnection else {
+                throw CheckFailure("Fixture preset is not bound")
+            }
+            let refresh = Task { await model.refreshConnection(connection, intent: .check) }
+            try await requested.wait()
+            try expect(model.lookupPresetChoiceIssue(preset) == nil, "Loading preset was disabled")
+            try expect(
+                model.presetIssue(preset)?.contains("Loading models") == true,
+                "Loading preset was marked ready")
+            try expect(model.modelsForPreset(preset).isEmpty, "Missing catalog synthesized a model")
+            await release.signal()
+            await refresh.value
+            try expect(model.presetIssue(preset) == nil, "Loaded preset remained unavailable")
+            try expectEqual(
+                model.modelsForPreset(preset).map(\.id), ["fixture"], "Ready catalog model changed")
+        },
         stateCase("offline model refuses sending despite ready account and valid draft") { f in
             f.model.chooseAction(f.single.id)
             f.model.query = "synthetic"

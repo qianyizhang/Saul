@@ -261,7 +261,7 @@ export class HistoryRepository {
         throw new Error('History cursor does not belong to this view and filter.');
       before = { createdAt: parsed[1] as number, id: parsed[2], app: parsed[3] };
     }
-    const items = browser.history({ limit: pageSize + 1, searchQuery, bookmarksOnly }, before);
+    const items = browser.library.list({ limit: pageSize + 1, searchQuery, bookmarksOnly }, before);
     const next = items.length > pageSize;
     if (next) items.pop();
     const last = items.at(-1);

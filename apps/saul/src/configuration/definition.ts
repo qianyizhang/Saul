@@ -1,3 +1,4 @@
+import { activeConnections } from './connections.ts';
 import { EXPLAIN_RECIPE_ID } from '../../shared/model/action-ids.ts';
 import type { ModelPreset, Recipe, ProviderType } from '../../shared/model/presets.ts';
 import type { ContextPolicy } from '../../shared/model/reading.ts';
@@ -236,7 +237,11 @@ export function illustrationPreset(settings: Configuration): ModelPreset {
     connectionKey: 'openai-api',
     capability: 'draw',
     model: '',
-    profileId: settings.connectionProfiles?.['openai-api'] || settings.activeProfileId || 'default',
+    profileId:
+      activeConnections(settings).find((connection) => connection.key === 'openai-api')
+        ?.localProfileId ??
+      settings.activeProfileId ??
+      'default',
     imageOptions: { size: '1024x1024', quality: 'low', outputFormat: 'png' },
   };
 }
@@ -250,7 +255,9 @@ export function illustrationRecipe(): Recipe {
     systemPrompt: '',
   };
 }
-export function configurationFor(settings: Configuration): ReadingConfiguration {
+export function configurationFor(
+  settings: Pick<Configuration, 'configuration'>,
+): ReadingConfiguration {
   if (!settings.configuration)
     throw new Error('Saved configuration is missing. Back up and reset it from Settings.');
   return settings.configuration;

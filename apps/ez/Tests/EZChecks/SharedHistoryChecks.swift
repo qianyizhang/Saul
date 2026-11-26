@@ -187,6 +187,32 @@ private struct HistoryContract: Decodable {
             try expectEqual(
                 try historySQL(url, "SELECT count(*) FROM digest_batch"), "1", "Library clear erased Calls")
         },
+        CheckCase("history contract: shared prompt search excludes masked attempts independently") {
+            directory in
+            let store = try HistoryStore(directory: directory)
+            let source = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+                .appendingPathComponent("../../../../contracts/fixtures/history-search.sql")
+                .standardizedFileURL
+            let writer = try HistoryFixtureWriter(store.url, reservation: .immediate)
+            try writer.run(String(contentsOf: source, encoding: .utf8))
+            try writer.run("COMMIT")
+            let record = HistoryStore.RecordID.browser(selectionID: "search-selection")
+            let reader = HistoryReader(directory: directory)
+            let old = "first question only"
+            let quoted = "quoted older answer"
+            for query in [old, quoted] {
+                try expectEqual(
+                    try await reader.page(search: query).rows.map(\.recordID), [record],
+                    "Search missed expected fixture prompt: \(query)")
+            }
+            let revision = try store.get(record)?.revision
+            _ = try store.mask(
+                .entry(record, .browser("search-old")), write: HistoryWrite(expectedRevision: revision))
+            try expectEqual(try await reader.page(search: old).total, 0, "Masked prompt leaked into search")
+            try expectEqual(
+                try await reader.page(search: quoted).rows.map(\.recordID), [record],
+                "A visible follow-up can quote an older answer")
+        },
         CheckCase("history contract: pending reuse and record masking share one admission guard") {
             directory in
             let store = try HistoryStore(directory: directory)

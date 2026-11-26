@@ -9,6 +9,7 @@ import {
 } from '../../shared/model/execution-route.ts';
 import { officialOpenAI } from '../../shared/protocol/credentials-contract.mts';
 import { inspectPreset, type PresetInspection } from './inspect';
+import { activeConnections } from './connections';
 import { CHROME_AI_RETIRED_MESSAGE } from '../../shared/model/retired-provider.ts';
 
 export { SELECT_NEW_PRESET } from '../../shared/model/execution-route.ts';
@@ -49,10 +50,14 @@ function loopback(endpoint: URL) {
   return ['localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname);
 }
 
-function resolveSelection(settings: Configuration, preset: ModelPreset): PresetInspection {
-  const selected = inspectPreset(settings, preset);
+function resolveSelection(
+  settings: Configuration,
+  preset: ModelPreset,
+  frozenProfileId?: string,
+): PresetInspection {
+  const selected = inspectPreset(settings, preset, frozenProfileId);
   if (selected.issue) throw new Error(selected.issue);
-  const connection = settings.connections.find((c) => c.key === preset.connectionKey);
+  const { connection } = selected;
   if (preset.capability === 'draw' || preset.capability === 'speak') {
     const capability = preset.capability === 'draw' ? 'Draw' : 'Speak';
     if (preset.provider !== 'openai-compatible' || connection?.kind !== 'openai-api')
@@ -64,7 +69,7 @@ function resolveSelection(settings: Configuration, preset: ModelPreset): PresetI
     if (
       preset.capability === 'speak' &&
       settings.sharedCredentials !== 'saul' &&
-      !settings.profiles?.some((p) => p.id === selected.profileId)
+      !selected.hasExplicitProfile
     )
       throw new Error(
         `Preset “${preset.name}” needs its saved connection. Choose a connection in Settings.`,
@@ -131,7 +136,7 @@ function credentialForChoices(settings: Configuration, input: FrozenModel): stri
     if (settings.sharedCredentials !== 'saul' || route.binding.kind !== 'connection')
       throw new Error(SELECT_NEW_PRESET);
     const key = route.binding.key;
-    const connection = settings.connections.find((item) => item.key === key);
+    const connection = activeConnections(settings).find((item) => item.key === key);
     if (
       connection?.kind !== 'chatgpt-plan' ||
       !connection.accountId ||
@@ -144,7 +149,7 @@ function credentialForChoices(settings: Configuration, input: FrozenModel): stri
   if (!input.preset) throw new Error(SELECT_NEW_PRESET);
   if (route.binding.kind === 'connection') {
     const key = route.binding.key;
-    const connection = settings.connections.find((item) => item.key === key);
+    const connection = activeConnections(settings).find((item) => item.key === key);
     const bound = connection?.baseUrl ?? 'https://api.openai.com/v1';
     if (
       connection?.kind !== 'openai-api' ||
@@ -157,17 +162,11 @@ function credentialForChoices(settings: Configuration, input: FrozenModel): stri
     )
       throw new Error(SELECT_NEW_PRESET);
   }
-  const frozenSettings =
-    input.preset.connectionKey && input.preset.profileId
-      ? {
-          ...settings,
-          connectionProfiles: {
-            ...settings.connectionProfiles,
-            [input.preset.connectionKey]: input.preset.profileId,
-          },
-        }
-      : settings;
-  const selected = resolveSelection(frozenSettings, input.preset);
+  const selected = resolveSelection(
+    settings,
+    input.preset,
+    route.owner === 'local' ? route.binding.id : input.preset.profileId,
+  );
   const currentEndpoint = validateSelection(selected, settings.sharedCredentials)!;
   if (currentEndpoint.href !== endpoint.href) throw new Error(SELECT_NEW_PRESET);
   if (route.owner !== (selected.remote.credentialOwner ?? 'local'))

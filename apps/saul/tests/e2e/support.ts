@@ -188,6 +188,7 @@ export interface SandboxOptions {
   databaseFixtures?: boolean;
   browserToolsFixtures?: boolean;
   handleProcessSignals?: boolean;
+  blockChatGPTNetwork?: boolean;
 }
 
 export async function createSandbox(options: SandboxOptions = {}) {
@@ -361,7 +362,13 @@ export async function createSandbox(options: SandboxOptions = {}) {
         ...(options.handleProcessSignals === false
           ? { handleSIGINT: false, handleSIGTERM: false }
           : {}),
-        args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`],
+        args: [
+          `--disable-extensions-except=${extension}`,
+          `--load-extension=${extension}`,
+          ...(options.blockChatGPTNetwork
+            ? ['--host-resolver-rules=MAP chatgpt.com ~NOTFOUND']
+            : []),
+        ],
         viewport: { width: 1000, height: 800 },
       });
       launchNumber++;

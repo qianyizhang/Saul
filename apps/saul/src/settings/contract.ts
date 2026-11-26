@@ -1,5 +1,5 @@
 import type { Configuration } from '../configuration/definition';
-import { record } from '../reading/contract';
+import { isRecord } from '../../shared/model/value.mts';
 
 export type SettingsRequest =
   | { action: 'read' }
@@ -12,7 +12,7 @@ export type SettingsState =
   | { state: 'conflict'; error: string };
 
 export function validateSettingsRequest(value: unknown): asserts value is SettingsRequest {
-  if (!record(value)) throw new Error('Invalid settings request');
+  if (!isRecord(value)) throw new Error('Invalid settings request');
   const keys = Object.keys(value);
   if (value.action === 'read' && keys.length === 1) return;
   if (typeof value.baseline !== 'string' || !/^[a-f0-9]{64}$/.test(value.baseline))
@@ -21,12 +21,12 @@ export function validateSettingsRequest(value: unknown): asserts value is Settin
   if (
     value.action === 'commit' &&
     keys.length === 3 &&
-    record(value.settings) &&
+    isRecord(value.settings) &&
     typeof value.settings.activeProvider === 'string' &&
-    record(value.settings.openaiCompatible) &&
-    record(value.settings.chromeAi) &&
-    record(value.settings.contextPolicy) &&
-    record(value.settings.configuration)
+    isRecord(value.settings.openaiCompatible) &&
+    isRecord(value.settings.chromeAi) &&
+    isRecord(value.settings.contextPolicy) &&
+    isRecord(value.settings.configuration)
   )
     return;
   throw new Error('Invalid settings request');

@@ -272,3 +272,38 @@ it('guards immediate connection commits while dirty and retains a failed local v
   expect(editor.getSnapshot()).toMatchObject({ dirty: true, blocked: false, saved: false });
   expect(request.mock.calls).toHaveLength(1);
 });
+
+it('deletes the selected joined binding and preserves unrelated unavailable bindings on reopen', async () => {
+  const settings = structuredClone(DEFAULT_CONFIGURATION);
+  settings.connections.push({ key: 'remove-me', name: 'Remove me', kind: 'openai-api' });
+  settings.connectionProfiles = {
+    'remove-me': 'default',
+    'openai-api': 'default',
+    'already-unavailable': 'another-profile',
+  };
+  const { editor, request } = fixture(settings);
+  await editor.open();
+  await editor.manageConnection({ action: 'rename', key: 'remove-me', name: 'Renamed' });
+  expect(editor.getSnapshot().configuration.connections).toContainEqual({
+    key: 'remove-me',
+    name: 'Renamed',
+    kind: 'openai-api',
+    localProfileId: 'default',
+  });
+  await editor.manageConnection({ action: 'delete', key: 'remove-me' });
+  expect(request.mock.calls.at(-1)?.[0]).toMatchObject({
+    action: 'commit',
+    settings: {
+      connections: DEFAULT_CONFIGURATION.connections,
+      connectionProfiles: { 'openai-api': 'default', 'already-unavailable': 'another-profile' },
+    },
+  });
+  await editor.reload();
+  expect(
+    editor.getSnapshot().configuration.connections.some((row) => row.key === 'remove-me'),
+  ).toBe(false);
+  expect(editor.configurationForProviderTest().connectionProfiles).toEqual({
+    'openai-api': 'default',
+    'already-unavailable': 'another-profile',
+  });
+});

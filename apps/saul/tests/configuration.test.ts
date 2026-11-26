@@ -1,4 +1,4 @@
-import { preparePreset } from '../src/configuration/resolve';
+import { preparePreset, prepareFrozenPreset } from '../src/configuration/resolve';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { ResolvedContext } from '../shared/model/reading.ts';
 import type { Configuration } from '../src/configuration/definition';
@@ -274,4 +274,44 @@ it('blocks shared API options before transport rather than silently discarding t
     expect(() => preparePreset(settings, request)).toThrow('Run it in EZ');
     expect(inspectPreset(settings, request).provider).toBe('openai-compatible');
   }
+});
+
+it('uses one current connection binding for inspection and admission while Retry keeps its exact local route', () => {
+  const settings = configured();
+  settings.profiles!.push({
+    id: 'connection-b',
+    name: 'Connection B',
+    config: {
+      ...settings.openaiCompatible,
+      baseUrl: 'https://different.test/v1',
+      apiKey: 'different-key',
+    },
+  });
+  const preset = {
+    ...settings.configuration!.presets[0]!,
+    connectionKey: 'openai-api',
+    profileId: 'connection-b',
+  };
+  settings.connectionProfiles = { 'openai-api': 'connection-a' };
+  expect(inspectPreset(settings, preset)).toMatchObject({
+    profileId: 'connection-a',
+    remote: { baseUrl: 'https://example.test/v1' },
+  });
+  const { choices, credential } = preparePreset(settings, preset);
+  expect(credential).toBe('private-key');
+  expect(choices.preset?.profileId).toBe('connection-a');
+  expect(choices.remote).not.toHaveProperty('apiKey');
+
+  settings.connectionProfiles['openai-api'] = 'connection-b';
+  expect(preparePreset(settings, preset).credential).toBe('different-key');
+  expect(prepareFrozenPreset(settings, choices).credential).toBe('private-key');
+
+  settings.profiles![0]!.config.baseUrl = settings.profiles![1]!.config.baseUrl;
+  expect(() => prepareFrozenPreset(settings, choices)).toThrow(/saved connection has changed/);
+  settings.connectionProfiles['openai-api'] = 'no-longer-available';
+  expect(inspectPreset(settings, preset)).toMatchObject({
+    profileId: 'no-longer-available',
+    remote: { baseUrl: '', apiKey: '' },
+  });
+  expect(() => preparePreset(settings, preset)).toThrow(/needs its saved connection/);
 });

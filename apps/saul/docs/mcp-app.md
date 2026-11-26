@@ -63,16 +63,17 @@ from selected tabs requires **Pages → Write**.
 - **Names** — [Extension label storage](../src/native/window-labels.ts) and [native adapter](../native/window-names.mts). [Label behavior](#manual-controls)
 - **Wire names** — `saul_workspace_*` identifies the MCP interface. Window and History keep their product names.
 
-| File                                                | Responsibility                                                            |
-| --------------------------------------------------- | ------------------------------------------------------------------------- |
-| [App protocol](../shared/protocol/app-protocol.mts) | Shared MCP-only schemas, visibility and resource metadata                 |
-| [Workspace service](../native/workspace.mts)        | Validation, projection, expiring approvals and verified execution         |
-| [MCP server](../native/mcp.mts)                     | Resource delivery and serialized tool dispatch                            |
-| [Board session](../board/board-session.ts)          | Session identity, refresh, draft proposals, approval and incoming results |
-| [UI](../board/workspace.ts)                         | Board rendering, focus, selection and gestures                            |
-| [Host adapter](../board/host-adapter.ts)            | SDK lifecycle, capability checks, calls, messages and teardown            |
-| [Board resource](../native/board-resource.mts)      | Process-frozen HTML and content-derived resource identity                 |
-| [Native installer](../native/installation/cli.mts)  | Stages and activates a complete immutable helper generation               |
+| File                                                | Responsibility                                                                                                            |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| [App protocol](../shared/protocol/app-protocol.mts) | Shared MCP-only schemas, visibility and resource metadata                                                                 |
+| [Workspace service](../native/workspace.mts)        | Validation, projection, expiring approvals and verified execution                                                         |
+| [Board service](../native/board-service.mts)        | Orders browser operations for both transports. Session discovery and diagnostics remain responsive during a stalled call. |
+| [MCP server](../native/mcp.mts)                     | MCP discovery, resource delivery and tool call envelopes                                                                  |
+| [Board session](../board/board-session.ts)          | Session identity, refresh, draft proposals, approval and incoming results                                                 |
+| [UI](../board/workspace.ts)                         | Board rendering, focus, selection and gestures                                                                            |
+| [Host adapter](../board/host-adapter.ts)            | SDK lifecycle, capability checks, calls, messages and teardown                                                            |
+| [Board resource](../native/board-resource.mts)      | Process-frozen HTML and content-derived resource identity                                                                 |
+| [Native installer](../native/installation/cli.mts)  | Stages and activates a complete immutable helper generation                                                               |
 
 - **Delivery** — Native build bundles the pinned MCP Apps SDK. Each server freezes the hash-addressed resource. `saul_workspace_show` opens it. Proposal tools update it by notification.
 - **Host lifecycle** — Register notifications before initialization, gate actions by host capability and end polls and local requests at teardown. The SDK owns request IDs. Keep drafts and report uncertain delivery without resend.

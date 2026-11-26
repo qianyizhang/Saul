@@ -15,6 +15,10 @@ on selection. Search covers all saved query/answer text, not only loaded rows,
 and retains localized case-insensitive substring matching. Pagination does not
 change frozen Retry/Reuse/Follow-up inputs or saved record identities.
 
+Both Libraries search each visible attempt’s full saved user prompt and answer. A follow-up
+can contain a quote from an earlier attempt. That quote is searchable for as long as the
+follow-up is visible. Saul also searches the selected text, page title and URL.
+
 ## Accepted interface
 
 Schema v5 uses this interface for the shared SQLite store. [Decision and rationale](../docs/adr/0007-history-records-and-entries.md)

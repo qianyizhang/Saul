@@ -269,6 +269,11 @@ export function ApiPresetFields({
             value={selectedPreset.profileId ?? ''}
             onChange={(e) => selectProfile(e.target.value)}
           >
+            {!profiles?.some((p) => p.id === selectedPreset.profileId) && (
+              <option value={selectedPreset.profileId ?? ''}>
+                {selectedPreset.profileId ? 'Unavailable connection' : 'Choose a connection'}
+              </option>
+            )}
             {profiles?.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}

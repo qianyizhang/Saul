@@ -100,6 +100,8 @@ export function initDeepDives() {
       [TAB_BINDINGS]: { ...bindings, [id]: { tabId: tab.id, prepareDraft } },
     });
     await chrome.tabs.update(tab.id, { url: CHATGPT_ORIGIN });
+    // Inspect the current tab as well as listening for future committed changes.
+    handle(inspectTab(tab.id));
   }
 
   async function open(item: DeepDive) {
@@ -151,15 +153,16 @@ export function initDeepDives() {
     }
   }
 
-  async function inspectTab(tab: chrome.tabs.Tab, loaded: boolean) {
-    if (tab.id === undefined || tab.incognito || !onChatGPT(tab.url)) return;
-    const tabId = tab.id;
+  async function inspectTab(tabId: number) {
     const request = await serialize(async () => {
       const bindings = await tabs();
       const match = Object.entries(bindings).find(([, binding]) => binding.tabId === tabId);
       const item = match && (await records()).find((record) => record.id === match[0]);
       if (!match || !item || item.handoff.phase === 'sent' || verifying.has(item.id)) return;
-      const fresh = loaded && tab.url === `${CHATGPT_ORIGIN}/`;
+      const tab = await chrome.tabs.get(tabId).catch(() => undefined);
+      if (!tab || tab.incognito || !onChatGPT(tab.url)) return;
+      const fresh =
+        tab.status === 'complete' && !tab.pendingUrl && tab.url === `${CHATGPT_ORIGIN}/`;
       if (item.handoff.phase === 'opening' && fresh) {
         if (Date.now() >= item.createdAt + HANDOFF_TIMEOUT) {
           await setHandoff(item.id, { phase: 'draft' });
@@ -218,7 +221,7 @@ export function initDeepDives() {
     // A full-page navigation can cut off the injected script. Read the new document once.
     if (action !== 'verify' && result?.phase !== 'sent') {
       const current = await chrome.tabs.get(tabId).catch(() => undefined);
-      if (current && chatUrl(current.url)) await inspectTab(current, false);
+      if (current && chatUrl(current.url)) await inspectTab(tabId);
     }
   }
 
@@ -226,19 +229,19 @@ export function initDeepDives() {
     const observe = await serialize(async () => {
       const bindings = await tabs();
       const items = await records();
-      const present: chrome.tabs.Tab[] = [];
+      const present: number[] = [];
       for (const item of items) {
         const tabId = bindings[item.id]?.tabId;
         const tab =
           tabId === undefined ? undefined : await chrome.tabs.get(tabId).catch(() => undefined);
-        if (tab) present.push(tab);
+        if (tab?.id !== undefined) present.push(tab.id);
         else if (item.handoff.phase === 'opening') await setHandoff(item.id, { phase: 'draft' });
         else if (item.handoff.phase === 'sending')
           await setHandoff(item.id, { phase: 'uncertain' });
       }
       return present;
     });
-    await Promise.all(observe.map((tab) => inspectTab(tab, tab.status === 'complete')));
+    await Promise.all(observe.map((tabId) => inspectTab(tabId)));
   }
 
   async function workspace(message: DeepDiveRequest) {
@@ -276,9 +279,9 @@ export function initDeepDives() {
       }),
     );
   });
-  chrome.tabs.onUpdated.addListener((_id, change, tab) => {
-    if (change.status === 'complete' || chatUrl(change.url))
-      handle(inspectTab(tab, change.status === 'complete'));
+  chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
+    if (onChatGPT(tab.url) && (change.status === 'complete' || change.url))
+      handle(inspectTab(tabId));
   });
   chrome.tabs.onRemoved.addListener((tabId) =>
     handle(

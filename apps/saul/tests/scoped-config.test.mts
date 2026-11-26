@@ -91,3 +91,47 @@ it('rejects multibyte scoped data before it can exceed native transport or chang
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+it('restores the exact credential for a legacy named local profile and never substitutes it for an unavailable binding', () => {
+  const local = structuredClone(DEFAULT_CONFIGURATION);
+  delete local.profiles;
+  local.activeProfileId = 'legacy-local';
+  local.openaiCompatible.apiKey = 'PRIVATE';
+  const portable = portableSettings(local);
+  expect(restoreSettings(local, { revision: 1, value: portable }).openaiCompatible.apiKey).toBe(
+    'PRIVATE',
+  );
+  expect(
+    restoreSettings(local, {
+      revision: 1,
+      value: { ...portable, activeProfileId: 'missing-profile' },
+    }).openaiCompatible.apiKey,
+  ).toBe('');
+});
+
+it('restores an omitted scoped profile as the default and does not borrow a same-endpoint named key', () => {
+  const local = structuredClone(DEFAULT_CONFIGURATION);
+  delete local.profiles;
+  delete local.activeProfileId;
+  local.openaiCompatible.apiKey = 'implicit-default-key';
+  local.openaiCompatible.credentialOwner = 'saul';
+  const value = portableSettings(local);
+  expect(restoreSettings(local, { revision: 1, value }).openaiCompatible).toMatchObject({
+    apiKey: 'implicit-default-key',
+    credentialOwner: 'saul',
+  });
+
+  local.activeProfileId = 'named-only';
+  local.openaiCompatible.apiKey = 'named-key';
+  expect(restoreSettings(local, { revision: 1, value }).openaiCompatible).toMatchObject({
+    apiKey: '',
+    credentialOwner: undefined,
+  });
+  local.profiles = [
+    { id: 'named-only', name: 'Named only', config: { ...local.openaiCompatible } },
+  ];
+  expect(restoreSettings(local, { revision: 1, value }).openaiCompatible).toMatchObject({
+    apiKey: '',
+    credentialOwner: undefined,
+  });
+});

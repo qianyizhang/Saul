@@ -24,7 +24,7 @@ Playwright startup probe; the runbook explains its retained errors.
 
 - Keep one disposable profile and extension snapshot across relaunches when proving durability.
 - Route popup/content through background; background calls offscreen directly.
-- Keep offscreen creation under one lock. Shared history uses the native helper; OPFS is read only during one-time migration. Never add a local or in-memory fallback.
+- Keep offscreen creation under one lock. Exercise shared History through the native SQLite helper, including the [shared database cutover](../../../contracts/history.md#personal-data-cutover).
 - Exercise selection -> Explain -> saved history for reading changes.
 - Keep credentials out of fixtures. Do not require native-host installation or personal Chrome data.
 

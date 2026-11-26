@@ -67,6 +67,28 @@ test('quiet queue, underline view, refresh and persistent unread explanations', 
   await view(page);
   await expect(page.getByText('Saved', { exact: true })).toBeVisible();
 });
+test('reopening a closed source from History delivers its saved explanation after startup', async ({
+  sandbox,
+  fixtureServer,
+}) => {
+  const { context, popup } = await sandbox.launch();
+  const initialRequests = fixtureServer.requests.length;
+  await configureFixtureProvider(popup, fixtureServer.origin);
+  const source = await context.newPage();
+  await source.goto(fixtureServer.origin + '/article');
+  await explain(source);
+  await expect(source.getByText('Saved', { exact: true })).toBeVisible();
+  await source.close();
+
+  await popup.getByRole('button', { name: 'History', exact: true }).click();
+  const opened = context.waitForEvent('page');
+  await popup.getByTitle('View source and explanation').click();
+  const page = await opened;
+  await expect(page).toHaveURL(fixtureServer.origin + '/article');
+  await expect(page.getByRole('region', { name: 'Saul explanation' })).toBeVisible();
+  expect(fixtureServer.requests).toHaveLength(initialRequests + 1);
+});
+
 test('dismiss, refresh and closing the source do not cancel; actual runner loss requires explicit retry', async ({
   sandbox,
 }) => {

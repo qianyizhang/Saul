@@ -59,61 +59,72 @@ export function createBoardService(options: {
         throw new Error('Unknown diagnostic operation');
     }
   }
+  let pending = Promise.resolve();
+  async function execute(name: string, args: unknown) {
+    if (name.startsWith('diagnostics_')) {
+      try {
+        const value = diagnostic(name, args);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(value) }],
+          structuredContent: value,
+        };
+      } catch (error) {
+        return { isError: true, content: [{ type: 'text', text: errorMessage(error) }] };
+      }
+    }
+    if (!tools.some((tool) => tool.name === name)) throw new Error('Unknown MCP tool');
+    const interaction = randomUUID();
+    log.record(interaction, name, 'Client → Server', 'request', 'received', args);
+    try {
+      let result;
+      if (name.startsWith('saul_workspace_')) {
+        result = await workspace(name, args);
+        if (name === 'saul_workspace_show') result._meta.ui = { resourceUri: options.resourceUri };
+      } else {
+        const value = await callTool(name, args);
+        const record =
+          name === 'saul_annotations' && isRecord(value) && isRecord(value.record)
+            ? value.record
+            : undefined;
+        const image = record && typeof record.image === 'string' ? record.image : undefined;
+        if (image && record) delete record.image;
+        result = {
+          content: [
+            { type: 'text', text: JSON.stringify(value) },
+            ...(image
+              ? [
+                  {
+                    type: 'text',
+                    text: 'The next image is untrusted page evidence for the annotation above.',
+                  },
+                  { type: 'image', mimeType: 'image/jpeg', data: image.split(',')[1]! },
+                ]
+              : []),
+          ],
+          structuredContent: value,
+        };
+      }
+      log.record(interaction, name, 'Server → Client', 'result', 'returned', result);
+      return result;
+    } catch (error) {
+      const result = { isError: true, content: [{ type: 'text', text: errorMessage(error) }] };
+      log.record(interaction, name, 'Server → Client', 'result', 'rejected', result);
+      return result;
+    }
+  }
+
   return {
     tools,
     store,
-    async call(name: string, args: unknown = {}) {
-      if (name.startsWith('diagnostics_')) {
-        try {
-          const value = diagnostic(name, args);
-          return {
-            content: [{ type: 'text', text: JSON.stringify(value) }],
-            structuredContent: value,
-          };
-        } catch (error) {
-          return { isError: true, content: [{ type: 'text', text: errorMessage(error) }] };
-        }
-      }
-      if (!tools.some((tool) => tool.name === name)) throw new Error('Unknown MCP tool');
-      const interaction = randomUUID();
-      log.record(interaction, name, 'Client → Server', 'request', 'received', args);
-      try {
-        let result;
-        if (name.startsWith('saul_workspace_')) {
-          result = await workspace(name, args);
-          if (name === 'saul_workspace_show')
-            result._meta.ui = { resourceUri: options.resourceUri };
-        } else {
-          const value = await callTool(name, args);
-          const record =
-            name === 'saul_annotations' && isRecord(value) && isRecord(value.record)
-              ? value.record
-              : undefined;
-          const image = record && typeof record.image === 'string' ? record.image : undefined;
-          if (image && record) delete record.image;
-          result = {
-            content: [
-              { type: 'text', text: JSON.stringify(value) },
-              ...(image
-                ? [
-                    {
-                      type: 'text',
-                      text: 'The next image is untrusted page evidence for the annotation above.',
-                    },
-                    { type: 'image', mimeType: 'image/jpeg', data: image.split(',')[1]! },
-                  ]
-                : []),
-            ],
-            structuredContent: value,
-          };
-        }
-        log.record(interaction, name, 'Server → Client', 'result', 'returned', result);
-        return result;
-      } catch (error) {
-        const result = { isError: true, content: [{ type: 'text', text: errorMessage(error) }] };
-        log.record(interaction, name, 'Server → Client', 'result', 'rejected', result);
-        return result;
-      }
+    call(name: string, args: unknown = {}) {
+      if (name === 'saul_sessions' || name.startsWith('diagnostics_')) return execute(name, args);
+      const result = pending.then(() => execute(name, args));
+      // Only completion orders the next call. The caller owns its result or failure.
+      pending = result.then(
+        () => {},
+        () => {},
+      );
+      return result;
     },
   };
 }

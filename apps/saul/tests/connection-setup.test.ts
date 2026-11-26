@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { createSettingsEditor } from '../src/settings/editor';
 import { requestSettings } from '../src/configuration/client';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 import { credentialCall } from '../src/native/credentials';
@@ -133,3 +134,41 @@ it('rejects a stale sign-out or sign-in before acting on a reassigned account', 
   );
   expect(auth).not.toHaveBeenCalled();
 });
+
+it.each(['finish', 'discard'] as const)(
+  'reopens a managed connection with a local binding after a Settings conflict and can %s',
+  async (action) => {
+    const settings = {
+      ...structuredClone(DEFAULT_CONFIGURATION),
+      sharedCredentials: 'saul' as const,
+      connections: [definition],
+      connectionProfiles: { [definition.key]: 'local-profile' },
+    };
+    vi.mocked(requestSettings).mockResolvedValue({ state: 'ready', revision: '1', settings });
+    const editor = createSettingsEditor(requestSettings);
+    await editor.open();
+    const previous = editor.getSnapshot().configuration.connections[0]!;
+    expect(previous.localProfileId).toBe('local-profile');
+
+    const commit = vi.fn().mockRejectedValueOnce(new Error('settings conflict'));
+    await expect(
+      saveConnectionSetup({ ...setup, previous }, 'private-value', commit, false),
+    ).rejects.toThrow('settings conflict');
+    expect(JSON.stringify(storage)).not.toMatch(/localProfileId|local-profile|private-value/);
+    const restored = (await readConnectionSetup())!;
+    expect(restored.previous).toEqual(definition);
+    expect(restored.phase).toBe('settings');
+    if (action === 'finish') {
+      await saveConnectionSetup(restored, '', commit, true);
+      expect(vi.mocked(credentialCall).mock.calls.map(([request]) => request.action)).toEqual([
+        'connection-key-save',
+        'connection-key-status',
+      ]);
+    } else {
+      await discardConnectionSetup(restored.id, restored.phase);
+      expect(credentialCall).toHaveBeenCalledTimes(1);
+    }
+    expect(await readConnectionSetup()).toBeUndefined();
+    editor.close();
+  },
+);

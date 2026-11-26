@@ -1,6 +1,7 @@
 import { connectionCapabilities } from '../../../shared/protocol/shared-presets-contract.mts';
 import { catalogIssue } from '../../../shared/protocol/connections-contract.mts';
 import type { ModelPreset } from '../../../shared/model/presets.ts';
+import type { PresetInspection } from '../../configuration/inspect';
 import type { Configuration } from '../../configuration/definition';
 import type { SettingsEdit } from '../draft';
 import { useConnectionCatalog } from './useConnectionCatalog';
@@ -32,7 +33,7 @@ export function PresetSettings({
   selectedPresetId,
   selectedPreset,
   settings,
-  remote,
+  inspection,
   visible,
   saved,
   locked,
@@ -47,11 +48,8 @@ export function PresetSettings({
   presets: ModelPreset[];
   selectedPresetId: string;
   selectedPreset: ModelPreset | undefined;
-  settings: Pick<
-    Configuration,
-    'connections' | 'profiles' | 'connectionProfiles' | 'sharedCredentials'
-  >;
-  remote: Configuration['openaiCompatible'];
+  settings: Pick<Configuration, 'connections' | 'profiles' | 'sharedCredentials'>;
+  inspection: PresetInspection;
   visible: boolean;
   saved: boolean;
   locked: boolean;
@@ -64,27 +62,17 @@ export function PresetSettings({
   openConnections: (connectionKey?: string) => void;
 }) {
   const { value: presetSearch, change: setPresetSearch } = search;
-  const selectedConnection = settings.connections.find(
-    (p) => p.key === selectedPreset?.connectionKey,
-  );
+  const { connection: selectedConnection, remote, issue } = inspection;
   const managedCheck =
     remote.credentialOwner === 'saul' ||
     (!!selectedPreset?.connectionKey && settings.sharedCredentials !== undefined);
   const localConnection =
-    selectedPreset?.provider === 'openai-compatible' &&
-    !managedCheck &&
-    (settings.sharedCredentials === undefined ||
-      (settings.sharedCredentials === 'disconnected' && !selectedConnection))
-      ? (settings.profiles?.find(
-          (p) =>
-            p.id ===
-            (settings.connectionProfiles?.[selectedPreset.connectionKey ?? ''] ||
-              selectedPreset.profileId),
-        )?.config ?? remote)
+    selectedPreset?.provider === 'openai-compatible' && !managedCheck && !issue
+      ? remote
       : undefined;
   const connectionCatalog = useConnectionCatalog(
     selectedConnection?.key,
-    visible && (settings.sharedCredentials === 'saul' || !!localConnection),
+    visible && !issue && (settings.sharedCredentials === 'saul' || !!localConnection),
     localConnection,
   );
   const modelOptions =

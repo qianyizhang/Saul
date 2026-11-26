@@ -56,7 +56,8 @@ public struct Action: Codable, Equatable, Identifiable, Sendable {
     }
 
     public func prepare(
-        values: [String: String], preset: ModelPreset, models: [ModelOption], provider: GenerationProviderID,
+        values: [String: String], preset: ModelPreset, models: [ConnectionModel],
+        provider: GenerationProviderID,
         image: ImageAttachment? = nil
     ) throws
         -> HistoryEntry
@@ -91,7 +92,8 @@ public struct Action: Codable, Equatable, Identifiable, Sendable {
     }
 
     public func compile(
-        values: [String: String], preset: ModelPreset, models: [ModelOption], provider: GenerationProviderID
+        values: [String: String], preset: ModelPreset, models: [ConnectionModel],
+        provider: GenerationProviderID
     ) throws -> Compiled {
         try validateInputs()
         if webSearch && provider == .chatGPTPlan {
@@ -114,7 +116,7 @@ public struct Action: Codable, Equatable, Identifiable, Sendable {
         }
         let tier =
             preset.capability == .write && preset.fast
-            ? (provider == .chatGPTPlan ? models.first { $0.model == preset.model }?.fastTier : "priority")
+            ? (provider == .chatGPTPlan ? models.first { $0.id == preset.model }?.fastTier : "priority")
             : nil
         return Compiled(action: self, preset: preset, values: values, prompt: prompt, tier: tier)
     }

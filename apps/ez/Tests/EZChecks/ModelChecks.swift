@@ -49,12 +49,20 @@ import SaulTestSupport
             try expect(!entry.isRetryable, "Saul-origin request offered native Retry")
         },
         CheckCase("model: preset defaults omit unadvertised effort and Fast options") { _ in
-            let model = ModelOption(
-                connectionModel: ConnectionModel(
-                    id: "test", efforts: ["high"], defaultEffort: "retired"))
+            let model = ConnectionModel(id: "test", efforts: ["high"], defaultEffort: "retired")
             try expect(
                 model.quickEffort == "high" && model.fastTier == nil,
                 "Unadvertised defaults changed the quick fallback")
+            for (efforts, advertised, expected) in [
+                (["high", "low", "minimal", "none"], "high", "none"),
+                (["medium", "high"], "high", "high"),
+                (["medium", "high"], "retired", "medium"),
+                ([], "high", ""),
+            ] {
+                try expectEqual(
+                    ConnectionModel(id: "test", efforts: efforts, defaultEffort: advertised).quickEffort,
+                    expected, "Quick effort priority changed")
+            }
             try expect(
                 ModelPreset(name: "Default", model: "test", effort: "", fast: false)
                     .availabilityError(in: [model], provider: .chatGPTPlan) == nil,
@@ -80,7 +88,7 @@ import SaulTestSupport
             try expect(
                 changed.availabilityError(in: [option], provider: .chatGPTPlan) != nil,
                 "Unsupported effort accepted")
-            let noFast = ModelOption(connectionModel: ConnectionModel(id: "fixture", efforts: ["medium"]))
+            let noFast = ConnectionModel(id: "fixture", efforts: ["medium"])
             try expect(
                 preset.availabilityError(in: [noFast], provider: .chatGPTPlan) != nil,
                 "Fast silently downgraded")
@@ -97,9 +105,7 @@ import SaulTestSupport
             try expect(
                 preset.availabilityError(in: [], provider: .chatGPTPlan) != nil,
                 "Added account bypassed model validation")
-            let option = ModelOption(
-                connectionModel: ConnectionModel(
-                    id: preset.model, efforts: [preset.effort], fastTier: "fast"))
+            let option = ConnectionModel(id: preset.model, efforts: [preset.effort], fastTier: "fast")
             let entry = try fixture.action.prepare(
                 values: ["fuzzy term": "word", "fuzzy context": "context"], preset: preset, models: [option],
                 provider: .chatGPTPlan)

@@ -5,7 +5,7 @@ import {
   type ToolArgs,
   type ToolResults,
 } from '../../shared/protocol/protocol.mts';
-import { record } from '../reading/contract';
+import { isRecord } from '../../shared/model/value.mts';
 type WorkspaceCommandTool =
   'saul_tabs_edit' | 'saul_tabs_undo' | 'saul_summary_open' | 'saul_summary_status';
 type WorkspaceCommandRequest = {
@@ -23,14 +23,14 @@ export type WorkspaceResultFor<T extends WorkspaceRequest> = T extends {
   ? ToolResults[K]
   : { snapshot: TabSnapshot };
 export function validateWorkspaceRequest(value: unknown): asserts value is WorkspaceRequest {
-  if (!record(value)) throw new Error('Invalid tab action');
+  if (!isRecord(value)) throw new Error('Invalid tab action');
   if (value.action === 'list') return;
   if (
     value.action !== 'command' ||
     !['saul_tabs_edit', 'saul_tabs_undo', 'saul_summary_open', 'saul_summary_status'].includes(
       String(value.method),
     ) ||
-    !record(value.args) ||
+    !isRecord(value.args) ||
     'session' in value.args
   )
     throw new Error('Invalid tab action');

@@ -18,3 +18,6 @@ export function recordMask(collection: string, id: string, owner = "''"): string
 export function entryMask(collection: string, recordId: string, id: string, owner = "''"): string {
   return `(SELECT masked_at FROM history_entry WHERE collection='${collection}' AND record_id=${recordId} AND id=${id} AND owner=${owner})`;
 }
+
+export const browserMask = (id: string) => recordMask('library-browser', id);
+export const runMask = entryMask('library-browser', 'llm_run.selection_id', 'llm_run.id');

@@ -8,10 +8,10 @@ import {
   inspectDraftPreset,
   type SettingsEdit,
 } from './draft';
+import { draftInspectionSettings, type SettingsValues } from './draft-storage';
 import { reviewSettings, type RecoveryChoice, type SettingsReview } from './recovery';
 import { setupConnections, type ConnectionSetup } from './connection-setup';
 import { changeConnection, type ConnectionChange } from './connection-management';
-import type { Configuration } from '../configuration/definition';
 
 type Ready = Extract<SettingsState, { state: 'ready' }>;
 type Operation = 'save' | 'review' | 'reload' | 'reset' | 'connections' | 'credentials';
@@ -37,7 +37,7 @@ export function createSettingsEditor(
   let generation = 0;
   const listeners = new Set<() => void>();
   const view = () => {
-    const configuration = structuredClone(settingsFromDraft(form));
+    const configuration = structuredClone(draftInspectionSettings(form));
     const selectedPreset = structuredClone(
       form.values.configuration.presets.find((p) => p.id === form.presetId),
     );
@@ -108,7 +108,7 @@ export function createSettingsEditor(
     return phase === 'editing' && !operation && !review;
   }
   async function guardedCommit(
-    update: (settings: Configuration) => Configuration,
+    update: (values: SettingsValues) => SettingsValues,
     kind: 'credentials' | 'connections',
   ) {
     if (!editable() || dirty || needsReview || !baseline) {
@@ -119,7 +119,7 @@ export function createSettingsEditor(
     const token = begin(kind)!;
     let submitted = false;
     try {
-      const settings = update(settingsForSave(form));
+      const settings = settingsForSave({ ...form, values: update(form.values) });
       submitted = true;
       const result = await request({
         action: 'commit',
@@ -143,6 +143,7 @@ export function createSettingsEditor(
   }
   return {
     getSnapshot: () => snapshot,
+    configurationForProviderTest: () => structuredClone(settingsFromDraft(form)),
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => {

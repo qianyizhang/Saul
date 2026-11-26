@@ -204,3 +204,38 @@ it('keeps credentials masked and does not combine a key with a changed endpoint'
     apiKey: '',
   });
 });
+
+it('reviews conflicting connection bindings as one edit and preserves unlisted legacy references', () => {
+  const source = structuredClone(DEFAULT_CONFIGURATION);
+  source.profiles = ['original', 'mine', 'latest'].map((id) => ({
+    id,
+    name: id,
+    config: { ...source.openaiCompatible },
+  }));
+  source.activeProfileId = 'original';
+  source.connectionProfiles = { 'openai-api': 'original', 'retired-route': 'original' };
+  const base = createSettingsDraft(source);
+  const mine = editSettingsDraft(base, {
+    type: 'connection-profile',
+    key: 'openai-api',
+    profileId: 'mine',
+  });
+  const latest = {
+    ...source,
+    connectionProfiles: { 'openai-api': 'latest', 'retired-route': 'latest' },
+  };
+  const review = reviewSettings(base, mine, latest);
+  expect(review.changes).toHaveLength(1);
+  expect(review.changes[0]).toMatchObject({
+    original: 'original',
+    mine: 'mine',
+    latest: 'latest',
+    conflict: true,
+  });
+  const result = settingsForSave(review.apply({ [review.changes[0]!.id]: 'mine' }).draft);
+  expect(result.connectionProfiles).toEqual({ 'openai-api': 'mine', 'retired-route': 'latest' });
+  expect(
+    result.connections.every((connection) => !Object.hasOwn(connection, 'localProfileId')),
+  ).toBe(true);
+  expect(result.configuration!.presets).toEqual(source.configuration!.presets);
+});

@@ -1,5 +1,6 @@
 import type { ScopedConfig } from '../../shared/protocol/shared-presets-contract.mts';
 import type { Configuration } from './definition';
+import { localProfile } from './connections';
 import { decodeConfiguration } from './record';
 
 // Connection secrets and the selected local account never enter the JSON file.
@@ -31,28 +32,15 @@ export function restoreSettings(local: Configuration, config: ScopedConfig): Con
     connections: local.connections,
     connectionProfiles: config.value.connectionProfiles ?? local.connectionProfiles,
   });
-  const keyFor = (id: string | undefined, baseUrl: string) => {
-    const connection = id
-      ? local.profiles?.find((p) => p.id === id)?.config
-      : local.openaiCompatible;
-    // An edited endpoint cannot inherit credentials from another destination.
-    return connection?.baseUrl === baseUrl ? connection.apiKey : '';
+  const restoreCredential = (config: Configuration['openaiCompatible'], id: string) => {
+    const current = localProfile(local, id)?.config;
+    // A missing binding or changed endpoint never borrows another credential.
+    config.apiKey = current?.baseUrl === config.baseUrl ? current.apiKey : '';
+    config.credentialOwner =
+      current?.baseUrl === config.baseUrl ? current.credentialOwner : undefined;
   };
-  value.openaiCompatible.apiKey = keyFor(value.activeProfileId, value.openaiCompatible.baseUrl);
-  const ownerFor = (id: string | undefined, endpoint: string) => {
-    const connection = id
-      ? local.profiles?.find((p) => p.id === id)?.config
-      : local.openaiCompatible;
-    return connection?.baseUrl === endpoint ? connection.credentialOwner : undefined;
-  };
-  value.openaiCompatible.credentialOwner = ownerFor(
-    value.activeProfileId,
-    value.openaiCompatible.baseUrl,
-  );
-  for (const profile of value.profiles || []) {
-    profile.config.apiKey = keyFor(profile.id, profile.config.baseUrl);
-    profile.config.credentialOwner = ownerFor(profile.id, profile.config.baseUrl);
-  }
+  restoreCredential(value.openaiCompatible, value.activeProfileId || 'default');
+  for (const profile of value.profiles ?? []) restoreCredential(profile.config, profile.id);
   value.chatgptPlan = local.chatgptPlan;
   value.sharedCredentials = local.sharedCredentials;
   value.configuration!.presets.push(

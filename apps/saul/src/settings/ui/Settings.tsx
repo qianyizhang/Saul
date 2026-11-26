@@ -61,7 +61,7 @@ export function Settings({
     providerTest.clear();
   }
   const test = (mode: 'endpoint' | 'generation') =>
-    providerTest.test(mode, settings, selectedPreset?.id);
+    providerTest.test(mode, draft.configurationForProviderTest(), selectedPreset?.id);
   const locked = testing || speechBusy;
   const connectionEdited = (value: boolean) => {
     setConnectionDirty(value);
@@ -163,10 +163,9 @@ export function Settings({
           settings={{
             connections: settings.connections,
             profiles: settings.profiles,
-            connectionProfiles: settings.connectionProfiles,
             sharedCredentials: settings.sharedCredentials,
           }}
-          remote={inspection.remote}
+          inspection={inspection}
           visible={section === 'models'}
           saved={!dirty}
           locked={locked}

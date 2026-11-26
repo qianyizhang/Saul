@@ -33,9 +33,8 @@ extension AppModel {
         if !Task.isCancelled && sharedCredentialsConnected { initializeStarterPreset() }
     }
 
-    func modelsForPreset(_ preset: ModelPreset) -> [ModelOption] {
-        return (connectionCatalog(preset.connectionKey)?.options(for: preset.capability) ?? [])
-            .map(ModelOption.init(connectionModel:))
+    func modelsForPreset(_ preset: ModelPreset) -> [ConnectionModel] {
+        connectionCatalog(preset.connectionKey)?.options(for: preset.capability) ?? []
     }
     func presetIssue(_ preset: ModelPreset) -> String? {
         guard let connection = configuration.connections.first(where: { $0.key == preset.connectionKey })

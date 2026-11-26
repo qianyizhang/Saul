@@ -6,12 +6,12 @@ describe what users can do.
 
 ## Runtime map
 
-| Context            | Entry point                                   | Responsibility                                                                       |
-| ------------------ | --------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Content script     | [Content](../entrypoints/content.tsx)         | Capture the main-frame selection, render the shadow-root UI and restore markers.     |
-| Service worker     | [Background](../entrypoints/background.ts)    | Validate callers; route reading and settings, badge, notification and native access. |
-| Offscreen document | [Offscreen](../entrypoints/offscreen/main.ts) | Run reading, Calls and annotation replies independently of views.                    |
-| Native helper      | [History](../native/storage/history.mts)      | Access the shared SQLite History store through native messaging.                     |
+| Context            | Entry point                                   | Responsibility                                                                   |
+| ------------------ | --------------------------------------------- | -------------------------------------------------------------------------------- |
+| Content script     | [Content](../entrypoints/content.tsx)         | Capture the main-frame selection, render the shadow-root UI and restore markers. |
+| Service worker     | [Background](../entrypoints/background.ts)    | Compose feature hosts and route application-wide settings and native access.     |
+| Offscreen document | [Offscreen](../entrypoints/offscreen/main.ts) | Run reading, Calls and annotation replies independently of views.                |
+| Native helper      | [History](../native/storage/history.mts)      | Access the shared SQLite History store through native messaging.                 |
 
 ### Source and build ownership
 
@@ -65,7 +65,7 @@ Content receives action names and safe choices, never storage or credentials.
 
 | Feature boundary                             | Owner                                                                                                                                                                                                |
 | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Reading                                      | [Admission](../src/reading/admission.ts), [configuration](../src/reading/configuration.ts) and [runner](../src/reading/runner.ts)                                                                    |
+| Reading                                      | [Background host](../src/reading/background.ts) validates callers, admits work, broadcasts preferences and reopens sources. The [runner](../src/reading/runner.ts) owns execution.                   |
 | Configuration                                | [Definition](../src/configuration/definition.ts), [inspection](../src/configuration/inspect.ts), [execution resolution](../src/configuration/resolve.ts), and [store](../src/configuration/store.ts) |
 | Providers                                    | [Requests](../shared/model/execution-route.ts), [model stream](../src/providers/stream.ts) and shared bounded [SSE framing](../shared/protocol/sse.mts)                                              |
 | Call selection, capture, execution and saves | [Calls and summaries](calls.md#runtime-owners)                                                                                                                                                       |
@@ -106,6 +106,10 @@ are on demand. Deletion invalidates late writes and cascades saved output.
 
 ### Persistence and anchors
 
+[Library storage](../native/storage/library-store.ts) projects the latest and completed attempts
+through the same run decoder. [Markdown export](../native/storage/history-markdown.ts) uses
+the Library’s paged records and visible attempts.
+
 [History](../../../contracts/history.md) uses the [native operation catalogue](../shared/protocol/history-protocol.mts)
 for admission and reconnect. Eligible reads and repeatable writes try at most
 three connections with the same identity. Destructive changes and Bookmark require explicit recovery after a lost reply.
@@ -126,6 +130,10 @@ detaches the old view from accepted work; late replies cannot reopen it on
 another route.
 
 ## Configuration and surfaces
+
+The [connection resolver](../src/configuration/connections.ts) joins connections to their local
+credential references for inspection and execution. [Settings draft storage](../src/settings/draft-storage.ts)
+translates the saved format when opening or saving an editor draft.
 
 Inspection returns unavailable choices without mutation; resolution admits
 execution and returns frozen choices with a separate transient credential.

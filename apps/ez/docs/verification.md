@@ -7,6 +7,13 @@
 - **SwiftPM** — Use `EZ_SWIFTPM_DISABLE_SANDBOX=1 make check` if nested manifest sandboxing fails. The outer sandbox stays active. Differently capitalized checkout paths can require clearing generated state.
 - **Packaging** — Validate the bundle through [the release guide](releasing.md). Icon dimensions alone cannot establish `iconutil` success.
 
+## Recently deleted · 2026-11-26
+
+The isolated Surface Preview restored a saved lookup with its original answer, moved it back
+to Recently deleted, and permanently removed it after confirmation. The other deleted lookup
+remained available. Dark Standard mode exposed both actions. Down selected a row and Escape
+returned to the Library. [Preview journey](ui-qa.md#recently-deleted)
+
 ## Native and live acceptance
 
 | Goal                                | Evidence                                                                                                                                                                               |

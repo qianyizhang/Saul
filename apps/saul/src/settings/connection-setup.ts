@@ -7,6 +7,7 @@ import {
 } from '../../shared/protocol/shared-presets-contract.mts';
 import { validSuggestedAppName } from '../../shared/protocol/credential-plan.mts';
 import { planCall } from '../providers/chatgpt-plan';
+import { connectionDefinition } from '../configuration/connections';
 import { requestSettings } from '../configuration/client';
 import { credentialCall } from '../native/credentials';
 
@@ -153,7 +154,13 @@ export async function saveConnectionSetup(
     const pending = await readConnectionSetup();
     if (resume ? !matchesReviewedSetup(pending, setup) : !!pending || setup.phase !== 'credential')
       throw new Error('Connection setup changed. Reopen Connections to review it.');
-    const attempt = pending ?? setup;
+    const attempt = pending ?? {
+      id: setup.id,
+      phase: setup.phase,
+      definition: connectionDefinition(setup.definition),
+      ...(setup.previous ? { previous: connectionDefinition(setup.previous) } : {}),
+      ...(setup.confirmedName === undefined ? {} : { confirmedName: setup.confirmedName }),
+    };
     setupConnections(await currentConnections(), attempt, attempt.phase === 'settings');
     const remember = (record: ConnectionSetup) =>
       chrome.storage.local.set({ [connectionSetupKey]: record });

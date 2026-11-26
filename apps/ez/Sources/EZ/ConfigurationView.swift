@@ -90,9 +90,9 @@ struct ConfigurationView: View {
                         let current = model.currentPreset.flatMap {
                             $0.connectionKey == draft.connectionKey ? $0.model : nil
                         }
-                        let option = options.first { $0.model == current } ?? options.first
+                        let option = options.first { $0.id == current } ?? options.first
                         if let option {
-                            draft.model = option.model
+                            draft.model = option.id
                             draft.effort = option.quickEffort
                         }
                         selectPreset(draft)

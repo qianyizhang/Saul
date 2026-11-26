@@ -5,6 +5,8 @@ import {
   settingsFromDraft,
   type SettingsDraft,
 } from './draft';
+import type { BoundConnection } from '../configuration/connections';
+import { encodeDraftConnections } from './draft-storage';
 import { decodeConfiguration } from '../configuration/record';
 
 type Tree = Record<string, unknown>;
@@ -213,10 +215,13 @@ export function reviewSettings(
                 accountId: planAccountId,
               }
             : undefined,
-        connections: ordered(
-          merged.connections,
-          latest.values.connections,
-          mine.values.connections,
+        ...encodeDraftConnections(
+          ordered(
+            merged.connections,
+            latest.values.connections,
+            mine.values.connections,
+          ) as BoundConnection[],
+          latest.retained.unlistedBindings,
         ),
         profiles: ordered(merged.profiles, latest.values.profiles, mine.values.profiles),
         configuration: {

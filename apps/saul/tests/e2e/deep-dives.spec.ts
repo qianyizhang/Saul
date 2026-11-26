@@ -3,7 +3,7 @@ import { CHATGPT_ORIGIN, DEEP_DIVE_MENU } from '../../src/deep-dives/model';
 import { reviewScreenshots } from './artifacts';
 import { expect, test } from './fixtures';
 
-test.use({ browserToolsFixtures: true });
+test.use({ browserToolsFixtures: true, blockChatGPTNetwork: true });
 
 const conversationId = 'c68abfba-6efe-40d4-acd5-200faf6aeed6';
 const conversation = `${CHATGPT_ORIGIN}/c/${conversationId}`;
@@ -11,6 +11,7 @@ const customInstruction = 'Explain the claim and how to challenge it.';
 
 async function mockChatGPT(
   context: BrowserContext,
+  worker: Worker,
   options: { signedIn?: boolean; hold?: Promise<void>; existingPrompt?: string } = {},
 ) {
   const sends: string[] = [];
@@ -67,6 +68,41 @@ ${profile}
 </script>`,
     });
   });
+  // The extension creates an inactive tab. Wait for Playwright to attach to
+  // that exact target before permitting its first navigation to the fixture.
+  const marker = 'about:blank#saul-chatgpt-fixture-';
+  context.on('page', (page) => {
+    const attach = async () => {
+      if (!page.url().startsWith(marker)) return;
+      const token = page.url().slice(marker.length);
+      page.off('framenavigated', attach);
+      await page.route(`${CHATGPT_ORIGIN}/**`, (route) => route.fallback());
+      await worker.evaluate((token) => {
+        const scope = globalThis as unknown as { readyDeepDiveTab: (token: string) => void };
+        scope.readyDeepDiveTab(token);
+      }, token);
+    };
+    page.on('framenavigated', attach);
+    void attach();
+  });
+  await worker.evaluate((marker) => {
+    const create = chrome.tabs.create.bind(chrome.tabs);
+    const gates = new Map<string, () => void>();
+    Object.assign(globalThis, { readyDeepDiveTab: (token: string) => gates.get(token)?.() });
+    chrome.tabs.create = (async (options: chrome.tabs.CreateProperties) => {
+      if (options.url !== 'about:blank') return create(options);
+      const token = crypto.randomUUID();
+      const ready = Promise.withResolvers<void>();
+      gates.set(token, ready.resolve);
+      try {
+        const tab = await create({ ...options, url: marker + token });
+        await ready.promise;
+        return tab;
+      } finally {
+        gates.delete(token);
+      }
+    }) as typeof chrome.tabs.create;
+  }, marker);
   return sends;
 }
 
@@ -114,7 +150,7 @@ test('deep dive verifies the first message, reuses the article, and saves both l
   const hold = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const sends = await mockChatGPT(context, { hold });
+  const sends = await mockChatGPT(context, worker, { hold });
   const article = await context.newPage();
   const articleUrl = `${fixtureServer.origin}/article`;
   await article.goto(articleUrl);
@@ -164,7 +200,9 @@ test('deep dive verifies the first message, reuses the article, and saves both l
     await popup.screenshot({ path: info.outputPath('deep-dives-dark-narrow.png'), fullPage: true });
   }
   const restarted = await sandbox.launch();
-  const resumedSends = await mockChatGPT(restarted.context, { existingPrompt: sends[0] });
+  const resumedSends = await mockChatGPT(restarted.context, restarted.worker, {
+    existingPrompt: sends[0],
+  });
   await restarted.popup.getByRole('button', { name: 'Deep dives', exact: true }).click();
   await expect(restarted.popup.getByRole('link', { name: 'Open article' })).toHaveAttribute(
     'href',
@@ -185,7 +223,7 @@ test('unconfirmed sign-in leaves a reopenable manual draft and links it after th
   fixtureServer,
 }, info) => {
   const { context, worker, popup } = await sandbox.launch();
-  const sends = await mockChatGPT(context, { signedIn: false });
+  const sends = await mockChatGPT(context, worker, { signedIn: false });
   const article = await context.newPage();
   await article.goto(`${fixtureServer.origin}/article`);
   const opened = context.waitForEvent('page');
@@ -218,7 +256,7 @@ test('closing ChatGPT after the send keeps the article and prevents an automatic
   fixtureServer,
 }) => {
   const { context, worker, popup } = await sandbox.launch();
-  const sends = await mockChatGPT(context);
+  const sends = await mockChatGPT(context, worker);
   const article = await context.newPage();
   await article.goto(`${fixtureServer.origin}/article`);
   const opened = context.waitForEvent('page');

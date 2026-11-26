@@ -14,41 +14,20 @@ import {
   validateConfiguration,
 } from '../configuration/definition';
 
-type RetainedSettings = Pick<
-  Configuration,
-  | 'activeProvider'
-  | 'activeProfileId'
-  | 'openaiCompatible'
-  | 'chromeAi'
-  | 'sharedPresetRevision'
-  | 'scopedConfigRevision'
-  | 'summaryPresetId'
-  | 'summaryConnectionKey'
->;
+import {
+  decodeDraftSettings,
+  draftInspectionSettings,
+  settingsFromDraft,
+  type SettingsDraft,
+} from './draft-storage';
+import { selectLocalProfile } from '../configuration/connections';
 
-export type SettingsValues = Omit<Configuration, keyof RetainedSettings | 'chatgptPlan'> & {
-  profiles: NonNullable<Configuration['profiles']>;
-  configuration: NonNullable<Configuration['configuration']>;
-  planAccountId?: string;
-};
+export { settingsFromDraft, type SettingsDraft } from './draft-storage';
 
 export type SettingsPreferences = Pick<
   Configuration,
   'responseLanguage' | 'contextPolicy' | 'summaryPdfProcessing'
 >;
-
-export interface SettingsDraft {
-  values: SettingsValues;
-  /** Transport defaults are not the inspected preset or a second editable connection. */
-  retained: Readonly<
-    RetainedSettings & {
-      planOptions?: Omit<NonNullable<Configuration['chatgptPlan']>, 'accountId'>;
-      activeProfileConfig?: Readonly<Configuration['openaiCompatible']>;
-    }
-  >;
-  presetId: string;
-  recipeId: string;
-}
 
 export type SettingsEdit =
   | { type: 'settings'; patch: Partial<SettingsPreferences> }
@@ -115,21 +94,8 @@ export function createSettingsDraft(
   source: Configuration,
   previous?: SettingsDraft,
 ): SettingsDraft {
-  const settings = structuredClone(source);
-  delete settings.summaryPresetId;
-  delete settings.summaryConnectionKey;
-  const {
-    activeProvider,
-    activeProfileId: savedProfileId,
-    openaiCompatible,
-    chromeAi,
-    chatgptPlan,
-    sharedPresetRevision,
-    scopedConfigRevision,
-    ...values
-  } = settings;
-  const activeProfileId = savedProfileId || 'default';
-  const configuration = configurationFor(settings);
+  const decoded = decodeDraftSettings(source);
+  const { configuration } = decoded.values;
   const recipe = configuration.recipes.find((item) => item.id === configuration.selectedRecipeId)!;
   const preset =
     configuration.presets.find((item) => item.id === recipe.presetId) ?? configuration.presets[0];
@@ -140,31 +106,8 @@ export function createSettingsDraft(
       configuration.presets.find(
         (p) => p.name === selected.name && p.provider === selected.provider,
       ));
-  const editable = {
-    ...values,
-    profiles: settings.profiles?.length
-      ? settings.profiles
-      : [{ id: activeProfileId, name: 'Default', config: { ...settings.openaiCompatible } }],
-    configuration,
-    planAccountId: chatgptPlan?.accountId,
-  };
-  const planOptions = chatgptPlan && {
-    model: chatgptPlan.model,
-    ...(chatgptPlan.effort === undefined ? {} : { effort: chatgptPlan.effort }),
-    ...(chatgptPlan.fast === undefined ? {} : { fast: chatgptPlan.fast }),
-  };
   return {
-    values: editable,
-    retained: {
-      activeProvider,
-      activeProfileId,
-      openaiCompatible,
-      chromeAi,
-      sharedPresetRevision,
-      scopedConfigRevision,
-      planOptions,
-      activeProfileConfig: editable.profiles.find((p) => p.id === activeProfileId)?.config,
-    },
+    ...decoded,
     presetId: restored?.id ?? preset?.id ?? '',
     recipeId: configuration.recipes.some((r) => r.id === previous?.recipeId)
       ? previous!.recipeId
@@ -172,43 +115,9 @@ export function createSettingsDraft(
   };
 }
 
-/** One transport boundary for views and commits; inspection never participates. */
-export function settingsFromDraft(draft: SettingsDraft): Configuration {
-  const { planAccountId, ...values } = draft.values;
-  const { planOptions, activeProfileConfig, ...retained } = draft.retained;
-  const profile = values.profiles.find((p) => p.id === retained.activeProfileId)?.config;
-  const changedRoute =
-    profile &&
-    activeProfileConfig &&
-    (profile.baseUrl !== activeProfileConfig.baseUrl ||
-      profile.apiKey !== activeProfileConfig.apiKey ||
-      profile.credentialOwner !== activeProfileConfig.credentialOwner);
-  return {
-    ...retained,
-    ...values,
-    openaiCompatible: changedRoute
-      ? {
-          ...retained.openaiCompatible,
-          baseUrl: profile.baseUrl,
-          apiKey: profile.apiKey,
-          credentialOwner: profile.credentialOwner,
-        }
-      : retained.openaiCompatible,
-    ...(planOptions || planAccountId !== undefined
-      ? {
-          chatgptPlan: {
-            ...planOptions,
-            model: planOptions?.model ?? '',
-            accountId: planAccountId ?? '',
-          },
-        }
-      : {}),
-  };
-}
-
 /** Ephemeral view only. Missing/unavailable choices remain editable. */
 export function inspectDraftPreset(draft: SettingsDraft) {
-  const settings = settingsFromDraft(draft);
+  const settings = draftInspectionSettings(draft);
   const preset = draft.values.configuration.presets.find((p) => p.id === draft.presetId);
   return inspectPreset(settings, preset);
 }
@@ -239,6 +148,13 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
     case 'preset-profile': {
       if (!settings.profiles?.some((p) => p.id === edit.id))
         throw new Error('Choose an existing connection.');
+      const preset = configuration.presets.find((p) => p.id === draft.presetId);
+      if (preset?.connectionKey)
+        return editSettingsDraft(draft, {
+          type: 'connection-profile',
+          key: preset.connectionKey,
+          profileId: edit.id,
+        });
       const next = {
         ...settings,
         configuration: {
@@ -283,13 +199,20 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
       };
     }
     case 'connection-profile': {
-      if (!settings.profiles?.some((p) => p.id === edit.profileId))
+      if (
+        !settings.connections.some((c) => c.key === edit.key && c.kind === 'openai-api') ||
+        !settings.profiles.some((p) => p.id === edit.profileId)
+      )
         throw new Error('Choose an existing connection.');
       return {
         ...draft,
         values: {
           ...settings,
-          connectionProfiles: { ...settings.connectionProfiles, [edit.key]: edit.profileId },
+          connections: settings.connections.map((connection) =>
+            connection.key === edit.key
+              ? { ...connection, localProfileId: edit.profileId }
+              : connection,
+          ),
         },
       };
     }
@@ -334,7 +257,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
       const connection = settings.connections.find((item) => item.key === edit.key);
       const preset = configuration.presets.find((item) => item.id === draft.presetId);
       if (!connection || !preset) throw new Error('Choose an available connection.');
-      const saved = settingsFromDraft(draft);
+      const saved = draftInspectionSettings(draft);
       const kind = connection.kind === 'chatgpt-plan' ? 'chatgpt-plan' : 'openai-compatible';
       const choices =
         preset.provider === kind
@@ -358,13 +281,8 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
             ? ('chatgpt-plan' as const)
             : ('openai-compatible' as const),
         profileId:
-          connection.kind === 'openai-api'
-            ? settings.connectionProfiles?.[connection.key] ||
-              (saved.openaiCompatible.baseUrl.replace(/\/+$/, '') === 'https://api.openai.com/v1'
-                ? saved.activeProfileId
-                : undefined) ||
-              connection.key
-            : undefined,
+          selectLocalProfile(saved, connection) ??
+          (connection.kind === 'openai-api' ? connection.key : undefined),
       };
       const configured = {
         ...settings,
@@ -468,7 +386,7 @@ export function editSettingsDraft(draft: SettingsDraft, edit: SettingsEdit): Set
       if (configuration.recipes.length >= 32 || configuration.presets.length >= 128)
         throw new Error('Remove an action or preset before adding Illustrate.');
       const draw = configuration.presets.find((p) => p.capability === 'draw');
-      const preset = draw ?? illustrationPreset(settingsFromDraft(draft));
+      const preset = draw ?? illustrationPreset(draftInspectionSettings(draft));
       return {
         ...draft,
         recipeId: 'recipe-illustrate',

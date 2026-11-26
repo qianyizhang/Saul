@@ -258,6 +258,35 @@ function safeFiles(root: string, io: InstallationFs) {
   visit(root);
   return files;
 }
+// Stage and verify exactly the same source bytes, including generated helper metadata.
+function* preparedPayload(
+  component: string,
+  source: string,
+  root: string,
+  io: InstallationFs,
+): Generator<[string, Buffer | string]> {
+  function read(base: string, file: string) {
+    let parent = base;
+    directory(parent, io);
+    for (const part of file.split('/').slice(0, -1)) {
+      parent = join(parent, part);
+      directory(parent, io);
+    }
+    const path = join(base, file);
+    const value = io.lstatSync(path);
+    if (value.isSymbolicLink() || !own(value))
+      throw new Error(`Unexpected source symlink or owner: ${path}`);
+    if (!value.isFile()) throw new Error(`Expected a regular payload file: ${path}`);
+    return io.readFileSync(path);
+  }
+  for (const file of payloadFiles[component]) yield [file, read(source, file)];
+  if (component === 'actions') {
+    const dependency = dirname(fileURLToPath(import.meta.resolve('typescript/package.json')));
+    for (const file of typescriptFiles)
+      yield [`node_modules/typescript/${file}`, read(dependency, file)];
+    yield ['installation-root.json', JSON.stringify({ version: 1, root })];
+  }
+}
 function copyTree(source: string, target: string, io: InstallationFs): void {
   const value = io.lstatSync(source);
   if (value.isSymbolicLink() || !own(value))
@@ -732,27 +761,10 @@ export async function installHelpers(
       const payload = join(staging, component);
       directory(payload, io, true);
       if (components.includes(component)) {
-        for (const file of payloadFiles[component]) {
-          directory(source, io);
-          let parent = source;
-          for (const segment of file.split('/').slice(0, -1)) {
-            parent = join(parent, segment);
-            directory(parent, io);
-          }
-          copyTree(join(source, file), join(payload, file), io);
-        }
-        if (component === 'actions') {
-          const dependency = dirname(fileURLToPath(import.meta.resolve('typescript/package.json')));
-          for (const file of typescriptFiles)
-            copyTree(join(dependency, file), join(payload, 'node_modules', 'typescript', file), io);
-        }
-        if (component === 'actions') {
-          writeFile(
-            join(payload, 'installation-root.json'),
-            JSON.stringify({ version: 1, root }),
-            0o600,
-            io,
-          );
+        for (const [file, bytes] of preparedPayload(component, source, root, io)) {
+          const target = join(payload, file);
+          directory(dirname(target), io, true);
+          writeFile(target, bytes, 0o600, io);
         }
       } else {
         for (const file of safeFiles(join(previous!.path!, component), io))
@@ -876,20 +888,8 @@ export function verifyInstallation(
   if (source) {
     const installed = join(selected.path, component);
     const expected = new Map<string, string>();
-    for (const file of payloadFiles[component]) {
-      regular(join(source, file), io);
-      expected.set(file, hash(io.readFileSync(join(source, file))));
-    }
-    if (component === 'actions') {
-      const dependency = dirname(fileURLToPath(import.meta.resolve('typescript/package.json')));
-      for (const file of typescriptFiles)
-        expected.set(
-          `node_modules/typescript/${file}`,
-          hash(io.readFileSync(join(dependency, file))),
-        );
-    }
-    if (component === 'actions')
-      expected.set('installation-root.json', hash(JSON.stringify({ version: 1, root })));
+    for (const [file, bytes] of preparedPayload(component, source, root, io))
+      expected.set(file, hash(bytes));
     const actual = safeFiles(installed, io);
     if (JSON.stringify(actual.sort()) !== JSON.stringify([...expected.keys()].sort()))
       throw new Error(`Installed ${component} inventory differs from the prepared build.`);

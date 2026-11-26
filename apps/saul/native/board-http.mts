@@ -11,7 +11,6 @@ export async function startBoardWeb(
   const service = options.service ?? createBoardService({ resourceUri: BOARD_URI });
   const token = randomBytes(32).toString('hex');
   let origin = '';
-  let queue: Promise<unknown> = Promise.resolve();
   const html = BOARD_HTML.replace(
     '</head>',
     '<script type="application/json" id="saul-web">{"mode":"standalone"}</script></head>',
@@ -66,11 +65,7 @@ export async function startBoardWeb(
         Object.keys(input).some((key) => !['name', 'arguments'].includes(key))
       )
         throw new Error('Invalid operation request');
-      const name = input.name;
-      const run = () => service.call(name, input.arguments ?? {});
-      const result = name.startsWith('diagnostics_')
-        ? await run()
-        : await (queue = queue.then(run, run));
+      const result = await service.call(input.name, input.arguments ?? {});
       finish(200, result);
     })().catch((error) =>
       finish(400, {

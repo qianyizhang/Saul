@@ -1,17 +1,20 @@
 import {
   connectionCapabilities,
-  validateConnections,
   type ConnectionDefinition,
 } from '../../shared/protocol/shared-presets-contract.mts';
 import type { ModelPreset } from '../../shared/model/presets.ts';
 import { configurationFor, type Configuration } from '../configuration/definition';
+import type { SettingsValues } from './draft-storage';
 
 export type ConnectionChange =
   | { action: 'rename'; key: string; name: string }
   | { action: 'move'; key: string; destination: string; presets: string[] }
   | { action: 'delete'; key: string };
 
-export const presetsUsingConnection = (settings: Configuration, key: string) =>
+export const presetsUsingConnection = (
+  settings: Pick<Configuration, 'configuration'>,
+  key: string,
+) =>
   configurationFor(settings).presets.filter(
     (preset) =>
       (preset.connectionKey ?? (preset.provider === 'chatgpt-plan' ? 'gpt-plan' : '')) === key,
@@ -37,14 +40,16 @@ export function connectionManagementLabel(connection: ConnectionDefinition) {
   return connection.name === route ? route : `${connection.name} · ${route}`;
 }
 
-export function changeConnection(settings: Configuration, change: ConnectionChange): Configuration {
+export function changeConnection(
+  settings: SettingsValues,
+  change: ConnectionChange,
+): SettingsValues {
   const source = settings.connections.find((connection) => connection.key === change.key);
   if (!source) throw new Error('This connection is unavailable. Reload saved settings.');
   if (change.action === 'rename') {
     const connections = settings.connections.map((connection) =>
       connection.key === source.key ? { ...connection, name: change.name.trim() } : connection,
     );
-    validateConnections(connections);
     return { ...settings, connections };
   }
 
@@ -52,11 +57,8 @@ export function changeConnection(settings: Configuration, change: ConnectionChan
   if (change.action === 'delete') {
     if (linked.length)
       throw new Error('Move the presets that use this connection before deleting it.');
-    const connectionProfiles = { ...settings.connectionProfiles };
-    delete connectionProfiles[source.key];
     return {
       ...settings,
-      connectionProfiles,
       connections: settings.connections.filter((connection) => connection.key !== source.key),
     };
   }
@@ -70,7 +72,7 @@ export function changeConnection(settings: Configuration, change: ConnectionChan
     throw new Error('Choose a destination and presets that still use this connection.');
   if (!moving.every((preset) => compatibleDestination(preset, destination)))
     throw new Error('The destination must support every selected preset.');
-  const configuration = configurationFor(settings);
+  const { configuration } = settings;
   const plan = destination.kind === 'chatgpt-plan';
   return {
     ...settings,
@@ -83,9 +85,7 @@ export function changeConnection(settings: Configuration, change: ConnectionChan
               connectionKey: destination.key,
               provider: plan ? 'chatgpt-plan' : 'openai-compatible',
               shared: preset.shared || preset.provider === 'chatgpt-plan',
-              profileId: plan
-                ? undefined
-                : settings.connectionProfiles?.[destination.key] || destination.key,
+              profileId: plan ? undefined : (destination.localProfileId ?? destination.key),
             }
           : preset,
       ),

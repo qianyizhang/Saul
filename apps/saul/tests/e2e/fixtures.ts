@@ -14,11 +14,13 @@ export const test = base.extend<
     sandbox: ExtensionSandbox;
     browserToolsFixtures: boolean;
     databaseFixtures: boolean;
+    blockChatGPTNetwork: boolean;
   },
   { fixtureServer: FixtureServer }
 >({
   browserToolsFixtures: [false, { option: true }],
   databaseFixtures: [false, { option: true }],
+  blockChatGPTNetwork: [false, { option: true }],
   fixtureServer: [
     async ({}, use) => {
       const server = await createFixtureServer();
@@ -30,13 +32,14 @@ export const test = base.extend<
     },
     { scope: 'worker' },
   ],
-  sandbox: async ({ browserToolsFixtures, databaseFixtures }, use, info) => {
+  sandbox: async ({ browserToolsFixtures, databaseFixtures, blockChatGPTNetwork }, use, info) => {
     const artifactsDir = info.outputPath('browser');
     const sandbox = await createSandbox({
       headless: !process.env.HEADED,
       artifactsDir,
       browserToolsFixtures,
       databaseFixtures,
+      blockChatGPTNetwork,
     });
     try {
       await use(sandbox);

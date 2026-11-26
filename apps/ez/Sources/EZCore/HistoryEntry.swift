@@ -93,7 +93,7 @@ public struct HistoryEntry: Codable, Identifiable, Equatable, Sendable {
         }
         return fields.compactMap { values[$0] }.joined(separator: " · ")
     }
-    public func prepareFollowUp(_ question: String, models: [ModelOption], provider: GenerationProviderID)
+    public func prepareFollowUp(_ question: String, models: [ConnectionModel], provider: GenerationProviderID)
         throws -> HistoryEntry
     {
         guard sourceID == nil else { throw EZError("Open this saved request in Saul to ask a follow-up.") }

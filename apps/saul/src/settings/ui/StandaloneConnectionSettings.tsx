@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { connectionCapabilities } from '../../../shared/protocol/shared-presets-contract.mts';
 import type { Configuration } from '../../configuration/definition';
+import { localProfile, selectLocalProfile } from '../../configuration/connections';
+import type { DraftInspectionSettings } from '../draft-storage';
 import type { SettingsEdit } from '../draft';
 import { officialOpenAI } from '../../../shared/protocol/credentials-contract.mts';
 import { ConnectionManagement, type ConnectionManagementAction } from './ConnectionManagement';
@@ -20,7 +22,7 @@ export function StandaloneConnectionSettings({
   visible,
   integrations,
 }: {
-  settings: Configuration;
+  settings: DraftInspectionSettings;
   edit: (edit: SettingsEdit) => void;
   disabled: boolean;
   managementDisabled: boolean;
@@ -35,17 +37,11 @@ export function StandaloneConnectionSettings({
     [showKey, setShowKey] = useState(false);
   const [management, setManagement] = useState<ConnectionManagementAction>();
   const connection = connections.find((p) => p.key === key);
-  const boundId = settings.connectionProfiles?.[key];
-  const official = settings.profiles?.find(
-    (p) =>
-      p.id === settings.activeProfileId &&
-      p.config.baseUrl.replace(/\/+$/, '') === 'https://api.openai.com/v1',
-  );
   const selectedId =
     connection?.kind === 'openai-api'
-      ? boundId || official?.id || ''
+      ? selectLocalProfile(settings, connection)
       : profileId || settings.activeProfileId;
-  const profile = settings.profiles?.find((p) => p.id === selectedId);
+  const profile = localProfile(settings, selectedId);
   useEffect(() => setShowKey(false), [key, selectedId, visible]);
   const selectProfile = (id: string) => {
     setShowKey(false);
@@ -196,6 +192,9 @@ export function StandaloneConnectionSettings({
                     onChange={(e) => selectProfile(e.target.value)}
                   >
                     <option value="">Choose a connection</option>
+                    {selectedId && !profile && (
+                      <option value={selectedId}>Unavailable profile</option>
+                    )}
                     {settings.profiles?.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name}

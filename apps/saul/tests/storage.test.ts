@@ -192,6 +192,42 @@ it('returns one history snapshot when another connection deletes a listed passag
     interleave.mockRestore();
   }
 });
+it('searches frozen prompts across visible attempts and retains quotes saved in a visible follow-up', async () => {
+  const store = history();
+  store.connection.exec(
+    readFileSync(
+      new URL('../../../contracts/fixtures/history-search.sql', import.meta.url),
+      'utf8',
+    ),
+  );
+  const owner = randomUUID();
+  const search = async (searchQuery: string) =>
+    (
+      await executeHistory(store, { type: 'DB_HISTORY_PAGE', payload: { searchQuery } }, owner)
+    ).items.map((row) => row.selectionId);
+  for (const query of [
+    'first question only',
+    '50%_exact',
+    'quoted older answer',
+    'Latest response',
+    'Original passage',
+    'Fixture title',
+    'fixture.test/prompt-search',
+  ])
+    expect(await search(query)).toEqual(['search-selection']);
+  expect(await search('50ANY_exact')).toEqual([]);
+  await store.run({
+    operation: 'history',
+    operationId: randomUUID(),
+    owner,
+    command: {
+      kind: 'mask',
+      target: { collection: 'library', id: 'search-selection', entryId: 'search-old' },
+    },
+  });
+  expect(await search('first question only')).toEqual([]);
+  expect(await search('quoted older answer')).toEqual(['search-selection']);
+});
 it('projects native entries into the same ordered/searchable library, including images, bookmarks and deletion', async () => {
   const store = history();
   await complete(store);

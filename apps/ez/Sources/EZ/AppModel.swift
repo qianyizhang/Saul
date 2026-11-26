@@ -479,10 +479,10 @@ import SaulNativeValues
         let starter = configuration.presets[index]
         guard connectionCatalog(starter.connectionKey)?.isFresh == true else { return }
         let options = modelsForPreset(starter)
-        guard let option = options.first(where: \.isDefault) ?? options.first else { return }
+        guard let option = options.first(where: { $0.isDefault == true }) ?? options.first else { return }
         var updated = configuration
-        updated.presets[index].model = option.model
-        updated.presets[index].effort = option.supportedReasoningEfforts.isEmpty ? "" : option.quickEffort
+        updated.presets[index].model = option.id
+        updated.presets[index].effort = option.quickEffort
         updated.presets[index].fast = false
         updated.unassignedStarterID = nil
         guard let store = configurationStore else { return }

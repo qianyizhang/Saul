@@ -28,9 +28,9 @@ export async function runChatGPTComposer(
   };
   const profile =
     'button[data-testid="accounts-profile-button"], button[data-testid="profile-button"], button[aria-label="Open profile menu"]';
-  const authenticated = () =>
-    visible(profile).length > 0 &&
-    visible('button[data-testid="login-button"], button[data-testid="signup-button"]').length === 0;
+  const signedOut = () =>
+    visible('button[data-testid="login-button"], button[data-testid="signup-button"]').length > 0;
+  const authenticated = () => visible(profile).length > 0 && !signedOut();
   const temporary = () =>
     visible(
       '[aria-label="Temporary Chat"][aria-pressed="true"], [data-testid="temporary-chat-button"][aria-pressed="true"]',
@@ -94,7 +94,7 @@ export async function runChatGPTComposer(
   } else if (input.isContentEditable) {
     document.execCommand('insertText', false, prompt);
   }
-  if (action === 'draft') return { phase: 'draft' };
+  if (action === 'draft' || signedOut()) return { phase: 'draft' };
 
   const sendControl = () => {
     if (

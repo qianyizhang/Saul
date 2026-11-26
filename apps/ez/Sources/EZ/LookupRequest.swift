@@ -6,7 +6,7 @@ import SaulNativeValues
 struct LookupRoute {
     let preset: ModelPreset
     let connection: ConnectionDefinition
-    let models: [ModelOption]
+    let models: [ConnectionModel]
 
     func requireSavedConnection(_ saved: ConnectionDefinition?) throws {
         guard let saved, saved.matchesRoute(connection) else {

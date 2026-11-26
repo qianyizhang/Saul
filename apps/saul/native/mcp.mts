@@ -93,24 +93,8 @@ async function dispatch(message: unknown) {
       });
   }
 }
-let queue = Promise.resolve();
 const decode = lineDecoder((message) => {
-  // Keep browser requests ordered, but never let a stalled browser block MCP health/discovery.
-  if (
-    isRecord(message) &&
-    message.method === 'tools/call' &&
-    (!isRecord(message.params) ||
-      (message.params.name !== 'saul_sessions' &&
-        !(
-          typeof message.params.name === 'string' && message.params.name.startsWith('diagnostics_')
-        )))
-  ) {
-    queue = queue
-      .then(() => dispatch(message))
-      .catch((error) => console.error(errorMessage(error)));
-  } else {
-    void dispatch(message).catch((error) => console.error(errorMessage(error)));
-  }
+  void dispatch(message).catch((error) => console.error(errorMessage(error)));
 });
 process.stdin.on('data', (chunk) => {
   try {

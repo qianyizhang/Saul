@@ -13,6 +13,7 @@ import type {
   SharedPresets,
 } from '../../shared/protocol/shared-presets-contract.mts';
 import { configurationFor } from './definition';
+import { activeConnections, selectLocalProfile } from './connections';
 
 // Stable migration IDs leave saved attempts untouched and keep recipe references together.
 async function sharedID(id: string): Promise<string> {
@@ -61,13 +62,17 @@ function project(settings: Configuration, library: SharedPresets): Configuration
   const configuration = configurationFor(settings);
   const connections = structuredClone(library.connections);
   const connectionProfiles = { ...settings.connectionProfiles };
-  // Adopt only the already-selected official OpenAI connection. Never borrow a key from another endpoint.
-  if (
-    connections.some((connection) => connection.key === 'openai-api') &&
-    !connectionProfiles['openai-api'] &&
-    settings.openaiCompatible.baseUrl.replace(/\/+$/, '') === 'https://api.openai.com/v1'
-  )
-    connectionProfiles['openai-api'] = settings.activeProfileId || 'default';
+  // Adopt only the previously selected official endpoint and preserve explicit (even unavailable) bindings.
+  const official = connections.find((connection) => connection.key === 'openai-api');
+  const adopted = official && selectLocalProfile(settings, official);
+  if (adopted && !Object.hasOwn(connectionProfiles, 'openai-api'))
+    connectionProfiles['openai-api'] = adopted;
+  const byKey = new Map(
+    activeConnections({ ...settings, connections, connectionProfiles }).map((connection) => [
+      connection.key,
+      connection,
+    ]),
+  );
   return {
     ...settings,
     connectionProfiles,
@@ -81,19 +86,16 @@ function project(settings: Configuration, library: SharedPresets): Configuration
           ...p,
           id: p.id.toLowerCase(),
           provider:
-            !p.connectionKey ||
-            connections.find((connection) => connection.key === p.connectionKey)?.kind ===
-              'chatgpt-plan'
+            !p.connectionKey || byKey.get(p.connectionKey)?.kind === 'chatgpt-plan'
               ? 'chatgpt-plan'
               : 'openai-compatible',
           ...(p.connectionKey
             ? {
                 shared: true,
                 profileId:
-                  connections.find((connection) => connection.key === p.connectionKey)?.kind ===
-                  'chatgpt-plan'
+                  byKey.get(p.connectionKey)?.kind === 'chatgpt-plan'
                     ? undefined
-                    : connectionProfiles[p.connectionKey] || p.connectionKey,
+                    : (byKey.get(p.connectionKey)?.localProfileId ?? p.connectionKey),
               }
             : {}),
         })),

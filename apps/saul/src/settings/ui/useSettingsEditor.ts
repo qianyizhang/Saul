@@ -34,6 +34,7 @@ export function useSettingsEditor(onDirty?: (dirty: boolean) => void) {
   return {
     ...state,
     edit: editor.edit,
+    configurationForProviderTest: editor.configurationForProviderTest,
     save: editor.save,
     reviewLatest: editor.reviewLatest,
     applyReview: editor.applyReview,

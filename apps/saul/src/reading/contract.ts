@@ -1,3 +1,4 @@
+import { isBoundedText, isId, isRecord } from '../../shared/model/value.mts';
 import type {
   ContextPolicy,
   ResolvedContext,
@@ -82,21 +83,17 @@ export type ReadingResultFor<T extends ReadingRequest> = T extends {
   ? ReadingResult<K>
   : never;
 
-export const record = (v: unknown): v is Record<string, unknown> =>
-  typeof v === 'object' && v !== null && !Array.isArray(v);
-export const text = (v: unknown, max = 10000): v is string =>
-  typeof v === 'string' && v.length <= max;
-export const id = (v: unknown): v is string => text(v, 128) && v.length > 0;
+const text = (value: unknown, maxLength = 10_000) => isBoundedText(value, maxLength);
 const number = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
 function validSnapshot(v: unknown): v is SelectionSnapshot {
   if (
-    !record(v) ||
-    !id(v.id) ||
+    !isRecord(v) ||
+    !isId(v.id) ||
     !text(v.text) ||
     !v.text.trim() ||
-    !record(v.page) ||
-    !record(v.anchor) ||
-    !record(v.viewport)
+    !isRecord(v.page) ||
+    !isRecord(v.anchor) ||
+    !isRecord(v.viewport)
   )
     return false;
   const anchor = v.anchor,
@@ -119,7 +116,7 @@ function validSnapshot(v: unknown): v is SelectionSnapshot {
 }
 function validContext(v: unknown): v is ResolvedContext {
   return (
-    record(v) &&
+    isRecord(v) &&
     text(v.selection) &&
     text(v.pageTitle) &&
     text(v.pageUrl) &&
@@ -129,7 +126,7 @@ function validContext(v: unknown): v is ResolvedContext {
   );
 }
 export function validateReading(v: unknown): asserts v is ReadingRequest {
-  if (!record(v)) throw new Error('Invalid reading request');
+  if (!isRecord(v)) throw new Error('Invalid reading request');
   let valid = false;
   switch (v.action) {
     case 'list':
@@ -138,42 +135,42 @@ export function validateReading(v: unknown): asserts v is ReadingRequest {
       break;
     case 'submit':
       valid =
-        id(v.submissionId) &&
+        isId(v.submissionId) &&
         (v.outputFormat === undefined || v.outputFormat === 'png' || v.outputFormat === 'gif') &&
         validSnapshot(v.snapshot) &&
         validContext(v.context) &&
         (v.regenerate === undefined || typeof v.regenerate === 'boolean') &&
-        (v.recipeId === undefined || id(v.recipeId));
+        (v.recipeId === undefined || isId(v.recipeId));
       break;
     case 'review':
       valid =
-        id(v.selectionId) &&
+        isId(v.selectionId) &&
         validContext(v.context) &&
-        (v.recipeId === undefined || id(v.recipeId));
+        (v.recipeId === undefined || isId(v.recipeId));
       break;
     case 'mute-errors':
       valid = typeof v.muted === 'boolean';
       break;
     case 'regenerate':
       valid =
-        id(v.submissionId) &&
-        id(v.selectionId) &&
-        (v.recipeId === undefined || id(v.recipeId)) &&
-        (v.runId === undefined || id(v.runId)) &&
+        isId(v.submissionId) &&
+        isId(v.selectionId) &&
+        (v.recipeId === undefined || isId(v.recipeId)) &&
+        (v.runId === undefined || isId(v.runId)) &&
         (v.instruction === undefined || text(v.instruction, 2000));
       break;
     case 'image':
-      valid = id(v.selectionId) && id(v.runId);
+      valid = isId(v.selectionId) && isId(v.runId);
       break;
     case 'stop':
     case 'runs':
-      valid = id(v.selectionId);
+      valid = isId(v.selectionId);
       break;
     case 'bookmark':
-      valid = id(v.selectionId) && typeof v.bookmarked === 'boolean';
+      valid = isId(v.selectionId) && typeof v.bookmarked === 'boolean';
       break;
     case 'view':
-      valid = id(v.selectionId) && id(v.runId);
+      valid = isId(v.selectionId) && isId(v.runId);
       break;
   }
   if (!valid) throw new Error('Invalid reading request');

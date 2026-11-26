@@ -7,7 +7,7 @@ import SaulTestSupport
 
 @testable import EZApplication
 
-private actor IllustrationKeyFixture: OpenAIKeyStorage {
+private actor IllustrationKeyFixture {
     var key: String? = "sk-offline-fixture"
     var failWrites = false
     func read() -> String? { key }

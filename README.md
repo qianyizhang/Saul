@@ -18,8 +18,6 @@
 | Verify a change                       | [Saul testing](apps/saul/docs/testing.md), [EZ verification](apps/ez/docs/verification.md), [CI](docs/ci.md) |
 | Review or retain evidence             | [Feature review](design/SKILL.md), [artifact policy](docs/artifacts.md)                                      |
 
-Deferred cross-app refactors and their acceptance checks are in the [architecture backlog](docs/backlog.md).
-
 ## Develop
 
 | Goal                                                 | Root command                         |

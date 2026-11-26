@@ -1,13 +1,20 @@
 import type { ModelPreset } from '../../shared/model/presets.ts';
 import type { Configuration, ProviderDefaults } from './definition';
+import { activePresetBinding, type BoundConnection } from './connections';
 
 /** An editable view of one choice. It is neither saved configuration nor permission to run. */
 export interface PresetInspection extends ProviderDefaults {
   preset?: ModelPreset;
   issue?: string;
+  connection?: BoundConnection;
+  hasExplicitProfile?: boolean;
 }
 
-export function inspectPreset(settings: Configuration, preset?: ModelPreset): PresetInspection {
+export function inspectPreset(
+  settings: Configuration,
+  preset?: ModelPreset,
+  frozenProfileId?: string,
+): PresetInspection {
   if (!preset)
     return {
       provider: settings.activeProvider,
@@ -16,7 +23,11 @@ export function inspectPreset(settings: Configuration, preset?: ModelPreset): Pr
       plan: structuredClone(settings.chatgptPlan),
       local: structuredClone(settings.chromeAi),
     };
-  const connection = settings.connections.find((c) => c.key === preset.connectionKey);
+  const { connection, profileId, localProfile } = activePresetBinding(
+    settings,
+    preset,
+    frozenProfileId,
+  );
   let issue: string | undefined;
   if (preset.connectionKey && !connection)
     issue = `Connection “${preset.connectionKey}” is unavailable. Open Connections.`;
@@ -25,15 +36,10 @@ export function inspectPreset(settings: Configuration, preset?: ModelPreset): Pr
     (connection.kind === 'chatgpt-plan' ? 'chatgpt-plan' : 'openai-compatible') !== preset.provider
   )
     issue = 'The preset connection changed. Reload settings before running.';
-  const profileId = preset.connectionKey
-    ? settings.connectionProfiles?.[preset.connectionKey] || preset.profileId
-    : preset.profileId;
-  const profile = settings.profiles?.find((p) => p.id === profileId);
   const managed =
     connection?.kind === 'openai-api' &&
     settings.sharedCredentials === 'saul' &&
     connection.baseUrl;
-  const implicit = !settings.profiles && profileId === (settings.activeProfileId || 'default');
   const source = managed
     ? {
         baseUrl: connection.baseUrl!,
@@ -42,11 +48,15 @@ export function inspectPreset(settings: Configuration, preset?: ModelPreset): Pr
         model: preset.model,
         temperature: preset.temperature ?? 0.3,
       }
-    : (profile?.config ?? (implicit ? settings.openaiCompatible : undefined));
+    : !issue
+      ? localProfile?.config
+      : undefined;
   if (preset.provider === 'openai-compatible' && !source)
     issue ??= `Preset “${preset.name}” needs its saved connection. Choose a connection in Settings.`;
   return {
     preset: structuredClone(preset),
+    connection,
+    hasExplicitProfile: !!settings.profiles && !!localProfile,
     provider: preset.provider,
     profileId: managed ? connection.key : profileId,
     remote:
@@ -61,7 +71,9 @@ export function inspectPreset(settings: Configuration, preset?: ModelPreset): Pr
       preset.provider !== 'chatgpt-plan'
         ? structuredClone(settings.chatgptPlan)
         : {
-            accountId: connection?.accountId ?? settings.chatgptPlan?.accountId ?? '',
+            accountId:
+              (preset.connectionKey ? connection?.accountId : settings.chatgptPlan?.accountId) ??
+              '',
             model: preset.model,
             ...(preset.effort === undefined ? {} : { effort: preset.effort }),
             ...(preset.fast === undefined ? {} : { fast: preset.fast }),
