@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "definition": {
+    "key": "team-api",
+    "name": "Team API",
+    "kind": "openai-api",
+    "baseUrl": "https://api.example.test/v1"
+  },
+  "cases": [
+    {
+      "id": "lost-credential-acknowledgement",
+      "phase": "credential",
+      "savedDefinition": null,
+      "keyAvailable": true,
+      "expected": "review-credential"
+    },
+    {
+      "id": "credential-confirmed-settings-absent",
+      "phase": "settings",
+      "savedDefinition": null,
+      "keyAvailable": true,
+      "expected": "save-definition"
+    },
+    {
+      "id": "lost-settings-acknowledgement",
+      "phase": "settings",
+      "savedDefinition": {
+        "key": "team-api",
+        "name": "Team API",
+        "kind": "openai-api",
+        "baseUrl": "https://api.example.test/v1"
+      },
+      "keyAvailable": true,
+      "expected": "already-saved"
+    },
+    {
+      "id": "same-key-different-endpoint",
+      "phase": "settings",
+      "savedDefinition": {
+        "key": "team-api",
+        "name": "Team API",
+        "kind": "openai-api",
+        "baseUrl": "https://another.example.test/v1"
+      },
+      "keyAvailable": true,
+      "expected": "conflict"
+    },
+    {
+      "id": "key-no-longer-available",
+      "phase": "settings",
+      "savedDefinition": null,
+      "keyAvailable": false,
+      "expected": "review-credential"
+    }
+  ]
+}

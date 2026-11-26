@@ -1,4 +1,5 @@
 import { AnnotationRunner } from '../../src/annotations/runner';
+import { holdConnection } from '../../src/connections/credential-hold';
 import { CallBatchRunner } from '../../src/calls/execution/batch-runner';
 import { captureSummarySource } from '../../src/calls/capture/source';
 import { sharedDb as db } from '../../src/storage/history';
@@ -16,7 +17,7 @@ const annotations = new AnnotationRunner(db, undefined, undefined, (url) => {
     .sendMessage({ target: 'saul-annotation', action: 'updated', url })
     .catch(() => undefined);
 });
-const calls = new CallBatchRunner(db, captureSummarySource);
+const calls = new CallBatchRunner(db, captureSummarySource, undefined, holdConnection);
 // Chrome offscreen documents expose runtime only. Trusted storage stays behind the background.
 const callEditor = new CallEditor({ db, storage: callEditorStorage, prepare: prepareCallPreset });
 const runner = new ReadingRunner(db, changed);

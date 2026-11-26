@@ -104,7 +104,8 @@ public struct SaulAccount: Codable, Equatable, Sendable, Identifiable {
         else { throw CredentialStorageError("Could not open Saul's official sign-in destination.") }
       } else if type == "error" {
         throw CredentialStorageError(
-          event["message"] as? String ?? "Saul could not complete the request.")
+          event["message"] as? String ?? "Saul could not complete the request.",
+          reason: event["reason"] as? String)
       } else if type == "result" || type == "complete" {
         return event
       } else {

@@ -1,3 +1,4 @@
+import type { SetupFence } from '../../shared/protocol/connection-coordination.mts';
 import { validateScopedConfigValue } from '../../shared/protocol/shared-presets-contract.mts';
 import { portableSettings, restoreSettings } from './scoped';
 import {
@@ -139,11 +140,11 @@ export const sharedPresets = {
     }
     return restoreSettings(projected, config);
   },
-  async save(source: Configuration): Promise<Configuration> {
+  async save(source: Configuration, setupFence?: SetupFence): Promise<Configuration> {
     const settings = await withSharedIDs(source);
     const presets = definitions(settings);
     if (settings.sharedPresetRevision === undefined) {
-      if (!presets.length) return settings;
+      if (!presets.length && !setupFence) return settings;
       throw new Error(
         'Reload saved settings to load shared presets before saving ChatGPT choices.',
       );
@@ -159,6 +160,7 @@ export const sharedPresets = {
       presets,
       connections: settings.connections,
       value: portableSettings(settings),
+      ...(setupFence && { setupFence }),
     } as const;
     const result = await commitSharedConfiguration(request);
     const projected = project(settings, result.library);

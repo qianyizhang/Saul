@@ -1,9 +1,13 @@
 import type { Configuration } from '../configuration/definition';
+import {
+  validSetupFence,
+  type SetupFence,
+} from '../../shared/protocol/connection-coordination.mts';
 import { isRecord } from '../../shared/model/value.mts';
 
 export type SettingsRequest =
   | { action: 'read' }
-  | { action: 'commit'; baseline: string; settings: unknown }
+  | { action: 'commit'; baseline: string; settings: unknown; setupFence?: SetupFence }
   | { action: 'reset'; baseline: string };
 
 export type SettingsState =
@@ -20,7 +24,7 @@ export function validateSettingsRequest(value: unknown): asserts value is Settin
   if (value.action === 'reset' && keys.length === 2) return;
   if (
     value.action === 'commit' &&
-    keys.length === 3 &&
+    (keys.length === 3 || (keys.length === 4 && validSetupFence(value.setupFence))) &&
     isRecord(value.settings) &&
     typeof value.settings.activeProvider === 'string' &&
     isRecord(value.settings.openaiCompatible) &&

@@ -17,6 +17,8 @@ import { validateCallEditRequest } from '../src/calls/contract';
 import type { CallEditorBridgeRequest } from '../src/calls/editor-client';
 import { prepareWritePreset } from '../src/configuration/resolve';
 import { sharedPresets } from '../src/configuration/shared';
+import { createConnectionService } from '../src/connections/service';
+import { ConnectionSetupNotAdmitted } from '../src/connections/setup';
 import { createConfigurationStore } from '../src/configuration/store';
 import {
   chromeConfigurationStorage,
@@ -39,6 +41,7 @@ const settingsOwner = createConfigurationStore(
   nativeCredentialAccess,
   actionStore.migrationComplete,
 );
+const connections = createConnectionService(settingsOwner);
 const launchCall = createCallAdmission({
   readSettings: () => settingsOwner({ action: 'read' }),
   readChoices: actionStore.readChoices,
@@ -68,6 +71,7 @@ export default defineBackground(() => {
   initNativeBridge();
   initStorageBridge();
   initCredentialBridge();
+  connections.registerReviewPort();
   initSpeechBridge(currentSettings);
   initActionBridge();
   initReadingHost(db, currentSettings);
@@ -83,6 +87,7 @@ export default defineBackground(() => {
         'saul-call-editor',
         'saul-digest-capture',
         'saul-settings',
+        'saul-connection',
         'saul-credential-mode',
       ].includes(request?.target) &&
       request?.type !== 'WORKSPACE_TABS'
@@ -118,6 +123,7 @@ export default defineBackground(() => {
       }
       if (!workspaceSender(sender)) throw new Error('Extension workspace only');
       if (request.target === 'saul-settings') return settings(request.message);
+      if (request.target === 'saul-connection') return connections.request(request.message);
       if (request.target === 'saul-action') {
         validateCallEditRequest(request.message);
         return runnerRequest({ operation: 'action', message: request.message });
@@ -142,7 +148,11 @@ export default defineBackground(() => {
     })().then(
       (result) => reply({ success: true, result }),
       (error) =>
-        reply({ success: false, error: error instanceof Error ? error.message : String(error) }),
+        reply({
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+          ...(error instanceof ConnectionSetupNotAdmitted && { setupNotAdmitted: true }),
+        }),
     );
     return true;
   });

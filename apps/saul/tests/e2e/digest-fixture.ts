@@ -112,7 +112,12 @@ export async function installDigestProvider(
           postMessage: (message: {
             version: number;
             id: string;
-            request: PlanRequest | Extract<CredentialRequest, { action: 'connection-catalog' }>;
+            request:
+              | PlanRequest
+              | Extract<
+                  CredentialRequest,
+                  { action: 'connection-catalog' | 'connection-run-hold' }
+                >;
             cancel?: boolean;
           }) => {
             if (message.cancel) {
@@ -120,13 +125,16 @@ export async function installDigestProvider(
               return;
             }
             if (message.version !== 2) throw new Error('Expected signed credential protocol v2');
-            const emit = (event: PlanEvent) =>
+            const emit = (event: PlanEvent | CredentialEvent) =>
               listeners.forEach((fn) => fn({ id: message.id, event }));
             const request = message.request;
-            if (request.action !== 'connection-catalog') state.requests.push(request);
+            if (request.action !== 'connection-catalog' && request.action !== 'connection-run-hold')
+              state.requests.push(request);
             queueMicrotask(() => {
               const models = ['gpt-6-luna', 'fixture-work-model'];
-              if (request.action === 'connection-catalog')
+              if (request.action === 'connection-run-hold')
+                emit({ type: 'connection-held', generation: '0'.repeat(64) });
+              else if (request.action === 'connection-catalog')
                 listeners.forEach((fn) =>
                   fn({
                     id: message.id,

@@ -46,13 +46,24 @@ private func canonical(_ url: URL) throws -> URL {
           ]), caller: .saul)
       }
       let loginRequest = try request(["action": "login"])
-      let signingIn = Task { try await login.run(loginRequest) }
+      var loginFailure: Error?
+      let signingIn = Task {
+        do { try await login.run(loginRequest) } catch {
+          loginFailure = error
+          await authorized.signal()
+          throw error
+        }
+      }
       defer { signingIn.cancel() }
       try await authorized.wait()
+      if let loginFailure { throw loginFailure }
 
       let apiRequest = try request(["action": "api-key-save", "key": "fixture-api-key"])
       let savingKey = Task {
-        try await api.run(apiRequest)
+        do { try await api.run(apiRequest) } catch {
+          await apiFinished.signal()
+          throw error
+        }
         await apiFinished.signal()
       }
       defer { savingKey.cancel() }
@@ -123,6 +134,41 @@ private func canonical(_ url: URL) throws -> URL {
         _ = try coordination.read(binding, generation: first.2)
       }
     },
+    CheckCase("coordination: Darwin path aliases share leases and unexpected symlinks fail") {
+      directory in
+      let root = try canonical(directory)
+      let file = root.appendingPathComponent("settings.json")
+      let canonical = ConnectionCoordination(settingsURL: file)
+      let binding = ConnectionBinding(key: "shared-api")
+      let primary = try canonical.read(binding)
+      defer { withExtendedLifetime(primary.lease) {} }
+      try expect(
+        root.path.hasPrefix("/private/var/") || root.path.hasPrefix("/private/tmp/"),
+        "The test fixture must use a Darwin temporary directory")
+      let alias = URL(fileURLWithPath: String(file.path.dropFirst("/private".count)))
+      let alternate = ConnectionCoordination(settingsURL: alias)
+      try expectEqual(
+        try alternate.read(binding).generation, primary.generation, "Alias changed the registry")
+      try expectThrows(
+        ConnectionCoordinationError.self, matching: { $0.localizedDescription.contains("busy") }
+      ) {
+        _ = try alternate.mutate(binding, origin: "ez", token: nil)
+      }
+
+      for name in [
+        "alias-parent", "alias-lock.json.lock.sqlite3", "alias-directory.json.connections",
+      ] {
+        let link = root.appendingPathComponent(name)
+        let destination =
+          name.hasSuffix(".sqlite3")
+          ? URL(fileURLWithPath: file.path + ".lock.sqlite3") : root
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: destination)
+      }
+      for relative in ["alias-parent/settings.json", "alias-lock.json", "alias-directory.json"] {
+        let invalid = ConnectionCoordination(settingsURL: root.appendingPathComponent(relative))
+        try expectThrows(ConnectionCoordinationError.self) { _ = try invalid.read(binding) }
+      }
+    },
     CheckCase("coordination: setup release, rotation and exact account fencing") { directory in
       let coordination = ConnectionCoordination(
         settingsURL: try canonical(directory).appendingPathComponent("settings.json"))
@@ -188,5 +234,76 @@ private func canonical(_ url: URL) throws -> URL {
       }
       try expect(try coordination.setups().isEmpty, "Released setup reappeared")
     },
+    CheckCase("coordination: signed client can list and release an abandoned foreign setup") {
+      directory in
+      let root = try canonical(directory)
+      let storage = SharedAuthStorage(records: FixtureCredentialRecords(), directory: root)
+      let coordination = ConnectionCoordination(
+        settingsURL: root.appendingPathComponent("settings.json"))
+      let binding = ConnectionBinding(key: "shared-api")
+      let operation = UUID()
+      let initial = try coordination.holdSetup(
+        binding, origin: "saul", operationID: operation, previousToken: nil
+      ).1
+      var holder: ConnectionLease?
+      let current: ConnectionReservation
+      do {
+        let (lease, row) = try coordination.holdSetup(
+          binding, origin: "saul", operationID: operation, previousToken: initial.token)
+        holder = lease
+        current = row
+      }
+      var reply: [String: Any] = [:]
+      let owner = CredentialOwner(storage: storage, coordination: coordination) { reply = $0 }
+      @MainActor func request(_ fields: [String: Any]) async throws {
+        try await owner.run(
+          CredentialRequest.decode(
+            JSONSerialization.data(withJSONObject: [
+              "version": CredentialRequest.version, "id": "fixture", "request": fields,
+            ]), caller: .ez))
+      }
+      @MainActor func release(_ token: UUID) async throws {
+        try await request([
+          "action": "connection-setup-release", "connectionKey": "shared-api",
+          "token": token.uuidString,
+        ])
+      }
+      try await request(["action": "connection-setups"])
+      guard let setups = reply["connectionSetups"] as? [[String: Any]] else {
+        throw CheckFailure("Invalid reservation list")
+      }
+      let listed = try JSONSerialization.data(withJSONObject: setups)
+      let rows = try JSONDecoder().decode([FixtureReservationStatus].self, from: listed)
+      try expectEqual(
+        rows,
+        [.init(connectionKey: "shared-api", origin: "saul", token: current.token, active: true)],
+        "Foreign reservation was not correctly identified")
+      try await expectAsyncThrows(
+        ConnectionCoordinationError.self,
+        matching: {
+          $0.localizedDescription.contains("busy")
+        }
+      ) { try await release(current.token) }
+      withExtendedLifetime(holder) {}
+      holder = nil
+      try await expectAsyncThrows(
+        ConnectionCoordinationError.self,
+        matching: {
+          $0.localizedDescription.contains("setup changed")
+        }
+      ) { try await release(initial.token) }
+      try await release(current.token)
+      try await request(["action": "connection-setups"])
+      try expect(
+        (reply["connectionSetups"] as? [[String: Any]])?.isEmpty == true,
+        "Released setup still listed")
+    },
   ]
+}
+
+private struct FixtureReservationStatus: Decodable, Equatable {
+  let connectionKey: String
+  let origin: String
+  let token: UUID
+  let active: Bool
 }

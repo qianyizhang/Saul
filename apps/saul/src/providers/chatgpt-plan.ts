@@ -6,11 +6,12 @@ import {
   type PlanControlRequest,
   type PlanResult,
 } from '../../shared/protocol/credential-plan.mts';
+import type { CredentialRequest } from '../../shared/protocol/credentials-contract.mts';
 import { credentialEvents } from '../native/credentials';
 import { SELECT_NEW_PRESET } from '../configuration/resolve';
 
 export async function* planEvents(
-  request: PlanRequest,
+  request: Extract<CredentialRequest, { action: PlanRequest['action'] }>,
   signal?: AbortSignal,
   expectedOwner?: 'local' | 'saul',
 ): AsyncGenerator<PlanEvent> {

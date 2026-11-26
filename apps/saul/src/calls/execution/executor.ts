@@ -43,6 +43,7 @@ export interface CallExecutor {
     request: { call: FrozenCall; page: CapturedPageContext },
     options: {
       credential: string;
+      admitGeneration?: () => Promise<string | undefined>;
       signal: AbortSignal;
       onProgress: (snapshot: CallSnapshot) => void;
     },
@@ -61,7 +62,7 @@ export function createCallExecutor(
   const plan = adapters.plan ?? planEvents;
   const script = adapters.script ?? actionHost;
   return {
-    async execute(request, { credential, signal: callerSignal, onProgress }) {
+    async execute(request, { credential, signal: callerSignal, admitGeneration, onProgress }) {
       // Caller edits cannot retarget an executing Call.
       const { call, page } = structuredClone(request);
       const { source } = page;
@@ -157,6 +158,8 @@ export function createCallExecutor(
                   const generationSignal = AbortSignal.any([signal, callSignal]);
                   generationSignal.throwIfAborted();
                   if (!active) throw new Error('Call execution has ended.');
+                  const runGeneration = await admitGeneration?.();
+                  generationSignal.throwIfAborted();
                   const transcript = {
                     instructions: request.instructions,
                     input: request.input ?? summaryRequestInput(page, source).userPrompt,
@@ -169,7 +172,10 @@ export function createCallExecutor(
                     { ...input, systemPrompt: request.instructions, userPrompt: transcript.input },
                     credential,
                     generationSignal,
-                    source.kind === 'pdf-url' ? { attachments: [source.attachment] } : undefined,
+                    {
+                      ...(source.kind === 'pdf-url' && { attachments: [source.attachment] }),
+                      runGeneration,
+                    },
                   );
                   let complete = false;
                   for await (const event of events) {
@@ -205,13 +211,15 @@ export function createCallExecutor(
           }
 
           const { userPrompt, attachments } = summaryRequestInput(page, source);
+          const runGeneration = await admitGeneration?.();
+          signal.throwIfAborted();
           const events = (() => {
             if (call.model.kind === 'preset')
               return model(
                 { ...call.model.input, systemPrompt: call.instructions, userPrompt },
                 credential,
                 signal,
-                { attachments },
+                { attachments, runGeneration },
               );
             const route = originalSummaryPlan(call.model);
             return plan(
@@ -224,6 +232,7 @@ export function createCallExecutor(
                 systemPrompt: call.instructions,
                 userPrompt,
                 ...(attachments ? { attachments } : {}),
+                ...(runGeneration ? { runGeneration } : {}),
               },
               signal,
               route.owner,

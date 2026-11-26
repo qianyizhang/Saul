@@ -1,3 +1,4 @@
+import type { SetupFence } from '../../shared/protocol/connection-coordination.mts';
 import { revisionOf } from '../../shared/model/revision.ts';
 import type { Configuration } from './definition';
 import { validateSettingsRequest, type SettingsState } from '../settings/contract';
@@ -10,7 +11,7 @@ export const RECOVERY_BACKUP_KEY = 'saul_user_settings_recovery_backup';
 
 export interface SharedConfigurationAccess {
   load(settings: Configuration): Promise<Configuration>;
-  save(settings: Configuration): Promise<Configuration>;
+  save(settings: Configuration, fence?: SetupFence): Promise<Configuration>;
 }
 export interface CredentialAccess {
   prepare(settings: Configuration, current: Configuration): Promise<Configuration>;
@@ -102,7 +103,8 @@ export function createConfigurationStore(
         validateSettingsConnections(settings);
         if (credentials)
           settings = await credentials.prepare(settings, loaded ?? settingsFromStored(stored));
-        if (shared) settings = await shared.save(settings);
+        if (shared) settings = await shared.save(settings, request.setupFence);
+        else if (request.setupFence) throw new Error('Shared configuration is unavailable.');
         try {
           await storage.write({ [SETTINGS_STORAGE_KEY]: settings });
         } catch (cause) {

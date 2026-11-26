@@ -10,6 +10,7 @@ struct ConnectionSetup: Codable, Equatable {
     let definition: ConnectionDefinition
     let previous: ConnectionDefinition?
     let confirmedName: String?
+    var protectionVersion: Int? = nil
 
     func applying(to current: Configuration, allowApplied: Bool = false) throws -> Configuration {
         let existing = current.connections.first { $0.key == definition.key }

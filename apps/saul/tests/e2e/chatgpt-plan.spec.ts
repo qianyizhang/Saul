@@ -141,6 +141,12 @@ test('ChatGPT provider settings route signed-owner reading streams, preserve par
             };
             queueMicrotask(() => {
               switch (message.request.action) {
+                case 'connection-capabilities':
+                  emit({ type: 'result', connectionCoordination: 1 });
+                  break;
+                case 'connection-setups':
+                  emit({ type: 'result', connectionSetups: [] });
+                  break;
                 case 'status':
                 case 'api-key-status':
                   emit({ type: 'result', accounts: [account], apiConnected: false });

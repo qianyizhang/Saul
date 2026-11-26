@@ -8,11 +8,13 @@ export async function generateImage(
   input: Pick<ModelRequest, 'systemPrompt' | 'userPrompt'>,
   key: string,
   signal?: AbortSignal,
+  runGeneration?: string,
 ): Promise<GeneratedImage> {
   if (route.capability !== 'draw') throw new Error('Choose a Draw preset.');
   const options = route.imageOptions;
   const request = {
     action: 'api-image',
+    ...(runGeneration ? { runGeneration } : {}),
     ...(route.binding.kind === 'connection' ? { connectionKey: route.binding.key } : {}),
     model: route.model,
     prompt: [input.systemPrompt, input.userPrompt].filter(Boolean).join('\n\n'),

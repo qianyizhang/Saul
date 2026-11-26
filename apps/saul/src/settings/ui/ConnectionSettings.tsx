@@ -13,14 +13,44 @@ import type { PlanResults } from '../../../shared/protocol/credential-plan.mts';
 import { useConnectionCatalog } from './useConnectionCatalog';
 import { ConnectionManagement, type ConnectionManagementAction } from './ConnectionManagement';
 import { presetCountLabel, presetsUsingConnection } from '../connection-management';
-import { changeOutsideSetup } from '../connection-setup';
+import { changeOutsideSetup } from '../../connections/client';
 import { useConnectionSetup } from '../useConnectionSetup';
 import type { Configuration } from '../../configuration/definition';
 import type { ConnectionChange } from '../connection-management';
-import type { CommitSetup } from '../connection-setup';
+import type { CommitSetup } from '../../connections/client';
 
 type Logout = PlanResults['logout'];
 const message = (cause: unknown) => (cause instanceof Error ? cause.message : 'Connection failed.');
+
+function PlanSignInAction({
+  label,
+  onClick,
+  primary = false,
+}: {
+  label: string;
+  onClick: () => void;
+  primary?: boolean;
+}) {
+  const className = primary ? 'btn primary' : 'btn';
+  // Opening the authorization tab dismisses Chrome's toolbar popup.
+  if (document.documentElement.classList.contains('toolbar-popup')) {
+    return (
+      <a
+        className={className}
+        href={chrome.runtime.getURL('library.html?section=connections#settings')}
+        target="_blank"
+        rel="noreferrer"
+      >
+        Open Connections in a tab
+      </a>
+    );
+  }
+  return (
+    <button type="button" className={className} onClick={onClick}>
+      {label}
+    </button>
+  );
+}
 
 function ConnectionRow({
   connection,
@@ -238,7 +268,7 @@ export function ConnectionSettings({
   focusConnection,
   onConnectionFocused,
 }: ConnectionSettingsProps) {
-  const setup = useConnectionSetup({ settings, onDirty, commit });
+  const setup = useConnectionSetup({ settings, onDirty, commit }, visible);
   const { draft, pending, status, plan } = setup;
   const { busy, error, revision, logouts } = status;
   const { accounts, selectedAccount, defaultPlanName, needsPlanPermission, recoveryIntent } = plan;
@@ -250,7 +280,10 @@ export function ConnectionSettings({
   const [recoveryKey, setRecoveryKey] = useState<{ id: string; value: string }>();
   const pendingId = pending?.id;
   const targetsPending = pending?.id === draft?.id && pending?.phase === 'credential';
-  const editing = !pending || targetsPending ? draft : undefined;
+  const editing =
+    !pending || targetsPending || pending.definition.key !== (draft?.target?.key ?? draft?.id)
+      ? draft
+      : undefined;
   const enabled = settings.sharedCredentials === 'saul';
   const planReady = !!(selectedAccount?.signedIn && selectedAccount.planEnabled);
   const target = draft?.target;
@@ -287,7 +320,7 @@ export function ConnectionSettings({
     <section hidden={!visible} className="settings-section" aria-label="Connections">
       <div className="row between">
         <h2 className="view-title">Connections</h2>
-        {!draft && !management && !pending && (
+        {!draft && !management && (
           <button
             ref={addButton}
             type="button"
@@ -307,6 +340,52 @@ export function ConnectionSettings({
           {error}
         </p>
       )}
+      {!editing &&
+        setup.foreignSetups.map((reservation) => {
+          const name =
+            settings.connections.find((connection) => connection.key === reservation.connectionKey)
+              ?.name ?? reservation.connectionKey;
+          return (
+            <div className="row between" key={reservation.token}>
+              <span>EZ setup for {name}</span>
+              {reservation.active ? (
+                <button type="button" className="btn" onClick={() => void setup.refreshPending()}>
+                  Active in EZ · Check again
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={busy || dirty || disabled}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Release the setup for ${name} from EZ? The credential may already have changed. Releasing keeps the current credential and saved connection.`,
+                      )
+                    )
+                      void setup.release(reservation);
+                  }}
+                >
+                  Release setup
+                </button>
+              )}
+            </div>
+          );
+        })}
+      {!editing &&
+        setup.pendingSetups
+          .filter((record) => record.id !== pending?.id)
+          .map((record) => (
+            <button
+              type="button"
+              className="btn"
+              key={record.id}
+              disabled={busy}
+              onClick={() => setup.reviewSetup(record.id)}
+            >
+              Review setup for {record.definition.name}
+            </button>
+          ))}
       {pending && !editing && (
         <fieldset className="stack settings-fields" disabled={busy || dirty || disabled}>
           <h3>Finish setting up {pending.definition.name}</h3>
@@ -330,21 +409,25 @@ export function ConnectionSettings({
             </label>
           )}
           <div className="row">
-            {pending.definition.kind === 'chatgpt-plan' && recoveryIntent && (
+            {pending.definition.kind === 'chatgpt-plan' && recoveryIntent === 'check' && (
               <button
                 type="button"
                 className="btn"
-                onClick={() => void setup.repairAccount(pending, recoveryIntent)}
+                onClick={() => void setup.repairAccount(pending, 'check')}
               >
-                {
-                  {
-                    check: 'Check original account',
-                    enable: 'Enable plan use',
-                    'sign-in': 'Sign in to original account',
-                  }[recoveryIntent]
-                }
+                Check original account
               </button>
             )}
+            {pending.definition.kind === 'chatgpt-plan' &&
+              recoveryIntent &&
+              recoveryIntent !== 'check' && (
+                <PlanSignInAction
+                  label={
+                    recoveryIntent === 'enable' ? 'Enable plan use' : 'Sign in to original account'
+                  }
+                  onClick={() => void setup.repairAccount(pending, recoveryIntent)}
+                />
+              )}
             <button
               type="button"
               className="btn primary"
@@ -497,14 +580,14 @@ export function ConnectionSettings({
                   </>
                 )}
                 {(boundPlan || (!planReady && selectedAccount)) && (
-                  <button type="button" className="btn primary" onClick={() => void setup.signIn()}>
-                    {needsPlanPermission ? 'Enable plan use' : 'Sign in again'}
-                  </button>
+                  <PlanSignInAction
+                    label={needsPlanPermission ? 'Enable plan use' : 'Sign in again'}
+                    onClick={() => void setup.signIn()}
+                    primary
+                  />
                 )}
                 {!boundPlan && !registration && (
-                  <button type="button" className="btn" onClick={setup.register}>
-                    Register a new app
-                  </button>
+                  <PlanSignInAction label="Register a new app" onClick={setup.register} />
                 )}
               </>
             )
@@ -576,7 +659,11 @@ export function ConnectionSettings({
             connection={connection}
             presetCount={presetsUsingConnection(settings, connection.key).length}
             enabled={enabled}
-            locked={busy || disabled || !!pending}
+            locked={
+              busy ||
+              disabled ||
+              setup.pendingSetups.some((record) => record.definition.key === connection.key)
+            }
             dirty={dirty}
             logout={connection.accountId ? logouts.get(connection.accountId) : undefined}
             reveal={(focusConnection ?? returnTo) === connection.key}

@@ -8,6 +8,132 @@ import SaulTestSupport
 
 @MainActor func connectionSetupStateChecks() -> [CheckCase] {
     [
+        CheckCase(
+            "connection setup: shared fixture reconciles credentials and settings without repeating writes"
+        ) {
+            directory in
+            let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+                .appendingPathComponent("../../../../contracts/fixtures/connection-setup.json")
+            let fixture = try JSONDecoder().decode(SetupContractFixture.self, from: Data(contentsOf: file))
+            for scenario in fixture.cases {
+                let folder = directory.appendingPathComponent(scenario.id)
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                let store = ConfigurationStore(directory: folder)
+                var configuration = Configuration.starters(model: "fixture", effort: "low", fast: false)
+                if let saved = scenario.savedDefinition { configuration.connections.append(saved) }
+                try store.save(configuration)
+                let setup = ConnectionSetup(
+                    id: UUID(), phase: scenario.phase, definition: fixture.definition,
+                    previous: nil, confirmedName: nil)
+                try AtomicFile.write(
+                    JSONEncoder().encode(setup),
+                    to: folder.appendingPathComponent("connection-setup.json"))
+                var credentialWrites = 0
+                var settingsWrites = 0
+                let session = ConnectionSession(
+                    checks: ConnectionChecks(
+                        status: { _ in ConnectionStatus(connected: true) },
+                        catalog: { _, _ in ConnectionCatalog() }),
+                    client: .init(
+                        saveKey: { _, _, _ in credentialWrites += 1 },
+                        keyStatus: { definition in
+                            ConnectionStatus(connected: scenario.keyAvailable, endpoint: definition.endpoint)
+                        }))
+                @MainActor func finish() async throws {
+                    try await session.save(
+                        .resume(setup.id, phase: scenario.phase), key: nil, directory: folder, blocked: false,
+                        readLatest: {
+                            guard let configuration = try store.load() else {
+                                throw CheckFailure("Missing settings fixture")
+                            }
+                            return configuration
+                        },
+                        commit: { value, _ in
+                            settingsWrites += 1
+                            try store.save(value)
+                        })
+                }
+                switch scenario.expected {
+                case "save-definition", "already-saved":
+                    try await finish()
+                    try expect(
+                        try store.load()?.connections.contains(fixture.definition) == true, scenario.id)
+                    try expect(session.pendingSetup == nil, "Confirmed setup remained pending")
+                case "review-credential", "conflict":
+                    try await expectAsyncThrows(EZError.self) { try await finish() }
+                    try expect(session.pendingSetup != nil, "Unresolved setup was cleared")
+                default: throw CheckFailure("Unknown fixture outcome")
+                }
+                try expectEqual(credentialWrites, 0, "Recovered setup rewrote credentials")
+                try expectEqual(
+                    settingsWrites, scenario.expected == "save-definition" ? 1 : 0,
+                    "Wrong settings write count for \(scenario.id)")
+            }
+        },
+        CheckCase("connection setup: definite denial leaves no new receipt and preserves old receipts") {
+            directory in
+            let fixture = try ConnectionSetupFixture(directory: directory)
+            var rejectionReason: String? = "connection_busy"
+            let transport = SaulConnection { frame in
+                var decoder = NativeFrames()
+                guard let bytes = try decoder.append(frame).first,
+                    let packet = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+                    let id = packet["id"] as? String,
+                    let request = packet["request"] as? [String: Any]
+                else { throw CheckFailure("Invalid request fixture") }
+                var event: [String: Any]
+                if request["action"] as? String == "connection-capabilities" {
+                    event = ["type": "result", "connectionCoordination": 1]
+                } else {
+                    event = ["type": "error", "message": "Synthetic admission rejection"]
+                    if let rejectionReason { event["reason"] = rejectionReason }
+                }
+                let reply = try JSONSerialization.data(withJSONObject: ["id": id, "event": event])
+                return NativeCredentialReplies(
+                    stream: AsyncThrowingStream { continuation in
+                        continuation.yield(reply)
+                        continuation.finish()
+                    }, close: {})
+            }
+            let session = fixture.session(protection: ConnectionProtection(client: transport))
+            @MainActor func start() async throws {
+                try await fixture.save(
+                    .start(fixture.connection, previous: nil, confirmedName: nil), on: session)
+            }
+            try await expectAsyncThrows(CredentialStorageError.self) { try await start() }
+            try expect(session.pendingSetup == nil, "Definite denial retained the new intent")
+
+            let legacy = ConnectionSetup(
+                id: UUID(), phase: .credential, definition: fixture.connection, previous: nil,
+                confirmedName: nil)
+            try AtomicFile.write(
+                JSONEncoder().encode(legacy), to: directory.appendingPathComponent("connection-setup.json"))
+            rejectionReason = "connection_reserved"
+            try await expectAsyncThrows(CredentialStorageError.self) {
+                try await fixture.save(.resume(legacy.id, phase: legacy.phase), on: session)
+            }
+            try expectEqual(session.pendingSetup, legacy, "Definite denial changed the previous intent")
+
+            rejectionReason = nil
+            try await expectAsyncThrows(CredentialStorageError.self) {
+                try await fixture.save(.resume(legacy.id, phase: legacy.phase), on: session)
+            }
+            try expectEqual(session.pendingSetup?.id, legacy.id, "Uncertain admission lost its identity")
+            try expectEqual(session.pendingSetup?.protectionVersion, 1, "Uncertain admission was forgotten")
+            try expectEqual(fixture.keyWrites, 0, "Rejected admission touched the credential")
+        },
+        CheckCase("connection setup: unrelated settings can settle while another key awaits recovery") {
+            directory in
+            let fixture = try ConnectionSetupFixture(directory: directory)
+            let session = fixture.session()
+            let pending = try await fixture.interruptSetup(on: session)
+            let unrelated = ConnectionDefinition(
+                key: "unrelated-api", name: "Unrelated fixture", kind: .openAIAPI,
+                baseUrl: fixture.connection.baseUrl)
+            try await fixture.save(.start(unrelated, previous: nil, confirmedName: nil), on: session)
+            try expect(try fixture.latest().connections.contains(unrelated), "Unrelated setup was blocked")
+            try expectEqual(session.pendingSetups.map(\.id), [pending], "Unrelated setup disturbed recovery")
+        },
         CheckCase("connection setup: restart finishes settings once and preserves independent edits") {
             directory in
             for acknowledgedWriteWasLost in [false, true] {
@@ -21,7 +147,7 @@ import SaulTestSupport
                     try await first.save(
                         .start(connection, previous: nil, confirmedName: nil), key: fixture.secret,
                         directory: scenario, blocked: false, readLatest: fixture.latest,
-                        commit: { updated in
+                        commit: { updated, _ in
                             if acknowledgedWriteWasLost { try fixture.store.save(updated) }
                             throw EZError("Synthetic settings failure")
                         })
@@ -46,7 +172,7 @@ import SaulTestSupport
                 try await resumed.save(
                     .resume(pending.id, phase: .settings), key: nil,
                     directory: scenario, blocked: false, readLatest: fixture.latest,
-                    commit: { updated in
+                    commit: { updated, _ in
                         commits += 1
                         try fixture.store.save(updated)
                     })
@@ -71,7 +197,7 @@ import SaulTestSupport
                 try await first.save(
                     .start(connection, previous: nil, confirmedName: nil), key: fixture.secret,
                     directory: directory, blocked: false, readLatest: fixture.latest,
-                    commit: { _ in throw EZError("Synthetic settings write failure") })
+                    commit: { _, _ in throw EZError("Synthetic settings write failure") })
             }
             first.close()
 
@@ -89,7 +215,7 @@ import SaulTestSupport
                 try await resumed.save(
                     .resume(pending.id, phase: .settings), key: nil,
                     directory: directory, blocked: false, readLatest: fixture.latest,
-                    commit: { _ in attemptedCommit = true })
+                    commit: { _, _ in attemptedCommit = true })
             }
             try expect(
                 error.localizedDescription.contains("changed"), "Stale target did not report a conflict")
@@ -99,7 +225,7 @@ import SaulTestSupport
             try expectEqual(
                 try fixture.latest().connections, other.connections, "Conflict replaced newer settings")
 
-            try resumed.discardSetup(pending.id, phase: .settings, in: directory)
+            try await resumed.discardSetup(pending.id, phase: .settings, in: directory)
             let reopened = fixture.session()
             try reopened.loadSetup(in: directory)
             try expect(reopened.pendingSetup == nil, "Discard did not clear durable recovery")
@@ -139,7 +265,7 @@ import SaulTestSupport
             let fixture = try ConnectionSetupFixture(directory: directory)
             let session = fixture.session()
             let old = try await fixture.interruptSetup(on: session)
-            try session.discardSetup(old, phase: .settings, in: directory)
+            try await session.discardSetup(old, phase: .settings, in: directory)
             try await expectAsyncThrows(EZError.self) {
                 try await fixture.save(.resume(old, phase: .settings), on: session)
             }
@@ -148,7 +274,9 @@ import SaulTestSupport
             try await expectAsyncThrows(EZError.self) {
                 try await fixture.save(.resume(old, phase: .settings), on: session)
             }
-            try expectThrows(EZError.self) { try session.discardSetup(old, phase: .settings, in: directory) }
+            try await expectAsyncThrows(EZError.self) {
+                try await session.discardSetup(old, phase: .settings, in: directory)
+            }
             try expectEqual(session.pendingSetup?.id, replacement, "Stale discard changed the active setup")
             try await expectAsyncThrows(EZError.self) {
                 try await fixture.save(.resume(replacement, phase: .credential), on: session)
@@ -219,18 +347,18 @@ import SaulTestSupport
                     checks: FixtureConnections().checks(),
                     client: .init(
                         accounts: { profiles },
-                        signIn: { account, _, consent in
+                        signIn: { account, _, consent, _ in
                             signedIn.append(account)
                             consentRequests.append(consent)
                             profiles = [exact, other]
                             return account
                         },
-                        confirmAppName: { _, _ in confirmations += 1 }))
+                        confirmAppName: { _, _, _ in confirmations += 1 }))
                 try await expectAsyncThrows(EZError.self) {
                     try await session.save(
                         .start(definition, previous: nil, confirmedName: "Fixture app"),
                         key: nil, directory: scenario, blocked: false, readLatest: fixture.latest,
-                        commit: { _ in throw EZError("Synthetic settings write failure") })
+                        commit: { _, _ in throw EZError("Synthetic settings write failure") })
                 }
                 guard let setup = session.pendingSetup else { throw CheckFailure("Missing setup") }
                 let stale: ConnectionSession.SetupRepairChoice = expected == .signIn ? .enablePlan : .signIn
@@ -281,7 +409,8 @@ import SaulTestSupport
     init(directory: URL) throws {
         self.directory = directory
         store = ConfigurationStore(directory: directory)
-        receipt = directory.appendingPathComponent("connection-setup.json")
+        receipt = directory.appendingPathComponent("connection-setups").appendingPathComponent(
+            connection.key + ".json")
         _ = try store.save(Configuration.starters(model: "fixture", effort: "low", fast: false))
     }
 
@@ -293,7 +422,7 @@ import SaulTestSupport
     func save(_ command: ConnectionSession.SetupCommand, on session: ConnectionSession) async throws {
         try await session.save(
             command, key: secret, directory: directory, blocked: false,
-            readLatest: latest, commit: { try self.store.save($0) })
+            readLatest: latest, commit: { try self.store.save($0, fence: $1) })
     }
 
     func interruptSetup(on session: ConnectionSession) async throws -> UUID {
@@ -301,7 +430,7 @@ import SaulTestSupport
             try await session.save(
                 .start(connection, previous: nil, confirmedName: nil), key: secret, directory: directory,
                 blocked: false, readLatest: latest,
-                commit: { _ in throw EZError("Synthetic settings write failure") })
+                commit: { _, _ in throw EZError("Synthetic settings write failure") })
         }
         guard let pending = session.pendingSetup, pending.phase == .settings else {
             throw CheckFailure("Settings failure did not leave the acknowledged stage")
@@ -309,11 +438,11 @@ import SaulTestSupport
         return pending.id
     }
 
-    func session() -> ConnectionSession {
+    func session(protection: ConnectionProtection? = nil) -> ConnectionSession {
         ConnectionSession(
             checks: FixtureConnections().checks(),
             client: .init(
-                saveKey: { [self] _, _ in
+                saveKey: { [self] _, _, _ in
                     keyWrites += 1
                     credentialPresent = true
                 },
@@ -321,6 +450,19 @@ import SaulTestSupport
                     statusChecks += 1
                     return ConnectionStatus(
                         connected: credentialPresent, endpoint: statusEndpoint ?? definition.endpoint)
-                }))
+                }),
+            protection: protection)
     }
+}
+
+private struct SetupContractFixture: Decodable {
+    struct Scenario: Decodable {
+        let id: String
+        let phase: ConnectionSetup.Phase
+        let savedDefinition: ConnectionDefinition?
+        let keyAvailable: Bool
+        let expected: String
+    }
+    let definition: ConnectionDefinition
+    let cases: [Scenario]
 }

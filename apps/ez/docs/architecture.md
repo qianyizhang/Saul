@@ -12,7 +12,7 @@ needs no Codex, Node, Python, Electron or webview runtime.
 | App composition and navigation | [EZComposition](../Sources/EZ/EZComposition.swift) assembles installed adapters. [AppModel](../Sources/EZ/AppModel.swift) coordinates the workspace, Settings and shutdown. |
 | Lookup workflow | [LookupSession](../Sources/EZ/Lookup/LookupSession.swift) owns the [draft](../Sources/EZ/Lookup/LookupDraft.swift), prepares Send, Follow-up, Retry and Reuse, and cancels superseded preparation. Lookup views observe the session directly. |
 | Frozen submission | `LookupRequest` / `LookupRoute` |
-| Settings and connection session | [ConfigurationEditor](../Sources/EZ/ConfigurationEditor.swift), `ConfigurationStore`, [ConnectionSession](../Sources/EZ/ConnectionSession.swift) and `ConnectionChecks` |
+| Settings and connection session | [ConfigurationEditor](../Sources/EZ/ConfigurationEditor.swift), `ConfigurationStore`, [ConnectionSession](../Sources/EZ/Connections/ConnectionSession.swift) and `ConnectionChecks` |
 | Attempt and history | [AttemptExecution](../Sources/EZCore/AttemptExecution.swift) decides when to send and what to save. [HistoryCollection](../Sources/EZ/HistoryCollection.swift) owns refresh and deletion; [HistoryWriter](../Sources/EZCore/HistoryWriter.swift) serializes SQLite changes. |
 | Provider calls | [SaulGeneration](../Sources/EZCore/SaulGeneration.swift) maps the frozen request to the [signed credential owner](../../../contracts/credentials.md). `ResponsesRequest` and `ResponseAccumulator` encode requests and interpret stream evidence. |
 | Signed caller, OAuth and Keychain | [Saul credential contract](../../../contracts/credentials.md); [Keychain diagnosis](keychain.md) |
@@ -21,9 +21,9 @@ needs no Codex, Node, Python, Electron or webview runtime.
 owns native presentation. [ADR 0001](adr/0001-screenshot-first-design-review.md) and
 [ADR 0002](adr/0002-model-presets-and-recipes.md) record review and template rationale.
 
-ConnectionSession owns managed setup and its app-local recovery record across
-restarts. AppModel supplies the configuration store and publishes the accepted
-settings. An explicit continuation checks the original account or endpoint.
+ConnectionSession admits managed commands. A [setup coordinator](../Sources/EZ/Connections/ConnectionSetupCoordinator.swift)
+uses the reviewed connection and its app-local recovery record to finish a transaction.
+AppModel supplies the configuration store and publishes accepted settings. An explicit continuation checks the original account or endpoint.
 [Setup contract](../../../contracts/credentials.md#connection-identity-and-catalogs)
 
 ## Direct plan-backed requests

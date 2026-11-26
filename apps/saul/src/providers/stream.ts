@@ -18,7 +18,12 @@ export async function* streamModel(
   input: ModelRequest,
   credential: string,
   signal?: AbortSignal,
-  options: { maxTokens?: number; attachments?: PdfUrlAttachment[]; images?: string[] } = {},
+  options: {
+    maxTokens?: number;
+    attachments?: PdfUrlAttachment[];
+    images?: string[];
+    runGeneration?: string;
+  } = {},
 ): AsyncGenerator<ModelEvent> {
   signal?.throwIfAborted();
   const route = executionModel(input);
@@ -34,6 +39,7 @@ export async function* streamModel(
         action: 'generate',
         ...route.plan,
         ...(connectionKey ? { connectionKey } : {}),
+        ...(options.runGeneration ? { runGeneration: options.runGeneration } : {}),
         systemPrompt: input.systemPrompt,
         userPrompt: input.userPrompt,
         ...(options.attachments ? { attachments: options.attachments } : {}),
@@ -59,7 +65,10 @@ export async function* streamModel(
   }
   if (route.capability === 'draw') {
     yield { type: 'activity', phase: 'waiting' };
-    yield { type: 'image', image: await generateImage(route, input, credential, signal) };
+    yield {
+      type: 'image',
+      image: await generateImage(route, input, credential, signal, options.runGeneration),
+    };
     yield { type: 'complete' };
     return;
   }
@@ -71,6 +80,7 @@ export async function* streamModel(
       ...(route.owner === 'saul'
         ? { credentialOwner: route.owner, connectionKey, apiKey: '' }
         : { apiKey: credential }),
+      runGeneration: options.runGeneration,
       maxTokens: options.maxTokens,
       images: options.images,
     },

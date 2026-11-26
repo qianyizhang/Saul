@@ -835,3 +835,68 @@ it.each(['failed', 'cancelled'] as const)(
     await vi.waitFor(() => expect(f.get().items[0]?.status).toBe(status));
   },
 );
+
+it('holds the signed connection once from first generation through settlement', async () => {
+  const f = fixture();
+  const generation = 'b'.repeat(64);
+  const close = vi.fn(async () => {});
+  const hold = vi.fn(async () => ({
+    evidence: { type: 'connection-held' as const, generation },
+    signal: new AbortController().signal,
+    close,
+  }));
+  const generate = vi.fn(async function* (request: PlanRequest & { runGeneration?: string }) {
+    expect(request.runGeneration).toBe(generation);
+    expect(close).not.toHaveBeenCalled();
+    yield* success();
+  });
+  const runner = new CallBatchRunner(f.db, f.capture, createCallExecutor({ plan: generate }), hold);
+  const record = batch();
+  await runner.request({ action: 'start', id: record.id }, record);
+  await waitDone(runner);
+  expect(hold).toHaveBeenCalledExactlyOnceWith(
+    { action: 'connection-run-hold', accountId: 'account' },
+    expect.any(AbortSignal),
+  );
+  expect(generate).toHaveBeenCalledTimes(3);
+  expect(close).toHaveBeenCalledOnce();
+});
+
+it('does not require the credential helper for an action that never calls generate', async () => {
+  const f = fixture();
+  const hold = vi.fn(async () => {
+    throw new Error('Helper unavailable');
+  });
+  const script = vi.fn(async () => ({
+    type: 'result' as const,
+    text: 'Calculated without a model',
+  }));
+  const runner = new CallBatchRunner(f.db, f.capture, createCallExecutor({ script }), hold);
+  const record: DigestBatch = {
+    ...batch(),
+    action: {
+      presetId: 'plan',
+      revision: {
+        contractVersion: 1,
+        name: 'Local',
+        description: '',
+        language: 'typescript',
+        revision: 'a'.repeat(64),
+        approved: true,
+        createdAt: 1,
+        source: 'export default () => "answer";',
+      },
+      input: {
+        provider: 'chatgpt-plan',
+        remote: { baseUrl: '', model: '', temperature: 0.3 },
+        plan: { accountId: 'account', model: 'gpt-6-luna' },
+        credentialOwner: 'saul',
+      },
+    },
+    summaryInput: undefined,
+  };
+  await runner.request({ action: 'start', id: record.id }, record);
+  await waitDone(runner);
+  expect(f.get().items.every((item) => item.status === 'completed')).toBe(true);
+  expect(hold).not.toHaveBeenCalled();
+});

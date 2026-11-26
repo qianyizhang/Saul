@@ -45,7 +45,7 @@ export function Workspace({ popup = false }: { popup?: boolean }) {
   const [settingsSection, setSettingsSection] = useState<SettingsSection>(() => {
     const linkedSection = settingsLink.get('section');
     return viewFromHash() === 'settings' &&
-      (linkedSection === 'models' || linkedSection === 'calls')
+      (linkedSection === 'models' || linkedSection === 'calls' || linkedSection === 'connections')
       ? linkedSection
       : 'overview';
   });

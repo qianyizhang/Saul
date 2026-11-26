@@ -7,6 +7,7 @@ export interface OpenAICompatibleConfig {
   apiKey: string;
   credentialOwner?: 'saul';
   connectionKey?: string;
+  runGeneration?: string;
   images?: string[];
   model: string;
   temperature?: number;
@@ -31,6 +32,7 @@ export async function* streamOpenAICompatible(
       {
         action: 'api-chat',
         ...(config.connectionKey ? { connectionKey: config.connectionKey } : {}),
+        ...(config.runGeneration ? { runGeneration: config.runGeneration } : {}),
         model: config.model,
         systemPrompt,
         userPrompt,

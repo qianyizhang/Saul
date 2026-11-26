@@ -34,22 +34,27 @@ import SaulNativeValues
                     try await auth.load()
                     return auth.accounts
                 },
-                signIn: { account, suggestedAppName, consent in
+                signIn: { account, suggestedAppName, consent, setupToken in
                     let reply = try await auth.signIn(
                         accountID: account, suggestedAppName: suggestedAppName, consent: consent,
+                        setupToken: setupToken,
                         authorize: { NSWorkspace.shared.open($0) })
                     return (reply["account"] as? [String: Any])?["id"] as? String
                 },
-                confirmAppName: { account, name in
-                    _ = try await auth.call([
+                confirmAppName: { account, name, token in
+                    var request: [String: Any] = [
                         "action": "confirm-app-name", "accountId": account, "suggestedAppName": name,
-                    ])
+                    ]
+                    if let token { request["setupToken"] = token.uuidString }
+                    _ = try await auth.call(request)
                 },
-                saveKey: { connection, key in
-                    let reply = try await auth.call([
+                saveKey: { connection, key, token in
+                    var request: [String: Any] = [
                         "action": "connection-key-save", "connectionKey": connection.key,
                         "endpoint": connection.endpoint, "key": key,
-                    ])
+                    ]
+                    if let token { request["setupToken"] = token.uuidString }
+                    let reply = try await auth.call(request)
                     let status = try decode(
                         ConnectionStatus.self, from: reply["connection"], name: "connection status")
                     guard status.connected, status.endpoint == connection.endpoint else {
@@ -76,6 +81,7 @@ import SaulNativeValues
                         ConnectionChecks.LogoutOutcome.self, from: reply, name: "sign-out result")
                 }),
             connected: !prefs.bool(forKey: "saulCredentialsDisconnected"),
+            protection: ConnectionProtection(client: auth),
             setPreference: { prefs.set(!$0, forKey: "saulCredentialsDisconnected") })
         let writer = HistoryWriter(directory: historyDirectory)
         let reader = HistoryReader(directory: historyDirectory)

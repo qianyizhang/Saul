@@ -355,12 +355,16 @@ private final class CoordinationDatabase {
     self.owned = true
     var handle: OpaquePointer?
     let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_NOFOLLOW
-    guard sqlite3_open_v2(url.path, &handle, flags, nil) == SQLITE_OK else {
+    // Darwin's system aliases are normal inputs from temporaryDirectory and tmpdir().
+    // Keep NOFOLLOW for every remaining path component, including the file itself.
+    let path = url.path
+    let lockPath = path.hasPrefix("/var/") || path.hasPrefix("/tmp/") ? "/private" + path : path
+    guard sqlite3_open_v2(lockPath, &handle, flags, nil) == SQLITE_OK else {
       sqlite3_close(handle)
       throw ConnectionCoordinationError.unavailable
     }
     do {
-      try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+      try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: lockPath)
     } catch {
       sqlite3_close(handle)
       throw error

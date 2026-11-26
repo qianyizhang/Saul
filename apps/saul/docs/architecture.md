@@ -141,9 +141,10 @@ execution and returns frozen choices with a separate transient credential.
 session. [React adapter](../src/settings/ui/useSettingsEditor.ts) owns lifetime, unload
 warnings and confirmation; stale callbacks cannot replace a newer session.
 
-Managed Connections owns sign-in, credential changes and [restartable setup](../src/settings/connection-setup.ts).
-The Settings editor commits against a settings revision. Each explicit continuation
-checks the pending action, credential availability and current public definition.
+The [background connection service](../src/connections/service.ts) admits managed setup.
+Its [setup coordinator](../src/connections/setup.ts) checks the reviewed definition and
+commits it against current saved settings. The Settings view can close after the
+credential acknowledgement. Explicit recovery rechecks the binding and the setup reservation.
 The shared [credential contract](../../../contracts/credentials.md#connection-identity-and-catalogs)
 defines what the browser can retain.
 

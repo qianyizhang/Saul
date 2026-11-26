@@ -1,3 +1,4 @@
+import type { holdConnection } from '../../connections/credential-hold';
 import type { DbCall } from '../../../shared/protocol/history-types.ts';
 import { type CallSnapshot } from '../../../shared/model/call-output.ts';
 import {
@@ -47,6 +48,7 @@ export class CallBatchRunner {
     private db: DbCall,
     private capture: Capture,
     private executor: CallExecutor = createCallExecutor(),
+    private hold?: typeof holdConnection,
   ) {
     void this.recover().catch(() => undefined);
   }
@@ -309,6 +311,51 @@ export class CallBatchRunner {
   }
   private async run(batch: DigestBatch, controller: AbortController, credential: string) {
     const signal = controller.signal;
+    let connection: Awaited<ReturnType<typeof holdConnection>> | undefined;
+    let admission: Promise<string | undefined> | undefined;
+    const stopped = () => controller.abort(connection?.signal.reason);
+    const admit = async () => {
+      if (!this.hold) return;
+      const input = batch.action?.input ?? batch.summaryInput;
+      const route = input
+        ? executionModel(input)
+        : !batch.action
+          ? originalSummaryPlan(batch)
+          : undefined;
+      if (route?.owner !== 'saul') return;
+      const connectionKey =
+        route.binding.kind === 'connection'
+          ? route.binding.key
+          : route.provider === 'openai-compatible'
+            ? 'openai-api'
+            : undefined;
+      connection = await this.hold(
+        {
+          action: 'connection-run-hold',
+          ...(connectionKey ? { connectionKey } : {}),
+          ...(route.provider === 'chatgpt-plan' ? { accountId: route.plan.accountId } : {}),
+        },
+        signal,
+      );
+      connection.signal.addEventListener('abort', stopped, { once: true });
+      connection.signal.throwIfAborted();
+      return connection.evidence.generation;
+    };
+    try {
+      await this.runQueue(batch, controller, credential, () => (admission ??= admit()));
+    } finally {
+      connection?.signal.removeEventListener('abort', stopped);
+      await connection?.close();
+    }
+  }
+
+  private async runQueue(
+    batch: DigestBatch,
+    controller: AbortController,
+    credential: string,
+    admitGeneration: () => Promise<string | undefined>,
+  ) {
+    const signal = controller.signal;
     const queue = batch.items.filter((i) => i.status === 'queued');
     let paused = false;
     const worker = async () => {
@@ -316,7 +363,7 @@ export class CallBatchRunner {
         const item = queue.shift();
         if (!item) return;
         try {
-          await this.process(batch, item, signal, credential, () => {
+          await this.process(batch, item, signal, credential, admitGeneration, () => {
             paused = true;
           });
         } catch (error) {
@@ -332,7 +379,9 @@ export class CallBatchRunner {
     for (const item of queue) {
       item.status = signal.aborted ? 'cancelled' : 'interrupted';
       item.error = signal.aborted
-        ? 'Stopped.'
+        ? signal.reason instanceof Error && signal.reason.name !== 'AbortError'
+          ? signal.reason.message
+          : 'Stopped.'
         : 'Paused after a provider failure. Retry unfinished tabs explicitly.';
       await this.save(batch, item);
     }
@@ -342,6 +391,7 @@ export class CallBatchRunner {
     item: DigestItem,
     signal: AbortSignal,
     credential: string,
+    admitGeneration: () => Promise<string | undefined>,
     pause: () => void,
   ) {
     item.status = 'capturing';
@@ -415,7 +465,7 @@ export class CallBatchRunner {
     try {
       outcome = await this.executor.execute(
         { call, page: { title: item.title, url: item.url, source } },
-        { credential, signal: executionSignal, onProgress: project },
+        { credential, admitGeneration, signal: executionSignal, onProgress: project },
       );
       // Keep the item in a live saving phase until the final row commits.
       if (!saveError) item.status = 'saving';

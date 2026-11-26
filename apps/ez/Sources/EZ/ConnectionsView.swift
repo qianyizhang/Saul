@@ -30,6 +30,12 @@ struct ConnectionsView: View {
     @State private var error: String?
     @State private var removing: ConnectionDefinition?
     @State private var loginTask: Task<Void, Never>?
+    @State private var recoveryID: UUID?
+    @State private var remoteSetups: [SharedConnectionSetup] = []
+    @State private var releasing: SharedConnectionSetup?
+    private var recovery: ConnectionSetup? {
+        model.session.pendingSetups.first { $0.id == recoveryID } ?? model.pendingConnectionSetup
+    }
     private var eligibleProfiles: [SaulAccount] {
         model.profiles.filter { profile in
             !model.configuration.connections.contains { $0.accountId == profile.id && $0.key != target?.key }
@@ -45,6 +51,9 @@ struct ConnectionsView: View {
     private var defaultPlanName: String {
         ConnectionDefinition.nextName("ChatGPT plan", among: model.configuration.connections)
     }
+    private func connectionName(_ key: String) -> String {
+        model.configuration.connections.first { $0.key == key }?.name ?? key
+    }
 
     var body: some View {
         ScrollView {
@@ -52,7 +61,7 @@ struct ConnectionsView: View {
                 HStack {
                     Text("Connections").font(.headline)
                     Spacer()
-                    if !editorOpen && model.pendingConnectionSetup == nil {
+                    if !editorOpen {
                         Menu("Add connection", systemImage: "plus") {
                             Button("ChatGPT plan") { open(nil, type: "plan") }
                             Button("OpenAI API") { open(nil, type: "api") }
@@ -70,9 +79,33 @@ struct ConnectionsView: View {
                         loginTask?.cancel()
                     }
                 }
-                if let pending = model.pendingConnectionSetup {
-                    setupRecovery(pending)
-                } else if let management {
+                if !editorOpen {
+                    ForEach(remoteSetups.filter { $0.origin == "saul" }) { reservation in
+                        HStack {
+                            Text("Saul setup for \(connectionName(reservation.connectionKey))")
+                            Spacer()
+                            if reservation.active {
+                                Button("Active in Saul · Check again") {
+                                    Task { await refreshReservations() }
+                                }
+                            } else {
+                                Button("Release setup") { releasing = reservation }
+                                    .disabled(managementDisabled)
+                            }
+                        }
+                    }
+                    if let pending = recovery {
+                        setupRecovery(pending)
+                        ForEach(model.session.pendingSetups.filter { $0.id != pending.id }, id: \.id) {
+                            record in
+                            Button("Review setup for \(record.definition.name)") {
+                                key = ""
+                                recoveryID = record.id
+                            }
+                        }
+                    }
+                }
+                if let management {
                     ConnectionManagementView(
                         action: management.action, connection: management.connection,
                         configuration: model.configuration,
@@ -93,23 +126,39 @@ struct ConnectionsView: View {
         }
         .task(id: visible) {
             guard visible else { return }
+            await refreshReservations()
             for connection in model.configuration.connections {
                 guard !Task.isCancelled else { return }
                 await model.refreshConnection(connection)
             }
         }
-        .onChange(of: model.pendingConnectionSetup?.id) { _, _ in
-            editing = false
-            management = nil
-            key = ""
-        }
-        .onChange(of: model.pendingConnectionSetup?.phase) { _, phase in
+        .onChange(of: recovery?.phase) { _, phase in
             if phase == .settings { key = "" }
         }
         .onChange(of: editorOpen, initial: true) { _, value in hasUnsavedChanges = value }
         .onDisappear {
             loginTask?.cancel()
             loginTask = nil
+        }
+        .confirmationDialog(
+            releasing.map { "Release the setup for \(connectionName($0.connectionKey)) from Saul?" }
+                ?? "Release setup from Saul?",
+            isPresented: Binding(get: { releasing != nil }, set: { if !$0 { releasing = nil } }),
+            titleVisibility: .visible,
+            presenting: releasing
+        ) { reservation in
+            Button("Release setup") {
+                Task {
+                    do {
+                        try await model.session.releaseSharedSetup(reservation)
+                        await refreshReservations()
+                    } catch { self.error = error.localizedDescription }
+                }
+            }
+        } message: { _ in
+            Text(
+                "The credential may already have changed. Releasing keeps the current credential and saved connection."
+            )
         }
         .confirmationDialog(
             "Disconnect this account or key in both Saul and EZ?",
@@ -132,8 +181,17 @@ struct ConnectionsView: View {
             )
         }
     }
+    private func refreshReservations() async {
+        do {
+            remoteSetups = try await model.session.sharedSetups()
+        } catch {
+            // The signed helper can be absent before the user opts in.
+            remoteSetups = []
+        }
+    }
+
     private func setupRecovery(_ pending: ConnectionSetup) -> some View {
-        let repair = model.connectionSetupRepairChoice
+        let repair = model.session.repairChoice(for: pending.id)
         let requestingKey =
             pending.definition.kind == .openAIAPI && (pending.phase == .credential || repair == .replaceKey)
         return VStack(alignment: .leading, spacing: 8) {
@@ -159,10 +217,12 @@ struct ConnectionsView: View {
                     }
                 }
                 Button("Discard setup") {
-                    do {
-                        try model.discardConnectionSetup(pending.id, phase: pending.phase)
-                        closeEditor()
-                    } catch { self.error = error.localizedDescription }
+                    Task {
+                        do {
+                            try await model.discardConnectionSetup(pending.id, phase: pending.phase)
+                            closeEditor()
+                        } catch { self.error = error.localizedDescription }
+                    }
                 }
             }
         }.disabled(managementDisabled || !model.sharedCredentialsConnected)
@@ -192,6 +252,7 @@ struct ConnectionsView: View {
 
     private func connectionRow(_ connection: ConnectionDefinition) -> some View {
         let presetCount = model.configuration.presets(using: connection.key).count
+        let pending = model.session.pendingSetups.contains { $0.definition.key == connection.key }
         let status = model.connectionStatus(connection.key)
         let checking = model.checkingConnections.contains(connection.key)
         let checkingExplicitly = model.connectionChecks.isCheckingExplicitly(connection.key)
@@ -234,7 +295,7 @@ struct ConnectionsView: View {
                     Image(systemName: "ellipsis").frame(width: 28, height: 24)
                 }
                 .menuStyle(.borderlessButton).fixedSize().accessibilityLabel("More for \(connection.name)")
-                .disabled(busy || model.configurationLocked)
+                .disabled(busy || pending || model.configurationLocked)
             }
             HStack(spacing: 8) {
                 ForEach(connection.capabilities, id: \.self) { capability in
@@ -299,6 +360,10 @@ struct ConnectionsView: View {
         return connection.endpoint + (status?.keySuffix.map { " · sk-***\($0)" } ?? "")
     }
     private func open(_ connection: ConnectionDefinition?, type: String = "plan") {
+        if let pending = model.session.pendingSetups.first(where: { $0.definition.key == connection?.key }) {
+            recoveryID = pending.id
+            return
+        }
         target = connection
         editing = true
         key = ""
@@ -524,7 +589,15 @@ struct ConnectionsView: View {
                 try await model.saveConnection(
                     definition, previous: previous, key: suppliedKey, confirmedAppName: confirmedName)
                 closeEditor()
-            } catch { self.error = error.localizedDescription }
+            } catch {
+                if let pending = model.session.pendingSetups.first(where: {
+                    $0.definition.key == definition.key
+                }) {
+                    closeEditor()
+                    recoveryID = pending.id
+                }
+                self.error = error.localizedDescription
+            }
         }
     }
 }

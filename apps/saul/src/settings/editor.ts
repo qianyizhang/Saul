@@ -10,7 +10,8 @@ import {
 } from './draft';
 import { draftInspectionSettings, type SettingsValues } from './draft-storage';
 import { reviewSettings, type RecoveryChoice, type SettingsReview } from './recovery';
-import { setupConnections, type ConnectionSetup } from './connection-setup';
+import type { ConnectionSetup } from '../connections/setup';
+import { saveSetup } from '../connections/client';
 import { changeConnection, type ConnectionChange } from './connection-management';
 
 type Ready = Extract<SettingsState, { state: 'ready' }>;
@@ -287,28 +288,12 @@ export function createSettingsEditor(
     },
     setCredentialOwner: (sharedCredentials: 'saul' | 'disconnected') =>
       guardedCommit((settings) => ({ ...settings, sharedCredentials }), 'credentials'),
-    async finishConnection(setup: ConnectionSetup, reviewLatest: boolean) {
+    async finishConnection(setup: ConnectionSetup, key: string, resume: boolean) {
       if (!editable() || dirty || !baseline)
         throw new Error('Save the current settings draft first.');
       const token = begin('connections')!;
       try {
-        const latest = reviewLatest ? await request({ action: 'read' }) : undefined;
-        if (latest && latest.state !== 'ready') throw new Error(latest.error);
-        if (token !== generation) throw new Error('Reopen Connections to finish setup.');
-        const current = latest?.settings ?? settingsForSave(form);
-        if (current.sharedCredentials !== 'saul')
-          throw new Error('Connect to Saul before finishing setup.');
-        const connections = setupConnections(current.connections, setup);
-        if (connections === current.connections && latest) {
-          receive(latest, true);
-          return;
-        }
-        const result = await request({
-          action: 'commit',
-          baseline: latest?.revision ?? baseline,
-          settings: { ...current, connections },
-        });
-        if (result.state !== 'ready') throw new Error(result.error);
+        const result = await saveSetup(setup, key, resume);
         if (token === generation) receive(result, true);
       } finally {
         finish(token);

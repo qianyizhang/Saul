@@ -75,7 +75,7 @@ private actor IllustrationKeyFixture {
             let model = fixtureModel(
                 directory: directory, connections: fixtures,
                 client: .init(
-                    saveKey: { _, key in
+                    saveKey: { _, key, _ in
                         try await keys.write(key)
                         fixtures.apiConnected = true
                     },

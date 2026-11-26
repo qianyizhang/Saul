@@ -325,14 +325,16 @@ enum SettingsSection: String, CaseIterable {
         try persistConfiguration(updated, store: store)
     }
 
-    private func persistConfiguration(_ updated: Configuration, store: ConfigurationStore) throws {
+    private func persistConfiguration(
+        _ updated: Configuration, store: ConfigurationStore, fence: ConnectionFence? = nil
+    ) throws {
         var saved = updated
         if let id = saved.unassignedStarterID,
             !saved.presets.contains(where: { $0.id == id && $0.model.isEmpty })
         {
             saved.unassignedStarterID = nil
         }
-        configuration = try store.save(saved)
+        configuration = try store.save(saved, fence: fence)
         configurationError = nil
         lookup.reconcileDraft()
     }
@@ -364,13 +366,13 @@ enum SettingsSection: String, CaseIterable {
         try await session.save(
             command, key: key, directory: directory, blocked: lookup.busy || lookup.launcherPending,
             readLatest: readCurrentConfiguration,
-            commit: { try self.persistConfiguration($0, store: store) })
+            commit: { try self.persistConfiguration($0, store: store, fence: $1) })
         if !quitting && sharedCredentialsConnected { initializeStarterPreset() }
     }
 
-    func discardConnectionSetup(_ id: UUID, phase: ConnectionSetup.Phase) throws {
+    func discardConnectionSetup(_ id: UUID, phase: ConnectionSetup.Phase) async throws {
         guard !credentialBusy, !quitting else { throw EZError("Wait for connection setup to finish.") }
-        try session.discardSetup(id, phase: phase, in: directory)
+        try await session.discardSetup(id, phase: phase, in: directory)
     }
 
     private func readCurrentConfiguration() throws -> Configuration {

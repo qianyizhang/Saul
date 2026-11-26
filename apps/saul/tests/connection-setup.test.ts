@@ -1,31 +1,140 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { createSettingsEditor } from '../src/settings/editor';
-import { requestSettings } from '../src/configuration/client';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
-import { credentialCall } from '../src/native/credentials';
+import { requestSettings } from '../src/configuration/client';
+import { changeOutsideSetup, saveSetup, discardConnectionSetup } from '../src/connections/client';
+import { createConnectionService } from '../src/connections/service';
+import { CredentialRequestError, nativeCredentialCall } from '../src/native/credentials';
+import { requireConnectionSettings } from '../src/native/config-transport';
 import {
-  changeOutsideSetup,
-  connectionSetupKey,
-  discardConnectionSetup,
+  ConnectionSetupCoordinator,
+  ConnectionSetupNotAdmitted,
+  legacyConnectionSetupKey,
   readConnectionSetup,
-  saveConnectionSetup,
+  readConnectionSetups,
   type ConnectionSetup,
-} from '../src/settings/connection-setup';
+} from '../src/connections/setup';
+import { holdConnection } from '../src/connections/credential-hold';
+import type { CredentialRequest } from '../shared/protocol/credentials-contract.mts';
+import type { ConnectionReservation } from '../shared/protocol/connection-coordination.mts';
+import type { ConnectionDefinition } from '../shared/protocol/shared-presets-contract.mts';
+import type { SettingsState } from '../src/settings/contract';
 
 vi.mock('../src/configuration/client', () => ({ requestSettings: vi.fn() }));
-vi.mock('../src/native/credentials', () => ({ credentialCall: vi.fn() }));
-const definition = {
-  key: 'fixture-api',
-  name: 'Fixture',
-  kind: 'openai-api',
-  baseUrl: 'https://example.test/v1',
-} as const;
+vi.mock('../src/native/credentials', async (load) => ({
+  ...(await load<typeof import('../src/native/credentials')>()),
+  credentialCall: vi.fn(),
+  nativeCredentialCall: vi.fn(),
+}));
+vi.mock('../src/native/config-transport', () => ({ requireConnectionSettings: vi.fn() }));
+vi.mock('../src/connections/credential-hold', () => ({ holdConnection: vi.fn() }));
+
+const fixture = JSON.parse(
+  readFileSync(
+    new URL('../../../contracts/fixtures/connection-setup.json', import.meta.url),
+    'utf8',
+  ),
+) as {
+  definition: ConnectionDefinition;
+  cases: {
+    id: string;
+    phase: ConnectionSetup['phase'];
+    savedDefinition: ConnectionDefinition | null;
+    keyAvailable: boolean;
+    expected: 'review-credential' | 'save-definition' | 'already-saved' | 'conflict';
+  }[];
+};
+
+const definition = fixture.definition;
 const setup: ConnectionSetup = { id: 'draft', definition, phase: 'credential' };
+type Ready = Extract<SettingsState, { state: 'ready' }>;
 let storage: Record<string, unknown>;
+let saved: Ready;
+let reservations: ConnectionReservation[];
+let keyAvailable: boolean;
+const credential = vi.fn(async (request: CredentialRequest) => {
+  switch (request.action) {
+    case 'connection-capabilities':
+      return { connectionCoordination: 1 };
+    case 'connection-setups':
+      return { connectionSetups: reservations };
+    case 'connection-setup-release':
+      reservations = reservations.filter((row) => row.token !== request.token);
+      return {};
+    case 'connection-key-save':
+      keyAvailable = true;
+      return { connection: { connected: true, endpoint: request.endpoint } };
+    case 'connection-key-status':
+      return { connection: { connected: keyAvailable, endpoint: request.endpoint } };
+    default:
+      throw new Error('Unexpected fixture credential operation.');
+  }
+});
+const hold = vi.fn<typeof holdConnection>(async (request) => {
+  if (request.action !== 'connection-setup-hold') throw new Error('Wrong hold request.');
+  if (request.previousToken && !reservations.some((row) => row.token === request.previousToken))
+    throw new Error('Old setup token.');
+  const token = crypto.randomUUID();
+  reservations = [
+    ...reservations.filter((row) => row.connectionKey !== request.connectionKey),
+    {
+      connectionKey: request.connectionKey,
+      origin: 'saul',
+      operationId: request.operationId,
+      token,
+    },
+  ];
+  return {
+    evidence: { type: 'connection-held', token },
+    signal: new AbortController().signal,
+    close: vi.fn(),
+  };
+});
+const commit = vi.fn(async (latest: Ready, connections: ConnectionDefinition[]) => {
+  saved = { ...latest, settings: { ...latest.settings, connections } };
+  return saved;
+});
+const requireSettingsWriter = vi.fn(async () => {});
+const coordinator = new ConnectionSetupCoordinator({
+  readSettings: async () => saved,
+  requireSettingsWriter,
+  credential,
+  hold,
+  commit,
+});
+
 beforeEach(() => {
-  vi.resetAllMocks();
+  vi.clearAllMocks();
   storage = {};
+  reservations = [];
+  keyAvailable = true;
+  saved = {
+    state: 'ready',
+    revision: '1',
+    settings: { ...DEFAULT_CONFIGURATION, sharedCredentials: 'saul', connections: [] },
+  };
+  vi.mocked(requestSettings).mockImplementation(async () => saved);
+  vi.mocked(requireConnectionSettings).mockImplementation(requireSettingsWriter);
+  vi.mocked(nativeCredentialCall).mockImplementation(credential);
+  vi.mocked(holdConnection).mockImplementation(hold);
+  const service = createConnectionService(async (request) => {
+    const action = request as { action: string; settings: Ready['settings'] };
+    return action.action === 'read' ? saved : commit(saved, action.settings.connections);
+  });
   vi.stubGlobal('chrome', {
+    runtime: {
+      sendMessage: async ({ message }: { message: unknown }) => {
+        try {
+          return { success: true, result: await service.request(message) };
+        } catch (cause) {
+          return {
+            success: false,
+            error: (cause as Error).message,
+            ...(cause instanceof ConnectionSetupNotAdmitted && { setupNotAdmitted: true }),
+          };
+        }
+      },
+    },
     storage: {
       local: {
         get: async () => structuredClone(storage),
@@ -38,26 +147,39 @@ beforeEach(() => {
       },
     },
   });
-  vi.mocked(requestSettings).mockResolvedValue({
-    state: 'ready',
-    revision: '1',
-    settings: { ...DEFAULT_CONFIGURATION, sharedCredentials: 'saul', connections: [] },
-  });
-  vi.mocked(credentialCall).mockResolvedValue({
-    connection: { connected: true, endpoint: definition.baseUrl },
-  });
 });
 afterEach(() => vi.unstubAllGlobals());
 
-it('retains only public setup details after a conflict and finishes without rewriting a credential', async () => {
-  const commit = vi
-    .fn()
-    .mockRejectedValueOnce(new Error('settings conflict'))
-    .mockResolvedValue(undefined);
-  await expect(
-    saveConnectionSetup(setup, 'synthetic-private-value', commit, false),
-  ).rejects.toThrow('settings conflict');
-  const restored = (await readConnectionSetup())!;
+it.each(fixture.cases)(
+  'reconciles reviewed setup without resending a key: $id',
+  async (scenario) => {
+    saved.settings.connections = scenario.savedDefinition ? [scenario.savedDefinition] : [];
+    keyAvailable = scenario.keyAvailable;
+    const pending = { ...setup, phase: scenario.phase };
+    storage[legacyConnectionSetupKey] = pending;
+    const result = coordinator.save(pending, '', true);
+    if (scenario.expected === 'review-credential' || scenario.expected === 'conflict') {
+      await expect(result).rejects.toThrow(
+        scenario.expected === 'conflict' ? 'connection changed' : /submit|no longer available/i,
+      );
+      expect(await readConnectionSetup(definition.key)).toBeDefined();
+    } else {
+      await expect(result).resolves.toMatchObject({ settings: { connections: [definition] } });
+      expect(await readConnectionSetup(definition.key)).toBeUndefined();
+    }
+    expect(
+      credential.mock.calls.filter(([request]) => request.action === 'connection-key-save'),
+    ).toHaveLength(0);
+    expect(commit).toHaveBeenCalledTimes(scenario.expected === 'save-definition' ? 1 : 0);
+  },
+);
+
+it('continues setup after a lost settings outcome without replaying its credential', async () => {
+  commit.mockRejectedValueOnce(new Error('settings conflict'));
+  await expect(coordinator.save(setup, 'synthetic-private-value', false)).rejects.toThrow(
+    'settings conflict',
+  );
+  const restored = (await readConnectionSetup(definition.key))!;
   expect(restored.phase).toBe('settings');
   expect(JSON.stringify(storage)).not.toContain('synthetic-private-value');
   const remove = vi.fn();
@@ -65,48 +187,80 @@ it('retains only public setup details after a conflict and finishes without rewr
     'Finish or discard',
   );
   expect(remove).not.toHaveBeenCalled();
-  await saveConnectionSetup(restored, '', commit, true);
-  expect(vi.mocked(credentialCall).mock.calls.map(([request]) => request.action)).toEqual([
-    'connection-key-save',
-    'connection-key-status',
-  ]);
-  expect(await readConnectionSetup()).toBeUndefined();
-  await expect(saveConnectionSetup(restored, '', commit, true)).rejects.toThrow('setup changed');
+  await coordinator.save(restored, '', true);
+  expect(
+    credential.mock.calls
+      .map(([request]) => request.action)
+      .filter((action) => action === 'connection-key-save'),
+  ).toHaveLength(1);
+  expect(await readConnectionSetup(definition.key)).toBeUndefined();
+  await expect(coordinator.save(restored, '', true)).rejects.toThrow('setup changed');
 });
 
-it('requires explicit same-endpoint repair if a confirmed credential was subsequently removed', async () => {
-  const restored: ConnectionSetup = { ...setup, phase: 'settings' };
-  storage[connectionSetupKey] = restored;
-  vi.mocked(credentialCall).mockResolvedValueOnce({
-    connection: { connected: false, endpoint: definition.baseUrl },
-  });
-  const commit = vi.fn();
-  await expect(saveConnectionSetup(restored, '', commit, true)).rejects.toThrow(
-    'no longer available',
-  );
+it('preserves another connection’s recovery and lets an unrelated setup complete', async () => {
+  commit.mockRejectedValueOnce(new Error('settings conflict'));
+  await expect(coordinator.save(setup, 'key', false)).rejects.toThrow('settings conflict');
+  const other = { ...definition, key: 'other-api', name: 'Other' };
+  await coordinator.save({ ...setup, id: 'other', definition: other }, 'other-key', false);
+  expect(saved.settings.connections).toEqual([other]);
+  expect(await readConnectionSetups()).toMatchObject([{ definition, phase: 'settings' }]);
+  expect(reservations).toMatchObject([{ connectionKey: definition.key }]);
+});
+
+it('requires the installed settings writer before writing any credential', async () => {
+  requireSettingsWriter.mockRejectedValueOnce(new Error('update storage helper'));
+  await expect(coordinator.save(setup, 'key', false)).rejects.toThrow('update storage helper');
+  expect(credential).not.toHaveBeenCalled();
+  expect(hold).not.toHaveBeenCalled();
+});
+
+it('keeps the form retryable after a definite initial admission rejection', async () => {
+  hold.mockRejectedValueOnce(new CredentialRequestError('Connection is busy.', 'connection_busy'));
+  await expect(saveSetup(setup, 'key', false)).rejects.toBeInstanceOf(ConnectionSetupNotAdmitted);
+  expect(await readConnectionSetup(definition.key)).toBeUndefined();
   expect(commit).not.toHaveBeenCalled();
-  await expect(saveConnectionSetup(restored, '', commit, true)).rejects.toThrow('setup changed');
-  expect(credentialCall).toHaveBeenCalledTimes(1);
-  await saveConnectionSetup((await readConnectionSetup())!, 'new-value', commit, true);
+  expect(credential.mock.calls.some(([request]) => request.action === 'connection-key-save')).toBe(
+    false,
+  );
+  await expect(saveSetup(setup, 'key', false)).resolves.toMatchObject({
+    settings: { connections: [definition] },
+  });
+});
+
+it('restores a previous recovery after a definite rejection and retains uncertain admission evidence', async () => {
+  storage[legacyConnectionSetupKey] = setup;
+  hold.mockRejectedValueOnce(
+    new CredentialRequestError('Another app is setting up.', 'connection_reserved'),
+  );
+  await expect(saveSetup(setup, 'key', true)).rejects.toBeInstanceOf(ConnectionSetupNotAdmitted);
+  expect(await readConnectionSetup(definition.key)).toEqual(setup);
+
+  hold.mockImplementationOnce(async (...args) => {
+    const admitted = hold.getMockImplementation()!;
+    await admitted(...args);
+    throw new Error('Lost hold acknowledgement.');
+  });
+  await expect(saveSetup(setup, 'key', true)).rejects.toThrow('Lost hold acknowledgement.');
+  const pending = (await readConnectionSetup(definition.key))!;
+  expect(pending.operationId).toBe(reservations[0]?.operationId);
+  expect(credential.mock.calls.some(([request]) => request.action === 'connection-key-save')).toBe(
+    false,
+  );
+  await expect(saveSetup(pending, 'key', true)).resolves.toMatchObject({
+    settings: { connections: [definition] },
+  });
+});
+
+it('requires explicit recovery when another app released the reserved setup', async () => {
+  commit.mockRejectedValueOnce(new Error('settings conflict'));
+  await expect(coordinator.save(setup, 'key', false)).rejects.toThrow('settings conflict');
+  reservations = [];
+  const record = (await readConnectionSetup(definition.key))!;
+  await expect(coordinator.save(record, '', true)).rejects.toThrow('setup was released');
+  expect(hold).toHaveBeenCalledOnce();
   expect(commit).toHaveBeenCalledOnce();
-});
-
-it('rejects stale routes and malformed receipts before any credential write', async () => {
-  await expect(
-    saveConnectionSetup({ ...setup, previous: definition }, 'value', vi.fn(), false),
-  ).rejects.toThrow('connection changed');
-  storage[connectionSetupKey] = { ...setup, phase: ['credential'] };
-  await expect(readConnectionSetup()).rejects.toThrow('could not be read');
-  expect(credentialCall).not.toHaveBeenCalled();
-});
-
-it('discard clears the reviewed receipt only', async () => {
-  storage[connectionSetupKey] = setup;
-  await expect(discardConnectionSetup('older', setup.phase)).rejects.toThrow('setup changed');
-  expect(await readConnectionSetup()).toMatchObject(setup);
-  await discardConnectionSetup(setup.id, setup.phase);
-  expect(await readConnectionSetup()).toBeUndefined();
-  expect(credentialCall).not.toHaveBeenCalled();
+  await coordinator.discard(record.id, 'settings');
+  expect(await readConnectionSetup(definition.key)).toBeUndefined();
 });
 
 it('rejects a stale sign-out or sign-in before acting on a reassigned account', async () => {
@@ -116,15 +270,7 @@ it('rejects a stale sign-out or sign-in before acting on a reassigned account', 
     kind: 'chatgpt-plan',
     accountId: 'account-a',
   } as const;
-  vi.mocked(requestSettings).mockResolvedValue({
-    state: 'ready',
-    revision: '2',
-    settings: {
-      ...DEFAULT_CONFIGURATION,
-      sharedCredentials: 'saul',
-      connections: [{ ...previous, key: 'replacement' }],
-    },
-  });
+  saved.settings.connections = [{ ...previous, key: 'replacement' }];
   const auth = vi.fn();
   await expect(changeOutsideSetup(previous.key, previous, auth)).rejects.toThrow(
     'connection changed',
@@ -136,39 +282,36 @@ it('rejects a stale sign-out or sign-in before acting on a reassigned account', 
 });
 
 it.each(['finish', 'discard'] as const)(
-  'reopens a managed connection with a local binding after a Settings conflict and can %s',
+  'projects browser-local fields at the service boundary and can %s a managed connection',
   async (action) => {
-    const settings = {
-      ...structuredClone(DEFAULT_CONFIGURATION),
-      sharedCredentials: 'saul' as const,
-      connections: [definition],
-      connectionProfiles: { [definition.key]: 'local-profile' },
-    };
-    vi.mocked(requestSettings).mockResolvedValue({ state: 'ready', revision: '1', settings });
-    const editor = createSettingsEditor(requestSettings);
-    await editor.open();
-    const previous = editor.getSnapshot().configuration.connections[0]!;
-    expect(previous.localProfileId).toBe('local-profile');
-
-    const commit = vi.fn().mockRejectedValueOnce(new Error('settings conflict'));
+    saved.settings.connections = [definition];
+    const localDefinition = { ...definition, localProfileId: 'local-only-profile' };
+    const renamed = { ...localDefinition, name: 'Reviewed managed connection' };
+    commit.mockRejectedValueOnce(new Error('settings conflict'));
     await expect(
-      saveConnectionSetup({ ...setup, previous }, 'private-value', commit, false),
+      saveSetup(
+        { ...setup, definition: renamed, previous: localDefinition },
+        'private-value',
+        false,
+      ),
     ).rejects.toThrow('settings conflict');
-    expect(JSON.stringify(storage)).not.toMatch(/localProfileId|local-profile|private-value/);
-    const restored = (await readConnectionSetup())!;
+    const restored = (await readConnectionSetup(definition.key))!;
     expect(restored.previous).toEqual(definition);
-    expect(restored.phase).toBe('settings');
-    if (action === 'finish') {
-      await saveConnectionSetup(restored, '', commit, true);
-      expect(vi.mocked(credentialCall).mock.calls.map(([request]) => request.action)).toEqual([
-        'connection-key-save',
-        'connection-key-status',
-      ]);
-    } else {
-      await discardConnectionSetup(restored.id, restored.phase);
-      expect(credentialCall).toHaveBeenCalledTimes(1);
-    }
-    expect(await readConnectionSetup()).toBeUndefined();
-    editor.close();
+    expect(JSON.stringify(storage)).not.toMatch(/localProfileId|local-only-profile|private-value/);
+    await expect(discardConnectionSetup('stale', restored.phase)).rejects.toThrow('setup changed');
+    if (action === 'finish') await saveSetup(restored, '', true);
+    else await discardConnectionSetup(restored.id, restored.phase);
+    expect(await readConnectionSetup(definition.key)).toBeUndefined();
+    expect(
+      credential.mock.calls.filter(([request]) => request.action === 'connection-key-save'),
+    ).toHaveLength(1);
   },
 );
+
+it('preserves malformed receipts and rejects them before a credential mutation', async () => {
+  storage[legacyConnectionSetupKey] = { ...setup, phase: ['credential'] };
+  await expect(readConnectionSetups()).rejects.toThrow('could not be read');
+  await expect(saveSetup(setup, 'key', false)).rejects.toThrow('could not be read');
+  expect(storage[legacyConnectionSetupKey]).toBeDefined();
+  expect(credential).not.toHaveBeenCalled();
+});

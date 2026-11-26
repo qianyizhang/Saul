@@ -10,13 +10,27 @@ import {
 import { Fragments } from '../../shared/protocol/fragments.mts';
 import { workspaceSender } from '../platform/chrome/sender';
 
+export class CredentialRequestError extends Error {
+  constructor(
+    message: string,
+    readonly reason?: string,
+  ) {
+    super(message);
+  }
+}
+
 export async function* credentialEvents(
   request: CredentialRequest,
   signal?: AbortSignal,
+  direct = false,
 ): AsyncGenerator<CredentialEvent> {
   validateCredentialRequest(request);
   signal?.throwIfAborted();
-  const port = chrome.runtime.connect({ name: CREDENTIALS_PORT });
+  const port = direct
+    ? chrome.runtime.connectNative(CREDENTIALS_HOST)
+    : chrome.runtime.connect({ name: CREDENTIALS_PORT });
+  const id = direct ? crypto.randomUUID() : undefined;
+  const packets = direct ? new Fragments() : undefined;
   const queue: CredentialEvent[] = [];
   let ended = false,
     wake = () => {};
@@ -24,14 +38,28 @@ export async function* credentialEvents(
     ended = true;
     wake();
     try {
-      port.postMessage({ cancel: true });
+      port.postMessage(id ? { version: CREDENTIALS_VERSION, id, cancel: true } : { cancel: true });
     } catch {
       /* Disconnected. */
     }
     port.disconnect();
   };
-  port.onMessage.addListener((event: unknown) => {
+  port.onMessage.addListener((packet: unknown) => {
     try {
+      let event = packet;
+      if (packets) {
+        const reply = packets.accept(packet);
+        if (reply === undefined) return;
+        if (
+          !reply ||
+          typeof reply !== 'object' ||
+          !('id' in reply) ||
+          reply.id !== id ||
+          !('event' in reply)
+        )
+          throw new Error('Invalid credential reply.');
+        event = reply.event;
+      }
       validateCredentialEvent(event);
       queue.push(event);
     } catch {
@@ -50,7 +78,7 @@ export async function* credentialEvents(
   });
   signal?.addEventListener('abort', abort, { once: true });
   try {
-    port.postMessage(request);
+    port.postMessage(id ? { version: CREDENTIALS_VERSION, id, request } : request);
     while (!ended) {
       if (!queue.length)
         await new Promise<void>((resolve) => {
@@ -59,7 +87,7 @@ export async function* credentialEvents(
       signal?.throwIfAborted();
       const event = queue.shift();
       if (!event) continue;
-      if (event.type === 'error') throw new Error(event.message);
+      if (event.type === 'error') throw new CredentialRequestError(event.message, event.reason);
       if (event.type === 'complete' || event.type === 'result') ended = true;
       yield event;
     }
@@ -82,7 +110,16 @@ export async function credentialCall(
 export async function nativeCredentialCall(
   request: Exclude<
     CredentialRequest,
-    { action: 'login' | 'generate' | 'api-chat' | 'api-realtime' | 'api-image' }
+    {
+      action:
+        | 'login'
+        | 'generate'
+        | 'api-chat'
+        | 'api-realtime'
+        | 'api-image'
+        | 'connection-run-hold'
+        | 'connection-setup-hold';
+    }
   >,
 ): Promise<Record<string, unknown>> {
   validateCredentialRequest(request);
@@ -120,7 +157,8 @@ export async function nativeCredentialCall(
         )
           throw new Error('Invalid credential reply.');
         validateCredentialEvent(reply.event);
-        if (reply.event.type === 'error') finish(new Error(reply.event.message));
+        if (reply.event.type === 'error')
+          finish(new CredentialRequestError(reply.event.message, reply.event.reason));
         else if (reply.event.type === 'result') finish(undefined, reply.event);
         else finish(new Error('Unexpected credential control reply.'));
       } catch (error) {
@@ -167,6 +205,15 @@ export function initCredentialBridge() {
       }
       native?.disconnect();
     };
+    const cancel = () => {
+      if (closed) return;
+      try {
+        native?.postMessage({ version: CREDENTIALS_VERSION, id, cancel: true });
+      } catch {
+        /* Disconnected. */
+      }
+      finish();
+    };
     port.onMessage.addListener((message: unknown) => {
       if (started) {
         if (
@@ -174,14 +221,8 @@ export function initCredentialBridge() {
           typeof message === 'object' &&
           'cancel' in message &&
           message.cancel === true
-        ) {
-          try {
-            native?.postMessage({ version: CREDENTIALS_VERSION, id, cancel: true });
-          } catch {
-            /* Disconnected. */
-          }
-          finish();
-        }
+        )
+          cancel();
         return;
       }
       started = true;
@@ -190,7 +231,7 @@ export function initCredentialBridge() {
         if (
           offscreen &&
           !(
-            ['generate', 'api-chat', 'api-image'].includes(message.action) ||
+            ['generate', 'api-chat', 'api-image', 'connection-run-hold'].includes(message.action) ||
             (message.action === 'connection-catalog' &&
               (message.intent === 'display' || (message.intent === undefined && !message.force)))
           )
@@ -243,20 +284,25 @@ export function initCredentialBridge() {
               'Saul credential helper disconnected or is not installed. Update it and retry.',
           });
         });
-        timer = setTimeout(
-          () => {
-            try {
-              native?.postMessage({ version: CREDENTIALS_VERSION, id, cancel: true });
-            } catch {
-              /* Disconnected. */
-            }
-            finish({
-              type: 'error',
-              message: 'Saul credential operation timed out. Retry explicitly.',
-            });
-          },
-          login ? 320_000 : 190_000,
-        );
+        if (
+          message.action !== 'connection-run-hold' &&
+          message.action !== 'connection-setup-hold'
+        ) {
+          timer = setTimeout(
+            () => {
+              try {
+                native?.postMessage({ version: CREDENTIALS_VERSION, id, cancel: true });
+              } catch {
+                /* Disconnected. */
+              }
+              finish({
+                type: 'error',
+                message: 'Saul credential operation timed out. Retry explicitly.',
+              });
+            },
+            login ? 320_000 : 190_000,
+          );
+        }
         native.postMessage({ version: CREDENTIALS_VERSION, id, request: message });
       } catch (error) {
         finish({
@@ -265,8 +311,6 @@ export function initCredentialBridge() {
         });
       }
     });
-    port.onDisconnect.addListener(() => {
-      if (!login) finish();
-    });
+    port.onDisconnect.addListener(cancel);
   });
 }

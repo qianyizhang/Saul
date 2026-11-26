@@ -38,3 +38,13 @@ export async function commitSharedConfiguration(
   const event = await configReply(request);
   return { library: event.library, config: event.config };
 }
+
+export async function requireConnectionSettings() {
+  try {
+    await configReply({ action: 'connection-settings-capabilities' });
+  } catch (cause) {
+    throw new Error('Update Saul’s local storage helper before managing shared connections.', {
+      cause,
+    });
+  }
+}

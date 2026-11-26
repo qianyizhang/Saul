@@ -37,7 +37,7 @@ import SwiftUI
         let model = fixtureModel(
             directory: directory, connectionChecks: checks,
             client: .init(
-                saveKey: { _, key in verifiedKey = key == "fixture-repair" },
+                saveKey: { _, key, _ in verifiedKey = key == "fixture-repair" },
                 keyStatus: { connection in
                     ConnectionStatus(connected: verifiedKey, endpoint: connection.endpoint)
                 }))
