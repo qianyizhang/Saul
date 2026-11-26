@@ -104,7 +104,7 @@ node scripts/setup.mts --components ez --verify
 
 ## Shared Saul credentials on macOS
 
-- **Installation and update order** — Install the [Apple-signed owner](../apps/ez/docs/releasing.md#local-signing-and-installation) before updating either client. New clients reject older owners that can import on account read.
+- **Installation and update order** — Stop active shared runs and finish or review pending setup. Install the [Apple-signed owner](../apps/ez/docs/releasing.md#local-signing-and-installation) and update the Node settings helper, extension and EZ before relying on cross-app setup protection. Reload the extension and relaunch EZ. [Mixed-version guarantees](../contracts/credentials.md#shared-connection-setup-and-execution)
 - **Binding** — Chrome uses **Settings → Preferences → Integrations → Connect to Saul** with its existing extension ID. EZ uses the same owner. Either UI can run alone.
 - **Migration** — Shared registrations and pauses stay available. Old credential records remain untouched. For a standalone-only registration, sign in through Connections and choose the account explicitly.
 - **Ownership** — [Credential compatibility and retry](../contracts/credentials.md#retirement-and-removal).

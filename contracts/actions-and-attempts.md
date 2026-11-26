@@ -40,7 +40,7 @@ requires explicit action. Saved history and configuration remain intact unless
 explicitly deleted or reset.
 
 [Attempt fixtures](fixtures/attempts.json) exercise Saul's ReadingRunner and EZ's
-AttemptExecution through AppModel. They check send counts, output and saved
+AttemptExecution through LookupSession. They check send counts, output and saved
 success across initial/terminal save failure, provider error, missing completion
 and success. The fixtures assert the saved cause for Stop and interruption.
 A terminal save failure can omit transient output.

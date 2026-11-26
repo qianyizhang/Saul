@@ -43,10 +43,7 @@ export function sameDefinition(a?: ConnectionDefinition, b?: ConnectionDefinitio
   );
 }
 
-export function matchesReviewedSetup(
-  current: ConnectionSetup | undefined,
-  reviewed: ConnectionSetup,
-) {
+function matchesReviewedSetup(current: ConnectionSetup | undefined, reviewed: ConnectionSetup) {
   return (
     current?.id === reviewed.id &&
     current.phase === reviewed.phase &&
@@ -129,7 +126,7 @@ export async function readConnectionSetup(key: string) {
   return (await readConnectionSetups()).find((setup) => setup.definition.key === key);
 }
 
-export async function writeConnectionSetup(key: string, setup?: ConnectionSetup) {
+async function writeConnectionSetup(key: string, setup?: ConnectionSetup) {
   await navigator.locks.request(connectionSetupKey, async () => {
     const pending = new Map(
       (await readConnectionSetups()).map((record) => [record.definition.key, record]),

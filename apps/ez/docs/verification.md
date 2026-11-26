@@ -7,6 +7,11 @@
 - **SwiftPM** — Use `EZ_SWIFTPM_DISABLE_SANDBOX=1 make check` if nested manifest sandboxing fails. The outer sandbox stays active. Differently capitalized checkout paths can require clearing generated state.
 - **Packaging** — Validate the bundle through [the release guide](releasing.md). Icon dimensions alone cannot establish `iconutil` success.
 
+Connection ownership is covered by native [process and credential checks](../../../native/credentials/Tests/CredentialOwnerChecks/CoordinationChecks.swift)
+and [app recovery checks](../Tests/EZStateChecks/ConnectionSetupStateChecks.swift).
+The latter consume the [same recovery cases as Saul](../../../contracts/fixtures/connection-setup.json).
+Use `make test-services test-ui` for Services delivery and native keyboard/focus checks.
+
 ## Recently deleted · 2026-11-26
 
 The isolated Surface Preview restored a saved lookup with its original answer, moved it back

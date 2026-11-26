@@ -78,6 +78,8 @@ it.each([
   ['src/custom-actions/probe.ts', "import '../calls/editor';"],
   ['src/reading/probe.ts', "import '../calls/client';"],
   ['src/configuration/definition.ts', "import '../reading/prompts';"],
+  ['src/configuration/codec.ts', "import './store';"],
+  ['src/configuration/resolver.ts', "import '../reading/prompts';"],
 ])('enforces one-way feature dependencies from %s', async (filePath, source) => {
   const [result] = await lint.lintText(source, { filePath });
   expect(

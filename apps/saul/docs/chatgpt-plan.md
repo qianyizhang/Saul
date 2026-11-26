@@ -6,7 +6,7 @@ Saul supports the direct **Sign in with ChatGPT** preview for local and open-sou
 
 1. Build and install the selected apps and helpers using the [setup guide](../../../docs/setup.md).
 2. Open **Settings → Preferences → Integrations → Connect to Saul** in Chrome. EZ uses the same signed owner by default; reconnect it in Preferences → Integrations if disconnected.
-3. Open **Settings → Connections** in either app. For a saved connection, choose **Sign in again**. For a new connection, add **ChatGPT plan** and choose a saved account or **Register a new app**. Select **Copy name and open ChatGPT**, then replace `Saul` with the copied name in ChatGPT before approving. Back in Settings, check **I used … in ChatGPT** if you pasted that name, then save the connection.
+3. Open **Settings → Connections** in either app. In Chrome’s toolbar popup, choose **Open Connections in a tab** before plan sign-in. Keep that workspace tab open until authorization finishes. Closing it cancels the pending sign-in. For a saved connection, choose **Sign in again**. For a new connection, add **ChatGPT plan** and choose a saved account or **Register a new app**. Select **Copy name and open ChatGPT**, then replace `Saul` with the copied name in ChatGPT before approving. Back in Settings, check **I used … in ChatGPT** if you pasted that name, then save the connection.
 4. In **Presets**, choose the saved connection, an available model, effort and speed, then Save. Catalog checks do not generate. Unavailable saved model options block until explicitly changed.
 
 A connection saved in either app is available to both. Managed connections pin the

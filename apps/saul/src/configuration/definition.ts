@@ -29,7 +29,7 @@ export interface Configuration {
   /** Per-installation choice; never portable to another machine's settings. */
   sharedCredentials?: 'saul' | 'disconnected';
   summaryPdfProcessing?: 'attachment' | 'local';
-  /** Legacy Calls migration input. Call selection writes go through the Calls store. */
+  /** Legacy Calls migration input. Custom Actions persists the saved Call selection. */
   summaryPresetId?: string;
   /** Legacy Calls migration input for a connection-only summary. */
   summaryConnectionKey?: string;

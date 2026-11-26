@@ -72,7 +72,9 @@ it would also erase the evidence needed to reject stale work. Per-binding
 SQLite files in the adjacent `settings.json.connections/` directory hold live
 read or write locks. Process exit releases those locks. Both settings writers
 and the signed owner must be upgraded for cross-app fencing. An older writer
-may honor the document lock while ignoring a connection reservation. Chrome-local commits are separate; Saul reports uncertain
+may honor the document lock while ignoring a connection reservation. See the
+[shared setup contract](credentials.md#shared-connection-setup-and-execution).
+Chrome-local commits are separate. Saul reports uncertain
 effects without replay and offers [Settings review](../apps/saul/docs/product.md#settings-and-models).
 
 Shared definitions come only from `modelPresets`. Saul's scope owns local

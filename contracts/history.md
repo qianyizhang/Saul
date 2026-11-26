@@ -30,10 +30,17 @@ behavior. One record can participate in several views. Feature owners define mea
 view semantics and payload versions. History owns identity, visibility, ordering, consistent reads
 and atomic commits. SQLite layout, transport names and image chunking belong to the adapters.
 
-Each supported wire operation declares its input schema, result schema and reconnect policy.
-Validate the request before it can mutate storage and validate the reply before reporting success.
-Reuse schemas for identical values and derive caller types where practical. Operations sharing a
-shape can still have different effects, access rules or replay policies.
+The Saul [operation registry](../apps/saul/shared/protocol/history-protocol.mts)
+declares the input, result, reconnect policy and affected record targets. It
+rejects unrecognized fields on incoming writes and passes parsed command values,
+including defaults, to storage. The Node repository resolves any indirect target
+from SQLite within the same transaction. Existing result and stored-row readers
+keep their compatibility rules.
+
+A receipt fingerprints the original wire command and owner. An exact valid retry
+from an earlier client still matches when the parser supplies a default. A legacy
+command containing a field the writer now rejects requires an explicit refresh
+to inspect its outcome. The database schema stays at version 5.
 
 | Operation                                               | Observable contract                                                                                                                                                                                                                                                                                                                                 |
 | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

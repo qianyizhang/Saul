@@ -22,7 +22,9 @@ retirement decision.
 - Preserve the shared owner's host ID, issued client IDs, identities and grants
   on existing registrations. Never combine one registration's tokens with
   another's client ID. New registrations use `agent_name_hint=Saul`. Serialize
-  refresh and writes across processes. Pin the account, provider, model and
+  refresh and changes to stored account records across processes. Interactive
+  OAuth releases that storage lock while waiting for browser approval. The
+  owner rereads the registration before saving the verified result. Pin the account, provider, model and
   billing route for a run.
 - Shared mode requires explicit opt-in. A lost owner blocks affected operations. It never triggers an
   app-local credential fallback, automatic replay or a different billing route.
@@ -55,8 +57,11 @@ cannot use a retired standalone route or switch to another registration.
 
 New clients send request envelope version 2. The new signed owner accepts both
 versions 1 and 2 for supported operations. Retired import and cleanup operations
-are rejected in either version. Older owners reject version 2 before reading or
-importing credentials. Update the signed owner if a new client cannot connect.
+are rejected in either version. Owners predating envelope version 2 reject it
+before reading credentials. Some version 2 installations predate connection
+coordination. Managed setup checks the signed owner’s capability before a
+credential change. Saul also checks its separately installed settings writer
+before setup that saves a definition.
 Keep app, extension, native-host and signing identities stable across upgrades.
 
 Sign out or Remove key affects the shared connection in both apps and states
@@ -93,15 +98,9 @@ The signed owner stores API keys with their immutable endpoint, separately from
 that document. Key replacement cannot change the endpoint. Removal leaves a
 retired binding so the same ID cannot later send another key to another origin.
 Plan definitions pin their account registration; an unbound migrated entry asks
-for an explicit selection. Setup writes credentials before the public definition;
-each app retains its own public setup details until the definition is confirmed or
-the user discards setup. The record holds the connection ID, proposed and previous
-definition, credential step and optional confirmed app name. The API key goes
-directly to the signed owner. After restarting, **Finish setup** checks current
-settings and the original binding. It skips settings already applied and checks the original definition
-before adding a connection or completing its binding. A lost credential acknowledgement
-requires an explicit credential action. Discard clears the local setup record.
-It does not silently switch or delete another connection. Both setup forms reauthorize
+for an explicit selection. A connection key keeps its original endpoint or plan
+registration through setup and Retry. The [setup and execution rules](#shared-connection-setup-and-execution)
+apply to both apps. Both setup forms reauthorize
 the selected registration, including on a new or unbound connection. Only
 **Register a new app → Copy name and open ChatGPT** omits the account ID to create a
 registration. Equal email labels never justify merging registrations or their tokens.
@@ -162,3 +161,43 @@ send these fields.
 [Browser Speak](../apps/saul/docs/chatgpt-plan.md#speech-preview) and
 [EZ Speak](../apps/ez/docs/design.md#speak-preview) use short-lived Realtime
 authorization, with no long-lived secret in preview state.
+
+## Shared connection setup and execution
+
+When Saul starts replacing a shared API key, EZ can see who owns setup for
+that connection. While setup is active, the other app directs the user to
+its origin. Each app retains its own reviewed definition, previous definition,
+phase, operation identity and optional confirmed app name. Recovery records
+contain public metadata. Existing single-record recovery files and browser
+records remain readable.
+
+The signed owner reserves the connection and its bound registration, if any.
+It admits multiple readers of the same credential. A conflicting credential
+change reports that the connection is in use. A Saul Call batch holds the
+credential from its first signed model request until settlement or Stop. A
+custom Call that completes locally acquires no hold. Each signed request in
+a batch checks the binding generation. Lost protection stops the batch. A
+Realtime preview needs the shared credential to obtain its short-lived client
+secret. Local playback uses the issued authorization.
+
+Credential and settings saves have separate acknowledgements. After the
+credential succeeds, the coordinator rechecks the reviewed definition against
+current settings and saves using the current revision. The writer validates
+the reservation token while holding the settings transaction. Independent
+preset edits survive. An already applied definition needs no second write.
+After a lost credential acknowledgement the user must explicitly review and
+submit the credential action. **Discard setup** releases its reservation and
+clears the local recovery record.
+
+If the origin has stopped, the other app can offer **Release setup**. Confirmation
+explains that the credential may already have changed. Release rechecks inactivity
+and the exact reservation, preserves the credential and settings, and invalidates
+the old token. A returning app must start a new setup to write again.
+
+Upgrade the signed owner, the Node settings helper, Saul and EZ together for
+the full guarantee. An older settings writer can ignore a reservation. An
+older batch client announces only individual provider requests, so a newer
+owner can protect those requests but cannot see the gap between them.
+[Coordination decision](../docs/adr/0008-coordinate-shared-connection-work.md) ·
+[Settings files and locking](configuration.md#unified-configuration-scopes) ·
+[Recovery fixtures](fixtures/connection-setup.json)

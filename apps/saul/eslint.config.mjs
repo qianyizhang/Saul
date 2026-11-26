@@ -101,7 +101,7 @@ export default ts.config(
   {
     files: [
       'src/settings/{draft,recovery}.ts',
-      'src/configuration/{definition,inspect,record,resolve}.ts',
+      'src/configuration/{codec,definition,inspect,resolver}.ts',
     ],
     rules: {
       'no-restricted-globals': [

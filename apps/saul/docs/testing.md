@@ -102,6 +102,14 @@ pnpm exec playwright show-trace ../../.artifacts/saul/e2e/latest/results/<case>/
 - **Delivered checks** — `pnpm test` builds and exercises `.build/native/*.mjs`, adjacent assets, retained generations and emitted JXA. Pure unit checks import source.
 - **Development entry points** — `pnpm saul`, `pnpm mcp`, `pnpm native:install`. Each builds before use.
 
+## Connections
+
+Exercise [Settings recovery and sign-in](../tests/e2e/connections.spec.ts) in
+disposable Chromium. Cases include abrupt tab closure during sign-in, completed
+credential work after view closure, and explicit release from the other app.
+The [setup coordinator tests](../tests/connection-setup.test.ts) also consume
+the [shared recovery fixture](../../../contracts/fixtures/connection-setup.json).
+
 ## Browser annotation checks
 
 - **Contract** — [Store and runner cases](../tests/browser-annotations.test.ts) cover revisions, scope, idempotency, retention, image requests and atomic reply completion.

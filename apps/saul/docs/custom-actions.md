@@ -109,7 +109,9 @@ requested. An idle restart is not a retry of any job.
 
 The unified JSON `apps.saul.calls` scope owns saved custom Call choices and the
 current Write preset reference for Summarize when the configuration helper is
-available. Browser-only installations keep these choices locally. The Call editor
+available. The [Custom Actions store](../src/custom-actions/store.ts) writes
+that scope and supplies approved revisions to Calls and Annotations. Browser-only
+installations keep these choices locally. The Call editor
 owns selection commands and the active build. Chrome's trusted extension storage
 holds its draft separately from saved choices, through validated background messages.
 Draft saves never rewrite selection. A failed or uncertain selection save is reported
@@ -136,9 +138,9 @@ node scripts/setup.mts --components actions --extension-id YOUR_EXTENSION_ID
 `com.saul.actions` is a third independently selectable native host. It does not
 replace `com.saul.chatgpt` or `com.saul.tabs`. The installer preserves their payloads
 and registrations and retains runtime generations for explicit recovery. ChatGPT
-inference still passes through the existing ChatGPT credential/refresh owner;
-custom Calls receive no tokens or direct SQLite interface. API credentials remain in
-trusted extension contexts. See [setup](../../../docs/setup.md).
+inference still passes through the signed credential owner. Custom Calls
+receive no tokens or direct SQLite interface. Browser-owned API keys remain in
+trusted extension contexts. The signed owner keeps shared API keys in Keychain. See [setup](../../../docs/setup.md).
 
 **User modules are trusted local Node code with OS permissions.** Static checks
 define the supported contract. Workers and import restrictions are not a security

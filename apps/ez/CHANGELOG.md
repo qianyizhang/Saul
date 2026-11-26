@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Connections identifies setup started in Saul. An inactive reservation can be
+  explicitly released while preserving the saved credential and definition.
+
 - New run uses a borderless Notebook editor. History opens on Answer, with
   Details and Saved text alongside it. Long recorded text supports Find and Copy.
 

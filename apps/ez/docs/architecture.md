@@ -23,7 +23,10 @@ owns native presentation. [ADR 0001](adr/0001-screenshot-first-design-review.md)
 
 ConnectionSession admits managed commands. A [setup coordinator](../Sources/EZ/Connections/ConnectionSetupCoordinator.swift)
 uses the reviewed connection and its app-local recovery record to finish a transaction.
-AppModel supplies the configuration store and publishes accepted settings. An explicit continuation checks the original account or endpoint.
+The [setup store](../Sources/EZ/Connections/ConnectionSetupStore.swift) reads per-connection
+records, including the earlier single-record format. AppModel supplies the configuration
+store and publishes accepted settings. An explicit continuation checks the original
+account or endpoint.
 [Setup contract](../../../contracts/credentials.md#connection-identity-and-catalogs)
 
 ## Direct plan-backed requests

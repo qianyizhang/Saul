@@ -27,13 +27,14 @@
 
 ## Data ownership
 
-| Data                       | Owner                                                                                                                                                         |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Connections and presets    | Shared local settings. Node storage helper for Saul, Swift adapter for EZ. [Configuration scopes](../contracts/configuration.md#unified-configuration-scopes) |
-| Actions                    | App-scoped configuration. Cross-app import and multi-device sync are outside the shared contract.                                                             |
-| Managed credentials        | Signed owner. Browser-local API connections keep app-owned keys. [Credential contract](../contracts/credentials.md)                                           |
-| History                    | [Shared SQLite](#shared-history)                                                                                                                              |
-| Drafts and active requests | App-local runtime state                                                                                                                                       |
+| Data                       | Owner                                                                                                                                                                                                                      |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Connections and presets    | Shared local settings. Node storage helper for Saul, Swift adapter for EZ. [Configuration scopes](../contracts/configuration.md#unified-configuration-scopes)                                                              |
+| Actions                    | App-scoped configuration. Cross-app import and multi-device sync are outside the shared contract.                                                                                                                          |
+| Managed credentials        | Signed owner. Browser-local API connections keep app-owned keys. [Credential contract](../contracts/credentials.md)                                                                                                        |
+| Connection setup           | Each app retains per-connection public recovery records. The signed owner admits credential use. Both [settings writers](../contracts/configuration.md#unified-configuration-scopes) check the same reservation at commit. |
+| History                    | [Shared SQLite](#shared-history)                                                                                                                                                                                           |
+| Drafts and active requests | App-local runtime state                                                                                                                                                                                                    |
 
 ## Shared history
 
@@ -53,7 +54,9 @@
 ## Managed connections
 
 - **Binding, migration and model choices** — [Configuration](../contracts/configuration.md#connections-and-presets).
-- **Credential lifecycle and catalogs** — [Credentials](../contracts/credentials.md#connection-identity-and-catalogs).
+- **Catalogs and identity** — [Credential contract](../contracts/credentials.md#connection-identity-and-catalogs).
+- **Setup, active runs and recovery** — [Shared admission rules](../contracts/credentials.md#shared-connection-setup-and-execution) and [coordination decision](adr/0008-coordinate-shared-connection-work.md).
+- **Module ownership across apps** — [Architecture consolidation inventory](architecture-consolidation.md#implemented-ownership).
 
 ### Provider, connection and protocol
 

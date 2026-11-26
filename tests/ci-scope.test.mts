@@ -21,13 +21,13 @@ describe('PR check scope', () => {
   });
 
   it('checks native state or installation only when those inputs change', () => {
-    expect(selectChecks(['apps/ez/Sources/EZ/LookupDraft.swift'])).toMatchObject({
+    expect(selectChecks(['apps/ez/Sources/EZ/Lookup/LookupDraft.swift'])).toMatchObject({
       smoke: false,
       native: true,
       state: true,
       install: false,
     });
-    expect(selectChecks(['apps/ez/scripts/install.sh'])).toMatchObject({
+    expect(selectChecks(['apps/ez/scripts/install-app.sh'])).toMatchObject({
       smoke: false,
       native: true,
       state: false,

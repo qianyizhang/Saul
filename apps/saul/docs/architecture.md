@@ -68,6 +68,7 @@ Content receives action names and safe choices, never storage or credentials.
 | Reading                                      | [Background host](../src/reading/background.ts) validates callers, admits work, broadcasts preferences and reopens sources. The [runner](../src/reading/runner.ts) owns execution.                    |
 | Configuration                                | [Definition](../src/configuration/definition.ts), [inspection](../src/configuration/inspect.ts), [execution resolution](../src/configuration/resolver.ts), and [store](../src/configuration/store.ts) |
 | Providers                                    | [Requests](../shared/model/execution-route.ts), [model stream](../src/providers/stream.ts) and shared bounded [SSE framing](../shared/protocol/sse.mts)                                               |
+| Custom Actions                               | [Library and saved choices](../src/custom-actions/store.ts) and [host client](../src/custom-actions/host-client.ts) serve Calls and Annotations. Each feature admits its own work.                    |
 | Call selection, capture, execution and saves | [Calls and summaries](calls.md#runtime-owners)                                                                                                                                                        |
 | Annotation captures, revisions and replies   | [Annotations](annotations.md#interface-and-ownership)                                                                                                                                                 |
 | ChatGPT browser handoffs                     | [Deep dive background worker](../src/deep-dives/background.ts). Saved links and instructions belong to the originating Chrome profile. Temporary tab bindings live for the browser session.           |
@@ -144,7 +145,8 @@ warnings and confirmation; stale callbacks cannot replace a newer session.
 The [background connection service](../src/connections/service.ts) admits managed setup.
 Its [setup coordinator](../src/connections/setup.ts) checks the reviewed definition and
 commits it against current saved settings. The Settings view can close after the
-credential acknowledgement. Explicit recovery rechecks the binding and the setup reservation.
+credential acknowledgement. The [connection editor](../src/connections/editor.ts)
+owns transient form fields and the lifetime of interactive sign-in. Explicit recovery rechecks the binding and the setup reservation.
 The shared [credential contract](../../../contracts/credentials.md#connection-identity-and-catalogs)
 defines what the browser can retain.
 
