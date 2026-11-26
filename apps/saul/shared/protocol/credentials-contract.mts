@@ -1,3 +1,9 @@
+import {
+  validConnectionGeneration,
+  validConnectionKey,
+  validConnectionReservation,
+  validConnectionToken,
+} from './connection-coordination.mts';
 import { validVisionImages } from './vision.mts';
 import { isRecord } from '../model/value.mts';
 import { validConnectionCatalog, validConnectionStatus } from './connections-contract.mts';
@@ -27,21 +33,45 @@ export function officialOpenAI(baseUrl: string): boolean {
 }
 export type ConnectionCatalogIntent = 'display' | 'refresh' | 'check';
 export type CredentialRequest =
-  | PlanRequest
-  | { action: 'confirm-app-name'; accountId: string; suggestedAppName: string }
+  | Exclude<PlanRequest, { action: 'login' | 'logout' | 'generate' }>
+  | (Extract<PlanRequest, { action: 'login' | 'logout' }> & { setupToken?: string })
+  | (Extract<PlanRequest, { action: 'generate' }> & { runGeneration?: string })
+  | { action: 'connection-capabilities' | 'connection-setups' }
+  | { action: 'connection-run-hold'; connectionKey?: string; accountId?: string }
+  | {
+      action: 'connection-setup-hold';
+      connectionKey: string;
+      accountId?: string;
+      operationId: string;
+      previousToken?: string;
+    }
+  | { action: 'connection-setup-release'; connectionKey: string; token: string }
+  | { action: 'confirm-app-name'; accountId: string; suggestedAppName: string; setupToken?: string }
   | { action: 'connection-status'; connectionKey: string }
   | ({
       action: 'connection-catalog';
       connectionKey: string;
     } & ({ intent: ConnectionCatalogIntent; force?: never } | { intent?: never; force?: boolean }))
-  | { action: 'connection-key-save'; connectionKey: string; endpoint: string; key: string }
-  | { action: 'connection-key-remove'; connectionKey: string; endpoint: string }
+  | {
+      action: 'connection-key-save';
+      connectionKey: string;
+      endpoint: string;
+      key: string;
+      setupToken?: string;
+    }
+  | {
+      action: 'connection-key-remove';
+      connectionKey: string;
+      endpoint: string;
+      setupToken?: string;
+    }
   | { action: 'connection-key-status'; connectionKey: string; endpoint: string }
   | { action: 'status' | 'api-key-status' | 'api-key-remove' }
   | { action: 'select'; accountId: string }
   | { action: 'api-key-save'; key: string }
   | {
       action: 'api-chat';
+      runGeneration?: string;
       connectionKey?: string;
       model: string;
       systemPrompt: string;
@@ -50,9 +80,16 @@ export type CredentialRequest =
       temperature?: number;
       maxTokens?: number;
     }
-  | { action: 'api-realtime'; model: string; voice: string; connectionKey?: string }
+  | {
+      action: 'api-realtime';
+      model: string;
+      voice: string;
+      connectionKey?: string;
+      runGeneration?: string;
+    }
   | {
       action: 'api-image';
+      runGeneration?: string;
       connectionKey?: string;
       prompt: string;
       model: string;
@@ -61,6 +98,8 @@ export type CredentialRequest =
       outputFormat: 'png' | 'gif';
     };
 export type CredentialEvent =
+  | { type: 'connection-held'; token: string; generation?: never }
+  | { type: 'connection-held'; generation: string; token?: never }
   | { type: 'delta'; text: string }
   | { type: 'activity'; phase: 'waiting' | 'thinking' }
   | { type: 'complete' }
@@ -73,21 +112,45 @@ const text = (value: unknown, max: number, empty = false): value is string =>
 export function validateCredentialRequest(value: unknown): asserts value is CredentialRequest {
   if (!isRecord(value) || typeof value.action !== 'string')
     throw new Error('Invalid Saul credential operation.');
+  const setupTokenActions = [
+    'login',
+    'logout',
+    'confirm-app-name',
+    'connection-key-save',
+    'connection-key-remove',
+  ];
+  const generationActions = ['generate', 'api-chat', 'api-realtime', 'api-image'];
+  if (
+    (Object.hasOwn(value, 'setupToken') &&
+      (!setupTokenActions.includes(value.action) || !validConnectionToken(value.setupToken))) ||
+    (Object.hasOwn(value, 'runGeneration') &&
+      (!generationActions.includes(value.action) ||
+        !validConnectionGeneration(value.runGeneration)))
+  )
+    throw new Error('Invalid connection coordination request.');
   if (['accounts', 'login', 'logout', 'models', 'generate'].includes(value.action)) {
-    validatePlanRequest(value);
+    const { setupToken, runGeneration, ...plan } = value;
+    void setupToken;
+    void runGeneration;
+    validatePlanRequest(plan);
     return;
   }
   const operations: Record<string, string[]> = {
     status: [],
+    'connection-capabilities': [],
+    'connection-setups': [],
+    'connection-run-hold': ['connectionKey', 'accountId'],
+    'connection-setup-hold': ['connectionKey', 'accountId', 'operationId', 'previousToken'],
+    'connection-setup-release': ['connectionKey', 'token'],
     select: ['accountId'],
-    'confirm-app-name': ['accountId', 'suggestedAppName'],
+    'confirm-app-name': ['accountId', 'suggestedAppName', 'setupToken'],
     'api-key-status': [],
     'api-key-remove': [],
     'api-key-save': ['key'],
     'connection-status': ['connectionKey'],
     'connection-catalog': ['connectionKey', 'force', 'intent'],
-    'connection-key-save': ['connectionKey', 'endpoint', 'key'],
-    'connection-key-remove': ['connectionKey', 'endpoint'],
+    'connection-key-save': ['connectionKey', 'endpoint', 'key', 'setupToken'],
+    'connection-key-remove': ['connectionKey', 'endpoint', 'setupToken'],
     'connection-key-status': ['connectionKey', 'endpoint'],
     'api-chat': [
       'model',
@@ -97,9 +160,18 @@ export function validateCredentialRequest(value: unknown): asserts value is Cred
       'temperature',
       'maxTokens',
       'connectionKey',
+      'runGeneration',
     ],
-    'api-realtime': ['model', 'voice', 'connectionKey'],
-    'api-image': ['prompt', 'model', 'size', 'quality', 'outputFormat', 'connectionKey'],
+    'api-realtime': ['model', 'voice', 'connectionKey', 'runGeneration'],
+    'api-image': [
+      'prompt',
+      'model',
+      'size',
+      'quality',
+      'outputFormat',
+      'connectionKey',
+      'runGeneration',
+    ],
   };
   const fields = operations[value.action];
   if (!fields || Object.keys(value).some((key) => key !== 'action' && !fields.includes(key)))
@@ -110,10 +182,27 @@ export function validateCredentialRequest(value: unknown): asserts value is Cred
   )
     throw new Error('Invalid ChatGPT app name confirmation.');
   if (
-    (value.action.startsWith('connection-') || value.connectionKey !== undefined) &&
-    (!text(value.connectionKey, 64) || !/^[a-z][a-z0-9-]{0,63}$/.test(value.connectionKey))
+    ((value.action.startsWith('connection-') &&
+      !['connection-capabilities', 'connection-setups', 'connection-run-hold'].includes(
+        value.action,
+      )) ||
+      value.connectionKey !== undefined) &&
+    !validConnectionKey(value.connectionKey)
   )
     throw new Error('Choose a saved connection.');
+  if (
+    ((value.action === 'connection-run-hold' || value.action === 'connection-setup-hold') &&
+      value.accountId !== undefined &&
+      !text(value.accountId, 256)) ||
+    (value.action === 'connection-run-hold' &&
+      value.connectionKey === undefined &&
+      value.accountId === undefined) ||
+    (value.action === 'connection-setup-hold' &&
+      (!validConnectionToken(value.operationId) ||
+        (value.previousToken !== undefined && !validConnectionToken(value.previousToken)))) ||
+    (value.action === 'connection-setup-release' && !validConnectionToken(value.token))
+  )
+    throw new Error('Invalid connection coordination request.');
   if (value.force !== undefined && typeof value.force !== 'boolean')
     throw new Error('Invalid refresh request.');
   if (
@@ -194,6 +283,8 @@ export function validateCredentialEvent(value: unknown): asserts value is Creden
             'imageBase64',
             'connection',
             'catalog',
+            'connectionCoordination',
+            'connectionSetups',
           ].includes(key),
       )
     )
@@ -204,6 +295,10 @@ export function validateCredentialEvent(value: unknown): asserts value is Creden
     )
       throw new Error('Invalid image result.');
     if (
+      (value.connectionCoordination !== undefined && value.connectionCoordination !== 1) ||
+      (value.connectionSetups !== undefined &&
+        (!Array.isArray(value.connectionSetups) ||
+          !value.connectionSetups.every(validConnectionReservation))) ||
       (value.connection !== undefined && !validConnectionStatus(value.connection)) ||
       (value.catalog !== undefined && !validConnectionCatalog(value.catalog)) ||
       (value.accounts !== undefined && !validPlanAccounts(value.accounts)) ||
@@ -220,6 +315,7 @@ export function validateCredentialEvent(value: unknown): asserts value is Creden
   }
   const fields: Record<string, string[]> = {
     complete: [],
+    'connection-held': ['token', 'generation'],
     activity: ['phase'],
     delta: ['text'],
     authorize: ['url'],
@@ -233,6 +329,9 @@ export function validateCredentialEvent(value: unknown): asserts value is Creden
     throw new Error('Saul returned unexpected credential event fields.');
   if (
     value.type === 'complete' ||
+    (value.type === 'connection-held' &&
+      ((validConnectionToken(value.token) && value.generation === undefined) ||
+        (validConnectionGeneration(value.generation) && value.token === undefined))) ||
     (value.type === 'activity' && (value.phase === 'waiting' || value.phase === 'thinking')) ||
     (value.type === 'delta' && text(value.text, 2_000_000, true)) ||
     (value.type === 'authorize' && text(value.url, 32_000)) ||

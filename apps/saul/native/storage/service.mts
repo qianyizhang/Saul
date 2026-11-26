@@ -23,6 +23,9 @@ export class HistoryConfigService {
         this.history ??= new SharedHistory();
         emit(await this.history.run(request.request));
         return;
+      case 'connection-settings-capabilities':
+        emit({ type: 'result', connectionSettings: 1 });
+        return;
       case 'config-read':
         emit({ type: 'result', config: this.presets.readScope(request.section) });
         return;
@@ -42,6 +45,7 @@ export class HistoryConfigService {
             request.presetRevision,
             request.presets,
             request.connections,
+            request.setupFence,
           ),
         });
         return;

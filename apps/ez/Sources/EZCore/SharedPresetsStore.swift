@@ -1,6 +1,7 @@
 import CSQLite
 import Darwin
 import Foundation
+import SaulConnectionCoordination
 import SaulNativeValues
 
 /// Shared connection/preset configuration. Secrets stay with their credential owner.
@@ -8,7 +9,9 @@ public final class SharedPresetsStore {
     public let url: URL
     public init(url: URL = SharedSettingsDocument.defaultURL) { self.url = url }
 
-    private func update<T>(_ change: (inout [String: Any]) throws -> T) throws -> T {
+    private func update<T>(fence: ConnectionFence? = nil, _ change: (inout [String: Any]) throws -> T) throws
+        -> T
+    {
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o700])
@@ -35,10 +38,15 @@ public final class SharedPresetsStore {
         }
         defer { sqlite3_exec(lock, "ROLLBACK", nil, nil, nil) }
         var document = try ConnectionSettingsMigration.document(SharedSettingsDocument.load(at: url))
-        _ = try SharedSettingsDocument.library(document)
+        let before = try SharedSettingsDocument.library(document).connections
         let result = try change(&document)
-        try writeDocument(document)
-        return result
+        let after = try SharedSettingsDocument.library(document).connections
+        return try ConnectionCoordination(settingsURL: url).withSettingsWrite(
+            registry: lock, before: before, after: after, origin: "ez", fence: fence
+        ) {
+            try writeDocument(document)
+            return result
+        }
     }
 
     private func readDocument() throws -> [String: Any] {
@@ -183,10 +191,12 @@ public final class SharedPresetsStore {
             ? current
             : setPresets(&document, imported, revision: current.revision, connections: definitions)
     }
-    func saveConfiguration(_ configuration: Configuration, scopedRevision: Int) throws -> (
-        scopedRevision: Int, library: SharedPresets
-    ) {
-        try update { document in
+    func saveConfiguration(_ configuration: Configuration, scopedRevision: Int, fence: ConnectionFence?)
+        throws -> (
+            scopedRevision: Int, library: SharedPresets
+        )
+    {
+        try update(fence: fence) { document in
             guard try appSection(document, "configuration").revision == scopedRevision else {
                 throw EZError("EZ settings changed. Reload before saving again.")
             }

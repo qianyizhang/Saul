@@ -16,7 +16,7 @@ case "$kind" in
     services)
         ez_build_product EZ
         ez_build_product EZStateChecks
-        ez_link_modules EZStateChecks EZApplication EZCore SaulCredentialClient SaulNativeValues SaulTestSupport EZCheckSupport
+        ez_link_modules EZStateChecks EZApplication EZCore SaulCredentialClient SaulNativeValues SaulConnectionCoordination SaulTestSupport EZCheckSupport
         ez_compile_library Tests/EZStateChecks/{FixtureComposition,StateFixture}.swift \
             Tests/Services/check.swift "${ez_objects[@]}" -o "$ez_bin_dir/EZServicesChecks"
         exec "$ez_bin_dir/EZServicesChecks" "$@"

@@ -65,11 +65,14 @@ draft. Browser scopes are capped at 750 KB of serialized UTF-8 JSON under the
 1 MiB native-message limit.
 
 Swift and Node use a SQLite `BEGIN IMMEDIATE` lease in
-`settings.json.lock.sqlite3`, with a five-second busy timeout and no settings
-data. Process exit releases the lease. Keep the lock file in place while either
-app may use it; removing it splits the lock. Upgrade both clients and the helper
-before relying on this guarantee; old writers ignore the lease or cannot read
-new binding fields. Chrome-local commits are separate; Saul reports uncertain
+`settings.json.lock.sqlite3`, with a five-second busy timeout. The JSON document holds the settings. The
+SQLite file also retains the public connection setup reservations and binding
+generations used by the signed owner. Keep this file across restarts. Removing
+it would also erase the evidence needed to reject stale work. Per-binding
+SQLite files in the adjacent `settings.json.connections/` directory hold live
+read or write locks. Process exit releases those locks. Both settings writers
+and the signed owner must be upgraded for cross-app fencing. An older writer
+may honor the document lock while ignoring a connection reservation. Chrome-local commits are separate; Saul reports uncertain
 effects without replay and offers [Settings review](../apps/saul/docs/product.md#settings-and-models).
 
 Shared definitions come only from `modelPresets`. Saul's scope owns local

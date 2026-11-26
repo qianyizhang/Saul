@@ -1,4 +1,5 @@
 import Foundation
+import SaulConnectionCoordination
 import SaulCredentialClient
 import SaulNativeValues
 
@@ -6,15 +7,18 @@ import SaulNativeValues
   let storage: SharedAuthStorage
   let http: ConnectionHTTP
   let emit: ([String: Any]) -> Void
+  private let coordination: ConnectionCoordination?
   let connectionDefinitions: () throws -> [ConnectionDefinition]
   package init(
     storage: SharedAuthStorage, http: ConnectionHTTP = ConnectionHTTP(),
+    coordination: ConnectionCoordination? = nil,
     connectionDefinitions: @escaping () throws -> [ConnectionDefinition] = {
       try SharedSettingsDocument.readLibrary().connections
     },
     emit: @escaping ([String: Any]) -> Void
   ) {
     self.storage = storage
+    self.coordination = coordination
     self.emit = emit
     self.connectionDefinitions = connectionDefinitions
     self.http = http
@@ -47,7 +51,10 @@ import SaulNativeValues
     return result
   }
   package func run(_ request: CredentialRequest) async throws {
-    do { try await execute(request.operation) } catch {
+    let lease = try admit(request)
+    defer { withExtendedLifetime(lease) {} }
+    try Task.checkCancellation()
+    do { try await execute(request) } catch {
       guard let failure = error as? CredentialHTTPError, failure.code == "model_not_found" else {
         throw error
       }
@@ -88,11 +95,74 @@ import SaulNativeValues
       + input.pdfURLs.map { ["type": "input_file", "file_url": $0] }
   }
 
-  private func execute(_ operation: CredentialOperation) async throws {
+  private func admit(_ request: CredentialRequest) throws -> ConnectionLease? {
+    guard let coordination else { return nil }
+    let origin = request.caller.rawValue
+    func mutation(_ binding: ConnectionBinding) throws -> ConnectionLease {
+      try coordination.mutate(binding, origin: origin, token: request.setupToken)
+    }
+    func generation(_ binding: ConnectionBinding) throws -> ConnectionLease {
+      try coordination.read(binding, generation: request.runGeneration).lease
+    }
+    func api(_ key: String?) -> ConnectionBinding {
+      ConnectionBinding(key: key ?? "openai-api")
+    }
+    switch request.operation {
+    case .connectionKey(let key, _, _): return try mutation(api(key))
+    case .apiKey: return try mutation(api(nil))
+    case .login(let account, _, _):
+      return try mutation(ConnectionBinding(key: nil, accountID: account))
+    case .logout(let account), .confirmAppName(let account, _):
+      return try mutation(ConnectionBinding(key: nil, accountID: account))
+    case .generate(let text):
+      return try generation(ConnectionBinding(key: text.connectionKey, accountID: text.accountID))
+    case .nativeResponses(let responses):
+      if case .plan(let account) = responses.route {
+        return try generation(ConnectionBinding(key: responses.connectionKey, accountID: account))
+      }
+      return try generation(api(responses.connectionKey))
+    case .apiChat(let request): return try generation(api(request.connectionKey))
+    case .apiRealtime(_, _, let key): return try generation(api(key))
+    case .image(let request): return try generation(api(request.connectionKey))
+    default: return nil
+    }
+  }
+
+  private func requireCoordination() throws -> ConnectionCoordination {
+    guard let coordination else { throw ConnectionCoordinationError.unavailable }
+    return coordination
+  }
+
+  private func execute(_ request: CredentialRequest) async throws {
+    let operation = request.operation
+    let caller = request.caller
     func result(_ value: [String: Any] = [:]) {
       emit(value.merging(["type": "result"]) { _, new in new })
     }
     switch operation {
+    case .connectionCapabilities:
+      _ = try requireCoordination()
+      result(["connectionCoordination": 1])
+    case .connectionSetups:
+      let setups = try requireCoordination().setups()
+      result([
+        "connectionSetups": try JSONSerialization.jsonObject(with: JSONEncoder().encode(setups))
+      ])
+    case .connectionSetupRelease(let key, let token):
+      try requireCoordination().release(.init(connectionKey: key, token: token))
+      result()
+    case .connectionRunHold(let key, let account):
+      let held = try requireCoordination().read(ConnectionBinding(key: key, accountID: account))
+      defer { withExtendedLifetime(held.lease) {} }
+      emit(["type": "connection-held", "generation": held.generation])
+      while true { try await Task.sleep(for: .seconds(3600)) }
+    case .connectionSetupHold(let key, let account, let operationID, let previousToken):
+      let (lease, record) = try requireCoordination().holdSetup(
+        ConnectionBinding(key: key, accountID: account), origin: caller.rawValue,
+        operationID: operationID, previousToken: previousToken)
+      defer { withExtendedLifetime(lease) {} }
+      emit(["type": "connection-held", "token": record.token.uuidString.lowercased()])
+      while true { try await Task.sleep(for: .seconds(3600)) }
     case .connectionStatus(let key):
       let status: [String: Any] = try await withLease {
         let definition = try connectionDefinition(key)
@@ -153,23 +223,22 @@ import SaulNativeValues
           return try self.status(auth)
         })
     case .login(let id, let consent, let suggestedAppName):
-      emit(
-        try await locked { auth in
-          if let id {
-            try self.invalidatePlanCatalog(id)
-          }
-          try await auth.signIn(
-            accountID: id, enablePlan: consent, suggestedAppName: suggestedAppName
-          ) { url in
-            self.emit(["type": "authorize", "url": url.absoluteString])
-            return true
-          }
-          guard let account = auth.selected else {
-            throw CredentialStorageError("Saul sign-in did not select an account.")
-          }
-          try self.storage.pause(account.id, value: false)
-          return ["type": "result", "account": self.summary(account)]
-        })
+      if let id { try await withLease { try self.invalidatePlanCatalog(id) } }
+      let auth = ChatGPTAuth(storage: storage, signInLeaseDirectory: storage.directory)
+      try await auth.signIn(
+        accountID: id, enablePlan: consent, suggestedAppName: suggestedAppName
+      ) { url in
+        self.emit(["type": "authorize", "url": url.absoluteString])
+        return true
+      }
+      guard let account = auth.selected else {
+        throw CredentialStorageError("Saul sign-in did not select an account.")
+      }
+      try await withLease { try self.storage.pause(account.id, value: false) }
+      if id == nil, let token = request.setupToken {
+        try requireCoordination().bindAccount(account.id, origin: caller.rawValue, token: token)
+      }
+      result(["account": summary(account)])
     case .confirmAppName(let id, let name):
       try await locked { auth in try auth.confirmAppName(accountID: id, name: name) }
       result()

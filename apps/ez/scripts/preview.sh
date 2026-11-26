@@ -10,7 +10,7 @@ esac
 kind="$1"
 source scripts/lib/swift-build.sh
 ez_build_product EZ
-ez_link_modules EZ EZApplication EZCore SaulCredentialClient SaulNativeValues
+ez_link_modules EZ EZApplication EZCore SaulCredentialClient SaulNativeValues SaulConnectionCoordination
 mkdir -p dist
 preview="$PWD/dist/$label.app"
 staging=$(mktemp -d "$PWD/dist/.ez-preview.XXXXXX")

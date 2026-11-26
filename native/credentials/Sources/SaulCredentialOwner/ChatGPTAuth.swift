@@ -7,10 +7,15 @@ import SaulNativeValues
   private let storage: CredentialStore
   private let session: URLSession
   private var listener: LoopbackListener?
+  private let signInLeaseDirectory: URL?
+  private var signingIn = false
   private var refreshTask: Task<String, Error>?
   private var refreshingID: String?
-  public init(storage: CredentialStore, session: URLSession? = nil) {
+  public init(
+    storage: CredentialStore, session: URLSession? = nil, signInLeaseDirectory: URL? = nil
+  ) {
     self.storage = storage
+    self.signInLeaseDirectory = signInLeaseDirectory
     let configuration = URLSessionConfiguration.ephemeral
     configuration.timeoutIntervalForRequest = 30
     configuration.timeoutIntervalForResource = 60
@@ -43,14 +48,27 @@ import SaulNativeValues
     if select { next.selectedID = profile.id }
     try save(next)
   }
+  private func withSignInRecords<T>(_ work: () throws -> T) async throws -> T {
+    guard let signInLeaseDirectory else { return try work() }
+    let lease = try await CredentialLease.acquire(in: signInLeaseDirectory)
+    defer { withExtendedLifetime(lease) {} }
+    try await load()
+    return try work()
+  }
+
   public func signIn(
     accountID: String?, enablePlan: Bool = false, suggestedAppName: String? = nil,
     openBrowser: (URL) -> Bool
   ) async throws {
-    guard listener == nil else { throw OwnerRequestError("A sign-in is already in progress.") }
-    let previous = state.profiles.first { $0.id == accountID }
-    guard accountID == nil || previous != nil else { throw OwnerRequestError("Unknown account.") }
-    try save(state)  // Persist the installation identity before leaving for the browser.
+    guard !signingIn else { throw OwnerRequestError("A sign-in is already in progress.") }
+    signingIn = true
+    defer { signingIn = false }
+    let (previous, hostID) = try await withSignInRecords {
+      let previous = state.profiles.first { $0.id == accountID }
+      guard accountID == nil || previous != nil else { throw OwnerRequestError("Unknown account.") }
+      try save(state)  // Persist the installation identity before leaving for the browser.
+      return (previous, state.hostID)
+    }
     let initialID = previous?.clientID ?? "dynamic_agent_client"
     let stateToken = try OIDC.random()
     let nonce = try OIDC.random()
@@ -62,9 +80,10 @@ import SaulNativeValues
       self.listener = nil
     }
     let redirect = try await listener.start(state: stateToken)
+    try Task.checkCancellation()
     var url = URLComponents(string: "https://auth.openai.com/api/accounts/authorize")!
     var params = [
-      "client_id": initialID, "ext_agent_host_id": state.hostID, "response_type": "code",
+      "client_id": initialID, "ext_agent_host_id": hostID, "response_type": "code",
       "redirect_uri": redirect.absoluteString,
       "scope": "openid profile email offline_access resource.invoke chatgpt.tokens.use.direct",
       "resource": "https://api.openai.com/v1", "state": stateToken, "nonce": nonce,
@@ -93,17 +112,22 @@ import SaulNativeValues
     if let previous, issuedID != previous.clientID {
       throw OwnerRequestError("Sign-in returned a different client registration.")
     }
-    if previous == nil && state.profiles.contains(where: { $0.id == issuedID }) {
-      throw OwnerRequestError(
-        "ChatGPT returned an existing registration. Choose it under saved accounts.")
-    }
     var profile =
       previous
       ?? AccountProfile(
         clientID: issuedID, subject: nil, email: nil, credentials: nil,
         suggestedAppName: suggestedAppName)
-    // Preserve registration before the first exchange, including invalid_grant recovery.
-    if previous == nil { try upsert(profile) }
+    // Preserve a new registration before the first exchange, including invalid_grant recovery.
+    if previous == nil {
+      try await withSignInRecords {
+        guard state.hostID == hostID, !state.profiles.contains(where: { $0.id == issuedID }) else {
+          throw OwnerRequestError(
+            "ChatGPT returned an existing registration. Choose it under saved accounts.")
+        }
+        try upsert(profile)
+      }
+    }
+    let beforeExchange = profile
     let token = try await tokenRequest([
       "grant_type": "authorization_code", "client_id": issuedID, "code": code,
       "code_verifier": verifier, "redirect_uri": redirect.absoluteString,
@@ -120,7 +144,15 @@ import SaulNativeValues
     profile.email = identity["email"] as? String
     profile.credentials = try credentials(token, previous: nil, idToken: idToken)
     try Task.checkCancellation()
-    try upsert(profile, select: true)
+    try await withSignInRecords {
+      guard state.hostID == hostID,
+        state.profiles.first(where: { $0.id == issuedID }) == beforeExchange
+      else {
+        throw OwnerRequestError(
+          "This registration changed during sign-in. Review it and try again.")
+      }
+      try upsert(profile, select: true)
+    }
   }
   func confirmAppName(accountID: String, name: String) throws {
     guard var profile = state.profiles.first(where: { $0.id == accountID }),

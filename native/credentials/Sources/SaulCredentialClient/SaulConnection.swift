@@ -47,6 +47,7 @@ public struct SaulAccount: Codable, Equatable, Sendable, Identifiable {
   /// Reauthorize an existing registration unless the user explicitly adds an account.
   public func signIn(
     accountID: String, suggestedAppName: String? = nil, consent: Bool = false,
+    setupToken: UUID? = nil,
     authorize: @escaping @MainActor (URL) -> Bool
   ) async throws -> [String: Any] {
     guard suggestedAppName != nil || !accountID.isEmpty else {
@@ -58,6 +59,7 @@ public struct SaulAccount: Codable, Equatable, Sendable, Identifiable {
     } else {
       request["accountId"] = accountID
     }
+    if let setupToken { request["setupToken"] = setupToken.uuidString }
     return try await call(request, authorize: authorize)
   }
   public func call(
@@ -77,12 +79,16 @@ public struct SaulAccount: Codable, Equatable, Sendable, Identifiable {
       : ["connection-catalog", "connection-status", "connection-key-status"].contains(
         request["action"] as? String ?? "")
         ? 30 : 190
-    let deadline = Task {
-      try await Task.sleep(for: .seconds(seconds))
-      replies.close()
-    }
+    let action = request["action"] as? String
+    let deadline: Task<Void, Never>? =
+      if action == "connection-run-hold" || action == "connection-setup-hold" { nil } else {
+        Task {
+          do { try await Task.sleep(for: .seconds(seconds)) } catch { return }
+          replies.close()
+        }
+      }
     defer {
-      deadline.cancel()
+      deadline?.cancel()
       replies.close()
     }
     for try await data in replies.stream {

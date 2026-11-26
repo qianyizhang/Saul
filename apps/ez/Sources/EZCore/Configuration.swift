@@ -408,13 +408,17 @@ public final class ConfigurationStore {
         return result
     }
 
-    @discardableResult public func save(_ configuration: Configuration) throws -> Configuration {
+    @discardableResult public func save(_ configuration: Configuration, fence: ConnectionFence? = nil) throws
+        -> Configuration
+    {
         try configuration.validate()
         guard let shared else {
+            if fence != nil { throw EZError("Shared configuration is unavailable.") }
             try writeLocal(configuration)
             return configuration
         }
-        let committed = try shared.saveConfiguration(configuration, scopedRevision: scopedRevision)
+        let committed = try shared.saveConfiguration(
+            configuration, scopedRevision: scopedRevision, fence: fence)
         scopedRevision = committed.scopedRevision
         var saved = configuration
         saved.connections = committed.library.connections

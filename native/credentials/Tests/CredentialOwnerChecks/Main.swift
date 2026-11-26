@@ -28,6 +28,12 @@ private func denied(_ operation: () throws -> Void) throws {
 }
 @main struct OwnerChecks {
   @MainActor static func main() async {
+    if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--coordination-hold" {
+      do {
+        try holdConnectionForCheck(at: CommandLine.arguments[2])
+        exit(0)
+      } catch { exit(1) }
+    }
     let legacy = CheckCase("credentials: legacy sources and pauses remain intact") { directory in
       try await legacyChecks(in: directory)
     }
@@ -37,7 +43,7 @@ private func denied(_ operation: () throws -> Void) throws {
     exit(
       await CheckRunner.run(
         [legacy, connectionKeyStatus] + identityChecks() + authenticationChecks()
-          + illustrationChecks()
+          + coordinationChecks() + illustrationChecks()
           + planCatalogChecks()
           + compatibleChatChecks() + cacheRecoveryChecks() + apiModelCapabilityChecks()))
   }

@@ -3,6 +3,7 @@ import {
   validateHistoryResult,
   type HistoryRequest,
 } from './history-protocol.mts';
+import { validSetupFence, type SetupFence } from './connection-coordination.mts';
 import { isRecord } from '../model/value.mts';
 import {
   validScopedConfig,
@@ -23,6 +24,7 @@ export type StorageHelperRequest =
       revision: number;
       value: Record<string, unknown>;
     }
+  | { action: 'connection-settings-capabilities' }
   | { action: 'presets-read' }
   | {
       action: 'config-commit';
@@ -30,6 +32,7 @@ export type StorageHelperRequest =
       revision: number;
       value: Record<string, unknown>;
       presetRevision: number;
+      setupFence?: SetupFence;
       presets: SharedPreset[];
       connections?: ConnectionDefinition[];
     }
@@ -42,6 +45,7 @@ export type StorageHelperRequest =
     };
 export interface StorageResults {
   history: { value: unknown; revision?: number };
+  'connection-settings-capabilities': { connectionSettings: 1 };
   'config-read': { config: ScopedConfig };
   'config-save': { config: ScopedConfig };
   'config-commit': { config: ScopedConfig; library: SharedPresets };
@@ -66,7 +70,16 @@ export function validateStorageHelperRequest(v: unknown): asserts v is StorageHe
     history: ['request'],
     'config-read': ['section'],
     'config-save': ['section', 'revision', 'value'],
-    'config-commit': ['section', 'revision', 'value', 'presetRevision', 'presets', 'connections'],
+    'config-commit': [
+      'section',
+      'revision',
+      'value',
+      'presetRevision',
+      'presets',
+      'connections',
+      'setupFence',
+    ],
+    'connection-settings-capabilities': [],
     'presets-read': [],
     'presets-import': ['presets'],
     'presets-save': ['revision', 'presets', 'connections'],
@@ -86,7 +99,8 @@ export function validateStorageHelperRequest(v: unknown): asserts v is StorageHe
       v.section !== 'settings' ||
       !validScopedConfig(v) ||
       !Number.isSafeInteger(v.presetRevision) ||
-      Number(v.presetRevision) < 0
+      Number(v.presetRevision) < 0 ||
+      (v.setupFence !== undefined && !validSetupFence(v.setupFence))
     )
       throw new Error('Invalid configuration transaction.');
     validateScopedConfigValue(v.value);
@@ -126,6 +140,7 @@ export function validateStorageResult<T extends StorageHelperRequest>(
     (v: Record<string, unknown>) => boolean
   > = {
     history: (v) => Object.hasOwn(v, 'value'),
+    'connection-settings-capabilities': (v) => v.connectionSettings === 1,
     'config-read': (v) => validScopedConfig(v.config),
     'config-save': (v) => validScopedConfig(v.config),
     'config-commit': (v) => validScopedConfig(v.config) && sharedLibrary(v),

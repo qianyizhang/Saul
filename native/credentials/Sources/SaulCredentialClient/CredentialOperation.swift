@@ -8,6 +8,11 @@ public enum CredentialOperation: Sendable {
   case confirmAppName(accountID: String, name: String)
   case logout(accountID: String)
   case models(accountID: String)
+  case connectionCapabilities
+  case connectionRunHold(key: String?, accountID: String?)
+  case connectionSetupHold(key: String, accountID: String?, operationID: UUID, previousToken: UUID?)
+  case connectionSetups
+  case connectionSetupRelease(key: String, token: UUID)
   case generate(PlanText)
   case apiKeyStatus
   case apiKey(String?)

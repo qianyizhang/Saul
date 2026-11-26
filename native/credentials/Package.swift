@@ -5,6 +5,8 @@ let package = Package(
   name: "SaulCredentials",
   platforms: [.macOS(.v14)],
   products: [
+    .library(name: "CSQLite", targets: ["CSQLite"]),
+    .library(name: "SaulConnectionCoordination", targets: ["SaulConnectionCoordination"]),
     .library(name: "SaulNativeValues", targets: ["SaulNativeValues"]),
     .library(name: "SaulCredentialClient", targets: ["SaulCredentialClient"]),
     .executable(name: "SaulCredentials", targets: ["SaulCredentials"]),
@@ -12,13 +14,19 @@ let package = Package(
     .library(name: "SaulCredentialTestSupport", targets: ["SaulCredentialTestSupport"]),
   ],
   targets: [
+    .systemLibrary(name: "CSQLite"),
     .target(name: "SaulNativeValues"),
+    .target(name: "SaulConnectionCoordination", dependencies: ["CSQLite", "SaulNativeValues"]),
     .target(name: "SaulCredentialClient"),
     .target(
-      name: "SaulCredentialOwner", dependencies: ["SaulNativeValues", "SaulCredentialClient"]),
+      name: "SaulCredentialOwner",
+      dependencies: ["SaulNativeValues", "SaulCredentialClient", "SaulConnectionCoordination"]),
     .executableTarget(
       name: "SaulCredentials",
-      dependencies: ["SaulCredentialOwner", "SaulNativeValues", "SaulCredentialClient"]),
+      dependencies: [
+        "SaulCredentialOwner", "SaulNativeValues", "SaulCredentialClient",
+        "SaulConnectionCoordination",
+      ]),
     .target(name: "SaulTestSupport", path: "Tests/Support"),
     .target(
       name: "SaulCredentialTestSupport",
@@ -33,7 +41,7 @@ let package = Package(
       name: "CredentialOwnerChecks",
       dependencies: [
         "SaulCredentialTestSupport", "SaulCredentialOwner", "SaulNativeValues",
-        "SaulCredentialClient", "SaulTestSupport",
+        "SaulCredentialClient", "SaulTestSupport", "SaulConnectionCoordination",
       ],
       path: "Tests/CredentialOwnerChecks"),
   ],

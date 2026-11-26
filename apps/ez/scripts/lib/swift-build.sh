@@ -55,5 +55,5 @@ ez_link_modules() {
 
 ez_compile_library() {
     xcrun swiftc "${ez_swift_flags[@]}" -parse-as-library "${ez_include_flags[@]}" \
-        -I "$ez_app_root/Sources/CSQLite" -lsqlite3 "$@"
+        -I "$ez_app_root/../../native/credentials/Sources/CSQLite" -lsqlite3 "$@"
 }

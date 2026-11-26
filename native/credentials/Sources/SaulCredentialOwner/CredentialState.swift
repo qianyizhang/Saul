@@ -1,6 +1,6 @@
 import Foundation
 
-public struct Credentials: Codable, Sendable {
+public struct Credentials: Codable, Equatable, Sendable {
   public var accessToken: String
   public var refreshToken: String?
   public var idToken: String
@@ -8,7 +8,7 @@ public struct Credentials: Codable, Sendable {
   public var scopes: [String]
   public var canUsePlan: Bool { scopes.contains("chatgpt.tokens.use.direct") }
 }
-public struct AccountProfile: Codable, Identifiable, Sendable {
+public struct AccountProfile: Codable, Equatable, Identifiable, Sendable {
   public var id: String { clientID }
   public var clientID: String
   public var subject: String?

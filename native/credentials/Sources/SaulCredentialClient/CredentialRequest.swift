@@ -12,6 +12,9 @@ public struct CredentialRequest: Sendable {
   public static let version = 2
   public let id: String
   public let operation: CredentialOperation
+  public let caller: CredentialCaller
+  public let setupToken: UUID?
+  public let runGeneration: String?
 
   public static func decode(_ data: Data, caller: CredentialCaller) throws -> CredentialRequest {
     guard data.count <= NativeFrames.maximumInputBytes,
@@ -24,30 +27,38 @@ public struct CredentialRequest: Sendable {
     else { throw invalid() }
     let operations: [String: Set<String>] = [
       "accounts": [], "status": [], "select": ["accountId"],
-      "login": ["accountId", "consent", "suggestedAppName"], "logout": ["accountId"],
-      "confirm-app-name": ["accountId", "suggestedAppName"],
+      "login": ["accountId", "consent", "suggestedAppName", "setupToken"],
+      "logout": ["accountId", "setupToken"],
+      "confirm-app-name": ["accountId", "suggestedAppName", "setupToken"],
       "models": ["accountId"],
+      "connection-capabilities": [],
+      "connection-setups": [],
+      "connection-run-hold": ["connectionKey", "accountId"],
+      "connection-setup-hold": ["connectionKey", "accountId", "operationId", "previousToken"],
+      "connection-setup-release": ["connectionKey", "token"],
       "generate": [
         "accountId", "model", "effort", "fast", "systemPrompt", "userPrompt", "attachments",
-        "images", "connectionKey",
+        "images", "connectionKey", "runGeneration",
       ],
       "api-key-status": [], "api-key-save": ["key"], "api-key-remove": [],
       "connection-status": ["connectionKey"],
       "connection-catalog": ["connectionKey", "force", "intent"],
-      "connection-key-save": ["connectionKey", "endpoint", "key"],
-      "connection-key-remove": ["connectionKey", "endpoint"],
+      "connection-key-save": ["connectionKey", "endpoint", "key", "setupToken"],
+      "connection-key-remove": ["connectionKey", "endpoint", "setupToken"],
       "connection-key-status": ["connectionKey", "endpoint"],
       "api-chat": [
         "model", "systemPrompt", "userPrompt", "temperature", "maxTokens", "connectionKey",
-        "images",
+        "images", "runGeneration",
       ],
-      "api-realtime": ["model", "voice", "connectionKey"],
-      "native-responses": ["provider", "accountId", "body", "connectionKey"],
+      "api-realtime": ["model", "voice", "connectionKey", "runGeneration"],
+      "native-responses": ["provider", "accountId", "body", "connectionKey", "runGeneration"],
       "native-image": [
         "prompt", "model", "size", "quality", "outputFormat", "imageBase64", "imageName",
-        "connectionKey",
+        "connectionKey", "runGeneration",
       ],
-      "api-image": ["prompt", "model", "size", "quality", "outputFormat", "connectionKey"],
+      "api-image": [
+        "prompt", "model", "size", "quality", "outputFormat", "connectionKey", "runGeneration",
+      ],
     ]
     guard let fields = operations[action],
       Set(value.keys).subtracting(["action"]).isSubset(of: fields)
@@ -70,7 +81,12 @@ public struct CredentialRequest: Sendable {
         let intent = intent as? String, CredentialCatalogIntent(rawValue: intent) != nil
       else { throw invalid() }
     }
-    if action.hasPrefix("connection-") || value["connectionKey"] != nil {
+    let optionalConnectionKey = [
+      "connection-capabilities", "connection-setups", "connection-run-hold",
+    ]
+    if (action.hasPrefix("connection-") && !optionalConnectionKey.contains(action))
+      || value["connectionKey"] != nil
+    {
       guard text("connectionKey", max: 64),
         (value["connectionKey"] as? String)?.range(
           of: "^[a-z][a-z0-9-]{0,63}$", options: .regularExpression) != nil
@@ -86,7 +102,33 @@ public struct CredentialRequest: Sendable {
     {
       throw invalid()
     }
-    if action == "login", !text("accountId", max: 256, required: false) { throw invalid() }
+    if ["login", "connection-run-hold", "connection-setup-hold"].contains(action),
+      !text("accountId", max: 256, required: false)
+    {
+      throw invalid()
+    }
+    if action == "connection-run-hold", value["connectionKey"] == nil, value["accountId"] == nil {
+      throw invalid()
+    }
+    for field in ["setupToken", "previousToken", "operationId", "token"] where value[field] != nil {
+      guard let token = value[field] as? String, UUID(uuidString: token) != nil else {
+        throw invalid()
+      }
+    }
+    if let raw = value["runGeneration"] {
+      guard let generation = raw as? String,
+        generation.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil
+      else { throw invalid() }
+    }
+    if ([
+      "connection-capabilities", "connection-setups", "connection-run-hold",
+      "connection-setup-hold",
+      "connection-setup-release",
+    ].contains(action) || value["setupToken"] != nil || value["runGeneration"] != nil)
+      && version.doubleValue != Double(Self.version)
+    {
+      throw invalid()
+    }
     if let raw = value["suggestedAppName"] {
       guard version.doubleValue == Double(Self.version),
         action != "login" || value["accountId"] == nil,
@@ -196,7 +238,11 @@ public struct CredentialRequest: Sendable {
         text("imageName", max: 800, required: false)
       else { throw invalid() }
     }
-    return CredentialRequest(id: id, operation: try operation(action, value))
+    return CredentialRequest(
+      id: id, operation: try operation(action, value), caller: caller,
+      setupToken: (value["setupToken"] as? String).flatMap(UUID.init(uuidString:)),
+      runGeneration: value["runGeneration"] as? String)
+
   }
 
   private static func operation(_ action: String, _ value: [String: Any]) throws
@@ -208,7 +254,20 @@ public struct CredentialRequest: Sendable {
       guard let text = (fields ?? value)[field] as? String else { throw invalid() }
       return text
     }
+    func id(_ field: String) throws -> UUID {
+      guard let id = try UUID(uuidString: string(field)) else { throw invalid() }
+      return id
+    }
     switch action {
+    case "connection-capabilities": return .connectionCapabilities
+    case "connection-setups": return .connectionSetups
+    case "connection-run-hold": return .connectionRunHold(key: key, accountID: account)
+    case "connection-setup-hold":
+      return try .connectionSetupHold(
+        key: string("connectionKey"), accountID: account, operationID: id("operationId"),
+        previousToken: (value["previousToken"] as? String).flatMap(UUID.init(uuidString:)))
+    case "connection-setup-release":
+      return try .connectionSetupRelease(key: string("connectionKey"), token: id("token"))
     case "accounts": return .accounts
     case "status": return .status
     case "select": return try .select(accountID: string("accountId"))

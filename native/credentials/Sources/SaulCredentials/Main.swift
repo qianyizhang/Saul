@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import SaulConnectionCoordination
 import SaulCredentialClient
 import SaulCredentialOwner
 import SaulNativeValues
@@ -73,12 +74,20 @@ import SaulNativeValues
             event: ["type": "error", "message": "Saul credential helper is busy."])
           continue
         }
-        let owner = CredentialOwner(storage: storage) { event in
+        let owner = CredentialOwner(
+          storage: storage,
+          coordination: ConnectionCoordination(settingsURL: SharedSettingsDocument.defaultURL)
+        ) { event in
           self.send(id: request.id, event: event)
         }
         running[request.id] = Task {
           let timer = Task {
-            let timeout: Int64 = if case .login = request.operation { 310 } else { 180 }
+            let timeout: Int64
+            switch request.operation {
+            case .login: timeout = 310
+            case .connectionRunHold, .connectionSetupHold: return
+            default: timeout = 180
+            }
             try? await Task.sleep(for: .seconds(timeout))
             if !Task.isCancelled { self.running[request.id]?.cancel() }
           }
@@ -88,6 +97,13 @@ import SaulNativeValues
           }
           do { try await owner.run(request) } catch {
             var reply: [String: Any] = ["type": "error", "message": self.safeMessage(error)]
+            if let coordinated = error as? ConnectionCoordinationError {
+              switch coordinated {
+              case .busy: reply["reason"] = "connection_busy"
+              case .reserved: reply["reason"] = "connection_reserved"
+              default: break
+              }
+            }
             if let error = error as? CredentialHTTPError, let code = error.code,
               code.range(of: "^[a-z][a-z0-9_]{0,127}$", options: .regularExpression) != nil
             {
@@ -107,6 +123,7 @@ import SaulNativeValues
   }
   private func safeMessage(_ error: Error) -> String {
     if error is CancellationError { return "Saul request stopped or timed out." }
+    if let error = error as? ConnectionCoordinationError { return error.localizedDescription }
     if let error = error as? CredentialStorageError { return error.localizedDescription }
     if let error = error as? CredentialHTTPError { return error.localizedDescription }
     if let error = error as? APIError {

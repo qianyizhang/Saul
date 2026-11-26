@@ -1,3 +1,5 @@
+import { withConnectionSettingsWrite } from './connection-coordination.ts';
+import type { SetupFence } from '../../shared/protocol/connection-coordination.mts';
 import { upgradeConnectionDocument } from './connection-migration.mts';
 import {
   mkdirSync,
@@ -36,7 +38,7 @@ export class SharedPresetsStore {
   constructor(path = sharedPresetsPath()) {
     this.path = path;
   }
-  private update<T>(change: (document: Record<string, unknown>) => T): T {
+  private update<T>(change: (document: Record<string, unknown>) => T, fence?: SetupFence): T {
     mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 });
     const lockPath = `${this.path}.lock.sqlite3`;
     for (const path of [this.path, lockPath]) {
@@ -47,17 +49,20 @@ export class SharedPresetsStore {
       }
     }
     // SQLite supplies the same crash-released process lock to Swift and Node.
-    // It contains no settings; all data remains in the JSON document.
+    // Connection coordination metadata shares the lease; settings remain in JSON.
     const lock = new DatabaseSync(lockPath);
     try {
       chmodSync(lockPath, 0o600);
       lock.exec('PRAGMA busy_timeout=5000; BEGIN IMMEDIATE');
       try {
         const document = upgradeConnectionDocument(this.document());
-        this.library(document);
+        const before = this.library(document).connections;
         const result = change(document);
-        this.writeDocument(document);
-        return result;
+        const after = this.library(document).connections;
+        return withConnectionSettingsWrite(this.path, lock, before, after, fence, () => {
+          this.writeDocument(document);
+          return result;
+        });
       } finally {
         lock.exec('ROLLBACK');
       }
@@ -216,12 +221,13 @@ export class SharedPresetsStore {
     presetRevision: number,
     presets: SharedPreset[],
     connections?: ConnectionDefinition[],
+    fence?: SetupFence,
   ) {
     return this.update((document) => {
       const config = this.setScope(document, section, revision, value);
       const library = this.setPresets(document, presetRevision, presets, connections);
       return { config, library };
-    });
+    }, fence);
   }
   import(presets: SharedPreset[]): SharedPresets {
     return this.update((document) => {
