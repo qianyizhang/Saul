@@ -59,6 +59,12 @@ describe('PR check scope', () => {
     expect(
       selectChecks(['native/credentials/Sources/SaulNativeValues/ConnectionCatalog.swift']),
     ).toMatchObject({ credentials: true, core: true, state: true });
+    for (const path of [
+      'native/credentials/Sources/CSQLite/module.modulemap',
+      'native/credentials/Sources/SaulConnectionCoordination/ConnectionCoordination.swift',
+    ]) {
+      expect(selectChecks([path])).toMatchObject({ credentials: true, core: true, state: true });
+    }
     expect(
       selectChecks(['native/credentials/Tests/CredentialOwnerChecks/PlanCatalogChecks.swift']),
     ).toMatchObject({ credentials: true, core: false, state: false });

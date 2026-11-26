@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
+import ezBuildInputs from '../apps/ez/build-inputs.json' with { type: 'json' };
 
 type NativeCheck = 'design' | 'core' | 'state' | 'credentials' | 'install';
 type Plan = Record<'docs' | 'smoke' | 'native' | NativeCheck, boolean>;
@@ -8,6 +9,8 @@ const docsFile =
   /^(?:(?:docs|apps\/(?:saul|ez)\/docs)\/.+\.md|(?:apps\/(?:saul|ez)\/)?(?:AGENTS|GLOSSARY|README|CONTRIBUTING)\.md)$/u;
 const workspaceTooling =
   /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|eslint\.config\.mjs|tsconfig\.json|vitest\.config\.ts)$/u;
+
+const sharedEZInputs = ezBuildInputs.filter((path) => path.startsWith('native/credentials/'));
 
 const nativePaths = [
   [/^apps\/ez\/(?:Sources\/EZ\/|Tests\/EZ(?:State|UI)Checks\/)/u, ['state']],
@@ -50,9 +53,8 @@ export function selectChecks(paths: readonly string[] | undefined): Plan {
       // These boundaries are consumed by both applications.
       plan.smoke = plan.native = plan.credentials = true;
       if (
-        /^native\/credentials\/(?:Package\.swift|Sources\/Saul(?:NativeValues|CredentialClient)\/|Tests\/Support\/)/u.test(
-          path,
-        )
+        sharedEZInputs.some((input) => path === input || path.startsWith(input + '/')) ||
+        path.startsWith('native/credentials/Tests/Support/')
       ) {
         plan.core = plan.state = true;
       }

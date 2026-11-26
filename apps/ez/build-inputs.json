@@ -8,6 +8,8 @@
   "apps/ez/scripts/swift.sh",
   "apps/ez/scripts/signing.sh",
   "native/credentials/Package.swift",
+  "native/credentials/Sources/CSQLite",
+  "native/credentials/Sources/SaulConnectionCoordination",
   "native/credentials/Sources/SaulCredentialClient",
   "native/credentials/Sources/SaulNativeValues"
 ]
