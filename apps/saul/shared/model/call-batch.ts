@@ -73,7 +73,7 @@ export type DigestMeta = {
   effort?: string;
 } & (
   | {
-      action: import('./custom-call.ts').FrozenCustomCall;
+      action: import('./custom-action.ts').FrozenCustomAction;
       summaryInput?: undefined;
       prompt?: string;
     }

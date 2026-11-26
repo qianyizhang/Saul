@@ -1,13 +1,13 @@
 import type { FrozenModel } from './execution-route.ts';
 import type { ActionRevision } from '../protocol/action-protocol.mts';
-export interface CallChoice {
+export interface ActionChoice {
   revision: ActionRevision;
   presetId: string;
 }
 
-export function callChoiceKey(choice: CallChoice) {
+export function actionChoiceKey(choice: ActionChoice) {
   return `${choice.revision.revision}:${choice.presetId}`;
 }
-export interface FrozenCustomCall extends CallChoice {
+export interface FrozenCustomAction extends ActionChoice {
   input?: FrozenModel;
 }

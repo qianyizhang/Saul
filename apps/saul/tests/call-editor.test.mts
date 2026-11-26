@@ -5,10 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CallEditor } from '../src/calls/editor';
-import { createCallStore } from '../src/calls/store';
+import { createCustomActionStore } from '../src/custom-actions/store';
 import type { streamModel } from '../src/providers/stream';
-import { actionHost } from '../src/calls/host';
-import { LEGACY_CALL_STATE_KEY, type CallEditorState } from '../src/calls/contract';
+import { actionHost } from '../src/custom-actions/host-client';
+import { LEGACY_CALL_STATE_KEY } from '../src/custom-actions/contract';
+import type { CallEditorState } from '../src/calls/contract';
 import { ActionStore } from '../.build/native/action-store.mjs';
 import { ActionRuntime } from '../.build/native/action-runtime.mjs';
 import type { DbCall, RunInput } from '../shared/protocol/history-types.ts';
@@ -17,7 +18,7 @@ import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 import { starterConfiguration } from '../src/configuration/definition';
 import { prepareFrozenPreset, prepareWritePreset } from '../src/configuration/resolve';
 
-vi.mock('../src/calls/host', () => ({ actionHost: vi.fn() }));
+vi.mock('../src/custom-actions/host-client', () => ({ actionHost: vi.fn() }));
 let saved: CallEditorState;
 let local: Record<string, unknown>;
 function readLocal(keys: string | string[]) {
@@ -55,7 +56,7 @@ function editor(generate?: typeof streamModel) {
     db,
     prepare: async () => ({ choices: input, credential: '' }),
     generate,
-    storage: createCallStore(),
+    storage: createCustomActionStore(),
   });
 }
 const db = vi.fn(async () => ['a'.repeat(64)]) as unknown as DbCall;

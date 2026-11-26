@@ -1,6 +1,7 @@
 import { readCredentialRoute } from '../src/providers/credential-route';
 import { initAnnotations } from '../src/annotations/background';
-import { callStore } from '../src/calls/store';
+import { createCustomActionStore } from '../src/custom-actions/store';
+import { legacySummaryPreset } from '../src/calls/choice-migration';
 import { captureTab, verifyCaptureTab } from '../src/calls/capture/capture';
 import { validateCallControl, validateCallLaunch } from '../src/calls/batch-messages';
 import { createCallAdmission, retryCallCredential } from '../src/calls/admission';
@@ -11,7 +12,7 @@ import { initStorageBridge } from '../src/native/storage-bridge';
 import { initCredentialBridge } from '../src/native/credentials';
 import { nativeCredentialAccess } from '../src/configuration/credentials';
 import { initSpeechBridge } from '../src/speech/bridge';
-import { initActionBridge } from '../src/native/actions';
+import { initActionBridge } from '../src/custom-actions/bridge';
 import { validateCallEditRequest } from '../src/calls/contract';
 import type { CallEditorBridgeRequest } from '../src/calls/editor-client';
 import { prepareWritePreset } from '../src/configuration/resolve';
@@ -29,16 +30,19 @@ import { offscreenSender, workspaceSender } from '../src/platform/chrome/sender'
 import type { DbCall, DbRequest } from '../shared/protocol/history-types.ts';
 
 const db: DbCall = (message) => runnerRequest({ operation: 'db', message: message as DbRequest });
+const actionStore = createCustomActionStore(async () =>
+  legacySummaryPreset(await currentSettings()),
+);
 const settingsOwner = createConfigurationStore(
   chromeConfigurationStorage,
   sharedPresets,
   nativeCredentialAccess,
-  callStore.migrationComplete,
+  actionStore.migrationComplete,
 );
 const launchCall = createCallAdmission({
   readSettings: () => settingsOwner({ action: 'read' }),
-  readChoices: () => callStore.readChoices(currentSettings),
-  saveChoices: callStore.saveChoices,
+  readChoices: actionStore.readChoices,
+  saveChoices: actionStore.saveChoices,
   lookup: (id, snapshot) =>
     runnerRequest({ operation: 'digest', message: { action: 'resolve', id }, snapshot }),
   start: (snapshot, credential, regenerate) =>
@@ -58,7 +62,7 @@ async function currentSettings() {
 export default defineBackground(() => {
   initSummaryActions();
   initDeepDives();
-  initAnnotations(currentSettings);
+  initAnnotations(currentSettings, actionStore.readLibrary);
   const settings = settingsOwner;
   initStorageSecurity();
   initNativeBridge();
@@ -95,13 +99,13 @@ export default defineBackground(() => {
         const message: CallEditorBridgeRequest = request.message;
         switch (message?.action) {
           case 'read-choices':
-            return callStore.readChoices(currentSettings);
+            return actionStore.readChoices();
           case 'save-choices':
-            return callStore.saveChoices(message.source, message.choices);
+            return actionStore.saveChoices(message.source, message.choices);
           case 'read-draft':
-            return callStore.readDraft();
+            return actionStore.readDraft();
           case 'save-draft':
-            return callStore.saveDraft(message.draft);
+            return actionStore.saveDraft(message.draft);
           case 'prepare-preset':
             return prepareWritePreset(await currentSettings(), message.presetId);
           default:

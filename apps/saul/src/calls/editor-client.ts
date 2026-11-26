@@ -6,7 +6,7 @@ import type {
   CallEditorStorage,
   SavedCallChoices,
   SavedCallDraft,
-} from './contract';
+} from '../custom-actions/contract';
 
 export type CallEditorBridgeRequest =
   | { action: 'read-choices' }

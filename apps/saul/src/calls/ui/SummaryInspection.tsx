@@ -8,7 +8,7 @@ import type {
 } from '../../../shared/model/call-batch.ts';
 import { sendDigestMessage } from '../client';
 import { InspectionText } from '../../ui/InspectionText';
-import { changeLabel } from '../../reading/input-change';
+import { changeLabel } from '../../ui/text-change-label';
 import { SUMMARY_PROMPT, summaryUserPrompt } from '../execution/summary';
 
 export function ComparisonNote({ comparison }: { comparison: DigestComparison }) {

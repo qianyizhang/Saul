@@ -11,7 +11,7 @@ import type {
   ReviewedAnnotation,
 } from '../../shared/protocol/annotations.ts';
 import type { ModelPreset } from '../../shared/model/presets.ts';
-import type { CallChoice } from '../../shared/model/custom-call.ts';
+import type { ActionChoice } from '../../shared/model/custom-action.ts';
 import { request } from '../platform/chrome/messages';
 import type { AnnotationDraftMutation } from './draft';
 
@@ -30,7 +30,7 @@ type Operations = {
   stop: WorkspaceOperation<{ id: string }, void>;
   open: WorkspaceOperation<{ id?: string }, void>;
   capture: WorkspaceOperation<{ capture: AnnotationCapture }, AnnotationResult>;
-  choices: WorkspaceOperation<object, { presets: ModelPreset[]; calls: CallChoice[] }>;
+  choices: WorkspaceOperation<object, { presets: ModelPreset[]; calls: ActionChoice[] }>;
   'start-capture': WorkspaceOperation<object, void>;
   'page-markers': WorkspaceOperation<object, AnnotationResult>;
   respond: WorkspaceOperation<

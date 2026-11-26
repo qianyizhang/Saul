@@ -24,6 +24,30 @@ const sharedHostGlobals = [
     ...Object.keys(globals.node).filter((name) => !Object.hasOwn(globals.browser, name)),
   ]),
 ];
+const extensionImportPatterns = [
+  'node:*',
+  '**/native/**/*.mts',
+  '**/native/storage/**',
+  '**/board/**',
+];
+
+function featureImports(files, blocked) {
+  const feature = `(?:^|/)(?:${blocked.join('|')})(?:/|$)`;
+  const message = 'Use a shared capability instead of importing this feature.';
+  return {
+    files,
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: [{ group: extensionImportPatterns }, { regex: feature, message }] },
+      ],
+      'no-restricted-syntax': [
+        'error',
+        { selector: `ImportExpression[source.value=/${feature.replaceAll('/', '\\/')}/]`, message },
+      ],
+    },
+  };
+}
 
 export default ts.config(
   {
@@ -68,12 +92,12 @@ export default ts.config(
         'module',
         'exports',
       ],
-      'no-restricted-imports': [
-        'error',
-        { patterns: ['node:*', '**/native/**/*.mts', '**/native/storage/**', '**/board/**'] },
-      ],
+      'no-restricted-imports': ['error', { patterns: extensionImportPatterns }],
     },
   },
+  featureImports(['src/calls/**/*.{ts,tsx}'], ['annotations', 'reading']),
+  featureImports(['src/annotations/**/*.{ts,tsx}', 'src/reading/**/*.{ts,tsx}'], ['calls']),
+  featureImports(['src/custom-actions/**/*.{ts,tsx}'], ['calls', 'annotations', 'reading']),
   {
     files: [
       'src/settings/{draft,recovery}.ts',
@@ -108,6 +132,7 @@ export default ts.config(
             '../configuration/store',
             '../configuration/chrome-storage',
             '../configuration/client',
+            '**/reading/**',
           ],
         },
       ],

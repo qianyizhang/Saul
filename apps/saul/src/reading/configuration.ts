@@ -1,7 +1,8 @@
 import type { ResolvedContext } from '../../shared/model/reading.ts';
 import type { Configuration } from '../configuration/definition';
 import type { RunInput } from '../../shared/protocol/history-types.ts';
-import { configurationFor, renderRecipePrompt } from '../configuration/definition';
+import { configurationFor } from '../configuration/definition';
+import { renderRecipePrompt } from './prompts';
 import { preparePreset, prepareFrozenPreset } from '../configuration/resolve';
 import { validateModelPrompts } from '../../shared/model/execution-route.ts';
 import { readingContext, frozenReadingRecipe } from '../../shared/protocol/reading-history.mts';

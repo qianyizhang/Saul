@@ -1,16 +1,8 @@
+import type { Recipe } from '../../shared/model/presets.ts';
+import { parseTemplate, type TemplateField } from '../configuration/definition';
 import type { ResolvedContext } from '../../shared/model/reading.ts';
 
-export const DEFAULT_SYSTEM_PROMPT = `You are Saul, an expert AI reading companion and concept explainer.
-Your goal is to provide a clear, concise, and insightful explanation of the selected text within its surrounding context.
-
-Formatting Rules:
-1. Provide a direct, well-structured explanation (2-4 sentences).
-2. Identify 1 to 4 key technical terms, underlying mechanisms, or domain concepts in your explanation that the reader might want elaborated.
-3. For each of these key terms, wrap it in an inline XML tag: <term note="Concise, plain-English 1-2 sentence definition or explanation of this specific term">exact term</term>.
-4. Do NOT nest <term> tags.
-5. Do NOT output markdown code fences around the text. Output plain text with inline <term note="...">...</term> tags directly.`;
-
-export function renderReadingContext(context: ResolvedContext): string {
+function renderReadingContext(context: ResolvedContext): string {
   const parts: string[] = [];
 
   if (context.pageTitle || context.pageUrl) {
@@ -29,5 +21,48 @@ export function renderReadingContext(context: ResolvedContext): string {
     parts.push(`\n--- Surrounding Context ---\n${context.surroundingText}`);
   }
 
+  return parts.join('\n');
+}
+
+export function renderRecipePrompt(
+  recipe: Recipe,
+  context: ResolvedContext,
+  instruction?: string,
+): string {
+  const parsed = parseTemplate(recipe.template);
+  const values: Record<TemplateField, string | undefined> = {
+    text: context.selection,
+    context: renderReadingContext(context),
+    'page title': context.pageTitle,
+    'page url': context.pageUrl,
+    heading: context.heading,
+    paragraph: context.paragraph,
+  };
+  for (const field of parsed.fields) {
+    if (!values[field]?.trim())
+      throw new Error(
+        `“${recipe.name}” needs {{${field}}}, but it is not available from this selection and its enabled context.`,
+      );
+  }
+  const selection = parsed.parts
+    .map((part) => ('text' in part ? part.text : values[part.field]))
+    .join('');
+  // Keep existing context assembly byte-for-byte for migrated {{text}} recipes.
+  // Context that a template already placed is not appended a second time.
+  const remaining = parsed.fields.includes('context')
+    ? { selection, pageTitle: '', pageUrl: '' }
+    : {
+        ...context,
+        selection,
+        ...(parsed.fields.includes('page title') ? { pageTitle: '' } : {}),
+        ...(parsed.fields.includes('page url') ? { pageUrl: '' } : {}),
+        ...(parsed.fields.includes('heading') ? { heading: undefined } : {}),
+        ...(parsed.fields.includes('paragraph')
+          ? { paragraph: undefined, surroundingText: undefined }
+          : {}),
+      };
+  const surrounding = renderReadingContext(remaining);
+  const parts = surrounding ? [surrounding, selection] : [selection];
+  if (instruction) parts.push(`\nAdditional Instruction: ${instruction}`);
   return parts.join('\n');
 }

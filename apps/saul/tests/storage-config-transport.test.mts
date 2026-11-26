@@ -7,7 +7,7 @@ import { scopedCall } from '../src/native/config-transport';
 import { HistoryConfigService } from '../native/storage/service.mts';
 import { SharedPresetsStore } from '../native/storage/shared-presets.mts';
 import type { StorageHelperRequest } from '../shared/protocol/storage-protocol.mts';
-import { validateCallEditorState } from '../src/calls/contract';
+import { validateSavedActionState } from '../src/custom-actions/contract';
 import { actionHash } from '../native/action-store.mts';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -30,7 +30,7 @@ it('saves and reloads valid fragmented Call settings; a lost write reply does no
     };
   });
   const value = { library };
-  validateCallEditorState(value);
+  validateSavedActionState(value);
   let saves = 0;
   let loseReply = false;
   vi.stubGlobal('chrome', {

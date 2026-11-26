@@ -5,12 +5,12 @@ import type { Configuration } from '../src/configuration/definition';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 import { decodeConfiguration } from '../src/configuration/record';
 import { inspectPreset } from '../src/configuration/inspect';
-import { DEFAULT_SYSTEM_PROMPT } from '../src/reading/prompts';
+import { renderRecipePrompt } from '../src/reading/prompts';
 import {
   configurationFor,
   normalizeConfiguration,
   parseTemplate,
-  renderRecipePrompt,
+  DEFAULT_SYSTEM_PROMPT,
   starterConfiguration,
   validateConfiguration,
 } from '../src/configuration/definition';

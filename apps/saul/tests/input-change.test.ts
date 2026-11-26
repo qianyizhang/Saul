@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
-import { compareText, changeLabel } from '../src/reading/input-change';
+import { compareText } from '../shared/model/text-change.ts';
+import { changeLabel } from '../src/ui/text-change-label';
 import { textPages } from '../src/ui/InspectionText';
 
 it('distinguishes exact input, whitespace, word boundaries, reordering and Chinese additions', () => {

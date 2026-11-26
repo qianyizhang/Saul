@@ -2,16 +2,14 @@ import type { DbCall } from '../../shared/protocol/history-types.ts';
 import type { PreparedModel } from '../configuration/resolve';
 import type { ModelRequest } from '../../shared/model/execution-route.ts';
 import { streamModel } from '../providers/stream';
-import { actionHost } from './host';
+import { actionHost } from '../custom-actions/host-client';
+import { BUILDER_PROMPT, type CallEditRequest, type CallEditorState } from './contract';
 import {
-  BUILDER_PROMPT,
-  type CallEditRequest,
-  type CallEditorState,
   type CallChoices,
   type CallDraft,
   type CallEditorStorage,
   type SavedCallChoices,
-} from './contract';
+} from '../custom-actions/contract';
 import { validateActionModule } from '../../shared/protocol/action-protocol.mts';
 
 export type CallPresetPreparation = (id: string) => Promise<PreparedModel>;

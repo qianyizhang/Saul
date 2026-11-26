@@ -1,7 +1,6 @@
-import type { Configuration } from '../configuration/definition';
 import { scopedCall, ConfigUnavailableError } from '../native/config-transport';
 import { isRecord as record } from '../../shared/model/value.mts';
-import { legacySummaryPreset } from './choice-migration';
+import type { ActionChoice } from '../../shared/model/custom-action.ts';
 import {
   deserializeChoices,
   legacyChoices,
@@ -67,8 +66,10 @@ function choiceRecord(source: CallChoiceSource, value: unknown): SavedCallChoice
 }
 
 /** The background serializes choice migrations and writes. Draft writes never touch choices. */
-export function createCallStore(): Omit<CallEditorStorage, 'readChoices'> & {
-  readChoices(readMigrationSettings?: () => Promise<Configuration>): Promise<SavedCallChoices>;
+export function createCustomActionStore(
+  readLegacyBuiltinPresetId?: () => Promise<string | undefined>,
+): CallEditorStorage & {
+  readLibrary(): Promise<ActionChoice[]>;
   migrationComplete(): Promise<boolean>;
 } {
   let pending: Promise<unknown> = Promise.resolve();
@@ -116,66 +117,74 @@ export function createCallStore(): Omit<CallEditorStorage, 'readChoices'> & {
     }
   }
 
-  return {
-    readChoices: (readMigrationSettings) =>
-      choiceOperation(async () => {
-        const data = await chrome.storage.local.get([CHOICES_KEY, UNIFIED_KEY]);
-        const local = localRecord(data[CHOICES_KEY]);
-        let source: CallChoiceSource;
-        let configValue: unknown;
-        try {
-          const config = await scopedCall({ action: 'config-read', section: 'calls' });
-          source = { kind: 'shared', revision: config.revision };
-          if (config.value && data[UNIFIED_KEY] !== true) {
-            try {
-              await chrome.storage.local.set({ [UNIFIED_KEY]: true });
-            } catch (error) {
-              if (data[UNIFIED_KEY] !== 'pending') throw error;
-            }
-          }
-          if (!config.value && data[UNIFIED_KEY] === true) return choiceRecord(source, {});
-          configValue = config.value;
-        } catch (error) {
-          if (data[UNIFIED_KEY] || !(error instanceof ConfigUnavailableError)) throw error;
-          source = { kind: 'chrome', revision: local.revision };
-        }
-
-        const value =
-          configValue ??
-          (local.value !== undefined ? local.value : await legacyPart(LEGACY_CHOICE_FIELDS));
-        const saved = choiceRecord(source, value);
-        if (saved.state !== 'ready') return saved;
-        if (isCurrent(value)) {
-          if (source.kind === 'chrome' || configValue !== undefined) return saved;
-          // Promote the existing Chrome selection before exposing a shared revision.
-          await saveChoices(source, saved.choices);
-          return { ...saved, source: { ...source, revision: source.revision + 1 } };
-        }
-        let builtinPresetId: string | undefined;
-        if (readMigrationSettings) {
+  const readChoices = (): Promise<SavedCallChoices> =>
+    choiceOperation(async () => {
+      const data = await chrome.storage.local.get([CHOICES_KEY, UNIFIED_KEY]);
+      const local = localRecord(data[CHOICES_KEY]);
+      let source: CallChoiceSource;
+      let configValue: unknown;
+      try {
+        const config = await scopedCall({ action: 'config-read', section: 'calls' });
+        source = { kind: 'shared', revision: config.revision };
+        if (config.value && data[UNIFIED_KEY] !== true) {
           try {
-            builtinPresetId = legacySummaryPreset(await readMigrationSettings());
+            await chrome.storage.local.set({ [UNIFIED_KEY]: true });
           } catch (error) {
-            // A legacy custom choice still identifies its saved attempts.
-            // Keep the unconverted record intact until the legacy settings can be read.
-            return {
-              ...saved,
-              source: {
-                ...source,
-                migrationBlocked: error instanceof Error ? error.message : String(error),
-              },
-            };
+            if (data[UNIFIED_KEY] !== 'pending') throw error;
           }
-        } else if (Object.keys(value as object).length === 0) return saved;
+        }
+        if (!config.value && data[UNIFIED_KEY] === true) return choiceRecord(source, {});
+        configValue = config.value;
+      } catch (error) {
+        if (data[UNIFIED_KEY] || !(error instanceof ConfigUnavailableError)) throw error;
+        source = { kind: 'chrome', revision: local.revision };
+      }
 
-        const choices = { ...saved.choices, builtinPresetId };
-        await saveChoices(source, choices);
-        return {
-          state: 'ready',
-          source: { ...source, revision: source.revision + 1 },
-          choices,
-        };
-      }),
+      const value =
+        configValue ??
+        (local.value !== undefined ? local.value : await legacyPart(LEGACY_CHOICE_FIELDS));
+      const saved = choiceRecord(source, value);
+      if (saved.state !== 'ready') return saved;
+      if (isCurrent(value)) {
+        if (source.kind === 'chrome' || configValue !== undefined) return saved;
+        // Promote the existing Chrome selection before exposing a shared revision.
+        await saveChoices(source, saved.choices);
+        return { ...saved, source: { ...source, revision: source.revision + 1 } };
+      }
+      let builtinPresetId: string | undefined;
+      if (readLegacyBuiltinPresetId) {
+        try {
+          builtinPresetId = await readLegacyBuiltinPresetId();
+        } catch (error) {
+          // A legacy custom choice still identifies its saved attempts.
+          // Keep the unconverted record intact until the legacy settings can be read.
+          return {
+            ...saved,
+            source: {
+              ...source,
+              migrationBlocked: error instanceof Error ? error.message : String(error),
+            },
+          };
+        }
+      } else if (Object.keys(value as object).length === 0) return saved;
+
+      const choices = { ...saved.choices, builtinPresetId };
+      await saveChoices(source, choices);
+      return {
+        state: 'ready',
+        source: { ...source, revision: source.revision + 1 },
+        choices,
+      };
+    });
+
+  return {
+    readChoices,
+    async readLibrary() {
+      const saved = await readChoices();
+      return saved.state === 'ready'
+        ? (saved.choices.library ?? []).filter((choice) => choice.revision.approved === true)
+        : [];
+    },
     saveChoices: (source, choices) => choiceOperation(() => saveChoices(source, choices)),
     async migrationComplete() {
       // This check can run inside a Settings commit. Do not wait on the choice
@@ -208,5 +217,3 @@ export function createCallStore(): Omit<CallEditorStorage, 'readChoices'> & {
     },
   };
 }
-
-export const callStore = createCallStore();

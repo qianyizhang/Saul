@@ -1,4 +1,4 @@
-import { callChoiceKey } from '../../../shared/model/custom-call.ts';
+import { actionChoiceKey } from '../../../shared/model/custom-action.ts';
 import { ActionLabel } from '../../ui/ActionLabel';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ModelPreset } from '../../../shared/model/presets.ts';
@@ -177,9 +177,9 @@ export function CallSettings({
           <select
             aria-label="Call preset"
             disabled={!canEditCall}
-            value={state.selected ? callChoiceKey(state.selected) : ''}
+            value={state.selected ? actionChoiceKey(state.selected) : ''}
             onChange={(event) => {
-              const choice = state.library?.find((c) => callChoiceKey(c) === event.target.value);
+              const choice = state.library?.find((c) => actionChoiceKey(c) === event.target.value);
               void request(
                 choice
                   ? {
@@ -194,7 +194,7 @@ export function CallSettings({
             <option value="">Summarize (default)</option>
             {(state.library || []).map((choice) => {
               const model = writePresets.find((p) => p.id === choice.presetId);
-              const key = callChoiceKey(choice);
+              const key = actionChoiceKey(choice);
               return (
                 <option key={key} value={key} disabled={!model}>
                   {choice.revision.name} · {model?.name ?? 'Unavailable preset'}

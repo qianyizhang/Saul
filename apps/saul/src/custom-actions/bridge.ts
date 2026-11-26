@@ -4,6 +4,7 @@ import {
   validateActionHostRequest,
   type ActionHostEvent,
 } from '../../shared/protocol/action-protocol.mts';
+import { offscreenSender } from '../platform/chrome/sender';
 
 // Only the offscreen execution owner can talk to the action host. Source pages never can.
 export function initActionBridge() {
@@ -47,12 +48,7 @@ export function initActionBridge() {
   };
   chrome.runtime.onConnect.addListener((port) => {
     if (port.name !== ACTION_PORT) return;
-    const sender = port.sender;
-    if (
-      sender?.id !== chrome.runtime.id ||
-      sender.tab ||
-      sender.url !== chrome.runtime.getURL('offscreen.html')
-    ) {
+    if (!offscreenSender(port.sender)) {
       port.disconnect();
       return;
     }

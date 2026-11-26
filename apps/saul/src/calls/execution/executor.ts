@@ -1,5 +1,5 @@
 import type { CallSnapshot } from '../../../shared/model/call-output.ts';
-import { actionHost } from '../host';
+import { actionHost } from '../../custom-actions/host-client';
 import { planEvents } from '../../providers/chatgpt-plan';
 import { streamModel } from '../../providers/stream';
 import { parseSummary, summaryRequestInput } from './summary';

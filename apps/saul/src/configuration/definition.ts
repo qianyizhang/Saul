@@ -64,8 +64,6 @@ import {
   validImageOptions,
   validSpeechOptions,
 } from '../../shared/protocol/shared-presets-contract.mts';
-import type { ResolvedContext } from '../../shared/model/reading.ts';
-import { DEFAULT_SYSTEM_PROMPT, renderReadingContext } from '../reading/prompts.ts';
 
 export const TEMPLATE_FIELDS = [
   'text',
@@ -75,7 +73,7 @@ export const TEMPLATE_FIELDS = [
   'heading',
   'paragraph',
 ] as const;
-type TemplateField = (typeof TEMPLATE_FIELDS)[number];
+export type TemplateField = (typeof TEMPLATE_FIELDS)[number];
 type Part = { text: string } | { field: TemplateField };
 
 /** Literal substitutions only. Inserted page text is never parsed as a template. */
@@ -110,49 +108,6 @@ export function parseTemplate(source: string): { parts: Part[]; fields: Template
   return { parts, fields };
 }
 
-export function renderRecipePrompt(
-  recipe: Recipe,
-  context: ResolvedContext,
-  instruction?: string,
-): string {
-  const parsed = parseTemplate(recipe.template);
-  const values: Record<TemplateField, string | undefined> = {
-    text: context.selection,
-    context: renderReadingContext(context),
-    'page title': context.pageTitle,
-    'page url': context.pageUrl,
-    heading: context.heading,
-    paragraph: context.paragraph,
-  };
-  for (const field of parsed.fields) {
-    if (!values[field]?.trim())
-      throw new Error(
-        `“${recipe.name}” needs {{${field}}}, but it is not available from this selection and its enabled context.`,
-      );
-  }
-  const selection = parsed.parts
-    .map((part) => ('text' in part ? part.text : values[part.field]))
-    .join('');
-  // Keep existing context assembly byte-for-byte for migrated {{text}} recipes.
-  // Context that a template already placed is not appended a second time.
-  const remaining = parsed.fields.includes('context')
-    ? { selection, pageTitle: '', pageUrl: '' }
-    : {
-        ...context,
-        selection,
-        ...(parsed.fields.includes('page title') ? { pageTitle: '' } : {}),
-        ...(parsed.fields.includes('page url') ? { pageUrl: '' } : {}),
-        ...(parsed.fields.includes('heading') ? { heading: undefined } : {}),
-        ...(parsed.fields.includes('paragraph')
-          ? { paragraph: undefined, surroundingText: undefined }
-          : {}),
-      };
-  const surrounding = renderReadingContext(remaining);
-  const parts = surrounding ? [surrounding, selection] : [selection];
-  if (instruction) parts.push(`\nAdditional Instruction: ${instruction}`);
-  return parts.join('\n');
-}
-
 export function presetFromSelection(
   settings: ProviderDefaults,
   id: string,
@@ -181,6 +136,16 @@ export function presetFromSelection(
       };
   }
 }
+
+export const DEFAULT_SYSTEM_PROMPT = `You are Saul, an expert AI reading companion and concept explainer.
+Your goal is to provide a clear, concise, and insightful explanation of the selected text within its surrounding context.
+
+Formatting Rules:
+1. Provide a direct, well-structured explanation (2-4 sentences).
+2. Identify 1 to 4 key technical terms, underlying mechanisms, or domain concepts in your explanation that the reader might want elaborated.
+3. For each of these key terms, wrap it in an inline XML tag: <term note="Concise, plain-English 1-2 sentence definition or explanation of this specific term">exact term</term>.
+4. Do NOT nest <term> tags.
+5. Do NOT output markdown code fences around the text. Output plain text with inline <term note="...">...</term> tags directly.`;
 
 export const DEFAULT_RECIPE_SYSTEM_PROMPT =
   'You are Saul, a concise language assistant. Follow the requested task and answer directly. Use plain text; annotate useful concepts with <term note="A brief explanation">concept</term> when helpful. Do not nest term tags.';

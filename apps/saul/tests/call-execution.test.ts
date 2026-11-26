@@ -4,8 +4,8 @@ import {
   createCallExecutor,
   type CallExecutor,
   type FrozenCall,
-} from '../src/calls/execution/module';
-import type { actionHost } from '../src/calls/host';
+} from '../src/calls/execution/executor';
+import type { actionHost } from '../src/custom-actions/host-client';
 import type { streamModel } from '../src/providers/stream';
 import type { ModelEvent } from '../shared/model/model-events.ts';
 type TextEvent = Extract<ModelEvent, { type: 'delta' | 'complete' }>;

@@ -1,40 +1,17 @@
-import { callChoiceKey, type CallChoice } from '../../shared/model/custom-call.ts';
-import type { ActionRevision } from '../../shared/protocol/action-protocol.mts';
-import { validRevision, validateActionModule } from '../../shared/protocol/action-protocol.mts';
+import { validRevision } from '../../shared/protocol/action-protocol.mts';
 import { isRecord as record } from '../../shared/model/value.mts';
+import {
+  ACTION_BUILDER_PROMPT_LIMIT,
+  ACTION_PRESET_ID_LIMIT,
+  type CallChoices,
+  type CallChoiceSource,
+  type SavedCallDraft,
+} from '../custom-actions/contract';
 
-export interface CallChoices {
-  builtinPresetId?: string;
-  library?: CallChoice[];
-  selected?: CallChoice;
-  previous?: CallChoice;
-}
-export interface CallDraft {
-  candidate?: ActionRevision;
-  prompt?: string;
-  raw?: string;
-  error?: string;
-}
-export type SavedCallDraft = CallDraft & { building?: boolean };
 export interface CallEditorState extends SavedCallDraft, CallChoices {
   blocked?: boolean;
   canRecover?: boolean;
   choiceSource?: CallChoiceSource;
-}
-export type CallChoiceSource = {
-  kind: 'chrome' | 'shared';
-  revision: number;
-  migrationBlocked?: string;
-};
-export type SavedCallChoices = { source: CallChoiceSource } & (
-  | { state: 'ready'; choices: CallChoices }
-  | { state: 'invalid'; error: string; recovery?: CallChoices }
-);
-export interface CallEditorStorage {
-  readChoices(): Promise<SavedCallChoices>;
-  saveChoices(source: CallChoiceSource, choices: CallChoices): Promise<void>;
-  readDraft(): Promise<SavedCallDraft>;
-  saveDraft(draft: SavedCallDraft): Promise<void>;
 }
 export type CallEditRequest =
   | { action: 'status' }
@@ -47,8 +24,11 @@ export type CallEditRequest =
   | { action: 'restore' }
   | { action: 'builtin' }
   | { action: 'builtin-preset'; presetId: string; baseline: CallChoiceSource };
-export const LEGACY_CALL_STATE_KEY = 'saul_summary_action_v1';
-export const CALL_FORM_LIMITS = { prompt: 8000, presetId: 128, path: 4096 } as const;
+export const CALL_FORM_LIMITS = {
+  prompt: ACTION_BUILDER_PROMPT_LIMIT,
+  presetId: ACTION_PRESET_ID_LIMIT,
+  path: 4096,
+} as const;
 export const BUILDER_PROMPT = `You write Saul action contract 1 modules. Return ONLY a JSON object with exactly:
 {"contractVersion":1,"name":"short name","description":"what it does","language":"typescript","source":"one complete module"}.
 The self-contained module exports default async function run(ctx): Promise<string>.
@@ -110,79 +90,4 @@ export function validateCallEditRequest(value: unknown): asserts value is CallEd
   }
   if ((value.action === 'load' || value.action === 'select') && !validRevision(value.revision))
     throw new Error('Invalid action revision.');
-}
-export function validateCallEditorState(value: unknown): asserts value is CallEditorState {
-  if (
-    !record(value) ||
-    Object.keys(value).some(
-      (k) =>
-        ![
-          'builtinPresetId',
-          'library',
-          'selected',
-          'previous',
-          'candidate',
-          'prompt',
-          'raw',
-          'error',
-          'building',
-          'blocked',
-          'canRecover',
-          'choiceSource',
-        ].includes(k),
-    )
-  )
-    throw new Error('Call settings are invalid. Choose Use Summarize to recover.');
-  const revision = (v: unknown) => {
-    if (
-      !record(v) ||
-      !validRevision(v.revision) ||
-      typeof v.createdAt !== 'number' ||
-      !Number.isFinite(v.createdAt) ||
-      (v.approved !== undefined && typeof v.approved !== 'boolean')
-    )
-      throw new Error('Invalid saved action revision.');
-    const { contractVersion, name, description, language, source } = v;
-    validateActionModule({ contractVersion, name, description, language, source });
-  };
-  if (
-    value.builtinPresetId !== undefined &&
-    (typeof value.builtinPresetId !== 'string' ||
-      !value.builtinPresetId.trim() ||
-      value.builtinPresetId.length > CALL_FORM_LIMITS.presetId)
-  )
-    throw new Error('Invalid summary model preset reference.');
-  if (value.library !== undefined) {
-    if (!Array.isArray(value.library) || value.library.length > 128)
-      throw new Error('Keep at most 128 call presets.');
-    for (const choice of value.library) validateCallEditorState({ selected: choice });
-    const ids = value.library.map(callChoiceKey);
-    if (new Set(ids).size !== ids.length) throw new Error('Duplicate call presets.');
-  }
-  for (const key of ['selected', 'previous'] as const)
-    if (value[key] !== undefined) {
-      const choice = value[key];
-      if (
-        !record(choice) ||
-        typeof choice.presetId !== 'string' ||
-        !choice.presetId ||
-        choice.presetId.length > CALL_FORM_LIMITS.presetId
-      )
-        throw new Error('Invalid action preset reference.');
-      revision(choice.revision);
-    }
-  if (value.candidate !== undefined) revision(value.candidate);
-  for (const [key, limit] of [
-    ['prompt', CALL_FORM_LIMITS.prompt],
-    ['raw', 100_000],
-    ['error', 100_000],
-  ] as const)
-    if (
-      value[key] !== undefined &&
-      (typeof value[key] !== 'string' || (value[key] as string).length > limit)
-    )
-      throw new Error('Invalid saved action draft.');
-  for (const key of ['building', 'blocked'])
-    if (value[key] !== undefined && typeof value[key] !== 'boolean')
-      throw new Error('Invalid action status.');
 }

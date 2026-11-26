@@ -1,4 +1,4 @@
-import { annotationPanelKey } from '../src/annotations/routing';
+import { panelViewKey } from '../src/platform/chrome/panel-view';
 import { afterEach, expect, it, vi } from 'vitest';
 import {
   openSummaryPanel,
@@ -25,7 +25,7 @@ it('dispatches panel opening in the gesture without waiting for storage, and sco
   expect(set).toHaveBeenCalledExactlyOnceWith({
     [summaryPanelKey(7)]: expect.stringMatching(/^#summary\/[^?]+\?tabs=42$/),
     [pendingPanelCallKey(7)]: null,
-    [annotationPanelKey(7)]: { view: 'summary' },
+    [panelViewKey(7)]: { view: 'summary' },
   });
   finish();
   await expect(result).resolves.toHaveProperty('id');

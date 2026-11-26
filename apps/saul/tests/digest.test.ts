@@ -3,8 +3,8 @@ import { parseSummary } from '../src/calls/execution/summary';
 import { digestHtml } from '../src/calls/ui/summary-html';
 import { validateCallControl, validateCallLaunch } from '../src/calls/batch-messages';
 import { CallBatchRunner } from '../src/calls/execution/batch-runner';
-import { createCallExecutor } from '../src/calls/execution/module';
-import type { actionHost } from '../src/calls/host';
+import { createCallExecutor } from '../src/calls/execution/executor';
+import type { actionHost } from '../src/custom-actions/host-client';
 import {
   activeItem,
   interruptItem,

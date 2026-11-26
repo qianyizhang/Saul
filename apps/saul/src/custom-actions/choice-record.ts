@@ -1,25 +1,27 @@
-import { callChoiceKey, type CallChoice } from '../../shared/model/custom-call.ts';
+import { actionChoiceKey, type ActionChoice } from '../../shared/model/custom-action.ts';
 import { isRecord as record } from '../../shared/model/value.mts';
-import { validateCallEditorState, type CallChoices } from './contract';
+import { validateSavedActionState, type CallChoices } from './contract';
 
 export const LEGACY_CHOICE_FIELDS = ['library', 'selected', 'previous'] as const;
 const CHOICE_FIELDS = [...LEGACY_CHOICE_FIELDS, 'builtinPresetId'];
 const STORED_FIELDS = [...CHOICE_FIELDS, 'schema'];
 
 export function validatePart(value: unknown, keys: readonly string[]) {
-  validateCallEditorState(value);
+  validateSavedActionState(value);
   if (Object.keys(value).some((key) => !keys.includes(key))) throw new Error('Invalid Call data.');
 }
 
 export function legacyChoices(value: unknown): CallChoices {
   validatePart(value, LEGACY_CHOICE_FIELDS);
   const choices = value as CallChoices;
-  const library = new Map((choices.library ?? []).map((choice) => [callChoiceKey(choice), choice]));
+  const library = new Map(
+    (choices.library ?? []).map((choice) => [actionChoiceKey(choice), choice]),
+  );
   for (const choice of [choices.previous, choices.selected]) {
-    if (choice) library.set(callChoiceKey(choice), choice);
+    if (choice) library.set(actionChoiceKey(choice), choice);
   }
   const migrated = { ...choices, library: [...library.values()] };
-  validateCallEditorState(migrated);
+  validateSavedActionState(migrated);
   return migrated;
 }
 
@@ -31,8 +33,8 @@ export function serializeChoices(choices: CallChoices): Record<string, unknown> 
     schema: 2,
     library: library ?? [],
     ...(builtinPresetId === undefined ? {} : { builtinPresetId }),
-    ...(selected && { selected: callChoiceKey(selected) }),
-    ...(previous && { previous: callChoiceKey(previous) }),
+    ...(selected && { selected: actionChoiceKey(selected) }),
+    ...(previous && { previous: actionChoiceKey(previous) }),
   };
   deserializeChoices(stored);
   return stored;
@@ -47,9 +49,9 @@ export function deserializeChoices(value: unknown): CallChoices {
   )
     throw new Error('Invalid Call data.');
   const { library, builtinPresetId, selected, previous } = value;
-  validateCallEditorState({ library, builtinPresetId });
+  validateSavedActionState({ library, builtinPresetId });
   const choices = new Map(
-    (library as CallChoice[]).map((choice) => [callChoiceKey(choice), choice]),
+    (library as ActionChoice[]).map((choice) => [actionChoiceKey(choice), choice]),
   );
   const resolve = (key: unknown) => {
     if (key === undefined) return undefined;
@@ -72,14 +74,14 @@ export function recoverChoices(value: unknown): CallChoices | undefined {
   const fields: readonly string[] = current ? STORED_FIELDS : LEGACY_CHOICE_FIELDS;
   if ((current && value.schema !== 2) || Object.keys(value).some((key) => !fields.includes(key)))
     return undefined;
-  const library = new Map<string, CallChoice>();
+  const library = new Map<string, ActionChoice>();
   function add(choice: unknown) {
     if (choice === undefined) return undefined;
     try {
       const entry: unknown = { selected: choice };
-      validateCallEditorState(entry);
+      validateSavedActionState(entry);
       if (!entry.selected) return undefined;
-      const key = callChoiceKey(entry.selected);
+      const key = actionChoiceKey(entry.selected);
       if (!library.has(key) && library.size >= 128) return undefined;
       library.set(key, entry.selected);
       return entry.selected;
@@ -95,7 +97,7 @@ export function recoverChoices(value: unknown): CallChoices | undefined {
   let builtinPresetId: string | undefined;
   try {
     const entry: unknown = { builtinPresetId: value.builtinPresetId };
-    validateCallEditorState(entry);
+    validateSavedActionState(entry);
     builtinPresetId = entry.builtinPresetId;
   } catch {
     // The damaged built-in reference can be chosen again after recovery.

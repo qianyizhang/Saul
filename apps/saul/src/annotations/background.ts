@@ -19,11 +19,12 @@ import {
 } from '../../shared/protocol/annotations.ts';
 import { prepareWritePreset } from '../configuration/resolve';
 import { configurationFor } from '../configuration/definition';
-import { callStore } from '../calls/store';
+import type { ActionChoice } from '../../shared/model/custom-action.ts';
 import type { Configuration } from '../configuration/definition';
 import { z } from 'zod';
 
-import { annotationPanelKey, annotationVersionKey } from './routing';
+import { annotationVersionKey } from './routing';
+import { panelViewKey } from '../platform/chrome/panel-view';
 export async function operateAnnotations(
   request: AnnotationRequest,
   external?: true,
@@ -60,7 +61,7 @@ export async function agentAnnotations(request: unknown) {
 async function openPanel(windowId: number, id?: string) {
   // Opening is attempted in the original capture gesture. A visible retry remains if Chrome expires it.
   const opening = chrome.sidePanel.open({ windowId });
-  await chrome.storage.session.set({ [annotationPanelKey(windowId)]: { view: 'annotations', id } });
+  await chrome.storage.session.set({ [panelViewKey(windowId)]: { view: 'annotations', id } });
   await opening;
 }
 async function markedImage(data: string, c: AnnotationCapture, number: number) {
@@ -249,7 +250,10 @@ async function pageIndex(tabId: number, url: string, filter: 'open' | 'done' | '
     throw new Error('Page changed. Refresh the index.');
   return { records: records.sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)) };
 }
-export function initAnnotations(settings: () => Promise<Configuration>) {
+export function initAnnotations(
+  settings: () => Promise<Configuration>,
+  readActionLibrary: () => Promise<ActionChoice[]>,
+) {
   chrome.tabs.onUpdated.addListener((id, change, tab) => {
     if (change.url && !tab.incognito && /^https?:/.test(change.url))
       void chrome.tabs.sendMessage(id, { type: 'SAUL_ANNOTATIONS_CHANGED' }).catch(() => undefined);
@@ -357,10 +361,10 @@ export function initAnnotations(settings: () => Promise<Configuration>) {
       }
       if (request.action === 'choices') {
         const s = await settings();
-        const calls = await callStore.readChoices(settings);
+        const calls = await readActionLibrary();
         return {
           presets: configurationFor(s).presets.filter((p) => (p.capability ?? 'write') === 'write'),
-          calls: calls.state === 'ready' ? (calls.choices.library ?? []) : [],
+          calls,
         };
       }
       if (request.action === 'respond') {
@@ -381,11 +385,8 @@ export function initAnnotations(settings: () => Promise<Configuration>) {
         const s = await settings(),
           prepared = prepareWritePreset(s, p.presetId);
         if (p.callRevision) {
-          const calls = await callStore.readChoices(settings);
-          if (
-            calls.state !== 'ready' ||
-            !calls.choices.library?.some((c) => c.revision.revision === p.callRevision)
-          )
+          const calls = await readActionLibrary();
+          if (!calls.some((c) => c.revision.revision === p.callRevision))
             throw new Error('Choose an approved Call.');
         }
         const related = p.targets.flatMap((t) => (t.url ? [t.url] : []));

@@ -1,9 +1,14 @@
 import type { DbCall } from '../../../shared/protocol/history-types.ts';
 import { type CallSnapshot } from '../../../shared/model/call-output.ts';
-import { createCallExecutor, type CallExecutor, type CallOutcome, type FrozenCall } from './module';
+import {
+  createCallExecutor,
+  type CallExecutor,
+  type CallOutcome,
+  type FrozenCall,
+} from './executor';
 import { executionModel, originalSummaryPlan } from '../../../shared/model/execution-route.ts';
 import { SUMMARY_PROMPT } from './summary';
-import { compareText } from '../../reading/input-change';
+import { compareText } from '../../../shared/model/text-change.ts';
 import {
   activeItem,
   interruptItem,

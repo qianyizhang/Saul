@@ -24,7 +24,7 @@ import { prepareFrozenPreset, prepareWritePreset, preparePreset } from '../confi
 import { nativeCredentialCall } from '../native/credentials';
 import type { SettingsState } from '../settings/contract';
 import { readCallSources } from './capture/capture';
-import type { CallEditorStorage } from './contract';
+import type { CallEditorStorage } from '../custom-actions/contract';
 import { SUMMARY_PROMPT } from './execution/summary';
 
 type Start = Extract<DigestRequest, { action: 'start' }>;

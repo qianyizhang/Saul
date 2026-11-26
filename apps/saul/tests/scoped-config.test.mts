@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SharedPresetsStore } from '../native/storage/shared-presets.mts';
 import { portableSettings, restoreSettings } from '../src/configuration/scoped';
-import { validateCallEditorState } from '../src/calls/contract';
+import { validateSavedActionState } from '../src/custom-actions/contract';
 import { actionHash } from '../native/action-store.mts';
 import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
 
@@ -65,7 +65,7 @@ for (const name of [
         true,
       );
       const calls: unknown = store.readScope('calls').value;
-      validateCallEditorState(calls);
+      validateSavedActionState(calls);
       for (const choice of calls.library || []) {
         expect(choice.revision.approved).not.toBe(true);
         expect(actionHash(choice.revision)).toBe(choice.revision.revision);

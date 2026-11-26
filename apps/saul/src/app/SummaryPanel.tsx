@@ -1,5 +1,5 @@
 import { AnnotationPanel } from '../annotations/AnnotationPanel';
-import { annotationPanelKey } from '../annotations/routing';
+import { panelViewKey } from '../platform/chrome/panel-view';
 import { useCallback, useEffect, useState } from 'react';
 import { useMinimumMode } from '../ui/useMinimumMode';
 import { SummaryHistory, SummaryReader } from '../calls/ui/Summaries';
@@ -21,7 +21,7 @@ export function SummaryPanel() {
   const selectView = (view: 'summary' | 'annotations') => {
     if (windowId === undefined) return;
     void chrome.storage.session
-      .set({ [annotationPanelKey(windowId)]: { view } })
+      .set({ [panelViewKey(windowId)]: { view } })
       .catch((e: Error) => setError(e.message));
   };
 
@@ -108,7 +108,7 @@ export function SummaryPanel() {
       if (currentWindow.id === undefined) throw new Error('The summary window is unavailable.');
       setWindowId(currentWindow.id);
       key = summaryPanelKey(currentWindow.id);
-      viewKey = annotationPanelKey(currentWindow.id);
+      viewKey = panelViewKey(currentWindow.id);
       pendingKey = pendingPanelCallKey(currentWindow.id);
       const before = revision;
       const beforeView = viewRevision;

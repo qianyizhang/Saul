@@ -1,10 +1,41 @@
 import { storagePort } from './helpers/storage-port';
 import { afterEach, expect, it, vi } from 'vitest';
-import { createCallStore } from '../src/calls/store';
-import { LEGACY_CALL_STATE_KEY } from '../src/calls/contract';
-import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
+import { createCustomActionStore } from '../src/custom-actions/store';
+import { LEGACY_CALL_STATE_KEY } from '../src/custom-actions/contract';
 
 afterEach(() => vi.unstubAllGlobals());
+
+it('exposes only approved library entries to other features', async () => {
+  const revision = {
+    revision: 'a'.repeat(64),
+    contractVersion: 1 as const,
+    name: 'Review',
+    description: 'Review the page',
+    language: 'typescript' as const,
+    source: 'export default () => "review";',
+    createdAt: 1,
+  };
+  const approved = { revision: { ...revision, approved: true }, presetId: 'preset-a' };
+  const candidate = {
+    revision: { ...revision, revision: 'b'.repeat(64), approved: false },
+    presetId: 'preset-b',
+  };
+  const value = {
+    schema: 2,
+    library: [candidate, approved],
+    selected: candidate.revision.revision + ':' + candidate.presetId,
+    builtinPresetId: 'builtin',
+  };
+  vi.stubGlobal('chrome', {
+    storage: { local: { get: async () => ({ saul_call_choices_v1: { revision: 2, value } }) } },
+  });
+  const storage = createCustomActionStore();
+  await expect(storage.readLibrary()).resolves.toEqual([approved]);
+  await expect(storage.readChoices()).resolves.toMatchObject({
+    choices: { selected: candidate, builtinPresetId: 'builtin' },
+  });
+});
+
 it('adopts the JSON call library and refuses helper loss or stale saves after adoption', async () => {
   const local: Record<string, unknown> = { [LEGACY_CALL_STATE_KEY]: {} };
   let revision = 1;
@@ -37,7 +68,7 @@ it('adopts the JSON call library and refuses helper loss or stale saves after ad
       ),
     },
   });
-  const storage = createCallStore();
+  const storage = createCustomActionStore();
   const localBeforeAdoption = await storage.readChoices();
   expect(localBeforeAdoption.source).toEqual({ kind: 'chrome', revision: 0 });
   available = true;
@@ -52,7 +83,7 @@ it('adopts the JSON call library and refuses helper loss or stale saves after ad
   await expect(storage.saveChoices(first.source, { library: [] })).rejects.toThrow('Reload');
   expect(local[LEGACY_CALL_STATE_KEY]).toEqual({});
   available = false;
-  await expect(createCallStore().readChoices()).rejects.toThrow('unavailable');
+  await expect(createCustomActionStore().readChoices()).rejects.toThrow('unavailable');
 });
 it('allows browser-only storage but rejects malformed replies rather than downgrading', async () => {
   const sendNativeMessage = vi.fn(async (): Promise<unknown> => {
@@ -62,12 +93,12 @@ it('allows browser-only storage but rejects malformed replies rather than downgr
     storage: { local: { get: async () => ({}), set: vi.fn() } },
     runtime: { connectNative: storagePort(sendNativeMessage) },
   });
-  expect(await createCallStore().readChoices()).toMatchObject({
+  expect(await createCustomActionStore().readChoices()).toMatchObject({
     state: 'ready',
     source: { kind: 'chrome' },
   });
   sendNativeMessage.mockResolvedValue({ event: { type: 'result', config: { revision: -1 } } });
-  await expect(createCallStore().readChoices()).rejects.toThrow('invalid reply');
+  await expect(createCustomActionStore().readChoices()).rejects.toThrow('invalid reply');
 });
 
 it('migrates a legacy built-in reference once and rejects stale local choice saves', async () => {
@@ -81,12 +112,9 @@ it('migrates a legacy built-in reference once and rejects stale local choice sav
       },
     },
   });
-  const readSettings = vi.fn(async () => ({
-    ...DEFAULT_CONFIGURATION,
-    summaryPresetId: 'removed-preset',
-  }));
-  const storage = createCallStore();
-  const migrated = await storage.readChoices(readSettings);
+  const readLegacyPresetId = vi.fn(async () => 'removed-preset');
+  const storage = createCustomActionStore(readLegacyPresetId);
+  const migrated = await storage.readChoices();
   expect(migrated).toMatchObject({
     state: 'ready',
     choices: { builtinPresetId: 'removed-preset', library: [] },
@@ -95,11 +123,11 @@ it('migrates a legacy built-in reference once and rejects stale local choice sav
   await expect(
     storage.saveChoices(migrated.source, { builtinPresetId: 'stale-preset' }),
   ).rejects.toThrow('Reload');
-  expect(await createCallStore().readChoices(readSettings)).toMatchObject({
+  expect(await createCustomActionStore(readLegacyPresetId).readChoices()).toMatchObject({
     state: 'ready',
     choices: { builtinPresetId: 'chosen-preset' },
   });
-  expect(readSettings).toHaveBeenCalledTimes(1);
+  expect(readLegacyPresetId).toHaveBeenCalledTimes(1);
 });
 
 it('preserves a concurrent shared Calls save when migrating from the old shape', async () => {
@@ -127,18 +155,18 @@ it('preserves a concurrent shared Calls save when migrating from the old shape',
       ),
     },
   });
-  const readSettings = vi.fn(async () => {
+  const readLegacyPresetId = vi.fn(async () => {
     revision++;
     value = { schema: 2, library: [], builtinPresetId: 'selected-elsewhere' };
-    return { ...DEFAULT_CONFIGURATION, summaryPresetId: 'old-preset' };
+    return 'old-preset';
   });
-  const storage = createCallStore();
-  await expect(storage.readChoices(readSettings)).rejects.toThrow('Reload');
-  expect(await storage.readChoices(readSettings)).toMatchObject({
+  const storage = createCustomActionStore(readLegacyPresetId);
+  await expect(storage.readChoices()).rejects.toThrow('Reload');
+  expect(await storage.readChoices()).toMatchObject({
     state: 'ready',
     choices: { builtinPresetId: 'selected-elsewhere' },
   });
-  expect(readSettings).toHaveBeenCalledTimes(1);
+  expect(readLegacyPresetId).toHaveBeenCalledTimes(1);
   expect(write).toHaveBeenCalledTimes(1);
 });
 
@@ -165,23 +193,23 @@ it('reads back an uncertain migration and never falls back after the shared sect
       ),
     },
   });
-  const readSettings = vi.fn(async () => ({ ...DEFAULT_CONFIGURATION, summaryPresetId: 'old' }));
-  const storage = createCallStore();
-  await expect(storage.readChoices(readSettings)).rejects.toThrow('Could not confirm');
+  const readLegacyPresetId = vi.fn(async () => 'old');
+  const storage = createCustomActionStore(readLegacyPresetId);
+  await expect(storage.readChoices()).rejects.toThrow('Could not confirm');
   expect(local.saul_calls_unified).toBe('pending');
-  expect(await storage.readChoices(readSettings)).toMatchObject({
+  expect(await storage.readChoices()).toMatchObject({
     state: 'ready',
     choices: { builtinPresetId: 'old' },
   });
   expect(local.saul_calls_unified).toBe(true);
   expect(await storage.migrationComplete()).toBe(true);
   config = { revision: config.revision + 1 };
-  expect(await storage.readChoices(readSettings)).toMatchObject({
+  expect(await storage.readChoices()).toMatchObject({
     state: 'ready',
     choices: { library: [] },
   });
   expect(await storage.migrationComplete()).toBe(true);
-  expect(readSettings).toHaveBeenCalledTimes(1);
+  expect(readLegacyPresetId).toHaveBeenCalledTimes(1);
   expect(write).toHaveBeenCalledTimes(1);
 });
 
@@ -213,7 +241,7 @@ it('promotes the Chrome selection before exposing the available shared scope', a
       ),
     },
   });
-  const storage = createCallStore();
+  const storage = createCustomActionStore();
   const first = await storage.readChoices();
   await storage.saveChoices(first.source, { builtinPresetId: 'kept' });
   const chromeChoice = await storage.readChoices();

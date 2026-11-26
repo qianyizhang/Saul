@@ -1,4 +1,4 @@
-import { annotationPanelKey } from '../annotations/routing';
+import { panelViewKey } from '../platform/chrome/panel-view';
 import { validateCall } from '../../shared/protocol/protocol.mts';
 import { isCallBatchId } from './batch-messages';
 
@@ -50,7 +50,7 @@ export async function openSummaryPanel(windowId: number, args: { tabIds?: number
   const routeWritten = chrome.storage.session.set({
     [summaryPanelKey(windowId)]: route,
     [pendingPanelCallKey(windowId)]: null,
-    [annotationPanelKey(windowId)]: { view: 'summary' },
+    [panelViewKey(windowId)]: { view: 'summary' },
   });
   const opened = chrome.sidePanel.open({ windowId });
   return Promise.all([routeWritten, opened]).then(() => ({ id }));

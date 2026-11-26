@@ -13,7 +13,7 @@ import {
 import type { DbCall } from '../../shared/protocol/history-types.ts';
 import type { PreparedModel } from '../configuration/resolve';
 import { streamModel } from '../providers/stream';
-import { actionHost } from '../calls/host';
+import { actionHost } from '../custom-actions/host-client';
 
 export type AnnotationRunRequest =
   | {

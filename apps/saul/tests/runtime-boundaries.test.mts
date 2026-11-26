@@ -70,3 +70,19 @@ it('keeps Node storage from importing browser presentation', async () => {
   });
   expect(result!.messages.some((message) => message.ruleId === 'no-restricted-imports')).toBe(true);
 });
+
+it.each([
+  ['src/calls/execution/probe.ts', "import '../../reading/input-change';"],
+  ['src/calls/probe.ts', "export const load = () => import('../annotations/routing');"],
+  ['src/annotations/probe.ts', "export { editCall } from '../calls/client';"],
+  ['src/custom-actions/probe.ts', "import '../calls/editor';"],
+  ['src/reading/probe.ts', "import '../calls/client';"],
+  ['src/configuration/definition.ts', "import '../reading/prompts';"],
+])('enforces one-way feature dependencies from %s', async (filePath, source) => {
+  const [result] = await lint.lintText(source, { filePath });
+  expect(
+    result!.messages.some((message) =>
+      ['no-restricted-imports', 'no-restricted-syntax'].includes(message.ruleId ?? ''),
+    ),
+  ).toBe(true);
+});

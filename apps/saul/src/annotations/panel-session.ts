@@ -1,6 +1,7 @@
 import { MAX_ANNOTATION_BATCH, type AnnotationSummary } from '../../shared/protocol/annotations.ts';
 import { annotationMessage } from './client';
-import { annotationPanelKey, annotationVersionKey } from './routing';
+import { annotationVersionKey } from './routing';
+import { panelViewKey } from '../platform/chrome/panel-view';
 
 type Page = { url: string; title: string; tabId: number };
 type Filter = 'open' | 'done' | 'deleted' | 'all';
@@ -231,7 +232,7 @@ function message(cause: unknown) {
 }
 
 export function chromeAnnotationPanel(windowId: number) {
-  const key = annotationPanelKey(windowId);
+  const key = panelViewKey(windowId);
   const session = createAnnotationPanelSession({
     async activePage() {
       const [tab] = await chrome.tabs.query({ active: true, windowId });

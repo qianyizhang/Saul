@@ -10,7 +10,8 @@ import { AnnotatedTextView } from './AnnotatedTextView';
 import { useAnchoredPosition } from './useAnchoredPosition';
 import { InputOutputInspector } from '../../ui/InputOutputInspector';
 import { RunDetails } from '../../ui/RunDetails';
-import { changeLabel, type InputComparison } from '../input-change';
+import type { InputComparison } from '../input-change';
+import { changeLabel } from '../../ui/text-change-label';
 interface Props {
   reuse?: InputComparison;
   onRunCurrent?: () => void;
