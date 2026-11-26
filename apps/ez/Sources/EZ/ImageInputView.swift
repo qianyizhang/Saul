@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 
 struct ImageInputView: View {
     @ObservedObject var model: AppModel
+    @ObservedObject var lookup: LookupSession
     let label: String
     var onEditSketch: (() -> Void)?
 
@@ -13,12 +14,12 @@ struct ImageInputView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(label).font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
             HStack(spacing: 12) {
-                if model.usesSketch, model.hasImageInput {
-                    SketchArtwork(scene: model.sketch.scene)
+                if lookup.usesSketch, lookup.hasImageInput {
+                    SketchArtwork(scene: lookup.sketch.scene)
                         .frame(width: 64, height: 64).accessibilityLabel("Sketch preview")
-                    Text(model.inputImage?.name ?? "Sketch ready").font(AppStyle.caption).lineLimit(2)
+                    Text(lookup.inputImage?.name ?? "Sketch ready").font(AppStyle.caption).lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                } else if let attachment = model.inputImage, let data = attachment.data,
+                } else if let attachment = lookup.inputImage, let data = attachment.data,
                     let image = NSImage(data: data)
                 {
                     Image(nsImage: image).resizable().scaledToFit().frame(width: 76, height: 64)
@@ -35,43 +36,46 @@ struct ImageInputView: View {
                     if let onEditSketch {
                         Button("Edit sketch", action: onEditSketch)
                     } else {
-                        Button(model.inputImage == nil ? "Choose…" : "Replace…") { ImageImport.choose(model) }
-                            .accessibilityLabel("Choose input image")
+                        Button(lookup.inputImage == nil ? "Choose…" : "Replace…") {
+                            ImageImport.choose(lookup)
+                        }
+                        .accessibilityLabel("Choose input image")
                     }
                     HStack {
-                        Button("Paste") { ImageImport.paste(model) }.accessibilityLabel("Paste input image")
-                        if model.hasImageInput {
-                            Button("Remove", action: model.removeImageInput)
-                                .accessibilityLabel(model.usesSketch ? "Remove sketch" : "Remove input image")
+                        Button("Paste") { ImageImport.paste(lookup) }.accessibilityLabel("Paste input image")
+                        if lookup.hasImageInput {
+                            Button("Remove", action: lookup.removeImageInput)
+                                .accessibilityLabel(
+                                    lookup.usesSketch ? "Remove sketch" : "Remove input image")
                         }
                     }
                 }
             }
             .padding(8).frame(minHeight: 72)
             .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 6))
-            .modifier(ImageDropTarget(model: model))
-            ImageInputFeedback(model: model)
-        }.disabled(model.busy || model.launcherPending)
+            .modifier(ImageDropTarget(lookup: lookup))
+            ImageInputFeedback(lookup: lookup)
+        }.disabled(lookup.busy || lookup.launcherPending)
     }
 }
 
 struct ImageInputFeedback: View {
-    @ObservedObject var model: AppModel
+    @ObservedObject var lookup: LookupSession
 
     var body: some View {
-        if model.restoringSavedImage {
+        if lookup.restoringSavedImage {
             ProgressView("Loading saved input image…").controlSize(.small).font(AppStyle.caption)
-        } else if let error = model.inputImageError {
+        } else if let error = lookup.inputImageError {
             Text(error).font(AppStyle.caption).foregroundStyle(.orange).textSelection(.enabled)
-            if model.canContinueWithoutSavedImage {
-                Button("Continue without image") { model.continueWithoutSavedImage() }
+            if lookup.canContinueWithoutSavedImage {
+                Button("Continue without image") { lookup.continueWithoutSavedImage() }
             }
         }
     }
 }
 
 struct ImageDropTarget: ViewModifier {
-    let model: AppModel
+    let lookup: LookupSession
     @State private var targeted = false
 
     func body(content: Content) -> some View {
@@ -82,61 +86,61 @@ struct ImageDropTarget: ViewModifier {
                         .allowsHitTesting(false)
                 }
             }
-            .onDrop(of: ImageImport.types, isTargeted: $targeted) { ImageImport.receive($0, model: model) }
+            .onDrop(of: ImageImport.types, isTargeted: $targeted) { ImageImport.receive($0, lookup: lookup) }
     }
 }
 
 @MainActor enum ImageImport {
     static let types: [UTType] = [.fileURL, .png, .jpeg, .webP, .tiff]
 
-    static func choose(_ model: AppModel) {
+    static func choose(_ lookup: LookupSession) {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.png, .jpeg, .webP]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        model.attachImage(url: url)
+        lookup.attachImage(url: url)
     }
 
-    static func paste(_ model: AppModel) {
-        model.beginImageImport()
+    static func paste(_ lookup: LookupSession) {
+        lookup.beginImageImport()
         let pasteboard = NSPasteboard.general
         if let urls = pasteboard.readObjects(
             forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
             urls.count == 1, let url = urls.first
         {
-            model.attachImage(url: url)
+            lookup.attachImage(url: url)
             return
         }
         for type in [UTType.png, .jpeg, .webP] {
             if let data = pasteboard.data(forType: .init(type.identifier)) {
-                model.attachImage(data: data, name: "Pasted image")
+                lookup.attachImage(data: data, name: "Pasted image")
                 return
             }
         }
         if let data = pasteboard.data(forType: .tiff), let png = tiffPNG(data) {
-            model.attachImage(data: png, name: "Pasted image.png")
+            lookup.attachImage(data: png, name: "Pasted image.png")
         } else {
-            model.inputImageError = "Copy one image, then paste it here."
+            lookup.inputImageError = "Copy one image, then paste it here."
         }
     }
 
-    static func receive(_ providers: [NSItemProvider], model: AppModel) -> Bool {
-        guard !model.busy, !model.launcherPending else { return false }
-        let importID = model.beginImageImport()
+    static func receive(_ providers: [NSItemProvider], lookup: LookupSession) -> Bool {
+        guard !lookup.busy, !lookup.launcherPending else { return false }
+        let importID = lookup.beginImageImport()
         guard providers.count == 1, let provider = providers.first else {
-            model.inputImageError = "Drop one image at a time."
+            lookup.inputImageError = "Drop one image at a time."
             return false
         }
         if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
             provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in
                 Task { @MainActor in
-                    model.finishImageImport(importID) {
+                    lookup.finishImageImport(importID) {
                         guard let data, let url = URL(dataRepresentation: data, relativeTo: nil) else {
-                            model.inputImageError = "The dropped file could not be read."
+                            lookup.inputImageError = "The dropped file could not be read."
                             return
                         }
-                        model.attachImage(url: url)
+                        lookup.attachImage(url: url)
                     }
                 }
             }
@@ -149,11 +153,11 @@ struct ImageDropTarget: ViewModifier {
         else { return false }
         provider.loadDataRepresentation(forTypeIdentifier: type.identifier) { data, _ in
             Task { @MainActor in
-                model.finishImageImport(importID) {
+                lookup.finishImageImport(importID) {
                     if let data, let image = type == .tiff ? tiffPNG(data) : data {
-                        model.attachImage(data: image, name: "Imported image")
+                        lookup.attachImage(data: image, name: "Imported image")
                     } else {
-                        model.inputImageError = "The dropped image could not be read."
+                        lookup.inputImageError = "The dropped image could not be read."
                     }
                 }
             }

@@ -66,17 +66,18 @@ import SwiftUI
         let source = NSWorkspace.shared.frontmostApplication
         newQuery()
         show()
-        guard model.allowsExternalServices, !model.busy, !model.launcherPending, !model.signingIn,
+        guard model.allowsExternalServices, !model.lookup.busy, !model.lookup.launcherPending,
+            !model.signingIn,
             !model.showSettings, SelectedTextCapture.isAllowed,
             let source, source.processIdentifier != ProcessInfo.processInfo.processIdentifier
         else { return }
-        let revision = model.draftRevision
+        let revision = model.lookup.draftRevision
         selectionTask = Task { [weak self] in
             let text = await SelectedTextCapture.read(from: source.processIdentifier)
             guard !Task.isCancelled, let self, self.isVisible,
-                self.model.draftRevision == revision
+                self.model.lookup.draftRevision == revision
             else { return }
-            self.model.fillQuickLookupSelection(text)
+            self.model.lookup.fillQuickLookupSelection(text)
         }
     }
 
@@ -99,7 +100,8 @@ import SwiftUI
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             panel.isReleasedWhenClosed = false
             panel.contentMinSize = NSSize(width: QuickLookupLayout.minimumWidth, height: 200)
-            panel.contentView = NSHostingView(rootView: QuickLookupView(model: model, controller: self))
+            panel.contentView = NSHostingView(
+                rootView: QuickLookupView(model: model, lookup: model.lookup, controller: self))
             self.panel = panel
         }
         guard let panel else { return }
@@ -185,13 +187,13 @@ import SwiftUI
 
     func newQuery() {
         selectionTask?.cancel()
-        guard !model.busy, !model.launcherPending else { return }
+        guard !model.lookup.busy, !model.lookup.launcherPending else { return }
         launcherError = nil
-        model.newQuery()
+        model.lookup.newQuery()
         presentation += 1
     }
 
-    func showMain(settings: Bool = false, section: AppModel.SettingsSection = .configuration) {
+    func showMain(settings: Bool = false, section: SettingsSection = .configuration) {
         hide()
         openMain?()
         NSApp.activate(ignoringOtherApps: true)

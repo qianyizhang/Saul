@@ -94,8 +94,8 @@ import SaulTestSupport
             append: { try await control.append($0) },
             delete: { try control.history.discardPending($0) })
         state = try StateFixture(directory: directory, attemptExecution: execution)
-        model.chooseAction(state.single.id)
-        model.query = "Frozen question"
+        model.lookup.chooseAction(state.single.id)
+        model.lookup.query = "Frozen question"
         let receive = execution.onChange
         execution.onChange = { [weak self] update in
             receive?(update)
@@ -124,82 +124,83 @@ import SaulTestSupport
     [
         attemptCase("retry freezes the request while the failure stays out of history") { f in
             f.control.generate = { _, _ in throw EZError("Provider unavailable") }
-            f.model.send()
+            f.model.lookup.send()
             try await f.terminal.wait()
-            let failed = f.model.selectedEntry!
+            let failed = f.model.lookup.selectedEntry!
             try expectEqual(f.model.entries.count, 0, "Failed result entered the sidebar")
             try expectEqual(f.model.historyTotal, 0, "Failed result entered the sidebar count")
             try expect(!f.model.canDeleteLookup(failed.recordID), "Transient failure offered shared deletion")
             await f.model.refreshHistory()?.value
-            try expectEqual(f.model.selectedEntry?.id, failed.id, "Refresh discarded the current error")
-            f.model.query = "Unrelated draft"
-            let draft = f.model.inputValues
+            try expectEqual(
+                f.model.lookup.selectedEntry?.id, failed.id, "Refresh discarded the current error")
+            f.model.lookup.query = "Unrelated draft"
+            let draft = f.model.lookup.inputValues
             var seen: HistoryEntry?
             f.control.generate = { entry, _ in
                 seen = entry
                 return try response("Recovered")
             }
             f.terminal = CheckSignal()
-            f.model.retry(failed.id)
+            f.model.lookup.retry(failed.id)
             try await f.terminal.wait()
-            let saved = f.model.selectedEntry!
+            let saved = f.model.lookup.selectedEntry!
             try expect(saved.id != failed.id, "Retry overwrote the failed attempt")
             try expectEqual(seen?.query, failed.query, "Retry sent the current draft")
             try expectEqual(seen?.actionSnapshot, failed.actionSnapshot, "Retry changed action")
             try expectEqual(seen?.presetSnapshot, failed.presetSnapshot, "Retry changed preset")
             try expectEqual(seen?.connectionSnapshot, failed.connectionSnapshot, "Retry changed connection")
-            try expectEqual(f.model.inputValues, draft, "Retry changed the unrelated draft")
+            try expectEqual(f.model.lookup.inputValues, draft, "Retry changed the unrelated draft")
             try expectEqual(saved.status, "completed", "Retry did not finish")
             try expectEqual(f.model.entries.map(\.id), [saved.id], "Retry left the failed row in the sidebar")
             try expectEqual(f.control.providerCalls, 2, "Retry sent more than one request")
-            f.model.retry(saved.id)
+            f.model.lookup.retry(saved.id)
             try expectEqual(f.control.providerCalls, 2, "Completed answer offered a retry")
         },
         attemptCase("retry blocks changed routes and failed initial saves without losing the result") { f in
             f.control.generate = { _, _ in throw EZError("Provider unavailable") }
-            f.model.send()
+            f.model.lookup.send()
             try await f.terminal.wait()
-            let failed = f.model.selectedEntry!
+            let failed = f.model.lookup.selectedEntry!
             var config = f.model.configuration
             config.connections[0].accountId = "different-account"
             try f.model.saveConfiguration(config)
-            f.model.retry(failed.id)
-            try expect(f.model.retryFailure != nil, "Changed account was accepted")
+            f.model.lookup.retry(failed.id)
+            try expect(f.model.lookup.retryFailure != nil, "Changed account was accepted")
             try expectEqual(f.control.providerCalls, 1, "Changed route reached provider")
             try f.model.saveConfiguration(f.state.configuration)
             f.control.failedWrites = [2]
             f.terminal = CheckSignal()
-            f.model.retry(failed.id)
+            f.model.lookup.retry(failed.id)
             try await f.terminal.wait()
             try expect(
-                f.model.retryFailure?.message.contains("history could not be saved") == true,
+                f.model.lookup.retryFailure?.message.contains("history could not be saved") == true,
                 "Initial-save failure was not explained")
-            try expectEqual(f.model.selection, failed.id, "Blocked retry changed selected answer")
+            try expectEqual(f.model.lookup.selection, failed.id, "Blocked retry changed selected answer")
             try expectEqual(f.control.providerCalls, 1, "Initial-save failure reached provider")
         },
         attemptCase("follow-ups retain earlier context, saved model and the original draft") { f in
-            f.model.send()
+            f.model.lookup.send()
             try await f.terminal.wait()
-            let first = f.model.selectedEntry!
-            f.model.followUpDrafts[first.id] = "Why does that happen?"
-            f.model.followUpTargetID = first.id
+            let first = f.model.lookup.selectedEntry!
+            f.model.lookup.followUpDrafts[first.id] = "Why does that happen?"
+            f.model.lookup.followUpTargetID = first.id
             f.terminal = CheckSignal()
             f.model.performLookupCommand(.send)
             try await f.terminal.wait()
-            let second = f.model.selectedEntry!
+            let second = f.model.lookup.selectedEntry!
             try expectEqual(second.parentID, first.id, "Parent link lost")
             try expectEqual(second.displayQuery, "Why does that happen?", "Question not displayed")
             try expect(
                 second.query.contains(first.query) && second.query.contains(first.response),
                 "Saved context lost")
             try expectEqual(second.model, first.model, "Model changed")
-            try expectEqual(f.model.query, "Frozen question", "Original draft changed")
-            try expect(f.model.followUpDrafts[first.id] == nil, "Accepted draft not cleared")
+            try expectEqual(f.model.lookup.query, "Frozen question", "Original draft changed")
+            try expect(f.model.lookup.followUpDrafts[first.id] == nil, "Accepted draft not cleared")
             f.terminal = CheckSignal()
-            f.model.followUpDrafts[second.id] = "And an example?"
-            f.model.followUp(second.id)
+            f.model.lookup.followUpDrafts[second.id] = "And an example?"
+            f.model.lookup.followUp(second.id)
             try await f.terminal.wait()
-            let third = f.model.selectedEntry!
+            let third = f.model.lookup.selectedEntry!
             try expect(third.query.contains(second.query), "Earlier exchanges lost")
             let loaded = try f.state.history.load()
             try expectEqual(
@@ -209,22 +210,22 @@ import SaulTestSupport
             try expectEqual(f.control.providerCalls, 3, "Unexpected provider request")
         },
         attemptCase("invalid follow-ups and failed initial saves retain the question") { f in
-            f.model.send()
+            f.model.lookup.send()
             try await f.terminal.wait()
-            let first = f.model.selectedEntry!
+            let first = f.model.lookup.selectedEntry!
             for question in ["  ", String(repeating: "x", count: 2_001)] {
-                f.model.followUpDrafts[first.id] = question
-                f.model.followUp(first.id)
+                f.model.lookup.followUpDrafts[first.id] = question
+                f.model.lookup.followUp(first.id)
                 try expectEqual(f.control.providerCalls, 1, "Invalid follow-up was sent")
             }
-            f.model.followUpDrafts[first.id] = "Keep this question"
+            f.model.lookup.followUpDrafts[first.id] = "Keep this question"
             f.control.failedWrites = [3]
             f.terminal = CheckSignal()
-            f.model.followUp(first.id)
+            f.model.lookup.followUp(first.id)
             try await f.terminal.wait()
-            try expectEqual(f.model.selection, first.id, "Failed submission changed answer")
+            try expectEqual(f.model.lookup.selection, first.id, "Failed submission changed answer")
             try expectEqual(
-                f.model.followUpDrafts[first.id], "Keep this question", "Failed submission lost draft")
+                f.model.lookup.followUpDrafts[first.id], "Keep this question", "Failed submission lost draft")
             try expectEqual(f.control.providerCalls, 1, "Initial-save failure reached provider")
             var unsaved = first
             unsaved.status = "unsaved"
@@ -241,47 +242,50 @@ import SaulTestSupport
                 _ = try long.prepareFollowUp(
                     "Why?", models: f.model.modelsForPreset(f.state.alternate), provider: .chatGPTPlan)
             }
-            try expectEqual(f.model.selectedEntry?.response, first.response, "Failure lost original answer")
+            try expectEqual(
+                f.model.lookup.selectedEntry?.response, first.response, "Failure lost original answer")
         },
         attemptCase("Run blocks a route changed on disk until the user reviews and runs again") { f in
             var revised = f.model.configuration
             revised.connections[0].accountId = "new-choice"
             try ConfigurationStore(directory: f.state.directory).save(revised)
-            f.model.send()
+            f.model.lookup.send()
             try expectEqual(f.control.appends.count, 0, "Run bypassed the displayed setup")
             try expect(f.model.error?.contains("setup changed") == true, "Changed setup was silent")
-            try expectEqual(f.model.query, "Frozen question", "Changed setup lost the draft")
+            try expectEqual(f.model.lookup.query, "Frozen question", "Changed setup lost the draft")
             try expectEqual(
-                f.model.currentConnection?.accountId, "new-choice", "Review did not reveal new route")
-            f.model.send()
+                f.model.lookup.currentConnection?.accountId, "new-choice", "Review did not reveal new route")
+            f.model.lookup.send()
             try await f.terminal.wait()
             try expectEqual(
-                f.model.selectedEntry?.connectionSnapshot?.accountId, "new-choice",
+                f.model.lookup.selectedEntry?.connectionSnapshot?.accountId, "new-choice",
                 "Reviewed route not frozen")
             try expectEqual(f.control.providerCalls, 1, "Review sent more than once")
         },
         attemptCase("follow-up blocks a changed connection and preserves the question") { f in
-            f.model.send()
+            f.model.lookup.send()
             try await f.terminal.wait()
-            let first = f.model.selectedEntry!
-            f.model.followUpDrafts[first.id] = "Keep this question"
+            let first = f.model.lookup.selectedEntry!
+            f.model.lookup.followUpDrafts[first.id] = "Keep this question"
             var config = f.model.configuration
             config.connections[0].accountId = "different-account"
             try f.model.saveConfiguration(config)
-            f.model.followUp(first.id)
-            try expectEqual(f.model.selection, first.id, "Changed account replaced the original answer")
+            f.model.lookup.followUp(first.id)
             try expectEqual(
-                f.model.followUpDrafts[first.id], "Keep this question", "Blocked question was lost")
+                f.model.lookup.selection, first.id, "Changed account replaced the original answer")
+            try expectEqual(
+                f.model.lookup.followUpDrafts[first.id], "Keep this question", "Blocked question was lost")
             try expect(f.model.error?.contains("changed") == true, "Changed route was not explained")
             try expectEqual(f.control.appends.count, 2, "Changed account was accepted")
         },
         attemptCase("initial save failure prevents credential and provider work") { f in
             f.control.failedWrites = [1]
-            try expect(f.model.canSend, "Controlled execution should be available")
-            f.model.send()
+            try expect(f.model.lookup.canSend, "Controlled execution should be available")
+            f.model.lookup.send()
             try expectEqual(f.control.providerCalls, 0, "Provider started before initial save")
             try await f.terminal.wait()
-            try expect(!f.model.busy && f.model.entries.isEmpty, "Failed submission changed attempt state")
+            try expect(
+                !f.model.lookup.busy && f.model.entries.isEmpty, "Failed submission changed attempt state")
             try expect(f.model.error?.contains("Query not sent") == true, "Missing submission failure")
         },
         attemptCase("unacknowledged initial and terminal commits never replay or report saved success") { f in
@@ -289,7 +293,7 @@ import SaulTestSupport
                 try f.state.history.append(entry)
                 throw EZError("Lost acknowledgement")
             }
-            f.model.send()
+            f.model.lookup.send()
             try await f.terminal.wait()
             try expect(
                 f.model.error?.contains("Query not sent") == true, "Lost initial reply did not block Run")
@@ -306,15 +310,17 @@ import SaulTestSupport
                     throw EZError("Lost acknowledgement")
                 }
             }
-            f.model.send()
+            f.model.lookup.send()
             try await f.terminal.wait()
-            try expectEqual(f.model.selectedEntry?.status, "unsaved", "Unacknowledged write claimed success")
+            try expectEqual(
+                f.model.lookup.selectedEntry?.status, "unsaved", "Unacknowledged write claimed success")
             try expectEqual(f.control.providerCalls, 1, "Unacknowledged terminal write resent the request")
             try expectEqual(
                 f.control.appends.map(\.status), ["pending", "pending", "completed"], "Save was replayed")
             await f.model.refreshHistory()?.value
             try expectEqual(
-                f.model.selectedEntry?.status, "completed", "Fresh read could not establish saved success")
+                f.model.lookup.selectedEntry?.status, "completed",
+                "Fresh read could not establish saved success")
         },
         attemptCase("Stop during the initial save prevents a send and settles cancellation once") { f in
             let writing = CheckSignal()
@@ -326,13 +332,14 @@ import SaulTestSupport
                     try await release.wait()
                 }
             }
-            f.model.send()
+            f.model.lookup.send()
             try await writing.wait()
-            try expect(f.model.preparingAttempt && f.model.commandEnabled(.stop), "Stop hidden before send")
-            f.model.stop()
-            f.model.stop()
+            try expect(
+                f.model.lookup.preparingAttempt && f.model.commandEnabled(.stop), "Stop hidden before send")
+            f.model.lookup.stop()
+            f.model.lookup.stop()
             try expectEqual(f.control.appends.map(\.status), ["pending"], "Stop raced the initial write")
-            try expect(f.model.selectedEntry == nil, "Uncommitted request appeared in history")
+            try expect(f.model.lookup.selectedEntry == nil, "Uncommitted request appeared in history")
             await release.signal()
             try await f.terminal.wait()
             try expectEqual(f.control.providerCalls, 0, "Stopped request reached the provider")
@@ -350,25 +357,27 @@ import SaulTestSupport
                     try await release.wait()
                 }
             }
-            f.model.send()
+            f.model.lookup.send()
             try await writing.wait()
-            try expect(f.model.savingAttempt && !f.model.commandEnabled(.stop), "Saving still allows Stop")
-            try expectEqual(f.model.selectedEntry?.status, "pending", "Completion published before save")
-            f.model.stop()
+            try expect(
+                f.model.lookup.savingAttempt && !f.model.commandEnabled(.stop), "Saving still allows Stop")
+            try expectEqual(
+                f.model.lookup.selectedEntry?.status, "pending", "Completion published before save")
+            f.model.lookup.stop()
             try expect(f.model.shutdown(), "Quit did not wait for terminal persistence")
             try expectEqual(
                 f.control.appends.map(\.status), ["pending", "completed"], "Quit changed the outcome")
             await release.signal()
             await f.model.waitForPersistence()
-            try expectEqual(f.model.selectedEntry?.status, "completed", "Saved outcome missing")
-            try expectEqual(f.model.selectedEntry?.response, "Frozen answer", "Answer lost")
+            try expectEqual(f.model.lookup.selectedEntry?.status, "completed", "Saved outcome missing")
+            try expectEqual(f.model.lookup.selectedEntry?.response, "Frozen answer", "Answer lost")
             try expectEqual(try f.state.history.load().count, 1, "One attempt became multiple rows")
         },
         attemptCase("Quit settles interruption without waiting for late provider callbacks") { f in
             let held = HeldResponse()
             defer { held.finish(.failure(CancellationError())) }
             f.control.generate = { _, update in try await held.stream(update: update) }
-            f.model.send()
+            f.model.lookup.send()
             try await held.started.wait()
             held.progress(try response("Keep partial", completed: false))
             try expect(f.model.shutdown(), "Quit skipped its interruption save")
@@ -389,33 +398,36 @@ import SaulTestSupport
             let saved = try f.state.savedAnswer()
             try f.state.history.append(saved)
             await f.model.refreshHistory()?.value
-            try f.model.submitLauncher("A launcher question", after: ready)
-            try expect(f.model.launcherPending && !f.model.busy, "Launcher did not wait for startup")
-            try expectThrows(EZError.self) { try f.model.submitLauncher("Duplicate", after: ready) }
-            try expectThrows(EZError.self) { try f.model.prepareSelectedText("Selected text") }
+            try f.model.lookup.submitLauncher("A launcher question", after: ready)
+            try expect(
+                f.model.lookup.launcherPending && !f.model.lookup.busy, "Launcher did not wait for startup")
+            try expectThrows(EZError.self) { try f.model.lookup.submitLauncher("Duplicate", after: ready) }
+            try expectThrows(EZError.self) { try f.model.lookup.prepareSelectedText("Selected text") }
             f.model.performLookupCommand(.newLookup)
-            f.model.chooseAction(f.state.multi.id)
+            f.model.lookup.chooseAction(f.state.multi.id)
             f.model.deleteLookup(saved.recordID)
-            f.model.fillQuickLookupSelection("Late selection")
-            try expectEqual(f.model.query, "A launcher question", "Competing action replaced launcher draft")
+            f.model.lookup.fillQuickLookupSelection("Late selection")
+            try expectEqual(
+                f.model.lookup.query, "A launcher question", "Competing action replaced launcher draft")
             try expectEqual(f.control.appends.count, 0, "Launcher transmitted before startup")
             try expect(
                 try f.state.history.load().contains { $0.id == saved.id }, "Launcher deletion lost history")
             await startup.signal()
             try await f.terminal.wait()
-            try expect(!f.model.launcherPending && !f.model.busy, "Launcher did not settle")
+            try expect(!f.model.lookup.launcherPending && !f.model.lookup.busy, "Launcher did not settle")
             try expectEqual(
-                f.model.selectedEntry?.displayQuery, "A launcher question", "Launcher sent the wrong draft")
+                f.model.lookup.selectedEntry?.displayQuery, "A launcher question",
+                "Launcher sent the wrong draft")
             try expectEqual(f.control.providerCalls, 1, "Launcher did not submit exactly once")
         },
         attemptCase("shutdown cancels a waiting launcher without sending") { f in
             let startup = CheckSignal()
             let ready = Task { _ = try? await startup.wait() }
-            try f.model.submitLauncher("Do not send", after: ready)
+            try f.model.lookup.submitLauncher("Do not send", after: ready)
             f.model.shutdown()
             await startup.signal()
             await ready.value
-            try expect(!f.model.launcherPending && !f.model.busy, "Shutdown left launcher work")
+            try expect(!f.model.lookup.launcherPending && !f.model.lookup.busy, "Shutdown left launcher work")
             try expectEqual(f.control.appends.count, 0, "Cancelled launcher wrote a request")
         },
         attemptCase("active lookup owns command guards and activity while viewing another answer") { f in
@@ -425,41 +437,43 @@ import SaulTestSupport
             let held = HeldResponse()
             defer { held.finish(.failure(CancellationError())) }
             f.control.generate = { _, update in try await held.stream(update: update) }
-            f.model.send()
+            f.model.lookup.send()
             try await held.started.wait()
-            let id = f.model.selection
-            let draft = f.model.query
+            let id = f.model.lookup.selection
+            let draft = f.model.lookup.query
             var thinking = ResponseAccumulator()
             try thinking.consume(
                 Data(#"{"type":"response.output_item.added","item":{"type":"reasoning"}}"#.utf8))
             held.progress(thinking)
             try expectEqual(
-                f.model.selectedResponseActivity, .thinking, "No thinking activity for active lookup")
-            f.model.selection = saved.id
-            try expectEqual(f.model.selectedResponseActivity, nil, "Unrelated answer showed activity")
+                f.model.lookup.selectedResponseActivity, .thinking, "No thinking activity for active lookup")
+            f.model.lookup.selection = saved.id
+            try expectEqual(f.model.lookup.selectedResponseActivity, nil, "Unrelated answer showed activity")
             f.model.deleteLookup(saved.recordID)
             try expect(
                 try f.state.history.load().contains { $0.id == saved.id }, "Busy deletion removed history")
-            try expectThrows(EZError.self) { try f.model.prepareSelectedText("do not replace") }
+            try expectThrows(EZError.self) { try f.model.lookup.prepareSelectedText("do not replace") }
             try expectThrows(EZError.self) { try f.model.saveConfiguration(Configuration()) }
-            f.model.fillQuickLookupSelection("late selection")
-            f.model.chooseAction(f.state.multi.id)
+            f.model.lookup.fillQuickLookupSelection("late selection")
+            f.model.lookup.chooseAction(f.state.multi.id)
             f.model.performLookupCommand(.nextRecipe)
             f.model.performLookupCommand(.newLookup)
-            try expectEqual(f.model.currentAction?.id, f.state.single.id, "Active lookup changed action")
-            try expectEqual(f.model.query, draft, "Active lookup lost the draft")
-            f.model.selection = id
+            try expectEqual(
+                f.model.lookup.currentAction?.id, f.state.single.id, "Active lookup changed action")
+            try expectEqual(f.model.lookup.query, draft, "Active lookup lost the draft")
+            f.model.lookup.selection = id
             held.progress(try response("Visible partial", completed: false))
-            try expectEqual(f.model.selectedResponseActivity, .responding, "Text did not end thinking")
-            f.model.stop()
-            try expectEqual(f.model.selectedResponseActivity, nil, "Stop left activity visible")
+            try expectEqual(f.model.lookup.selectedResponseActivity, .responding, "Text did not end thinking")
+            f.model.lookup.stop()
+            try expectEqual(f.model.lookup.selectedResponseActivity, nil, "Stop left activity visible")
         },
         attemptCase("immediate Stop prevents credential and provider work") { f in
-            f.model.send()
-            f.model.stop()
+            f.model.lookup.send()
+            f.model.lookup.stop()
             try await f.terminal.wait()
             try expectEqual(f.control.providerCalls, 0, "Stopped attempt reached provider")
-            try expectEqual(f.model.selectedEntry?.status, "cancelled", "Stop did not publish cancellation")
+            try expectEqual(
+                f.model.lookup.selectedEntry?.status, "cancelled", "Stop did not publish cancellation")
             let saved = try f.state.history.load().first
             try expectEqual(saved?.status, "cancelled", "Stop was not saved")
             try expect(saved?.isRetryable == true, "Stopped request could no longer be retried")
@@ -468,36 +482,36 @@ import SaulTestSupport
             let held = HeldResponse()
             defer { held.finish(.failure(CancellationError())) }
             f.control.generate = { _, update in try await held.stream(update: update) }
-            f.model.send()
+            f.model.lookup.send()
             try await held.started.wait()
             held.progress(try response("Retain this", completed: false))
             f.model.shutdown()
             try await f.terminal.wait()
-            try expectEqual(f.model.selectedEntry?.status, "interrupted", "Shutdown recorded a Stop")
+            try expectEqual(f.model.lookup.selectedEntry?.status, "interrupted", "Shutdown recorded a Stop")
             let saved = try f.state.history.load().first
             try expectEqual(saved?.status, "interrupted", "Shutdown cause did not persist")
             try expectEqual(saved?.response, "Retain this", "Shutdown lost partial output")
         },
         attemptCase("failed terminal save reports unsaved and a new Run saves a separate attempt") { f in
             f.control.failedWrites = [2]
-            f.model.send()
+            f.model.lookup.send()
             try await f.terminal.wait()
-            guard let unsaved = f.model.selectedEntry else { throw CheckFailure("Missing answer") }
+            guard let unsaved = f.model.lookup.selectedEntry else { throw CheckFailure("Missing answer") }
             try expectEqual(unsaved.status, "unsaved", "Failed save claimed completion")
             try expect(
                 unsaved.error?.contains("Synthetic history write failure") == true, "Missing save error")
-            try expect(!f.model.canRetry(unsaved), "Unsaved answer offered inference retry")
+            try expect(!f.model.lookup.canRetry(unsaved), "Unsaved answer offered inference retry")
             try expectEqual(
                 try f.state.history.load()[0].status, "interrupted", "Terminal save wrote success")
             try expectEqual(f.control.appends.count, 2, "Failed save wrote again")
-            f.model.newQuery()
-            f.model.query = "A new question"
+            f.model.lookup.newQuery()
+            f.model.lookup.query = "A new question"
             await f.model.refreshHistory()?.value
             try expectEqual(f.control.providerCalls, 1, "Reading history resubmitted")
             f.terminal = CheckSignal()
-            f.model.send()
+            f.model.lookup.send()
             try await f.terminal.wait()
-            let saved = f.model.selectedEntry!
+            let saved = f.model.lookup.selectedEntry!
             try expect(saved.id != unsaved.id, "New Run reused failed save identity")
             try expectEqual(saved.status, "completed", "New Run did not save")
             try expectEqual(f.control.providerCalls, 2, "New Run generated more than once")
@@ -517,9 +531,9 @@ import SaulTestSupport
                 update(try response("Partial answer", completed: false))
                 throw EZError("Synthetic provider failure")
             }
-            f.model.send()
+            f.model.lookup.send()
             try await f.terminal.wait()
-            guard let entry = f.model.selectedEntry else { throw CheckFailure("Missing failure") }
+            guard let entry = f.model.lookup.selectedEntry else { throw CheckFailure("Missing failure") }
             try expectEqual(entry.status, "unsaved", "Unpersisted provider failure marked saved")
             try expect(entry.error?.contains("Synthetic provider failure") == true, "Provider error was lost")
             try expect(
@@ -540,30 +554,33 @@ import SaulTestSupport
                 second.finish(.failure(CancellationError()))
             }
             f.control.generate = { _, update in try await first.stream(update: update) }
-            f.model.send()
+            f.model.lookup.send()
             try await first.started.wait()
             first.progress(try response("Stopped partial", completed: false))
-            let firstID = f.model.selection!
-            f.model.stop()
+            let firstID = f.model.lookup.selection!
+            f.model.lookup.stop()
             try await f.terminal.wait()
-            try expectEqual(f.model.selectedEntry?.status, "cancelled", "Stop did not finish")
-            try expectEqual(f.model.selectedEntry?.response, "Stopped partial", "Stop lost partial text")
+            try expectEqual(f.model.lookup.selectedEntry?.status, "cancelled", "Stop did not finish")
+            try expectEqual(
+                f.model.lookup.selectedEntry?.response, "Stopped partial", "Stop lost partial text")
             f.terminal = CheckSignal()
             f.control.generate = { _, update in try await second.stream(update: update) }
-            f.model.newQuery()
-            f.model.query = "Second question"
-            f.model.send()
+            f.model.lookup.newQuery()
+            f.model.lookup.query = "Second question"
+            f.model.lookup.send()
             try await second.started.wait()
-            let secondID = f.model.selection!
+            let secondID = f.model.lookup.selection!
             first.progress(try response("Late old answer"))
             first.finish(.success(try response("Late old answer")))
             try await first.returned.wait()
-            try expect(f.model.busy, "Late completion stopped the new attempt")
-            try expectEqual(f.model.selection, secondID, "Late completion changed selection")
-            try expectEqual(f.model.selectedEntry?.response, "", "Late progress entered the new attempt")
+            try expect(f.model.lookup.busy, "Late completion stopped the new attempt")
+            try expectEqual(f.model.lookup.selection, secondID, "Late completion changed selection")
+            try expectEqual(
+                f.model.lookup.selectedEntry?.response, "", "Late progress entered the new attempt")
             second.finish(.success(try response("Second answer")))
             try await f.terminal.wait()
-            try expectEqual(f.model.selectedEntry?.response, "Second answer", "New attempt did not complete")
+            try expectEqual(
+                f.model.lookup.selectedEntry?.response, "Second answer", "New attempt did not complete")
             try expectEqual(
                 try f.state.history.entry(.native(firstID))?.response, "Stopped partial",
                 "Late callbacks rewrote stopped answer")
@@ -575,14 +592,14 @@ import SaulTestSupport
                 try await Task.sleep(for: .seconds(30))
                 return try response("Late result")
             }
-            f.model.send()
+            f.model.lookup.send()
             try await started.wait()
-            guard let id = f.model.selectedEntry?.recordID else {
+            guard let id = f.model.lookup.selectedEntry?.recordID else {
                 throw CheckFailure("Active lookup not selected")
             }
             try expect(f.model.canStopAndDeleteLookup(id), "Active lookup cannot stop and delete")
             await f.model.stopAndDeleteLookup(id)?.value
-            try expect(f.model.selection == nil, "Masked attempt remained selected")
+            try expect(f.model.lookup.selection == nil, "Masked attempt remained selected")
             try expect(try f.state.history.get(id) == nil, "Stopped attempt remained visible")
             let masked = try f.state.history.get(id, visibility: .masked)
             try expectEqual(masked?.value.status, "cancelled", "Mask arrived before cancellation")
@@ -592,32 +609,35 @@ import SaulTestSupport
                 let partial = try response("Only partial", completed: false)
                 return partial
             }
-            f.model.send()
+            f.model.lookup.send()
             try await f.terminal.wait()
-            try expectEqual(f.model.selectedEntry?.status, "failed", "Missing completion was accepted")
-            try expectEqual(f.model.selectedEntry?.response, "Only partial", "Incomplete stream lost output")
+            try expectEqual(f.model.lookup.selectedEntry?.status, "failed", "Missing completion was accepted")
+            try expectEqual(
+                f.model.lookup.selectedEntry?.response, "Only partial", "Incomplete stream lost output")
         },
         attemptCase("failed delete leaves selected result; successful delete removes its history") { f in
             f.control.failedWrites = [2]
-            f.model.send()
+            f.model.lookup.send()
             try await f.terminal.wait()
-            let id = f.model.selection!
+            let id = f.model.lookup.selection!
             _ = try historySQL(
                 f.state.history.url,
                 "CREATE TRIGGER fail_delete BEFORE UPDATE OF masked_at ON history_record BEGIN SELECT RAISE(ABORT,'Synthetic delete failure'); END"
             )
             await f.model.deleteLookup(.native(id))?.value
-            try expectEqual(f.model.selection, id, "Failed deletion changed selection")
-            try expectEqual(f.model.selectedEntry?.status, "unsaved", "Failed deletion discarded the result")
+            try expectEqual(f.model.lookup.selection, id, "Failed deletion changed selection")
+            try expectEqual(
+                f.model.lookup.selectedEntry?.status, "unsaved", "Failed deletion discarded the result")
             _ = try historySQL(f.state.history.url, "DROP TRIGGER fail_delete")
             await f.model.deleteLookup(.native(id))?.value
-            try expect(f.model.entries.isEmpty && f.model.selection == nil, "Deleted lookup still visible")
+            try expect(
+                f.model.entries.isEmpty && f.model.lookup.selection == nil, "Deleted lookup still visible")
             try expect(try f.state.history.load().isEmpty, "Deleted lookup remained in storage")
             try expectEqual(f.control.appends.count, 2, "Deletion replayed a history write")
         },
         attemptCase("reload reflects only persisted bytes and never resubmits") { f in
             f.control.failedWrites = [2]
-            f.model.send()
+            f.model.lookup.send()
             try await f.terminal.wait()
             let loaded = try f.state.history.load()
             try expectEqual(loaded.count, 1, "Initial record lost")
@@ -672,16 +692,16 @@ private struct AttemptContract: Decodable {
                     if scenario.providerOutcome == .interrupted { throw CancellationError() }
                     return result
                 }
-                f.model.send()
+                f.model.lookup.send()
                 if !scenario.initialSaveFails, scenario.providerOutcome == .cancel {
                     try await held.started.wait()
                     held.progress(try response(scenario.text, completed: false))
-                    f.model.stop()
+                    f.model.lookup.stop()
                     held.finish(.failure(CancellationError()))
                     try await held.returned.wait()
                 }
                 try await f.terminal.wait()
-                let entry = f.model.selectedEntry
+                let entry = f.model.lookup.selectedEntry
                 let saved = try f.state.history.load().first
                 try expectEqual(f.control.providerCalls, scenario.expected.providerCalls, "Provider count")
                 if scenario.expected.output != .optional {

@@ -8,7 +8,7 @@ struct SketchEditor: View {
         case resizePhoto
     }
 
-    @ObservedObject var model: AppModel
+    @ObservedObject var lookup: LookupSession
     let label: String
     @State private var tool = Tool.draw
     @State private var selection: SketchScene.Item?
@@ -18,16 +18,16 @@ struct SketchEditor: View {
     @FocusState private var canvasFocused: Bool
     @FocusState private var captionFocused: Bool
 
-    private var scene: SketchScene { model.sketch.scene }
+    private var scene: SketchScene { lookup.sketch.scene }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(label).font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
                 Spacer()
-                Button("Paste") { ImageImport.paste(model) }.accessibilityLabel("Paste image into sketch")
+                Button("Paste") { ImageImport.paste(lookup) }.accessibilityLabel("Paste image into sketch")
                     .help(scene.photo == nil ? "Paste an image" : "Replace the image in the sketch")
-                Button(scene.photo == nil ? "Choose…" : "Replace…") { ImageImport.choose(model) }
+                Button(scene.photo == nil ? "Choose…" : "Replace…") { ImageImport.choose(lookup) }
                     .accessibilityLabel(scene.photo == nil ? "Choose sketch image" : "Replace sketch image")
             }
             HStack(spacing: 8) {
@@ -36,10 +36,10 @@ struct SketchEditor: View {
                     Text("Select").tag(Tool.select)
                 }.pickerStyle(.segmented).labelsHidden().frame(width: 126)
                 Spacer(minLength: 0)
-                iconButton("Undo sketch edit", "arrow.uturn.backward", action: model.undoSketch)
-                    .disabled(!model.sketch.canUndo)
-                iconButton("Redo sketch edit", "arrow.uturn.forward", action: model.redoSketch)
-                    .disabled(!model.sketch.canRedo)
+                iconButton("Undo sketch edit", "arrow.uturn.backward", action: lookup.undoSketch)
+                    .disabled(!lookup.sketch.canUndo)
+                iconButton("Redo sketch edit", "arrow.uturn.forward", action: lookup.redoSketch)
+                    .disabled(!lookup.sketch.canRedo)
                 Button("Add text", systemImage: "textformat", action: addCaption)
                     .disabled(scene.captions.count >= SketchScene.captionLimit)
             }
@@ -60,15 +60,15 @@ struct SketchEditor: View {
                         .labelStyle(.iconOnly).help("Remove selected item")
                 }
             }
-            ImageInputFeedback(model: model)
+            ImageInputFeedback(lookup: lookup)
         }
         .controlSize(.small)
-        .disabled(!model.canEditSketch)
+        .disabled(!lookup.canEditSketch)
         .onChange(of: tool) { _, value in if value == .draw { selection = nil } }
         .onChange(of: scene) { _, value in
             if let selection, value.frame(for: selection) == nil { self.selection = nil }
         }
-        .onChange(of: model.canEditSketch) { _, enabled in if !enabled { finishGesture() } }
+        .onChange(of: lookup.canEditSketch) { _, enabled in if !enabled { finishGesture() } }
     }
 
     private var artboard: some View {
@@ -96,7 +96,7 @@ struct SketchEditor: View {
             )
             .focusable()
             .focused($canvasFocused)
-            .onPasteCommand(of: ImageImport.types) { _ = ImageImport.receive($0, model: model) }
+            .onPasteCommand(of: ImageImport.types) { _ = ImageImport.receive($0, lookup: lookup) }
             .onDeleteCommand(perform: removeSelection)
             .onKeyPress(.space) { selectNext() ? .handled : .ignored }
             .onKeyPress(keys: [.leftArrow, .rightArrow, .upArrow, .downArrow], action: adjustSelection)
@@ -105,7 +105,7 @@ struct SketchEditor: View {
                 "Space selects the next item. Arrow keys move it; Shift with arrows resizes an image."
             )
             .accessibilityAction(named: "Select next sketch item") { _ = selectNext() }
-            .modifier(ImageDropTarget(model: model))
+            .modifier(ImageDropTarget(lookup: lookup))
         }
         .aspectRatio(1, contentMode: .fit)
         .frame(maxWidth: 392)
@@ -142,7 +142,7 @@ struct SketchEditor: View {
     private func addCaption() {
         var next = scene
         guard let id = next.addCaption() else { return }
-        model.commitSketch(next)
+        lookup.commitSketch(next)
         tool = .select
         selection = .caption(id)
         captionFocused = true
@@ -155,7 +155,7 @@ struct SketchEditor: View {
             var next = scene
             guard let index = next.captions.firstIndex(where: { $0.id == id }) else { return }
             next.captions[index].text = String(value.unicodeScalars.prefix(120))
-            model.commitSketch(next)
+            lookup.commitSketch(next)
         }
     }
 
@@ -163,7 +163,7 @@ struct SketchEditor: View {
         guard let selection else { return }
         var next = scene
         next.remove(selection)
-        model.commitSketch(next)
+        lookup.commitSketch(next)
         self.selection = nil
     }
 
@@ -187,12 +187,12 @@ struct SketchEditor: View {
         } else {
             next.move(selection, dx: dx, dy: dy)
         }
-        model.commitSketch(next)
+        lookup.commitSketch(next)
         return .handled
     }
 
     private func changeGesture(_ value: DragGesture.Value, scale: CGFloat) {
-        guard model.canEditSketch, scale > 0 else { return }
+        guard lookup.canEditSketch, scale > 0 else { return }
         if gestureBase == nil {
             let start = SketchScene.clamped(
                 CGPoint(x: value.startLocation.x / scale, y: value.startLocation.y / scale))
@@ -210,7 +210,7 @@ struct SketchEditor: View {
                 selection = scene.hit(at: start)
                 if let selection { gestureEdit = .move(selection) }
             }
-            if gestureEdit != nil { model.beginSketchEdit() }
+            if gestureEdit != nil { lookup.beginSketchEdit() }
         }
         switch gestureEdit {
         case .draw(var stroke):
@@ -241,9 +241,9 @@ struct SketchEditor: View {
         if let drawing {
             var next = scene
             next.strokes.append(drawing)
-            model.commitSketch(next)
+            lookup.commitSketch(next)
         } else if let gesturePreview {
-            model.commitSketch(gesturePreview)
+            lookup.commitSketch(gesturePreview)
         }
     }
 

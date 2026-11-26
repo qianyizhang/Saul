@@ -4,6 +4,7 @@ import SwiftUI
 
 struct ContentView: View {
     @ObservedObject var model: AppModel
+    @ObservedObject var lookup: LookupSession
     @State private var lookupToDelete: HistoryRow?
     @State private var page = NotebookPage.answer
     @State private var showsRecentlyDeleted = false
@@ -16,16 +17,16 @@ struct ContentView: View {
                 .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 300)
         } detail: {
             VStack(spacing: 0) {
-                ThinkingDivider(activity: model.selectedResponseActivity)
+                ThinkingDivider(activity: lookup.selectedResponseActivity)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
-                        if let entry = model.selectedEntry {
-                            if model.usesSketch && model.showsMainComposer {
+                        if let entry = lookup.selectedEntry {
+                            if lookup.usesSketch && lookup.showsMainComposer {
                                 composer
                             } else {
                                 answer(entry)
                             }
-                        } else if model.selection != nil {
+                        } else if lookup.selection != nil {
                             if model.historyDetailLoading {
                                 ProgressView("Loading saved lookup…")
                             } else {
@@ -37,7 +38,7 @@ struct ContentView: View {
                             welcome
                             composer
                         }
-                        if model.selectedEntry != nil {
+                        if lookup.selectedEntry != nil {
                             if let error = model.historyDetailError {
                                 Text("Could not refresh this saved lookup. \(error)")
                                     .foregroundStyle(.secondary)
@@ -49,8 +50,8 @@ struct ContentView: View {
                     }
                     .padding(30)
                     .frame(
-                        maxWidth: (model.selectedEntry?.mode == .spelling && page == .answer)
-                            || model.usesSketch ? 1140 : 684, alignment: .leading
+                        maxWidth: (lookup.selectedEntry?.mode == .spelling && page == .answer)
+                            || lookup.usesSketch ? 1140 : 684, alignment: .leading
                     )
                     .frame(maxWidth: .infinity)
                 }
@@ -62,28 +63,28 @@ struct ContentView: View {
                 if let error = model.error {
                     banner(error, symbol: "exclamationmark.circle", color: .red) { model.error = nil }
                 }
-                if model.selectedEntry != nil && model.showsMainComposer && !model.usesSketch {
+                if lookup.selectedEntry != nil && lookup.showsMainComposer && !lookup.usesSketch {
                     Divider()
                     composer.padding(20).frame(maxWidth: 664)
-                } else if model.selectedEntry != nil && !model.showsMainComposer {
-                    if model.busy {
+                } else if lookup.selectedEntry != nil && !lookup.showsMainComposer {
+                    if lookup.busy {
                         HStack {
                             Spacer()
-                            AttemptControls(model: model)
+                            AttemptControls(model: model, lookup: model.lookup)
                         }.padding(.horizontal, 24).padding(.vertical, 12)
-                    } else if model.hasRetainedDraft && !model.launcherPending {
+                    } else if lookup.hasRetainedDraft && !lookup.launcherPending {
                         Divider()
                         HStack {
                             if !model.minimumMode { Text("Retained draft").foregroundStyle(.secondary) }
                             Spacer()
                             Button(model.minimumMode ? "Edit draft" : "Edit") {
-                                model.showsMainComposer = true
+                                lookup.showsMainComposer = true
                             }
                             .help("Edit retained draft").accessibilityLabel("Edit draft")
                         }.font(AppStyle.caption).padding(.horizontal, 24).padding(.vertical, 10)
                     }
                 }
-                if !model.minimumMode, let entry = model.selectedEntry {
+                if !model.minimumMode, let entry = lookup.selectedEntry {
                     Divider()
                     LookupStatusLine(entry: entry)
                         .padding(.horizontal, 20).padding(.vertical, 7)
@@ -92,7 +93,7 @@ struct ContentView: View {
             .background(Color(nsColor: .textBackgroundColor))
             .labelStyle(EverydayLabelStyle(minimum: model.minimumMode))
         }
-        .onChange(of: model.selectedEntry?.id) { _, _ in page = .answer }
+        .onChange(of: lookup.selectedEntry?.id) { _, _ in page = .answer }
         .tint(AppStyle.accent)
         .disclosureGroupStyle(FullRowDisclosureStyle())
         .alert(
@@ -130,14 +131,14 @@ struct ContentView: View {
                 .padding(.top, 20).padding(.horizontal, 18).padding(.bottom, 8)
             VStack(alignment: .leading, spacing: 0) {
                 FullRowButton {
-                    model.newQuery()
+                    lookup.newQuery()
                 } label: {
                     Label("New run", systemImage: "square.and.pencil").labelStyle(.titleAndIcon)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .notebookRow(selected: model.selection == nil)
+                        .notebookRow(selected: lookup.selection == nil)
                 }
-                .accessibilityAddTraits(model.selection == nil ? .isSelected : [])
-                .disabled(model.busy || model.launcherPending)
+                .accessibilityAddTraits(lookup.selection == nil ? .isSelected : [])
+                .disabled(lookup.busy || lookup.launcherPending)
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass").accessibilityHidden(true)
                     TextField("Search history", text: $model.search).textFieldStyle(.plain)
@@ -151,7 +152,7 @@ struct ContentView: View {
                     Text("\(model.historyTotal)").font(.caption.monospacedDigit())
                 }
             }.foregroundStyle(.secondary).padding(.horizontal, 18)
-            List(selection: $model.selection) {
+            List(selection: $lookup.selection) {
                 ForEach(model.filteredEntries) { entry in
                     VStack(alignment: .leading, spacing: 5) {
                         Text(entry.displayQuery).font(AppStyle.control).lineLimit(2)
@@ -210,7 +211,7 @@ struct ContentView: View {
             Spacer(minLength: 0)
             Divider()
             FullRowButton {
-                model.openSettings(model.connectionGuidance(for: model.currentPreset)?.section ?? .overview)
+                model.openSettings(lookup.connectionGuidance(for: lookup.currentPreset)?.section ?? .overview)
             } label: {
                 HStack {
                     if !model.minimumMode { Image(systemName: "person.crop.circle").font(.title3) }
@@ -233,7 +234,7 @@ struct ContentView: View {
     private var welcome: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("New run").font(AppStyle.subject)
-            if model.currentAction == nil && !model.minimumMode {
+            if lookup.currentAction == nil && !model.minimumMode {
                 Text("Add an action to start your next run.").font(AppStyle.body).foregroundStyle(.secondary)
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
@@ -257,7 +258,7 @@ struct ContentView: View {
             switch page {
             case .answer:
                 LookupAnswerText(
-                    entry: entry, activity: model.selectedResponseActivity, showsShortSubject: false,
+                    entry: entry, activity: lookup.selectedResponseActivity, showsShortSubject: false,
                     imageData: model.imageData(for: entry), imageLoading: model.imageLoading)
             case .details:
                 LookupDetails(entry: entry)
@@ -267,9 +268,9 @@ struct ContentView: View {
                     transientFailure: model.isTransientFailure(entry)
                 ).id(entry.id)
             }
-            RetryAttemptNotice(model: model, entry: entry)
+            RetryAttemptNotice(lookup: lookup, entry: entry)
             if let parentID = entry.parentID {
-                Button("Previous answer") { model.selection = parentID }.buttonStyle(.borderless)
+                Button("Previous answer") { lookup.selection = parentID }.buttonStyle(.borderless)
             }
             if let source = entry.sourceURL, let url = URL(string: source),
                 ["http", "https"].contains(url.scheme?.lowercased() ?? "")
@@ -286,14 +287,16 @@ struct ContentView: View {
                 }
                 answerActions(entry)
             }
-            if page == .answer { FollowUpComposer(model: model, entry: entry).id(entry.id) }
+            if page == .answer {
+                FollowUpComposer(lookup: lookup, entry: entry).id(entry.id)
+            }
         }
     }
 
     @ViewBuilder private func answerActions(_ entry: HistoryEntry) -> some View {
         let allowsDownload = entry.capability == .draw && model.imageData(for: entry) != nil
         let allowsCopy = entry.capability == .write && !entry.response.isEmpty
-        let allowsReuse = model.canReuse(entry)
+        let allowsReuse = lookup.canReuse(entry)
         let allowsDelete = model.canDeleteLookup(entry.recordID)
         if allowsDownload || allowsCopy || allowsReuse || entry.capability == .write || allowsDelete {
             HStack(spacing: 12) {
@@ -308,7 +311,7 @@ struct ContentView: View {
                     }.help("Copy answer").accessibilityLabel("Copy answer")
                 }
                 if allowsReuse {
-                    Button("Reuse") { model.reuse(entry) }
+                    Button("Reuse") { lookup.reuse(entry) }
                         .help("Restore this request as an editable draft")
                 }
                 if entry.capability == .write {
@@ -332,34 +335,34 @@ struct ContentView: View {
     }
     private var composer: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if model.selectedEntry != nil {
+            if lookup.selectedEntry != nil {
                 HStack {
                     if !model.minimumMode {
                         Text("Draft").font(AppStyle.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button(model.minimumMode ? "Hide draft" : "Hide") { model.showsMainComposer = false }
+                    Button(model.minimumMode ? "Hide draft" : "Hide") { lookup.showsMainComposer = false }
                         .buttonStyle(.borderless).help("Hide draft").accessibilityLabel("Hide draft")
                 }
             }
-            LookupChoices(model: model)
+            LookupChoices(model: model, lookup: model.lookup)
             Divider()
-            ActionInputs(model: model)
-            if model.currentAction != nil {
+            ActionInputs(model: model, lookup: model.lookup)
+            if lookup.currentAction != nil {
                 HStack(spacing: 8) {
                     Spacer(minLength: 2)
-                    LookupBillingLabel(model: model)
-                    NextLookupDetailsButton(model: model)
-                    if model.busy {
-                        AttemptControls(model: model)
+                    LookupBillingLabel(lookup: lookup)
+                    NextLookupDetailsButton(model: model, lookup: model.lookup)
+                    if lookup.busy {
+                        AttemptControls(model: model, lookup: model.lookup)
                     } else {
                         Button {
-                            model.send()
+                            lookup.send()
                         } label: {
                             ControlLabel(symbol: .send).frame(width: 18, height: 24)
                         }
                         .accessibilityLabel("Run action").buttonStyle(.borderedProminent).disabled(
-                            !model.canSend
+                            !lookup.canSend
                         )
                         .help("Run · \(model.shortcuts.binding(for: .send).display)")
                     }
@@ -368,26 +371,26 @@ struct ContentView: View {
                     Text(composerHint).font(AppStyle.caption).foregroundStyle(AppStyle.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                if let section = model.currentConnectionSetupSection {
+                if let section = lookup.currentConnectionSetupSection {
                     Button(AppModel.setupLabel(for: section)) {
-                        if section == .configuration { model.settingsPresetID = model.currentPreset?.id }
+                        if section == .configuration { model.settingsPresetID = lookup.currentPreset?.id }
                         model.openSettings(section)
                     }
-                } else if model.connectionIssue == nil, let preset = model.currentPreset,
+                } else if lookup.connectionIssue == nil, let preset = lookup.currentPreset,
                     model.presetIssue(preset) != nil
                 {
                     Button("Edit preset") {
                         model.settingsPresetID = preset.id
                         model.openSettings(.configuration)
-                    }.disabled(model.busy)
+                    }.disabled(lookup.busy)
                 }
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
     private var composerHint: String {
-        if let issue = model.connectionIssue { return issue }
-        if let warning = model.currentConnectionWarning { return warning }
-        return model.requestIssue
+        if let issue = lookup.connectionIssue { return issue }
+        if let warning = lookup.currentConnectionWarning { return warning }
+        return lookup.requestIssue
             ?? (model.minimumMode
                 ? "" : "\(model.shortcuts.binding(for: .send).display) to send · Each lookup starts fresh.")
     }

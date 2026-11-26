@@ -29,7 +29,7 @@ import SaulNativeValues
     private var details: [UUID: HistoryEntry] = [:]
     private var detailOrder: [UUID] = []
     private var mutationVersion = 0
-    private var selectedID: UUID?
+    private(set) var selectedID: UUID?
     private var selectedIdentity: HistoryStore.RecordID?
     private var query = ""
     private var next: HistoryCursor?

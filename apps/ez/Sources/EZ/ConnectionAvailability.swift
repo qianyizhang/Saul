@@ -4,21 +4,16 @@ import Foundation
 import SaulNativeValues
 
 extension AppModel {
-    struct ConnectionGuidance {
-        let message: String
-        let section: SettingsSection?
-    }
-
     static func setupLabel(for section: SettingsSection) -> String {
         section == .preferences ? "Open Integrations" : "Open \(section.title)"
     }
 
     func refreshActiveConnection(preferred: ConnectionDefinition? = nil) {
         guard !quitting, sharedCredentialsConnected else { return }
-        let historyConnection = selectedEntry.flatMap { entry in
+        let historyConnection = lookup.selectedEntry.flatMap { entry in
             configuration.connections.first { $0.key == entry.presetSnapshot?.connectionKey }
         }
-        connectionChecks.focus(preferred ?? historyConnection ?? currentConnection) { [weak self] in
+        connectionChecks.focus(preferred ?? historyConnection ?? lookup.currentConnection) { [weak self] in
             self?.initializeStarterPreset()
         }
     }
@@ -33,16 +28,21 @@ extension AppModel {
         if !Task.isCancelled && sharedCredentialsConnected { initializeStarterPreset() }
     }
 
+    func modelsForPreset(_ preset: ModelPreset) -> [ConnectionModel] { session.modelsForPreset(preset) }
+    func presetIssue(_ preset: ModelPreset) -> String? { session.presetIssue(preset, in: configuration) }
+}
+
+extension ConnectionSession {
     func modelsForPreset(_ preset: ModelPreset) -> [ConnectionModel] {
-        connectionCatalog(preset.connectionKey)?.options(for: preset.capability) ?? []
+        checks.report(preset.connectionKey)?.catalog?.options(for: preset.capability) ?? []
     }
-    func presetIssue(_ preset: ModelPreset) -> String? {
+    func presetIssue(_ preset: ModelPreset, in configuration: Configuration) -> String? {
         guard let connection = configuration.connections.first(where: { $0.key == preset.connectionKey })
         else {
             return "The preset's connection is unavailable. Update the preset in Settings."
         }
-        guard let catalog = connectionCatalog(connection.key) else {
-            return connectionError(connection.key) ?? "Loading models for ‘\(connection.name)’…"
+        guard let catalog = checks.report(connection.key)?.catalog else {
+            return checks.report(connection.key)?.error ?? "Loading models for ‘\(connection.name)’…"
         }
         if let issue = catalog.issue(model: preset.model, capability: preset.capability) { return issue }
         if connection.kind == .chatGPTPlan,
@@ -59,7 +59,28 @@ extension AppModel {
     }
 }
 
-extension AppModel {
+extension LookupSession {
+    struct ConnectionGuidance {
+        let message: String
+        let section: SettingsSection?
+    }
+
+    func modelsForPreset(_ preset: ModelPreset) -> [ConnectionModel] {
+        connections.modelsForPreset(preset)
+    }
+
+    func presetIssue(_ preset: ModelPreset) -> String? {
+        connections.presetIssue(preset, in: configuration)
+    }
+
+    private func connectionCatalog(_ key: String) -> ConnectionCatalog? {
+        connections.checks.report(key)?.catalog
+    }
+    private func connectionStatus(_ key: String) -> ConnectionStatus? {
+        connections.checks.report(key)?.status
+    }
+    private func connectionError(_ key: String) -> String? { connections.checks.report(key)?.error }
+
     var currentConnection: ConnectionDefinition? {
         configuration.connections.first { $0.key == currentPreset?.connectionKey }
     }
@@ -94,7 +115,7 @@ extension AppModel {
         func setup(_ message: String) -> ConnectionGuidance {
             ConnectionGuidance(message: message, section: .connections)
         }
-        if !sharedCredentialsConnected {
+        if !connections.connected {
             return ConnectionGuidance(
                 message: "Connect to Saul in Settings → Preferences → Integrations.",
                 section: .preferences)

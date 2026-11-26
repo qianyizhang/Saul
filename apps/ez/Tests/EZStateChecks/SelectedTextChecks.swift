@@ -8,38 +8,40 @@ import SaulTestSupport
 @MainActor func selectedTextChecks() -> [CheckCase] {
     [
         stateCase("selected text preserves Unicode and waits for Send in a single-field action") { f in
-            f.model.chooseAction(f.single.id)
+            f.model.lookup.chooseAction(f.single.id)
             let text = "  café 中文 🧪\nsecond line + % &  "
-            try f.model.prepareSelectedText(text)
-            try expect(f.model.query == text, "Selection was trimmed or decoded")
+            try f.model.lookup.prepareSelectedText(text)
+            try expect(f.model.lookup.query == text, "Selection was trimmed or decoded")
             try expect(
-                !f.model.busy && !f.model.launcherPending && f.model.entries.isEmpty,
+                !f.model.lookup.busy && !f.model.lookup.launcherPending && f.model.entries.isEmpty,
                 "Selected text started or queued a request")
             try expect(try f.history.load().isEmpty, "Draft was saved as a request")
         },
         stateCase("selected text fills only the first field of a multi-input action") { f in
-            f.model.chooseAction(f.multi.id)
-            try f.model.prepareSelectedText("elicit")
-            try expect(f.model.inputValues == ["fuzzy term": "elicit"], "Other action inputs were filled")
+            f.model.lookup.chooseAction(f.multi.id)
+            try f.model.lookup.prepareSelectedText("elicit")
             try expect(
-                f.model.currentPreset == f.alternate && !f.model.busy,
+                f.model.lookup.inputValues == ["fuzzy term": "elicit"], "Other action inputs were filled")
+            try expect(
+                f.model.lookup.currentPreset == f.alternate && !f.model.lookup.busy,
                 "Action default changed or request sent")
         },
         stateCase("selected text refuses active work and preserves the entire draft") { f in
-            f.model.chooseAction(f.multi.id)
-            f.model.setInput("existing", for: "fuzzy term")
-            f.model.setInput("context", for: "fuzzy context")
-            f.model.chooseLookupPreset(f.alternate.id)
-            let revision = f.model.draftRevision
+            f.model.lookup.chooseAction(f.multi.id)
+            f.model.lookup.setInput("existing", for: "fuzzy term")
+            f.model.lookup.setInput("context", for: "fuzzy context")
+            f.model.lookup.chooseLookupPreset(f.alternate.id)
+            let revision = f.model.lookup.draftRevision
             for blocked in ["draft", "settings"] {
                 f.model.showSettings = blocked == "settings"
                 let expected = blocked == "draft" ? "draft" : blocked == "settings" ? "Settings" : "already"
                 try expectThrows(EZError.self, matching: { $0.message.contains(expected) }) {
-                    try f.model.prepareSelectedText("replacement")
+                    try f.model.lookup.prepareSelectedText("replacement")
                 }
                 try expect(
-                    f.model.inputValues == ["fuzzy term": "existing", "fuzzy context": "context"]
-                        && f.model.currentPreset == f.alternate && f.model.draftRevision == revision,
+                    f.model.lookup.inputValues == ["fuzzy term": "existing", "fuzzy context": "context"]
+                        && f.model.lookup.currentPreset == f.alternate
+                        && f.model.lookup.draftRevision == revision,
                     "Rejected selection changed the draft")
             }
         },
@@ -47,38 +49,39 @@ import SaulTestSupport
             var config = f.configuration
             config.addIllustration()
             try f.model.saveConfiguration(config)
-            f.model.chooseAction(config.actions.first { $0.capability == .draw }?.id)
-            f.model.chooseOutputFormat("gif")
-            try expect(f.model.query.isEmpty && f.model.hasRetainedDraft, "Missing format-only draft")
+            f.model.lookup.chooseAction(config.actions.first { $0.capability == .draw }?.id)
+            f.model.lookup.chooseOutputFormat("gif")
+            try expect(
+                f.model.lookup.query.isEmpty && f.model.lookup.hasRetainedDraft, "Missing format-only draft")
             try expectThrows(EZError.self, matching: { $0.message.contains("draft") }) {
-                try f.model.prepareSelectedText("Do not overwrite")
+                try f.model.lookup.prepareSelectedText("Do not overwrite")
             }
-            try expectEqual(f.model.outputFormat, "gif", "Services reset the output format")
-            try expectEqual(f.model.query, "", "Services replaced a retained draft")
+            try expectEqual(f.model.lookup.outputFormat, "gif", "Services reset the output format")
+            try expectEqual(f.model.lookup.query, "", "Services replaced a retained draft")
         },
         stateCase("selected text rejects empty and oversized input before clearing a saved selection") { f in
             let entry = try f.selectLookup()
-            f.model.query = ""
-            let revision = f.model.draftRevision
+            f.model.lookup.query = ""
+            let revision = f.model.lookup.draftRevision
             for text in ["", " \n\t", String(repeating: "é", count: 8193)] {
-                try expectThrows(EZError.self) { try f.model.prepareSelectedText(text) }
+                try expectThrows(EZError.self) { try f.model.lookup.prepareSelectedText(text) }
                 try expect(
-                    f.model.selection == entry.id && f.model.draftRevision == revision,
+                    f.model.lookup.selection == entry.id && f.model.lookup.draftRevision == revision,
                     "Invalid selection cleared the workspace")
             }
-            try f.model.prepareSelectedText(String(repeating: "é", count: 8192))
+            try f.model.lookup.prepareSelectedText(String(repeating: "é", count: 8192))
             try expect(
-                f.model.query.utf8.count == 16_384 && f.model.selection == nil,
+                f.model.lookup.query.utf8.count == 16_384 && f.model.lookup.selection == nil,
                 "Boundary selection rejected or old answer stayed selected")
         },
         stateCase("selected text without actions preserves the workspace and reports configuration") { f in
             try f.model.saveConfiguration(Configuration())
-            let revision = f.model.draftRevision
+            let revision = f.model.lookup.draftRevision
             try expectThrows(EZError.self, matching: { $0.message.contains("Settings → Actions") }) {
-                try f.model.prepareSelectedText("word")
+                try f.model.lookup.prepareSelectedText("word")
             }
             try expect(
-                f.model.inputValues.isEmpty && f.model.draftRevision == revision,
+                f.model.lookup.inputValues.isEmpty && f.model.lookup.draftRevision == revision,
                 "Missing action changed the workspace")
         },
     ]

@@ -10,6 +10,10 @@ public final class HistoryStore {
     }
 
     public static var defaultDirectory: URL { SharedSettingsDocument.defaultURL.deletingLastPathComponent() }
+    public static func databaseURL(in directory: URL) -> URL {
+        directory.appendingPathComponent("history.sqlite3")
+    }
+
     public let url: URL
     var database: OpaquePointer?
     private let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
@@ -18,7 +22,7 @@ public final class HistoryStore {
         try Self.regular(directory, directory: true)
         try FileManager.default.createDirectory(
             at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-        url = directory.appendingPathComponent("history.sqlite3")
+        url = Self.databaseURL(in: directory)
         try Self.regular(url)
         try open(flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
         do {
@@ -48,7 +52,7 @@ public final class HistoryStore {
 
     private init(opening directory: URL, readOnly: Bool) throws {
         try Self.regular(directory, directory: true)
-        url = directory.appendingPathComponent("history.sqlite3")
+        url = Self.databaseURL(in: directory)
         try Self.regular(url)
         // Keep the same descriptor mode as peers. Mixed modes can give Apple's SQLite
         // writer EBADF taking its reservation. SQL writes stay disabled on this connection.

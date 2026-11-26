@@ -24,13 +24,14 @@ import SaulTestSupport
             try bytes.write(to: configURL)
             let model = fixtureModel(directory: directory)
             defer { model.shutdown() }
-            try expect(model.configurationError != nil && !model.canSend, "Corruption silently reset")
-            let revision = model.draftRevision
+            try expect(model.configurationError != nil && !model.lookup.canSend, "Corruption silently reset")
+            let revision = model.lookup.draftRevision
             try expectThrows(EZError.self, matching: { $0.message == model.configurationError }) {
-                try model.prepareSelectedText("synthetic selection")
+                try model.lookup.prepareSelectedText("synthetic selection")
             }
             try expect(
-                model.inputValues.isEmpty && model.draftRevision == revision && !model.launcherPending,
+                model.lookup.inputValues.isEmpty && model.lookup.draftRevision == revision
+                    && !model.lookup.launcherPending,
                 "Rejected selection changed the workspace")
             try expectThrows(
                 EZError.self, matching: { $0.message.contains("Configuration cannot be changed") }

@@ -226,7 +226,7 @@ private struct SurfacePreviewControls: View {
             )
             .font(.caption).foregroundStyle(.secondary).padding(.bottom, 8)
             Divider()
-            ContentView(model: model)
+            ContentView(model: model, lookup: model.lookup)
                 .environment(\.thinkingLightMotionDisabled, reduceMotion)
         }
         .preferredColorScheme(dark ? .dark : .light)
@@ -235,7 +235,7 @@ private struct SurfacePreviewControls: View {
             NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         }
         .task(id: scenario) {
-            model.stop()
+            model.lookup.stop()
             await model.waitForPersistence()
             if !Task.isCancelled { loadFixture() }
         }
@@ -245,7 +245,7 @@ private struct SurfacePreviewControls: View {
     }
 
     private func loadFixture() {
-        model.newQuery()
+        model.lookup.newQuery()
         model.storageWarning = nil
         model.error = nil
         model.search = ""
@@ -300,47 +300,47 @@ private struct SurfacePreviewControls: View {
         } else {
             action = config.actions.first
         }
-        model.chooseAction(action?.id)
+        model.lookup.chooseAction(action?.id)
         model.showHistory([])
         if scenario.hasPrefix("Meme") {
-            model.query = "Make this a Monday meme. Caption: already?"
+            model.lookup.query = "Make this a Monday meme. Caption: already?"
             if scenario == "Meme invalid" {
-                model.attachImage(data: Data("invalid".utf8), name: "bad.png")
+                model.lookup.attachImage(data: Data("invalid".utf8), name: "bad.png")
             } else if scenario != "Meme blank", let png = try? previewPNG() {
-                model.attachImage(data: png, name: "sketch.png")
+                model.lookup.attachImage(data: png, name: "sketch.png")
             }
-            if scenario == "Meme result" { model.send() }
+            if scenario == "Meme result" { model.lookup.send() }
         }
         if scenario.hasPrefix("Research") {
-            model.query = "How does sketch-to-meme work?"
-            if scenario == "Research waiting" { model.query += " [slow]" }
-            if scenario == "Research error" { model.query += " [fail]" }
-            if scenario != "Research" { model.send() }
+            model.lookup.query = "How does sketch-to-meme work?"
+            if scenario == "Research waiting" { model.lookup.query += " [slow]" }
+            if scenario == "Research error" { model.lookup.query += " [fail]" }
+            if scenario != "Research" { model.lookup.send() }
         }
         if scenario.hasPrefix("Draw") {
-            if scenario == "Draw GIF" { model.chooseOutputFormat("gif") }
-            model.query = "A tree shares nutrients through its roots and fungi."
-            if scenario == "Draw waiting" { model.query += " [slow]" }
-            if scenario == "Draw error" { model.query += " [fail]" }
-            if scenario != "Draw" { model.send() }
+            if scenario == "Draw GIF" { model.lookup.chooseOutputFormat("gif") }
+            model.lookup.query = "A tree shares nutrients through its roots and fungi."
+            if scenario == "Draw waiting" { model.lookup.query += " [slow]" }
+            if scenario == "Draw error" { model.lookup.query += " [fail]" }
+            if scenario != "Draw" { model.lookup.send() }
         }
         if [
             "Answer", "Retained draft", "Waiting", "Thinking", "Streaming", "Blocked", "Long metadata",
             "Legacy answer",
         ]
         .contains(scenario) {
-            model.query = "Serendipity"
+            model.lookup.query = "Serendipity"
         }
         if ["Waiting", "Thinking", "Streaming"].contains(scenario) {
-            model.query = "Serendipity [\(scenario.lowercased())]"
-            model.send()
+            model.lookup.query = "Serendipity [\(scenario.lowercased())]"
+            model.lookup.send()
         }
         if ["Answer", "Retained draft", "Blocked", "Long metadata", "Legacy answer"].contains(scenario),
             let action,
-            let preset = model.currentPreset
+            let preset = model.lookup.currentPreset
         {
             if var entry = try? action.prepare(
-                values: model.inputValues, preset: preset, models: model.modelsForPreset(preset),
+                values: model.lookup.inputValues, preset: preset, models: model.modelsForPreset(preset),
                 provider: .chatGPTPlan)
             {
                 entry.response =
@@ -360,9 +360,10 @@ private struct SurfacePreviewControls: View {
                     entry.metrics = nil
                     entry.actualServiceTier = nil
                 }
-                model.query = scenario == "Retained draft" ? "An unrelated question I have not run yet." : ""
+                model.lookup.query =
+                    scenario == "Retained draft" ? "An unrelated question I have not run yet." : ""
                 model.showHistory([entry])
-                model.selection = entry.id
+                model.lookup.selection = entry.id
             }
         }
         if scenario == "Prose corrections" {
@@ -391,7 +392,7 @@ private struct SurfacePreviewControls: View {
                 """
             entry.status = "completed"
             model.showHistory([entry])
-            model.selection = entry.id
+            model.lookup.selection = entry.id
         }
         if scenario == "Blocked" {
             fixtures.models.removeAll { $0.id == "fixture-luna" }
@@ -400,12 +401,12 @@ private struct SurfacePreviewControls: View {
             model.storageWarning = "Answer could not be saved. Copy it before quitting."
         }
         if scenario == "Saving" {
-            model.query = "Serendipity [saving]"
-            model.send()
+            model.lookup.query = "Serendipity [saving]"
+            model.lookup.send()
         }
         if scenario == "Unsaved" {
-            model.query = "Serendipity"
-            model.send()
+            model.lookup.query = "Serendipity"
+            model.lookup.send()
         }
     }
 }

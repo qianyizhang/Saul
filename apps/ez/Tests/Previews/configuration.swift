@@ -51,7 +51,7 @@ import SwiftUI
         config.presets[0].name = "lit"
         config.presets.append(ModelPreset(name: "steady", model: "fixture-luna", effort: "high", fast: false))
         do { try model.saveConfiguration(config) } catch { model.error = error.localizedDescription }
-        model.chooseAction(config.actions[3].id)
+        model.lookup.chooseAction(config.actions[3].id)
         let connections = config.connections
         Task {
             for connection in connections { await checks.refresh(connection) }
@@ -97,9 +97,9 @@ private struct ConfigurationPreviewSurface: View {
             if configuration {
                 SettingsView(model: model)
             } else if compact {
-                QuickLookupView(model: model, controller: controller).frame(width: 560)
+                QuickLookupView(model: model, lookup: model.lookup, controller: controller).frame(width: 560)
             } else {
-                ContentView(model: model)
+                ContentView(model: model, lookup: model.lookup)
             }
         }.preferredColorScheme(dark ? .dark : .light)
             .frame(minWidth: 780, minHeight: 780)

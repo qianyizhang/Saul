@@ -4,7 +4,7 @@ import SwiftUI
 
 /// The same per-answer draft is used in Quick Lookup and the main window.
 struct FollowUpComposer: View {
-    @ObservedObject var model: AppModel
+    @ObservedObject var lookup: LookupSession
     let entry: HistoryEntry
     @FocusState private var focused: Bool
 
@@ -18,8 +18,8 @@ struct FollowUpComposer: View {
                     TextField(
                         "",
                         text: Binding(
-                            get: { model.followUpDrafts[entry.id] ?? "" },
-                            set: { model.followUpDrafts[entry.id] = $0 }
+                            get: { lookup.followUpDrafts[entry.id] ?? "" },
+                            set: { lookup.followUpDrafts[entry.id] = $0 }
                         ), axis: .vertical
                     )
                     .lineLimit(1...4).notebookEditor(focused: focused)
@@ -28,23 +28,23 @@ struct FollowUpComposer: View {
                     .multilineDraftReturn()
                     .onChange(of: focused) { _, focused in
                         if focused {
-                            model.followUpTargetID = entry.id
-                        } else if model.followUpTargetID == entry.id {
-                            model.followUpTargetID = nil
+                            lookup.followUpTargetID = entry.id
+                        } else if lookup.followUpTargetID == entry.id {
+                            lookup.followUpTargetID = nil
                         }
                     }
                     .onDisappear {
-                        if model.followUpTargetID == entry.id { model.followUpTargetID = nil }
+                        if lookup.followUpTargetID == entry.id { lookup.followUpTargetID = nil }
                     }
-                    .disabled(model.busy)
+                    .disabled(lookup.busy)
                     Button {
-                        model.followUp(entry.id)
+                        lookup.followUp(entry.id)
                     } label: {
                         ControlLabel(symbol: .send)
                     }
                     .help("Send follow-up").accessibilityLabel("Send follow-up")
                     .disabled(
-                        !model.canFollowUp
+                        !lookup.canFollowUp
                             || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                             || draft.utf16.count > 2_000)
                 }
@@ -54,5 +54,5 @@ struct FollowUpComposer: View {
             }
         }
     }
-    private var draft: String { model.followUpDrafts[entry.id] ?? "" }
+    private var draft: String { lookup.followUpDrafts[entry.id] ?? "" }
 }

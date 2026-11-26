@@ -110,7 +110,7 @@ struct LookupDraft {
     }
 }
 
-extension AppModel {
+extension LookupSession {
     func attachImage(url: URL) {
         beginImageImport()
         guard url.isFileURL else {

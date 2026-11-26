@@ -53,7 +53,7 @@ struct SettingsView: View {
             Divider()
             HStack(alignment: .top, spacing: 0) {
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(AppModel.SettingsSection.allCases, id: \.self) { section in
+                    ForEach(SettingsSection.allCases, id: \.self) { section in
                         FullRowButton {
                             model.settingsSection = section
                         } label: {
@@ -123,17 +123,20 @@ struct SettingsView: View {
                 .textSelection(.enabled)
                 .accessibilityLabel("Version \(version) · Build \(build)")
                 .accessibilityIdentifier("ez-version")
-            overviewRow("Action", value: model.currentAction?.name ?? "Unavailable", destination: .actions)
             overviewRow(
-                "Preset", value: model.currentPreset?.name ?? "Unavailable", destination: .configuration)
+                "Action", value: model.lookup.currentAction?.name ?? "Unavailable", destination: .actions)
             overviewRow(
-                "Connection", value: model.currentConnection?.name ?? "Unavailable", destination: .connections
+                "Preset", value: model.lookup.currentPreset?.name ?? "Unavailable",
+                destination: .configuration)
+            overviewRow(
+                "Connection", value: model.lookup.currentConnection?.name ?? "Unavailable",
+                destination: .connections
             )
             Spacer()
         }.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private func overviewRow(_ label: String, value: String, destination: AppModel.SettingsSection)
+    private func overviewRow(_ label: String, value: String, destination: SettingsSection)
         -> some View
     {
         Button {

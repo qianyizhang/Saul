@@ -32,7 +32,7 @@ import SaulTestSupport
                 { directory in
                     let f = try StateFixture(directory: directory)
                     defer { f.model.shutdown() }
-                    f.model.chooseAction(f.single.id)
+                    f.model.lookup.chooseAction(f.single.id)
                     let pasteboard = NSPasteboard.withUniqueName()
                     defer { pasteboard.releaseGlobally() }
                     let text = "café 中文 🧪\n+ & %"
@@ -43,15 +43,15 @@ import SaulTestSupport
                     let clipboardChanges = NSPasteboard.general.changeCount
                     var presentations = 0
                     let provider = SelectedTextService { text in
-                        try f.model.prepareSelectedText(text)
+                        try f.model.lookup.prepareSelectedText(text)
                         presentations += 1
                     }
                     var error: NSString?
                     provider.lookupSelectedText(pasteboard, userData: nil, error: &error)
                     try expect(
-                        error == nil && f.model.query == text && presentations == 1,
+                        error == nil && f.model.lookup.query == text && presentations == 1,
                         "Selection did not reach the draft")
-                    try expect(!f.model.busy && f.model.entries.isEmpty, "Service submitted a request")
+                    try expect(!f.model.lookup.busy && f.model.entries.isEmpty, "Service submitted a request")
                     try expect(
                         pasteboard.changeCount == originalChanges
                             && pasteboard.string(forType: .string) == text,
@@ -61,7 +61,7 @@ import SaulTestSupport
                         "Clipboard changed during the callback")
                     provider.lookupSelectedText(pasteboard, userData: nil, error: &error)
                     try expect(
-                        error != nil && presentations == 1 && f.model.query == text,
+                        error != nil && presentations == 1 && f.model.lookup.query == text,
                         "Repeated service invocation replaced an existing draft")
                 },
                 CheckCase("services: missing text reports a Services error without presenting") { _ in

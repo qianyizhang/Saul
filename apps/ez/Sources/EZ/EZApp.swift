@@ -27,7 +27,7 @@ public struct EZApp: App {
     let model = EZComposition.installed()
     lazy var quickLookup = QuickLookupController(model: model)
     private lazy var selectedTextService = SelectedTextService { [unowned self] text in
-        try model.prepareSelectedText(text)
+        try model.lookup.prepareSelectedText(text)
         quickLookup.launcherError = nil
         quickLookup.show()
     }
@@ -60,7 +60,7 @@ public struct EZApp: App {
                 throw EZError("Submit one EZ launcher query at a time.")
             }
             let request = try LauncherQuery(url: url)
-            try model.submitLauncher(request.query, after: connectOnce())
+            try model.lookup.submitLauncher(request.query, after: connectOnce())
             quickLookup.launcherError = nil
         } catch { quickLookup.launcherError = error.localizedDescription }
     }
@@ -109,8 +109,8 @@ private struct MainWindowView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        ContentView(model: model)
-            .disabled(model.launcherPending)
+        ContentView(model: model, lookup: model.lookup)
+            .disabled(model.lookup.launcherPending)
             .onAppear {
                 quickLookup.setOpenMain { openWindow(id: "main") }
             }

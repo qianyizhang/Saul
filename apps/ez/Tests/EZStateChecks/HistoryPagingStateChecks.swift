@@ -26,16 +26,16 @@ import SaulTestSupport
             await model.refreshHistory()?.value
             try expectEqual(model.entries.count, 100, "History was fully hydrated")
             try expectEqual(model.historyTotal, 205, "Count only covers loaded rows")
-            model.selection = oldest!.id
+            model.lookup.selection = oldest!.id
             await model.waitForHistorySelection()
             try expectEqual(
-                model.selectedEntry?.response, oldest?.response, "Unloaded parent could not be read")
+                model.lookup.selectedEntry?.response, oldest?.response, "Unloaded parent could not be read")
             await model.loadMoreHistory()?.value
             try expectEqual(model.entries.count, 200, "Second page was not appended")
             await model.refreshHistory()?.value
-            try expectEqual(model.selection, oldest?.id, "Refresh dropped off-page selection")
+            try expectEqual(model.lookup.selection, oldest?.id, "Refresh dropped off-page selection")
             try expectEqual(
-                model.selectedEntry?.response, oldest?.response, "Refresh discarded selected detail")
+                model.lookup.selectedEntry?.response, oldest?.response, "Refresh discarded selected detail")
             model.search = "unique answer"
             await model.refreshHistory()?.value
             try expectEqual(model.entries.map(\.id), [oldest!.id], "Search omitted an unloaded answer")
@@ -43,7 +43,7 @@ import SaulTestSupport
             model.search = "no match"
             await model.refreshHistory()?.value
             try expect(model.entries.isEmpty && model.historyTotal == 0, "Empty search kept stale list rows")
-            try expectEqual(model.selection, oldest?.id, "Search discarded selected history")
+            try expectEqual(model.lookup.selection, oldest?.id, "Search discarded selected history")
         },
         CheckCase("history state: superseded detail cannot replace selection and failures remain recoverable")
         { directory in
@@ -76,21 +76,23 @@ import SaulTestSupport
                 model.shutdown()
             }
             await model.refreshHistory()?.value
-            model.selection = a.id
+            model.lookup.selection = a.id
             try await firstStarted.wait()
-            model.selection = b.id
+            model.lookup.selection = b.id
             await model.waitForHistorySelection()
             try expect(
-                model.historyDetailError != nil && model.selection == b.id, "Failure lost the selected row")
+                model.historyDetailError != nil && model.lookup.selection == b.id,
+                "Failure lost the selected row")
             first?.resume(returning: a)
             first = nil
             await Task.yield()
-            try expect(model.selectedEntry == nil, "Old detail replaced B")
+            try expect(model.lookup.selectedEntry == nil, "Old detail replaced B")
             failB = false
             model.reloadHistorySelection()
             await model.waitForHistorySelection()
             try expectEqual(
-                model.selectedEntry?.response, "Answer B", "Detail recovery did not load the exact record")
+                model.lookup.selectedEntry?.response, "Answer B",
+                "Detail recovery did not load the exact record")
             try expect(model.historyDetailError == nil, "Successful detail left a stale error")
         },
         CheckCase("history state: detail cache evicts old answers and reopens them from storage") {
@@ -116,14 +118,15 @@ import SaulTestSupport
             defer { model.shutdown() }
             await model.refreshHistory()?.value
             for entry in values {
-                model.selection = entry.id
+                model.lookup.selection = entry.id
                 await model.waitForHistorySelection()
             }
-            model.selection = values[0].id
+            model.lookup.selection = values[0].id
             await model.waitForHistorySelection()
             try expectEqual(calls[values[0].recordID], 2, "Full answers accumulated without a bound")
             try expectEqual(
-                model.selectedEntry?.response, values[0].response, "Evicted detail did not reload exactly")
+                model.lookup.selectedEntry?.response, values[0].response,
+                "Evicted detail did not reload exactly")
         },
         CheckCase("history state: obsolete refresh detail cannot clear a newer search error") { directory in
             let entry = HistoryEntry(
@@ -147,7 +150,7 @@ import SaulTestSupport
                 model.shutdown()
             }
             model.showHistory([entry])
-            model.selection = entry.id
+            model.lookup.selection = entry.id
             let old = model.refreshHistory()
             try await started.wait()
             model.search = "new"
@@ -176,13 +179,13 @@ import SaulTestSupport
                 })
             defer { model.shutdown() }
             await model.refreshHistory()?.value
-            model.selection = entry.id
+            model.lookup.selection = entry.id
             await model.waitForHistorySelection()
             fail = true
             model.reloadHistorySelection()
             await model.waitForHistorySelection()
             try expectEqual(
-                model.selectedEntry?.response, entry.response,
+                model.lookup.selectedEntry?.response, entry.response,
                 "Refresh failure discarded readable saved detail")
             try expectEqual(
                 model.historyDetailError, "Fixture refresh failure", "Cached detail hid its refresh error")
@@ -193,11 +196,12 @@ import SaulTestSupport
             model.search = "no matching rows"
             await model.refreshHistory()?.value
             try expect(
-                model.entries.isEmpty && model.selectedEntry != nil, "Fixture is not an off-page selection")
+                model.entries.isEmpty && model.lookup.selectedEntry != nil,
+                "Fixture is not an off-page selection")
             await model.deleteLookup(entry.recordID)?.value
-            model.selection = entry.id
+            model.lookup.selection = entry.id
             await model.waitForHistorySelection()
-            try expect(model.selectedEntry == nil, "Deleted off-page detail remained cached")
+            try expect(model.lookup.selectedEntry == nil, "Deleted off-page detail remained cached")
             try expect(model.historyDetailError != nil, "Missing detail was not reported")
         },
     ]

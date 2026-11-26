@@ -12,27 +12,27 @@ import SaulTestSupport
             let f = try StateFixture(directory: directory)
             defer { f.model.shutdown() }
             let entry = try f.selectLookup()
-            let draft = f.model.inputValues
+            let draft = f.model.lookup.inputValues
             await f.model.deleteLookup(entry.recordID)?.value
             try expect(
-                f.model.entries.isEmpty && f.model.selection == nil,
+                f.model.entries.isEmpty && f.model.lookup.selection == nil,
                 "Successful deletion left lookup selected")
-            try expect(f.model.inputValues == draft, "Deletion discarded draft")
+            try expect(f.model.lookup.inputValues == draft, "Deletion discarded draft")
             try expect(try f.history.load().isEmpty, "Deletion did not persist")
         },
         CheckCase("state: failed deletion keeps lookup selection and draft and displays error") { directory in
             let f = try StateFixture(directory: directory)
             defer { f.model.shutdown() }
             let entry = try f.selectLookup()
-            let draft = f.model.inputValues
+            let draft = f.model.lookup.inputValues
             try FileManager.default.removeItem(at: f.history.url)
             try FileManager.default.createDirectory(at: f.history.url, withIntermediateDirectories: true)
             await f.model.deleteLookup(entry.recordID)?.value
             try expect(
-                f.model.entries == [HistoryRow(entry)] && f.model.selection == entry.id,
+                f.model.entries == [HistoryRow(entry)] && f.model.lookup.selection == entry.id,
                 "Failed deletion removed visible lookup")
             try expect(
-                f.model.inputValues == draft && f.model.error != nil,
+                f.model.lookup.inputValues == draft && f.model.error != nil,
                 "Failed deletion hid error or discarded draft")
         },
         CheckCase(
@@ -47,7 +47,7 @@ import SaulTestSupport
             guard let original = model.entries.first, let library = model.library,
                 let revision = original.revision
             else { throw CheckFailure("Library did not open shared record") }
-            model.selection = original.id
+            model.lookup.selection = original.id
             await model.waitForHistorySelection()
             _ = try historySQL(
                 url,
@@ -60,10 +60,11 @@ import SaulTestSupport
             try expect(
                 model.error?.contains("History changed") == true, "Stale confirmation masked newer work")
             try expectEqual(
-                model.selectedEntry?.sourceRunID, "new-run", "Stale confirmation cleared the answer")
+                model.lookup.selectedEntry?.sourceRunID, "new-run", "Stale confirmation cleared the answer")
 
             await model.deleteLookup(original.recordID)?.value
-            try expect(model.entries.isEmpty && model.selection == nil, "Mask left visible Library history")
+            try expect(
+                model.entries.isEmpty && model.lookup.selection == nil, "Mask left visible Library history")
             let deleted = try await library.list(after: nil)
             guard let masked = deleted.rows.first else { throw CheckFailure("Recently deleted is empty") }
             try expectEqual(masked.recordID, original.recordID, "Mask changed identity")
@@ -152,9 +153,9 @@ import SaulTestSupport
             defer { model.shutdown() }
             await model.refreshHistory()?.value
             try expect(model.connectionCatalog(preset.connectionKey) == nil, "Fixture warmed the connection")
-            model.selection = entry.id
+            model.lookup.selection = entry.id
             await model.waitForHistorySelection()
-            try expectEqual(model.selectedEntry?.presetSnapshot, preset, "Saved detail did not load")
+            try expectEqual(model.lookup.selectedEntry?.presetSnapshot, preset, "Saved detail did not load")
             try await requested.wait()
         },
         CheckCase("state: delete waits off the UI actor for SQLite write access") { directory in
@@ -169,11 +170,12 @@ import SaulTestSupport
             try expect(
                 !f.model.canDeleteLookup(saved.recordID), "Delete did not keep ownership until SQLite settled"
             )
-            try expectEqual(f.model.selection, saved.id, "Delete changed selection before commit")
+            try expectEqual(f.model.lookup.selection, saved.id, "Delete changed selection before commit")
             try blocker.run("ROLLBACK")
             await deleting.value
             try expect(
-                f.model.entries.isEmpty && f.model.selection == nil, "Acknowledged delete was not applied")
+                f.model.entries.isEmpty && f.model.lookup.selection == nil,
+                "Acknowledged delete was not applied")
             try expect(try f.history.load().isEmpty, "Delete was not committed")
         },
         CheckCase("state: locked history refresh yields, preserves selection and recovers on the next focus")
@@ -196,21 +198,22 @@ import SaulTestSupport
                 })
             defer { model.shutdown() }
             model.showHistory([entry])
-            model.selection = entry.id
+            model.lookup.selection = entry.id
             let writer = try HistoryFixtureWriter(store.url, reservation: .exclusive)
             guard let refresh = model.refreshHistory() else { throw CheckFailure("No history refresh") }
             try await readStarted.wait()
             try expect(model.storageWarning == nil, "The main actor stopped responding during a read")
-            model.query = "Draft edited while history was locked"
+            model.lookup.query = "Draft edited while history was locked"
             await refresh.value
             try expect(model.storageWarning?.contains("locked") == true, "Read failure was not reported")
-            try expectEqual(model.selection, entry.id, "Read failure cleared selection")
+            try expectEqual(model.lookup.selection, entry.id, "Read failure cleared selection")
             try expectEqual(model.entries.map(\.id), [entry.id], "Read failure replaced saved history")
             try writer.run("ROLLBACK")
             await model.refreshHistory()?.value
             try expect(model.storageWarning == nil, "Successful refresh left a stale warning")
-            try expectEqual(model.selection, entry.id, "Recovery lost selection")
-            try expectEqual(model.query, "Draft edited while history was locked", "Recovery lost the draft")
+            try expectEqual(model.lookup.selection, entry.id, "Recovery lost selection")
+            try expectEqual(
+                model.lookup.query, "Draft edited while history was locked", "Recovery lost the draft")
         },
         CheckCase("state: a late history refresh cannot resurrect a successfully deleted row") { directory in
             let store = try HistoryStore(directory: directory)
@@ -232,7 +235,7 @@ import SaulTestSupport
                 model.shutdown()
             }
             model.showHistory([saved])
-            model.selection = saved.id
+            model.lookup.selection = saved.id
             guard let pending = model.refreshHistory() else { throw CheckFailure("No history refresh") }
             try await readStarted.wait()
             await model.deleteLookup(saved.recordID)?.value
@@ -240,7 +243,8 @@ import SaulTestSupport
             release = nil
             await pending.value
             try expect(
-                model.entries.isEmpty && model.selection == nil, "A stale reply resurrected a deletion")
+                model.entries.isEmpty && model.lookup.selection == nil, "A stale reply resurrected a deletion"
+            )
             try expect(try store.load().isEmpty, "Deletion did not persist")
             try expectEqual(model.historyTotal, 0, "Stale page resurrected the deleted count")
         },
@@ -295,7 +299,7 @@ import SaulTestSupport
                 let current = HistoryEntry(
                     mode: .ask, query: "Current", model: "m", effort: "", requestedServiceTier: nil)
                 try execution.start(current)
-                model.selection = current.id
+                model.lookup.selection = current.id
                 try await terminal.wait()
                 release?.resume(returning: startupSnapshot)
                 release = nil
@@ -304,10 +308,10 @@ import SaulTestSupport
                     Set(model.entries.map(\.id)), [old.id, current.id], "Startup lost history rows")
                 try expectEqual(model.historyTotal, 2, "Startup count ignored the new outcome")
                 try expectEqual(
-                    model.selectedEntry?.status, failsSave ? "unsaved" : "completed",
+                    model.lookup.selectedEntry?.status, failsSave ? "unsaved" : "completed",
                     "Startup replaced the newer terminal result")
                 try expectEqual(
-                    model.selectedEntry?.response, "Latest answer", "Startup lost the latest answer")
+                    model.lookup.selectedEntry?.response, "Latest answer", "Startup lost the latest answer")
             }
         },
     ]

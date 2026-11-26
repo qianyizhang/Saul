@@ -4,23 +4,24 @@ import SwiftUI
 
 struct LookupChoices: View {
     @ObservedObject var model: AppModel
+    @ObservedObject var lookup: LookupSession
 
     var body: some View {
         HStack(spacing: 8) {
             LookupChoiceButton(
                 role: "Action", options: actions,
-                selection: model.replayEntry?.actionSnapshot != nil
-                    ? "saved" : model.selectedActionID?.uuidString ?? ""
+                selection: lookup.replayEntry?.actionSnapshot != nil
+                    ? "saved" : lookup.selectedActionID?.uuidString ?? ""
             ) { value in
-                if let id = UUID(uuidString: value) { model.chooseAction(id) }
+                if let id = UUID(uuidString: value) { lookup.chooseAction(id) }
             }
             .frame(maxWidth: .infinity)
-            .disabled(model.busy || model.launcherPending)
+            .disabled(lookup.busy || lookup.launcherPending)
             LookupChoiceButton(
                 role: "Preset", options: presets, selection: presetSelection
-            ) { model.chooseLookupPreset(UUID(uuidString: $0)) }
+            ) { lookup.chooseLookupPreset(UUID(uuidString: $0)) }
             .frame(maxWidth: .infinity)
-            .disabled(model.busy || model.credentialBusy || model.launcherPending)
+            .disabled(lookup.busy || model.credentialBusy || lookup.launcherPending)
         }.frame(maxWidth: 368, alignment: .leading).frame(height: AppStyle.rowHeight)
     }
 
@@ -28,7 +29,7 @@ struct LookupChoices: View {
         var choices = model.configuration.actions.map {
             LookupChoice(id: $0.id.uuidString, name: $0.name, symbol: $0.symbol, detail: $0.capability.name)
         }
-        if let saved = model.replayEntry?.actionSnapshot {
+        if let saved = lookup.replayEntry?.actionSnapshot {
             choices.insert(
                 LookupChoice(
                     id: "saved", name: "Saved: \(saved.name)", symbol: saved.symbol,
@@ -39,13 +40,13 @@ struct LookupChoices: View {
     }
 
     private var presetSelection: String {
-        if model.replayEntry?.presetSnapshot != nil && model.overridePresetID == nil { return "saved" }
-        return model.currentPreset?.id.uuidString ?? ""
+        if lookup.replayEntry?.presetSnapshot != nil && lookup.overridePresetID == nil { return "saved" }
+        return lookup.currentPreset?.id.uuidString ?? ""
     }
 
     private var presets: [LookupChoice] {
         var choices = model.configuration.presets.map { presetChoice($0) }
-        if let saved = model.replayEntry?.presetSnapshot {
+        if let saved = lookup.replayEntry?.presetSnapshot {
             choices.insert(presetChoice(saved, saved: true), at: 0)
         }
         return choices
@@ -58,20 +59,20 @@ struct LookupChoices: View {
             ? (preset.fast ? "Fast" : (model.minimumMode ? nil : "Standard")) : nil
         let detail = [
             preset.capability.name, connection?.lookupBillingLabel ?? "Connection unavailable",
-            !saved && model.overridePresetID == preset.id && !model.minimumMode ? "Override" : nil,
+            !saved && lookup.overridePresetID == preset.id && !model.minimumMode ? "Override" : nil,
         ].compactMap { $0 }.joined(separator: " · ")
         return LookupChoice(
             id: saved ? "saved" : preset.id.uuidString, name: saved ? "Saved: \(preset.name)" : preset.name,
-            detail: detail, badge: speed, unavailable: model.lookupPresetChoiceIssue(preset))
+            detail: detail, badge: speed, unavailable: lookup.lookupPresetChoiceIssue(preset))
     }
 }
 
 struct LookupBillingLabel: View {
-    @ObservedObject var model: AppModel
+    @ObservedObject var lookup: LookupSession
 
     var body: some View {
-        if let connection = model.currentConnection {
-            Text(connection.lookupBillingLabel(search: model.currentAction?.webSearch == true))
+        if let connection = lookup.currentConnection {
+            Text(connection.lookupBillingLabel(search: lookup.currentAction?.webSearch == true))
                 .font(AppStyle.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -91,6 +92,7 @@ extension ConnectionDefinition {
 
 struct NextLookupDetailsButton: View {
     @ObservedObject var model: AppModel
+    @ObservedObject var lookup: LookupSession
     @State private var showDetails = false
     var body: some View {
         Button {
@@ -101,7 +103,7 @@ struct NextLookupDetailsButton: View {
         .buttonStyle(.borderless).help("Next lookup details")
         .accessibilityLabel("Next lookup details")
         .popover(isPresented: $showDetails) {
-            RequestDetails(model: model, showsAnswer: false) {
+            RequestDetails(model: model, lookup: model.lookup, showsAnswer: false) {
                 showDetails = false
                 model.openSettings(.configuration)
             }
@@ -111,12 +113,13 @@ struct NextLookupDetailsButton: View {
 
 struct RequestDetails: View {
     @ObservedObject var model: AppModel
+    @ObservedObject var lookup: LookupSession
     var showsAnswer = true
     var onConfigure: () -> Void
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                if showsAnswer, let entry = model.selectedEntry {
+                if showsAnswer, let entry = lookup.selectedEntry {
                     Text("Answer details").font(.headline)
                     LookupDetails(entry: entry)
                     DisclosureGroup(model.inspectionTitle(for: entry)) {
@@ -142,13 +145,13 @@ struct RequestDetails: View {
 
     private var draftDetails: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let preset = model.currentPreset {
+            if let preset = lookup.currentPreset {
                 MetadataRow("Preset", value: preset.name)
                 MetadataRow("Model", value: preset.model)
                 MetadataRow("Connection", value: preset.connectionKey)
                 MetadataRow("Capability", value: preset.capability.name)
                 if preset.capability == .draw {
-                    MetadataRow("Output format", value: model.outputFormat.uppercased())
+                    MetadataRow("Output format", value: lookup.outputFormat.uppercased())
                     MetadataRow("Size", value: (preset.imageOptions ?? ImageOptions()).size)
                     MetadataRow("Quality", value: (preset.imageOptions ?? ImageOptions()).quality.capitalized)
                 } else {
@@ -163,7 +166,7 @@ struct RequestDetails: View {
                 Text("A preset override lasts until New run or an action change.")
                     .font(AppStyle.caption).foregroundStyle(.secondary)
             }
-            if model.fast && !model.minimumMode {
+            if lookup.fast && !model.minimumMode {
                 Text("Fast requests priority service and may use more plan allowance.")
                     .font(AppStyle.caption).foregroundStyle(.secondary)
             }
@@ -173,36 +176,38 @@ struct RequestDetails: View {
 
 struct ActionInputs: View {
     @ObservedObject var model: AppModel
+    @ObservedObject var lookup: LookupSession
     var compact = false
     var presentation = 0
     var onConfigure: (() -> Void)? = nil
     var onEditSketch: (() -> Void)? = nil
     @FocusState private var focusedField: String?
     var body: some View {
-        let imageField = model.currentAction?.imageInput
+        let imageField = lookup.currentAction?.imageInput
         VStack(alignment: .leading, spacing: 8) {
-            if imageField != nil && model.outputFormat != "png" {
-                Button("Use PNG") { model.chooseOutputFormat("png") }
+            if imageField != nil && lookup.outputFormat != "png" {
+                Button("Use PNG") { lookup.chooseOutputFormat("png") }
                     .help("EZ uses PNG for image edits")
-            } else if model.currentAction?.capability == .draw && imageField == nil {
+            } else if lookup.currentAction?.capability == .draw && imageField == nil {
                 SelectorPicker(
                     "Output format",
                     options: ImageOptions.formats.map {
                         .init(value: $0, title: $0 == "gif" ? "GIF · animated" : "PNG")
                     },
-                    selection: Binding(get: { model.outputFormat }, set: { model.chooseOutputFormat($0) }))
+                    selection: Binding(get: { lookup.outputFormat }, set: { lookup.chooseOutputFormat($0) }))
             }
             if let label = imageField {
-                if model.usesSketch && !compact {
-                    SketchEditor(model: model, label: label).id(model.draftRevision)
+                if lookup.usesSketch && !compact {
+                    SketchEditor(lookup: lookup, label: label).id(lookup.draftRevision)
                 } else {
                     ImageInputView(
-                        model: model, label: label, onEditSketch: model.usesSketch ? onEditSketch : nil)
+                        model: model, lookup: model.lookup, label: label,
+                        onEditSketch: lookup.usesSketch ? onEditSketch : nil)
                 }
-            } else if model.restoringSavedImage || model.canContinueWithoutSavedImage {
-                ImageInputFeedback(model: model)
+            } else if lookup.restoringSavedImage || lookup.canContinueWithoutSavedImage {
+                ImageInputFeedback(lookup: lookup)
             }
-            if model.inputFields.isEmpty {
+            if lookup.inputFields.isEmpty {
                 Button(model.minimumMode ? "Actions" : "Configure actions") {
                     if let onConfigure { onConfigure() } else { model.openSettings(.actions) }
                 }.help("Configure actions").accessibilityLabel("Configure actions")
@@ -210,14 +215,14 @@ struct ActionInputs: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(spacing: 8) {
-                            ForEach(model.inputFields, id: \.self) { field in
+                            ForEach(lookup.inputFields, id: \.self) { field in
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(field).font(AppStyle.control).foregroundStyle(.secondary)
                                     TextField(
                                         "",
                                         text: Binding(
-                                            get: { model.inputValues[field] ?? "" },
-                                            set: { model.setInput($0, for: field) }), axis: .vertical
+                                            get: { lookup.inputValues[field] ?? "" },
+                                            set: { lookup.setInput($0, for: field) }), axis: .vertical
                                     )
                                     .lineLimit(compact ? 2 : 4, reservesSpace: true)
                                     .notebookEditor(focused: focusedField == field).accessibilityLabel(field)
@@ -232,17 +237,17 @@ struct ActionInputs: View {
                     }
                 }.frame(
                     height: compact
-                        ? QuickLookupLayout.inputHeight(fieldCount: model.inputFields.count)
-                        : min(248, CGFloat(model.inputFields.count) * 124)
+                        ? QuickLookupLayout.inputHeight(fieldCount: lookup.inputFields.count)
+                        : min(248, CGFloat(lookup.inputFields.count) * 124)
                 )
             }
         }
-        .disabled(model.busy || model.launcherPending)
+        .disabled(lookup.busy || lookup.launcherPending)
         .onAppear { focusInput() }
         .onChange(of: presentation) { _, _ in focusInput() }
-        .onChange(of: model.draftRevision) { _, _ in focusInput() }
-        .onChange(of: model.inputFields) { _, _ in focusInput() }
-        .onChange(of: model.busy) { _, busy in if !busy { focusInput() } }
+        .onChange(of: lookup.draftRevision) { _, _ in focusInput() }
+        .onChange(of: lookup.inputFields) { _, _ in focusInput() }
+        .onChange(of: lookup.busy) { _, busy in if !busy { focusInput() } }
     }
 
     private func focusInput() {
@@ -250,10 +255,10 @@ struct ActionInputs: View {
             focusedField = nil
             // Action changes replace the fields; focus after the new controls exist.
             await Task.yield()
-            guard !model.busy, !model.launcherPending,
+            guard !lookup.busy, !lookup.launcherPending,
                 compact == (NSApp.keyWindow is NSPanel)
             else { return }
-            focusedField = model.inputFields.first
+            focusedField = lookup.inputFields.first
         }
     }
 }

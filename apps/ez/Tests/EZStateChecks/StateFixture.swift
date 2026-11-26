@@ -47,8 +47,8 @@ import SaulTestSupport
         let entry = try savedAnswer()
         try history.append(entry)
         model.showHistory([entry])
-        model.selection = entry.id
-        model.query = "draft to preserve"
+        model.lookup.selection = entry.id
+        model.lookup.query = "draft to preserve"
         return entry
     }
 }

@@ -87,7 +87,7 @@ struct ConfigurationView: View {
                     Button(model.minimumMode ? "Add" : "Add preset", systemImage: "plus") {
                         var draft = ModelPreset(name: "New preset", model: "", effort: "", fast: false)
                         let options = model.modelsForPreset(draft)
-                        let current = model.currentPreset.flatMap {
+                        let current = model.lookup.currentPreset.flatMap {
                             $0.connectionKey == draft.connectionKey ? $0.model : nil
                         }
                         let option = options.first { $0.id == current } ?? options.first
@@ -239,7 +239,7 @@ struct ConfigurationView: View {
                 }
             }
             if let preset,
-                let issue = model.connectionIssue(for: preset)
+                let issue = model.lookup.connectionIssue(for: preset)
                     ?? model.connectionError(preset.connectionKey) ?? model.presetIssue(preset)
             {
                 Text(issue).font(AppStyle.caption).foregroundStyle(.orange)

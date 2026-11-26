@@ -38,7 +38,7 @@ private actor IllustrationKeyFixture {
 
 @MainActor private func completionSignal(_ model: AppModel) -> (CheckSignal, AnyCancellable) {
     let signal = CheckSignal()
-    let observer = model.$runningAttempt.dropFirst().filter { $0 == nil }.sink { _ in
+    let observer = model.lookup.attemptChanges.filter { $0 == nil }.sink { _ in
         Task { await signal.signal() }
     }
     return (signal, observer)
@@ -60,8 +60,8 @@ private actor IllustrationKeyFixture {
     let execution = AttemptExecution(
         generate: generate, append: { try store.append($0) }, delete: { try store.discardPending($0) })
     let model = fixtureModel(directory: directory, attemptExecution: execution, connections: connections)
-    model.chooseAction(config.actions.first { $0.capability == .draw }!.id)
-    model.query = "Trees share nutrients. 中文\n"
+    model.lookup.chooseAction(config.actions.first { $0.capability == .draw }!.id)
+    model.lookup.query = "Trees share nutrients. 中文\n"
     return model
 }
 
@@ -123,21 +123,21 @@ private actor IllustrationKeyFixture {
                     return .image(fixturePNG)
                 })
             defer { model.shutdown() }
-            let id = model.currentPreset!.id
-            model.chooseOutputFormat("gif")
+            let id = model.lookup.currentPreset!.id
+            model.lookup.chooseOutputFormat("gif")
             let (done, observer) = completionSignal(model)
             defer { observer.cancel() }
-            model.send()
+            model.lookup.send()
             try await done.wait()
             try expectEqual(
                 seen?.presetSnapshot?.imageOptions?.outputFormat, "gif", "Runtime format was not frozen")
             try expectEqual(
                 model.configuration.presets.first { $0.id == id }?.imageOptions?.outputFormat, "png",
                 "Runtime override mutated the preset")
-            await model.reuse(model.selectedEntry!)?.value
-            try expectEqual(model.outputFormat, "gif", "Reuse lost the frozen output format")
-            model.newQuery()
-            try expectEqual(model.outputFormatOverride, nil, "New run retained an old override")
+            await model.lookup.reuse(model.lookup.selectedEntry!)?.value
+            try expectEqual(model.lookup.outputFormat, "gif", "Reuse lost the frozen output format")
+            model.lookup.newQuery()
+            try expectEqual(model.lookup.outputFormatOverride, nil, "New run retained an old override")
         },
         CheckCase("action: Draw shares frozen inputs history and one active request") { directory in
             let held = HeldImage()
@@ -154,27 +154,28 @@ private actor IllustrationKeyFixture {
             }
             let (done, observer) = completionSignal(model)
             defer { observer.cancel() }
-            try expect(model.canSend, "Configured Draw action cannot run while signed out of ChatGPT")
-            model.send()
+            try expect(model.lookup.canSend, "Configured Draw action cannot run while signed out of ChatGPT")
+            model.lookup.send()
             try await held.started.wait()
-            model.send()
-            model.query = "Changed draft"
+            model.lookup.send()
+            model.lookup.query = "Changed draft"
             held.finish()
             try await done.wait()
-            let entry = model.selectedEntry!
+            let entry = model.lookup.selectedEntry!
             try expectEqual(calls, 1, "Duplicate Run started more work")
             try expectEqual(
                 entry.inputValues?["context"], "Trees share nutrients. 中文\n", "Frozen image inputs changed")
             try expectEqual(entry.connectionSnapshot?.key, "openai-api", "Connection key not frozen")
             try expectEqual(entry.status, "completed", "Image result not saved")
-            try expectEqual(model.query, "Changed draft", "Completion cleared draft")
+            try expectEqual(model.lookup.query, "Changed draft", "Completion cleared draft")
             let saved = try HistoryStore(directory: directory).load()[0]
             try expectEqual(
                 try HistoryStore(directory: directory).image(for: saved), fixturePNG, "Saved PNG missing")
-            model.newQuery()
-            model.selection = saved.id
+            model.lookup.newQuery()
+            model.lookup.selection = saved.id
             try expectEqual(
-                model.selectedEntry?.id, entry.id, "Image unavailable through shared History selection")
+                model.lookup.selectedEntry?.id, entry.id, "Image unavailable through shared History selection"
+            )
         },
         CheckCase("action: image save failure reports unsaved and keeps Download available") { directory in
             var calls = 0
@@ -191,9 +192,9 @@ private actor IllustrationKeyFixture {
             )
             let (done, observer) = completionSignal(model)
             defer { observer.cancel() }
-            model.send()
+            model.lookup.send()
             try await done.wait()
-            let entry = model.selectedEntry!
+            let entry = model.lookup.selectedEntry!
             try expectEqual(entry.status, "unsaved", "Failed PNG write reported saved")
             try expectEqual(
                 model.imageData(for: entry), fixturePNG, "Current unsaved PNG could not be downloaded")
@@ -220,28 +221,29 @@ private actor IllustrationKeyFixture {
                 first.finish()
                 second.finish()
             }
-            model.send()
+            model.lookup.send()
             try await first.started.wait()
-            let oldID = model.selection!
+            let oldID = model.lookup.selection!
             let (stopped, stopObserver) = completionSignal(model)
-            model.stop()
+            model.lookup.stop()
             try await stopped.wait()
             stopObserver.cancel()
-            model.newQuery()
-            model.query = "Second"
+            model.lookup.newQuery()
+            model.lookup.query = "Second"
             let (done, observer) = completionSignal(model)
             defer { observer.cancel() }
-            model.send()
+            model.lookup.send()
             try await second.started.wait()
             first.finish()
             try await first.returned.wait()
             try expect(
-                model.busy && model.selectedEntry?.hasImage == false,
+                model.lookup.busy && model.lookup.selectedEntry?.hasImage == false,
                 "Late output replaced the active request")
             second.finish()
             try await done.wait()
             try expectEqual(
-                model.selectedEntry?.inputValues?["context"], "Second", "Replacement image did not finish")
+                model.lookup.selectedEntry?.inputValues?["context"], "Second",
+                "Replacement image did not finish")
             let store = try HistoryStore(directory: directory)
             let old = try store.load().first { $0.id == oldID }!
             try expect(try store.image(for: old) == nil, "Cancelled image was saved late")
@@ -258,18 +260,18 @@ private actor IllustrationKeyFixture {
                 })
             defer { model.shutdown() }
             fixtures.apiConnected = false
-            model.send()
-            try expect(!model.canSend && calls == 0, "Missing API key sent a request")
+            model.lookup.send()
+            try expect(!model.lookup.canSend && calls == 0, "Missing API key sent a request")
             fixtures.apiConnected = true
             let write = model.configuration.presets.first { $0.capability == .write }!
-            model.chooseLookupPreset(write.id)
-            try expectEqual(model.currentPreset?.capability, .draw, "Chooser selected Write for Draw")
+            model.lookup.chooseLookupPreset(write.id)
+            try expectEqual(model.lookup.currentPreset?.capability, .draw, "Chooser selected Write for Draw")
             var unavailable = model.configuration
             unavailable.connections.removeAll { $0.key == "openai-api" }
             try model.saveConfiguration(unavailable)
-            model.send()
+            model.lookup.send()
             try expect(
-                !model.canSend && calls == 0 && model.connectionIssue != nil,
+                !model.lookup.canSend && calls == 0 && model.lookup.connectionIssue != nil,
                 "Unavailable provider silently selected a different connection")
         },
     ]

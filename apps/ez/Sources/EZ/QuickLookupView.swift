@@ -4,21 +4,22 @@ import SwiftUI
 
 struct QuickLookupView: View {
     @ObservedObject var model: AppModel
+    @ObservedObject var lookup: LookupSession
     @ObservedObject var controller: QuickLookupController
     @State private var showDetails = false
     @State private var showsComposer = false
-    private var showsInputs: Bool { !model.minimumMode || model.selectedEntry == nil || showsComposer }
+    private var showsInputs: Bool { !model.minimumMode || lookup.selectedEntry == nil || showsComposer }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
             if showsInputs {
-                LookupChoices(model: model)
+                LookupChoices(model: model, lookup: model.lookup)
                 ActionInputs(
-                    model: model, compact: true, presentation: controller.presentation,
+                    model: model, lookup: model.lookup, compact: true, presentation: controller.presentation,
                     onConfigure: { controller.showMain(settings: true) },
                     onEditSketch: {
-                        model.showsMainComposer = true
+                        lookup.showsMainComposer = true
                         controller.showMain()
                     })
             }
@@ -37,7 +38,7 @@ struct QuickLookupView: View {
                         if let section = setupSection {
                             Button(AppModel.setupLabel(for: section)) {
                                 if section == .configuration {
-                                    model.settingsPresetID = model.currentPreset?.id
+                                    model.settingsPresetID = lookup.currentPreset?.id
                                 }
                                 controller.showMain(settings: true, section: section)
                             }.controlSize(.small)
@@ -45,19 +46,19 @@ struct QuickLookupView: View {
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }.frame(height: 88)
             }
-            if let entry = model.selectedEntry {
-                ThinkingDivider(activity: controller.isVisible ? model.selectedResponseActivity : nil)
+            if let entry = lookup.selectedEntry {
+                ThinkingDivider(activity: controller.isVisible ? lookup.selectedResponseActivity : nil)
                 ScrollView {
                     result(entry).frame(maxWidth: .infinity, alignment: .leading)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 Spacer(minLength: 0)
             }
-            if let entry = model.selectedEntry {
-                FollowUpComposer(model: model, entry: entry).id(entry.id)
+            if let entry = lookup.selectedEntry {
+                FollowUpComposer(lookup: lookup, entry: entry).id(entry.id)
             }
             footer
-            if !model.minimumMode, let entry = model.selectedEntry {
+            if !model.minimumMode, let entry = lookup.selectedEntry {
                 Divider()
                 LookupStatusLine(entry: entry)
             }
@@ -75,7 +76,7 @@ struct QuickLookupView: View {
             controller.resizeContent(layout)
         }
         .onChange(of: layout) { _, layout in controller.resizeContent(layout) }
-        .onChange(of: model.selection) { _, _ in showsComposer = false }
+        .onChange(of: lookup.selection) { _, _ in showsComposer = false }
     }
 
     private var header: some View {
@@ -90,8 +91,8 @@ struct QuickLookupView: View {
                 ControlLabel(symbol: .openWorkspace)
             }.help("Open EZ & history").accessibilityLabel("Open EZ & history")
             Menu {
-                if let entry = model.selectedEntry, model.canReuse(entry) {
-                    Button("Reuse") { model.reuse(entry) }
+                if let entry = lookup.selectedEntry, lookup.canReuse(entry) {
+                    Button("Reuse") { lookup.reuse(entry) }
                     Divider()
                 }
                 Toggle("Min Mode", isOn: $model.minimumMode)
@@ -120,25 +121,25 @@ struct QuickLookupView: View {
             }.buttonStyle(.borderless).help(
                 "New lookup · \(model.shortcuts.binding(for: .newLookup).display)"
             )
-            .disabled(model.busy || model.launcherPending)
-            if model.minimumMode && model.selectedEntry != nil && !model.busy && !model.launcherPending
-                && (showsComposer || model.hasRetainedDraft)
+            .disabled(lookup.busy || lookup.launcherPending)
+            if model.minimumMode && lookup.selectedEntry != nil && !lookup.busy && !lookup.launcherPending
+                && (showsComposer || lookup.hasRetainedDraft)
             {
                 Button(showsInputs ? "Hide draft" : "Edit draft") { showsComposer.toggle() }
                     .buttonStyle(.borderless)
             }
             Spacer()
-            if model.launcherPending {
+            if lookup.launcherPending {
                 Text("Preparing…").font(AppStyle.caption).foregroundStyle(.secondary)
-            } else if model.busy {
-                AttemptControls(model: model)
+            } else if lookup.busy {
+                AttemptControls(model: model, lookup: model.lookup)
             } else if showsInputs {
                 Button {
-                    model.send()
+                    lookup.send()
                 } label: {
                     ControlLabel(symbol: .run, iconOnly: model.minimumMode)
                 }.buttonStyle(.borderedProminent)
-                    .disabled(!model.canSend).help(
+                    .disabled(!lookup.canSend).help(
                         "Run action · \(model.shortcuts.binding(for: .send).display)")
             }
         }.controlSize(.small)
@@ -147,7 +148,7 @@ struct QuickLookupView: View {
     private var footer: some View {
         HStack(spacing: 8) {
             if showsInputs {
-                LookupBillingLabel(model: model)
+                LookupBillingLabel(lookup: lookup)
             }
             Button {
                 showDetails.toggle()
@@ -158,10 +159,10 @@ struct QuickLookupView: View {
                 .accessibilityLabel("Details")
                 .popover(isPresented: $showDetails) { details }
             Spacer(minLength: 0)
-            if let entry = model.selectedEntry, entry.capability == .draw, model.imageData(for: entry) != nil
+            if let entry = lookup.selectedEntry, entry.capability == .draw, model.imageData(for: entry) != nil
             {
                 Button("Download") { model.downloadImage(entry) }.buttonStyle(.borderless)
-            } else if let entry = model.selectedEntry, entry.capability == .write, !entry.response.isEmpty {
+            } else if let entry = lookup.selectedEntry, entry.capability == .write, !entry.response.isEmpty {
                 Button {
                     model.copy(entry.citedResponse)
                 } label: {
@@ -173,7 +174,7 @@ struct QuickLookupView: View {
     }
 
     private var details: some View {
-        RequestDetails(model: model) {
+        RequestDetails(model: model, lookup: model.lookup) {
             showDetails = false
             controller.showMain(settings: true)
         }
@@ -182,11 +183,11 @@ struct QuickLookupView: View {
     private func result(_ entry: HistoryEntry) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             LookupAnswerText(
-                entry: entry, activity: model.selectedResponseActivity, compact: true,
+                entry: entry, activity: lookup.selectedResponseActivity, compact: true,
                 imageData: model.imageData(for: entry), imageLoading: model.imageLoading)
-            RetryAttemptNotice(model: model, entry: entry) { controller.showMain() }
+            RetryAttemptNotice(lookup: lookup, entry: entry) { controller.showMain() }
             if let parentID = entry.parentID, model.entries.contains(where: { $0.id == parentID }) {
-                Button("Previous answer") { model.selection = parentID }.buttonStyle(.borderless)
+                Button("Previous answer") { lookup.selection = parentID }.buttonStyle(.borderless)
             }
             if !["pending", "completed"].contains(entry.status) {
                 Text(entry.status.capitalized).font(AppStyle.caption).foregroundStyle(.orange)
@@ -199,22 +200,22 @@ struct QuickLookupView: View {
 
     private var notices: [String] {
         var messages: [String] = []
-        let presetIssue = model.currentPreset.flatMap { model.presetIssue($0) }
+        let presetIssue = lookup.currentPreset.flatMap { model.presetIssue($0) }
         for message in [
-            controller.shortcutError, controller.launcherError, model.storageWarning, model.connectionIssue,
-            model.currentConnectionWarning, model.configurationError, model.error,
-            model.connectionIssue == nil ? presetIssue : nil,
+            controller.shortcutError, controller.launcherError, model.storageWarning, lookup.connectionIssue,
+            lookup.currentConnectionWarning, model.configurationError, model.error,
+            lookup.connectionIssue == nil ? presetIssue : nil,
         ].compactMap({ $0 }) {
             if !messages.contains(message) { messages.append(message) }
         }
         return messages
     }
-    private var setupSection: AppModel.SettingsSection? {
-        if model.connectionIssue != nil || model.currentConnectionWarning != nil {
-            return model.currentConnectionSetupSection
+    private var setupSection: SettingsSection? {
+        if lookup.connectionIssue != nil || lookup.currentConnectionWarning != nil {
+            return lookup.currentConnectionSetupSection
         }
-        if model.currentAction != nil,
-            model.currentPreset == nil || model.currentPreset.flatMap({ model.presetIssue($0) }) != nil
+        if lookup.currentAction != nil,
+            lookup.currentPreset == nil || lookup.currentPreset.flatMap({ model.presetIssue($0) }) != nil
                 || model.configurationError != nil
         {
             return .configuration
@@ -224,11 +225,11 @@ struct QuickLookupView: View {
     private var layout: QuickLookupLayout {
         QuickLookupLayout(
             showsChoices: showsInputs,
-            fieldCount: showsInputs ? model.inputFields.count : 0,
+            fieldCount: showsInputs ? lookup.inputFields.count : 0,
             showsNotice: !notices.isEmpty || setupSection != nil,
-            showsAnswer: model.selectedEntry != nil,
-            showsFollowUp: model.selectedEntry?.status == "completed"
-                && model.selectedEntry?.capability == .write,
-            showsImageInput: showsInputs && model.currentAction?.imageInput != nil)
+            showsAnswer: lookup.selectedEntry != nil,
+            showsFollowUp: lookup.selectedEntry?.status == "completed"
+                && lookup.selectedEntry?.capability == .write,
+            showsImageInput: showsInputs && lookup.currentAction?.imageInput != nil)
     }
 }

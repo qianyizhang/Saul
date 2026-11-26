@@ -21,8 +21,8 @@ import SwiftUI
         entry.actualServiceTier = "default"
         entry.durationSeconds = 1.2
         model.showHistory([entry])
-        model.selection = entry.id
-        model.query = entry.query
+        model.lookup.selection = entry.id
+        model.lookup.query = entry.query
         model.storageWarning = nil
         _model = StateObject(wrappedValue: model)
     }
@@ -57,7 +57,7 @@ private struct PreviewSurface: View {
                 if settings {
                     SettingsView(model: model)
                 } else {
-                    ContentView(model: model)
+                    ContentView(model: model, lookup: model.lookup)
                 }
             }
             .disabled(true)

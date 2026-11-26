@@ -9,25 +9,26 @@ import SaulTestSupport
     [
         stateCase("shortcuts cycle actions in order and wrap with clean drafts") { f in
             let actions = f.model.configuration.actions
-            f.model.chooseAction(actions[0].id)
-            f.model.query = "draft"
-            f.model.chooseLookupPreset(f.alternate.id)
+            f.model.lookup.chooseAction(actions[0].id)
+            f.model.lookup.query = "draft"
+            f.model.lookup.chooseLookupPreset(f.alternate.id)
             f.model.performLookupCommand(.previousRecipe)
-            try expectEqual(f.model.currentAction?.id, actions.last?.id, "Shortcut contract mismatch")
+            try expectEqual(f.model.lookup.currentAction?.id, actions.last?.id, "Shortcut contract mismatch")
             try expect(
-                f.model.inputValues.isEmpty && f.model.overridePresetID == nil,
+                f.model.lookup.inputValues.isEmpty && f.model.lookup.overridePresetID == nil,
                 "Cycle retained draft or override")
             f.model.performLookupCommand(.nextRecipe)
-            try expectEqual(f.model.currentAction?.id, actions[0].id, "Shortcut contract mismatch")
+            try expectEqual(f.model.lookup.currentAction?.id, actions[0].id, "Shortcut contract mismatch")
             f.model.performLookupCommand(.nextRecipe)
-            try expectEqual(f.model.currentAction?.id, actions[1].id, "Shortcut contract mismatch")
+            try expectEqual(f.model.lookup.currentAction?.id, actions[1].id, "Shortcut contract mismatch")
             f.model.performLookupCommand(.recipe1)
-            try expectEqual(f.model.currentAction?.id, actions[0].id, "Shortcut contract mismatch")
-            f.model.query = "preserve when already selected"
+            try expectEqual(f.model.lookup.currentAction?.id, actions[0].id, "Shortcut contract mismatch")
+            f.model.lookup.query = "preserve when already selected"
             f.model.performLookupCommand(.recipe1)
-            try expectEqual(f.model.query, "preserve when already selected", "Shortcut contract mismatch")
+            try expectEqual(
+                f.model.lookup.query, "preserve when already selected", "Shortcut contract mismatch")
             f.model.performLookupCommand(.lastRecipe)
-            try expectEqual(f.model.currentAction?.id, actions.last?.id, "Shortcut contract mismatch")
+            try expectEqual(f.model.lookup.currentAction?.id, actions.last?.id, "Shortcut contract mismatch")
         },
         stateCase("shortcuts respect absent actions") { f in
             try expect(!f.model.commandEnabled(.recipe8), "Missing action was enabled")
@@ -36,18 +37,19 @@ import SaulTestSupport
                 f.model.performLookupCommand(command)
                 try expect(!f.model.commandEnabled(command), "Empty configuration enabled action action")
             }
-            try expect(f.model.currentAction == nil, "Navigation resurrected a action")
+            try expect(f.model.lookup.currentAction == nil, "Navigation resurrected a action")
         },
         stateCase("shortcuts leave history replay and reset through the shared actions") { f in
-            f.model.reuse(try f.savedAnswer())
+            f.model.lookup.reuse(try f.savedAnswer())
             f.model.performLookupCommand(.nextRecipe)
             try expectEqual(
-                f.model.currentAction?.id, f.configuration.actions.first?.id, "Shortcut contract mismatch")
-            try expect(f.model.replayEntry == nil, "Action command kept history replay")
-            f.model.query = "new draft"
+                f.model.lookup.currentAction?.id, f.configuration.actions.first?.id,
+                "Shortcut contract mismatch")
+            try expect(f.model.lookup.replayEntry == nil, "Action command kept history replay")
+            f.model.lookup.query = "new draft"
             f.model.performLookupCommand(.newLookup)
             try expect(
-                f.model.inputValues.isEmpty && f.model.selection == nil,
+                f.model.lookup.inputValues.isEmpty && f.model.lookup.selection == nil,
                 "New shortcut retained draft/selection")
             try expect(!f.model.commandEnabled(.send), "Offline shortcut can send")
         },

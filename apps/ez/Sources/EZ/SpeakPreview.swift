@@ -25,7 +25,7 @@ struct SpeakPreview: View {
 
     private var canGenerate: Bool {
         saved && model.allowsExternalServices && !phase.isGenerating
-            && model.presetIssue(preset) == nil && model.connectionIssue(for: preset) == nil
+            && model.presetIssue(preset) == nil && model.lookup.connectionIssue(for: preset) == nil
             && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && text.utf16.count <= 512
     }
 
@@ -60,7 +60,7 @@ struct SpeakPreview: View {
             }
             if !model.allowsExternalServices {
                 Text("Speech generation is unavailable in the offline preview.").font(AppStyle.caption)
-            } else if let issue = model.connectionIssue(for: preset) {
+            } else if let issue = model.lookup.connectionIssue(for: preset) {
                 Text(issue).font(AppStyle.caption).foregroundStyle(.red)
             }
         }

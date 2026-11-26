@@ -32,9 +32,9 @@ import OSLog
 
     private enum Phase {
         case idle
-        case preparing(HistoryEntry, Task<Void, Never>, cancelled: Outcome?)
-        case generating(HistoryEntry, Task<Void, Never>)
-        case settling(Task<Void, Never>)
+        case preparing(Progress, Task<Void, Never>, cancelled: Outcome?)
+        case generating(Progress, Task<Void, Never>)
+        case settling(Progress, Task<Void, Never>)
     }
 
     private enum Outcome {
@@ -55,6 +55,13 @@ import OSLog
     private let delete: @MainActor (HistoryStore.RecordID) async throws -> Void
     private let log = Logger(subsystem: "local.ez.app", category: "Lookup")
     private var phase = Phase.idle
+    public var progress: Progress? {
+        switch phase {
+        case .preparing(let progress, _, _), .generating(let progress, _), .settling(let progress, _):
+            return progress
+        case .idle: return nil
+        }
+    }
     private var shuttingDown = false
 
     public init(
@@ -74,8 +81,9 @@ import OSLog
             throw EZError("Start a new lookup to send another request.")
         }
         let task = Task { await prepare(entry) }
-        phase = .preparing(entry, task, cancelled: nil)
-        publish(entry, phase: .preparing)
+        phase = .preparing(
+            Progress(entry: entry, phase: .preparing, activity: .waiting), task, cancelled: nil)
+        publish()
     }
 
     public func stop() { cancel(.stopped) }
@@ -89,7 +97,7 @@ import OSLog
     public func waitForSettlement() async {
         while !Task.isCancelled {
             switch phase {
-            case .preparing(_, let task, _), .settling(let task): await task.value
+            case .preparing(_, let task, _), .settling(_, let task): await task.value
             case .idle, .generating: return
             }
         }
@@ -97,13 +105,13 @@ import OSLog
 
     private func cancel(_ outcome: Outcome) {
         switch phase {
-        case .preparing(let entry, let task, nil):
+        case .preparing(let progress, let task, nil):
             // Even if Stop arrives during the write, let the outcome of that write decide
             // whether there is a pending row to settle. The provider is never entered.
-            phase = .preparing(entry, task, cancelled: outcome)
-        case .generating(let entry, let task):
+            phase = .preparing(progress, task, cancelled: outcome)
+        case .generating(let progress, let task):
             task.cancel()
-            save(entry, outcome: outcome)
+            save(progress.entry, outcome: outcome)
         case .idle, .preparing, .settling:
             break
         }
@@ -126,8 +134,8 @@ import OSLog
             return
         }
         let task = Task { await run(entry) }
-        phase = .generating(entry, task)
-        publish(entry, phase: .generating)
+        phase = .generating(Progress(entry: entry, phase: .generating, activity: .waiting), task)
+        publish()
     }
 
     private func run(_ entry: HistoryEntry) async {
@@ -136,7 +144,8 @@ import OSLog
             let result = try await generate(entry) { [weak self] response in
                 self?.progress(response, for: entry.id)
             }
-            guard case .generating(var current, _) = phase, current.id == entry.id else { return }
+            guard case .generating(let progress, _) = phase, progress.entry.id == entry.id else { return }
+            var current = progress.entry
             switch result {
             case .text(let response):
                 record(response, in: &current)
@@ -152,7 +161,8 @@ import OSLog
             }
             save(current, outcome: .completed)
         } catch {
-            guard case .generating(let current, _) = phase, current.id == entry.id else { return }
+            guard case .generating(let progress, _) = phase, progress.entry.id == entry.id else { return }
+            let current = progress.entry
             let cancelled = error is CancellationError || (error as? URLError)?.code == .cancelled
             if cancelled {
                 save(current, outcome: .interrupted)
@@ -171,16 +181,15 @@ import OSLog
     }
 
     private func progress(_ response: ResponseAccumulator, for id: UUID) {
-        guard case .generating(var entry, let task) = phase, entry.id == id else { return }
+        guard case .generating(let progress, let task) = phase, progress.entry.id == id else { return }
+        var entry = progress.entry
         record(response, in: &entry)
-        phase = .generating(entry, task)
-        publish(entry, phase: .generating, activity: response.activity)
+        phase = .generating(Progress(entry: entry, phase: .generating, activity: response.activity), task)
+        publish()
     }
 
-    private func publish(
-        _ entry: HistoryEntry, phase: Progress.Phase, activity: ResponseActivity = .waiting
-    ) {
-        onChange?(.running(Progress(entry: entry, phase: phase, activity: activity)))
+    private func publish() {
+        if let progress { onChange?(.running(progress)) }
     }
 
     private func save(_ pending: HistoryEntry, outcome: Outcome) {
@@ -217,13 +226,13 @@ import OSLog
     }
 
     private func settle(_ pending: HistoryEntry, phase progress: Progress.Phase, task: Task<Void, Never>) {
-        phase = .settling(task)
         // Keep the provisional answer readable. Images and completed status are
         // published by the terminal update; a progress update is not saved success.
         var preview = pending
         preview.imageData = nil
         preview.inputImage?.data = nil
-        publish(preview, phase: progress)
+        phase = .settling(Progress(entry: preview, phase: progress, activity: .waiting), task)
+        publish()
     }
 
     private func persist(_ snapshot: HistoryEntry) async {
