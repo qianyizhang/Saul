@@ -17,58 +17,65 @@ const frozenModel = savedReadingInput.omit({
 const modelRequest = frozenModel.extend({ systemPrompt: text, userPrompt: text });
 const terminal = ['completed', 'failed', 'interrupted', 'cancelled'] as const;
 const statuses = z.enum(['queued', 'running', 'saving', ...terminal]);
-const pair = z.object({ en: text, zh: text });
-const summary = z.object({
-  lead: pair,
-  points: pair.array(),
-  caution: pair.nullable(),
-  flow: pair.array(),
-  terms: pair.array(),
-  question: pair.nullable(),
-});
-const callRevision = z.object({
-  contractVersion: z.literal(1),
-  name: text,
-  description: text,
-  language: z.enum(['javascript', 'typescript']),
-  source: text,
-  revision: id,
-  createdAt: integer,
-  approved: bool.optional(),
-});
 const responseCall = { instructions: text, input: text, complete: bool };
-const item = z.object({
-  maskedAt: integer.optional(),
-  index: integer,
-  tabId: z.number().int(),
-  windowId: z.number().int().optional(),
-  windowTitle: text.optional(),
-  title: text,
-  url: id,
-  status: z.enum(['queued', 'capturing', 'running', 'saving', 'skipped', ...terminal]),
-  raw: text,
-  summary: summary.optional(),
-  error: text.optional(),
-  coverage: text.optional(),
-  truncated: bool.optional(),
-  capturedAt: integer.optional(),
-  sourceKind: z.literal('pdf-url').optional(),
-  finalText: text.optional(),
-  progress: text.optional(),
-  calls: z
-    .object({ ...responseCall, output: text })
-    .array()
-    .optional(),
-});
-const overview = z.object({
-  maskedAt: integer.optional(),
-  id,
-  title: text.optional(),
-  windowTitle: text,
-  createdAt: integer,
-});
-const batch = overview
-  .extend({
+
+// Commands reject unknown fields. Stored results keep their existing compatibility.
+function objectPolicy(strict: boolean) {
+  return <S extends z.ZodRawShape>(shape: S) => (strict ? z.strictObject(shape) : z.object(shape));
+}
+
+function callHistorySchemas(strict: boolean) {
+  const object = objectPolicy(strict);
+  const pair = object({ en: text, zh: text });
+  const summary = object({
+    lead: pair,
+    points: pair.array(),
+    caution: pair.nullable(),
+    flow: pair.array(),
+    terms: pair.array(),
+    question: pair.nullable(),
+  });
+  const callRevision = object({
+    contractVersion: z.literal(1),
+    name: text,
+    description: text,
+    language: z.enum(['javascript', 'typescript']),
+    source: text,
+    revision: id,
+    createdAt: integer,
+    approved: bool.optional(),
+  });
+  const item = object({
+    maskedAt: integer.optional(),
+    index: integer,
+    tabId: z.number().int(),
+    windowId: z.number().int().optional(),
+    windowTitle: text.optional(),
+    title: text,
+    url: id,
+    status: z.enum(['queued', 'capturing', 'running', 'saving', 'skipped', ...terminal]),
+    raw: text,
+    summary: summary.optional(),
+    error: text.optional(),
+    coverage: text.optional(),
+    truncated: bool.optional(),
+    capturedAt: integer.optional(),
+    sourceKind: z.literal('pdf-url').optional(),
+    finalText: text.optional(),
+    progress: text.optional(),
+    calls: object({ ...responseCall, output: text })
+      .array()
+      .optional(),
+  });
+  const overviewFields = {
+    maskedAt: integer.optional(),
+    id,
+    title: text.optional(),
+    windowTitle: text,
+    createdAt: integer,
+  };
+  const batchFields = {
+    ...overviewFields,
     windowId: z.number().int(),
     pdfProcessing: z.enum(['attachment', 'local']).optional(),
     accountId: text.optional(),
@@ -78,62 +85,68 @@ const batch = overview
     effort: text.optional(),
     error: text.optional(),
     items: item.array(),
-  })
-  .and(
-    z.union([
-      z.object({
-        action: z.object({ revision: callRevision, presetId: id, input: frozenModel.optional() }),
-        summaryInput: z.undefined().optional(),
-        prompt: text.optional(),
-      }),
-      z.object({
-        action: z.undefined().optional(),
-        summaryInput: frozenModel.optional(),
-        prompt: text,
-      }),
-    ]),
-  );
-const source = z
-  .object({
+  };
+  const batch = z.union([
+    object({
+      ...batchFields,
+      action: object({ revision: callRevision, presetId: id, input: frozenModel.optional() }),
+      summaryInput: z.undefined().optional(),
+      prompt: text.optional(),
+    }),
+    object({
+      ...batchFields,
+      action: z.undefined().optional(),
+      summaryInput: frozenModel.optional(),
+      prompt: text,
+    }),
+  ]);
+  const sourceFields = {
     title: text.optional(),
     capturedAt: integer,
     truncated: bool,
     coverage: text,
-  })
-  .and(
-    z.union([
-      z.object({
-        kind: z.literal('pdf-url'),
-        attachment: z.custom<PdfUrlAttachment>(validPdfUrlAttachment),
-      }),
-      z.object({ kind: z.literal('text').optional(), text }),
-    ]),
-  );
-export const callSchemas = { item, overview, batch, source };
-const attempt = z.object({
-  id,
-  annotationId: annotationIdSchema,
-  url: pageUrl,
-  revision: integer,
-  status: statuses,
-  createdAt: integer,
-  maskedAt: integer.optional(),
-  input: modelRequest,
-  evidence: text,
-  image: text.optional(),
-  raw: text,
-  calls: z
-    .object({ ...responseCall, raw: text })
-    .array()
-    .optional(),
-  error: text.optional(),
-  callRevision: id.optional(),
-  currentText: text.optional(),
-});
+  };
+  const source = z.discriminatedUnion('kind', [
+    object({
+      ...sourceFields,
+      kind: z.literal('pdf-url'),
+      attachment: z.custom<PdfUrlAttachment>(validPdfUrlAttachment),
+    }),
+    object({ ...sourceFields, kind: z.literal('text').optional(), text }),
+  ]);
+  return { item, overview: object(overviewFields), batch, source };
+}
+export const callSchemas = callHistorySchemas(false);
+export const callWriteSchemas = callHistorySchemas(true);
+
+function attemptSchema(strict: boolean) {
+  const object = objectPolicy(strict);
+  return object({
+    id,
+    annotationId: annotationIdSchema,
+    url: pageUrl,
+    revision: integer,
+    status: statuses,
+    createdAt: integer,
+    maskedAt: integer.optional(),
+    input: modelRequest,
+    evidence: text,
+    image: text.optional(),
+    raw: text,
+    calls: object({ ...responseCall, raw: text })
+      .array()
+      .optional(),
+    error: text.optional(),
+    callRevision: id.optional(),
+    currentText: text.optional(),
+  });
+}
+const attempt = attemptSchema(false);
+const attemptWrite = attemptSchema(true);
 const attemptOperation = z.discriminatedUnion('action', [
-  z.strictObject({ action: z.literal('admit'), attempts: attempt.array().min(1) }),
-  z.strictObject({ action: z.literal('save'), attempt }),
-  z.strictObject({ action: z.literal('complete'), attempt, revision: integer }),
+  z.strictObject({ action: z.literal('admit'), attempts: attemptWrite.array().min(1) }),
+  z.strictObject({ action: z.literal('save'), attempt: attemptWrite }),
+  z.strictObject({ action: z.literal('complete'), attempt: attemptWrite, revision: integer }),
   z.strictObject({
     action: z.literal('read'),
     id: id.optional(),

@@ -6,7 +6,6 @@ import { readFileSync, lstatSync, existsSync, chmodSync } from 'node:fs';
 import { secureDirectory } from '../transport.mts';
 import type { SqlDatabase, SqlValue } from './sql.ts';
 import { HistoryRepository } from './history-repository.mts';
-import { validateHistoryRequest } from '../../shared/protocol/history-protocol.mts';
 
 // Freeze the schema with this loaded runtime, including during later checkout builds.
 const historySchema = readFileSync(new URL('./history.sql', import.meta.url), 'utf8');
@@ -96,7 +95,6 @@ export class SharedHistory {
     }
   }
   async run(request: unknown) {
-    validateHistoryRequest(request);
     return new HistoryRepository(this.connection).run(request);
   }
   close() {

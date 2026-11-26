@@ -1,10 +1,94 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { SharedHistory } from '../native/storage/history.mts';
-import type { HistoryRequest } from '../shared/protocol/history-protocol.mts';
+import {
+  decomposeHistoryCommand,
+  type HistoryRequest,
+} from '../shared/protocol/history-protocol.mts';
+
+it('dispatches annotation defaults without changing the fingerprint of old History receipts', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'saul-history-defaults-'));
+  const history = new SharedHistory(directory);
+  const owner = randomUUID();
+  const operationId = randomUUID();
+  const id = 'annotation';
+  const url = 'https://example.test/article';
+  // This explicit wire fixture is in lexical key order, as hashed by the v5 writer.
+  const command = {
+    change: 'annotations.change',
+    input: {
+      author: { kind: 'user', name: 'Person' },
+      operation: {
+        action: 'create',
+        capture: {
+          id,
+          target: {
+            frame: 'top document',
+            kind: 'element',
+            label: 'Article',
+            rect: { height: 100, width: 100, x: 0, y: 0 },
+            viewport: { height: 100, scale: 1, scrollX: 0, scrollY: 0, width: 100 },
+          },
+          title: 'Article',
+          url,
+        },
+      },
+      scope: { urls: [url] },
+    },
+    kind: 'commit',
+  } as const;
+  try {
+    const request = { operation: 'history', owner, operationId, command };
+    const feature = decomposeHistoryCommand(command);
+    expect(feature).toMatchObject({
+      payload: { scope: { ids: [] }, operation: { capture: { comment: '' } } },
+    });
+    const reply = await history.run(request);
+    expect(reply).toMatchObject({ revision: 1, value: { records: [{ id, comment: '' }] } });
+    const oldFingerprint = createHash('sha256')
+      .update(JSON.stringify(['saul', owner, command]))
+      .digest('hex');
+    expect(
+      history.connection.selectValue(
+        'SELECT fingerprint FROM history_receipt WHERE operation_id=?',
+        [operationId],
+      ),
+    ).toBe(oldFingerprint);
+
+    const oldId = randomUUID();
+    history.connection.exec({
+      sql: 'INSERT INTO history_receipt VALUES(?,?,?)',
+      bind: [oldId, oldFingerprint, JSON.stringify(reply)],
+    });
+    history.connection.exec({
+      sql: 'INSERT INTO history_receipt_record VALUES(?,?,?,?)',
+      bind: [oldId, 'annotations', id, owner],
+    });
+    await expect(history.run({ ...request, operationId: oldId })).resolves.toEqual(reply);
+    const explicitDefault = {
+      ...command,
+      input: { ...command.input, scope: { urls: [url], ids: [] } },
+    };
+    await expect(
+      history.run({ ...request, operationId: oldId, command: explicitDefault }),
+    ).rejects.toThrow('different History input');
+
+    await history.run({
+      ...request,
+      operationId: randomUUID(),
+      command: { kind: 'mask', target: { collection: 'annotations', id } },
+    });
+    await expect(history.run({ ...request, operationId: oldId })).rejects.toThrow(
+      'saved content is unavailable',
+    );
+  } finally {
+    history.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
 
 it('scopes cursors, masks bytes, guards stale revisions and expires retained records', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'saul-history-repository-'));
@@ -143,6 +227,20 @@ it('commits generated annotation replies once in posting order and pages masked 
       raw: '',
     };
     const failed = { ...generated, id: 'failed', createdAt: 2 };
+    await expect(
+      commit('annotations.attempt', {
+        action: 'admit',
+        attempts: [
+          {
+            ...generated,
+            calls: [{ instructions: 'Read', input: '', raw: '', complete: false, extra: true }],
+          },
+        ],
+      }),
+    ).rejects.toThrow('command.input.attempts[0].calls[0].extra: unknown field');
+    expect(history.connection.selectValue('SELECT count(*) FROM browser_annotation_attempt')).toBe(
+      0,
+    );
     await commit('annotations.attempt', { action: 'admit', attempts: [generated, failed] });
     await commit('annotations.attempt', {
       action: 'save',

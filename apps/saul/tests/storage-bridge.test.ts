@@ -169,6 +169,38 @@ it('allows trusted history operations and rejects invalid operation identities',
   expect(runner.port.postMessage).toHaveBeenCalledWith({ type: 'result', value: [] });
 });
 
+it('rejects nested unknown History write fields before opening the native port', () => {
+  const h = harness();
+  const runner = h.connect('chrome-extension://extension/offscreen.html');
+  runner.receive({
+    action: 'history',
+    request: {
+      ...historyRead.request,
+      command: {
+        kind: 'commit',
+        change: 'calls.update-item',
+        input: {
+          id: 'call',
+          item: {
+            index: 0,
+            tabId: 1,
+            title: 'Page',
+            url: 'https://example.test',
+            status: 'queued',
+            raw: '',
+            extra: true,
+          },
+        },
+      },
+    },
+  });
+  expect(runner.port.postMessage).toHaveBeenCalledWith({
+    type: 'error',
+    message: expect.stringContaining('command.input.item.extra: unknown field'),
+  });
+  expect(h.connectNative).not.toHaveBeenCalled();
+});
+
 it('settles a timed-out request even when its native connection cannot receive cancellation', async () => {
   vi.useFakeTimers();
   const h = harness();

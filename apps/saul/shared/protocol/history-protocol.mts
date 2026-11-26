@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { isRecord } from '../model/value.mts';
-import type { DbRequest, DbType } from './history-types.ts';
+import type { DbOperations, DbRequest, DbType } from './history-types.ts';
 import {
   READING_HISTORY_OPERATIONS,
   readingContext,
@@ -14,10 +14,9 @@ import {
   pageUrl,
   requestSchema,
   validAnnotationResult,
-  type AnnotationOperation,
 } from './annotations.ts';
 import { annotationStatusSchema } from './annotation-attempts.ts';
-import { callSchemas, annotationSchemas } from './history-feature-schemas.mts';
+import { callSchemas, callWriteSchemas, annotationSchemas } from './history-feature-schemas.mts';
 
 const id = z.string().min(1);
 const integer = z.number().int().nonnegative();
@@ -89,26 +88,90 @@ const passage = z.object({
 });
 export type HistoryOperationPolicy = 'read' | 'repeatable-write' | 'explicit-write';
 type ReadKind = 'list' | 'get' | 'entries' | 'attachment';
-type Operation = {
+type RecordTarget = { collection: 'library' | 'calls' | 'annotations'; id: string };
+export type HistoryTargetReference = RecordTarget | { readingRunId: string };
+type TargetResolver<T> = (payload: T, value: unknown) => HistoryTargetReference[];
+type Operation<T = unknown> = {
   name: string;
   kind: ReadKind | 'commit';
   policy: HistoryOperationPolicy;
-  input: z.ZodType;
   result: z.ZodType;
+  decode(
+    payload: unknown,
+    path: string[],
+  ): {
+    payload: T;
+    targets(value: unknown): HistoryTargetReference[];
+  };
 };
-const read = (kind: ReadKind, name: string, input: z.ZodType, result: z.ZodType): Operation => ({
-  kind,
-  name,
-  input,
-  result,
-  policy: 'read',
-});
-const commit = (
+function historyError(error: z.ZodError, path: string[] = []): Error {
+  const field = (keys: PropertyKey[]) =>
+    keys.reduce<string>(
+      (name, key) =>
+        typeof key === 'number'
+          ? `${name}[${key}]`
+          : [name, String(key).slice(0, 120)].filter(Boolean).join('.'),
+      '',
+    ) || 'request';
+  function fields(issues: z.core.$ZodIssue[], prefix: PropertyKey[]): string[] {
+    return issues.flatMap((issue) => {
+      const location = [...prefix, ...issue.path];
+      if (issue.code === 'invalid_union' && issue.errors.length > 0)
+        return issue.errors.flatMap((branch) => fields(branch, location));
+      return issue.code === 'unrecognized_keys'
+        ? issue.keys.map((key) => `${field([...location, key])}: unknown field`)
+        : [`${field(location)}: ${issue.message}`];
+    });
+  }
+  const details = [...new Set(fields(error.issues, path))].slice(0, 5).join(' ');
+  return new Error(`Invalid History request. ${details}`);
+}
+
+function operation<T>(
+  kind: Operation['kind'],
   name: string,
-  input: z.ZodType,
+  input: z.ZodType<T>,
   result: z.ZodType,
-  policy: HistoryOperationPolicy = 'repeatable-write',
-): Operation => ({ kind: 'commit', name, input, result, policy });
+  targets: TargetResolver<NoInfer<T>>,
+  policy: HistoryOperationPolicy,
+): Operation<T> {
+  return {
+    kind,
+    name,
+    policy,
+    result,
+    decode(payload, path) {
+      const parsed = input.safeParse(payload);
+      if (!parsed.success) throw historyError(parsed.error, path);
+      return { payload: parsed.data, targets: (value) => targets(parsed.data, value) };
+    },
+  };
+}
+const read = <T,>(
+  kind: ReadKind,
+  name: string,
+  input: z.ZodType<T>,
+  result: z.ZodType,
+  targets: TargetResolver<NoInfer<T>>,
+) => operation(kind, name, input, result, targets, 'read');
+const commit = <T,>(
+  name: string,
+  input: z.ZodType<T>,
+  result: z.ZodType,
+  targets: TargetResolver<NoInfer<T>>,
+  policy: Exclude<HistoryOperationPolicy, 'read'> = 'repeatable-write',
+) => operation('commit', name, input, result, targets, policy);
+
+const noTargets = () => [];
+const singleTarget =
+  <K extends string>(collection: RecordTarget['collection'], field: K) =>
+  (payload: Record<K, string>): RecordTarget[] => [{ collection, id: payload[field] }];
+const selectionTarget = singleTarget('library', 'selectionId');
+const callsTarget = singleTarget('calls', 'id');
+const annotationTarget = singleTarget('annotations', 'id');
+const runTarget = ({ runId }: { runId: string }) => [{ readingRunId: runId }];
+const annotationTargets = (ids: string[]): RecordTarget[] =>
+  [...new Set(ids)].map((id) => ({ collection: 'annotations', id }));
 const LIFE = {
   DB_DELETE_SELECTION: { kind: 'mask', collection: 'library' },
   DB_RESTORE_SELECTION: { kind: 'restore', collection: 'library' },
@@ -125,12 +188,14 @@ const OPERATIONS = {
     'calls.items',
     z.strictObject({ id, limit: integer.optional(), cursor: id.optional() }),
     z.strictObject({ items: callSchemas.item.array(), cursor: id.optional() }),
+    callsTarget,
   ),
   DB_READING_ATTEMPTS_PAGE: read(
     'entries',
     'reading.attempts',
     z.strictObject({ ...selection, limit: integer.optional(), cursor: id.optional() }),
     z.strictObject({ items: checkRun.array(), cursor: id.optional() }),
+    selectionTarget,
   ),
   DB_ANNOTATION_ACTIVITY: read(
     'entries',
@@ -141,6 +206,7 @@ const OPERATIONS = {
       cursor: id.optional(),
     }),
     z.strictObject({ items: annotationSchemas.attempt.array(), cursor: id.optional() }),
+    singleTarget('annotations', 'annotationId'),
   ),
   DB_ANNOTATION_CONVERSATION: read(
     'entries',
@@ -152,22 +218,49 @@ const OPERATIONS = {
       cursor: id.optional(),
     }),
     z.strictObject({ items: annotationReplySchema.array(), cursor: id.optional() }),
+    annotationTarget,
   ),
   DB_ANNOTATION: commit(
     'annotations.change',
     requestSchema.safeExtend({ external: z.literal(true).optional() }),
     z.custom(validAnnotationResult),
+    ({ operation }) => {
+      switch (operation.action) {
+        case 'create':
+          return annotationTargets([operation.capture.id]);
+        case 'change':
+          return annotationTargets(operation.changes.map(({ id }) => id));
+        case 'read':
+          return annotationTarget(operation);
+        case 'list':
+          return [];
+      }
+    },
     'explicit-write',
   ),
   DB_ANNOTATION_IMAGE: commit(
     'annotations.capture',
     z.strictObject({ id: annotationIdSchema, image: text.optional(), error: text.optional() }),
     empty,
+    annotationTarget,
   ),
   DB_ANNOTATION_ATTEMPT: commit(
     'annotations.attempt',
     annotationSchemas.attemptOperation,
     annotationSchemas.attempt.array(),
+    (payload) => {
+      switch (payload.action) {
+        case 'admit':
+          return annotationTargets(payload.attempts.map(({ annotationId }) => annotationId));
+        case 'save':
+        case 'complete':
+          return annotationTargets([payload.attempt.annotationId]);
+        case 'read':
+          return payload.annotationId ? annotationTargets([payload.annotationId]) : [];
+        case 'recover':
+          return [];
+      }
+    },
     'explicit-write',
   ),
   DB_ANNOTATION_STATUS: read(
@@ -175,14 +268,22 @@ const OPERATIONS = {
     'annotations.editor',
     annotationStatusSchema,
     annotationSchemas.editor,
+    annotationTarget,
   ),
   DB_ANNOTATION_URLS: read(
     'list',
     'annotations.urls',
     z.strictObject({ url: pageUrl }),
     text.array(),
+    noTargets,
   ),
-  DB_IMAGE: read('attachment', 'library.image', z.strictObject(run), image.optional()),
+  DB_IMAGE: read(
+    'attachment',
+    'library.image',
+    z.strictObject(run),
+    image.optional(),
+    selectionTarget,
+  ),
   DB_IMAGE_CHUNK: commit(
     'reading.image-transfer',
     z.strictObject({
@@ -193,39 +294,67 @@ const OPERATIONS = {
       last: z.boolean(),
     }),
     empty,
+    runTarget,
   ),
   DB_READING_RESOLVE: commit(
     'reading.reuse',
     z.strictObject({ snapshot: readingSnapshot, submissionId: id, recipeId: id }),
     id.optional(),
+    (_payload, value) => (typeof value === 'string' ? [{ collection: 'library', id: value }] : []),
   ),
-  DB_RECOVER: commit('reading.recover', empty, empty),
-  DB_PAGE: read('list', 'reading.page', z.strictObject({ url: id }), passage.array()),
-  DB_PASSAGE: read('get', 'reading.passage', z.strictObject(selection), passage.optional()),
-  DB_CONTEXT: read('get', 'reading.context', z.strictObject(run), readingContext),
-  DB_INPUT: read('get', 'reading.frozen-input', z.strictObject(run), savedReadingInput.optional()),
-  DB_RUNS: read('entries', 'reading.legacy-attempts', z.strictObject(selection), checkRun.array()),
-  DB_VIEW: commit('reading.viewed', z.strictObject({ ...selection, runId: id }), empty),
-  DB_UNREAD: read('list', 'library.unread', empty, integer),
+  DB_RECOVER: commit('reading.recover', empty, empty, noTargets),
+  DB_PAGE: read('list', 'reading.page', z.strictObject({ url: id }), passage.array(), noTargets),
+  DB_PASSAGE: read(
+    'get',
+    'reading.passage',
+    z.strictObject(selection),
+    passage.optional(),
+    selectionTarget,
+  ),
+  DB_CONTEXT: read('get', 'reading.context', z.strictObject(run), readingContext, selectionTarget),
+  DB_INPUT: read(
+    'get',
+    'reading.frozen-input',
+    z.strictObject(run),
+    savedReadingInput.optional(),
+    selectionTarget,
+  ),
+  DB_RUNS: read(
+    'entries',
+    'reading.legacy-attempts',
+    z.strictObject(selection),
+    checkRun.array(),
+    selectionTarget,
+  ),
+  DB_VIEW: commit(
+    'reading.viewed',
+    z.strictObject({ ...selection, runId: id }),
+    empty,
+    selectionTarget,
+  ),
+  DB_UNREAD: read('list', 'library.unread', empty, integer, noTargets),
   DB_GET_HISTORY: read(
     'list',
     'library.legacy-list',
     z.strictObject({ ...filters, offset: integer.optional() }),
     libraryItem.array(),
+    noTargets,
   ),
   DB_HISTORY_PAGE: read(
     'list',
     'library.records',
     z.strictObject({ ...filters, cursor: id.optional() }),
     z.strictObject({ items: libraryItem.array(), cursor: id.optional() }),
+    noTargets,
   ),
   DB_SET_BOOKMARK: commit(
     'library.bookmark',
     z.strictObject({ ...selection, bookmarked: z.boolean() }),
     empty,
+    selectionTarget,
     'explicit-write',
   ),
-  DB_EXPORT_MARKDOWN: read('list', 'library.markdown', empty, text),
+  DB_EXPORT_MARKDOWN: read('list', 'library.markdown', empty, text, noTargets),
   DB_DIGEST_FIND: read(
     'list',
     'calls.reusable',
@@ -235,55 +364,80 @@ const OPERATIONS = {
       actionPresetId: id.optional(),
     }),
     callSchemas.batch.optional(),
+    noTargets,
   ),
-  DB_DIGEST_ACTION_REVISIONS: read('list', 'calls.action-revisions', empty, text.array()),
-  DB_DIGEST_CREATE: commit('calls.create', callSchemas.batch, callSchemas.batch),
-  DB_DIGEST_GET: read('get', 'calls.run', z.strictObject({ id }), callSchemas.batch),
-  DB_DIGEST_RETRY: commit('calls.retry', z.strictObject({ id }), callSchemas.batch),
+  DB_DIGEST_ACTION_REVISIONS: read(
+    'list',
+    'calls.action-revisions',
+    empty,
+    text.array(),
+    noTargets,
+  ),
+  DB_DIGEST_CREATE: commit('calls.create', callWriteSchemas.batch, callSchemas.batch, callsTarget),
+  DB_DIGEST_GET: read('get', 'calls.run', z.strictObject({ id }), callSchemas.batch, callsTarget),
+  DB_DIGEST_RETRY: commit('calls.retry', z.strictObject({ id }), callSchemas.batch, callsTarget),
   DB_DIGEST_INTERRUPT: commit(
     'calls.interrupt',
     z.strictObject({ id, error: text }),
     callSchemas.batch,
+    callsTarget,
   ),
-  DB_DIGEST_LIST: read('list', 'calls.runs', empty, callSchemas.overview.array()),
+  DB_DIGEST_LIST: read('list', 'calls.runs', empty, callSchemas.overview.array(), noTargets),
   DB_DIGEST_ITEM: commit(
     'calls.update-item',
-    z.strictObject({ id, item: callSchemas.item, source: callSchemas.source.optional() }),
+    z.strictObject({ id, item: callWriteSchemas.item, source: callWriteSchemas.source.optional() }),
     empty,
+    callsTarget,
   ),
   DB_DIGEST_SOURCE: read(
     'attachment',
     'calls.source',
     z.strictObject({ id, index: integer }),
     callSchemas.source.optional(),
+    callsTarget,
   ),
-  DB_DIGEST_RECOVER: commit('calls.recover', empty, empty),
+  DB_DIGEST_RECOVER: commit('calls.recover', empty, empty, noTargets),
   DB_SUBMIT: commit(
     'reading.submit',
     READING_HISTORY_OPERATIONS.DB_SUBMIT.input,
     READING_HISTORY_OPERATIONS.DB_SUBMIT.result,
+    (_payload, value) =>
+      isRecord(value) && typeof value.passageId === 'string'
+        ? [{ collection: 'library', id: value.passageId }]
+        : [],
+    READING_HISTORY_OPERATIONS.DB_SUBMIT.policy,
   ),
   DB_CLAIM: commit(
     'reading.claim',
     READING_HISTORY_OPERATIONS.DB_CLAIM.input,
     READING_HISTORY_OPERATIONS.DB_CLAIM.result,
+    runTarget,
+    READING_HISTORY_OPERATIONS.DB_CLAIM.policy,
   ),
   DB_SAVING: commit(
     'reading.saving',
     READING_HISTORY_OPERATIONS.DB_SAVING.input,
     READING_HISTORY_OPERATIONS.DB_SAVING.result,
+    runTarget,
+    READING_HISTORY_OPERATIONS.DB_SAVING.policy,
   ),
   DB_CHECKPOINT: commit(
     'reading.checkpoint',
     READING_HISTORY_OPERATIONS.DB_CHECKPOINT.input,
     READING_HISTORY_OPERATIONS.DB_CHECKPOINT.result,
+    runTarget,
+    READING_HISTORY_OPERATIONS.DB_CHECKPOINT.policy,
   ),
   DB_FINISH: commit(
     'reading.finish',
     READING_HISTORY_OPERATIONS.DB_FINISH.input,
     READING_HISTORY_OPERATIONS.DB_FINISH.result,
+    runTarget,
+    READING_HISTORY_OPERATIONS.DB_FINISH.policy,
   ),
-} satisfies Record<Exclude<DbType, LifecycleType>, Operation>;
+} satisfies {
+  [K in Exclude<DbType, LifecycleType>]: Operation<DbOperations[K]['payload']>;
+};
 
 type FeatureType = keyof typeof OPERATIONS;
 const features = Object.entries(OPERATIONS) as [FeatureType, Operation][];
@@ -377,15 +531,15 @@ function featureOperation(command: HistoryRequest['command']) {
   const type = byName.get(name);
   if (!type) throw new Error('Unsupported History view or change.');
   const operation = OPERATIONS[type];
-  const payload = reading ? command.query : command.input;
+  const { payload, targets } = reading
+    ? operation.decode(command.query, ['command', 'query'])
+    : operation.decode(command.input, ['command', 'input']);
   const route = annotationRead(type, payload) ?? operation;
-  if (
-    route.kind !== command.kind ||
-    route.name !== name ||
-    !operation.input.safeParse(payload).success
-  )
-    throw new Error(`Invalid History request for ${operation.name}.`);
-  return { type, payload, operation };
+  if (route.kind !== command.kind || route.name !== name)
+    throw new Error(
+      `Invalid History request for ${name}. Command does not match the requested operation.`,
+    );
+  return { message: { type, payload } as DbRequest, operation, targets };
 }
 
 export function createHistoryRequest(
@@ -434,10 +588,7 @@ export function createHistoryRequest(
 }
 
 export function decomposeHistoryCommand(command: HistoryRequest['command']): DbRequest | undefined {
-  const feature = featureOperation(command);
-  if (!feature) return undefined;
-  const { type, payload } = feature;
-  return { type, payload } as DbRequest;
+  return featureOperation(command)?.message;
 }
 
 export function historyRequestPolicy(request: HistoryRequest): HistoryOperationPolicy {
@@ -445,15 +596,15 @@ export function historyRequestPolicy(request: HistoryRequest): HistoryOperationP
   return featureOperation(request.command)?.operation.policy ?? 'explicit-write';
 }
 
-export function validateHistoryResult(request: HistoryRequest, event: unknown): void {
-  const feature = featureOperation(request.command);
+function checkResult(
+  feature: ReturnType<typeof featureOperation>,
+  writing: boolean,
+  event: unknown,
+) {
   const validEnvelope = isRecord(event) && event.type === 'result' && Object.hasOwn(event, 'value');
-  const writing = !('view' in request.command);
   const value = validEnvelope ? (event.value ?? undefined) : undefined;
   const annotation =
-    feature?.type === 'DB_ANNOTATION'
-      ? (feature.payload as { operation: AnnotationOperation }).operation
-      : undefined;
+    feature?.message.type === 'DB_ANNOTATION' ? feature.message.payload.operation : undefined;
   if (
     !validEnvelope ||
     (event.revision !== undefined && !integer.safeParse(event.revision).success) ||
@@ -469,11 +620,25 @@ export function validateHistoryResult(request: HistoryRequest, event: unknown): 
   }
 }
 
-export function validateHistoryRequest(value: unknown): asserts value is HistoryRequest {
+export function decodeHistoryRequest(value: unknown) {
   const parsed = requestSchemaV1.safeParse(value);
-  if (!parsed.success) throw new Error('Invalid History request.');
+  if (!parsed.success) throw historyError(parsed.error);
   const { command } = parsed.data;
-  featureOperation(command);
+  const feature = featureOperation(command);
   if (command.kind === 'commit' && command.expectedRevision !== undefined && !command.target)
     throw new Error('A record target is required for a revision check.');
+  return {
+    // The envelope preserves the wire input. Receipts hash it without feature defaults.
+    request: parsed.data,
+    feature,
+    validateResult: (event: unknown) => checkResult(feature, !('view' in command), event),
+  };
+}
+
+export function validateHistoryResult(request: HistoryRequest, event: unknown): void {
+  decodeHistoryRequest(request).validateResult(event);
+}
+
+export function validateHistoryRequest(value: unknown): asserts value is HistoryRequest {
+  decodeHistoryRequest(value);
 }

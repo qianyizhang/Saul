@@ -55,7 +55,75 @@ describe('History wire', () => {
       expect(() =>
         validateHistoryResult(request, { type: 'result', value: payload }),
       ).not.toThrow();
+      expect(decomposeHistoryCommand(request.command)).toEqual({
+        type: 'DB_DIGEST_CREATE',
+        payload,
+      });
+      expect(() =>
+        validateHistoryRequest({
+          ...request,
+          command: {
+            ...request.command,
+            input: { ...payload, items: [{ ...payload.items[0], future: 1 }] },
+          },
+        }),
+      ).toThrow('command.input.items[0].future: unknown field');
+      // Old stored rows can carry fields outside this writer's command schema.
+      expect(() =>
+        validateHistoryResult(request, {
+          type: 'result',
+          value: { ...payload, items: [{ ...payload.items[0], future: 1 }] },
+        }),
+      ).not.toThrow();
     }
+  });
+
+  it('keeps valid nested Call source and output fields and rejects unknown attachment fields', () => {
+    const item = {
+      index: 0,
+      tabId: 1,
+      title: 'Report',
+      url: 'https://example.test/report.pdf',
+      raw: 'Generated text',
+      status: 'completed' as const,
+      calls: [{ instructions: 'Read', input: 'Report', output: 'Extracted text', complete: true }],
+      finalText: 'Final',
+    };
+    const fields = { title: 'Report', capturedAt: 1, truncated: false, coverage: 'Full' };
+    const sources = [
+      { ...fields, text: 'Report' },
+      {
+        ...fields,
+        kind: 'pdf-url' as const,
+        attachment: { type: 'pdf-url' as const, url: item.url },
+      },
+    ];
+    for (const source of sources) {
+      const message = { type: 'DB_DIGEST_ITEM', payload: { id: 'call', item, source } } as const;
+      const request = createHistoryRequest(owner, operationId, message);
+      expect(decomposeHistoryCommand(request.command)).toEqual(message);
+    }
+    const request = createHistoryRequest(owner, operationId, {
+      type: 'DB_DIGEST_ITEM',
+      payload: { id: 'call', item },
+    });
+    expect(() =>
+      validateHistoryRequest({
+        ...request,
+        command: {
+          ...request.command,
+          input: {
+            id: 'call',
+            item,
+            source: {
+              ...fields,
+              kind: 'pdf-url',
+              attachment: { type: 'pdf-url', url: item.url, label: 'extra' },
+            },
+          },
+        },
+      }),
+    ).toThrow('command.input.source.attachment:');
   });
 
   it('round-trips a scoped, filtered view using an opaque cursor', () => {

@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { DbRequest } from '../../shared/protocol/history-types.ts';
 import {
-  decomposeHistoryCommand,
-  validateHistoryResult,
+  decodeHistoryRequest,
+  type HistoryTargetReference,
   type HistoryRequest,
 } from '../../shared/protocol/history-protocol.mts';
 import { SaulDatabase } from './db.ts';
@@ -49,102 +49,31 @@ function stableJSON(value: unknown): string {
 }
 const hash = (value: unknown) => createHash('sha256').update(stableJSON(value)).digest('hex');
 
-function recordTargets(db: SqlDatabase, message: DbRequest, value: unknown): Target[] {
-  switch (message.type) {
-    case 'DB_SUBMIT':
-      return value && typeof value === 'object' && 'passageId' in value
-        ? [{ collection: 'library', id: String(value.passageId) }]
-        : [];
-    case 'DB_READING_RESOLVE':
-      return typeof value === 'string' ? [{ collection: 'library', id: value }] : [];
-    case 'DB_IMAGE_CHUNK':
-    case 'DB_CHECKPOINT':
-    case 'DB_FINISH':
-    case 'DB_CLAIM':
-    case 'DB_SAVING': {
-      const selection = db.selectValue('SELECT selection_id FROM llm_run WHERE id=?', [
-        message.payload.runId,
-      ]);
-      return selection ? [{ collection: 'library', id: String(selection) }] : [];
-    }
-    case 'DB_PASSAGE':
-    case 'DB_CONTEXT':
-    case 'DB_INPUT':
-    case 'DB_IMAGE':
-    case 'DB_RUNS':
-    case 'DB_READING_ATTEMPTS_PAGE':
-    case 'DB_SET_BOOKMARK':
-    case 'DB_VIEW':
-      return [{ collection: 'library', id: message.payload.selectionId }];
-    case 'DB_DIGEST_CREATE':
-    case 'DB_DIGEST_RETRY':
-    case 'DB_DIGEST_INTERRUPT':
-    case 'DB_DIGEST_ITEM':
-    case 'DB_DIGEST_ITEMS_PAGE':
-    case 'DB_DIGEST_GET':
-    case 'DB_DIGEST_SOURCE':
-      return [{ collection: 'calls', id: message.payload.id }];
-    case 'DB_ANNOTATION_IMAGE':
-    case 'DB_ANNOTATION_STATUS':
-    case 'DB_ANNOTATION_CONVERSATION':
-      return [{ collection: 'annotations', id: message.payload.id }];
-    case 'DB_ANNOTATION_ACTIVITY':
-      return [{ collection: 'annotations', id: message.payload.annotationId }];
-    case 'DB_ANNOTATION_ATTEMPT': {
-      const p = message.payload;
-      const ids =
-        p.action === 'admit'
-          ? p.attempts.map((item) => item.annotationId)
-          : p.action === 'complete' || p.action === 'save'
-            ? [p.attempt.annotationId]
-            : p.action === 'read' && p.annotationId
-              ? [p.annotationId]
-              : [];
-      return [...new Set(ids)].map((id) => ({ collection: 'annotations', id }));
-    }
-    case 'DB_ANNOTATION': {
-      const op = message.payload.operation;
-      const ids =
-        op.action === 'create'
-          ? [op.capture.id]
-          : op.action === 'change'
-            ? op.changes.map((change) => change.id)
-            : op.action === 'read'
-              ? [op.id]
-              : [];
-      return [...new Set(ids)].map((id) => ({ collection: 'annotations', id }));
-    }
-    default:
-      return [];
-  }
-}
-
 export class HistoryRepository {
   private readonly db: SqlDatabase;
   constructor(db: SqlDatabase) {
     this.db = db;
   }
 
-  run(request: HistoryRequest): Reply {
+  run(value: unknown): Reply {
+    const { request, feature, validateResult } = decodeHistoryRequest(value);
     const { owner, operationId, command } = request;
-    const message = decomposeHistoryCommand(command);
     const reading = 'view' in command;
     this.expire();
     return this.db.transaction(
       () => {
         if (reading) {
-          if (!message) throw new Error('Unknown History view.');
+          if (!feature) throw new Error('Unknown History view.');
+          const { message } = feature;
           const browser = new SaulDatabase(this.db, owner, command.visibility);
           const value =
             message.type === 'DB_HISTORY_PAGE'
               ? this.list(browser, request, message.payload)
               : browser.executeReady(message, operationId);
-          const targets = recordTargets(this.db, message, value);
+          const targets = this.resolveTargets(feature.targets(value), owner);
           const revision =
-            targets.length === 1 && value != null
-              ? this.revision(key(targets[0]!, owner))
-              : undefined;
-          return this.reply(request, value, revision);
+            targets.length === 1 && value != null ? this.revision(targets[0]!) : undefined;
+          return this.reply(validateResult, value, revision);
         }
         const fingerprint = hash(['saul', owner, command]);
         const receipt = this.db.selectObject(
@@ -169,7 +98,7 @@ export class HistoryRepository {
               ))
           )
             throw new Error('The write was applied. Its saved content is unavailable.');
-          validateHistoryResult(request, prior);
+          validateResult(prior);
           return prior;
         }
 
@@ -180,9 +109,9 @@ export class HistoryRepository {
           throw new Error('History changed. Refresh the record before applying the write.');
         let reply: Reply;
         let affected: Key[] = [];
-        if (command.kind === 'commit' && message) {
-          const value = new SaulDatabase(this.db, owner).executeReady(message, operationId);
-          affected = recordTargets(this.db, message, value).map((target) => key(target, owner));
+        if (command.kind === 'commit' && feature) {
+          const value = new SaulDatabase(this.db, owner).executeReady(feature.message, operationId);
+          affected = this.resolveTargets(feature.targets(value), owner);
           if (
             explicit &&
             (affected.length !== 1 ||
@@ -192,12 +121,12 @@ export class HistoryRepository {
           )
             throw new Error('History change does not match its record target.');
           reply = this.reply(
-            request,
+            validateResult,
             value,
             affected.length === 1 ? this.revision(affected[0]!) : undefined,
           );
         } else {
-          reply = this.reply(request, null, this.lifecycle(command, owner));
+          reply = this.reply(validateResult, null, this.lifecycle(command, owner));
         }
         this.db.exec({
           sql: 'INSERT INTO history_receipt VALUES(?,?,?)',
@@ -218,13 +147,27 @@ export class HistoryRepository {
     );
   }
 
-  private reply(request: HistoryRequest, value: unknown, revision?: number): Reply {
+  private resolveTargets(references: HistoryTargetReference[], owner: string): Key[] {
+    return references.flatMap((reference) => {
+      if (!('readingRunId' in reference)) return [key(reference, owner)];
+      const selection = this.db.selectValue('SELECT selection_id FROM llm_run WHERE id=?', [
+        reference.readingRunId,
+      ]);
+      return selection ? [key({ collection: 'library', id: String(selection) }, owner)] : [];
+    });
+  }
+
+  private reply(
+    validateResult: (event: unknown) => void,
+    value: unknown,
+    revision?: number,
+  ): Reply {
     const reply: Reply = {
       type: 'result',
       value: value ?? null,
       ...(revision === undefined ? {} : { revision }),
     };
-    validateHistoryResult(request, reply);
+    validateResult(reply);
     return reply;
   }
 
