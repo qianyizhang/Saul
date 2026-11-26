@@ -93,6 +93,8 @@ final class ChoiceAnchor: NSButton, NSPopoverDelegate {
         ])
 
         popover.behavior = .transient
+        // Escape and selection return keyboard focus to the anchor immediately.
+        popover.animates = false
         popover.delegate = self
     }
 
