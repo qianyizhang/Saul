@@ -4,6 +4,7 @@ export const accessLevel = z.enum(['off', 'read', 'write']);
 export type AccessLevel = z.infer<typeof accessLevel>;
 export const localToolAccess = z.object({
   tabs: z.enum(['read', 'write']),
+  history: z.enum(['off', 'read']).optional(),
   pages: accessLevel,
   annotations: accessLevel,
 });

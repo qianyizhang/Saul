@@ -16,6 +16,16 @@ const group = { id: 2, windowId: 1, color: 'blue' as const, collapsed: false };
 const snapshot = { windows: [{ id: 1, focused: true }], tabs: [], groups: [group] };
 // Independent wire examples retained across the refactor, not generated from its schemas.
 const replies = {
+  saul_history_search: { items: [] },
+  saul_history_read: {
+    id: 'r',
+    source: 'saul',
+    attemptId: 'a',
+    createdAt: 1,
+    status: 'completed',
+    prompt: 'q',
+    answer: 'a',
+  },
   saul_annotations: { records: [] },
   saul_windows_label: { dryRun: true, windows: [{ windowId: 1, title: '' }] },
   saul_tabs_close_duplicates: { dryRun: true, tabIds: [] },

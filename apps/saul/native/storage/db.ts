@@ -385,6 +385,7 @@ export class SaulDatabase {
       case 'DB_CLEAR_HISTORY':
       case 'DB_RESTORE_SELECTION':
       case 'DB_PURGE_SELECTION':
+      case 'DB_TOOL_HISTORY_SEARCH':
       case 'DB_HISTORY_PAGE':
         throw new Error('This operation requires the History repository.');
       default:

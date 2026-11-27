@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, statSync, readFileSync } from 'node:fs';
+import { readdirSync, mkdirSync, mkdtempSync, rmSync, statSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { endianness } from 'node:os';
 import { encodeNative, nativeDecoder, lineDecoder } from '../native/transport.mts';
@@ -215,6 +215,52 @@ describe('native transport', () => {
     expect(mcp.code).toBe(0);
     expect(JSON.parse(mcp.stdout).result.structuredContent).toEqual({ records: [] });
   });
+  it('routes positional CLI and MCP History commands through the same browser tools', async () => {
+    const hit = { id: 'ez:fixture', source: 'ez', createdAt: 1, title: 'EZ', excerpt: 'needle' };
+    const read = {
+      id: hit.id,
+      source: hit.source,
+      attemptId: hit.id,
+      createdAt: 1,
+      status: 'completed',
+      prompt: 'needle',
+      answer: 'answer',
+    };
+    await host((message) => {
+      if (!isRecord(message.params)) throw new Error('Missing History arguments');
+      if (message.method === 'saul_history_search' && message.params.query === 'needle')
+        return { result: { items: [hit] } };
+      if (message.method === 'saul_history_read' && message.params.id === hit.id)
+        return { result: read };
+      throw new Error('Unexpected History request');
+    });
+    for (const [action, args, positional, expected] of [
+      ['search', { query: 'needle' }, 'needle', { items: [hit] }],
+      ['read', { id: hit.id }, hit.id, read],
+    ] as const) {
+      const cli = await subprocess('.build/native/cli.mjs', ['history', action, positional]);
+      expect(cli.code).toBe(0);
+      expect(JSON.parse(cli.stdout)).toEqual(expected);
+      const mcp = await subprocess(
+        '.build/native/mcp.mjs',
+        [],
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: { name: 'saul_history_' + action, arguments: args },
+        }) + '\n',
+      );
+      expect(JSON.parse(mcp.stdout).result.structuredContent).toEqual(expected);
+    }
+    const logs = readdirSync(join(directory, 'diagnostics'), { recursive: true, encoding: 'utf8' })
+      .filter((path) => path.endsWith('server.jsonl'))
+      .map((path) => readFileSync(join(directory, 'diagnostics', path), 'utf8'))
+      .join('\n');
+    expect(logs).toContain('saul_history_read');
+    expect(logs).not.toContain('needle');
+    expect(logs).not.toContain(hit.id);
+  });
   it('rejects pending calls and removes its socket when Chrome disconnects', async () => {
     let received!: () => void;
     const incoming = new Promise<void>((resolve) => {
@@ -389,6 +435,8 @@ describe('native transport', () => {
     const tools = await runProcess(cli, ['tools'], undefined, { cwd: unrelatedCwd });
     expect(tools).toMatchObject({ code: 0, stderr: '' });
     expect(JSON.parse(tools.stdout).map((tool: { name: string }) => tool.name)).toEqual([
+      'saul_history_search',
+      'saul_history_read',
       'saul_annotations',
       'saul_windows_label',
       'saul_tabs_close_duplicates',

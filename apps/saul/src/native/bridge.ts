@@ -55,7 +55,9 @@ export function initNativeBridge() {
             response = {
               id: message.id,
               error: {
-                message: `${error instanceof Error ? error.message : error}. If applying changes, some may have completed; list tabs before retrying.`,
+                message: message.method.startsWith('saul_history_')
+                  ? String(error instanceof Error ? error.message : error)
+                  : `${error instanceof Error ? error.message : error}. If applying changes, some may have completed; list tabs before retrying.`,
               },
             };
           }

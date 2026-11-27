@@ -1,3 +1,4 @@
+import type { LibraryToolOperations } from './history-tools.mts';
 import type { ReadingHistoryOperations } from './reading-history.mts';
 import type { AnnotationDbOperations } from './annotation-attempts.ts';
 import type { ModelActivity } from '../model/model-events.ts';
@@ -60,7 +61,11 @@ export interface HistoryItem {
 }
 
 export interface DbOperations
-  extends DigestDbOperations, AnnotationDbOperations, ReadingHistoryOperations {
+  extends
+    LibraryToolOperations,
+    DigestDbOperations,
+    AnnotationDbOperations,
+    ReadingHistoryOperations {
   DB_IMAGE: {
     payload: { selectionId: string; runId?: string };
     result: import('../model/image.ts').GeneratedImage | undefined;

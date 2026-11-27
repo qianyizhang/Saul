@@ -8,6 +8,7 @@ const sections = [
   { name: 'Connection', policy: 'discovery' },
   { name: 'Tabs', policy: 'tabs-' },
   { name: 'Pages', policy: 'pages-' },
+  { name: 'History', policy: 'history-read' },
   { name: 'Annotations', policy: 'annotations' },
 ];
 
@@ -22,10 +23,13 @@ const accessHelp = {
   'tabs-preview': 'Preview with Tabs Read. Apply with Organize tabs and windows and dryRun:false.',
   'pages-read': 'Requires Pages Read or Write.',
   'pages-preview': 'Preview with Pages Read. Apply with Pages Write and dryRun:false.',
+  'history-read': 'Requires History Read in Local tool access.',
   annotations: 'List or read with Annotations Read. Create or change with Annotations Write.',
 };
 
 function commandHelp(command: string) {
+  if (command === 'history')
+    return 'Usage: saul history search "query" | saul history read ID\nBoth commands accept JSON arguments for pagination and session selection.';
   const tool = publicCommand(command);
   if (command === 'tools') return 'Usage: saul tools\n\nPrint the public command schemas as JSON.';
   if (!tool) throw new Error(`Unknown command: ${command}. Run saul help.`);
@@ -70,16 +74,32 @@ function overview() {
   ].join('\n\n');
 }
 
-const [command, json, ...extra] = process.argv.slice(2);
+const argv = process.argv.slice(2);
+const help = argv[0] && helpFlags.includes(argv[0]) ? argv.shift() : undefined;
+const group = argv.shift();
+const command =
+  group === 'history' && argv[0] && !helpFlags.includes(argv[0])
+    ? `history ${argv.shift()}`
+    : group;
+const [argument, ...extra] = argv;
+function argumentsForCommand() {
+  if (argument === undefined) return {};
+  if (!argument.trimStart().startsWith('{')) {
+    if (command === 'history search') return { query: argument };
+    if (command === 'history read') return { id: argument };
+  }
+  return JSON.parse(argument);
+}
 try {
   if (extra.length) throw new Error('Pass arguments as a single JSON object');
-  if (!command || helpFlags.includes(command)) console.log(json ? commandHelp(json) : overview());
-  else if (json && helpFlags.includes(json)) console.log(commandHelp(command));
+  if (!command) console.log(overview());
+  else if (command === 'history' || help || (argument && helpFlags.includes(argument)))
+    console.log(commandHelp(command));
   else if (command === 'tools') console.log(JSON.stringify(TOOLS, null, 2));
   else {
     const tool = publicCommand(command);
     if (!tool) throw new Error(`Unknown command: ${command}. Run saul help.`);
-    const result = await callTool(tool.name, json === undefined ? {} : JSON.parse(json));
+    const result = await callTool(tool.name, argumentsForCommand());
     console.log(JSON.stringify(result, null, 2));
   }
 } catch (error) {

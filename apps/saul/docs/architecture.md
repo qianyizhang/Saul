@@ -38,7 +38,7 @@ The [component inventory](../native/installation/components.mts) maps source
 entrypoints to the installed names and drives packaging and verification. See
 the [artifact decision](../../../docs/adr/0005-separate-saul-helper-source-from-installed-artifacts.md).
 
-The [tool operation registry](../shared/protocol/protocol.mts) owns each tab/page
+The [tool operation registry](../shared/protocol/protocol.mts) owns each browser and History
 tool's argument schema, result schema and catalog metadata. TypeScript types,
 CLI names and advertised schemas derive from that registry. Results retain extra
 browser metadata after validation; annotation results also match the requested
@@ -47,7 +47,7 @@ and the same schema library, without a second JSON-schema interpreter.
 
 The [local tool dispatcher](../src/native/local-tool-call.ts) checks the profile’s
 [Local tool permissions](native-messaging.md#local-tool-permissions) after a
-request reaches the tab operation queue. The bridge owns connection and retry.
+request reaches the tab operation queue. The bridge owns connection and retry. History tools read the existing shared Library through the native storage helper using a read-only SQLite connection. They bypass offscreen job recovery.
 The extension’s own Window view uses the same tab operations through its trusted
 workspace route.
 

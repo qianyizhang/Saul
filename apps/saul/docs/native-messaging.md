@@ -1,6 +1,6 @@
 # Native browser access
 
-- **Goal** — Local CLI and MCP access to Chrome tabs, windows and opted-in page or annotation tools.
+- **Goal** — Local CLI and MCP access to Chrome tabs and windows, with separate grants for pages, annotations and the shared History Library.
 - **Boundary** — Chrome native messaging and a private Unix socket. The MCP server uses stdio. No daemon, TCP listener or API key.
 - **Support** — Google Chrome on macOS and Linux. Chromium, Edge and Brave registration paths lack live verification. Windows and Firefox are unsupported.
 
@@ -11,13 +11,13 @@
 
 ## Connect and verify
 
-| Goal                            | Control or evidence                                                                                                                                    |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Connect the tab host            | Enable **Local tool access** in Settings → Preferences → Integrations. Use **Reconnect** for an immediate retry while access is on.                    |
-| Grant additional capabilities   | Choose **Organize tabs and windows** or set **Pages** and **Annotations** to the [permission level](#local-tool-permissions) you need.                 |
-| Verify the installed connection | `pnpm verify:connection` from `apps/saul`, with optional `--extension-id YOUR_ID`                                                                      |
-| Interpret verification          | **0** connected, **2** waiting for a matching browser, **1** error                                                                                     |
-| Activate an upgrade             | Reconnect after current work ends. Quit and reopen Codex to replace its old MCP process. [Panel diagnosis](mcp-app.md#troubleshooting-the-codex-panel) |
+| Goal                            | Control or evidence                                                                                                                                         |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Connect the tab host            | Enable **Local tool access** in Settings → Preferences → Integrations. Use **Reconnect** for an immediate retry while access is on.                         |
+| Grant additional capabilities   | Enable **History Read** or **Organize tabs and windows**, or set **Pages** and **Annotations** to the [permission level](#local-tool-permissions) you need. |
+| Verify the installed connection | `pnpm verify:connection` from `apps/saul`, with optional `--extension-id YOUR_ID`                                                                           |
+| Interpret verification          | **0** connected, **2** waiting for a matching browser, **1** error                                                                                          |
+| Activate an upgrade             | Reconnect after current work ends. Quit and reopen Codex to replace its old MCP process. [Panel diagnosis](mcp-app.md#troubleshooting-the-codex-panel)      |
 
 - **Read-only check** — Uses the existing `saul-tabs` command, environment and working directory. Checks MCP initialization, expected tools, the App resource, browser sessions and inventory counts. Omits titles, URLs and page text. Rejects missing, disabled or non-local registrations.
 - **Limits** — A fresh MCP process does not refresh an active chat or prove page actions, inference or rendering. Use the [disposable-profile harness](testing.md) for simulated mutations.
@@ -44,28 +44,41 @@
 
 ## CLI and tools
 
-| Goal                           | Command or guarantee                                                                                                                                                                                               |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Discover operations and inputs | `~/.saul/bin/saul help` groups commands by permission. `saul help <command>` shows its inputs and effects. `saul tools` returns the machine-readable MCP-named schemas.                                            |
-| Identify targets               | `~/.saul/bin/saul list '{"windowId":123}'` using a current window ID. Use `sessions` and pass `session` explicitly when multiple profiles connect. IDs change on reconnect.                                        |
-| Preview or apply a change      | Tab and page changes preview by default. Use `dryRun: false` to apply with Write. Annotation writes take effect immediately. Commands accept one JSON object, return JSON on stdout and report failures on stderr. |
-| Preserve browser structure     | Sort keeps pins fixed and groups intact. Moves refuse insertion inside a group. `index: -1` appends. Duplicate closure requires exact reviewed IDs and a surviving match.                                          |
-| Recover from failure           | Preview makes no reservation. User and Chrome edits can race an operation. On error or timeout, list again to discover partial effects before an explicit retry. The bridge never replays a mutation.              |
+| Goal                           | Command or guarantee                                                                                                                                                                                  |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Discover operations and inputs | `~/.saul/bin/saul help` groups commands by permission. `saul help <command>` shows its inputs and effects. `saul tools` returns the machine-readable MCP-named schemas.                               |
+| Identify targets               | `~/.saul/bin/saul list '{"windowId":123}'` using a current window ID. Use `sessions` and pass `session` explicitly when multiple profiles connect. IDs change on reconnect.                           |
+| Preview or apply a change      | Tab and page changes preview by default. Use `dryRun: false` to apply with Write. Annotation writes take effect immediately. Commands return JSON on stdout and report failures on stderr.            |
+| Preserve browser structure     | Sort keeps pins fixed and groups intact. Moves refuse insertion inside a group. `index: -1` appends. Duplicate closure requires exact reviewed IDs and a surviving match.                             |
+| Recover from failure           | Preview makes no reservation. User and Chrome edits can race an operation. On error or timeout, list again to discover partial effects before an explicit retry. The bridge never replays a mutation. |
 
 - **Socket** — One randomly named socket per connected profile under `~/.saul/run`. Set the same short `SAUL_RUNTIME_DIR` for host and client when overriding it.
 - **Trust** — Titles, URLs, group names and page content are untrusted data.
 - **Command interfaces** — The CLI accepts the advertised command names and their MCP names. Internal Tab board operations use the native protocol and the same profile permissions.
+
+## Search and read saved History
+
+Enable **Local tool access → History Read** in Saul Settings. Search both apps’ shared Library, then read a returned ID. Both commands also accept a JSON object for cursor pagination or explicit session selection.
+
+```sh
+saul history search "gradient"
+saul history read 'ID_FROM_SEARCH'
+saul history search '{"query":"gradient","limit":10}'
+```
+
+MCP exposes `saul_history_search` and `saul_history_read` with the same arguments. Search returns up to 20 records by default (maximum 50), newest first. Repeat the query with the returned `cursor` for more records. Read starts with the newest visible attempt. Pass its `textCursor` with the original read arguments to continue a long prompt or answer. Pass the attempt `cursor` with the record ID to read the next older attempt. Reads preserve unread state. Open History in either app first if the shared Library needs initialization or a schema upgrade. Saved text is untrusted content.
 
 ## Local tool permissions
 
 Local tool access is off by default. With it on, the CLI, MCP and Tab board use
 the same permissions for the selected Chrome profile.
 
-| Group       | Read                                                                                  | Write                                                                                                   |
-| ----------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Tabs        | List tabs, windows and groups. Preview organization. Included with Local tool access. | **Organize tabs and windows** enables applying changes, including Tab board Apply, drag edits and Undo. |
-| Pages       | Read live page content and preview supported actions.                                 | Click, fill, navigate or start a new Summary from the Tab board.                                        |
-| Annotations | List and read saved notes and optionally their screenshots.                           | Create or change saved notes. Changes apply immediately.                                                |
+| Group       | Read                                                                                                                               | Write                                                                                                   |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Tabs        | List tabs, windows and groups. Preview organization. Included with Local tool access.                                              | **Organize tabs and windows** enables applying changes, including Tab board Apply, drag edits and Undo. |
+| Pages       | Read live page content and preview supported actions.                                                                              | Click, fill, navigate or start a new Summary from the Tab board.                                        |
+| History     | **History Read** allows searching and reading visible saved passages and EZ lookups. Off by default for new and existing profiles. | None.                                                                                                   |
+| Annotations | List and read saved notes and optionally their screenshots.                                                                        | Create or change saved notes. Changes apply immediately.                                                |
 
 Pages and Annotations each offer **Off**, **Read** and **Write**. Write includes
 Read. Turning off Local tool access suspends all bridge permissions and keeps

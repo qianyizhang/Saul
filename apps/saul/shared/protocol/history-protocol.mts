@@ -1,3 +1,9 @@
+import {
+  historySearch,
+  historyRead,
+  historySearchResult,
+  historyReadResult,
+} from './history-tools.mts';
 import { z } from 'zod';
 import { isRecord } from '../model/value.mts';
 import type { DbOperations, DbRequest, DbType } from './history-types.ts';
@@ -332,6 +338,14 @@ const OPERATIONS = {
     empty,
     selectionTarget,
   ),
+  DB_TOOL_HISTORY_SEARCH: read(
+    'list',
+    'library.tool-search',
+    historySearch,
+    historySearchResult,
+    noTargets,
+  ),
+  DB_TOOL_HISTORY_READ: read('get', 'library.tool-read', historyRead, historyReadResult, noTargets),
   DB_UNREAD: read('list', 'library.unread', empty, integer, noTargets),
   DB_GET_HISTORY: read(
     'list',
@@ -585,6 +599,14 @@ export function createHistoryRequest(
     }
   }
   return { operation: 'history', owner, operationId, command };
+}
+
+export function isHistoryToolRead({ command }: HistoryRequest): boolean {
+  return (
+    'view' in command &&
+    (command.view === OPERATIONS.DB_TOOL_HISTORY_SEARCH.name ||
+      command.view === OPERATIONS.DB_TOOL_HISTORY_READ.name)
+  );
 }
 
 export function historyRequestPolicy(request: HistoryRequest): HistoryOperationPolicy {

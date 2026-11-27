@@ -1,4 +1,5 @@
-import { SharedHistory } from './history.mts';
+import { isHistoryToolRead } from '../../shared/protocol/history-protocol.mts';
+import { readInstalledHistory, SharedHistory } from './history.mts';
 import type {
   StorageResult,
   StorageHelperRequest,
@@ -20,6 +21,10 @@ export class HistoryConfigService {
   async run(request: StorageHelperRequest, emit: (event: StorageResult) => void) {
     switch (request.action) {
       case 'history':
+        if (isHistoryToolRead(request.request)) {
+          emit(readInstalledHistory(request.request));
+          return;
+        }
         this.history ??= new SharedHistory();
         emit(await this.history.run(request.request));
         return;

@@ -1,10 +1,11 @@
+import { HistoryConfigService } from '../native/storage/service.mts';
 import { executeHistory } from './helpers/history-db';
 import { afterEach, expect, it, vi } from 'vitest';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { HistoryConnection, SharedHistory } from '../native/storage/history.mts';
+import { HistoryConnection, historyDirectory, SharedHistory } from '../native/storage/history.mts';
 import { StorageConnection, StorageDisconnected } from '../src/native/storage-connection';
 import { requestHistory } from '../src/native/storage-client';
 import { storagePort } from './helpers/storage-port';
@@ -503,4 +504,73 @@ it('converts the shared v4 fixture atomically and preserves its bookmark and fro
     ),
   ).toEqual([]);
   expect(reopened.connection.selectValue('PRAGMA user_version')).toBe(5);
+});
+
+it('pages visible History text without touching read state or writing to SQLite', async () => {
+  const store = history();
+  const response = 'long answer '.repeat(7000);
+  const attempt = await complete(store, { query: 'needle', response });
+  const before = store.connection.selectValue('SELECT total_changes()');
+  const search = await executeHistory(store, {
+    type: 'DB_TOOL_HISTORY_SEARCH',
+    payload: { query: 'needle' },
+  });
+  expect(search.items).toEqual([
+    { id: 'selection', source: 'saul', createdAt: 1, title: 'Source', excerpt: 'needle' },
+  ]);
+  const read = (textCursor?: string) =>
+    executeHistory(store, {
+      type: 'DB_TOOL_HISTORY_READ',
+      payload: { id: 'selection', ...(textCursor && { textCursor }) },
+    });
+  let part = await read();
+  expect(part).toMatchObject({ attemptId: attempt, prompt: 'needle' });
+  let answer = part.answer;
+  while (part.textCursor) {
+    part = await read(part.textCursor);
+    answer += part.answer;
+  }
+  expect(answer).toBe(response);
+  expect(store.connection.selectValue('SELECT total_changes()')).toBe(before);
+  expect(store.connection.selectValue('SELECT viewed_at FROM llm_run')).toBeNull();
+  await executeHistory(store, {
+    type: 'DB_DELETE_SELECTION',
+    payload: { selectionId: 'selection' },
+  });
+  expect(
+    (await executeHistory(store, { type: 'DB_TOOL_HISTORY_SEARCH', payload: { query: 'needle' } }))
+      .items,
+  ).toEqual([]);
+  await expect(read()).rejects.toThrow('unavailable');
+});
+
+it('opens an initialized Library read-only and leaves initialization and migration to the apps', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'history-tool-home-'));
+  roots.push(home);
+  vi.stubEnv('HOME', home);
+  const service = new HistoryConfigService();
+  try {
+    const directory = join(home, 'Library/Application Support/Little Clarity');
+    expect(historyDirectory()).toBe(directory);
+    const request = createHistoryRequest(randomUUID(), randomUUID(), {
+      type: 'DB_TOOL_HISTORY_SEARCH',
+      payload: { query: 'gradient' },
+    });
+    const emit = vi.fn();
+    const search = () => service.run({ action: 'history', request }, emit);
+    await expect(search()).rejects.toThrow('Open History');
+    const store = new SharedHistory(directory);
+    open.push(store);
+    await complete(store);
+    await search();
+    expect(emit).toHaveBeenCalledWith(
+      expect.objectContaining({ value: { items: [expect.objectContaining({ id: 'selection' })] } }),
+    );
+    store.connection.exec('PRAGMA user_version=4');
+    await expect(search()).rejects.toThrow('Open History');
+    expect(store.connection.selectValue('PRAGMA user_version')).toBe(4);
+  } finally {
+    service.close();
+    vi.unstubAllEnvs();
+  }
 });

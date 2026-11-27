@@ -74,7 +74,15 @@ export function createBoardService(options: {
     }
     if (!tools.some((tool) => tool.name === name)) throw new Error('Unknown MCP tool');
     const interaction = randomUUID();
-    log.record(interaction, name, 'Client → Server', 'request', 'received', args);
+    const historyRead = name === 'saul_history_search' || name === 'saul_history_read';
+    log.record(
+      interaction,
+      name,
+      'Client → Server',
+      'request',
+      'received',
+      historyRead ? {} : args,
+    );
     try {
       let result;
       if (name.startsWith('saul_workspace_')) {
@@ -104,11 +112,25 @@ export function createBoardService(options: {
           structuredContent: value,
         };
       }
-      log.record(interaction, name, 'Server → Client', 'result', 'returned', result);
+      log.record(
+        interaction,
+        name,
+        'Server → Client',
+        'result',
+        'returned',
+        historyRead ? {} : result,
+      );
       return result;
     } catch (error) {
       const result = { isError: true, content: [{ type: 'text', text: errorMessage(error) }] };
-      log.record(interaction, name, 'Server → Client', 'result', 'rejected', result);
+      log.record(
+        interaction,
+        name,
+        'Server → Client',
+        'result',
+        'rejected',
+        historyRead ? {} : result,
+      );
       return result;
     }
   }

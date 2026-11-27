@@ -1,3 +1,4 @@
+import { historyTextLimit } from '../../shared/protocol/history-tools.mts';
 import { historyCursor } from './history-cursor.ts';
 import {
   browserMask,
@@ -60,6 +61,7 @@ const passageSelect = (visibility: HistoryVisibility) => `SELECT s.*,
  LEFT JOIN llm_run c ON c.rowid = ${success(visibility)}`;
 
 type LibraryOperation =
+  | 'DB_TOOL_HISTORY_READ'
   | 'DB_PAGE'
   | 'DB_PASSAGE'
   | 'DB_CONTEXT'
@@ -222,34 +224,10 @@ export class LibraryStore {
           mediaType: binary.startsWith('GIF8') ? 'image/gif' : 'image/png',
         };
       }
-      case 'DB_READING_ATTEMPTS_PAGE': {
-        const { selectionId, limit = 25, cursor } = message.payload;
-        const pagination = historyCursor(
-          [this.owner, 'reading.attempts', selectionId, this.visibility],
-          cursor,
-        );
-        const before = pagination.read();
-        if (selectionId.startsWith('ez:')) {
-          const entry = this.ezHistory(selectionId.slice(3));
-          return { items: entry && before === undefined ? [entry.latest] : [] };
-        }
-        const pageSize = Math.max(1, Math.min(100, limit));
-        const rows = this.rows(
-          `SELECT llm_run.id,status,response_raw,model,provider,created_at,latency_ms,error_message,reason,
-            viewed_at,input_json,response_structured IS NOT NULL AS has_image,${effectiveRunMask} AS masked_at,e.position
-           FROM llm_run JOIN history_entry e ON e.collection='library-browser'
-             AND e.record_id=llm_run.selection_id AND e.owner='' AND e.id=llm_run.id
-           WHERE llm_run.selection_id=? AND ${this.browserEntryFilter()}${before === undefined ? '' : ' AND e.position<?'}
-           ORDER BY e.position DESC LIMIT ?`,
-          [selectionId, ...(before === undefined ? [] : [before]), pageSize + 1],
-        );
-        const next = rows.length > pageSize;
-        if (next) rows.pop();
-        return {
-          items: rows.map((row) => this.run(row)),
-          ...(next ? { cursor: pagination.write(Number(rows.at(-1)!.position)) } : {}),
-        };
-      }
+      case 'DB_READING_ATTEMPTS_PAGE':
+        return this.attempts(message.payload);
+      case 'DB_TOOL_HISTORY_READ':
+        return this.toolRead(message.payload);
       case 'DB_RUNS':
         return this.runs(message.payload.selectionId);
       case 'DB_VIEW':
@@ -291,6 +269,64 @@ export class LibraryStore {
         );
     }
   }
+  private attempts(
+    { selectionId, limit = 25, cursor }: DbOperations['DB_READING_ATTEMPTS_PAGE']['payload'],
+    savedOnly = false,
+  ): DbOperations['DB_READING_ATTEMPTS_PAGE']['result'] {
+    const pagination = historyCursor(
+      [this.owner, 'reading.attempts', selectionId, this.visibility],
+      cursor,
+    );
+    const before = pagination.read();
+    if (selectionId.startsWith('ez:')) {
+      const entry = this.ezHistory(selectionId.slice(3), savedOnly);
+      return { items: entry && before === undefined ? [entry.latest] : [] };
+    }
+    const pageSize = Math.max(1, Math.min(100, limit));
+    const rows = this.rows(
+      `SELECT llm_run.id,status,response_raw,model,provider,created_at,latency_ms,error_message,reason,
+            viewed_at,input_json,response_structured IS NOT NULL AS has_image,${effectiveRunMask} AS masked_at,e.position
+           FROM llm_run JOIN history_entry e ON e.collection='library-browser'
+             AND e.record_id=llm_run.selection_id AND e.owner='' AND e.id=llm_run.id
+           WHERE llm_run.selection_id=? AND ${this.browserEntryFilter()}${before === undefined ? '' : ' AND e.position<?'}
+           ORDER BY e.position DESC LIMIT ?`,
+      [selectionId, ...(before === undefined ? [] : [before]), pageSize + 1],
+    );
+    const next = rows.length > pageSize;
+    if (next) rows.pop();
+    return {
+      items: rows.map((row) => this.run(row)),
+      ...(next ? { cursor: pagination.write(Number(rows.at(-1)!.position)) } : {}),
+    };
+  }
+
+  private toolRead({
+    id,
+    cursor,
+    textCursor,
+  }: DbOperations['DB_TOOL_HISTORY_READ']['payload']): DbOperations['DB_TOOL_HISTORY_READ']['result'] {
+    const page = this.attempts({ selectionId: id, cursor, limit: 1 }, true);
+    const attempt = page.items[0];
+    if (!attempt) throw new Error('Saved History record unavailable.');
+    const prompt = attempt.inspection?.userPrompt ?? '';
+    const answer = attempt.responseRaw;
+    const text = historyCursor([this.owner, id, attempt.id, prompt, answer], textCursor);
+    const start = text.read() ?? 0;
+    if (start > prompt.length + answer.length) throw new Error('Invalid History text cursor.');
+    const end = start + historyTextLimit;
+    return {
+      id,
+      source: id.startsWith('ez:') ? 'ez' : 'saul',
+      attemptId: attempt.id,
+      createdAt: attempt.createdAt,
+      status: attempt.status,
+      prompt: prompt.slice(start, end),
+      answer: answer.slice(Math.max(0, start - prompt.length), Math.max(0, end - prompt.length)),
+      ...(end < prompt.length + answer.length && { textCursor: text.write(end) }),
+      ...(page.cursor && { cursor: page.cursor }),
+    };
+  }
+
   private runs(selectionId: string): RunResult[] {
     if (selectionId.startsWith('ez:')) {
       const item = this.ezHistory(selectionId.slice(3));
@@ -387,11 +423,12 @@ export class LibraryStore {
       };
     });
   }
-  private ezHistory(id: string): HistoryItem | undefined {
+  private ezHistory(id: string, savedOnly = false): HistoryItem | undefined {
     const row = this.rows(
       `SELECT data,created_at,bookmarked,image IS NOT NULL AS has_image,${nativeMask('ez_entry.id')} AS masked_at,
         ${nativeEntryMask('ez_entry.id')} AS entry_masked_at
         FROM ez_entry WHERE id=? AND ${nativeHasEntry('ez_entry.id')}
+          ${savedOnly ? "AND json_extract(data,'$.status')!='pending'" : ''}
           AND ${maskFilter(nativeEntryMask('ez_entry.id'), this.visibility)}`,
       [id],
     )[0];

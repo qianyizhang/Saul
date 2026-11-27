@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
-import type { DbRequest } from '../../shared/protocol/history-types.ts';
+import type { DbRequest, HistoryItem } from '../../shared/protocol/history-types.ts';
 import {
   decodeHistoryRequest,
+  isHistoryToolRead,
   type HistoryTargetReference,
   type HistoryRequest,
 } from '../../shared/protocol/history-protocol.mts';
@@ -49,6 +50,24 @@ function stableJSON(value: unknown): string {
 }
 const hash = (value: unknown) => createHash('sha256').update(stableJSON(value)).digest('hex');
 
+function searchExcerpt(item: HistoryItem, query: string): string {
+  const needle = query.toLowerCase();
+  for (const text of [
+    item.selectedText,
+    item.responseRaw,
+    item.latest.inspection?.userPrompt,
+    item.completed?.inspection?.userPrompt,
+  ]) {
+    if (!text) continue;
+    const match = text.toLowerCase().indexOf(needle);
+    if (match >= 0) {
+      const start = Math.max(0, match - 60);
+      return text.slice(start, start + 320);
+    }
+  }
+  return (item.selectedText || item.responseRaw).slice(0, 320);
+}
+
 export class HistoryRepository {
   private readonly db: SqlDatabase;
   constructor(db: SqlDatabase) {
@@ -59,13 +78,32 @@ export class HistoryRepository {
     const { request, feature, validateResult } = decodeHistoryRequest(value);
     const { owner, operationId, command } = request;
     const reading = 'view' in command;
-    this.expire();
+    const toolRead = isHistoryToolRead(request);
+    if (!toolRead) this.expire();
     return this.db.transaction(
       () => {
         if (reading) {
           if (!feature) throw new Error('Unknown History view.');
           const { message } = feature;
-          const browser = new SaulDatabase(this.db, owner, command.visibility);
+          const browser = new SaulDatabase(
+            this.db,
+            owner,
+            toolRead ? 'visible' : command.visibility,
+          );
+          if (message.type === 'DB_TOOL_HISTORY_SEARCH') {
+            const { query, limit = 20, cursor } = message.payload;
+            const page = this.list(browser, request, { searchQuery: query, limit, cursor });
+            return this.reply(validateResult, {
+              items: page.items.map((item) => ({
+                id: item.selectionId,
+                source: item.selectionId.startsWith('ez:') ? 'ez' : 'saul',
+                createdAt: item.createdAt,
+                title: item.pageTitle.slice(0, 200),
+                excerpt: searchExcerpt(item, query),
+              })),
+              ...(page.cursor && { cursor: page.cursor }),
+            });
+          }
           const value =
             message.type === 'DB_HISTORY_PAGE'
               ? this.list(browser, request, message.payload)

@@ -143,6 +143,7 @@ it('preserves legacy grants and lets explicit settings override them across mast
     saul_annotation_access: true,
   });
   expect(await readLocalAccess()).toEqual({
+    history: false,
     enabled: true,
     organize: true,
     pages: 'write',
@@ -158,6 +159,7 @@ it('preserves legacy grants and lets explicit settings override them across mast
     [localAccessKeys.annotations]: 'off',
   });
   expect(await readLocalAccess()).toEqual({
+    history: false,
     enabled: false,
     organize: false,
     pages: 'read',

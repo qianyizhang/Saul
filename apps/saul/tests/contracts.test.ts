@@ -70,6 +70,8 @@ it('rejects coercible enum values at the action, preset, catalog and credential 
   }
 });
 const fields = {
+  saul_history_search: ['session', 'query', 'limit', 'cursor'],
+  saul_history_read: ['session', 'id', 'cursor', 'textCursor'],
   saul_annotations: ['session', 'scope', 'author', 'operation'],
   saul_tabs_edit: [
     'session',
@@ -114,6 +116,8 @@ const complete: {
       ? true
       : never;
 } = {
+  saul_history_search: true,
+  saul_history_read: true,
   saul_annotations: true,
   saul_tabs_edit: true,
   saul_tabs_undo: true,
@@ -134,6 +138,8 @@ const complete: {
   saul_groups_update: true,
 };
 const samples = {
+  saul_history_search: { query: 'topic' },
+  saul_history_read: { id: 'record' },
   saul_annotations: {
     scope: { urls: ['https://example.com/'], ids: [] },
     author: { kind: 'agent', name: 'Test' },

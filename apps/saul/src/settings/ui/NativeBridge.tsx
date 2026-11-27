@@ -138,6 +138,17 @@ export function NativeBridge() {
             />
           </label>
         </section>
+        <label className="toggle">
+          <span>
+            <strong>History Read</strong>
+            <span className="small muted"> · Saved Saul passages and EZ lookups</span>
+          </span>
+          <input
+            type="checkbox"
+            checked={access?.history ?? false}
+            onChange={(event) => void save('history', event.target.checked)}
+          />
+        </label>
         {permissions.map(({ key, name, cue, description }) => (
           <div key={key} className="stack">
             <label className="toggle">

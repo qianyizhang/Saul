@@ -3,6 +3,7 @@ import { accessLevel, type AccessLevel } from '../../shared/protocol/local-acces
 export const localAccessKeys = {
   enabled: 'saul_local_tools_enabled',
   organize: 'saul_local_tools_organize',
+  history: 'saul_local_tools_history_read',
   pages: 'saul_local_tools_pages',
   annotations: 'saul_local_tools_annotations',
 } as const;
@@ -24,6 +25,7 @@ export function isLocalAccessChange(changes: object) {
 export interface LocalAccessPreferences {
   enabled: boolean;
   organize: boolean;
+  history: boolean;
   pages: AccessLevel;
   annotations: AccessLevel;
 }
@@ -40,6 +42,7 @@ function level(value: unknown, legacy: unknown): AccessLevel {
 export async function readLocalAccess(): Promise<LocalAccessPreferences> {
   const saved = await chrome.storage.local.get(accessKeys);
   return {
+    history: saved[localAccessKeys.history] === true,
     enabled: flag(saved[localAccessKeys.enabled], saved[legacyEnabled]),
     organize: flag(saved[localAccessKeys.organize], saved[legacyEnabled]),
     pages: level(saved[localAccessKeys.pages], saved[legacyPages]),

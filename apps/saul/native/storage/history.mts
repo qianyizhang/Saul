@@ -32,8 +32,8 @@ export class HistoryConnection implements SqlDatabase {
   readonly sqlite: DatabaseSync;
   private changed = 0;
   private transactionDepth = 0;
-  constructor(path: string) {
-    this.sqlite = new DatabaseSync(path);
+  constructor(path: string, readOnly = false) {
+    this.sqlite = new DatabaseSync(path, { readOnly });
     this.sqlite.exec('PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON; PRAGMA secure_delete=ON;');
   }
   exec(command: string | { sql: string; bind?: SqlValue[] }) {
@@ -74,6 +74,24 @@ export class HistoryConnection implements SqlDatabase {
   }
   close() {
     this.sqlite.close();
+  }
+}
+export function readInstalledHistory(request: unknown, directory = historyDirectory()) {
+  const path = join(directory, 'history.sqlite3');
+  const needsSetup =
+    'Open History in Saul or EZ to initialize or upgrade the shared Library before using History Read.';
+  if (!existsSync(path)) throw new Error(needsSetup);
+  const parent = lstatSync(directory);
+  if (!parent.isDirectory() || parent.uid !== process.getuid!() || !lstatSync(path).isFile())
+    throw new Error(
+      'History Read requires the existing, user-owned Library directory and regular database file.',
+    );
+  const connection = new HistoryConnection(path, true);
+  try {
+    if (connection.selectValue('PRAGMA user_version') !== 5) throw new Error(needsSetup);
+    return new HistoryRepository(connection).run(request);
+  } finally {
+    connection.close();
   }
 }
 export class SharedHistory {
