@@ -1,7 +1,13 @@
 import { workspaceSender } from '../platform/chrome/sender';
 import type { Configuration } from '../configuration/definition';
 import { credentialCall } from '../native/credentials';
-import { generateSpeech, speechCredential, SPEECH_PORT, validateSpeechRequest } from './realtime';
+import {
+  generateSpeech,
+  speechCredential,
+  SPEECH_PORT,
+  validateSpeechRequest,
+  type SpeechEvent,
+} from './realtime';
 
 export function initSpeechBridge(currentSettings: () => Promise<Configuration>) {
   chrome.runtime.onConnect.addListener((port) => {
@@ -10,6 +16,7 @@ export function initSpeechBridge(currentSettings: () => Promise<Configuration>) 
       port.disconnect();
       return;
     }
+    const post = (event: SpeechEvent) => port.postMessage(event);
     const controller = new AbortController();
     let started = false;
     port.onDisconnect.addListener(() => controller.abort());
@@ -19,7 +26,7 @@ export function initSpeechBridge(currentSettings: () => Promise<Configuration>) 
       const signal = controller.signal;
       const timer = setTimeout(() => {
         if (signal.aborted) return;
-        port.postMessage({ error: 'Speech timed out. Generate again to retry.' });
+        post({ error: 'Speech timed out. Generate again to retry.' });
         controller.abort();
         port.disconnect();
       }, 90_000);
@@ -54,11 +61,11 @@ export function initSpeechBridge(currentSettings: () => Promise<Configuration>) 
       })()
         .then(
           (result) => {
-            if (!controller.signal.aborted) port.postMessage({ result });
+            if (!controller.signal.aborted) post({ result });
           },
           (error: unknown) => {
             if (!controller.signal.aborted)
-              port.postMessage({
+              post({
                 error: error instanceof Error ? error.message : 'Speech failed.',
               });
           },

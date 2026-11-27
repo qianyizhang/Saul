@@ -1,4 +1,5 @@
 import { SPEECH_PORT, speechBlob, type SpeechRequest, type SpeechResult } from './realtime';
+import { isRecord } from '../../shared/model/value.mts';
 
 export function requestSpeech(request: SpeechRequest, signal: AbortSignal): Promise<Blob> {
   signal.throwIfAborted();
@@ -20,9 +21,16 @@ export function requestSpeech(request: SpeechRequest, signal: AbortSignal): Prom
       }
     };
     const abort = () => finish(undefined, new DOMException('Speech stopped.', 'AbortError'));
-    port.onMessage.addListener((message: { result?: SpeechResult; error?: string }) => {
-      if (typeof message.error === 'string') finish(undefined, new Error(message.error));
-      else if (message.result) finish(message.result);
+    port.onMessage.addListener((message: unknown) => {
+      if (isRecord(message) && typeof message.error === 'string')
+        finish(undefined, new Error(message.error));
+      else if (
+        isRecord(message) &&
+        isRecord(message.result) &&
+        typeof message.result.audioBase64 === 'string' &&
+        message.result.mimeType === 'audio/wav'
+      )
+        finish({ audioBase64: message.result.audioBase64, mimeType: message.result.mimeType });
       else finish(undefined, new Error('Invalid speech reply.'));
     });
     port.onDisconnect.addListener(() => {

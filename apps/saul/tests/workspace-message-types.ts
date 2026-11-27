@@ -3,6 +3,9 @@ import type { ConnectionResult } from '../src/connections/messages';
 import type { DeepDiveMessage, DeepDiveResults } from '../src/deep-dives/model';
 import { sendAnnotationTab, type AnnotationTabReply } from '../src/annotations/messages';
 import type { OpenSourceMessage, OpenSourceReply } from '../src/reading/contract';
+import type { ActionHostResult, ActionWorkerMessage } from '../shared/protocol/action-protocol.mts';
+import { actionHost } from '../src/custom-actions/host-client';
+import type { SpeechEvent } from '../src/speech/realtime';
 
 export function checkConnectionMessages() {
   const catalog: Promise<ConnectionResult<'accounts'>> = requestConnection({ action: 'accounts' });
@@ -37,4 +40,21 @@ export function checkTabMessages() {
   // @ts-expect-error A reading source acknowledgement contains a boolean.
   const receipt: OpenSourceReply = { received: 'yes' };
   return { state, wrong, reopen, receipt };
+}
+
+export function checkPortMessages() {
+  const result: Promise<{ type: 'result'; text: string }> = actionHost({
+    action: 'run',
+    revision: 'example',
+    source: { title: 'Article', url: 'https://example.test/', coverage: 'Visible text' },
+  });
+  // @ts-expect-error Model callbacks cannot omit both the value and error.
+  const worker: ActionWorkerMessage = { id: 'run', callId: 1 };
+  // @ts-expect-error Run requires terminal text.
+  const terminal: ActionHostResult<{ action: 'run'; revision: string; source: never }> = {
+    type: 'result',
+  };
+  // @ts-expect-error The speech reply must be a supported audio format.
+  const speech: SpeechEvent = { result: { audioBase64: '', mimeType: 'audio/mp3' } };
+  return { result, worker, terminal, speech };
 }

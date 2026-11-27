@@ -1,5 +1,5 @@
 import type { CallSnapshot } from '../../../shared/model/call-output.ts';
-import { actionHost } from '../../custom-actions/host-client';
+import { actionHost, type ActionRunHost } from '../../custom-actions/host-client';
 import { planEvents } from '../../providers/chatgpt-plan';
 import { streamModel } from '../../providers/stream';
 import { parseSummary, summaryRequestInput } from './summary';
@@ -55,7 +55,7 @@ export function createCallExecutor(
   adapters: Partial<{
     model: typeof streamModel;
     plan: typeof planEvents;
-    script: typeof actionHost;
+    script: ActionRunHost;
   }> = {},
 ): CallExecutor {
   const model = adapters.model ?? streamModel;

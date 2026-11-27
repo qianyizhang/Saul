@@ -1,7 +1,11 @@
+import { isRecord } from '../../shared/model/value.mts';
 import {
   ACTION_HOST,
   ACTION_PORT,
   validateActionHostRequest,
+  validateActionHostEvent,
+  isActionCallback,
+  type ActionNativeMessage,
   type ActionHostEvent,
 } from '../../shared/protocol/action-protocol.mts';
 import { offscreenSender } from '../platform/chrome/sender';
@@ -30,8 +34,14 @@ export function initActionBridge() {
     if (native) return native;
     const port = chrome.runtime.connectNative(ACTION_HOST);
     native = port;
-    port.onMessage.addListener((message) => {
-      if (typeof message?.id === 'string' && message.event) finish(message.id, message.event);
+    port.onMessage.addListener((message: unknown) => {
+      if (!isRecord(message) || typeof message.id !== 'string') return;
+      try {
+        validateActionHostEvent(message.event);
+        finish(message.id, message.event);
+      } catch {
+        finish(message.id, { type: 'error', message: 'Action helper returned an invalid event.' });
+      }
     });
     port.onDisconnect.addListener(() => {
       void chrome.runtime.lastError;
@@ -53,19 +63,17 @@ export function initActionBridge() {
       return;
     }
     let id: string | undefined;
-    port.onMessage.addListener((message) => {
+    port.onMessage.addListener((message: unknown) => {
       if (id) {
-        if (message?.cancel === true) native?.postMessage({ id, cancel: true });
-        else if (
-          Number.isSafeInteger(message?.callId) &&
-          (typeof message.text === 'string' || typeof message.error === 'string')
-        )
-          native?.postMessage({
-            id,
-            callId: message.callId,
-            text: message.text,
-            error: message.error,
-          });
+        if (isRecord(message) && message.cancel === true)
+          native?.postMessage({ id, cancel: true } satisfies ActionNativeMessage);
+        else if (isActionCallback(message)) {
+          const { callId, text, error } = message;
+          if (typeof text === 'string')
+            native?.postMessage({ id, callId, text, error } satisfies ActionNativeMessage);
+          else if (typeof error === 'string')
+            native?.postMessage({ id, callId, error } satisfies ActionNativeMessage);
+        }
         return;
       }
       try {
@@ -74,7 +82,7 @@ export function initActionBridge() {
         const requestId = id;
         const timer = setTimeout(
           () => {
-            native?.postMessage({ id: requestId, cancel: true });
+            native?.postMessage({ id: requestId, cancel: true } satisfies ActionNativeMessage);
             finish(requestId, {
               type: 'error',
               message: 'Action helper timed out. Retry explicitly.',
@@ -83,7 +91,7 @@ export function initActionBridge() {
           message.action === 'run' ? 320_000 : 30_000,
         );
         requests.set(id, { port, timer });
-        connect().postMessage({ id, request: message });
+        connect().postMessage({ id, request: message } satisfies ActionNativeMessage);
       } catch (error) {
         const event = { type: 'error' as const, message: (error as Error).message };
         if (id) finish(id, event);
@@ -96,7 +104,7 @@ export function initActionBridge() {
       if (!entry) return;
       clearTimeout(entry.timer);
       requests.delete(id);
-      native?.postMessage({ id, cancel: true });
+      native?.postMessage({ id, cancel: true } satisfies ActionNativeMessage);
     });
   });
 }

@@ -2,20 +2,23 @@ import type { AnnotationOperation, AnnotationResult } from '../../shared/protoco
 import {
   ACTION_PORT,
   validateActionGenerate,
-  type ActionHostEvent,
+  validateActionHostEvent,
+  validateActionHostResult,
+  type ActionHostResult,
+  type ActionPortMessage,
   type ActionHostRequest,
   type ActionGenerate,
 } from '../../shared/protocol/action-protocol.mts';
 
-export async function actionHost(
-  request: ActionHostRequest,
+export async function actionHost<T extends ActionHostRequest>(
+  request: T,
   options: {
     signal?: AbortSignal;
     generate?: (request: ActionGenerate, signal: AbortSignal) => Promise<string>;
     progress?: (text: string) => void;
     annotations?: (operation: AnnotationOperation) => Promise<AnnotationResult>;
   } = {},
-): Promise<Extract<ActionHostEvent, { type: 'result' }>> {
+): Promise<ActionHostResult<T>> {
   options.signal?.throwIfAborted();
   const port = chrome.runtime.connect({ name: ACTION_PORT });
   const controller = new AbortController();
@@ -23,7 +26,8 @@ export async function actionHost(
     let ended = false;
     let cancelling = false;
     let cancelTimer: ReturnType<typeof setTimeout> | undefined;
-    const finish = (error?: Error, result?: Extract<ActionHostEvent, { type: 'result' }>) => {
+    const post = (message: ActionPortMessage) => port.postMessage(message);
+    const finish = (error?: Error, result?: ActionHostResult<T>) => {
       if (ended) return;
       ended = true;
       clearTimeout(cancelTimer);
@@ -38,7 +42,7 @@ export async function actionHost(
       cancelling = true;
       controller.abort();
       try {
-        port.postMessage({ cancel: true });
+        post({ cancel: true });
       } catch (error) {
         finish(
           error instanceof Error ? error : new Error('Action helper disconnected during Stop.'),
@@ -60,15 +64,27 @@ export async function actionHost(
       void chrome.runtime.lastError;
       finish(new Error('Action helper connection closed. No work was replayed.'));
     });
-    port.onMessage.addListener((event: ActionHostEvent) => {
+    port.onMessage.addListener((event: unknown) => {
       if (ended) return;
+      try {
+        validateActionHostEvent(event);
+      } catch (error) {
+        finish(error instanceof Error ? error : new Error('Invalid action helper event.'));
+        return;
+      }
       if (cancelling) {
         if (event.type === 'error' || event.type === 'result') finish(new Error('Stopped.'));
         return;
       }
       if (event.type === 'error') finish(new Error(event.message));
-      else if (event.type === 'result') finish(undefined, event);
-      else if (event.type === 'progress') options.progress?.(event.text);
+      else if (event.type === 'result') {
+        try {
+          validateActionHostResult(request, event);
+          finish(undefined, event);
+        } catch (error) {
+          finish(error instanceof Error ? error : new Error('Invalid action helper result.'));
+        }
+      } else if (event.type === 'progress') options.progress?.(event.text);
       else if (event.type === 'annotation') {
         void (async () => {
           if (!options.annotations)
@@ -76,10 +92,10 @@ export async function actionHost(
           return options.annotations(event.operation);
         })().then(
           (result) => {
-            if (!ended) port.postMessage({ callId: event.callId, text: JSON.stringify(result) });
+            if (!ended) post({ callId: event.callId, text: JSON.stringify(result) });
           },
           (error) => {
-            if (!ended) port.postMessage({ callId: event.callId, error: String(error) });
+            if (!ended) post({ callId: event.callId, error: String(error) });
           },
         );
       } else if (event.type === 'generate') {
@@ -89,11 +105,11 @@ export async function actionHost(
           return options.generate(event.request, controller.signal);
         })().then(
           (text) => {
-            if (!ended) port.postMessage({ callId: event.callId, text });
+            if (!ended) post({ callId: event.callId, text });
           },
           (error: unknown) => {
             if (!ended)
-              port.postMessage({
+              post({
                 callId: event.callId,
                 error: error instanceof Error ? error.message : String(error),
               });
@@ -103,9 +119,11 @@ export async function actionHost(
     });
     try {
       options.signal?.throwIfAborted();
-      port.postMessage(request);
+      post(request);
     } catch (error) {
       finish(error as Error);
     }
   });
 }
+
+export type ActionRunHost = typeof actionHost<Extract<ActionHostRequest, { action: 'run' }>>;

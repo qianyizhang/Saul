@@ -16,6 +16,8 @@ import {
 import { isRecord } from '../../shared/model/value.mts';
 import {
   CONNECTION_TARGET,
+  CONNECTION_REVIEW_PORT,
+  type ConnectionReviewRequest,
   type ConnectionRequest,
   type ConnectionReply,
   type ConnectionResult,
@@ -95,7 +97,7 @@ export async function withReviewedConnectionSetup(
   signal?: AbortSignal,
 ) {
   signal?.throwIfAborted();
-  const port = chrome.runtime.connect({ name: 'saul-connection-review' });
+  const port = chrome.runtime.connect({ name: CONNECTION_REVIEW_PORT });
   const lifetime = new AbortController();
   const ready = Promise.withResolvers<string>();
   const stop = (error: unknown) => {
@@ -121,7 +123,11 @@ export async function withReviewedConnectionSetup(
   });
   const deadline = setTimeout(() => stop(new Error('Connection setup review timed out.')), 20_000);
   try {
-    port.postMessage({ key: setup.definition.key, id: setup.id, phase: setup.phase });
+    port.postMessage({
+      key: setup.definition.key,
+      id: setup.id,
+      phase: setup.phase,
+    } satisfies ConnectionReviewRequest);
     const token = await ready.promise;
     clearTimeout(deadline);
     lifetime.signal.throwIfAborted();

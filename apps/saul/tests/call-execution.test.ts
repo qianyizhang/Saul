@@ -5,7 +5,7 @@ import {
   type CallExecutor,
   type FrozenCall,
 } from '../src/calls/execution/executor';
-import type { actionHost } from '../src/custom-actions/host-client';
+import type { ActionRunHost } from '../src/custom-actions/host-client';
 import type { streamModel } from '../src/providers/stream';
 import type { ModelEvent } from '../shared/model/model-events.ts';
 type TextEvent = Extract<ModelEvent, { type: 'delta' | 'complete' }>;
@@ -178,7 +178,7 @@ it('runs text cleanup and chained requests as one Call with frozen inputs and de
   let continueRun!: () => void;
   const original = structuredClone({ call: script, page });
   const before = structuredClone(original);
-  const host = vi.fn<typeof actionHost>(async (request, opts) => {
+  const host = vi.fn<ActionRunHost>(async (request, opts) => {
     if (request.action !== 'run') throw new Error('Unexpected request');
     await new Promise<void>((resolve) => {
       continueRun = resolve;
@@ -245,7 +245,7 @@ it.each(['incomplete', 'oversized', 'empty-final', 'failed-after-generation'] as
       yield { type: 'delta', text };
       if (mode !== 'incomplete') yield { type: 'complete' };
     });
-    const host = vi.fn<typeof actionHost>(async (_request, opts) => {
+    const host = vi.fn<ActionRunHost>(async (_request, opts) => {
       await opts!.generate!({ instructions: 'Process' }, opts!.signal!);
       if (mode === 'failed-after-generation') throw new Error('Script failed');
       return { type: 'result', text: '' };
@@ -262,7 +262,7 @@ it.each(['incomplete', 'oversized', 'empty-final', 'failed-after-generation'] as
 );
 
 it('rejects an unavailable saved custom preset before invoking an adapter', async () => {
-  const host = vi.fn<typeof actionHost>();
+  const host = vi.fn<ActionRunHost>();
   const result = await createCallExecutor({ script: host }).execute(
     { call: { kind: 'script', revision: 'a'.repeat(64) }, page },
     options(),
@@ -275,8 +275,8 @@ it('rejects an unavailable saved custom preset before invoking an adapter', asyn
 });
 
 it('cancels a custom chain and ignores callbacks retained after settlement', async () => {
-  let callbacks: Parameters<typeof actionHost>[1];
-  const host: typeof actionHost = async (_request, opts) => {
+  let callbacks: Parameters<ActionRunHost>[1];
+  const host: ActionRunHost = async (_request, opts) => {
     callbacks = opts;
     await opts!.generate!({ instructions: 'First' }, opts!.signal!);
     return { type: 'result', text: 'Late final' };
@@ -320,7 +320,7 @@ it('preserves PDF attachment with custom explicit input and allows a text-only s
     },
   };
   const model = vi.fn<typeof streamModel>(success);
-  const host: typeof actionHost = async (_request, opts) => {
+  const host: ActionRunHost = async (_request, opts) => {
     await opts!.generate!({ instructions: 'Explain', input: 'Prepared input' }, opts!.signal!);
     return { type: 'result', text: 'Final text' };
   };
@@ -332,7 +332,7 @@ it('preserves PDF attachment with custom explicit input and allows a text-only s
     attachments: [{ type: 'pdf-url', url: 'https://example.com/paper.pdf' }],
   });
   model.mockClear();
-  const local: typeof actionHost = async () => ({ type: 'result', text: 'Locally prepared text' });
+  const local: ActionRunHost = async () => ({ type: 'result', text: 'Locally prepared text' });
   expect(
     await createCallExecutor({ script: local, model }).execute({ call: script, page }, options()),
   ).toMatchObject({ kind: 'completed', result: { kind: 'text', text: 'Locally prepared text' } });
@@ -359,7 +359,7 @@ it.each(['completed', 'failed', 'cancelled'] as const)(
         if (ending === 'failed') throw new Error('Provider failed after output');
         yield { type: 'complete' };
       };
-      const host: typeof actionHost = async (_request, opts) => ({
+      const host: ActionRunHost = async (_request, opts) => ({
         type: 'result',
         text: await opts!.generate!({ instructions: 'Process' }, opts!.signal!),
       });
@@ -417,7 +417,7 @@ it('settles a timed publication failure even when the adapter ignores cancellati
       yield { type: 'delta', text: ' late' };
       yield { type: 'complete' };
     };
-    const host: typeof actionHost = async (_request, opts) => ({
+    const host: ActionRunHost = async (_request, opts) => ({
       type: 'result',
       text: await opts!.generate!({ instructions: 'Process' }, opts!.signal!),
     });
@@ -456,7 +456,7 @@ it('a throwing final publication returns a failed outcome with all buffered outp
     yield { type: 'delta', text: 'partial' };
     throw new Error('Provider failed');
   };
-  const host: typeof actionHost = async (_request, opts) => ({
+  const host: ActionRunHost = async (_request, opts) => ({
     type: 'result',
     text: await opts!.generate!({ instructions: 'Process' }, opts!.signal!),
   });

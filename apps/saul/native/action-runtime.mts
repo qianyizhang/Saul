@@ -1,3 +1,4 @@
+import { isRecord } from '../shared/model/value.mts';
 import { Worker } from 'node:worker_threads';
 import { checkAction } from './action-check.mts';
 import { ActionStore } from './action-store.mts';
@@ -5,6 +6,9 @@ import {
   ACTION_MAX_CALLS,
   ACTION_TIMEOUT_MS,
   validateActionGenerate,
+  validateActionHostEvent,
+  type ActionWorkerMessage,
+  type ActionCallbackResult,
   validateAnnotationOperation,
   type ActionHostEvent,
   type ActionSource,
@@ -72,57 +76,56 @@ export class ActionRuntime {
           this.workers.delete(worker);
           fail(new Error('Action runtime disconnected. No work was replayed.'));
         });
-        worker.on(
-          'message',
-          (message: { ready?: boolean; id?: string; event?: ActionHostEvent }) => {
-            if (message.ready && !ready) {
-              ready = true;
-              clearTimeout(timer);
-              resolve();
-              return;
-            }
-            if (!message.id || !message.event) return;
-            const run = generation.runs.get(message.id);
-            if (!run || generation.stopping) return;
-            const event = message.event;
-            try {
-              if (event.type === 'generate') {
-                validateActionGenerate(event.request);
-                if (
-                  !Number.isSafeInteger(event.callId) ||
-                  event.callId !== run.calls.size + 1 ||
-                  run.calls.size >= ACTION_MAX_CALLS
-                )
-                  throw new Error('Action exceeded the three-model-call limit.');
-                run.calls.add(event.callId);
-                run.emit(event);
-              } else if (event.type === 'annotation') {
-                validateAnnotationOperation(event.operation);
-                if (
-                  !run.annotations ||
-                  event.callId !== 1001 + run.annotationCalls.size ||
-                  run.annotationCalls.size >= 50
-                )
-                  throw new Error(
-                    'Annotation operations require an annotation run and are limited to 50 per run.',
-                  );
-                run.annotationCalls.add(event.callId);
-                run.emit(event);
-              } else if (event.type === 'progress') {
-                if (typeof event.text !== 'string' || event.text.length > 500)
-                  throw new Error('Invalid progress.');
-                run.emit(event);
-              } else if (event.type === 'result') run.finish(undefined, event.text);
-              else if (event.type === 'error') run.finish(new Error(event.message));
-            } catch (error) {
-              this.stopGeneration(
-                revision,
-                generation,
-                error instanceof Error ? error : new Error(String(error)),
-              );
-            }
-          },
-        );
+        worker.on('message', (message: unknown) => {
+          if (!isRecord(message)) return;
+          if (message.ready === true && !ready) {
+            ready = true;
+            clearTimeout(timer);
+            resolve();
+            return;
+          }
+          if (typeof message.id !== 'string' || !message.id || !message.event) return;
+          const run = generation.runs.get(message.id);
+          if (!run || generation.stopping) return;
+          const event = message.event;
+          try {
+            validateActionHostEvent(event);
+            if (event.type === 'generate') {
+              validateActionGenerate(event.request);
+              if (
+                !Number.isSafeInteger(event.callId) ||
+                event.callId !== run.calls.size + 1 ||
+                run.calls.size >= ACTION_MAX_CALLS
+              )
+                throw new Error('Action exceeded the three-model-call limit.');
+              run.calls.add(event.callId);
+              run.emit(event);
+            } else if (event.type === 'annotation') {
+              validateAnnotationOperation(event.operation);
+              if (
+                !run.annotations ||
+                event.callId !== 1001 + run.annotationCalls.size ||
+                run.annotationCalls.size >= 50
+              )
+                throw new Error(
+                  'Annotation operations require an annotation run and are limited to 50 per run.',
+                );
+              run.annotationCalls.add(event.callId);
+              run.emit(event);
+            } else if (event.type === 'progress') {
+              if (typeof event.text !== 'string' || event.text.length > 500)
+                throw new Error('Invalid progress.');
+              run.emit(event);
+            } else if (event.type === 'result') run.finish(undefined, event.text);
+            else if (event.type === 'error') run.finish(new Error(event.message));
+          } catch (error) {
+            this.stopGeneration(
+              revision,
+              generation,
+              error instanceof Error ? error : new Error(String(error)),
+            );
+          }
+        });
       });
       return generation;
     })();
@@ -182,7 +185,7 @@ export class ActionRuntime {
         if (!generation.runs.delete(id)) return;
         clearTimeout(timer);
         signal.removeEventListener('abort', abort);
-        generation.worker.postMessage({ id, cancel: true });
+        generation.worker.postMessage({ id, cancel: true } satisfies ActionWorkerMessage);
         if (error) reject(error);
         else resolve(text || '');
         void this.retire(revision);
@@ -204,22 +207,22 @@ export class ActionRuntime {
         annotations: !!source.annotations?.length,
       });
       signal.addEventListener('abort', abort, { once: true });
-      generation.worker.postMessage({ id, source });
+      generation.worker.postMessage({ id, source } satisfies ActionWorkerMessage);
     });
   }
-  async reply(
-    revision: string,
-    id: string,
-    callId: number,
-    result: { text?: string; error?: string },
-  ) {
+  async reply(revision: string, id: string, callId: number, result: ActionCallbackResult) {
     const generation = await this.generations.get(revision);
     if (
       generation &&
       (generation.runs.get(id)?.calls.has(callId) ||
         generation.runs.get(id)?.annotationCalls.has(callId))
-    )
-      generation.worker.postMessage({ id, callId, ...result });
+    ) {
+      const { text, error } = result;
+      if (typeof text === 'string')
+        generation.worker.postMessage({ id, callId, text, error } satisfies ActionWorkerMessage);
+      else if (typeof error === 'string')
+        generation.worker.postMessage({ id, callId, error } satisfies ActionWorkerMessage);
+    }
   }
   async close() {
     this.closed = true;

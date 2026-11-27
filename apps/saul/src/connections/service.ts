@@ -1,6 +1,7 @@
 import { isRecord } from '../../shared/model/value.mts';
 import {
   validConnectionKey,
+  validConnectionToken,
   validSetupFence,
 } from '../../shared/protocol/connection-coordination.mts';
 import { validateConnections } from '../../shared/protocol/shared-presets-contract.mts';
@@ -11,7 +12,11 @@ import {
 import { requireConnectionSettings } from '../native/config-transport';
 import { workspaceSender } from '../platform/chrome/sender';
 import { nativeCredentialCall } from '../native/credentials';
-import type { ConnectionResult } from './messages';
+import {
+  CONNECTION_REVIEW_PORT,
+  type ConnectionReviewEvent,
+  type ConnectionResult,
+} from './messages';
 import type { SettingsState } from '../settings/contract';
 import { holdConnection } from './credential-hold';
 import {
@@ -114,7 +119,7 @@ export function createConnectionService(settings: (request: unknown) => Promise<
   }
   function registerReviewPort() {
     chrome.runtime.onConnect.addListener((port) => {
-      if (port.name !== 'saul-connection-review') return;
+      if (port.name !== CONNECTION_REVIEW_PORT) return;
       if (!port.sender || !workspaceSender(port.sender)) {
         port.disconnect();
         return;
@@ -122,7 +127,7 @@ export function createConnectionService(settings: (request: unknown) => Promise<
       const closed = new AbortController();
       port.onDisconnect.addListener(() => closed.abort());
       let active = false;
-      const post = (value: unknown) => {
+      const post = (value: ConnectionReviewEvent) => {
         if (closed.signal.aborted) return;
         try {
           port.postMessage(value);
@@ -164,7 +169,10 @@ export function createConnectionService(settings: (request: unknown) => Promise<
               closed.signal,
             );
             try {
-              post({ token: held.evidence.token });
+              const token = held.evidence.token;
+              if (!validConnectionToken(token))
+                throw new Error('Invalid connection setup response.');
+              post({ token });
               const stop = AbortSignal.any([held.signal, closed.signal]);
               if (!stop.aborted)
                 await new Promise<void>((resolve) => {

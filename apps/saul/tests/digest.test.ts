@@ -4,7 +4,7 @@ import { digestHtml } from '../src/calls/ui/summary-html';
 import { validateCallControl, validateCallLaunch } from '../src/calls/batch-messages';
 import { CallBatchRunner } from '../src/calls/execution/batch-runner';
 import { createCallExecutor } from '../src/calls/execution/executor';
-import type { actionHost } from '../src/custom-actions/host-client';
+import type { ActionRunHost } from '../src/custom-actions/host-client';
 import {
   activeItem,
   interruptItem,
@@ -547,7 +547,7 @@ it('runs custom actions per page with two-page concurrency and pins code and pre
   const calls: string[] = [];
   let active = 0,
     maximum = 0;
-  const custom = vi.fn<typeof actionHost>(async (request, options) => {
+  const custom = vi.fn<ActionRunHost>(async (request, options) => {
     if (request.action !== 'run') throw new Error('Unexpected host request');
     const index = Number(new URL(request.source.url).pathname.slice(1));
     calls.push(request.revision);
@@ -585,7 +585,7 @@ it('runs custom actions per page with two-page concurrency and pins code and pre
 });
 it('keeps custom intermediate output separate from a failed final result without replay', async () => {
   const f = fixture();
-  const custom = vi.fn<typeof actionHost>(async (_request, options) => {
+  const custom = vi.fn<ActionRunHost>(async (_request, options) => {
     await options!.generate!(
       { instructions: 'Frozen instructions', input: 'Captured source' },
       options!.signal!,
@@ -616,7 +616,7 @@ it('a custom terminal save failure aborts its sibling and removes the unsaved fi
       throw new Error('disk full');
     return db(r);
   });
-  const custom = vi.fn<typeof actionHost>(async (request, options) => {
+  const custom = vi.fn<ActionRunHost>(async (request, options) => {
     if (request.action !== 'run') throw new Error('Unexpected host request');
     if (request.source.url.endsWith('/0')) return { type: 'result', text: 'Unsaved final' };
     const signal = options!.signal!;
@@ -662,7 +662,7 @@ it.each(['preset', 'script'] as const)(
         yield* success();
       },
     );
-    const host: typeof actionHost = async (_request, options) => ({
+    const host: ActionRunHost = async (_request, options) => ({
       type: 'result',
       text: await options!.generate!({ instructions: 'Frozen instructions' }, options!.signal!),
     });
@@ -715,7 +715,7 @@ it('a custom checkpoint failure cancels execution and siblings without saving a 
       signal!.throwIfAborted();
     },
   );
-  const host: typeof actionHost = async (_request, options) => ({
+  const host: ActionRunHost = async (_request, options) => ({
     type: 'result',
     text: await options!.generate!({ instructions: 'Work' }, options!.signal!),
   });
@@ -752,7 +752,7 @@ it('pauses unstarted pages on a Call failure before a pending checkpoint settles
   });
   let failFirst!: () => void;
   let finishSecond!: () => void;
-  const host = vi.fn<typeof actionHost>(async (request, options) => {
+  const host = vi.fn<ActionRunHost>(async (request, options) => {
     if (request.action !== 'run') throw new Error('Unexpected request');
     if (request.source.url.endsWith('/0')) {
       options!.progress!('Waiting');
@@ -801,7 +801,7 @@ it.each(['failed', 'cancelled'] as const)(
       return db(request);
     });
     let fail!: () => void;
-    const host: typeof actionHost = async (_request, options) => {
+    const host: ActionRunHost = async (_request, options) => {
       options!.progress!('Waiting');
       await new Promise<void>((_resolve, reject) => {
         fail = () => reject(new Error('Call failed'));

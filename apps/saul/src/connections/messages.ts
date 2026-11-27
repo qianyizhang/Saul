@@ -8,6 +8,9 @@ import type { SettingsState } from '../settings/contract';
 import type { ConnectionSetup } from './setup';
 
 export const CONNECTION_TARGET = 'saul-connection';
+export const CONNECTION_REVIEW_PORT = 'saul-connection-review';
+export type ConnectionReviewRequest = { key: string; id: string; phase: ConnectionSetup['phase'] };
+export type ConnectionReviewEvent = { token: string } | { error: string };
 type ConnectionOperations = {
   save: {
     input: { setup: ConnectionSetup; key: string; resume: boolean };

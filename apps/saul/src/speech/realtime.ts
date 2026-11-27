@@ -16,6 +16,7 @@ export interface SpeechResult {
   audioBase64: string;
   mimeType: 'audio/wav';
 }
+export type SpeechEvent = { result: SpeechResult } | { error: string };
 
 export function validateSpeechRequest(value: unknown): asserts value is SpeechRequest {
   if (!value || typeof value !== 'object' || Array.isArray(value))

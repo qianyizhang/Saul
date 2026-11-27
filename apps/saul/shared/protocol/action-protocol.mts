@@ -44,7 +44,94 @@ export type ActionHostEvent =
   | { type: 'progress'; text: string }
   | { type: 'generate'; callId: number; request: ActionGenerate }
   | { type: 'annotation'; callId: number; operation: AnnotationOperation };
+export type ActionHostResult<T extends ActionHostRequest> = { type: 'result' } & (T extends {
+  action: 'run';
+}
+  ? { text: string; revision?: never }
+  : T extends { action: 'prune' }
+    ? { revision?: never; text?: never }
+    : { revision: ActionRevision; text?: never });
+export type ActionCancel = { cancel: true };
+export type ActionCallback = { callId: number } & ActionCallbackResult;
+export type ActionCallbackResult =
+  { text: string; error?: string } | { text?: string; error: string };
+export type ActionPortMessage = ActionHostRequest | ActionCancel | ActionCallback;
+export type ActionNativeMessage = { id: string } & (
+  { request: ActionHostRequest } | ActionCancel | ActionCallback
+);
+export type ActionNativeEvent = { id: string; event: ActionHostEvent };
+export type ActionWorkerMessage = { id: string } & (
+  { source: ActionSource } | ActionCancel | ActionCallback
+);
+export type ActionWorkerEvent =
+  | { ready: true }
+  | {
+      id: string;
+      event:
+        | Exclude<ActionHostEvent, { type: 'annotation' }>
+        | { type: 'annotation'; callId: number; operation: unknown };
+    };
 export const validateAnnotationOperation = (value: unknown) => operationSchema.parse(value);
+
+export function isActionCallback(value: unknown): value is ActionCallback {
+  return (
+    isRecord(value) &&
+    typeof value.callId === 'number' &&
+    Number.isSafeInteger(value.callId) &&
+    (value.text === undefined || typeof value.text === 'string') &&
+    (value.error === undefined || typeof value.error === 'string') &&
+    (typeof value.text === 'string' || typeof value.error === 'string')
+  );
+}
+
+export function validateActionHostEvent(value: unknown): asserts value is ActionHostEvent {
+  if (isRecord(value)) {
+    switch (value.type) {
+      case 'result':
+        if (value.text !== undefined && typeof value.text !== 'string') break;
+        if (value.revision !== undefined) {
+          if (!isRecord(value.revision)) break;
+          const { revision, createdAt, approved, ...module } = value.revision;
+          if (
+            !validRevision(revision) ||
+            typeof createdAt !== 'number' ||
+            (approved !== undefined && typeof approved !== 'boolean')
+          )
+            break;
+          validateActionModule(module);
+        }
+        return;
+      case 'error':
+        if (typeof value.message === 'string') return;
+        break;
+      case 'progress':
+        if (typeof value.text === 'string') return;
+        break;
+      case 'generate':
+      case 'annotation':
+        if (typeof value.callId !== 'number' || !Number.isSafeInteger(value.callId)) break;
+        if (value.type === 'generate') validateActionGenerate(value.request);
+        else validateAnnotationOperation(value.operation);
+        return;
+    }
+  }
+  throw new Error('Action helper returned an invalid event.');
+}
+
+export function validateActionHostResult<T extends ActionHostRequest>(
+  request: T,
+  event: Extract<ActionHostEvent, { type: 'result' }>,
+): asserts event is ActionHostResult<T> {
+  if (
+    request.action === 'run'
+      ? typeof event.text === 'string' && event.revision === undefined
+      : request.action === 'prune'
+        ? event.text === undefined && event.revision === undefined
+        : event.revision !== undefined && event.text === undefined
+  )
+    return;
+  throw new Error('Action helper returned a result for a different operation.');
+}
 
 export function validRevision(v: unknown): v is string {
   return typeof v === 'string' && /^[a-f0-9]{64}$/.test(v);
@@ -102,31 +189,32 @@ export function validateActionHostRequest(v: unknown): asserts v is ActionHostRe
     throw new Error('Choose a local JS or TS file.');
   if (['load', 'run'].includes(v.action) && !validRevision(v.revision))
     throw new Error('Invalid action revision.');
-  if (
-    v.action === 'run' &&
-    (!isRecord(v.source) ||
-      !['title', 'url', 'coverage'].every(
-        (key) => typeof (v.source as Record<string, unknown>)[key] === 'string',
-      ) ||
-      (v.source.annotations !== undefined &&
-        (!Array.isArray(v.source.annotations) ||
-          v.source.annotations.length > 20 ||
-          v.source.annotations.some(
-            (a: unknown) =>
-              !isRecord(a) ||
-              typeof a.id !== 'string' ||
-              typeof a.comment !== 'string' ||
-              typeof a.evidence !== 'string' ||
-              a.evidence.length > 120000,
-          ))) ||
-      (v.source.text !== undefined &&
-        (typeof v.source.text !== 'string' || v.source.text.length > 150_000)) ||
-      (v.source.pdfUrl !== undefined && typeof v.source.pdfUrl !== 'string'))
-  )
-    throw new Error('Invalid captured action source.');
+  if (v.action === 'run') validateActionSource(v.source);
   if (
     v.action === 'prune' &&
     (!Array.isArray(v.protect) || v.protect.length > 100_000 || !v.protect.every(validRevision))
   )
     throw new Error('Invalid retained action revisions.');
+}
+
+export function validateActionSource(source: unknown): asserts source is ActionSource {
+  if (
+    !isRecord(source) ||
+    !['title', 'url', 'coverage'].every((key) => typeof source[key] === 'string') ||
+    (source.annotations !== undefined &&
+      (!Array.isArray(source.annotations) ||
+        source.annotations.length > 20 ||
+        source.annotations.some(
+          (a: unknown) =>
+            !isRecord(a) ||
+            typeof a.id !== 'string' ||
+            typeof a.comment !== 'string' ||
+            typeof a.evidence !== 'string' ||
+            a.evidence.length > 120000,
+        ))) ||
+    (source.text !== undefined &&
+      (typeof source.text !== 'string' || source.text.length > 150_000)) ||
+    (source.pdfUrl !== undefined && typeof source.pdfUrl !== 'string')
+  )
+    throw new Error('Invalid captured action source.');
 }

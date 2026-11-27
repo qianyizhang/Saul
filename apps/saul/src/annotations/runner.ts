@@ -13,7 +13,7 @@ import {
 import type { DbCall } from '../../shared/protocol/history-types.ts';
 import type { PreparedModel } from '../configuration/resolver';
 import { streamModel } from '../providers/stream';
-import { actionHost } from '../custom-actions/host-client';
+import { actionHost, type ActionRunHost } from '../custom-actions/host-client';
 
 export type AnnotationRunRequest =
   | {
@@ -66,7 +66,7 @@ export class AnnotationRunner {
   constructor(
     private db: DbCall,
     private model = streamModel,
-    private script = actionHost,
+    private script: ActionRunHost = actionHost,
     private changed: (url: string) => void = () => undefined,
   ) {
     void this.recover().catch(() => undefined);

@@ -7,6 +7,9 @@ import { ActionRuntime } from '../action-runtime.mts';
 import {
   ACTION_IDLE_MS,
   validateActionHostRequest,
+  isActionCallback,
+  type ActionHostResult,
+  type ActionNativeEvent,
   type ActionHostEvent,
 } from '../../shared/protocol/action-protocol.mts';
 
@@ -25,7 +28,7 @@ const resetIdle = () => {
   if (!running.size) idle = setTimeout(shutdown, ACTION_IDLE_MS);
 };
 const send = (id: string, event: ActionHostEvent) =>
-  process.stdout.write(encodeNative({ id, event }));
+  process.stdout.write(encodeNative({ id, event } satisfies ActionNativeEvent));
 const decode = nativeDecoder((message) => {
   if (!isRecord(message) || typeof message.id !== 'string' || message.id.length > 128)
     throw new Error('Invalid request ID.');
@@ -36,15 +39,8 @@ const decode = nativeDecoder((message) => {
   }
   if (message.callId !== undefined) {
     const revision = running.get(id)?.revision;
-    if (
-      revision &&
-      Number.isSafeInteger(message.callId) &&
-      (typeof message.text === 'string' || typeof message.error === 'string')
-    )
-      void runtime.reply(revision, id, message.callId as number, {
-        text: typeof message.text === 'string' ? message.text : undefined,
-        error: typeof message.error === 'string' ? message.error : undefined,
-      });
+    if (revision && isActionCallback(message))
+      void runtime.reply(revision, id, message.callId, message);
     return;
   }
   try {
@@ -67,14 +63,23 @@ const decode = nativeDecoder((message) => {
   void (async (): Promise<ActionHostEvent> => {
     switch (request.action) {
       case 'stage':
-        return { type: 'result', revision: await store.stage(request.module) };
+        return {
+          type: 'result',
+          revision: await store.stage(request.module),
+        } satisfies ActionHostResult<typeof request>;
       case 'file':
-        return { type: 'result', revision: await store.file(request.path) };
+        return {
+          type: 'result',
+          revision: await store.file(request.path),
+        } satisfies ActionHostResult<typeof request>;
       case 'load':
-        return { type: 'result', revision: await runtime.load(request.revision) };
+        return {
+          type: 'result',
+          revision: await runtime.load(request.revision),
+        } satisfies ActionHostResult<typeof request>;
       case 'prune':
         await runtime.prune(request.protect);
-        return { type: 'result' };
+        return { type: 'result' } satisfies ActionHostResult<typeof request>;
       case 'run':
         return {
           type: 'result',
@@ -85,7 +90,7 @@ const decode = nativeDecoder((message) => {
             (e) => send(id, e),
             controller.signal,
           ),
-        };
+        } satisfies ActionHostResult<typeof request>;
     }
   })()
     .then(
