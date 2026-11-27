@@ -320,6 +320,9 @@ export const TOOL_OPERATIONS = {
   },
 } as const;
 export type ToolName = keyof typeof TOOL_OPERATIONS;
+export function isToolName(name: string): name is ToolName {
+  return Object.hasOwn(TOOL_OPERATIONS, name);
+}
 type Arguments<Schema extends z.ZodType> = keyof z.output<Schema> extends never
   ? Record<string, never>
   : z.output<Schema>;
@@ -328,7 +331,7 @@ export type ToolResults = { [K in ToolName]: z.infer<(typeof TOOL_OPERATIONS)[K]
 export type BrowserTool = Exclude<ToolName, 'saul_sessions'>;
 export type ToolCaller = <K extends ToolName>(
   name: K,
-  args?: ToolArgs[K],
+  args?: ToolArgs[NoInfer<K>],
 ) => Promise<ToolResults[K]>;
 
 const names = Object.keys(TOOL_OPERATIONS) as ToolName[];
@@ -358,8 +361,8 @@ export const CLI_COMMANDS = Object.freeze(
 export function validateCall<K extends ToolName>(name: K, args?: unknown): ToolArgs[K];
 export function validateCall(name: string, args?: unknown): ToolArgs[ToolName];
 export function validateCall(name: string, args: unknown = {}): ToolArgs[ToolName] {
-  if (!Object.hasOwn(TOOL_OPERATIONS, name)) throw new Error(`Unknown tool: ${name}`);
-  const operation = TOOL_OPERATIONS[name as ToolName];
+  if (!isToolName(name)) throw new Error(`Unknown tool: ${name}`);
+  const operation = TOOL_OPERATIONS[name];
   const parsed = parseArguments(operation.input, args, name);
   return 'normalize' in operation
     ? operation.normalize(parsed as ToolArgs['saul_annotations'])

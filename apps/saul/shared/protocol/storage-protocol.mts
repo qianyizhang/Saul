@@ -1,3 +1,5 @@
+import type { DbOperations, DbType } from './history-types.ts';
+import type { HistoryRequestFor } from './history-protocol.mts';
 import {
   validateHistoryRequest,
   validateHistoryResult,
@@ -55,7 +57,9 @@ export interface StorageResults {
 }
 export type StorageResult<T extends StorageHelperRequest = StorageHelperRequest> = {
   type: 'result';
-} & StorageResults[T['action']];
+} & (T extends { action: 'history'; request: HistoryRequestFor<infer K extends DbType> }
+  ? { value: DbOperations[K]['result'] | null; revision?: number }
+  : StorageResults[T['action']]);
 export type StorageEvent = StorageResult | { type: 'error'; message: string };
 
 export const STORAGE_HOST = 'com.saul.chatgpt'; // Stable installed identity.

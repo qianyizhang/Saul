@@ -2,14 +2,15 @@ import {
   STORAGE_PORT,
   validateStorageResult,
   type StorageHelperRequest,
+  type StorageResult,
 } from '../../shared/protocol/storage-protocol.mts';
 import { isRecord } from '../../shared/model/value.mts';
 import { StorageDisconnected } from './storage-connection';
 
 /** Offscreen storage access. Configuration writes run directly in the background. */
-export async function requestHistory(
-  request: Extract<StorageHelperRequest, { action: 'history' }>,
-) {
+export async function requestHistory<
+  T extends Extract<StorageHelperRequest, { action: 'history' }>,
+>(request: T): Promise<StorageResult<T>['value']> {
   const port = chrome.runtime.connect({ name: STORAGE_PORT });
   try {
     return await new Promise((resolve, reject) => {

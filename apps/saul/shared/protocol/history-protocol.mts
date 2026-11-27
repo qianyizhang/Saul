@@ -556,30 +556,40 @@ function featureOperation(command: HistoryRequest['command']) {
   return { message: { type, payload } as DbRequest, operation, targets };
 }
 
+declare const historyOperation: unique symbol;
+export type HistoryRequestFor<K extends DbType> = HistoryRequest & {
+  readonly [historyOperation]: K;
+};
+
+export function createHistoryRequest<K extends DbType>(
+  owner: string,
+  operationId: string,
+  message: DbRequest<K>,
+): HistoryRequestFor<K>;
 export function createHistoryRequest(
   owner: string,
   operationId: string,
-  message: DbRequest,
+  dbMessage: DbRequest,
 ): HistoryRequest {
   let command: HistoryRequest['command'];
-  switch (message.type) {
+  switch (dbMessage.type) {
     case 'DB_CLEAR_HISTORY':
-      command = LIFE[message.type];
+      command = LIFE[dbMessage.type];
       break;
     case 'DB_DIGEST_DELETE':
-      command = { kind: 'mask', target: { collection: 'calls', id: message.payload.id } };
+      command = { kind: 'mask', target: { collection: 'calls', id: dbMessage.payload.id } };
       break;
     case 'DB_DELETE_SELECTION':
     case 'DB_RESTORE_SELECTION':
     case 'DB_PURGE_SELECTION':
       command = {
-        kind: LIFE[message.type].kind,
-        target: { collection: 'library', id: message.payload.selectionId },
-        expectedRevision: message.payload.expectedRevision,
+        kind: LIFE[dbMessage.type].kind,
+        target: { collection: 'library', id: dbMessage.payload.selectionId },
+        expectedRevision: dbMessage.payload.expectedRevision,
       };
       break;
     case 'DB_SET_BOOKMARK': {
-      const { expectedRevision, ...input } = message.payload;
+      const { expectedRevision, ...input } = dbMessage.payload;
       command = {
         kind: 'commit',
         change: OPERATIONS.DB_SET_BOOKMARK.name,
@@ -590,12 +600,12 @@ export function createHistoryRequest(
       break;
     }
     default: {
-      const operation = OPERATIONS[message.type];
-      const { kind, name } = annotationRead(message.type, message.payload) ?? operation;
+      const operation = OPERATIONS[dbMessage.type];
+      const { kind, name } = annotationRead(dbMessage.type, dbMessage.payload) ?? operation;
       command =
         kind === 'commit'
-          ? { kind, change: name, input: message.payload }
-          : { kind, view: name, ...projectedQuery(message) };
+          ? { kind, change: name, input: dbMessage.payload }
+          : { kind, view: name, ...projectedQuery(dbMessage) };
     }
   }
   return { operation: 'history', owner, operationId, command };

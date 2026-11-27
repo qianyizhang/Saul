@@ -3,6 +3,10 @@ import {
   CREDENTIALS_VERSION,
   CREDENTIALS_PORT,
   validateCredentialEvent,
+  validateCredentialResult,
+  type CredentialResult,
+  type CredentialResultRequest,
+  type NativeCredentialEnvelope,
   validateCredentialRequest,
   type CredentialRequest,
   type CredentialEvent,
@@ -38,7 +42,11 @@ export async function* credentialEvents(
     ended = true;
     wake();
     try {
-      port.postMessage(id ? { version: CREDENTIALS_VERSION, id, cancel: true } : { cancel: true });
+      port.postMessage(
+        id
+          ? ({ version: CREDENTIALS_VERSION, id, cancel: true } satisfies NativeCredentialEnvelope)
+          : { cancel: true },
+      );
     } catch {
       /* Disconnected. */
     }
@@ -78,7 +86,11 @@ export async function* credentialEvents(
   });
   signal?.addEventListener('abort', abort, { once: true });
   try {
-    port.postMessage(id ? { version: CREDENTIALS_VERSION, id, request } : request);
+    port.postMessage(
+      id
+        ? ({ version: CREDENTIALS_VERSION, id, request } satisfies NativeCredentialEnvelope)
+        : request,
+    );
     while (!ended) {
       if (!queue.length)
         await new Promise<void>((resolve) => {
@@ -97,44 +109,43 @@ export async function* credentialEvents(
     port.disconnect();
   }
 }
-export async function credentialCall(
-  request: CredentialRequest,
+export async function credentialCall<T extends CredentialResultRequest>(
+  request: T,
   signal?: AbortSignal,
-): Promise<Record<string, unknown>> {
-  for await (const event of credentialEvents(request, signal))
-    if (event.type === 'result') return event;
+): Promise<CredentialResult<T>> {
+  for await (const event of credentialEvents(request, signal)) {
+    if (event.type === 'result') {
+      validateCredentialResult(request, event);
+      return event;
+    }
+  }
   throw new Error('Saul returned no credential result.');
 }
 
 /** Background-only control route. It cannot start sign-in, generation or return a long-lived secret. */
-export async function nativeCredentialCall(
-  request: Exclude<
-    CredentialRequest,
-    {
-      action:
-        | 'login'
-        | 'generate'
-        | 'api-chat'
-        | 'api-realtime'
-        | 'api-image'
-        | 'connection-run-hold'
-        | 'connection-setup-hold';
-    }
-  >,
-): Promise<Record<string, unknown>> {
+type NativeCredentialRequest = Exclude<
+  CredentialResultRequest,
+  {
+    action: 'login' | 'api-realtime' | 'api-image';
+  }
+>;
+export async function nativeCredentialCall<T extends NativeCredentialRequest>(
+  request: T,
+): Promise<CredentialResult<T>> {
   validateCredentialRequest(request);
   const id = crypto.randomUUID();
   const port = chrome.runtime.connectNative(CREDENTIALS_HOST);
   return new Promise((resolve, reject) => {
     let ended = false;
     const fragments = new Fragments();
-    const finish = (error?: Error, value?: Record<string, unknown>) => {
+    const finish = (error?: Error, value?: CredentialResult<T>) => {
       if (ended) return;
       ended = true;
       clearTimeout(timer);
       port.disconnect();
       if (error) reject(error);
-      else resolve(value ?? {});
+      else if (value) resolve(value);
+      else reject(new Error('Saul returned no credential result.'));
     };
     const timer = setTimeout(
       () => finish(new Error('Saul credential operation timed out. Reload before retrying.')),
@@ -159,14 +170,20 @@ export async function nativeCredentialCall(
         validateCredentialEvent(reply.event);
         if (reply.event.type === 'error')
           finish(new CredentialRequestError(reply.event.message, reply.event.reason));
-        else if (reply.event.type === 'result') finish(undefined, reply.event);
-        else finish(new Error('Unexpected credential control reply.'));
+        else if (reply.event.type === 'result') {
+          validateCredentialResult(request, reply.event);
+          finish(undefined, reply.event);
+        } else finish(new Error('Unexpected credential control reply.'));
       } catch (error) {
         finish(error instanceof Error ? error : new Error('Invalid credential reply.'));
       }
     });
     try {
-      port.postMessage({ version: CREDENTIALS_VERSION, id, request });
+      port.postMessage({
+        version: CREDENTIALS_VERSION,
+        id,
+        request,
+      } satisfies NativeCredentialEnvelope);
     } catch (error) {
       finish(error instanceof Error ? error : new Error('Cannot connect to Saul credentials.'));
     }
@@ -208,7 +225,11 @@ export function initCredentialBridge() {
     const cancel = () => {
       if (closed) return;
       try {
-        native?.postMessage({ version: CREDENTIALS_VERSION, id, cancel: true });
+        native?.postMessage({
+          version: CREDENTIALS_VERSION,
+          id,
+          cancel: true,
+        } satisfies NativeCredentialEnvelope);
       } catch {
         /* Disconnected. */
       }
@@ -291,7 +312,11 @@ export function initCredentialBridge() {
           timer = setTimeout(
             () => {
               try {
-                native?.postMessage({ version: CREDENTIALS_VERSION, id, cancel: true });
+                native?.postMessage({
+                  version: CREDENTIALS_VERSION,
+                  id,
+                  cancel: true,
+                } satisfies NativeCredentialEnvelope);
               } catch {
                 /* Disconnected. */
               }
@@ -303,7 +328,11 @@ export function initCredentialBridge() {
             login ? 320_000 : 190_000,
           );
         }
-        native.postMessage({ version: CREDENTIALS_VERSION, id, request: message });
+        native.postMessage({
+          version: CREDENTIALS_VERSION,
+          id,
+          request: message,
+        } satisfies NativeCredentialEnvelope);
       } catch (error) {
         finish({
           type: 'error',

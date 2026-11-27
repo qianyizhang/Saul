@@ -3,10 +3,16 @@ import {
   validConnectionKey,
   validConnectionReservation,
   validConnectionToken,
+  type ConnectionReservation,
 } from './connection-coordination.mts';
 import { validVisionImages } from './vision.mts';
 import { isRecord } from '../model/value.mts';
-import { validConnectionCatalog, validConnectionStatus } from './connections-contract.mts';
+import {
+  validConnectionCatalog,
+  validConnectionStatus,
+  type ConnectionCatalog,
+  type ConnectionStatus,
+} from './connections-contract.mts';
 import {
   validConnectionEndpoint,
   validImageSize,
@@ -21,6 +27,7 @@ import {
   validPlanModels,
   validSuggestedAppName,
   type PlanRequest,
+  type PlanResults,
 } from './credential-plan.mts';
 
 export const CREDENTIALS_VERSION = 2;
@@ -97,15 +104,78 @@ export type CredentialRequest =
       quality: string;
       outputFormat: 'png' | 'gif';
     };
+type CredentialSummary = PlanResults['accounts'] & {
+  apiConnected?: boolean;
+  selectedAccountId?: string;
+};
+type CredentialResults = PlanResults & {
+  status: Partial<CredentialSummary>;
+  select: CredentialSummary;
+  'api-key-status': { apiConnected: boolean };
+  'api-key-save': { apiConnected: boolean };
+  'api-key-remove': { apiConnected: boolean };
+  'connection-capabilities': { connectionCoordination: 1 };
+  'connection-setups': { connectionSetups: ConnectionReservation[] };
+  'connection-setup-release': Record<never, never>;
+  'confirm-app-name': Record<never, never>;
+  'connection-status': { connection: ConnectionStatus };
+  'connection-catalog': { catalog: ConnectionCatalog };
+  'connection-key-save': { connection: ConnectionStatus };
+  'connection-key-remove': { connection: ConnectionStatus };
+  'connection-key-status': { connection: ConnectionStatus };
+  'api-realtime': { clientSecret: string };
+  'api-image': { imageBase64: string };
+};
+type CredentialResultEvent = { type: 'result'; [key: string]: unknown };
+export type CredentialResultRequest = CredentialRequest & { action: keyof CredentialResults };
+export type CredentialResult<T extends CredentialResultRequest> = CredentialResultEvent &
+  CredentialResults[T['action']];
+export type NativeCredentialEnvelope = { version: typeof CREDENTIALS_VERSION; id: string } & (
+  { request: CredentialRequest } | { cancel: true }
+);
+
 export type CredentialEvent =
   | { type: 'connection-held'; token: string; generation?: never }
   | { type: 'connection-held'; generation: string; token?: never }
   | { type: 'delta'; text: string }
   | { type: 'activity'; phase: 'waiting' | 'thinking' }
   | { type: 'complete' }
-  | { type: 'result'; [key: string]: unknown }
+  | CredentialResultEvent
   | { type: 'authorize'; url: string }
   | { type: 'error'; message: string; reason?: string };
+
+const resultFields = {
+  accounts: 'accounts',
+  login: 'account',
+  logout: 'account',
+  models: 'models',
+  status: undefined, // Older helpers only guaranteed a successful status acknowledgement.
+  select: 'accounts',
+  'api-key-status': 'apiConnected',
+  'api-key-save': 'apiConnected',
+  'api-key-remove': 'apiConnected',
+  'connection-capabilities': 'connectionCoordination',
+  'connection-setups': 'connectionSetups',
+  'connection-setup-release': undefined,
+  'confirm-app-name': undefined,
+  'connection-status': 'connection',
+  'connection-catalog': 'catalog',
+  'connection-key-save': 'connection',
+  'connection-key-remove': 'connection',
+  'connection-key-status': 'connection',
+  'api-realtime': 'clientSecret',
+  'api-image': 'imageBase64',
+} satisfies { [K in keyof CredentialResults]: keyof CredentialResults[K] | undefined };
+
+/** The event decoder checks field shapes. Check the result belongs to this operation. */
+export function validateCredentialResult<T extends CredentialResultRequest>(
+  request: T,
+  event: CredentialResultEvent,
+): asserts event is CredentialResult<T> {
+  const field = resultFields[request.action];
+  if (field !== undefined && event[field] === undefined)
+    throw new Error('Saul returned an invalid credential result for this operation.');
+}
 
 const text = (value: unknown, max: number, empty = false): value is string =>
   typeof value === 'string' && (empty || value.length > 0) && value.length <= max;

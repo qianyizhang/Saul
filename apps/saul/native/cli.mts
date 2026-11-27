@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { CLI_COMMANDS, TOOL_OPERATIONS, TOOLS } from '../shared/protocol/protocol.mts';
-import { callTool } from './client.mts';
+import { callToolFromInput } from './client.mts';
 import { errorMessage } from './transport.mts';
 
 const helpFlags = ['help', '--help', '-h'];
@@ -99,7 +99,7 @@ try {
   else {
     const tool = publicCommand(command);
     if (!tool) throw new Error(`Unknown command: ${command}. Run saul help.`);
-    const result = await callTool(tool.name, argumentsForCommand());
+    const result = await callToolFromInput(tool.name, argumentsForCommand());
     console.log(JSON.stringify(result, null, 2));
   }
 } catch (error) {

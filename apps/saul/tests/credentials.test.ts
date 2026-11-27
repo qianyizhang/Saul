@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { initCredentialBridge } from '../src/native/credentials';
+import { initCredentialBridge, nativeCredentialCall } from '../src/native/credentials';
 import {
   validateCredentialEvent,
   validateCredentialRequest,
@@ -159,6 +159,19 @@ function harness() {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
+});
+it('checks a correlated credential reply against the requested operation', async () => {
+  const h = harness();
+  const confirmation = nativeCredentialCall({ action: 'connection-capabilities' });
+  const [{ id }] = h.native.postMessage.mock.calls[0]!;
+  h.emit({ id, event: { type: 'result', connectionCoordination: 1 } });
+  await expect(confirmation).resolves.toMatchObject({ connectionCoordination: 1 });
+
+  const next = harness();
+  const mismatch = nativeCredentialCall({ action: 'connection-setups' });
+  const [{ id: nextId }] = next.native.postMessage.mock.calls[0]!;
+  next.emit({ id: nextId, event: { type: 'result', connectionCoordination: 1 } });
+  await expect(mismatch).rejects.toThrow('invalid credential result for this operation');
 });
 it('denies page callers and credential operations from the offscreen runner', () => {
   const h = harness();

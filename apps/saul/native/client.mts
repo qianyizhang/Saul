@@ -9,7 +9,7 @@ import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { runtimeDirectory, lineDecoder } from './transport.mts';
-import { validateCall } from '../shared/protocol/protocol.mts';
+import { isToolName, validateCall } from '../shared/protocol/protocol.mts';
 import { MAX_MESSAGE } from '../shared/protocol/native-messaging.mts';
 import { createWindowNames, withWindowNames } from './window-names.mts';
 
@@ -97,11 +97,25 @@ export async function sessions() {
   );
   return results.filter((value) => value !== null);
 }
-export function callTool<K extends ToolName>(name: K, args?: ToolArgs[K]): Promise<ToolResults[K]>;
-export function callTool(name: string, args?: unknown): Promise<unknown>;
-export async function callTool(name: string, input: unknown = {}): Promise<unknown> {
+export function callTool<K extends ToolName>(
+  name: K,
+  args?: ToolArgs[NoInfer<K>],
+): Promise<ToolResults[K]> {
+  return invokeTool(name, args);
+}
+
+export async function callToolFromInput(name: string, args?: unknown) {
+  if (!isToolName(name)) throw new Error(`Unknown tool: ${name}`);
+  return invokeTool(name, args);
+}
+
+async function invokeTool<K extends ToolName>(
+  name: K,
+  input: unknown = {},
+): Promise<ToolResults[K]> {
   const args = validateCall(name, input);
-  if (name === 'saul_sessions') return { sessions: await sessions() };
+  if (name === 'saul_sessions')
+    return validateToolResult(name, { sessions: await sessions() }, args);
   let session = 'session' in args ? args.session : undefined;
   if (!session) {
     const active = await sessions();
@@ -118,7 +132,7 @@ export async function callTool(name: string, input: unknown = {}): Promise<unkno
   const params: Record<string, unknown> = { ...args };
   delete params.session;
   if (!['saul_tabs_list', 'saul_windows_label'].includes(name))
-    return validateToolResult(name as ToolName, await request(session, name, params), args);
+    return validateToolResult(name, await request(session, name, params), args);
   const connected = await request(session, '__ping');
   if (!isSession(connected)) throw new Error('Invalid bridge session');
   let names = nativeNames.get(session);
@@ -131,5 +145,5 @@ export async function callTool(name: string, input: unknown = {}): Promise<unkno
     name,
     params,
   );
-  return validateToolResult(name as ToolName, value);
+  return validateToolResult(name, value);
 }

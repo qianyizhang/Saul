@@ -39,16 +39,16 @@ type Context = { generation: number; session?: string; observing?: boolean };
 export type BoardManualCommand =
   | [
       name: 'saul_workspace_edit',
-      args: Omit<AppArgs['saul_workspace_edit'], 'session' | 'interactionToken' | 'revision'> &
-        Partial<Pick<AppArgs['saul_workspace_edit'], 'revision'>>,
+      args: Omit<AppArgs['saul_workspace_edit'], 'session' | 'interactionToken'>,
     ]
+  | [name: 'saul_workspace_undo' | 'saul_workspace_discard']
   | [
-      name: 'saul_workspace_undo' | 'saul_workspace_discard' | 'saul_workspace_summarize',
-      args?: { tabIds?: number[]; id?: string },
+      name: 'saul_workspace_summarize',
+      args: Omit<AppArgs['saul_workspace_summarize'], 'session' | 'interactionToken'>,
     ];
 
 export function createBoardSession(deps: {
-  call: (name: keyof AppArgs, args: Record<string, unknown>) => Promise<CallToolResult>;
+  call: <K extends keyof AppArgs>(name: K, args: AppArgs[NoInfer<K>]) => Promise<CallToolResult>;
   changed: () => void;
   status: (message: string, error?: boolean) => void;
   onSessionChange: () => void;
@@ -178,7 +178,7 @@ export function createBoardSession(deps: {
     await refresh();
   }
 
-  async function manual(...[name, args = {}]: BoardManualCommand) {
+  async function manual(...[name, args]: BoardManualCommand) {
     const owner = context();
     if (
       !state.ready ||
@@ -193,7 +193,13 @@ export function createBoardSession(deps: {
     publish({ busy: true });
     deps.status('');
     try {
-      const result = await deps.call(name, { ...args, session: owner.session, interactionToken });
+      const scope = { session: owner.session, interactionToken };
+      const result =
+        name === 'saul_workspace_edit'
+          ? await deps.call(name, { ...args, ...scope })
+          : name === 'saul_workspace_summarize'
+            ? await deps.call(name, { ...args, ...scope })
+            : await deps.call(name, scope);
       return receive(result, owner);
     } catch (cause) {
       if (!current(owner)) return false;

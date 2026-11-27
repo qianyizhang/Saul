@@ -234,8 +234,9 @@ async function moveTab(
     beforeId = data.snapshot.tabs
       .filter((t) => t.groupId === groupId)
       .sort((a, b) => a.index - b.index)[0]?.id;
+  if (!data?.revision) return;
   await manual('saul_workspace_edit', {
-    revision: data?.revision,
+    revision: data.revision,
     kind: sourceGroupId !== undefined ? 'moveGroup' : 'move',
     ...(sourceGroupId !== undefined
       ? { groupId: sourceGroupId }
@@ -961,8 +962,10 @@ $('create-group').onclick = (event) => {
   event.preventDefault();
   if (!$('group-title').value.trim()) return $('group-title').focus();
   if (!$('group-window').value) return $('group-window').focus();
+  const revision = board.state.data?.revision;
+  if (!revision) return;
   void manual('saul_workspace_edit', {
-    revision: board.state.data?.revision,
+    revision,
     kind: 'group',
     tabIds: selectedIds(),
     windowId: Number($('group-window').value),
@@ -977,9 +980,10 @@ $('group-title').onkeydown = (event) => {
   }
 };
 $('existing-group').onchange = () => {
-  if ($('existing-group').value)
+  const revision = board.state.data?.revision;
+  if (revision && $('existing-group').value)
     void manual('saul_workspace_edit', {
-      revision: board.state.data?.revision,
+      revision,
       kind: 'group',
       tabIds: selectedIds(),
       groupId: Number($('existing-group').value),

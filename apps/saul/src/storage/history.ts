@@ -3,8 +3,9 @@ import {
   createHistoryRequest,
   historyRequestPolicy,
   type HistoryRequest,
+  type HistoryRequestFor,
 } from '../../shared/protocol/history-protocol.mts';
-import type { DbCall, DbRequest } from '../../shared/protocol/history-types.ts';
+import type { DbOperations, DbRequest, DbType } from '../../shared/protocol/history-types.ts';
 import { requestHistory } from '../native/storage-client';
 import { StorageDisconnected } from '../native/storage-connection';
 
@@ -24,6 +25,10 @@ function profileOwner(): Promise<string> {
     }));
 }
 
+export function historyCall<K extends DbType>(
+  request: HistoryRequestFor<K>,
+): Promise<DbOperations[K]['result'] | null>;
+export function historyCall(request: HistoryRequest): Promise<unknown>;
 export async function historyCall(request: HistoryRequest): Promise<unknown> {
   const policy = historyRequestPolicy(request);
   for (let attempt = 0; ; attempt++) {
@@ -42,12 +47,12 @@ export async function historyCall(request: HistoryRequest): Promise<unknown> {
   }
 }
 
-export const sharedDb: DbCall = async (message) => {
-  const request = createHistoryRequest(
-    await profileOwner(),
-    crypto.randomUUID(),
-    message as DbRequest,
-  );
+export async function sharedDb<K extends DbType>(
+  message: DbRequest<K>,
+): Promise<DbOperations[K]['result']> {
+  const request = createHistoryRequest(await profileOwner(), crypto.randomUUID(), message);
   const value = await historyCall(request);
-  return (value === null ? undefined : value) as never;
-};
+  // The native wire uses null for a missing result. Its operation decoder
+  // already verified the value against the result schema before it reached here.
+  return (value === null ? undefined : value) as DbOperations[K]['result'];
+}

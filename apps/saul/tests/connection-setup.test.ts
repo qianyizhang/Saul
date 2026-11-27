@@ -15,7 +15,10 @@ import {
   type ConnectionSetup,
 } from '../src/connections/setup';
 import { holdConnection } from '../src/connections/credential-hold';
-import type { CredentialRequest } from '../shared/protocol/credentials-contract.mts';
+import {
+  validateCredentialResult,
+  type CredentialRequest,
+} from '../shared/protocol/credentials-contract.mts';
 import type { ConnectionReservation } from '../shared/protocol/connection-coordination.mts';
 import type { ConnectionDefinition } from '../shared/protocol/shared-presets-contract.mts';
 import type { SettingsState } from '../src/settings/contract';
@@ -55,21 +58,32 @@ let keyAvailable: boolean;
 const credential = vi.fn(async (request: CredentialRequest) => {
   switch (request.action) {
     case 'connection-capabilities':
-      return { connectionCoordination: 1 };
+      return { type: 'result' as const, connectionCoordination: 1 as const };
     case 'connection-setups':
-      return { connectionSetups: reservations };
+      return { type: 'result' as const, connectionSetups: reservations };
     case 'connection-setup-release':
       reservations = reservations.filter((row) => row.token !== request.token);
-      return {};
+      return { type: 'result' as const };
     case 'connection-key-save':
       keyAvailable = true;
-      return { connection: { connected: true, endpoint: request.endpoint } };
+      return {
+        type: 'result' as const,
+        connection: { connected: true, endpoint: request.endpoint },
+      };
     case 'connection-key-status':
-      return { connection: { connected: keyAvailable, endpoint: request.endpoint } };
+      return {
+        type: 'result' as const,
+        connection: { connected: keyAvailable, endpoint: request.endpoint },
+      };
     default:
       throw new Error('Unexpected fixture credential operation.');
   }
 });
+const credentialAdapter: typeof nativeCredentialCall = async (request) => {
+  const reply = await credential(request);
+  validateCredentialResult(request, reply);
+  return reply;
+};
 const hold = vi.fn<typeof holdConnection>(async (request) => {
   if (request.action !== 'connection-setup-hold') throw new Error('Wrong hold request.');
   if (request.previousToken && !reservations.some((row) => row.token === request.previousToken))
@@ -98,7 +112,7 @@ const requireSettingsWriter = vi.fn(async () => {});
 const coordinator = new ConnectionSetupCoordinator({
   readSettings: async () => saved,
   requireSettingsWriter,
-  credential,
+  credential: credentialAdapter,
   hold,
   commit,
 });
@@ -115,7 +129,7 @@ beforeEach(() => {
   };
   vi.mocked(requestSettings).mockImplementation(async () => saved);
   vi.mocked(requireConnectionSettings).mockImplementation(requireSettingsWriter);
-  vi.mocked(nativeCredentialCall).mockImplementation(credential);
+  vi.mocked(nativeCredentialCall).mockImplementation(credentialAdapter);
   vi.mocked(holdConnection).mockImplementation(hold);
   const service = createConnectionService(async (request) => {
     const action = request as { action: string; settings: Ready['settings'] };

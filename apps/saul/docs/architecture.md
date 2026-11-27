@@ -59,8 +59,12 @@ The trusted background admits offscreen and database work; offscreen reports
 state back to it. Runtime messages do not return to their sender.
 [Sender checks](../src/platform/chrome/sender.ts) authenticate extension views
 and current main-frame routes. [Offscreen creation](../src/platform/chrome/offscreen.ts)
-locks the existence check and creation together. Feature clients own typed
-requests; [Chrome messaging](../src/platform/chrome/messages.ts) unwraps replies.
+locks the existence check and creation together. Features own the types of
+requests and replies, including variants such as
+[Call capture and verification](../src/calls/messages.ts).
+[Chrome messaging](../src/platform/chrome/messages.ts) unwraps replies.
+The [offscreen runner interface](../src/platform/chrome/runner.ts) uses the
+existing feature result types and admits only the operations it serves.
 Content receives action names and safe choices, never storage or credentials.
 
 | Feature boundary                             | Owner                                                                                                                                                                                                 |

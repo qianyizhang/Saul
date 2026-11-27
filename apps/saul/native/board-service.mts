@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mcpTools } from '../shared/protocol/app-protocol.mts';
 import { createWorkspace } from './workspace.mts';
-import { callTool } from './client.mts';
+import { callToolFromInput } from './client.mts';
 import { errorMessage } from './transport.mts';
 import { validateDiagnosticCall } from '../shared/protocol/diagnostic-protocol.mts';
 import { isRecord } from '../shared/model/value.mts';
@@ -89,9 +89,12 @@ export function createBoardService(options: {
         result = await workspace(name, args);
         if (name === 'saul_workspace_show') result._meta.ui = { resourceUri: options.resourceUri };
       } else {
-        const value = await callTool(name, args);
+        const value = await callToolFromInput(name, args);
         const record =
-          name === 'saul_annotations' && isRecord(value) && isRecord(value.record)
+          name === 'saul_annotations' &&
+          isRecord(value) &&
+          'record' in value &&
+          isRecord(value.record)
             ? value.record
             : undefined;
         const image = record && typeof record.image === 'string' ? record.image : undefined;
