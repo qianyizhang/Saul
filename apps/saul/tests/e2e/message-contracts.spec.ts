@@ -60,7 +60,7 @@ test('the actual offscreen runner accepts a supported read and rejects malformed
   });
   expect(replies).toEqual([
     { success: true, result: 0 },
-    { success: false, error: 'Invalid or unavailable runner operation.' },
+    { success: false, error: 'Unknown workspace storage operation' },
     { success: false, error: 'Invalid or unavailable workspace operation' },
   ]);
 });

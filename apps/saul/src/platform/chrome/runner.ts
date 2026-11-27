@@ -110,12 +110,9 @@ export function validateRunnerRequest(value: unknown): asserts value is RunnerRe
         return;
       case 'db': {
         const command = value.message;
-        if (
-          !isRecord(command) ||
-          typeof command.type !== 'string' ||
-          !runnerDbRoutes.has(command.type)
-        )
-          break;
+        if (!isRecord(command) || typeof command.type !== 'string') break;
+        if (!runnerDbRoutes.has(command.type))
+          throw new Error('Unknown workspace storage operation');
         // The History adapter validates command payloads against the native operation catalogue.
         if (
           command.type === 'DB_DIGEST_GET' &&
