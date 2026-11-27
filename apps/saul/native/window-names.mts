@@ -1,5 +1,6 @@
 import { organizePermission } from '../shared/protocol/local-access.mts';
 import type { TabSnapshot } from '../shared/protocol/protocol.mts';
+import type { WindowNameReply, WindowNameRequest } from './window-name-messages.mts';
 export interface NativeWindowName {
   windowId: number;
   title: string;
@@ -37,13 +38,17 @@ export function createWindowNames({
   ) => Promise<{ stdout: string }>;
 } = {}): WindowNames {
   let supported: boolean | undefined;
-  const available = async () => {
-    if (supported !== undefined) return supported;
-    if (platform !== 'darwin') return false;
+  function connectedPid(): number {
     if (browserPid === undefined || !Number.isSafeInteger(browserPid) || browserPid <= 0)
       throw new Error(
         'Reload Saul in Chrome to restart its native host before using native window names',
       );
+    return browserPid;
+  }
+  const available = async () => {
+    if (supported !== undefined) return supported;
+    if (platform !== 'darwin') return false;
+    const browserPid = connectedPid();
     const { stdout } = await execFile('/bin/ps', ['-p', String(browserPid), '-o', 'comm='], {
       timeout: 3000,
     });
@@ -55,31 +60,45 @@ export function createWindowNames({
   };
   const invoke = async (
     snapshot: TabSnapshot,
-    action: string,
-    updates?: NativeWindowName[],
+    command:
+      | { action: 'read'; updates?: NativeWindowName[] }
+      | { action: 'apply'; updates: NativeWindowName[] },
   ): Promise<NativeWindowName[]> => {
-    const windows = (updates ?? snapshot.windows.map((w) => ({ windowId: w.id }))).map((w) => {
+    const browserPid = connectedPid();
+    const withTabs = <T extends { windowId: number }>(w: T) => {
       if (!snapshot.windows.some((x) => x.id === w.windowId))
         throw new Error('Unknown native-name destination');
       return {
         ...w,
         tabIds: snapshot.tabs.filter((t) => t.windowId === w.windowId).map((t) => t.id),
       };
-    });
+    };
+    const request: WindowNameRequest =
+      command.action === 'apply'
+        ? { browserPid, action: 'apply', windows: command.updates.map(withTabs) }
+        : {
+            browserPid,
+            action: 'read',
+            windows: (command.updates ?? snapshot.windows.map((w) => ({ windowId: w.id }))).map(
+              withTabs,
+            ),
+          };
+    const { windows } = request;
     const { stdout } = await execFile(
       '/usr/bin/osascript',
-      ['-l', 'JavaScript', script, JSON.stringify({ browserPid, action, windows })],
+      ['-l', 'JavaScript', script, JSON.stringify(request)],
       { timeout: 15000, maxBuffer: 1024 * 1024 },
     );
-    const names = JSON.parse(stdout);
+    const names: unknown = JSON.parse(stdout);
     if (
       !Array.isArray(names) ||
       names.length !== windows.length ||
-      names.some(
-        (w, i) =>
-          w.windowId !== windows[i]!.windowId ||
-          typeof w.title !== 'string' ||
-          w.title.length > 1000,
+      !names.every(
+        (w: unknown, i): w is WindowNameReply[number] =>
+          isRecord(w) &&
+          w.windowId === windows[i]!.windowId &&
+          typeof w.title === 'string' &&
+          w.title.length <= 1000,
       )
     )
       throw new Error('Invalid native window-name response');
@@ -101,7 +120,7 @@ export function createWindowNames({
     async read(snapshot) {
       try {
         if (!(await available())) return { status: 'unsupported' };
-        return { status: 'available', windows: await invoke(snapshot, 'read') };
+        return { status: 'available', windows: await invoke(snapshot, { action: 'read' }) };
       } catch (error) {
         return { status: 'unavailable', message: failure(error) };
       }
@@ -109,7 +128,7 @@ export function createWindowNames({
     async apply(snapshot, windows, dryRun = false) {
       if (!(await available())) return;
       try {
-        await invoke(snapshot, dryRun ? 'read' : 'apply', windows);
+        await invoke(snapshot, { action: dryRun ? 'read' : 'apply', updates: windows });
       } catch (error) {
         throw new Error(failure(error), { cause: error });
       }

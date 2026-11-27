@@ -9,14 +9,37 @@ declare function Application(pid: number): {
   running(): boolean;
   windows: { (): ChromeWindow[]; id(): number[]; mode(): string[] };
 };
-interface NameRequest {
-  browserPid: number;
-  action: 'read' | 'apply';
-  windows: { windowId: number; tabIds: number[]; title: string; expectedTitle?: string }[];
+// An inline type import keeps this file a script with a top-level JXA run function.
+type NameRequest = import('./window-name-messages.mts').WindowNameRequest;
+type NameReply = import('./window-name-messages.mts').WindowNameReply;
+function nameRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+function validateNameRequest(value: unknown): asserts value is NameRequest {
+  if (
+    !nameRecord(value) ||
+    typeof value.browserPid !== 'number' ||
+    !Number.isSafeInteger(value.browserPid) ||
+    value.browserPid < 1 ||
+    (value.action !== 'read' && value.action !== 'apply') ||
+    !Array.isArray(value.windows) ||
+    !value.windows.every(
+      (window: unknown) =>
+        nameRecord(window) &&
+        Number.isSafeInteger(window.windowId) &&
+        Array.isArray(window.tabIds) &&
+        window.tabIds.every(Number.isSafeInteger) &&
+        (window.expectedTitle === undefined || typeof window.expectedTitle === 'string') &&
+        (typeof window.title === 'string' ||
+          (value.action === 'read' && window.title === undefined)),
+    )
+  )
+    throw new Error('Invalid native window name request.');
 }
 // All untrusted titles/IDs arrive as JSON data, never script source.
 function run(argv: string[]) {
-  const request: NameRequest = JSON.parse(argv[0]);
+  const request: unknown = JSON.parse(argv[0]);
+  validateNameRequest(request);
   const app = Application(request.browserPid);
   if (!app.running()) throw new Error('Connected Chrome process is no longer running');
   const windows = app.windows();
@@ -52,11 +75,12 @@ function run(argv: string[]) {
   });
   // Validate every destination before writing the first name.
   if (request.action === 'apply')
-    targets.forEach(function (target) {
+    targets.forEach(function (target, index) {
+      const title = request.windows[index].title;
       if (target.window.givenName() !== target.title)
         throw new Error('Native window name changed during apply');
-      target.window.givenName = target.input.title;
-      if (target.window.givenName() !== target.input.title)
+      target.window.givenName = title;
+      if (target.window.givenName() !== title)
         throw new Error('Native window rename could not be verified');
     });
   return JSON.stringify(
@@ -65,6 +89,6 @@ function run(argv: string[]) {
         windowId: target.input.windowId,
         title: request.action === 'apply' ? target.window.givenName() : target.title,
       };
-    }),
+    }) satisfies NameReply,
   );
 }

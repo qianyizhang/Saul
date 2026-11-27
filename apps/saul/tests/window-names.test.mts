@@ -3,6 +3,14 @@ import { validateToolResult } from '../shared/protocol/results.mts';
 import type { TabSnapshot } from '../shared/protocol/protocol.mts';
 import { it, expect, vi } from 'vitest';
 import { createWindowNames, withWindowNames } from '../native/window-names.mts';
+import type { WindowNameRequest } from '../native/window-name-messages.mts';
+
+export function checkWindowNameRequestTypes(windows: { windowId: number; tabIds: number[] }[]) {
+  const read: WindowNameRequest = { browserPid: 123, action: 'read', windows };
+  // @ts-expect-error Writes require a title on every window.
+  const write: WindowNameRequest = { browserPid: 123, action: 'apply', windows };
+  return { read, write };
+}
 
 const snapshot = (): TabSnapshot => ({
   windows: [{ id: 1, title: 'Old', focused: false }],
@@ -30,6 +38,11 @@ it('targets the connected PID and carries quotes, newlines and script-like title
   expect(await names.read(snapshot())).toEqual({
     status: 'available',
     windows: [{ windowId: 1, title: 'Native reading' }],
+  });
+  expect(JSON.parse(execFile.mock.calls.at(-1)![1][3])).toEqual({
+    browserPid: 123,
+    action: 'read',
+    windows: [{ windowId: 1, tabIds: [10] }],
   });
   const title = '研究 "quoted"\n$(touch /tmp/never)';
   await names.apply(snapshot(), [{ windowId: 1, title, expectedTitle: 'Old' }]);
@@ -181,6 +194,16 @@ it('reads native names with linear Apple events and validates every target befor
   expect(result).toHaveLength(50);
   expect(result[49]).toEqual({ windowId: 50, title: 'Window 49' });
   expect(idReads).toBeLessThanOrEqual(50);
+  expect(writes).toBe(0);
+  expect(() =>
+    context.run([
+      JSON.stringify({
+        ...request,
+        action: 'apply',
+        windows: [{ windowId: 1, tabIds: [100] }],
+      }),
+    ]),
+  ).toThrow('Invalid native window name request.');
   expect(writes).toBe(0);
   request.action = 'apply';
   request.windows.forEach((w, i) => {
