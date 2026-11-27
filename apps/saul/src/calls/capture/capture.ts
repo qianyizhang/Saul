@@ -1,5 +1,6 @@
 import { getWindowLabels } from '../../native/window-labels';
-import type { DigestBatch, DigestItem, DigestCapture } from '../../../shared/model/call-batch.ts';
+import type { DigestBatch, DigestCapture } from '../../../shared/model/call-batch.ts';
+import type { CaptureTabSource } from '../messages';
 
 export type CallSources = Pick<DigestBatch, 'windowId' | 'windowTitle' | 'items'>;
 export async function readCallSources(tabIds: number[]): Promise<CallSources> {
@@ -71,14 +72,14 @@ export function extractPage(expectedUrl: string): DigestCapture {
     coverage: `Visible ${root === document.body ? 'page' : 'article'} text and loaded discussion only; no video or audio content, linked pages, images, collapsed or unloaded content.${truncated ? ' Limited to the first 120,000 characters.' : ''}`,
   };
 }
-export async function verifyCaptureTab(item: DigestItem): Promise<void> {
+export async function verifyCaptureTab(item: CaptureTabSource): Promise<void> {
   const tab = await chrome.tabs.get(item.tabId);
   if (tab.incognito || tab.url !== item.url || !/^https?:\/\//.test(item.url))
     throw new Error('Source tab changed or is unavailable. Start a new summary.');
   if (tab.discarded || tab.status !== 'complete')
     throw new Error('Tab is unloaded or still loading. Load it, then retry.');
 }
-export async function captureTab(item: DigestItem): Promise<DigestCapture> {
+export async function captureTab(item: CaptureTabSource): Promise<DigestCapture> {
   await verifyCaptureTab(item);
   const pdf = { pdf: { url: item.url, title: item.title } };
   if (/\.pdf$/i.test(new URL(item.url).pathname)) return pdf;

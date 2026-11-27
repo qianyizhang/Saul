@@ -4,6 +4,13 @@ import { createCustomActionStore } from '../src/custom-actions/store';
 import { legacySummaryPreset } from '../src/calls/choice-migration';
 import { captureTab, verifyCaptureTab } from '../src/calls/capture/capture';
 import { validateCallControl, validateCallLaunch } from '../src/calls/batch-messages';
+import {
+  CALL_LAUNCH,
+  DIGEST_CAPTURE,
+  validateDigestCapture,
+  type CallLaunchReply,
+  type DigestCaptureHandlers,
+} from '../src/calls/messages';
 import { createCallAdmission, retryCallCredential } from '../src/calls/admission';
 import { initSummaryActions } from '../src/calls/summary-actions';
 import { pendingPanelCallKey, summaryPanelKey } from '../src/calls/panel-route';
@@ -62,6 +69,12 @@ async function currentSettings() {
   if (result.state !== 'ready') throw new Error(result.error);
   return result.settings;
 }
+async function handleCallLaunch(message: unknown): Promise<CallLaunchReply> {
+  validateCallLaunch(message);
+  return launchCall(message);
+}
+const captureHandlers: DigestCaptureHandlers = { capture: captureTab, verify: verifyCaptureTab };
+
 export default defineBackground(() => {
   initSummaryActions();
   initDeepDives();
@@ -82,10 +95,10 @@ export default defineBackground(() => {
     if (
       ![
         'saul-digest',
-        'saul-call-launch',
+        CALL_LAUNCH,
         'saul-action',
         'saul-call-editor',
-        'saul-digest-capture',
+        DIGEST_CAPTURE,
         'saul-settings',
         'saul-connection',
         'saul-credential-mode',
@@ -117,9 +130,13 @@ export default defineBackground(() => {
             throw new Error('Invalid Call storage request.');
         }
       }
-      if (request.target === 'saul-digest-capture') {
+      if (request.target === DIGEST_CAPTURE) {
         if (!offscreenSender(sender)) throw new Error('Runner only');
-        return request.verifyOnly ? verifyCaptureTab(request.item) : captureTab(request.item);
+        const capture: unknown = request;
+        validateDigestCapture(capture);
+        return capture.verifyOnly
+          ? captureHandlers.verify(capture.item)
+          : captureHandlers.capture(capture.item);
       }
       if (!workspaceSender(sender)) throw new Error('Extension workspace only');
       if (request.target === 'saul-settings') return settings(request.message);
@@ -128,9 +145,8 @@ export default defineBackground(() => {
         validateCallEditRequest(request.message);
         return runnerRequest({ operation: 'action', message: request.message });
       }
-      if (request.target === 'saul-call-launch') {
-        validateCallLaunch(request.message);
-        return launchCall(request.message);
+      if (request.target === CALL_LAUNCH) {
+        return handleCallLaunch(request.message);
       }
       if (request.target === 'saul-digest') {
         validateCallControl(request.message);

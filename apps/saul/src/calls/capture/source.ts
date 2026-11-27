@@ -1,24 +1,16 @@
-import type { Reply } from '../../../shared/protocol/history-types.ts';
-import type {
-  DigestCapture,
-  DigestItem,
-  DigestSource,
-  PdfProcessing,
-} from '../../../shared/model/call-batch.ts';
+import type { DigestItem, DigestSource, PdfProcessing } from '../../../shared/model/call-batch.ts';
 import { validPdfUrlAttachment } from '../../../shared/protocol/credential-plan.mts';
+import { request } from '../../platform/chrome/messages';
+import { DIGEST_CAPTURE, type DigestCaptureMessage, type DigestCaptureReply } from '../messages';
 import { extractPdf } from './pdf';
 import { captureWait } from './capture-wait';
 
 export const CAPTURE_TIMEOUT_MS = 30_000;
 
-async function backgroundCapture(item: DigestItem, verifyOnly = false) {
-  const reply: Reply<DigestCapture | undefined> = await chrome.runtime.sendMessage({
-    target: 'saul-digest-capture',
-    item,
-    verifyOnly,
-  });
-  if (!reply?.success) throw new Error(reply?.error || 'Capture failed.');
-  return reply.result;
+export function requestDigestCapture<T extends DigestCaptureMessage>(
+  message: T,
+): Promise<DigestCaptureReply<T>> {
+  return request(message, 'Capture failed.');
 }
 
 // Runs in the existing offscreen document, never in the PDF viewer or service worker.
@@ -31,7 +23,10 @@ export async function captureSummarySource(
   const signal = stop ? AbortSignal.any([stop, timeout]) : timeout;
   try {
     signal.throwIfAborted();
-    const captured = await captureWait(backgroundCapture(item), signal);
+    const captured = await captureWait(
+      requestDigestCapture({ target: DIGEST_CAPTURE, item, verifyOnly: false }),
+      signal,
+    );
     signal.throwIfAborted();
     if (!captured) throw new Error('Page text could not be read.');
     if (!('pdf' in captured)) return captured;
@@ -47,7 +42,10 @@ export async function captureSummarySource(
         throw new Error(
           'This PDF URL cannot be attached. Choose Local PDF processing in Settings.',
         );
-      await captureWait(backgroundCapture(item, true), signal);
+      await captureWait(
+        requestDigestCapture({ target: DIGEST_CAPTURE, item, verifyOnly: true }),
+        signal,
+      );
       signal.throwIfAborted();
       return {
         kind: 'pdf-url',
@@ -61,7 +59,10 @@ export async function captureSummarySource(
     }
     const source = await extractPdf(captured.pdf.url, signal);
     signal.throwIfAborted();
-    await captureWait(backgroundCapture(item, true), signal);
+    await captureWait(
+      requestDigestCapture({ target: DIGEST_CAPTURE, item, verifyOnly: true }),
+      signal,
+    );
     signal.throwIfAborted();
     return source;
   } catch (error) {

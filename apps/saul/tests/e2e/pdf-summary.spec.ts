@@ -47,6 +47,28 @@ async function generations(worker: Worker) {
   );
 }
 
+test('call messages reject malformed launches and workspace capture requests', async ({
+  sandbox,
+}) => {
+  const { popup } = await sandbox.launch();
+  const replies = await popup.evaluate(async () => {
+    const launch = await chrome.runtime.sendMessage({
+      target: 'saul-call-launch',
+      message: { id: 'invalid', tabIds: [] },
+    });
+    const capture = await chrome.runtime.sendMessage({
+      target: 'saul-digest-capture',
+      item: { tabId: 1, url: 'https://example.test/article', title: 'Article' },
+      verifyOnly: true,
+    });
+    return { launch, capture };
+  });
+  expect(replies).toEqual({
+    launch: { success: false, error: 'Invalid Call launch.' },
+    capture: { success: false, error: 'Runner only' },
+  });
+});
+
 test('PDF viewer capture supports query strings and extensionless documents, with a real packaged worker @smoke', async ({
   sandbox,
   fixtureServer,
