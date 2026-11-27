@@ -1,3 +1,5 @@
+import { isRecord } from '../../shared/model/value.mts';
+import { NATIVE_RECONNECT, type NativeReconnectReply } from './control-messages';
 import { workspaceSender } from '../platform/chrome/sender';
 import { HOST_NAME, MAX_MESSAGE } from '../../shared/protocol/native-messaging.mts';
 import { isLocalAccessChange, readLocalAccess } from './local-access';
@@ -104,27 +106,29 @@ export function initNativeBridge() {
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === RETRY_ALARM) connect();
   });
-  chrome.runtime.onMessage.addListener((message, sender, reply) => {
-    if (message?.type !== 'NATIVE_RECONNECT') return false;
-    if (!workspaceSender(sender)) {
-      reply({ success: false, error: 'Extension pages only' });
+  chrome.runtime.onMessage.addListener(
+    (message: unknown, sender, reply: (value: NativeReconnectReply) => void) => {
+      if (!isRecord(message) || message.type !== NATIVE_RECONNECT) return false;
+      if (!workspaceSender(sender)) {
+        reply({ success: false, error: 'Extension pages only' });
+        return false;
+      }
+      if (!enabled) {
+        reply({ success: false, error: 'Enable Local tool access first.' });
+        return false;
+      }
+      const previous = port;
+      port = undefined;
+      previous?.disconnect();
+      try {
+        connect();
+        reply({ success: true });
+      } catch (error) {
+        reply({ success: false, error: String(error) });
+      }
       return false;
-    }
-    if (!enabled) {
-      reply({ success: false, error: 'Enable Local tool access first.' });
-      return false;
-    }
-    const previous = port;
-    port = undefined;
-    previous?.disconnect();
-    try {
-      connect();
-      reply({ success: true });
-    } catch (error) {
-      reply({ success: false, error: String(error) });
-    }
-    return false;
-  });
+    },
+  );
   let revision = 0;
   function refreshAccess() {
     const current = ++revision;

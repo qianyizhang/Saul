@@ -7,6 +7,26 @@ import type {
 import type { Passage, RunResult } from '../../shared/protocol/history-types.ts';
 
 type EmptyResult = Record<string, never>;
+export const READING_TARGET = 'saul-reading';
+export const OPEN_SOURCE_TARGET = 'saul-open-source';
+export const SOURCE_READY_TARGET = 'saul-source-ready';
+export const READING_EVENTS_TARGET = 'saul-events';
+export type ReadingMessage =
+  | { target: typeof READING_TARGET; message: ReadingRequest }
+  | { target: typeof OPEN_SOURCE_TARGET; selectionId: string }
+  | { target: typeof SOURCE_READY_TARGET }
+  | { target: typeof READING_EVENTS_TARGET; url: string };
+export type OpenSourceMessage = { type: 'SAUL_OPEN'; selectionId: string };
+export type OpenSourceReply = { received: boolean };
+export type ReadingEvent =
+  | { type: 'changed' }
+  | { type: 'notifications'; muted: boolean }
+  | { type: 'presentation'; minimum: boolean }
+  | { type: 'configuration' };
+
+export function receivedSource(value: unknown): boolean {
+  return isRecord(value) && value.received === true;
+}
 export interface ReadingOperations {
   review: {
     request: { action: 'review'; selectionId: string; context: ResolvedContext; recipeId?: string };

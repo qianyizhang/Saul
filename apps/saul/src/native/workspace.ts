@@ -15,6 +15,8 @@ type WorkspaceCommandRequest = {
     args: Omit<ToolArgs[K], 'session'>;
   };
 }[WorkspaceCommandTool];
+export const WINDOW_TARGET = 'WORKSPACE_TABS';
+export type WindowMessage = { type: typeof WINDOW_TARGET } & WorkspaceRequest;
 export type WorkspaceRequest = { action: 'list' } | WorkspaceCommandRequest;
 export type WorkspaceResultFor<T extends WorkspaceRequest> = T extends {
   action: 'command';

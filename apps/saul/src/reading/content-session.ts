@@ -1,3 +1,10 @@
+import { isId, isRecord } from '../../shared/model/value.mts';
+import {
+  READING_TARGET,
+  SOURCE_READY_TARGET,
+  type OpenSourceReply,
+  type ReadingMessage,
+} from './contract';
 import { useEffect, useState, useRef } from 'react';
 import { captureSelection, buildResolvedContext } from '../capture/selection';
 import { sendReadingMessage } from '../reading/client';
@@ -162,9 +169,10 @@ export function useReadingSession(isContextValid: () => boolean) {
     refreshRef.current = refresh;
     function connectPort() {
       if (disposed || !isContextValid()) return;
-      const connected = chrome.runtime.connect({ name: 'saul-reading' });
+      const connected = chrome.runtime.connect({ name: READING_TARGET });
       port = connected;
-      connected.onMessage.addListener((message) => {
+      connected.onMessage.addListener((message: unknown) => {
+        if (!isRecord(message)) return;
         if (disposed || !isContextValid() || port !== connected) return;
         if (message.type === 'notifications') {
           setErrorsMuted(message.muted === true);
@@ -231,11 +239,12 @@ export function useReadingSession(isContextValid: () => boolean) {
       }
     };
     const source = (
-      message: { type?: string; selectionId?: string },
+      message: unknown,
       _sender: chrome.runtime.MessageSender,
-      reply: (value: unknown) => void,
+      reply: (value: OpenSourceReply) => void,
     ) => {
-      if (message.type !== 'SAUL_OPEN' || !message.selectionId) return false;
+      if (!isRecord(message) || message.type !== 'SAUL_OPEN' || !isId(message.selectionId))
+        return false;
       const id = message.selectionId;
       void refresh().then(() => {
         if (disposed || !isContextValid()) return;
@@ -247,7 +256,9 @@ export function useReadingSession(isContextValid: () => boolean) {
     };
     chrome.runtime.onMessage.addListener(source);
     connect();
-    void chrome.runtime.sendMessage({ target: 'saul-source-ready' }).catch(() => undefined);
+    void chrome.runtime
+      .sendMessage({ target: SOURCE_READY_TARGET } satisfies ReadingMessage)
+      .catch(() => undefined);
     document.addEventListener('visibilitychange', visible);
     // pushState has no browser event; reset attachments/subscriptions when its URL changes.
     const routeTimer = setInterval(() => {

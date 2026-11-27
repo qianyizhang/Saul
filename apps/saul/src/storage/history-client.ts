@@ -1,16 +1,23 @@
 import type {
-  DbOperations,
   DbRequest,
   HistoryVisibility,
   HistoryItem,
 } from '../../shared/protocol/history-types.ts';
-import type { WorkspaceDbType } from '../contracts/workspace';
+import {
+  HISTORY_WORKSPACE_TARGET,
+  type HistoryWorkspaceMessage,
+  type HistoryWorkspaceReply,
+  type WorkspaceDbType,
+} from '../contracts/workspace';
 import { request } from '../platform/chrome/messages';
 
 export async function sendDbMessage<K extends WorkspaceDbType>(
   message: DbRequest<K>,
-): Promise<DbOperations[K]['result']> {
-  return request({ target: 'saul-workspace', message });
+): Promise<HistoryWorkspaceReply<K>> {
+  return request({
+    target: HISTORY_WORKSPACE_TARGET,
+    message,
+  } satisfies HistoryWorkspaceMessage<K>);
 }
 export const fetchHistory = (
   limit: number,

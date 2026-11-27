@@ -5,6 +5,9 @@ import {
 } from '../../shared/protocol/connection-coordination.mts';
 import { isRecord } from '../../shared/model/value.mts';
 
+export const SETTINGS_TARGET = 'saul-settings';
+export type SettingsMessage = { target: typeof SETTINGS_TARGET; message: SettingsRequest };
+
 export type SettingsRequest =
   | { action: 'read' }
   | { action: 'commit'; baseline: string; settings: unknown; setupFence?: SetupFence }

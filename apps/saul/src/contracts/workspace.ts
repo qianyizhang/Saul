@@ -1,6 +1,12 @@
-import type { DbRequest } from '../../shared/protocol/history-types.ts';
+import type { DbOperations, DbRequest } from '../../shared/protocol/history-types.ts';
 import { isId, isBoundedText, isRecord } from '../../shared/model/value.mts';
 const revision = (v: unknown) => v === undefined || (Number.isSafeInteger(v) && Number(v) >= 0);
+export const HISTORY_WORKSPACE_TARGET = 'saul-workspace';
+export type HistoryWorkspaceMessage<K extends WorkspaceDbType = WorkspaceDbType> = {
+  target: typeof HISTORY_WORKSPACE_TARGET;
+  message: DbRequest<K>;
+};
+export type HistoryWorkspaceReply<K extends WorkspaceDbType> = DbOperations[K]['result'];
 export type WorkspaceDbType =
   | 'DB_HISTORY_PAGE'
   | 'DB_GET_HISTORY'

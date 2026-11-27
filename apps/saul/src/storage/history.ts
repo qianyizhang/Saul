@@ -1,3 +1,4 @@
+import { HISTORY_IDENTITY_TARGET, type HistoryIdentityReply } from '../native/control-messages';
 import {
   createHistoryRequest,
   historyRequestPolicy,
@@ -10,11 +11,12 @@ import { StorageDisconnected } from '../native/storage-connection';
 let owner: Promise<string> | undefined;
 function profileOwner(): Promise<string> {
   return (owner ??= chrome.runtime
-    .sendMessage({ target: 'saul-history-identity' })
-    .then((reply) => {
-      if (!reply?.success || typeof reply.result !== 'string')
-        throw new Error(reply?.error || 'History profile identity unavailable.');
-      return reply.result as string;
+    .sendMessage({ target: HISTORY_IDENTITY_TARGET })
+    .then((reply: HistoryIdentityReply | undefined) => {
+      if (!reply?.success) throw new Error(reply?.error || 'History profile identity unavailable.');
+      if (typeof reply.result !== 'string')
+        throw new Error('History profile identity unavailable.');
+      return reply.result;
     })
     .catch((cause: unknown) => {
       owner = undefined;

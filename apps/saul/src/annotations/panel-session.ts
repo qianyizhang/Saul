@@ -248,7 +248,9 @@ export function chromeAnnotationPanel(windowId: number) {
     },
     acknowledgeRoute: () => chrome.storage.session.set({ [key]: { view: 'annotations' } }),
     choices: () => annotationMessage({ action: 'choices' }),
-    capture: () => annotationMessage({ action: 'start-capture' }),
+    capture: async () => {
+      await annotationMessage({ action: 'start-capture' });
+    },
     respond: (options) => annotationMessage({ action: 'respond', options }),
   });
   return {

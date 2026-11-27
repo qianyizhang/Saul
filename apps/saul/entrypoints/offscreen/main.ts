@@ -1,3 +1,5 @@
+import { ANNOTATION_TARGET, type AnnotationMessage } from '../../src/annotations/messages';
+import { READING_EVENTS_TARGET, type ReadingMessage } from '../../src/reading/contract';
 import { AnnotationRunner } from '../../src/annotations/runner';
 import { holdConnection } from '../../src/connections/credential-hold';
 import { CallBatchRunner } from '../../src/calls/execution/batch-runner';
@@ -16,11 +18,13 @@ import { CallEditor } from '../../src/calls/editor';
 import { callEditorStorage, prepareCallPreset } from '../../src/calls/editor-client';
 
 const changed = (url: string) => {
-  void chrome.runtime.sendMessage({ target: 'saul-events', url }).catch(() => undefined);
+  void chrome.runtime
+    .sendMessage({ target: READING_EVENTS_TARGET, url } satisfies ReadingMessage)
+    .catch(() => undefined);
 };
 const annotations = new AnnotationRunner(db, undefined, undefined, (url) => {
   void chrome.runtime
-    .sendMessage({ target: 'saul-annotation', action: 'updated', url })
+    .sendMessage({ target: ANNOTATION_TARGET, action: 'updated', url } satisfies AnnotationMessage)
     .catch(() => undefined);
 });
 const calls = new CallBatchRunner(db, captureSummarySource, undefined, holdConnection);

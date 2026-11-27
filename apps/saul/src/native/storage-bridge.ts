@@ -1,3 +1,5 @@
+import { isRecord } from '../../shared/model/value.mts';
+import { HISTORY_IDENTITY_TARGET, type HistoryIdentityReply } from './control-messages';
 import type { DbRequest } from '../../shared/protocol/history-types.ts';
 import { createHistoryRequest } from '../../shared/protocol/history-protocol.mts';
 import {
@@ -38,17 +40,19 @@ export async function readToolHistory(
 
 // The offscreen runner uses this history port. Settings run directly in background.
 export function initStorageBridge() {
-  chrome.runtime.onMessage.addListener((message, sender, reply) => {
-    if (message?.target !== 'saul-history-identity') return false;
-    if (!offscreenSender(sender)) {
-      reply({ success: false, error: 'Offscreen history only.' });
-      return false;
-    }
-    void historyProfileId()
-      .then((result) => reply({ success: true, result }))
-      .catch((error) => reply({ success: false, error: String(error) }));
-    return true;
-  });
+  chrome.runtime.onMessage.addListener(
+    (message: unknown, sender, reply: (value: HistoryIdentityReply) => void) => {
+      if (!isRecord(message) || message.target !== HISTORY_IDENTITY_TARGET) return false;
+      if (!offscreenSender(sender)) {
+        reply({ success: false, error: 'Offscreen history only.' });
+        return false;
+      }
+      void historyProfileId()
+        .then((result) => reply({ success: true, result }))
+        .catch((error) => reply({ success: false, error: String(error) }));
+      return true;
+    },
+  );
 
   const storage = new StorageConnection();
   chrome.runtime.onConnect.addListener((port) => {

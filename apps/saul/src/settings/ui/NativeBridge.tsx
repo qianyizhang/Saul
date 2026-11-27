@@ -1,3 +1,4 @@
+import { reconnectNative } from '../../native/control-messages';
 import { useEffect, useState } from 'react';
 import { ControlIcon } from '../../ui/ControlIcon';
 import { ActionLabel } from '../../ui/ActionLabel';
@@ -187,8 +188,7 @@ export function NativeBridge() {
             className="btn"
             onClick={async () => {
               try {
-                const r = await chrome.runtime.sendMessage({ type: 'NATIVE_RECONNECT' });
-                if (!r?.success) throw new Error(r?.error || 'Reconnect failed');
+                await reconnectNative();
               } catch (err) {
                 setError(String(err));
               }

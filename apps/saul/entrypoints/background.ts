@@ -1,3 +1,6 @@
+import { CREDENTIAL_MODE_TARGET, type CredentialModeResult } from '../src/native/control-messages';
+import { isRecord } from '../shared/model/value.mts';
+import { SETTINGS_TARGET, type SettingsState } from '../src/settings/contract';
 import { readCredentialRoute } from '../src/providers/credential-route';
 import { initAnnotations } from '../src/annotations/background';
 import { createCustomActionStore } from '../src/custom-actions/store';
@@ -39,7 +42,7 @@ import {
 import { runnerRequest, type RunnerDbCall } from '../src/platform/chrome/runner';
 import { initReadingHost } from '../src/reading/background';
 import { initNativeBridge } from '../src/native/bridge';
-import { workspaceCall } from '../src/native/workspace';
+import { WINDOW_TARGET, workspaceCall } from '../src/native/workspace';
 import { offscreenSender, workspaceSender } from '../src/platform/chrome/sender';
 
 const db: RunnerDbCall = (message) => runnerRequest({ operation: 'db', message });
@@ -95,26 +98,30 @@ export default defineBackground(() => {
   chrome.windows.onRemoved.addListener((windowId) => {
     void chrome.storage.session.remove([summaryPanelKey(windowId), pendingPanelCallKey(windowId)]);
   });
-  chrome.runtime.onMessage.addListener((request, sender, reply) => {
+  chrome.runtime.onMessage.addListener((request: unknown, sender, reply) => {
+    if (!isRecord(request)) return false;
     if (
-      ![
-        CALL_CONTROL,
-        CALL_LAUNCH,
-        CALL_EDIT,
-        CALL_EDITOR_STORAGE,
-        DIGEST_CAPTURE,
-        'saul-settings',
-        CONNECTION_TARGET,
-        'saul-credential-mode',
-      ].includes(request?.target) &&
-      request?.type !== 'WORKSPACE_TABS'
+      !(
+        typeof request.target === 'string' &&
+        [
+          CALL_CONTROL,
+          CALL_LAUNCH,
+          CALL_EDIT,
+          CALL_EDITOR_STORAGE,
+          DIGEST_CAPTURE,
+          SETTINGS_TARGET,
+          CONNECTION_TARGET,
+          CREDENTIAL_MODE_TARGET,
+        ].includes(request.target)
+      ) &&
+      request?.type !== WINDOW_TARGET
     )
       return false;
     (async () => {
-      if (request.target === 'saul-credential-mode') {
+      if (request.target === CREDENTIAL_MODE_TARGET) {
         if (!offscreenSender(sender)) throw new Error('Runner only');
         const route = await readCredentialRoute();
-        return { mode: route === 'local' ? 'standalone' : route };
+        return { mode: route === 'local' ? 'standalone' : route } satisfies CredentialModeResult;
       }
       if (request.target === CALL_EDITOR_STORAGE) {
         if (!offscreenSender(sender)) throw new Error('Runner only');
@@ -155,7 +162,8 @@ export default defineBackground(() => {
           : captureHandlers.capture(capture.item);
       }
       if (!workspaceSender(sender)) throw new Error('Extension workspace only');
-      if (request.target === 'saul-settings') return settings(request.message);
+      if (request.target === SETTINGS_TARGET)
+        return settings(request.message) satisfies Promise<SettingsState>;
       if (request.target === CONNECTION_TARGET) return connections.request(request.message);
       if (request.target === CALL_EDIT) {
         validateCallEditRequest(request.message);
@@ -176,7 +184,7 @@ export default defineBackground(() => {
             : undefined;
         return runnerRequest({ operation: 'digest', message, credential });
       }
-      if (request.type === 'WORKSPACE_TABS') return workspaceCall(request);
+      if (request.type === WINDOW_TARGET) return workspaceCall(request);
     })().then(
       (result) => reply({ success: true, result }),
       (error) =>

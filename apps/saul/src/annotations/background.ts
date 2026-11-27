@@ -1,3 +1,5 @@
+import { isRecord } from '../../shared/model/value.mts';
+import { ANNOTATION_TARGET, sendAnnotationTab, type AnnotationReply } from './messages';
 import { sourcePage, workspaceSender } from '../platform/chrome/sender';
 import { runnerRequest } from '../platform/chrome/runner';
 import { annotationStatusSchema } from '../../shared/protocol/annotation-attempts.ts';
@@ -44,9 +46,7 @@ export async function operateAnnotations(
         [...urls].some((url) => url.split('#')[0] === tab.url!.split('#')[0]) &&
         !tab.incognito
       )
-        void chrome.tabs
-          .sendMessage(tab.id, { type: 'SAUL_ANNOTATIONS_CHANGED' })
-          .catch(() => undefined);
+        void sendAnnotationTab(tab.id, { type: 'SAUL_ANNOTATIONS_CHANGED' }).catch(() => undefined);
   }
   return result;
 }
@@ -110,12 +110,7 @@ async function takeViewportEvidence(
   active: boolean,
 ): Promise<ViewportEvidence> {
   const { tabId, documentId, url, target } = capture;
-  const state = () =>
-    chrome.tabs.sendMessage(
-      tabId,
-      { type: 'SAUL_ANNOTATION_STATE' },
-      { documentId },
-    ) as Promise<string>;
+  const state = () => sendAnnotationTab(tabId, { type: 'SAUL_ANNOTATION_STATE' }, { documentId });
 
   let changed = false;
   const activated = () => {
@@ -214,9 +209,11 @@ async function confirmedUrls(tabId: number, url: string, candidates: string[]) {
     (candidate) => candidate !== url && candidate.split('#')[0] === url.split('#')[0],
   );
   if (!related.length) return [url];
-  const confirmation = await chrome.tabs
-    .sendMessage(tabId, { type: 'SAUL_ANNOTATION_URLS', url, urls: related })
-    .catch(() => undefined);
+  const confirmation = await sendAnnotationTab(tabId, {
+    type: 'SAUL_ANNOTATION_URLS',
+    url,
+    urls: related,
+  }).catch(() => undefined);
   const confirmed = new Set(confirmation?.urls);
   return [url, ...related.filter((candidate) => confirmed.has(candidate))];
 }
@@ -253,14 +250,14 @@ export function initAnnotations(
 ) {
   chrome.tabs.onUpdated.addListener((id, change, tab) => {
     if (change.url && !tab.incognito && /^https?:/.test(change.url))
-      void chrome.tabs.sendMessage(id, { type: 'SAUL_ANNOTATIONS_CHANGED' }).catch(() => undefined);
+      void sendAnnotationTab(id, { type: 'SAUL_ANNOTATIONS_CHANGED' }).catch(() => undefined);
   });
   chrome.commands.onCommand.addListener((command, tab) => {
     if (command === 'saul-annotate' && tab?.id !== undefined && !tab.incognito)
-      void chrome.tabs.sendMessage(tab.id, { type: 'SAUL_ANNOTATE' }).catch(() => undefined);
+      void sendAnnotationTab(tab.id, { type: 'SAUL_ANNOTATE' }).catch(() => undefined);
   });
-  chrome.runtime.onMessage.addListener((request, sender, reply) => {
-    if (request?.target !== 'saul-annotation') return false;
+  chrome.runtime.onMessage.addListener((request: unknown, sender, reply) => {
+    if (!isRecord(request) || request.target !== ANNOTATION_TARGET) return false;
     void (async () => {
       if (request.action === 'updated') {
         if (
@@ -269,12 +266,13 @@ export function initAnnotations(
           sender.url !== chrome.runtime.getURL('offscreen.html')
         )
           throw new Error('Runner only.');
+        const url = pageUrl.parse(request.url);
         await chrome.storage.session.set({ [annotationVersionKey]: crypto.randomUUID() });
         for (const tab of await chrome.tabs.query({}))
-          if (tab.id && tab.url?.split('#')[0] === request.url.split('#')[0] && !tab.incognito)
-            void chrome.tabs
-              .sendMessage(tab.id, { type: 'SAUL_ANNOTATIONS_CHANGED' })
-              .catch(() => undefined);
+          if (tab.id && tab.url?.split('#')[0] === url.split('#')[0] && !tab.incognito)
+            void sendAnnotationTab(tab.id, { type: 'SAUL_ANNOTATIONS_CHANGED' }).catch(
+              () => undefined,
+            );
         return {};
       }
       if (request.action === 'page-markers') {
@@ -334,9 +332,9 @@ export function initAnnotations(
       if (request.action === 'draft') return mutateAnnotationDraft(request.mutation);
       if (request.action === 'operate')
         return operateAnnotations({
-          scope: { urls: [request.url], ids: [] },
+          scope: { urls: [pageUrl.parse(request.url)], ids: [] },
           author: { kind: 'user', name: 'You' },
-          operation: request.operation,
+          operation: requestSchema.shape.operation.parse(request.operation),
         });
       if (request.action === 'status')
         return runnerRequest({
@@ -354,7 +352,7 @@ export function initAnnotations(
       if (request.action === 'start-capture') {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!tab?.id || tab.incognito) throw new Error('Choose an ordinary web page.');
-        return chrome.tabs.sendMessage(tab.id, { type: 'SAUL_ANNOTATE', fromPanel: true });
+        return sendAnnotationTab(tab.id, { type: 'SAUL_ANNOTATE', fromPanel: true });
       }
       if (request.action === 'choices') {
         const s = await settings();
@@ -362,7 +360,7 @@ export function initAnnotations(
         return {
           presets: configurationFor(s).presets.filter((p) => (p.capability ?? 'write') === 'write'),
           calls,
-        };
+        } satisfies AnnotationReply<'choices'>;
       }
       if (request.action === 'respond') {
         const p = z

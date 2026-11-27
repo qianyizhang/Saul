@@ -1,3 +1,4 @@
+import { CREDENTIAL_MODE_TARGET } from '../native/control-messages';
 import { SETTINGS_STORAGE_KEY } from '../configuration/store';
 export type CredentialRoute = 'local' | 'saul' | 'disconnected';
 
@@ -14,7 +15,7 @@ export async function readCredentialRoute(): Promise<CredentialRoute> {
     if (mode === undefined) return 'local';
     if (mode === 'saul' || mode === 'disconnected') return mode;
   } else {
-    const reply: unknown = await chrome.runtime.sendMessage({ target: 'saul-credential-mode' });
+    const reply: unknown = await chrome.runtime.sendMessage({ target: CREDENTIAL_MODE_TARGET });
     if (
       reply &&
       typeof reply === 'object' &&

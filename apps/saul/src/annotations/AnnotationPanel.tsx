@@ -1,3 +1,4 @@
+import { sendAnnotationTab } from './messages';
 import { annotationLabels } from './labels';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { AnnotationAttempt } from '../../shared/protocol/annotation-attempts.ts';
@@ -80,17 +81,18 @@ export function AnnotationPanel({ windowId }: { windowId: number }) {
                   setFallbackId(a.id);
                   return;
                 }
-                void chrome.tabs
-                  .sendMessage(page.tabId, { type: 'SAUL_ANNOTATION_REVIEW', annotation: a })
-                  .then(
-                    (result) => {
-                      if (request === selectionRequest.current && !result?.available)
-                        setFallbackId(a.id);
-                    },
-                    () => {
-                      if (request === selectionRequest.current) setFallbackId(a.id);
-                    },
-                  );
+                void sendAnnotationTab(page.tabId, {
+                  type: 'SAUL_ANNOTATION_REVIEW',
+                  annotation: a,
+                }).then(
+                  (result) => {
+                    if (request === selectionRequest.current && !result?.available)
+                      setFallbackId(a.id);
+                  },
+                  () => {
+                    if (request === selectionRequest.current) setFallbackId(a.id);
+                  },
+                );
               }}
             >
               <strong>
@@ -277,20 +279,18 @@ function AnnotationEditor({
       <button
         className="btn"
         onClick={() =>
-          void chrome.tabs
-            .sendMessage(tabId, {
-              type: 'SAUL_ANNOTATION_LOCATE',
-              annotation: { url: record.url, target: record.target },
-            })
-            .then(
-              (r) =>
-                setLocated(
-                  r?.available
-                    ? 'Target found on current page.'
-                    : 'Target unavailable. Saved evidence is unchanged.',
-                ),
-              () => setLocated('Target unavailable. Saved evidence is unchanged.'),
-            )
+          void sendAnnotationTab(tabId, {
+            type: 'SAUL_ANNOTATION_LOCATE',
+            annotation: { url: record.url, target: record.target },
+          }).then(
+            (r) =>
+              setLocated(
+                r?.available
+                  ? 'Target found on current page.'
+                  : 'Target unavailable. Saved evidence is unchanged.',
+              ),
+            () => setLocated('Target unavailable. Saved evidence is unchanged.'),
+          )
         }
       >
         Locate target

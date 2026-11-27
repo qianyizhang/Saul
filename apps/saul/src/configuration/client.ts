@@ -1,4 +1,9 @@
-import type { SettingsRequest, SettingsState } from '../settings/contract';
+import {
+  SETTINGS_TARGET,
+  type SettingsMessage,
+  type SettingsRequest,
+  type SettingsState,
+} from '../settings/contract';
 import type { Reply } from '../../shared/protocol/history-types.ts';
 
 export class SettingsDeliveryError extends Error {
@@ -17,7 +22,10 @@ export class SettingsDeliveryError extends Error {
 export async function requestSettings(message: SettingsRequest): Promise<SettingsState> {
   let reply: Reply<SettingsState> | undefined;
   try {
-    reply = await chrome.runtime.sendMessage({ target: 'saul-settings', message });
+    reply = await chrome.runtime.sendMessage({
+      target: SETTINGS_TARGET,
+      message,
+    } satisfies SettingsMessage);
   } catch (cause) {
     throw new SettingsDeliveryError(message.action !== 'read', { cause });
   }

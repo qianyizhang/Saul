@@ -1,3 +1,6 @@
+import { isRecord } from '../../shared/model/value.mts';
+import { targetSchema } from '../../shared/protocol/annotations.ts';
+import type { AnnotationTabReply } from './messages';
 import { annotationLabels } from './labels';
 import { openAnnotationCard, dismissAnnotationCard } from './page-card';
 import { annotationMessage } from './client';
@@ -470,27 +473,64 @@ export function installAnnotationCapture() {
     draw(rect);
   };
   const listener = (
-    message: { type?: string; annotation?: Annotation; urls?: string[]; url?: string },
+    message: unknown,
     _sender: chrome.runtime.MessageSender,
-    reply: (value: unknown) => void,
+    reply: (
+      value: AnnotationTabReply<
+        | 'SAUL_ANNOTATION_STATE'
+        | 'SAUL_ANNOTATION_URLS'
+        | 'SAUL_ANNOTATE'
+        | 'SAUL_ANNOTATION_REVIEW'
+        | 'SAUL_ANNOTATION_LOCATE'
+      >,
+    ) => void,
   ) => {
-    if (message.type === 'SAUL_ANNOTATION_URLS')
-      reply({ urls: message.url === location.href ? message.urls?.filter(belongsHere) : [] });
+    if (!isRecord(message)) return false;
+    if (
+      message.type === 'SAUL_ANNOTATION_URLS' &&
+      typeof message.url === 'string' &&
+      Array.isArray(message.urls) &&
+      message.urls.every((url: unknown): url is string => typeof url === 'string')
+    )
+      reply({
+        urls: message.url === location.href ? message.urls.filter(belongsHere) : [],
+      } satisfies AnnotationTabReply<'SAUL_ANNOTATION_URLS'>);
     if (message.type === 'SAUL_ANNOTATIONS_CHANGED') refresh();
     if (message.type === 'SAUL_ANNOTATE') {
       start();
-      reply({});
+      reply({} satisfies AnnotationTabReply<'SAUL_ANNOTATE'>);
     }
     if (message.type === 'SAUL_ANNOTATION_STATE')
-      reply(JSON.stringify({ url: location.href, viewport: viewport() }));
-    if (message.type === 'SAUL_ANNOTATION_REVIEW' && message.annotation) {
-      if (belongsHere(message.annotation.url) && resolveTarget(message.annotation)) {
-        review(message.annotation);
-        reply({ available: true });
-      } else reply({ available: false });
+      reply(
+        JSON.stringify({
+          url: location.href,
+          viewport: viewport(),
+        }) satisfies AnnotationTabReply<'SAUL_ANNOTATION_STATE'>,
+      );
+    if (message.type === 'SAUL_ANNOTATION_REVIEW' || message.type === 'SAUL_ANNOTATION_LOCATE') {
+      const annotation = message.annotation;
+      if (!isRecord(annotation) || typeof annotation.url !== 'string') return false;
+      const target = targetSchema.safeParse(annotation.target);
+      if (!target.success) return false;
+      const anchor = { url: annotation.url, target: target.data };
+      if (message.type === 'SAUL_ANNOTATION_LOCATE') {
+        reply({ available: locate(anchor) } satisfies AnnotationTabReply<'SAUL_ANNOTATION_LOCATE'>);
+      } else if (
+        typeof annotation.id === 'string' &&
+        typeof annotation.title === 'string' &&
+        typeof annotation.comment === 'string'
+      ) {
+        const available = belongsHere(anchor.url) && Boolean(resolveTarget(anchor));
+        if (available)
+          review({
+            ...anchor,
+            id: annotation.id,
+            title: annotation.title,
+            comment: annotation.comment,
+          });
+        reply({ available } satisfies AnnotationTabReply<'SAUL_ANNOTATION_REVIEW'>);
+      }
     }
-    if (message.type === 'SAUL_ANNOTATION_LOCATE' && message.annotation)
-      reply({ available: locate(message.annotation) });
     return false;
   };
   chrome.runtime.onMessage.addListener(listener);

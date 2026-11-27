@@ -2,7 +2,7 @@ import { isId, isRecord } from '../../shared/model/value.mts';
 import type { Passage } from '../../shared/protocol/history-types.ts';
 import { configurationFor, type Configuration } from '../configuration/definition';
 import { SETTINGS_STORAGE_KEY } from '../configuration/store';
-import { validateWorkspace } from '../contracts/workspace';
+import { HISTORY_WORKSPACE_TARGET, validateWorkspace } from '../contracts/workspace';
 import { runnerRequest, type RunnerDbCall } from '../platform/chrome/runner';
 import { offscreenSender, sourcePage, workspaceSender } from '../platform/chrome/sender';
 import {
@@ -16,14 +16,25 @@ import {
   MINIMUM_MODE_STORAGE_KEY,
 } from '../storage/presentation';
 import { createReadingAdmission, type ReadingAdmission } from './admission';
-import { validateReading, type ReadingRequest, type ReadingResult } from './contract';
+import {
+  OPEN_SOURCE_TARGET,
+  READING_EVENTS_TARGET,
+  READING_TARGET,
+  SOURCE_READY_TARGET,
+  receivedSource,
+  validateReading,
+  type OpenSourceMessage,
+  type ReadingEvent,
+  type ReadingRequest,
+  type ReadingResult,
+} from './contract';
 
 const targets = new Set([
-  'saul-events',
-  'saul-source-ready',
-  'saul-reading',
-  'saul-open-source',
-  'saul-workspace',
+  READING_EVENTS_TARGET,
+  SOURCE_READY_TARGET,
+  READING_TARGET,
+  OPEN_SOURCE_TARGET,
+  HISTORY_WORKSPACE_TARGET,
 ]);
 
 export function initReadingHost(db: RunnerDbCall, currentSettings: () => Promise<Configuration>) {
@@ -116,14 +127,14 @@ export function initReadingHost(db: RunnerDbCall, currentSettings: () => Promise
   async function deliverSource(tabId: number) {
     const key = sourceKey(tabId),
       saved = await chrome.storage.session.get(key);
-    if (!saved[key]) return;
+    if (typeof saved[key] !== 'string' || !saved[key]) return;
     try {
-      const reply = await chrome.tabs.sendMessage(
+      const reply: unknown = await chrome.tabs.sendMessage(
         tabId,
-        { type: 'SAUL_OPEN', selectionId: saved[key] },
+        { type: 'SAUL_OPEN', selectionId: saved[key] } satisfies OpenSourceMessage,
         { frameId: 0 },
       );
-      if (reply?.received) await chrome.storage.session.remove(key);
+      if (receivedSource(reply)) await chrome.storage.session.remove(key);
     } catch {
       /* The page's content script will request delivery when mounted. */
     }
@@ -147,13 +158,7 @@ export function initReadingHost(db: RunnerDbCall, currentSettings: () => Promise
   const subscribers = new Map<chrome.runtime.Port, string>();
   let notificationRevision = 0;
   let presentationRevision = 0;
-  function notifyPreference(
-    port: chrome.runtime.Port,
-    preference:
-      | { type: 'notifications'; muted: boolean }
-      | { type: 'presentation'; minimum: boolean }
-      | { type: 'configuration' },
-  ) {
+  function notifyPreference(port: chrome.runtime.Port, preference: ReadingEvent) {
     try {
       port.postMessage(preference);
     } catch {
@@ -178,7 +183,7 @@ export function initReadingHost(db: RunnerDbCall, currentSettings: () => Promise
     }
   });
   chrome.runtime.onConnect.addListener((port) => {
-    if (port.name !== 'saul-reading') return;
+    if (port.name !== READING_TARGET) return;
     try {
       subscribers.set(port, sourcePage(port.sender || {}));
     } catch {
@@ -216,31 +221,28 @@ export function initReadingHost(db: RunnerDbCall, currentSettings: () => Promise
     if (!isRecord(request) || typeof request.target !== 'string' || !targets.has(request.target))
       return false;
     void (async () => {
-      if (request.target === 'saul-events') {
+      if (request.target === READING_EVENTS_TARGET) {
         if (!offscreenSender(sender)) throw new Error('Runner only');
+        if (typeof request.url !== 'string') throw new Error('Invalid reading event.');
         for (const [port, url] of subscribers)
           if (request.url === '*' || request.url === url) {
-            try {
-              port.postMessage({ type: 'changed' });
-            } catch {
-              subscribers.delete(port);
-            }
+            notifyPreference(port, { type: 'changed' });
           }
         const count = await db({ type: 'DB_UNREAD', payload: undefined });
         await chrome.action.setBadgeText({ text: count ? String(count) : '' });
         return;
       }
-      if (request.target === 'saul-source-ready') {
+      if (request.target === SOURCE_READY_TARGET) {
         sourcePage(sender);
         await deliverSource(sender.tab!.id!);
         return;
       }
-      if (request.target === 'saul-reading') {
+      if (request.target === READING_TARGET) {
         validateReading(request.message);
         return reading(request.message, sender);
       }
       if (!workspaceSender(sender)) throw new Error('Extension workspace only');
-      if (request.target === 'saul-open-source') {
+      if (request.target === OPEN_SOURCE_TARGET) {
         if (!isId(request.selectionId)) throw new Error('Invalid passage');
         return openSource(request.selectionId);
       }
