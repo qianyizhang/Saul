@@ -3,9 +3,10 @@ import { validateToolResult } from '../../shared/protocol/results.mts';
 import { expect } from './fixtures.ts';
 import { reviewScreenshots } from './artifacts.ts';
 import type { FrameLocator, Page } from '@playwright/test';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { build } from 'esbuild';
 import { BOARD_URI } from '../../.build/native/board-resource.mjs';
 import { createBoardService } from '../../native/board-service.mts';
@@ -27,6 +28,10 @@ const hostBundle = build({
   target: 'es2022',
   logLevel: 'silent',
 }).then((result) => result.outputFiles[0]!.text);
+const execute = promisify(execFile);
+const deliveredWindowNames = fileURLToPath(
+  new URL('../../.build/native/window-names.jxa', import.meta.url),
+);
 
 function deliveredBoard(logRoot: string) {
   const output = execFileSync(process.execPath, [resolve('.build/native/mcp.mjs')], {
@@ -206,7 +211,18 @@ export async function openWorkspace(
     const { processInfo } = await cdp.send('SystemInfo.getProcessInfo');
     const browserPid = processInfo.find((p) => p.type === 'browser')!.id;
     await cdp.detach();
-    names = createWindowNames({ browserPid });
+    names = createWindowNames({
+      browserPid,
+      // This fixture imports the Node source; the JXA script is emitted with the helper.
+      execFile: (file, args, options) =>
+        execute(
+          file,
+          file === '/usr/bin/osascript'
+            ? [...args.slice(0, 2), deliveredWindowNames, ...args.slice(3)]
+            : args,
+          { ...options, encoding: 'utf8' },
+        ),
+    });
     const before = (await rawCall('saul_tabs_list')) as TabSnapshot;
     const native = await names.read(before);
     if (native.status !== 'available')
