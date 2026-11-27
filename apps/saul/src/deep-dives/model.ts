@@ -70,3 +70,12 @@ export const deepDiveRequest = z.discriminatedUnion('action', [
 ]);
 
 export type DeepDiveRequest = z.infer<typeof deepDiveRequest>;
+export const DEEP_DIVE_TARGET = 'saul-deep-dives';
+export type DeepDiveMessage = { target: typeof DEEP_DIVE_TARGET; message: DeepDiveRequest };
+export type DeepDiveResults = {
+  list: { items: DeepDive[]; error: string };
+  instruction: string;
+  'save-instruction': string;
+  open: void;
+  remove: void;
+};

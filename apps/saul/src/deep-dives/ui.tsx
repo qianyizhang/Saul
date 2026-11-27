@@ -4,12 +4,16 @@ import { useRefreshOnFocus } from '../ui/useRefreshOnFocus';
 import {
   DEEP_DIVE_LABEL,
   DEEP_DIVE_RECORDS,
+  DEEP_DIVE_TARGET,
   MAX_INSTRUCTION_LENGTH,
   type DeepDive,
   type DeepDiveRequest,
+  type DeepDiveMessage,
+  type DeepDiveResults,
 } from './model';
 
-const send = <T,>(message: DeepDiveRequest) => request<T>({ target: 'saul-deep-dives', message });
+const send = <T extends DeepDiveRequest>(message: T): Promise<DeepDiveResults[T['action']]> =>
+  request({ target: DEEP_DIVE_TARGET, message } satisfies DeepDiveMessage);
 
 const handoffText = {
   opening: 'Opening ChatGPT…',
@@ -34,7 +38,7 @@ export function DeepDiveHistory() {
   }, [refresh]);
   useEffect(() => {
     let current = true;
-    void send<{ items: DeepDive[]; error: string }>({ action: 'list' }).then(
+    void send({ action: 'list' }).then(
       ({ items: saved, error: issue }) => {
         if (current) {
           setItems(saved);
@@ -153,7 +157,7 @@ export function DeepDiveSettings({ onDirty }: { onDirty: (dirty: boolean) => voi
   const changed = saved !== null && draft !== saved;
   useEffect(() => {
     let current = true;
-    void send<string>({ action: 'instruction' }).then(
+    void send({ action: 'instruction' }).then(
       (value) => {
         if (current) {
           setSaved(value);
@@ -181,7 +185,7 @@ export function DeepDiveSettings({ onDirty }: { onDirty: (dirty: boolean) => voi
     setSaving(true);
     setError('');
     try {
-      const result = await send<string>({
+      const result = await send({
         action: 'save-instruction',
         value: draft,
         expected: saved,
@@ -199,7 +203,7 @@ export function DeepDiveSettings({ onDirty }: { onDirty: (dirty: boolean) => voi
     if (changed && !window.confirm('Replace this draft with the saved instruction?')) return;
     setSaving(true);
     try {
-      const result = await send<string>({ action: 'instruction' });
+      const result = await send({ action: 'instruction' });
       setSaved(result);
       setDraft(result);
       setError('');

@@ -1,12 +1,8 @@
 import {
   validConnectionToken,
-  type ConnectionReservation,
   type SetupFence,
 } from '../../shared/protocol/connection-coordination.mts';
 import type { ConnectionDefinition } from '../../shared/protocol/shared-presets-contract.mts';
-import type { Reply } from '../../shared/protocol/history-types.ts';
-import type { PlanResults } from '../../shared/protocol/credential-plan.mts';
-import type { SettingsState } from '../settings/contract';
 import { requestSettings } from '../configuration/client';
 import { connectionDefinition } from '../configuration/connections';
 import { credentialCall } from '../native/credentials';
@@ -18,15 +14,22 @@ import {
   type ConnectionSetup,
 } from './setup';
 import { isRecord } from '../../shared/model/value.mts';
+import {
+  CONNECTION_TARGET,
+  type ConnectionRequest,
+  type ConnectionReply,
+  type ConnectionResult,
+} from './messages';
 
 export type CommitSetup = (setup: ConnectionSetup, key: string, review: boolean) => Promise<void>;
 
-async function request<T>(message: Record<string, unknown>): Promise<T> {
-  const reply: (Reply<T> & { setupNotAdmitted?: true }) | undefined =
-    await chrome.runtime.sendMessage({
-      target: 'saul-connection',
-      message,
-    });
+export async function requestConnection<T extends ConnectionRequest>(
+  message: T,
+): Promise<ConnectionResult<T['action']>> {
+  const reply: ConnectionReply<T['action']> | undefined = await chrome.runtime.sendMessage({
+    target: CONNECTION_TARGET,
+    message,
+  });
   if (!reply?.success) {
     if (reply?.setupNotAdmitted) throw new ConnectionSetupNotAdmitted(reply.error);
     throw new Error(reply?.error ?? 'Connection setup was interrupted. Review the current setup.');
@@ -35,7 +38,7 @@ async function request<T>(message: Record<string, unknown>): Promise<T> {
 }
 
 export const saveSetup = (setup: ConnectionSetup, key: string, resume: boolean) =>
-  request<Extract<SettingsState, { state: 'ready' }>>({
+  requestConnection({
     action: 'save',
     setup: {
       ...setup,
@@ -46,11 +49,11 @@ export const saveSetup = (setup: ConnectionSetup, key: string, resume: boolean) 
     resume,
   });
 export const discardConnectionSetup = (id: string, phase: ConnectionSetup['phase']) =>
-  request<void>({ action: 'discard', id, phase });
-export const connectionRecovery = () => request<ConnectionSetup[]>({ action: 'recovery' });
-export const connectionAccounts = () => request<PlanResults['accounts']>({ action: 'accounts' });
-export const connectionSetups = () => request<ConnectionReservation[]>({ action: 'setups' });
-export const releaseSetup = (fence: SetupFence) => request<void>({ action: 'release', fence });
+  requestConnection({ action: 'discard', id, phase });
+export const connectionRecovery = () => requestConnection({ action: 'recovery' });
+export const connectionAccounts = () => requestConnection({ action: 'accounts' });
+export const connectionSetups = () => requestConnection({ action: 'setups' });
+export const releaseSetup = (fence: SetupFence) => requestConnection({ action: 'release', fence });
 
 async function currentConnections() {
   const latest = await requestSettings({ action: 'read' });

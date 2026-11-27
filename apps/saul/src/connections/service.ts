@@ -4,10 +4,14 @@ import {
   validSetupFence,
 } from '../../shared/protocol/connection-coordination.mts';
 import { validateConnections } from '../../shared/protocol/shared-presets-contract.mts';
-import { validSuggestedAppName } from '../../shared/protocol/credential-plan.mts';
+import {
+  validatePlanResult,
+  validSuggestedAppName,
+} from '../../shared/protocol/credential-plan.mts';
 import { requireConnectionSettings } from '../native/config-transport';
 import { workspaceSender } from '../platform/chrome/sender';
 import { nativeCredentialCall } from '../native/credentials';
+import type { ConnectionResult } from './messages';
 import type { SettingsState } from '../settings/contract';
 import { holdConnection } from './credential-hold';
 import {
@@ -50,17 +54,30 @@ export function createConnectionService(settings: (request: unknown) => Promise<
 
   async function request(message: unknown) {
     if (isRecord(message)) {
-      if (message.action === 'recovery') return readConnectionSetups();
-      if (message.action === 'accounts') return nativeCredentialCall({ action: 'accounts' });
-      if (message.action === 'setups') return listConnectionSetups(nativeCredentialCall);
+      if (message.action === 'recovery')
+        return readConnectionSetups() satisfies Promise<ConnectionResult<'recovery'>>;
+      if (message.action === 'accounts') {
+        const command = { action: 'accounts' } as const;
+        const result = await nativeCredentialCall(command);
+        validatePlanResult(command, result);
+        return result satisfies ConnectionResult<'accounts'>;
+      }
+      if (message.action === 'setups')
+        return listConnectionSetups(nativeCredentialCall) satisfies Promise<
+          ConnectionResult<'setups'>
+        >;
       if (message.action === 'release' && validSetupFence(message.fence))
-        return releaseConnectionSetup(nativeCredentialCall, message.fence);
+        return releaseConnectionSetup(nativeCredentialCall, message.fence) satisfies Promise<
+          ConnectionResult<'release'>
+        >;
       if (
         message.action === 'discard' &&
         typeof message.id === 'string' &&
         (message.phase === 'credential' || message.phase === 'settings')
       )
-        return setup().discard(message.id, message.phase);
+        return setup().discard(message.id, message.phase) satisfies Promise<
+          ConnectionResult<'discard'>
+        >;
       if (
         message.action === 'save' &&
         typeof message.key === 'string' &&
@@ -89,7 +106,7 @@ export function createConnectionService(settings: (request: unknown) => Promise<
             },
             message.key,
             message.resume,
-          );
+          ) satisfies Promise<ConnectionResult<'save'>>;
         }
       }
     }

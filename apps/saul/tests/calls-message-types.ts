@@ -2,10 +2,13 @@ import type { CallLaunchResult, DigestCapture } from '../shared/model/call-batch
 import { captureTab, verifyCaptureTab } from '../src/calls/capture/capture';
 import { requestDigestCapture } from '../src/calls/capture/source';
 import { launchCall } from '../src/calls/client';
+import { requestCallEditorStorage } from '../src/calls/editor-client';
+import type { SavedCallDraft } from '../src/custom-actions/contract';
 import {
   DIGEST_CAPTURE,
   type CallLaunchMessage,
   type CallLaunchReply,
+  type CallEditorStorageReplies,
   type DigestCaptureHandlers,
 } from '../src/calls/messages';
 
@@ -29,4 +32,13 @@ export function checkCallMessageTypes(message: CallLaunchMessage) {
   // @ts-expect-error Capture cannot return the verification acknowledgement.
   const captureHandler: DigestCaptureHandlers['capture'] = verifyCaptureTab;
   return { launch, capture, verify, launchReply, handlers, captureHandler };
+}
+
+export function checkEditorStorageTypes() {
+  const draft: Promise<SavedCallDraft> = requestCallEditorStorage({ action: 'read-draft' });
+  // @ts-expect-error A draft mutation needs a draft.
+  requestCallEditorStorage({ action: 'save-draft' });
+  // @ts-expect-error A save acknowledges completion without a result.
+  const wrong: CallEditorStorageReplies['save-draft'] = { error: 'wrong' };
+  return { draft, wrong };
 }

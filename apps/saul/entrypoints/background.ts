@@ -5,9 +5,14 @@ import { legacySummaryPreset } from '../src/calls/choice-migration';
 import { captureTab, verifyCaptureTab } from '../src/calls/capture/capture';
 import { validateCallControl, validateCallLaunch } from '../src/calls/batch-messages';
 import {
+  CALL_CONTROL,
+  CALL_EDIT,
+  CALL_EDITOR_STORAGE,
   CALL_LAUNCH,
   DIGEST_CAPTURE,
+  validateCallEditorBridge,
   validateDigestCapture,
+  type CallEditorStorageReplies,
   type CallLaunchReply,
   type DigestCaptureHandlers,
 } from '../src/calls/messages';
@@ -21,9 +26,9 @@ import { nativeCredentialAccess } from '../src/configuration/credentials';
 import { initSpeechBridge } from '../src/speech/bridge';
 import { initActionBridge } from '../src/custom-actions/bridge';
 import { validateCallEditRequest } from '../src/calls/contract';
-import type { CallEditorBridgeRequest } from '../src/calls/editor-client';
 import { prepareWritePreset } from '../src/configuration/resolver';
 import { sharedPresets } from '../src/configuration/shared';
+import { CONNECTION_TARGET } from '../src/connections/messages';
 import { createConnectionService } from '../src/connections/service';
 import { ConnectionSetupNotAdmitted } from '../src/connections/setup';
 import { createConfigurationStore } from '../src/configuration/store';
@@ -94,13 +99,13 @@ export default defineBackground(() => {
   chrome.runtime.onMessage.addListener((request, sender, reply) => {
     if (
       ![
-        'saul-digest',
+        CALL_CONTROL,
         CALL_LAUNCH,
-        'saul-action',
-        'saul-call-editor',
+        CALL_EDIT,
+        CALL_EDITOR_STORAGE,
         DIGEST_CAPTURE,
         'saul-settings',
-        'saul-connection',
+        CONNECTION_TARGET,
         'saul-credential-mode',
       ].includes(request?.target) &&
       request?.type !== 'WORKSPACE_TABS'
@@ -112,20 +117,32 @@ export default defineBackground(() => {
         const route = await readCredentialRoute();
         return { mode: route === 'local' ? 'standalone' : route };
       }
-      if (request.target === 'saul-call-editor') {
+      if (request.target === CALL_EDITOR_STORAGE) {
         if (!offscreenSender(sender)) throw new Error('Runner only');
-        const message: CallEditorBridgeRequest = request.message;
+        const message: unknown = request.message;
+        validateCallEditorBridge(message);
         switch (message?.action) {
           case 'read-choices':
-            return actionStore.readChoices();
+            return actionStore.readChoices() satisfies Promise<
+              CallEditorStorageReplies['read-choices']
+            >;
           case 'save-choices':
-            return actionStore.saveChoices(message.source, message.choices);
+            return actionStore.saveChoices(message.source, message.choices) satisfies Promise<
+              CallEditorStorageReplies['save-choices']
+            >;
           case 'read-draft':
-            return actionStore.readDraft();
+            return actionStore.readDraft() satisfies Promise<
+              CallEditorStorageReplies['read-draft']
+            >;
           case 'save-draft':
-            return actionStore.saveDraft(message.draft);
+            return actionStore.saveDraft(message.draft) satisfies Promise<
+              CallEditorStorageReplies['save-draft']
+            >;
           case 'prepare-preset':
-            return prepareWritePreset(await currentSettings(), message.presetId);
+            return prepareWritePreset(
+              await currentSettings(),
+              message.presetId,
+            ) satisfies CallEditorStorageReplies['prepare-preset'];
           default:
             throw new Error('Invalid Call storage request.');
         }
@@ -140,15 +157,15 @@ export default defineBackground(() => {
       }
       if (!workspaceSender(sender)) throw new Error('Extension workspace only');
       if (request.target === 'saul-settings') return settings(request.message);
-      if (request.target === 'saul-connection') return connections.request(request.message);
-      if (request.target === 'saul-action') {
+      if (request.target === CONNECTION_TARGET) return connections.request(request.message);
+      if (request.target === CALL_EDIT) {
         validateCallEditRequest(request.message);
         return runnerRequest({ operation: 'action', message: request.message });
       }
       if (request.target === CALL_LAUNCH) {
         return handleCallLaunch(request.message);
       }
-      if (request.target === 'saul-digest') {
+      if (request.target === CALL_CONTROL) {
         validateCallControl(request.message);
         const message = request.message;
         const credential =

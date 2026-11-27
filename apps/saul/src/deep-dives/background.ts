@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isRecord } from '../../shared/model/value.mts';
 import { workspaceSender } from '../platform/chrome/sender';
 import { runChatGPTComposer } from './composer';
 import {
@@ -9,12 +10,14 @@ import {
   DEEP_DIVE_INSTRUCTION,
   DEEP_DIVE_MENU,
   DEEP_DIVE_RECORDS,
+  DEEP_DIVE_TARGET,
   deepDiveRecords,
   deepDiveRequest,
   DEFAULT_INSTRUCTION,
   instructionText,
   type DeepDive,
   type DeepDiveRequest,
+  type DeepDiveResults,
   type Handoff,
 } from './model';
 
@@ -247,20 +250,20 @@ export function initDeepDives() {
   async function workspace(message: DeepDiveRequest) {
     switch (message.action) {
       case 'list':
-        return { items: await records(), error: launchError };
+        return { items: await records(), error: launchError } satisfies DeepDiveResults['list'];
       case 'instruction':
-        return instruction();
+        return instruction() satisfies Promise<DeepDiveResults['instruction']>;
       case 'save-instruction':
         if ((await instruction()) !== message.expected)
           throw new Error('The instruction changed in another window. Reload it before saving.');
         await chrome.storage.local.set({ [DEEP_DIVE_INSTRUCTION]: message.value });
-        return message.value;
+        return message.value satisfies DeepDiveResults['save-instruction'];
       case 'open':
       case 'remove': {
         const items = await records();
         const item = items.find(({ id }) => id === message.id);
         if (!item) return;
-        if (message.action === 'open') return open(item);
+        if (message.action === 'open') return open(item) satisfies Promise<DeepDiveResults['open']>;
         if (active(item)) throw new Error('Wait for the current handoff before removing it.');
         await chrome.storage.local.set({
           [DEEP_DIVE_RECORDS]: items.filter(({ id }) => id !== item.id),
@@ -307,8 +310,8 @@ export function initDeepDives() {
       }),
     );
   });
-  chrome.runtime.onMessage.addListener((message, sender, reply) => {
-    if (message?.target !== 'saul-deep-dives') return false;
+  chrome.runtime.onMessage.addListener((message: unknown, sender, reply) => {
+    if (!isRecord(message) || message.target !== DEEP_DIVE_TARGET) return false;
     if (!workspaceSender(sender)) {
       reply({ success: false, error: 'Extension workspace only.' });
       return false;
