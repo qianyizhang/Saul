@@ -51,9 +51,11 @@ The profile’s permission for local clients such as the CLI and Codex to use Sa
 It includes tab inventory and controls access to additional browser operations.
 _Avoid_: Codex tab access
 
-**Tabs**, **Pages**, **Annotations**:
+**Tabs**, **Pages**, **History**, **Annotations**:
 The Local tool access groups for tab and window inventory and organization, live
-page content and interaction, and saved notes and their evidence, respectively.
+page content and interaction, saved passages and lookups, and saved notes and
+their evidence. **History Read** gives local clients opt-in, read-only access
+to visible records from both apps. See [Local tool permissions](docs/native-messaging.md#local-tool-permissions).
 
 **Read** and **Write**:
 Read permits inspection and supported previews. Write includes Read and permits

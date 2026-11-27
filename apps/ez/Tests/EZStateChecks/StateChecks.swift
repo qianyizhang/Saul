@@ -10,7 +10,8 @@ import SaulTestSupport
                 recipeStateChecks() + historyStateChecks() + historyPagingStateChecks()
                     + configurationStateChecks()
                     + shortcutStateChecks() + selectedTextChecks() + quickLookupStateChecks()
-                    + connectionSetupStateChecks() + attemptStateChecks() + illustrationStateChecks()
+                    + connectionSetupStateChecks() + connectionEditorStateChecks()
+                    + attemptStateChecks() + illustrationStateChecks()
                     + searchImageStateChecks()))
     }
 }
