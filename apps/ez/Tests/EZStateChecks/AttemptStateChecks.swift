@@ -185,7 +185,7 @@ import SaulTestSupport
             f.model.lookup.followUpDrafts[first.id] = "Why does that happen?"
             f.model.lookup.followUpTargetID = first.id
             f.terminal = CheckSignal()
-            f.model.performLookupCommand(.send)
+            f.model.lookup.performLookupCommand(.send)
             try await f.terminal.wait()
             let second = f.model.lookup.selectedEntry!
             try expectEqual(second.parentID, first.id, "Parent link lost")
@@ -335,7 +335,8 @@ import SaulTestSupport
             f.model.lookup.send()
             try await writing.wait()
             try expect(
-                f.model.lookup.preparingAttempt && f.model.commandEnabled(.stop), "Stop hidden before send")
+                f.model.lookup.preparingAttempt && f.model.lookup.commandEnabled(.stop),
+                "Stop hidden before send")
             f.model.lookup.stop()
             f.model.lookup.stop()
             try expectEqual(f.control.appends.map(\.status), ["pending"], "Stop raced the initial write")
@@ -360,7 +361,8 @@ import SaulTestSupport
             f.model.lookup.send()
             try await writing.wait()
             try expect(
-                f.model.lookup.savingAttempt && !f.model.commandEnabled(.stop), "Saving still allows Stop")
+                f.model.lookup.savingAttempt && !f.model.lookup.commandEnabled(.stop),
+                "Saving still allows Stop")
             try expectEqual(
                 f.model.lookup.selectedEntry?.status, "pending", "Completion published before save")
             f.model.lookup.stop()
@@ -403,7 +405,7 @@ import SaulTestSupport
                 f.model.lookup.launcherPending && !f.model.lookup.busy, "Launcher did not wait for startup")
             try expectThrows(EZError.self) { try f.model.lookup.submitLauncher("Duplicate", after: ready) }
             try expectThrows(EZError.self) { try f.model.lookup.prepareSelectedText("Selected text") }
-            f.model.performLookupCommand(.newLookup)
+            f.model.lookup.performLookupCommand(.newLookup)
             f.model.lookup.chooseAction(f.state.multi.id)
             f.model.deleteLookup(saved.recordID)
             f.model.lookup.fillQuickLookupSelection("Late selection")
@@ -456,8 +458,8 @@ import SaulTestSupport
             try expectThrows(EZError.self) { try f.model.saveConfiguration(Configuration()) }
             f.model.lookup.fillQuickLookupSelection("late selection")
             f.model.lookup.chooseAction(f.state.multi.id)
-            f.model.performLookupCommand(.nextRecipe)
-            f.model.performLookupCommand(.newLookup)
+            f.model.lookup.performLookupCommand(.nextRecipe)
+            f.model.lookup.performLookupCommand(.newLookup)
             try expectEqual(
                 f.model.lookup.currentAction?.id, f.state.single.id, "Active lookup changed action")
             try expectEqual(f.model.lookup.query, draft, "Active lookup lost the draft")

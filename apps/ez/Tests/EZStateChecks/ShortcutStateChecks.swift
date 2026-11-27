@@ -12,46 +12,47 @@ import SaulTestSupport
             f.model.lookup.chooseAction(actions[0].id)
             f.model.lookup.query = "draft"
             f.model.lookup.chooseLookupPreset(f.alternate.id)
-            f.model.performLookupCommand(.previousRecipe)
+            f.model.lookup.performLookupCommand(.previousRecipe)
             try expectEqual(f.model.lookup.currentAction?.id, actions.last?.id, "Shortcut contract mismatch")
             try expect(
                 f.model.lookup.inputValues.isEmpty && f.model.lookup.overridePresetID == nil,
                 "Cycle retained draft or override")
-            f.model.performLookupCommand(.nextRecipe)
+            f.model.lookup.performLookupCommand(.nextRecipe)
             try expectEqual(f.model.lookup.currentAction?.id, actions[0].id, "Shortcut contract mismatch")
-            f.model.performLookupCommand(.nextRecipe)
+            f.model.lookup.performLookupCommand(.nextRecipe)
             try expectEqual(f.model.lookup.currentAction?.id, actions[1].id, "Shortcut contract mismatch")
-            f.model.performLookupCommand(.recipe1)
+            f.model.lookup.performLookupCommand(.recipe1)
             try expectEqual(f.model.lookup.currentAction?.id, actions[0].id, "Shortcut contract mismatch")
             f.model.lookup.query = "preserve when already selected"
-            f.model.performLookupCommand(.recipe1)
+            f.model.lookup.performLookupCommand(.recipe1)
             try expectEqual(
                 f.model.lookup.query, "preserve when already selected", "Shortcut contract mismatch")
-            f.model.performLookupCommand(.lastRecipe)
+            f.model.lookup.performLookupCommand(.lastRecipe)
             try expectEqual(f.model.lookup.currentAction?.id, actions.last?.id, "Shortcut contract mismatch")
         },
         stateCase("shortcuts respect absent actions") { f in
-            try expect(!f.model.commandEnabled(.recipe8), "Missing action was enabled")
+            try expect(!f.model.lookup.commandEnabled(.recipe8), "Missing action was enabled")
             try f.model.saveConfiguration(Configuration())
             for command in [LookupCommand.nextRecipe, .previousRecipe, .recipe1, .lastRecipe] {
-                f.model.performLookupCommand(command)
-                try expect(!f.model.commandEnabled(command), "Empty configuration enabled action action")
+                f.model.lookup.performLookupCommand(command)
+                try expect(
+                    !f.model.lookup.commandEnabled(command), "Empty configuration enabled a lookup action")
             }
             try expect(f.model.lookup.currentAction == nil, "Navigation resurrected a action")
         },
         stateCase("shortcuts leave history replay and reset through the shared actions") { f in
             f.model.lookup.reuse(try f.savedAnswer())
-            f.model.performLookupCommand(.nextRecipe)
+            f.model.lookup.performLookupCommand(.nextRecipe)
             try expectEqual(
                 f.model.lookup.currentAction?.id, f.configuration.actions.first?.id,
                 "Shortcut contract mismatch")
             try expect(f.model.lookup.replayEntry == nil, "Action command kept history replay")
             f.model.lookup.query = "new draft"
-            f.model.performLookupCommand(.newLookup)
+            f.model.lookup.performLookupCommand(.newLookup)
             try expect(
                 f.model.lookup.inputValues.isEmpty && f.model.lookup.selection == nil,
                 "New shortcut retained draft/selection")
-            try expect(!f.model.commandEnabled(.send), "Offline shortcut can send")
+            try expect(!f.model.lookup.commandEnabled(.send), "Offline shortcut can send")
         },
         stateCase("shortcut saves publish only after persistence succeeds") { f in
             try f.model.saveShortcut(.init(key: "t"), for: .newLookup)

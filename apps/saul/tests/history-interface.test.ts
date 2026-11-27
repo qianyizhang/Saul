@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createHistoryRequest,
-  decomposeHistoryCommand,
+  decodeHistoryRequest,
   historyRequestPolicy,
   validateHistoryRequest,
   validateHistoryResult,
@@ -55,7 +55,7 @@ describe('History wire', () => {
       expect(() =>
         validateHistoryResult(request, { type: 'result', value: payload }),
       ).not.toThrow();
-      expect(decomposeHistoryCommand(request.command)).toEqual({
+      expect(decodeHistoryRequest(request).feature?.message).toEqual({
         type: 'DB_DIGEST_CREATE',
         payload,
       });
@@ -101,7 +101,7 @@ describe('History wire', () => {
     for (const source of sources) {
       const message = { type: 'DB_DIGEST_ITEM', payload: { id: 'call', item, source } } as const;
       const request = createHistoryRequest(owner, operationId, message);
-      expect(decomposeHistoryCommand(request.command)).toEqual(message);
+      expect(decodeHistoryRequest(request).feature?.message).toEqual(message);
     }
     const request = createHistoryRequest(owner, operationId, {
       type: 'DB_DIGEST_ITEM',
@@ -137,7 +137,7 @@ describe('History wire', () => {
       view: 'library.records',
       visibility: 'masked',
     });
-    expect(decomposeHistoryCommand(request.command)).toEqual({
+    expect(decodeHistoryRequest(request).feature?.message).toEqual({
       type: 'DB_HISTORY_PAGE',
       payload: { cursor: 'opaque', limit: 2, searchQuery: 'answer' },
     });

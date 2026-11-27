@@ -4,10 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { SharedHistory } from '../native/storage/history.mts';
-import {
-  decomposeHistoryCommand,
-  type HistoryRequest,
-} from '../shared/protocol/history-protocol.mts';
+import { decodeHistoryRequest, type HistoryRequest } from '../shared/protocol/history-protocol.mts';
 
 it('dispatches annotation defaults without changing the fingerprint of old History receipts', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'saul-history-defaults-'));
@@ -42,7 +39,7 @@ it('dispatches annotation defaults without changing the fingerprint of old Histo
   } as const;
   try {
     const request = { operation: 'history', owner, operationId, command };
-    const feature = decomposeHistoryCommand(command);
+    const feature = decodeHistoryRequest(request).feature?.message;
     expect(feature).toMatchObject({
       payload: { scope: { ids: [] }, operation: { capture: { comment: '' } } },
     });

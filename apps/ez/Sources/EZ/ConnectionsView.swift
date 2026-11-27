@@ -34,7 +34,8 @@ struct ConnectionsView: View {
     @State private var remoteSetups: [SharedConnectionSetup] = []
     @State private var releasing: SharedConnectionSetup?
     private var recovery: ConnectionSetup? {
-        model.session.pendingSetups.first { $0.id == recoveryID } ?? model.pendingConnectionSetup
+        let setups = model.session.pendingSetups
+        return setups.first { $0.id == recoveryID } ?? setups.first
     }
     private var eligibleProfiles: [SaulAccount] {
         model.profiles.filter { profile in

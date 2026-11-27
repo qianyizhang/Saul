@@ -104,7 +104,7 @@ private actor IllustrationKeyFixture {
                 model.connectionStatus(connection.key)?.connected == true,
                 "Failed removal disconnected the credential")
             await keys.setFailure(false)
-            guard let pending = model.pendingConnectionSetup else {
+            guard let pending = model.session.pendingSetups.first else {
                 throw CheckFailure("Failed save lost the pending setup")
             }
             try await model.resumeConnectionSetup(pending.id, phase: pending.phase, key: "sk-replacement")

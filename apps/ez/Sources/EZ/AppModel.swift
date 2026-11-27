@@ -197,9 +197,6 @@ enum SettingsSection: String, CaseIterable {
         lookup.objectWillChange.send()
     }
 
-    func commandEnabled(_ command: LookupCommand) -> Bool { lookup.commandEnabled(command) }
-    func performLookupCommand(_ command: LookupCommand) { lookup.performLookupCommand(command) }
-
     func saveShortcut(_ binding: LookupKeyBinding, for command: LookupCommand) throws {
         var updated = shortcuts
         updated.overrides[command.rawValue] = binding
@@ -345,9 +342,6 @@ enum SettingsSection: String, CaseIterable {
         try await saveConnectionSetup(
             .start(connection, previous: previous, confirmedName: confirmedAppName), key: key)
     }
-
-    var pendingConnectionSetup: ConnectionSetup? { session.pendingSetup }
-    var connectionSetupRepairChoice: ConnectionSession.SetupRepairChoice? { session.setupRepairChoice }
 
     func resumeConnectionSetup(_ id: UUID, phase: ConnectionSetup.Phase, key: String? = nil) async throws {
         try await saveConnectionSetup(.resume(id, phase: phase), key: key)

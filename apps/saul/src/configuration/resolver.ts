@@ -12,8 +12,6 @@ import { inspectPreset, type PresetInspection } from './inspect';
 import { activeConnections } from './connections';
 import { CHROME_AI_RETIRED_MESSAGE } from '../../shared/model/retired-provider.ts';
 
-export { SELECT_NEW_PRESET } from '../../shared/model/execution-route.ts';
-
 export interface PreparedModel {
   choices: FrozenModel;
   credential: string;

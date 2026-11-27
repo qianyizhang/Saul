@@ -164,11 +164,9 @@ private struct LookupCommands: Commands {
         }
     }
     private func commandButton(_ command: LookupCommand) -> some View {
-        Button(command.title) {
-            if command == .newLookup { quickLookup.newQuery() } else { model.performLookupCommand(command) }
-        }
-        .keyboardShortcut(model.shortcuts.binding(for: command).keyboardShortcut)
-        .disabled(model.showSettings || !model.commandEnabled(command))
+        Button(command.title) { quickLookup.perform(command) }
+            .keyboardShortcut(model.shortcuts.binding(for: command).keyboardShortcut)
+            .disabled(model.showSettings || !model.lookup.commandEnabled(command))
     }
 }
 

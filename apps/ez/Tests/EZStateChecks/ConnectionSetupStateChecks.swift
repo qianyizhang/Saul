@@ -58,10 +58,10 @@ import SaulTestSupport
                     try await finish()
                     try expect(
                         try store.load()?.connections.contains(fixture.definition) == true, scenario.id)
-                    try expect(session.pendingSetup == nil, "Confirmed setup remained pending")
+                    try expect(session.pendingSetups.isEmpty, "Confirmed setup remained pending")
                 case "review-credential", "conflict":
                     try await expectAsyncThrows(EZError.self) { try await finish() }
-                    try expect(session.pendingSetup != nil, "Unresolved setup was cleared")
+                    try expect(!session.pendingSetups.isEmpty, "Unresolved setup was cleared")
                 default: throw CheckFailure("Unknown fixture outcome")
                 }
                 try expectEqual(credentialWrites, 0, "Recovered setup rewrote credentials")
@@ -101,7 +101,7 @@ import SaulTestSupport
                     .start(fixture.connection, previous: nil, confirmedName: nil), on: session)
             }
             try await expectAsyncThrows(CredentialStorageError.self) { try await start() }
-            try expect(session.pendingSetup == nil, "Definite denial retained the new intent")
+            try expect(session.pendingSetups.isEmpty, "Definite denial retained the new intent")
 
             let legacy = ConnectionSetup(
                 id: UUID(), phase: .credential, definition: fixture.connection, previous: nil,
@@ -112,14 +112,17 @@ import SaulTestSupport
             try await expectAsyncThrows(CredentialStorageError.self) {
                 try await fixture.save(.resume(legacy.id, phase: legacy.phase), on: session)
             }
-            try expectEqual(session.pendingSetup, legacy, "Definite denial changed the previous intent")
+            try expectEqual(session.pendingSetups, [legacy], "Definite denial changed the previous intent")
 
             rejectionReason = nil
             try await expectAsyncThrows(CredentialStorageError.self) {
                 try await fixture.save(.resume(legacy.id, phase: legacy.phase), on: session)
             }
-            try expectEqual(session.pendingSetup?.id, legacy.id, "Uncertain admission lost its identity")
-            try expectEqual(session.pendingSetup?.protectionVersion, 1, "Uncertain admission was forgotten")
+            try expectEqual(
+                session.pendingSetups.map(\.id), [legacy.id], "Uncertain admission lost its identity")
+            try expectEqual(
+                session.pendingSetups.first { $0.id == legacy.id }?.protectionVersion, 1,
+                "Uncertain admission was forgotten")
             try expectEqual(fixture.keyWrites, 0, "Rejected admission touched the credential")
         },
         CheckCase("connection setup: unrelated settings can settle while another key awaits recovery") {
@@ -164,9 +167,10 @@ import SaulTestSupport
                 independentlyEdited = try fixture.store.save(independentlyEdited)
                 let resumed = fixture.session()
                 try resumed.loadSetup(in: scenario)
-                try expectEqual(
-                    resumed.pendingSetup?.phase, .settings, "Restart lost the completed credential stage")
-                guard let pending = resumed.pendingSetup else { throw CheckFailure("Missing pending setup") }
+                guard let pending = resumed.pendingSetups.first else {
+                    throw CheckFailure("Missing pending setup")
+                }
+                try expectEqual(pending.phase, .settings, "Restart lost the completed credential stage")
                 let expectedCommitCount = acknowledgedWriteWasLost ? 0 : 1
                 var commits = 0
                 try await resumed.save(
@@ -183,7 +187,7 @@ import SaulTestSupport
                 try expect(
                     latest.connections.contains(connection), "Recovery did not finish the target settings")
                 try expectEqual(fixture.keyWrites, 1, "Recovery rewrote the credential")
-                try expect(resumed.pendingSetup == nil, "Finished setup remained pending")
+                try expect(resumed.pendingSetups.isEmpty, "Finished setup remained pending")
                 try expect(
                     !FileManager.default.fileExists(atPath: fixture.receipt.path), "Finished receipt remained"
                 )
@@ -209,7 +213,9 @@ import SaulTestSupport
 
             let resumed = fixture.session()
             try resumed.loadSetup(in: directory)
-            guard let pending = resumed.pendingSetup else { throw CheckFailure("Missing pending setup") }
+            guard let pending = resumed.pendingSetups.first else {
+                throw CheckFailure("Missing pending setup")
+            }
             var attemptedCommit = false
             let error = try await expectAsyncThrows(EZError.self) {
                 try await resumed.save(
@@ -221,14 +227,15 @@ import SaulTestSupport
                 error.localizedDescription.contains("changed"), "Stale target did not report a conflict")
             try expect(!attemptedCommit && fixture.keyWrites == 1, "Conflict repeated a side effect")
             try expectEqual(
-                resumed.pendingSetup?.definition, connection, "Conflict forgot the pending target")
+                resumed.pendingSetups.first { $0.id == pending.id }?.definition, connection,
+                "Conflict forgot the pending target")
             try expectEqual(
                 try fixture.latest().connections, other.connections, "Conflict replaced newer settings")
 
             try await resumed.discardSetup(pending.id, phase: .settings, in: directory)
             let reopened = fixture.session()
             try reopened.loadSetup(in: directory)
-            try expect(reopened.pendingSetup == nil, "Discard did not clear durable recovery")
+            try expect(reopened.pendingSetups.isEmpty, "Discard did not clear durable recovery")
             try expectEqual(fixture.keyWrites, 1, "Discard changed the credential")
             try expectEqual(try fixture.latest().connections, other.connections, "Discard changed settings")
         },
@@ -259,7 +266,7 @@ import SaulTestSupport
                 try await fixture.save(.start(original, previous: nil, confirmedName: nil), on: session)
             }
             try expectEqual(fixture.keyWrites, 0, "A stale form changed a credential")
-            try expect(session.pendingSetup == nil, "Stale form created a pending setup")
+            try expect(session.pendingSetups.isEmpty, "Stale form created a pending setup")
         },
         CheckCase("connection setup: discarded replaced and completed IDs cannot act") { directory in
             let fixture = try ConnectionSetupFixture(directory: directory)
@@ -277,7 +284,8 @@ import SaulTestSupport
             try await expectAsyncThrows(EZError.self) {
                 try await session.discardSetup(old, phase: .settings, in: directory)
             }
-            try expectEqual(session.pendingSetup?.id, replacement, "Stale discard changed the active setup")
+            try expectEqual(
+                session.pendingSetups.map(\.id), [replacement], "Stale discard changed the active setup")
             try await expectAsyncThrows(EZError.self) {
                 try await fixture.save(.resume(replacement, phase: .credential), on: session)
             }
@@ -302,7 +310,7 @@ import SaulTestSupport
             try await expectAsyncThrows(EZError.self) {
                 try await fixture.save(.resume(id, phase: .settings), on: fresh)
             }
-            try expect(fresh.setupRepairChoice == nil, "Mismatched endpoint was reported as missing")
+            try expect(fresh.repairChoice(for: id) == nil, "Mismatched endpoint was reported as missing")
             try expectEqual(fixture.keyWrites, 1, "Credential status replayed the key change")
             try expect(
                 !(try fixture.latest().connections.contains(fixture.connection)),
@@ -312,7 +320,7 @@ import SaulTestSupport
                 try await fixture.save(.resume(id, phase: .settings), on: fresh)
             }
             try expectEqual(
-                fresh.setupRepairChoice, .replaceKey, "Missing key did not offer repair of this setup")
+                fresh.repairChoice(for: id), .replaceKey, "Missing key did not offer repair of this setup")
             try expectEqual(fixture.keyWrites, 1, "Finish setup rewrote the acknowledged credential")
             try await fixture.save(.repair(id, choice: .replaceKey), on: fresh)
             try expectEqual(fixture.keyWrites, 2, "Repair did not submit exactly one explicit key change")
@@ -360,7 +368,7 @@ import SaulTestSupport
                         key: nil, directory: scenario, blocked: false, readLatest: fixture.latest,
                         commit: { _, _ in throw EZError("Synthetic settings write failure") })
                 }
-                guard let setup = session.pendingSetup else { throw CheckFailure("Missing setup") }
+                guard let setup = session.pendingSetups.first else { throw CheckFailure("Missing setup") }
                 let stale: ConnectionSession.SetupRepairChoice = expected == .signIn ? .enablePlan : .signIn
                 profiles = stale == .signIn ? [other] : [noGrant, other]
                 try await expectAsyncThrows(EZError.self) {
@@ -369,16 +377,18 @@ import SaulTestSupport
                 try expectEqual(signedIn, [], "Resume signed in automatically")
                 try expectEqual(confirmations, 1, "Resume repeated app-name confirmation")
                 try expectEqual(
-                    session.setupRepairChoice, stale, "Initial repair choice ignored account status")
+                    session.repairChoice(for: setup.id), stale, "Initial repair choice ignored account status"
+                )
                 profiles = expected == .signIn ? [other] : [noGrant, other]
                 try await expectAsyncThrows(EZError.self) {
                     try await fixture.save(.repair(setup.id, choice: stale), on: session)
                 }
                 try expectEqual(signedIn, [], "Stale repair command authorized the changed action")
                 try expectEqual(
-                    session.setupRepairChoice, expected, "Fresh account status did not update choice")
+                    session.repairChoice(for: setup.id), expected,
+                    "Fresh account status did not update choice")
                 try expectEqual(
-                    session.setupRepairChoice?.title,
+                    session.repairChoice(for: setup.id)?.title,
                     expected == .signIn ? "Sign in again" : "Enable plan use",
                     "Displayed label did not match authorization intent")
                 try await fixture.save(.repair(setup.id, choice: expected), on: session)
@@ -432,7 +442,7 @@ import SaulTestSupport
                 blocked: false, readLatest: latest,
                 commit: { _, _ in throw EZError("Synthetic settings write failure") })
         }
-        guard let pending = session.pendingSetup, pending.phase == .settings else {
+        guard let pending = session.pendingSetups.first, pending.phase == .settings else {
             throw CheckFailure("Settings failure did not leave the acknowledged stage")
         }
         return pending.id

@@ -587,10 +587,6 @@ export function createHistoryRequest(
   return { operation: 'history', owner, operationId, command };
 }
 
-export function decomposeHistoryCommand(command: HistoryRequest['command']): DbRequest | undefined {
-  return featureOperation(command)?.message;
-}
-
 export function historyRequestPolicy(request: HistoryRequest): HistoryOperationPolicy {
   if ('view' in request.command) return 'read';
   return featureOperation(request.command)?.operation.policy ?? 'explicit-write';

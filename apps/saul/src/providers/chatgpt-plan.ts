@@ -8,7 +8,7 @@ import {
 } from '../../shared/protocol/credential-plan.mts';
 import type { CredentialRequest } from '../../shared/protocol/credentials-contract.mts';
 import { credentialEvents } from '../native/credentials';
-import { SELECT_NEW_PRESET } from '../configuration/resolver';
+import { SELECT_NEW_PRESET } from '../../shared/model/execution-route';
 
 export async function* planEvents(
   request: Extract<CredentialRequest, { action: PlanRequest['action'] }>,

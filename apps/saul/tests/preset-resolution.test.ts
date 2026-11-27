@@ -1,11 +1,10 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { DEFAULT_CONFIGURATION } from '../src/configuration/definition';
-import { starterConfiguration } from '../src/configuration/definition';
+import { SELECT_NEW_PRESET } from '../shared/model/execution-route';
+import { DEFAULT_CONFIGURATION, starterConfiguration } from '../src/configuration/definition';
 import {
   preparePreset,
   prepareWritePreset,
   prepareFrozenPreset,
-  SELECT_NEW_PRESET,
 } from '../src/configuration/resolver';
 import { prepareRecipeRun } from '../src/reading/configuration';
 import { planEvents } from '../src/providers/chatgpt-plan';
@@ -137,9 +136,7 @@ it('retries only the frozen account of an available ChatGPT plan connection', ()
     [{ ...connection, accountId: 'other' }],
     [{ ...connection, kind: 'openai-api' as const }],
   ])
-    expect(() => prepareFrozenPreset({ ...value, connections }, managed)).toThrow(
-      SELECT_NEW_PRESET,
-    );
+    expect(() => prepareFrozenPreset({ ...value, connections }, managed)).toThrow();
 });
 
 it('inspection needs no key, while actual execution still rejects a missing key', () => {

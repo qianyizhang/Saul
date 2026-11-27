@@ -58,8 +58,6 @@ import SaulNativeValues
     private let setupStore = ConnectionSetupStore()
     private let protection: ConnectionProtection?
     var pendingSetups: [ConnectionSetup] { setupStore.records }
-    var pendingSetup: ConnectionSetup? { pendingSetups.first }
-    var setupRepairChoice: SetupRepairChoice? { pendingSetup.flatMap { repairChoice(for: $0.id) } }
     func repairChoice(for id: UUID) -> SetupRepairChoice? { setupStore.repairs[id] }
     private let setPreference: @MainActor (Bool) -> Void
     var onChange: (@MainActor () -> Void)?

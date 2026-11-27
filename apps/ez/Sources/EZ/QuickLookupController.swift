@@ -153,8 +153,12 @@ import SwiftUI
             })
         else { return false }
         guard !event.isARepeat else { return true }
-        if command == .newLookup { newQuery() } else { model.performLookupCommand(command) }
+        perform(command)
         return true
+    }
+
+    func perform(_ command: LookupCommand) {
+        if command == .newLookup { newQuery() } else { model.lookup.performLookupCommand(command) }
     }
 
     func hide() {
@@ -187,7 +191,7 @@ import SwiftUI
 
     func newQuery() {
         selectionTask?.cancel()
-        guard !model.lookup.busy, !model.lookup.launcherPending else { return }
+        guard model.lookup.commandEnabled(.newLookup) else { return }
         launcherError = nil
         model.lookup.newQuery()
         presentation += 1

@@ -1,8 +1,5 @@
 import { SharedHistory } from '../../.build/native/history.mjs';
-import {
-  validateHistoryRequest,
-  decomposeHistoryCommand,
-} from '../../shared/protocol/history-protocol.mts';
+import { decodeHistoryRequest } from '../../shared/protocol/history-protocol.mts';
 import type { DbRequest } from '../../shared/protocol/history-types.ts';
 import { randomUUID } from 'node:crypto';
 import { chromium, expect, type BrowserContext } from '@playwright/test';
@@ -217,11 +214,12 @@ export async function createSandbox(options: SandboxOptions = {}) {
           await import('../history-fixtures.ts')
         ).runHistoryFixture(history, data as import('./database-harness').DatabaseFixtureRequest);
       else if (request.url === '/' + token) {
-        validateHistoryRequest(data);
-        const feature = rejectWrite && decomposeHistoryCommand(data.command);
-        if (feature && rejectWrite?.(feature)) {
-          rejectWrite = undefined;
-          throw new Error('Fixture rejected the storage write.');
+        if (rejectWrite) {
+          const message = decodeHistoryRequest(data).feature?.message;
+          if (message && rejectWrite(message)) {
+            rejectWrite = undefined;
+            throw new Error('Fixture rejected the storage write.');
+          }
         }
         result = await history.run(data);
       } else throw new Error('Unavailable fixture route');
