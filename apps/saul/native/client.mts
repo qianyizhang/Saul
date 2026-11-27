@@ -15,6 +15,12 @@ import { createWindowNames, withWindowNames } from './window-names.mts';
 
 const nativeNames = new Map<string, WindowNames>();
 
+export class MultipleBrowserSessionsError extends Error {
+  constructor() {
+    super('Multiple browsers/profiles connected. Call saul_sessions and supply a session ID.');
+  }
+}
+
 function request(
   session: string,
   method: string,
@@ -118,10 +124,7 @@ async function invokeTool<K extends ToolName>(
       throw new Error(
         'No Saul browser connected. Install the native host and enable Local tool access in Saul → Settings → Preferences → Integrations.',
       );
-    if (active.length > 1)
-      throw new Error(
-        'Multiple browsers/profiles connected. Call saul_sessions and supply a session ID.',
-      );
+    if (active.length > 1) throw new MultipleBrowserSessionsError();
     session = active[0]!.session;
   }
   const params: Record<string, unknown> = { ...args };

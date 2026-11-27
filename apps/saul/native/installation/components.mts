@@ -3,7 +3,7 @@ export const helperComponents = {
   tabs: {
     entries: {
       'host.mjs': 'native/hosts/tabs.mts',
-      'cli.mjs': 'native/cli.mts',
+      'cli.mjs': 'native/cli-entry.mts',
       'mcp.mjs': 'native/mcp.mts',
       'board-web.mjs': 'native/board-web.mts',
     },

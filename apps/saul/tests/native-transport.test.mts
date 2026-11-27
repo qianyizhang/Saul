@@ -21,6 +21,7 @@ beforeEach(() => {
   directory = mkdtempSync('/tmp/saul-test-');
   vi.stubEnv('MCP_APP_LOG_ROOT', join(directory, 'diagnostics'));
   vi.stubEnv('SAUL_RUNTIME_DIR', join(directory, 'run'));
+  vi.stubEnv('SAUL_SESSION', undefined);
 });
 afterEach(async () => {
   for (const child of children.splice(0)) {
@@ -84,7 +85,7 @@ async function runProcess(
   command: string,
   args: string[] = [],
   input?: string,
-  options: { cwd?: string } = {},
+  options: { cwd?: string; keepStdinOpen?: boolean } = {},
 ) {
   const child = spawn(command, args, { env: process.env, cwd: options.cwd });
   children.push(child);
@@ -97,7 +98,7 @@ async function runProcess(
     stderr += data;
   });
   const exited = once(child, 'exit');
-  child.stdin.end(input);
+  if (!options.keepStdinOpen) child.stdin.end(input);
   const [code] = await exited;
   return { code, stdout, stderr };
 }
@@ -105,7 +106,7 @@ async function subprocess(
   script: string,
   args: string[] = [],
   input?: string,
-  options: { cwd?: string } = {},
+  options: { cwd?: string; keepStdinOpen?: boolean } = {},
 ) {
   return runProcess(process.execPath, [resolve(script), ...args], input, options);
 }
@@ -241,6 +242,14 @@ describe('native transport', () => {
       const cli = await subprocess('.build/native/cli.mjs', ['history', action, positional]);
       expect(cli.code).toBe(0);
       expect(JSON.parse(cli.stdout)).toEqual(expected);
+      const structured = await subprocess('.build/native/cli.mjs', [
+        'history',
+        action,
+        '--json',
+        JSON.stringify(args),
+      ]);
+      expect(structured.code).toBe(0);
+      expect(JSON.parse(structured.stdout)).toEqual(expected);
       const mcp = await subprocess(
         '.build/native/mcp.mjs',
         [],
@@ -279,9 +288,60 @@ describe('native transport', () => {
     await check;
     expect(await sessions()).toEqual([]);
   });
+  it('routes stdin JSON to the selected session and leaves open stdin alone by default', async () => {
+    await host((message) => ({
+      result: { items: [], echoed: message.params, profile: 'first' },
+    }));
+    const [target] = await sessions();
+    expect(target).toBeDefined();
+    await host((message) => ({
+      result: { items: [], echoed: message.params, profile: 'second' },
+    }));
+
+    const selected = await subprocess(
+      '.build/native/cli.mjs',
+      ['--session', target!.session, 'history', 'search', '-'],
+      '{"query":"needle","limit":3}',
+    );
+    expect(selected).toMatchObject({ code: 0, stderr: '' });
+    expect(JSON.parse(selected.stdout)).toEqual({
+      items: [],
+      echoed: { query: 'needle', limit: 3 },
+      profile: 'first',
+    });
+
+    const ambiguous = await subprocess('.build/native/cli.mjs', ['tabs', 'list'], undefined, {
+      keepStdinOpen: true,
+    });
+    expect(ambiguous).toMatchObject({ code: 1, stdout: '' });
+    expect(JSON.parse(ambiguous.stderr)).toEqual({
+      error:
+        'Multiple browsers/profiles connected. Run saul sessions and pass --session <id> (or set SAUL_SESSION).',
+    });
+
+    const mcp = await subprocess(
+      '.build/native/mcp.mjs',
+      [],
+      JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'saul_tabs_list' },
+      }) + '\n',
+    );
+    expect(JSON.parse(mcp.stdout).result).toMatchObject({
+      isError: true,
+      content: [
+        {
+          type: 'text',
+          text: 'Multiple browsers/profiles connected. Call saul_sessions and supply a session ID.',
+        },
+      ],
+    });
+  });
   it('runs the CLI and MCP handshake/tool discovery/calls over stdio', async () => {
     await host();
-    const cli = await subprocess('.build/native/cli.mjs', ['list', '{"windowId":7}']);
+    const cli = await subprocess('.build/native/cli.mjs', ['tabs', 'list', '{"windowId":7}']);
     expect(cli.code).toBe(0);
     expect(JSON.parse(cli.stdout).echoed).toEqual({ windowId: 7 });
     const requests = [
@@ -430,7 +490,11 @@ describe('native transport', () => {
     const cli = join(installDir, 'bin/saul');
     const help = await runProcess(cli, ['help'], undefined, { cwd: unrelatedCwd });
     expect(help).toMatchObject({ code: 0, stderr: '' });
-    expect(help.stdout).toContain('groups-update');
+    expect(help.stdout).toContain('groups update');
+
+    const version = await runProcess(cli, ['--version'], undefined, { cwd: unrelatedCwd });
+    expect(version).toMatchObject({ code: 0, stderr: '' });
+    expect(version.stdout).toMatch(/^saul \d+\.\d+\.\d+\n$/);
 
     const tools = await runProcess(cli, ['tools'], undefined, { cwd: unrelatedCwd });
     expect(tools).toMatchObject({ code: 0, stderr: '' });

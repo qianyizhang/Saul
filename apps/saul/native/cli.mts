@@ -1,47 +1,148 @@
-#!/usr/bin/env node
-import { CLI_COMMANDS, TOOL_OPERATIONS, TOOLS } from '../shared/protocol/protocol.mts';
-import { callToolFromInput } from './client.mts';
+import { addAbortSignal, type Readable } from 'node:stream';
+import { parseArgs } from 'node:util';
+import packageInfo from '../package.json' with { type: 'json' };
+import { isRecord } from '../shared/model/value.mts';
+import { MAX_MESSAGE } from '../shared/protocol/native-messaging.mts';
+import {
+  CLI_COMMANDS,
+  TOOL_OPERATIONS,
+  TOOLS,
+  validateCall,
+  type ToolName,
+} from '../shared/protocol/protocol.mts';
+import { callToolFromInput, MultipleBrowserSessionsError } from './client.mts';
 import { errorMessage } from './transport.mts';
 
-const helpFlags = ['help', '--help', '-h'];
-const sections = [
-  { name: 'Connection', policy: 'discovery' },
-  { name: 'Tabs', policy: 'tabs-' },
-  { name: 'Pages', policy: 'pages-' },
-  { name: 'History', policy: 'history-read' },
-  { name: 'Annotations', policy: 'annotations' },
-];
-
-function publicCommand(command: string) {
-  const name = Object.hasOwn(CLI_COMMANDS, command) ? CLI_COMMANDS[command] : command;
-  return TOOLS.find((tool) => tool.name === name);
+export interface CliIO {
+  callTool: (name: ToolName, args: unknown) => Promise<unknown>;
+  readStdin: () => Promise<string>;
+  env: NodeJS.ProcessEnv;
+  stdout: (text: string) => void;
+  stderr: (text: string) => void;
 }
 
+const toolsByName = new Map(TOOLS.map((tool) => [tool.name, tool]));
+const catalog = Object.entries(CLI_COMMANDS).map(([command, name]) => ({
+  ...toolsByName.get(name)!,
+  command,
+  access: TOOL_OPERATIONS[name].access,
+}));
+type CliTool = (typeof catalog)[number];
+
+const paths = catalog
+  .map((tool) => ({ tool, tokens: tool.command.split(' ') }))
+  .sort((a, b) => b.tokens.length - a.tokens.length);
+
+const sectionTitles = new Map<string, string>([
+  ['sessions', 'Connection'],
+  ['tabs', 'Tabs'],
+  ['groups', 'Groups'],
+  ['windows', 'Windows'],
+  ['page', 'Pages'],
+  ['history', 'History'],
+  ['annotations', 'Annotations'],
+]);
+
 const accessHelp = {
-  discovery: 'Lists bridge sessions. No browser content is read.',
+  discovery: 'Lists bridge sessions without reading browser content.',
   'tabs-read': 'Requires Local tool access.',
-  'tabs-preview': 'Preview with Tabs Read. Apply with Organize tabs and windows and dryRun:false.',
+  'tabs-preview': 'Preview with Tabs Read. Applying requires Organize tabs and windows.',
   'pages-read': 'Requires Pages Read or Write.',
-  'pages-preview': 'Preview with Pages Read. Apply with Pages Write and dryRun:false.',
+  'pages-preview': 'Preview with Pages Read. Applying requires Pages Write.',
   'history-read': 'Requires History Read in Local tool access.',
-  annotations: 'List or read with Annotations Read. Create or change with Annotations Write.',
+  annotations:
+    'List or read with Annotations Read. Create or change immediately with Annotations Write.',
 };
 
-function commandHelp(command: string) {
-  if (command === 'history')
-    return 'Usage: saul history search "query" | saul history read ID\nBoth commands accept JSON arguments for pagination and session selection.';
-  const tool = publicCommand(command);
-  if (command === 'tools') return 'Usage: saul tools\n\nPrint the public command schemas as JSON.';
-  if (!tool) throw new Error(`Unknown command: ${command}. Run saul help.`);
+function matchCommand(positionals: string[]) {
+  return paths.find(({ tokens }) => tokens.every((token, index) => token === positionals[index]));
+}
+
+function commandsIn(group: string) {
+  return catalog.filter(({ command }) => command.startsWith(group + ' '));
+}
+
+function supportsApply(tool: CliTool) {
+  return tool.access.endsWith('-preview');
+}
+
+function shorthand(tool: CliTool) {
   const definition = TOOL_OPERATIONS[tool.name];
-  const section = sections.find(({ policy }) => definition.access.startsWith(policy))?.name;
+  return 'cliShorthand' in definition ? definition.cliShorthand : undefined;
+}
+
+function overview() {
+  const nouns = new Set([
+    ...sectionTitles.keys(),
+    ...catalog.map(({ command }) => command.split(' ')[0]!),
+  ]);
   return [
-    `Usage: saul ${definition.command} '[JSON arguments]'`,
+    'Saul local browser tools',
+    'Usage: saul <command> [arguments]',
+    ...Array.from(nouns).flatMap((noun) => {
+      const entries = catalog.filter(
+        ({ command }) => command === noun || command.startsWith(noun + ' '),
+      );
+      const title = sectionTitles.get(noun) ?? noun.charAt(0).toUpperCase() + noun.slice(1);
+      return entries.length
+        ? [`${title}\n  ${entries.map(({ command }) => command).join(', ')}`]
+        : [];
+    }),
+    'Help and schemas\n  help [group | command], tools',
+    [
+      'Options',
+      '  --session <id>  Select a browser session. Defaults to SAUL_SESSION when supported.',
+      '  --apply         Apply a tab or page change with Write access.',
+      '  --json <object> Pass arguments as JSON.',
+      '  -               Read a JSON object from stdin.',
+      '  --compact       Write JSON on one line.',
+      '  -h, --help      Show help.',
+      '  -V, --version   Show the Saul version.',
+    ].join('\n'),
+    [
+      'Examples',
+      '  saul sessions',
+      '  saul tabs sort \'{"windowId":123,"by":"domain"}\'',
+      '  saul history search "gradient"',
+    ].join('\n'),
+    'Tab and page changes preview by default. Review visual tab organization in the Tab Board. Annotation writes apply immediately.',
+  ].join('\n\n');
+}
+
+function helpFor(positionals: string[]) {
+  if (!positionals.length) return overview();
+  const [group] = positionals;
+  if (positionals.length === 1) {
+    if (group === 'tools')
+      return 'Usage: saul tools [--compact]\n\nPrint the public command catalog as JSON.';
+    if (group === 'help') return 'Usage: saul help [group | command]';
+    const entries = commandsIn(group!);
+    if (entries.length) {
+      return [
+        `Usage: saul ${group} <command> [arguments]`,
+        ...entries.map(
+          ({ command, access, description }) => `  ${command} [${access}]\n    ${description}`,
+        ),
+      ].join('\n\n');
+    }
+  }
+  const match = matchCommand(positionals);
+  if (!match || match.tokens.length !== positionals.length)
+    throw new Error(`Unknown command or help topic: ${positionals.join(' ')}.`);
+  const { tool } = match;
+  const literal = shorthand(tool);
+  const input = literal ? `<${literal}>` : "'<JSON object>'";
+  return [
+    `Usage: saul ${tool.command} [${input} | --json '<JSON object>' | -]`,
     '',
-    section,
     tool.description,
-    ...(definition.access in accessHelp
-      ? [accessHelp[definition.access as keyof typeof accessHelp]]
+    `Access: ${tool.access}. ${accessHelp[tool.access]}`,
+    ...(supportsApply(tool) ? ['Use --apply or set dryRun to false in JSON to apply.'] : []),
+    ...(literal
+      ? ['Positional input is literal. Use -- before a literal that starts with a dash.']
+      : []),
+    ...(Object.hasOwn(tool.inputSchema.properties, 'session')
+      ? ['Select a session with --session <id>, JSON session, or SAUL_SESSION.']
       : []),
     '',
     'Arguments',
@@ -49,60 +150,143 @@ function commandHelp(command: string) {
   ].join('\n');
 }
 
-function overview() {
-  const groups = sections.map(({ name, policy }) => {
-    const commands = Object.entries(CLI_COMMANDS)
-      .filter(([, tool]) => TOOL_OPERATIONS[tool].access.startsWith(policy))
-      .sort(
-        ([, a], [, b]) => Number(TOOL_OPERATIONS[b].readOnly) - Number(TOOL_OPERATIONS[a].readOnly),
-      )
-      .map(([command]) => command);
-    return `${name}\n  ${commands.join(', ')}`;
-  });
-  return [
-    'Saul local browser tools',
-    "Usage: saul <command> '[JSON arguments]'",
-    ...groups,
-    'Help and schemas\n  help [command], tools',
-    'Start with saul sessions and saul list. With multiple profiles, pass session in the JSON.',
-    `Example preview
-  saul sort '{"windowId":123,"by":"domain"}'`,
-    'Tabs Read comes with Local tool access. Organize tabs and windows enables applying changes.',
-    'Pages and Annotations use Off, Read or Write.',
-    'Tab and page changes preview by default. Use dryRun:false to apply with Write.',
-    'Annotation writes apply immediately. Use command help for details.',
-  ].join('\n\n');
+export async function readCliStdin(input: Readable, deadline = AbortSignal.timeout(10_000)) {
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  try {
+    for await (const chunk of addAbortSignal(deadline, input)) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      bytes += buffer.length;
+      if (bytes > MAX_MESSAGE) throw new Error('Stdin JSON exceeds 1 MiB.');
+      chunks.push(buffer);
+    }
+  } catch (error) {
+    if (deadline.aborted) throw new Error('Timed out waiting for EOF on stdin.', { cause: error });
+    throw error;
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks, bytes));
+  } catch {
+    throw new Error('Stdin must contain valid UTF-8.');
+  }
 }
 
-const argv = process.argv.slice(2);
-const help = argv[0] && helpFlags.includes(argv[0]) ? argv.shift() : undefined;
-const group = argv.shift();
-const command =
-  group === 'history' && argv[0] && !helpFlags.includes(argv[0])
-    ? `history ${argv.shift()}`
-    : group;
-const [argument, ...extra] = argv;
-function argumentsForCommand() {
-  if (argument === undefined) return {};
-  if (!argument.trimStart().startsWith('{')) {
-    if (command === 'history search') return { query: argument };
-    if (command === 'history read') return { id: argument };
+function parseObject(json: string) {
+  let value: unknown;
+  try {
+    value = JSON.parse(json);
+  } catch {
+    throw new Error('Invalid JSON. Pass a single JSON object.');
   }
-  return JSON.parse(argument);
+  if (!isRecord(value)) throw new Error('Pass a JSON object.');
+  return value;
 }
-try {
-  if (extra.length) throw new Error('Pass arguments as a single JSON object');
-  if (!command) console.log(overview());
-  else if (command === 'history' || help || (argument && helpFlags.includes(argument)))
-    console.log(commandHelp(command));
-  else if (command === 'tools') console.log(JSON.stringify(TOOLS, null, 2));
-  else {
-    const tool = publicCommand(command);
-    if (!tool) throw new Error(`Unknown command: ${command}. Run saul help.`);
-    const result = await callToolFromInput(tool.name, argumentsForCommand());
-    console.log(JSON.stringify(result, null, 2));
+
+async function toolArguments(
+  tool: CliTool,
+  positionals: string[],
+  options: { json?: string; session?: string; apply?: boolean },
+  io: CliIO,
+) {
+  const { json, session, apply } = options;
+  const [argument] = positionals;
+  if (positionals.length > 1 || (argument !== undefined && json !== undefined))
+    throw new Error('Pass arguments as a single positional value, --json, or - for stdin.');
+
+  const acceptsSession = Object.hasOwn(tool.inputSchema.properties, 'session');
+  if (session !== undefined && !acceptsSession)
+    throw new Error(`--session is not supported on ${tool.command}.`);
+  if (apply && !supportsApply(tool))
+    throw new Error('--apply is only supported on preview commands.');
+
+  const literal = shorthand(tool);
+  let args: Record<string, unknown> = {};
+  if (json !== undefined) args = parseObject(json);
+  else if (argument === '-') args = parseObject(await io.readStdin());
+  else if (argument !== undefined) args = literal ? { [literal]: argument } : parseObject(argument);
+
+  if (session !== undefined && Object.hasOwn(args, 'session'))
+    throw new Error('Pass session either via --session or in the JSON payload, not both.');
+  if (apply && Object.hasOwn(args, 'dryRun'))
+    throw new Error('Pass either --apply or dryRun in the JSON payload, not both.');
+
+  const defaultSession = session ?? io.env.SAUL_SESSION;
+  if (acceptsSession && !Object.hasOwn(args, 'session') && defaultSession !== undefined)
+    args.session = defaultSession;
+  if (apply) args.dryRun = false;
+  return validateCall(tool.name, args);
+}
+
+export async function runCli(argv: string[], overrides: Partial<CliIO> = {}): Promise<number> {
+  const io: CliIO = {
+    callTool: callToolFromInput,
+    readStdin: () => readCliStdin(process.stdin),
+    env: process.env,
+    stdout: (text) => process.stdout.write(text),
+    stderr: (text) => process.stderr.write(text),
+    ...overrides,
+  };
+  const print = (text: string) => io.stdout(text + '\n');
+  let hint = 'Run saul help.';
+  let tool: CliTool;
+  let args: unknown;
+  let indent: number;
+  try {
+    const { positionals, values } = parseArgs({
+      args: argv,
+      allowPositionals: true,
+      options: {
+        session: { type: 'string', multiple: true },
+        apply: { type: 'boolean' },
+        json: { type: 'string', multiple: true },
+        compact: { type: 'boolean' },
+        help: { type: 'boolean', short: 'h' },
+        version: { type: 'boolean', short: 'V' },
+      },
+    });
+    const [first] = positionals;
+    const match = matchCommand(positionals);
+    if (match) hint = `Run saul help ${match.tool.command}.`;
+    if ((values.session?.length ?? 0) > 1) throw new Error('Pass --session only once.');
+    if ((values.json?.length ?? 0) > 1) throw new Error('Pass --json only once.');
+    const session = values.session?.[0];
+    const json = values.json?.[0];
+    indent = values.compact ? 0 : 2;
+
+    if (values.help || values.version || !match) {
+      if (session !== undefined || values.apply || json !== undefined)
+        throw new Error('--session, --apply, and --json require a tool command.');
+      if (values.version) print(`saul ${packageInfo.version}`);
+      else if (first === 'help') print(helpFor(positionals.slice(1)));
+      else if (values.help || !first || (positionals.length === 1 && commandsIn(first).length))
+        print(helpFor(positionals));
+      else if (first === 'tools' && positionals.length === 1)
+        print(JSON.stringify(catalog, null, indent));
+      else throw new Error(`Unknown command: ${positionals.join(' ')}.`);
+      return 0;
+    }
+
+    tool = match.tool;
+    args = await toolArguments(
+      tool,
+      positionals.slice(match.tokens.length),
+      { session, json, apply: values.apply },
+      io,
+    );
+  } catch (error) {
+    io.stderr(JSON.stringify({ error: errorMessage(error), hint }) + '\n');
+    return 2;
   }
-} catch (error) {
-  console.error(JSON.stringify({ error: errorMessage(error) }));
-  process.exitCode = 1;
+
+  try {
+    print(JSON.stringify(await io.callTool(tool.name, args), null, indent));
+    return 0;
+  } catch (error) {
+    const message =
+      error instanceof MultipleBrowserSessionsError
+        ? 'Multiple browsers/profiles connected. Run saul sessions and pass --session <id> (or set SAUL_SESSION).'
+        : errorMessage(error);
+    io.stderr(JSON.stringify({ error: message }) + '\n');
+    return 1;
+  }
 }
