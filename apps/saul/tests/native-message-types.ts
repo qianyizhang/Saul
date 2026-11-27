@@ -14,6 +14,8 @@ export function checkNativeMessageTypes() {
   });
   // @ts-expect-error Trusted code must use a registered operation name.
   callTool('saul_unregistered');
+  // @ts-expect-error History read requires a record ID even when the entire argument is omitted.
+  callTool('saul_history_read');
   // @ts-expect-error The argument does not belong to this operation.
   callTool('saul_tabs_list', { ids: [1] });
   // @ts-expect-error A streaming operation cannot use the terminal reply client.

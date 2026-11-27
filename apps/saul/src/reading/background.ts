@@ -253,7 +253,7 @@ export function initReadingHost(db: RunnerDbCall, currentSettings: () => Promise
           ...request.message.payload,
         });
       if (request.message.type === 'DB_CLEAR_HISTORY')
-        return runnerRequest({ operation: 'delete' });
+        return runnerRequest({ operation: 'clear-history' });
       return db(request.message);
     })().then(
       (result) => reply({ success: true, result }),

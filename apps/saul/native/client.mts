@@ -1,7 +1,7 @@
 import { isRecord } from '../shared/model/value.mts';
 import { validateToolResult } from '../shared/protocol/results.mts';
 import { isSession } from '../shared/protocol/tool-values.mts';
-import type { ToolName, ToolArgs, ToolResults } from '../shared/protocol/protocol.mts';
+import type { ToolName, ToolCaller, ToolResults } from '../shared/protocol/protocol.mts';
 import type { WindowNames } from './window-names.mts';
 import { errorCode } from '../shared/model/value.mts';
 import net from 'node:net';
@@ -97,12 +97,7 @@ export async function sessions() {
   );
   return results.filter((value) => value !== null);
 }
-export function callTool<K extends ToolName>(
-  name: K,
-  args?: ToolArgs[NoInfer<K>],
-): Promise<ToolResults[K]> {
-  return invokeTool(name, args);
-}
+export const callTool: ToolCaller = invokeTool;
 
 export async function callToolFromInput(name: string, args?: unknown) {
   if (!isToolName(name)) throw new Error(`Unknown tool: ${name}`);

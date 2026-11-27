@@ -17,7 +17,8 @@ import type { AnnotationRunRequest, AnnotationRunResult } from '../../annotation
 import type { ReadingResult } from '../../reading/contract';
 import { isId, isRecord } from '../../../shared/model/value.mts';
 import { READING_HISTORY_OPERATIONS } from '../../../shared/protocol/reading-history.mts';
-import { callSchemas } from '../../../shared/protocol/history-feature-schemas.mts';
+import { validateFeaturePayload } from '../../../shared/protocol/history-protocol.mts';
+import { callSchemas, frozenModel } from '../../../shared/protocol/history-feature-schemas.mts';
 import {
   annotationIdSchema,
   pageUrl,
@@ -54,11 +55,23 @@ export type RunnerDbType = (typeof runnerDbTypes)[number];
 const runnerDbRoutes = new Set<string>(runnerDbTypes);
 export type RunnerDbCall = DbCall<RunnerDbType>;
 
+type RecordDeletion = { operation: 'delete' } & DbRequest<'DB_DELETE_SELECTION'>['payload'];
+type ClearHistoryWire = {
+  operation: 'delete';
+  selectionId?: never;
+  expectedRevision?: never;
+  stopRunId?: never;
+};
 type RunnerOperation =
   | {
       operation: 'annotation';
-      message: AnnotationRunRequest;
-      prepared?: PreparedModel;
+      message: Extract<AnnotationRunRequest, { action: 'respond' }>;
+      prepared: PreparedModel;
+    }
+  | {
+      operation: 'annotation';
+      message: Exclude<AnnotationRunRequest, { action: 'respond' }>;
+      prepared?: never;
     }
   | {
       operation: 'action';
@@ -67,20 +80,13 @@ type RunnerOperation =
   | ({ operation: 'digest' } & AdmittedCall)
   | { operation: 'submit'; submission: Submission; credential: string }
   | { operation: 'stop'; selectionId: string }
-  | ({ operation: 'delete' } & (
-      | DbRequest<'DB_DELETE_SELECTION'>['payload']
-      | {
-          selectionId?: never;
-          expectedRevision?: never;
-          stopRunId?: never;
-        }
-    ));
+  | RecordDeletion;
 type RunnerDbRequest<K extends RunnerDbType = RunnerDbType> = {
   operation: 'db';
   message: DbRequest<K>;
 };
-export type RunnerRequest = RunnerOperation | RunnerDbRequest;
-export type RunnerResult<T extends RunnerOperation> = T extends {
+export type RunnerRequest = RunnerOperation | RunnerDbRequest | ClearHistoryWire;
+export type RunnerResult<T extends RunnerOperation | ClearHistoryWire> = T extends {
   operation: 'annotation';
   message: infer M extends AnnotationRunRequest;
 }
@@ -97,9 +103,52 @@ export function runnerRequest<K extends RunnerDbType>(
   message: RunnerDbRequest<K>,
 ): Promise<DbOperations[K]['result']>;
 export function runnerRequest<T extends RunnerOperation>(message: T): Promise<RunnerResult<T>>;
-export async function runnerRequest(message: RunnerRequest): Promise<unknown> {
+export function runnerRequest(message: { operation: 'clear-history' }): Promise<void>;
+export async function runnerRequest(
+  message: RunnerOperation | RunnerDbRequest | { operation: 'clear-history' },
+): Promise<unknown> {
+  if (message.operation === 'delete' && !isId(message.selectionId))
+    throw new Error('A record ID is required for deletion.');
+  // Existing offscreen documents recognize an unqualified delete as Clear History.
+  const wire: RunnerRequest =
+    message.operation === 'clear-history' ? { operation: 'delete' } : message;
   await ensureOffscreenDocument();
-  return request({ target: RUNNER_TARGET, ...message });
+  return request({ target: RUNNER_TARGET, ...wire });
+}
+
+function isRunnerDbType(value: string): value is RunnerDbType {
+  return runnerDbRoutes.has(value);
+}
+
+function validateRunnerDbPayload(type: RunnerDbType, payload: unknown) {
+  switch (type) {
+    case 'DB_RESTORE_SELECTION':
+    case 'DB_PURGE_SELECTION':
+    case 'DB_SET_BOOKMARK':
+      validateWorkspace({ type, payload });
+      return;
+    case 'DB_HISTORY_PAGE':
+    case 'DB_ANNOTATION_URLS': {
+      if (!isRecord(payload)) break;
+      const { visibility, ...query } = payload;
+      if (
+        visibility !== undefined &&
+        visibility !== 'masked' &&
+        !(type === 'DB_HISTORY_PAGE' && (visibility === 'visible' || visibility === 'all'))
+      )
+        break;
+      validateFeaturePayload(type, query);
+      return;
+    }
+    case 'DB_DIGEST_GET':
+      if (!isRecord(payload) || !isCallBatchId(payload.id)) break;
+      validateFeaturePayload(type, payload);
+      return;
+    default:
+      validateFeaturePayload(type, payload);
+      return;
+  }
+  throw new Error('Invalid or unavailable runner operation.');
 }
 
 export function validateRunnerRequest(value: unknown): asserts value is RunnerRequest {
@@ -111,14 +160,8 @@ export function validateRunnerRequest(value: unknown): asserts value is RunnerRe
       case 'db': {
         const command = value.message;
         if (!isRecord(command) || typeof command.type !== 'string') break;
-        if (!runnerDbRoutes.has(command.type))
-          throw new Error('Unknown workspace storage operation');
-        // The History adapter validates command payloads against the native operation catalogue.
-        if (
-          command.type === 'DB_DIGEST_GET' &&
-          (!isRecord(command.payload) || !isCallBatchId(command.payload.id))
-        )
-          break;
+        if (!isRunnerDbType(command.type)) throw new Error('Unknown workspace storage operation');
+        validateRunnerDbPayload(command.type, command.payload);
         return;
       }
       case 'submit':
@@ -129,12 +172,7 @@ export function validateRunnerRequest(value: unknown): asserts value is RunnerRe
         if (isId(value.selectionId)) return;
         break;
       case 'delete':
-        if (
-          value.selectionId === undefined &&
-          value.expectedRevision === undefined &&
-          value.stopRunId === undefined
-        )
-          return;
+        if (Object.keys(value).every((key) => key === 'target' || key === 'operation')) return;
         validateWorkspace({
           type: 'DB_DELETE_SELECTION',
           payload: {
@@ -162,7 +200,7 @@ export function validateRunnerRequest(value: unknown): asserts value is RunnerRe
             callSchemas.batch.parse(value.snapshot);
           } else {
             if (value.credential !== undefined) break;
-            callSchemas.item.array().parse(value.snapshot.items);
+            callSchemas.lookup.parse(value.snapshot);
           }
           return;
         }
@@ -173,6 +211,7 @@ export function validateRunnerRequest(value: unknown): asserts value is RunnerRe
       case 'annotation': {
         const request = value.message;
         if (!isRecord(request)) break;
+        if (request.action !== 'respond' && value.prepared !== undefined) break;
         if (request.action === 'stop' && annotationIdSchema.safeParse(request.id).success) return;
         if (
           request.action === 'attempts' &&
@@ -193,7 +232,7 @@ export function validateRunnerRequest(value: unknown): asserts value is RunnerRe
           (request.callRevision === undefined || typeof request.callRevision === 'string') &&
           isRecord(value.prepared) &&
           typeof value.prepared.credential === 'string' &&
-          isRecord(value.prepared.choices)
+          frozenModel.safeParse(value.prepared.choices).success
         )
           return;
         break;

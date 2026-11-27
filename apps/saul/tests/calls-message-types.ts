@@ -53,6 +53,18 @@ export function checkRunnerMessageTypes() {
   runnerRequest({ operation: 'db', message: { type: 'DB_RECOVER', payload: undefined } });
   // @ts-expect-error Stopping requires a selection.
   runnerRequest({ operation: 'stop' });
+  // @ts-expect-error A record deletion must identify a record.
+  runnerRequest({ operation: 'delete' });
+  const respond = {
+    action: 'respond',
+    url: 'https://example.test/',
+    targets: [],
+    presetId: 'preset',
+    current: false,
+    textOnly: true,
+  } as const;
+  // @ts-expect-error Responding needs the prepared model.
+  runnerRequest({ operation: 'annotation', message: { ...respond, targets: [] } });
   // @ts-expect-error Revisions are only for deleting one record.
   runnerRequest({ operation: 'delete', expectedRevision: 1 });
   // @ts-expect-error The unread result is a count.

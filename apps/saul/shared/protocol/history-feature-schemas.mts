@@ -7,7 +7,7 @@ const id = z.string().min(1);
 const text = z.string();
 const integer = z.number().int().nonnegative();
 const bool = z.boolean();
-const frozenModel = savedReadingInput.omit({
+export const frozenModel = savedReadingInput.omit({
   systemPrompt: true,
   userPrompt: true,
   followUpQuestion: true,
@@ -86,10 +86,11 @@ function callHistorySchemas(strict: boolean) {
     error: text.optional(),
     items: item.array(),
   };
+  const action = object({ revision: callRevision, presetId: id, input: frozenModel.optional() });
   const batch = z.union([
     object({
       ...batchFields,
-      action: object({ revision: callRevision, presetId: id, input: frozenModel.optional() }),
+      action,
       summaryInput: z.undefined().optional(),
       prompt: text.optional(),
     }),
@@ -114,7 +115,18 @@ function callHistorySchemas(strict: boolean) {
     }),
     object({ ...sourceFields, kind: z.literal('text').optional(), text }),
   ]);
-  return { item, overview: object(overviewFields), batch, source };
+  return {
+    item,
+    overview: object(overviewFields),
+    batch,
+    source,
+    lookup: object({
+      items: batchFields.items,
+      pdfProcessing: batchFields.pdfProcessing,
+      action: action.optional(),
+      currentModel: frozenModel.nullish(),
+    }),
+  };
 }
 export const callSchemas = callHistorySchemas(false);
 export const callWriteSchemas = callHistorySchemas(true);

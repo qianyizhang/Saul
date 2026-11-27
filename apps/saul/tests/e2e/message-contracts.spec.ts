@@ -1,4 +1,7 @@
 import { expect, test } from './fixtures.ts';
+import { runDatabaseFixture } from './database-harness';
+
+test.use({ databaseFixtures: true });
 
 test('workspace routes reject malformed requests and keep offscreen storage private', async ({
   sandbox,
@@ -27,7 +30,10 @@ test('workspace routes reject malformed requests and keep offscreen storage priv
 test('the actual offscreen runner accepts a supported read and rejects malformed dispatch', async ({
   sandbox,
 }) => {
-  const { worker } = await sandbox.launch();
+  const { worker, popup } = await sandbox.launch();
+  const id = await runDatabaseFixture<string>(popup, { action: 'seed-native' });
+  const records = () =>
+    runDatabaseFixture(popup, { action: 'db', message: { type: 'DB_HISTORY_PAGE', payload: {} } });
   const replies = await worker.evaluate(async () => {
     const url = chrome.runtime.getURL('offscreen.html');
     const contexts = await chrome.runtime.getContexts({
@@ -56,11 +62,23 @@ test('the actual offscreen runner accepts a supported read and rejects malformed
         operation: 'delete',
         expectedRevision: 1,
       }),
+      chrome.runtime.sendMessage({
+        target: 'saul-offscreen',
+        operation: 'delete',
+        selectionID: 'mistyped-field',
+      }),
     ]);
   });
   expect(replies).toEqual([
     { success: true, result: 0 },
     { success: false, error: 'Unknown workspace storage operation' },
     { success: false, error: 'Invalid or unavailable workspace operation' },
+    { success: false, error: 'Invalid or unavailable workspace operation' },
   ]);
+  expect(await records()).toMatchObject({ items: [{ selectionId: 'ez:' + id }] });
+  const cleared = await worker.evaluate(() =>
+    chrome.runtime.sendMessage({ target: 'saul-offscreen', operation: 'delete' }),
+  );
+  expect(cleared.success).toBe(true);
+  expect(await records()).toMatchObject({ items: [] });
 });

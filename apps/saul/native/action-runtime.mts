@@ -5,11 +5,9 @@ import { ActionStore } from './action-store.mts';
 import {
   ACTION_MAX_CALLS,
   ACTION_TIMEOUT_MS,
-  validateActionGenerate,
   validateActionHostEvent,
   type ActionWorkerMessage,
   type ActionCallbackResult,
-  validateAnnotationOperation,
   type ActionHostEvent,
   type ActionSource,
 } from '../shared/protocol/action-protocol.mts';
@@ -91,17 +89,11 @@ export class ActionRuntime {
           try {
             validateActionHostEvent(event);
             if (event.type === 'generate') {
-              validateActionGenerate(event.request);
-              if (
-                !Number.isSafeInteger(event.callId) ||
-                event.callId !== run.calls.size + 1 ||
-                run.calls.size >= ACTION_MAX_CALLS
-              )
+              if (event.callId !== run.calls.size + 1 || run.calls.size >= ACTION_MAX_CALLS)
                 throw new Error('Action exceeded the three-model-call limit.');
               run.calls.add(event.callId);
               run.emit(event);
             } else if (event.type === 'annotation') {
-              validateAnnotationOperation(event.operation);
               if (
                 !run.annotations ||
                 event.callId !== 1001 + run.annotationCalls.size ||
@@ -113,8 +105,7 @@ export class ActionRuntime {
               run.annotationCalls.add(event.callId);
               run.emit(event);
             } else if (event.type === 'progress') {
-              if (typeof event.text !== 'string' || event.text.length > 500)
-                throw new Error('Invalid progress.');
+              if (event.text.length > 500) throw new Error('Invalid progress.');
               run.emit(event);
             } else if (event.type === 'result') run.finish(undefined, event.text);
             else if (event.type === 'error') run.finish(new Error(event.message));

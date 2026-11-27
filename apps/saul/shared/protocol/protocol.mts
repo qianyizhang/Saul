@@ -331,7 +331,9 @@ export type ToolResults = { [K in ToolName]: z.infer<(typeof TOOL_OPERATIONS)[K]
 export type BrowserTool = Exclude<ToolName, 'saul_sessions'>;
 export type ToolCaller = <K extends ToolName>(
   name: K,
-  args?: ToolArgs[NoInfer<K>],
+  ...input: Record<string, never> extends ToolArgs[NoInfer<K>]
+    ? [args?: ToolArgs[NoInfer<K>]]
+    : [args: ToolArgs[NoInfer<K>]]
 ) => Promise<ToolResults[K]>;
 
 const names = Object.keys(TOOL_OPERATIONS) as ToolName[];

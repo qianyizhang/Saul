@@ -538,6 +538,11 @@ function projectedQuery(message: DbRequest): {
   return { query: message.payload };
 }
 
+// Offscreen commands can affect active work before the native store receives them.
+export function validateFeaturePayload(type: FeatureType, payload: unknown): void {
+  OPERATIONS[type].decode(payload, ['payload']);
+}
+
 function featureOperation(command: HistoryRequest['command']) {
   if (!('view' in command || 'change' in command)) return undefined;
   const reading = 'view' in command;
