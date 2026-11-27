@@ -1,9 +1,9 @@
 import { isId, isRecord } from '../../shared/model/value.mts';
-import type { DbCall, Passage } from '../../shared/protocol/history-types.ts';
+import type { Passage } from '../../shared/protocol/history-types.ts';
 import { configurationFor, type Configuration } from '../configuration/definition';
 import { SETTINGS_STORAGE_KEY } from '../configuration/store';
 import { validateWorkspace } from '../contracts/workspace';
-import { runnerRequest } from '../platform/chrome/runner';
+import { runnerRequest, type RunnerDbCall } from '../platform/chrome/runner';
 import { offscreenSender, sourcePage, workspaceSender } from '../platform/chrome/sender';
 import {
   getErrorNotificationsMuted,
@@ -26,7 +26,7 @@ const targets = new Set([
   'saul-workspace',
 ]);
 
-export function initReadingHost(db: DbCall, currentSettings: () => Promise<Configuration>) {
+export function initReadingHost(db: RunnerDbCall, currentSettings: () => Promise<Configuration>) {
   async function owned(selectionId: string, url: string): Promise<Passage> {
     const p = await db({ type: 'DB_PASSAGE', payload: { selectionId } });
     if (!p || p.snapshot.page.url !== url)

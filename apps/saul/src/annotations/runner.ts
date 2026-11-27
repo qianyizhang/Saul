@@ -29,7 +29,7 @@ export type AnnotationRunRequest =
   | { action: 'attempts'; annotationId?: string; id?: string }
   | { action: 'stop'; id: string };
 
-type AnnotationRunResult = {
+export type AnnotationRunResult = {
   respond: { ids: string[] };
   attempts: { attempts: AnnotationAttempt[] };
   stop: void;

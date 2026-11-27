@@ -1,6 +1,7 @@
+import type { RunnerDbCall } from '../platform/chrome/runner';
 import { configurationFor, type Configuration } from '../configuration/definition';
 import type { ReadingRequest } from './contract';
-import type { DbCall, Passage, Submission } from '../../shared/protocol/history-types.ts';
+import type { Passage, Submission } from '../../shared/protocol/history-types.ts';
 import { compareRunInput } from './input-change';
 import { prepareFollowUpRun, prepareFrozenRun, prepareRecipeRun } from './configuration';
 
@@ -11,7 +12,10 @@ export type ReadingAdmission =
 const defaultRecipe = (settings: Configuration) => configurationFor(settings).selectedRecipeId;
 
 /** Admit one user intent against a single configuration and saved-input snapshot. */
-export function createReadingAdmission(readSettings: () => Promise<Configuration>, db: DbCall) {
+export function createReadingAdmission(
+  readSettings: () => Promise<Configuration>,
+  db: RunnerDbCall,
+) {
   const readInput = (selectionId: string, runId?: string) =>
     db({ type: 'DB_INPUT', payload: { selectionId, runId } });
 

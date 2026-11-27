@@ -1,13 +1,13 @@
 import type {
   DbOperations,
   DbRequest,
-  DbType,
   HistoryVisibility,
   HistoryItem,
 } from '../../shared/protocol/history-types.ts';
+import type { WorkspaceDbType } from '../contracts/workspace';
 import { request } from '../platform/chrome/messages';
 
-export async function sendDbMessage<K extends DbType>(
+export async function sendDbMessage<K extends WorkspaceDbType>(
   message: DbRequest<K>,
 ): Promise<DbOperations[K]['result']> {
   return request({ target: 'saul-workspace', message });

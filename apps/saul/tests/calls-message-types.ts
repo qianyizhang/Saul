@@ -4,6 +4,7 @@ import { requestDigestCapture } from '../src/calls/capture/source';
 import { launchCall } from '../src/calls/client';
 import { requestCallEditorStorage } from '../src/calls/editor-client';
 import type { SavedCallDraft } from '../src/custom-actions/contract';
+import { runnerRequest } from '../src/platform/chrome/runner';
 import {
   DIGEST_CAPTURE,
   type CallLaunchMessage,
@@ -41,4 +42,20 @@ export function checkEditorStorageTypes() {
   // @ts-expect-error A save acknowledges completion without a result.
   const wrong: CallEditorStorageReplies['save-draft'] = { error: 'wrong' };
   return { draft, wrong };
+}
+
+export function checkRunnerMessageTypes() {
+  const unread: Promise<number> = runnerRequest({
+    operation: 'db',
+    message: { type: 'DB_UNREAD', payload: undefined },
+  });
+  // @ts-expect-error Worker lifecycle operations use the native store directly.
+  runnerRequest({ operation: 'db', message: { type: 'DB_RECOVER', payload: undefined } });
+  // @ts-expect-error Stopping requires a selection.
+  runnerRequest({ operation: 'stop' });
+  // @ts-expect-error Revisions are only for deleting one record.
+  runnerRequest({ operation: 'delete', expectedRevision: 1 });
+  // @ts-expect-error The unread result is a count.
+  const wrong: Promise<boolean> = unread;
+  return { unread, wrong };
 }

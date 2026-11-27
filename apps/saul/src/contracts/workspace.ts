@@ -1,7 +1,21 @@
 import type { DbRequest } from '../../shared/protocol/history-types.ts';
 import { isId, isBoundedText, isRecord } from '../../shared/model/value.mts';
 const revision = (v: unknown) => v === undefined || (Number.isSafeInteger(v) && Number(v) >= 0);
-export function validateWorkspace(v: unknown): asserts v is DbRequest {
+export type WorkspaceDbType =
+  | 'DB_HISTORY_PAGE'
+  | 'DB_GET_HISTORY'
+  | 'DB_DELETE_SELECTION'
+  | 'DB_RESTORE_SELECTION'
+  | 'DB_PURGE_SELECTION'
+  | 'DB_IMAGE'
+  | 'DB_RUNS'
+  | 'DB_PASSAGE'
+  | 'DB_SET_BOOKMARK'
+  | 'DB_VIEW'
+  | 'DB_CLEAR_HISTORY'
+  | 'DB_EXPORT_MARKDOWN'
+  | 'DB_UNREAD';
+export function validateWorkspace(v: unknown): asserts v is DbRequest<WorkspaceDbType> {
   if (!isRecord(v)) throw new Error('Invalid workspace request');
   const p = v.payload;
   let valid = false;

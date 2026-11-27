@@ -36,14 +36,13 @@ import {
   chromeConfigurationStorage,
   initStorageSecurity,
 } from '../src/configuration/chrome-storage';
-import { runnerRequest } from '../src/platform/chrome/runner';
+import { runnerRequest, type RunnerDbCall } from '../src/platform/chrome/runner';
 import { initReadingHost } from '../src/reading/background';
 import { initNativeBridge } from '../src/native/bridge';
 import { workspaceCall } from '../src/native/workspace';
 import { offscreenSender, workspaceSender } from '../src/platform/chrome/sender';
-import type { DbCall, DbRequest } from '../shared/protocol/history-types.ts';
 
-const db: DbCall = (message) => runnerRequest({ operation: 'db', message: message as DbRequest });
+const db: RunnerDbCall = (message) => runnerRequest({ operation: 'db', message });
 const actionStore = createCustomActionStore(async () =>
   legacySummaryPreset(await currentSettings()),
 );

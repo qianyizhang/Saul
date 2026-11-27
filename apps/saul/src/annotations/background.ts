@@ -1,9 +1,6 @@
 import { sourcePage, workspaceSender } from '../platform/chrome/sender';
 import { runnerRequest } from '../platform/chrome/runner';
-import {
-  annotationStatusSchema,
-  type AnnotationEditorStatus,
-} from '../../shared/protocol/annotation-attempts.ts';
+import { annotationStatusSchema } from '../../shared/protocol/annotation-attempts.ts';
 import { mutateAnnotationDraft } from './draft';
 import {
   requestSchema,
@@ -30,7 +27,7 @@ export async function operateAnnotations(
   external?: true,
 ): Promise<AnnotationResult> {
   const parsed = requestSchema.parse(request);
-  const result = await runnerRequest<AnnotationResult>({
+  const result = await runnerRequest({
     operation: 'db',
     message: { type: 'DB_ANNOTATION', payload: { ...parsed, ...(external && { external }) } },
   });
@@ -224,7 +221,7 @@ async function confirmedUrls(tabId: number, url: string, candidates: string[]) {
   return [url, ...related.filter((candidate) => confirmed.has(candidate))];
 }
 async function pageIndex(tabId: number, url: string, filter: 'open' | 'done' | 'all' | 'deleted') {
-  const candidates = await runnerRequest<string[]>({
+  const candidates = await runnerRequest({
     operation: 'db',
     message: {
       type: 'DB_ANNOTATION_URLS',
@@ -342,7 +339,7 @@ export function initAnnotations(
           operation: request.operation,
         });
       if (request.action === 'status')
-        return runnerRequest<AnnotationEditorStatus>({
+        return runnerRequest({
           operation: 'db',
           message: {
             type: 'DB_ANNOTATION_STATUS',
@@ -422,7 +419,7 @@ export function initAnnotations(
         });
       }
       if (request.action === 'inspect') {
-        const result = await runnerRequest<{ attempts: unknown[] }>({
+        const result = await runnerRequest({
           operation: 'annotation',
           message: {
             action: 'attempts',

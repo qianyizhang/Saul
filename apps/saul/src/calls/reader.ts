@@ -1,5 +1,4 @@
 import type { SummaryProgress } from '../../shared/protocol/protocol.mts';
-import type { DigestBatch } from '../../shared/model/call-batch.ts';
 import { runnerRequest } from '../platform/chrome/runner';
 import { isCallBatchId } from './batch-messages';
 
@@ -31,7 +30,7 @@ export async function openSummaryReader(args: { tabIds?: number[]; id?: string }
 }
 
 export async function summaryProgress(): Promise<SummaryProgress | null> {
-  const batch = await runnerRequest<DigestBatch | undefined>({
+  const batch = await runnerRequest({
     operation: 'digest',
     message: { action: 'active' },
   });

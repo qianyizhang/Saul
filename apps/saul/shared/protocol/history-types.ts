@@ -130,7 +130,7 @@ export type DbType = keyof DbOperations;
 export type DbRequest<K extends DbType = DbType> = {
   [P in K]: { type: P; payload: DbOperations[P]['payload'] };
 }[K];
-export type DbCall = <K extends DbType>(
+export type DbCall<Allowed extends DbType = DbType> = <K extends Allowed>(
   message: DbRequest<K>,
 ) => Promise<DbOperations[K]['result']>;
 export type Reply<T> = { success: true; result: T } | { success: false; error: string };

@@ -18,6 +18,7 @@ import {
   type CallLookup,
   type DigestItem,
   type DigestRequest,
+  type DigestResult,
   type DigestSource,
   type DigestComparison,
   type DigestInspection,
@@ -60,11 +61,16 @@ export class CallBatchRunner {
     return this.recovery;
   }
   // Serialize control actions; generation itself stays independent of popup lifetime.
+  request<T extends DigestRequest>(
+    request: T,
+    snapshot?: DigestBatch | CallLookup,
+    credential?: string,
+  ): Promise<DigestResult<T>>;
   request(
     request: DigestRequest,
     snapshot?: DigestBatch | CallLookup,
     credential = '',
-  ): Promise<unknown> {
+  ): Promise<DigestResult<DigestRequest>> {
     // Read-only page comparisons must not delay Stop or other generation controls.
     if (
       request.action === 'resolve' ||
@@ -96,11 +102,16 @@ export class CallBatchRunner {
     run?.controller.abort();
     return run;
   }
+  private handle<T extends Exclude<DigestRequest, { action: 'stop' }>>(
+    request: T,
+    snapshot?: DigestBatch | CallLookup,
+    credential?: string,
+  ): Promise<DigestResult<T>>;
   private async handle(
     r: Exclude<DigestRequest, { action: 'stop' }>,
     snapshot?: DigestBatch | CallLookup,
     credential = '',
-  ): Promise<unknown> {
+  ): Promise<DigestResult<DigestRequest>> {
     await this.recover();
     if (r.action === 'active') return structuredClone([...this.runs.values()].at(-1)?.batch);
     if (r.action === 'inspect') {
@@ -112,7 +123,7 @@ export class CallBatchRunner {
     if (r.action === 'resolve') {
       if (!snapshot) throw new Error('Missing selection snapshot.');
       const batch = await this.find(snapshot);
-      if (!batch) return { comparisons: [] };
+      if (!batch) return { comparisons: [] } satisfies DigestResult<typeof r>;
       const comparisons: DigestComparison[] = [];
       const savedItems = new Map(batch.items.map((item) => [item.index, item]));
       let modelChange: string | undefined;
@@ -159,7 +170,7 @@ export class CallBatchRunner {
       return {
         batch: structuredClone(batch),
         comparisons: comparisons.sort((a, b) => a.index - b.index),
-      };
+      } satisfies DigestResult<typeof r>;
     }
     if (r.action === 'list') return this.db({ type: 'DB_DIGEST_LIST', payload: undefined });
     if (r.action === 'get') {
