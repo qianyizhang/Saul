@@ -100,14 +100,29 @@ import SaulNativeValues
     var inputValues: [String: String] { draft.values }
     var sketch: SketchDraft { draft.sketch }
     @Published var inputImageError: String?
-    @Published private var reuseImageWork: Task<Void, Never>?
-    private var needsSavedImageRecovery = false
-    var restoringSavedImage: Bool { reuseImageWork != nil }
+    private enum SavedImageRestore {
+        case idle
+        case restoring(Task<Void, Never>)
+        case needsRecovery
+    }
+    @Published private var savedImageRestore = SavedImageRestore.idle
+    var restoringSavedImage: Bool {
+        if case .restoring = savedImageRestore { return true }
+        return false
+    }
+    private var needsSavedImageRecovery: Bool {
+        if case .needsRecovery = savedImageRestore { return true }
+        return false
+    }
     var canContinueWithoutSavedImage: Bool {
         needsSavedImageRecovery && currentAction?.imageInput == nil
     }
-    @Published private var retryWork: Task<Void, Never>?
-    @Published private(set) var retryPreparingID: UUID?
+    private struct RetryPreparation {
+        let entryID: UUID
+        let task: Task<Void, Never>
+    }
+    @Published private var retryPreparation: RetryPreparation?
+    var retryPreparingID: UUID? { retryPreparation?.entryID }
     @Published var showsMainComposer = false
     struct RetryFailure {
         let entryID: UUID
@@ -124,7 +139,7 @@ import SaulNativeValues
     var busy: Bool { runningAttempt != nil }
     var canStop: Bool {
         !quitting
-            && (retryWork != nil
+            && (retryPreparation != nil
                 || runningAttempt.map { $0.phase == .preparing || $0.phase == .generating } == true)
     }
     var preparingAttempt: Bool { runningAttempt?.phase == .preparing }
@@ -418,7 +433,7 @@ import SaulNativeValues
 
     func stop() {
         guard canStop else { return }
-        if retryWork != nil {
+        if retryPreparation != nil {
             cancelRetryPreparation()
         } else {
             attemptExecution?.stop()
@@ -449,7 +464,7 @@ import SaulNativeValues
         } catch { self.error = error.localizedDescription }
     }
     func canRetry(_ entry: HistoryEntry) -> Bool {
-        entry.isRetryable && canStartLookup && !connecting && retryWork == nil
+        entry.isRetryable && canStartLookup && !connecting && retryPreparation == nil
     }
 
     @discardableResult func retry(_ id: UUID) -> Task<Void, Never>? {
@@ -466,7 +481,6 @@ import SaulNativeValues
 
             try route.requireSavedConnection(original.connectionSnapshot)
             let connection = route.connection
-            retryPreparingID = id
             let task = Task { [weak self, readInputImage] in
                 do {
                     let image: ImageAttachment?
@@ -487,7 +501,7 @@ import SaulNativeValues
                     }
                     try Task.checkCancellation()
                     guard let self else { return }
-                    clearRetryPreparation()
+                    retryPreparation = nil
                     guard canRetry(original) else {
                         throw EZError("Retry could not start. Wait for current work to finish and try again.")
                     }
@@ -501,7 +515,7 @@ import SaulNativeValues
                     retryFailure = RetryFailure(entryID: id, message: error.localizedDescription)
                 }
             }
-            retryWork = task
+            retryPreparation = RetryPreparation(entryID: id, task: task)
             return task
         } catch {
             retryFailure = RetryFailure(entryID: id, message: error.localizedDescription)
@@ -522,14 +536,9 @@ import SaulNativeValues
     }
 
     private func cancelRetryPreparation() {
-        retryWork?.cancel()
-        clearRetryPreparation()
-    }
-
-    private func clearRetryPreparation() {
-        guard retryPreparingID != nil else { return }
-        retryWork = nil
-        retryPreparingID = nil
+        guard let retryPreparation else { return }
+        retryPreparation.task.cancel()
+        self.retryPreparation = nil
     }
 
     func newQuery() {
@@ -611,29 +620,31 @@ import SaulNativeValues
                 let photo = restoreAsSketch ? try await SketchPhoto.prepareRestoration(attachment) : nil
                 guard !Task.isCancelled, let self else { return }
                 draft.restoreImage(attachment, sketchPhoto: photo)
-                reuseImageWork = nil
+                savedImageRestore = .idle
             } catch {
                 guard !Task.isCancelled, let self else { return }
                 cancelSavedImageRestore(needsRecovery: true)
             }
         }
-        reuseImageWork = task
+        savedImageRestore = .restoring(task)
         return task
     }
 
     private func cancelSavedImageRestore(needsRecovery: Bool = false) {
-        if let reuseImageWork {
-            reuseImageWork.cancel()
-            self.reuseImageWork = nil
-            needsSavedImageRecovery = needsRecovery
+        switch savedImageRestore {
+        case .restoring(let task):
+            task.cancel()
+            savedImageRestore = needsRecovery ? .needsRecovery : .idle
             if needsRecovery {
                 inputImageError =
                     currentAction?.imageInput != nil
                     ? "The saved input image is unavailable. Attach it again."
                     : "The saved input image is unavailable."
             }
-        } else if !needsRecovery {
-            needsSavedImageRecovery = false
+        case .needsRecovery where !needsRecovery:
+            savedImageRestore = .idle
+        case .idle, .needsRecovery:
+            break
         }
     }
 

@@ -1,4 +1,5 @@
 import Foundation
+import SaulConnectionCoordination
 import SaulNativeValues
 import SaulTestSupport
 
@@ -6,6 +7,23 @@ import SaulTestSupport
 
 @MainActor func configurationChecks() -> [CheckCase] {
     [
+        CheckCase("configuration: the writer rejects unexpected parent aliases") { directory in
+            let root = directory.resolvingSymlinksInPath()
+            let target = root.appendingPathComponent("target", isDirectory: true)
+            let alias = root.appendingPathComponent("alias", isDirectory: true)
+            try FileManager.default.createDirectory(at: target, withIntermediateDirectories: false)
+            try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: target)
+            let shared = SharedPresetsStore(url: alias.appendingPathComponent("settings.json"))
+            try expectThrows(ConnectionCoordination.SettingsLockError.self) {
+                try shared.saveAppSection("configuration", value: [:], revision: 0)
+            }
+            try expectEqual(
+                try FileManager.default.contentsOfDirectory(atPath: target.path), [], "Alias was used")
+            let canonical = SharedPresetsStore(url: target.appendingPathComponent("settings.json"))
+            try expectEqual(
+                try canonical.saveAppSection("configuration", value: [:], revision: 0), 1,
+                "The canonical settings path should remain usable")
+        },
         CheckCase("configuration: whole saves reject either stale revision without partial changes") {
             directory in
             let shared = SharedPresetsStore(url: directory.appendingPathComponent("settings.json"))

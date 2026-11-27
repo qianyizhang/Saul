@@ -1,10 +1,5 @@
 import { organizePermission } from '../shared/protocol/local-access.mts';
-import type {
-  TabSnapshot,
-  TabView,
-  ToolCaller,
-  TabEditResult,
-} from '../shared/protocol/protocol.mts';
+import type { TabSnapshot, ToolCaller, TabEditResult } from '../shared/protocol/protocol.mts';
 import type {
   ProposalWindow,
   WorkspaceState,
@@ -24,11 +19,10 @@ type TabMove = { tabId: number; destination: string | number; beforeId?: number 
 import { createHash, randomUUID } from 'node:crypto';
 import { callTool } from './client.mts';
 import { appRequest } from '../shared/protocol/app-protocol.mts';
-import { tabLayoutRevision } from '../shared/model/tab-layout.mts';
+import { fixedInProposal as fixed, tabLayoutRevision } from '../shared/model/tab-layout.mts';
 import { createWindowLabels } from './window-labels.mts';
 import { runtimeDirectory } from './transport.mts';
 
-const fixed = (tab: TabView) => tab.pinned || tab.groupId >= 0;
 const ordered = (snapshot: TabSnapshot, windowId: number | string | undefined) =>
   snapshot.tabs.filter((t) => t.windowId === windowId).sort((a, b) => a.index - b.index);
 export function revision(snapshot: TabSnapshot) {

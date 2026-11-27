@@ -1,5 +1,3 @@
-import CSQLite
-import Darwin
 import Foundation
 import SaulConnectionCoordination
 import SaulNativeValues
@@ -12,40 +10,23 @@ public final class SharedPresetsStore {
     private func update<T>(fence: ConnectionFence? = nil, _ change: (inout [String: Any]) throws -> T) throws
         -> T
     {
-        try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
-            attributes: [.posixPermissions: 0o700])
-        let lockURL = URL(fileURLWithPath: url.path + ".lock.sqlite3")
-        for path in [url, lockURL] {
-            if let kind = try? FileManager.default.attributesOfItem(atPath: path.path)[.type],
+        try ConnectionCoordination(settingsURL: url).withSettingsTransaction(origin: "ez", fence: fence) {
+            if let kind = try? FileManager.default.attributesOfItem(atPath: url.path)[.type],
                 kind as? FileAttributeType != .typeRegular
             {
                 throw EZError("Settings paths must be regular files.")
             }
-        }
-        var lock: OpaquePointer?
-        guard
-            sqlite3_open_v2(lockURL.path, &lock, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK
-        else {
-            sqlite3_close(lock)
-            throw EZError("Cannot open the configuration lock.")
-        }
-        defer { sqlite3_close(lock) }
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: lockURL.path)
-        sqlite3_busy_timeout(lock, 5000)
-        guard sqlite3_exec(lock, "BEGIN IMMEDIATE", nil, nil, nil) == SQLITE_OK else {
-            throw EZError("Configuration is busy. Try Save again.")
-        }
-        defer { sqlite3_exec(lock, "ROLLBACK", nil, nil, nil) }
-        var document = try ConnectionSettingsMigration.document(SharedSettingsDocument.load(at: url))
-        let before = try SharedSettingsDocument.library(document).connections
-        let result = try change(&document)
-        let after = try SharedSettingsDocument.library(document).connections
-        return try ConnectionCoordination(settingsURL: url).withSettingsWrite(
-            registry: lock, before: before, after: after, origin: "ez", fence: fence
-        ) {
-            try writeDocument(document)
-            return result
+            var document = try ConnectionSettingsMigration.document(SharedSettingsDocument.load(at: url))
+            let before = try SharedSettingsDocument.library(document).connections
+            let result = try change(&document)
+            let after = try SharedSettingsDocument.library(document).connections
+            return (
+                before, after,
+                {
+                    try self.writeDocument(document)
+                    return result
+                }
+            )
         }
     }
 

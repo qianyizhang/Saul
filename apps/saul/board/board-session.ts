@@ -1,6 +1,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/client';
 import type { AppArgs } from '../shared/protocol/app-protocol.mts';
-import type { TabSnapshot, TabView } from '../shared/protocol/protocol.mts';
+import type { TabSnapshot } from '../shared/protocol/protocol.mts';
+import { fixedInProposal as fixed } from '../shared/model/tab-layout.mts';
 import {
   workspaceState,
   type WorkspaceState,
@@ -22,7 +23,6 @@ interface DraftLayout {
   changedTabIds: number[];
 }
 
-export const fixed = (tab: TabView) => tab.pinned || tab.groupId >= 0;
 export const boardError = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
@@ -66,6 +66,35 @@ export function createBoardSession(deps: {
 
   const context = (): Context => ({ generation, session: state.data?.session });
   const current = (owner: Context) => generation === owner.generation;
+  // An edit can queue a newer proposal while staging. Other commands wait for idle.
+  const canStage = () => state.ready && !state.busy && !state.refreshing;
+  const idle = () => canStage() && !state.staging;
+  const canEdit = () => {
+    const { data, draftLayout } = state;
+    return Boolean(
+      canStage() &&
+      data?.snapshot &&
+      !draftLayout &&
+      !['pending', 'expired'].includes(data.proposal?.status ?? '') &&
+      data.snapshot.localAccess?.tabs !== 'read',
+    );
+  };
+  const applyTarget = () => {
+    const { draftLayout, approvalToken, data } = state;
+    const proposal = data?.proposal;
+    if (
+      !idle() ||
+      draftLayout ||
+      !approvalToken ||
+      !data?.session ||
+      !data.snapshot ||
+      data.snapshot.localAccess?.tabs === 'read' ||
+      proposal?.status !== 'pending' ||
+      proposal.expiresAt <= Date.now()
+    )
+      return undefined;
+    return { session: data.session, proposalId: proposal.id, approvalToken };
+  };
   function publish(patch: Partial<BoardState>, draw = true) {
     state = { ...state, ...patch };
     if (draw) deps.changed();
@@ -124,8 +153,7 @@ export function createBoardSession(deps: {
   }
 
   async function refresh() {
-    if (state.busy || state.staging || state.refreshing || !state.ready || deps.dragActive())
-      return;
+    if (!idle() || deps.dragActive()) return;
     const owner = { ...context(), observing: true };
     publish({ refreshing: true });
     try {
@@ -180,15 +208,7 @@ export function createBoardSession(deps: {
 
   async function manual(...[name, args]: BoardManualCommand) {
     const owner = context();
-    if (
-      !state.ready ||
-      state.busy ||
-      state.staging ||
-      state.refreshing ||
-      !interactionToken ||
-      !owner.session
-    )
-      return false;
+    if (!idle() || !interactionToken || !owner.session) return false;
     if (name === 'saul_workspace_discard') publish({ draftLayout: undefined }, false);
     publish({ busy: true });
     deps.status('');
@@ -219,20 +239,13 @@ export function createBoardSession(deps: {
   }
 
   async function apply() {
-    const { busy, staging, draftLayout, refreshing, approvalToken, data, ready } = state;
-    if (
-      !ready ||
-      busy ||
-      staging ||
-      draftLayout ||
-      refreshing ||
-      !approvalToken ||
-      !data?.session ||
-      data.proposal?.status !== 'pending'
-    )
+    const args = applyTarget();
+    if (!args) {
+      // The preview can expire while a focused proposal control pauses the refresh poll.
+      deps.changed();
       return;
+    }
     const owner = context();
-    const args = { session: data.session, proposalId: data.proposal.id, approvalToken };
     publish({ busy: true, approvalToken: undefined });
     deps.status('');
     try {
@@ -253,15 +266,7 @@ export function createBoardSession(deps: {
     movedTabId?: number,
   ) {
     const { data, draftLayout } = state;
-    if (
-      !state.ready ||
-      state.busy ||
-      state.refreshing ||
-      !source ||
-      !data?.session ||
-      !data.revision
-    )
-      return;
+    if (!canStage() || !source || !data?.session || !data.revision) return;
     const started = context();
     const submitted = draft.map((w) => ({ ...w, tabIds: [...w.tabIds] }));
     // A deduplicated projection hides removed copies. Retain those inputs while
@@ -360,6 +365,10 @@ export function createBoardSession(deps: {
       return state;
     },
     manual,
+    canEdit,
+    canApply: () => applyTarget() !== undefined,
+    canStage,
+    idle,
     stageDraft,
     displayProposal,
     apply,

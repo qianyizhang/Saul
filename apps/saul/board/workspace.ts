@@ -1,6 +1,7 @@
 import { organizePermission, summaryPermission } from '../shared/protocol/local-access.mts';
 import { controlSymbols } from '../browser/control-symbols.ts';
 import { createBoardDrag } from './board-drag.ts';
+import { fixedInProposal as fixed } from '../shared/model/tab-layout.mts';
 import type { McpUiHostCapabilities } from '@modelcontextprotocol/ext-apps';
 import type { TabSnapshot, TabView } from '../shared/protocol/protocol.mts';
 import type { ProjectedWindow } from '../shared/protocol/workspace-contract.mts';
@@ -9,7 +10,6 @@ import { createBoardConnection, diagnostics, standalone } from './board-connecti
 import {
   createBoardSession,
   boardError as errorMessage,
-  fixed,
   type BoardManualCommand,
   type DisplayProposal,
 } from './board-session.ts';
@@ -121,7 +121,7 @@ const board = createBoardSession({
 });
 const drag = createBoardDrag({
   layout,
-  canEdit,
+  canEdit: board.canEdit,
   canReorder: () => !board.state.busy && !board.state.staging,
   onWindowStart: () => closeActions(),
   onSelect: (tabId) => {
@@ -178,18 +178,6 @@ function layout(current = false) {
     })),
   };
 }
-function canEdit() {
-  const { ready, busy, refreshing, data, draftLayout } = board.state;
-  return Boolean(
-    ready &&
-    !busy &&
-    !refreshing &&
-    data?.snapshot &&
-    !['pending', 'expired'].includes(data?.proposal?.status ?? '') &&
-    !draftLayout &&
-    data?.snapshot?.localAccess?.tabs !== 'read',
-  );
-}
 function selectedIds(source = board.state.data?.snapshot) {
   if (!source) return [];
   const order = windowOrder.length ? windowOrder : source.windows.map((w) => String(w.id));
@@ -216,7 +204,7 @@ async function moveTab(
   sourceGroupId?: number,
 ) {
   const { data } = board.state;
-  if (!canEdit() || !data?.snapshot) return;
+  if (!board.canEdit() || !data?.snapshot) return;
   const tab = data.snapshot.tabs.find((t) => t.id === tabId);
   if (!tab || tab.pinned) return;
   const ids =
@@ -349,12 +337,12 @@ function tabActions(tab: TabView, window: BoardWindow): MenuAction[] {
     [
       'Move up',
       () => void moveTab(tab.id, window.id, siblings[index - 1]),
-      tab.pinned || index <= 0 || !canEdit(),
+      tab.pinned || index <= 0 || !board.canEdit(),
     ],
     [
       'Move down',
       () => void moveTab(tab.id, window.id, siblings[index + 2]),
-      tab.pinned || index >= siblings.length - 1 || !canEdit(),
+      tab.pinned || index >= siblings.length - 1 || !board.canEdit(),
     ],
   ];
 }
@@ -509,7 +497,7 @@ function renderProposal(
   snapshot: TabSnapshot | null | undefined,
 ) {
   const panel = $('proposal');
-  const { data, draftLayout, busy, ready, staging, refreshing, approvalToken } = board.state;
+  const { draftLayout, busy, staging } = board.state;
   panel.hidden = !proposal;
   const detailsOpen = panel.querySelector('details')?.open ?? false;
   panel.replaceChildren();
@@ -577,8 +565,7 @@ function renderProposal(
     const checkbox = element('input');
     checkbox.type = 'checkbox';
     checkbox.checked = proposal.deduplicate !== false;
-    checkbox.disabled =
-      !ready || busy || staging || refreshing || !snapshot || Boolean(draftLayout);
+    checkbox.disabled = !board.idle() || !snapshot || Boolean(draftLayout);
     checkbox.onchange = () => {
       if (!proposal.windows) return;
       const original = proposal.windows.map((w, index) => ({
@@ -603,23 +590,13 @@ function renderProposal(
   if (pending) {
     const apply = element('button', 'primary', busy ? 'Applying…' : 'Apply');
     apply.id = 'apply';
-    apply.disabled =
-      !ready ||
-      !valid ||
-      !approvalToken ||
-      !data?.session ||
-      busy ||
-      staging ||
-      Boolean(draftLayout) ||
-      refreshing ||
-      !snapshot ||
-      snapshot.localAccess?.tabs === 'read';
+    apply.disabled = !board.canApply();
     if (snapshot?.localAccess?.tabs === 'read')
       row.append(element('span', 'small', 'Enable Organize tabs and windows to apply.'));
     apply.onclick = board.apply;
     if (!valid && !staging) {
       const renew = element('button', '', 'Retry');
-      renew.disabled = !ready || busy || refreshing || !snapshot;
+      renew.disabled = !board.canStage() || !snapshot;
       renew.onclick = () => {
         const { source, windows } = layout();
         void board.stageDraft(source, windows);
@@ -627,7 +604,7 @@ function renderProposal(
       row.append(renew);
     }
     const reset = element('button', '', 'Discard');
-    reset.disabled = !ready || busy || staging || refreshing || !snapshot;
+    reset.disabled = !board.idle() || !snapshot;
     reset.onclick = () => void manual('saul_workspace_discard');
     row.append(reset, apply);
   }
@@ -664,7 +641,7 @@ function render() {
   );
   const snapshot = data?.snapshot;
   const proposal = board.displayProposal();
-  $('refresh').disabled = !ready || busy || staging || refreshing;
+  $('refresh').disabled = !board.idle();
   $('ask').disabled =
     busy || staging || refreshing || (standalone ? false : !ready || !capabilities.message);
   const messageLabel = standalone ? 'Copy message' : 'Send';
@@ -698,7 +675,7 @@ function render() {
   $('access-state').title = organizePermission;
   renderProposal(proposal, snapshot);
   const { source, windows } = layout();
-  const editable = canEdit();
+  const editable = board.canEdit();
   const filter = $('filter').value.toLowerCase();
   const tabMap = new Map(source?.tabs.map((t) => [t.id, t]) ?? []);
   windowOrder = [

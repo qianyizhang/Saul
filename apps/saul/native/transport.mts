@@ -38,6 +38,37 @@ export function nativeDecoder(onMessage: (message: unknown) => void) {
     }
   };
 }
+
+export function chromeNativeHostId(invalidOriginMessage?: string) {
+  const match = /^chrome-extension:\/\/([a-p]{32})\/$/.exec(process.argv[2] ?? '');
+  if (!match) {
+    if (invalidOriginMessage) console.error(invalidOriginMessage);
+    process.exit(1);
+  }
+  process.umask(0o077);
+  return match[1]!;
+}
+
+export function listenForNativeMessages(
+  onMessage: (message: unknown) => void,
+  shutdown: () => void,
+  onIOError = shutdown,
+  onDecodeError: (error: unknown) => void = shutdown,
+) {
+  const decode = nativeDecoder(onMessage);
+  process.stdin.on('data', (chunk) => {
+    try {
+      decode(chunk);
+    } catch (error) {
+      onDecodeError(error);
+    }
+  });
+  process.stdin.on('end', shutdown);
+  process.stdin.on('error', onIOError);
+  process.stdout.on('error', onIOError);
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+}
 export function lineDecoder(onMessage: (message: unknown) => void) {
   let buffer = Buffer.alloc(0);
   return (chunk: Uint8Array) => {

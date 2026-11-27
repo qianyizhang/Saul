@@ -1,6 +1,6 @@
 import { isRecord } from '../../shared/model/value.mts';
 import { ANNOTATION_TARGET, sendAnnotationTab, type AnnotationReply } from './messages';
-import { sourcePage, workspaceSender } from '../platform/chrome/sender';
+import { offscreenSender, sourcePage, workspaceSender } from '../platform/chrome/sender';
 import { runnerRequest } from '../platform/chrome/runner';
 import { annotationStatusSchema } from '../../shared/protocol/annotation-attempts.ts';
 import { mutateAnnotationDraft } from './draft';
@@ -260,12 +260,7 @@ export function initAnnotations(
     if (!isRecord(request) || request.target !== ANNOTATION_TARGET) return false;
     void (async () => {
       if (request.action === 'updated') {
-        if (
-          sender.id !== chrome.runtime.id ||
-          sender.tab ||
-          sender.url !== chrome.runtime.getURL('offscreen.html')
-        )
-          throw new Error('Runner only.');
+        if (!offscreenSender(sender)) throw new Error('Runner only.');
         const url = pageUrl.parse(request.url);
         await chrome.storage.session.set({ [annotationVersionKey]: crypto.randomUUID() });
         for (const tab of await chrome.tabs.query({}))

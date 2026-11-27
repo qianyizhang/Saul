@@ -27,7 +27,7 @@ enum SettingsSection: String, CaseIterable {
     @Published var settingsPresetID: UUID?
     @Published private(set) var configuration = Configuration() {
         didSet {
-            lookup.objectWillChange.send()
+            invalidateLookupEnvironment()
             connectionChecks.reconcile(configuration.connections)
             if configuration.connections != oldValue.connections
                 || lookup.preset(in: oldValue)?.connectionKey != lookup.currentPreset?.connectionKey
@@ -37,7 +37,7 @@ enum SettingsSection: String, CaseIterable {
         }
     }
     @Published var configurationError: String? {
-        didSet { lookup.objectWillChange.send() }
+        didSet { invalidateLookupEnvironment() }
     }
     let session: ConnectionSession
     var connectionChecks: ConnectionChecks { session.checks }
@@ -63,18 +63,18 @@ enum SettingsSection: String, CaseIterable {
     var profiles: [SaulAccount] { session.profiles }
     var signingIn: Bool { session.operation == .signIn }
     var credentialBusy: Bool { session.operation != nil }
-    private(set) var quitting = false {
-        didSet { lookup.objectWillChange.send() }
+    @Published private(set) var quitting = false {
+        didSet { invalidateLookupEnvironment() }
     }
     @Published var error: String? {
-        didSet { lookup.objectWillChange.send() }
+        didSet { invalidateLookupEnvironment() }
     }
     @Published var storageWarning: String? {
-        didSet { lookup.objectWillChange.send() }
+        didSet { invalidateLookupEnvironment() }
     }
     var sharedCredentialsConnected: Bool { session.connected }
     @Published var showSettings = false {
-        didSet { lookup.objectWillChange.send() }
+        didSet { invalidateLookupEnvironment() }
     }
     @Published var minimumMode: Bool {
         didSet { setMinimumMode(minimumMode) }
@@ -90,6 +90,7 @@ enum SettingsSection: String, CaseIterable {
     let speak: (@MainActor (ModelPreset, String) async throws -> Data)?
     private let historyCollection: HistoryCollection
     private var lookupObservation: AnyCancellable?
+    private var publishingLookupEnvironment = false
     let library: LibraryMaintenance?
     var canMaintainLibrary: Bool {
         !quitting && !lookup.busy && !lookup.launcherPending && historyCollection.ready && lock != nil
@@ -138,7 +139,10 @@ enum SettingsSection: String, CaseIterable {
                 focusConnection: { application.model?.refreshActiveConnection(preferred: $0) },
                 setError: { application.model?.error = $0 }))
         application.model = self
-        lookupObservation = lookup.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }
+        lookupObservation = lookup.objectWillChange.sink { [weak self] in
+            guard let self, !publishingLookupEnvironment else { return }
+            objectWillChange.send()
+        }
         historyCollection.onChange = { [weak self] in
             guard let self else { return }
             lookup.objectWillChange.send()
@@ -194,6 +198,14 @@ enum SettingsSection: String, CaseIterable {
     }
 
     private func connectionChanged() {
+        lookup.objectWillChange.send()
+    }
+
+    private func invalidateLookupEnvironment() {
+        // The app property already published. Only lookup observers need a second notification.
+        guard !publishingLookupEnvironment else { return }
+        publishingLookupEnvironment = true
+        defer { publishingLookupEnvironment = false }
         lookup.objectWillChange.send()
     }
 

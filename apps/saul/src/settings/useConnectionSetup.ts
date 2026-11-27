@@ -4,10 +4,10 @@ import { createConnectionEditor, type ConnectionEditorOptions } from '../connect
 export function useConnectionSetup(options: ConnectionEditorOptions, visible: boolean) {
   const [session] = useState(() => createConnectionEditor(options));
   const snapshot = useSyncExternalStore(session.subscribe, session.getSnapshot);
-  const { settings, commit, onDirty } = options;
+  const { settings, commit, onDirty, manageConnection } = options;
   useEffect(
-    () => session.updateOptions({ settings, commit, onDirty }),
-    [session, settings, commit, onDirty],
+    () => session.updateOptions({ settings, commit, onDirty, manageConnection }),
+    [session, settings, commit, onDirty, manageConnection],
   );
   useEffect(() => session.enter(), [session]);
   useEffect(() => {

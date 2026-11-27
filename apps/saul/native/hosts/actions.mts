@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { actionRevisionDirectory } from '../installation/paths.mts';
-import { encodeNative, nativeDecoder } from '../transport.mts';
+import { chromeNativeHostId, encodeNative, listenForNativeMessages } from '../transport.mts';
 import { isRecord } from '../../shared/model/value.mts';
 import { ActionStore } from '../action-store.mts';
 import { ActionRuntime } from '../action-runtime.mts';
@@ -13,8 +13,7 @@ import {
   type ActionHostEvent,
 } from '../../shared/protocol/action-protocol.mts';
 
-if (!/^chrome-extension:\/\/[a-p]{32}\/$/.test(process.argv[2] || '')) process.exit(1);
-process.umask(0o077);
+chromeNativeHostId();
 const store = new ActionStore(actionRevisionDirectory(import.meta.url));
 const runtime = new ActionRuntime(store);
 const running = new Map<string, { controller: AbortController; revision?: string }>();
@@ -29,7 +28,7 @@ const resetIdle = () => {
 };
 const send = (id: string, event: ActionHostEvent) =>
   process.stdout.write(encodeNative({ id, event } satisfies ActionNativeEvent));
-const decode = nativeDecoder((message) => {
+listenForNativeMessages((message) => {
   if (!isRecord(message) || typeof message.id !== 'string' || message.id.length > 128)
     throw new Error('Invalid request ID.');
   const id = message.id;
@@ -105,17 +104,5 @@ const decode = nativeDecoder((message) => {
       running.delete(id);
       resetIdle();
     });
-});
-process.stdin.on('data', (chunk) => {
-  try {
-    decode(chunk);
-  } catch {
-    shutdown();
-  }
-});
-process.stdin.on('end', shutdown);
-process.stdin.on('error', shutdown);
-process.stdout.on('error', shutdown);
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+}, shutdown);
 resetIdle();

@@ -2,7 +2,6 @@ import {
   validConnectionEndpoint,
   type ConnectionDefinition,
 } from '../../shared/protocol/shared-presets-contract.mts';
-import { isRecord } from '../../shared/model/value.mts';
 import { credentialCall } from '../native/credentials';
 import { planCall } from '../providers/chatgpt-plan';
 import type { Configuration } from '../configuration/definition';
@@ -18,13 +17,9 @@ import {
   withReviewedConnectionSetup,
   type CommitSetup,
 } from './client';
-import {
-  ConnectionSetupNotAdmitted,
-  connectionSetupKey,
-  legacyConnectionSetupKey,
-  type ConnectionSetup,
-} from './setup';
+import { ConnectionSetupNotAdmitted, observeConnectionSetups, type ConnectionSetup } from './setup';
 import { nextName } from '../settings/draft';
+import type { ConnectionChange } from '../settings/connection-management';
 
 type Logout = PlanResults['logout'];
 const message = (cause: unknown) => (cause instanceof Error ? cause.message : 'Connection failed.');
@@ -50,6 +45,7 @@ function sameSetup(current: ConnectionSetup | undefined, reviewed: ConnectionSet
 export type ConnectionEditorOptions = {
   settings: Configuration;
   commit: CommitSetup;
+  manageConnection: (change: ConnectionChange) => Promise<void>;
   onDirty: (dirty: boolean) => void;
 };
 
@@ -562,19 +558,6 @@ export function createConnectionEditor(options: ConnectionEditorOptions) {
     };
   }
   let current = snapshot();
-  const changed = (items: Record<string, chrome.storage.StorageChange>) => {
-    if (connectionSetupKey in items || legacyConnectionSetupKey in items) {
-      const value: unknown = items[connectionSetupKey]?.newValue;
-      if (
-        savingIdentity &&
-        isRecord(value) &&
-        Object.values(value).some((record) => isRecord(record) && record.id === savingIdentity)
-      )
-        submittedIdentity = savingIdentity;
-      void refreshPending();
-    }
-  };
-
   return {
     getSnapshot: () => current,
     subscribe(listener: () => void) {
@@ -592,14 +575,17 @@ export function createConnectionEditor(options: ConnectionEditorOptions) {
     },
     enter() {
       active = true;
-      chrome.storage.local.onChanged.addListener(changed);
+      const stopObserving = observeConnectionSetups((recordedIds) => {
+        if (savingIdentity && recordedIds.has(savingIdentity)) submittedIdentity = savingIdentity;
+        void refreshPending();
+      });
       void refreshPending();
       return () => {
         active = false;
         pendingRead++;
         accountRead?.abort();
         loginController?.abort();
-        chrome.storage.local.onChanged.removeListener(changed);
+        stopObserving();
       };
     },
     open,
@@ -616,6 +602,8 @@ export function createConnectionEditor(options: ConnectionEditorOptions) {
     discard,
     repairAccount,
     disconnect,
+    manage: (connection: ConnectionDefinition, change: ConnectionChange) =>
+      changeOutsideSetup(change.key, connection, () => options.manageConnection(change)),
     release: (setup: ConnectionReservation) =>
       run(async () => {
         await releaseSetup({ connectionKey: setup.connectionKey, token: setup.token });

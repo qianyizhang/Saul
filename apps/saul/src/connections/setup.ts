@@ -126,6 +126,23 @@ export async function readConnectionSetup(key: string) {
   return (await readConnectionSetups()).find((setup) => setup.definition.key === key);
 }
 
+/** Observe recovery changes, including a submission that finishes before the next read. */
+export function observeConnectionSetups(changed: (recordedIds: ReadonlySet<string>) => void) {
+  const onChanged = (items: Record<string, chrome.storage.StorageChange>) => {
+    if (!(connectionSetupKey in items || legacyConnectionSetupKey in items)) return;
+    const raw: unknown = items[connectionSetupKey]?.newValue;
+    const recordedIds = new Set<string>();
+    if (isRecord(raw)) {
+      for (const record of Object.values(raw)) {
+        if (isRecord(record) && typeof record.id === 'string') recordedIds.add(record.id);
+      }
+    }
+    changed(recordedIds);
+  };
+  chrome.storage.local.onChanged.addListener(onChanged);
+  return () => chrome.storage.local.onChanged.removeListener(onChanged);
+}
+
 async function writeConnectionSetup(key: string, setup?: ConnectionSetup) {
   await navigator.locks.request(connectionSetupKey, async () => {
     const pending = new Map(

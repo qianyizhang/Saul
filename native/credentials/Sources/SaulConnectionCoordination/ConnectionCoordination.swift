@@ -71,6 +71,18 @@ package final class ConnectionLease {
 }
 
 public struct ConnectionCoordination {
+  public enum SettingsLockError: LocalizedError {
+    case busy
+    case unavailable
+
+    public var errorDescription: String? {
+      switch self {
+      case .busy: "Configuration is busy. Try Save again."
+      case .unavailable: "Cannot open the configuration lock."
+      }
+    }
+  }
+
   public let settingsURL: URL
   public init(settingsURL: URL) { self.settingsURL = settingsURL }
 
@@ -210,16 +222,37 @@ public struct ConnectionCoordination {
     }
   }
 
-  /// The settings writer already holds the shared settings transaction when it calls this.
-  public func withSettingsWrite<T>(
-    registry: OpaquePointer?, before: [ConnectionDefinition], after: [ConnectionDefinition],
+  /// Prepare the replacement under the document lock, then fence its commit against live work.
+  public func withSettingsTransaction<T>(
+    origin: String, fence: ConnectionFence?,
+    prepare: () throws -> (
+      before: [ConnectionDefinition], after: [ConnectionDefinition], write: () throws -> T
+    )
+  ) throws -> T {
+    let database: CoordinationDatabase
+    do {
+      database = try openRegistryTransaction()
+    } catch ConnectionCoordinationError.busy {
+      throw SettingsLockError.busy
+    } catch ConnectionCoordinationError.unavailable {
+      throw SettingsLockError.unavailable
+    }
+    defer { try? database.run("ROLLBACK") }
+    let change = try prepare()
+    return try withSettingsWrite(
+      in: database, before: change.before, after: change.after, origin: origin, fence: fence,
+      write: change.write)
+  }
+
+  private func withSettingsWrite<T>(
+    in database: CoordinationDatabase, before: [ConnectionDefinition],
+    after: [ConnectionDefinition],
     origin: String, fence: ConnectionFence?, write: () throws -> T
   ) throws -> T {
     let prior = Dictionary(uniqueKeysWithValues: before.map { ($0.key, $0) })
     let next = Dictionary(uniqueKeysWithValues: after.map { ($0.key, $0) })
     let changed = Set(prior.keys).union(next.keys).filter { prior[$0] != next[$0] }
     if changed.isEmpty && fence == nil { return try write() }
-    let database = CoordinationDatabase(borrowing: registry)
     let scopes = Set(
       changed.flatMap { key in
         ["key:" + key]
@@ -259,13 +292,18 @@ public struct ConnectionCoordination {
     }
   }
 
-  private func registry<T>(_ operation: (CoordinationDatabase) throws -> T) throws -> T {
+  private func openRegistryTransaction() throws -> CoordinationDatabase {
     try FileManager.default.createDirectory(
       at: settingsURL.deletingLastPathComponent(), withIntermediateDirectories: true,
       attributes: [.posixPermissions: 0o700])
     let database = try CoordinationDatabase(opening: registryURL)
     try database.run("PRAGMA busy_timeout = 5000")
     try database.run("BEGIN IMMEDIATE")
+    return database
+  }
+
+  private func registry<T>(_ operation: (CoordinationDatabase) throws -> T) throws -> T {
+    let database = try openRegistryTransaction()
     do {
       try database.run(
         """
@@ -342,23 +380,21 @@ public struct ConnectionCoordination {
 }
 
 private final class CoordinationDatabase {
-  private var connection: OpaquePointer?
-  private let owned: Bool
+  private let connection: OpaquePointer?
   private let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
-  init(borrowing connection: OpaquePointer?) {
-    self.connection = connection
-    self.owned = false
-  }
-
   init(opening url: URL) throws {
-    self.owned = true
     var handle: OpaquePointer?
     let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_NOFOLLOW
     // Darwin's system aliases are normal inputs from temporaryDirectory and tmpdir().
     // Keep NOFOLLOW for every remaining path component, including the file itself.
     let path = url.path
     let lockPath = path.hasPrefix("/var/") || path.hasPrefix("/tmp/") ? "/private" + path : path
+    if let kind = try? FileManager.default.attributesOfItem(atPath: lockPath)[.type],
+      kind as? FileAttributeType != .typeRegular
+    {
+      throw ConnectionCoordinationError.unavailable
+    }
     guard sqlite3_open_v2(lockPath, &handle, flags, nil) == SQLITE_OK else {
       sqlite3_close(handle)
       throw ConnectionCoordinationError.unavailable
@@ -372,7 +408,7 @@ private final class CoordinationDatabase {
     connection = handle
   }
 
-  deinit { if owned { sqlite3_close(connection) } }
+  deinit { sqlite3_close(connection) }
 
   private func check(_ code: Int32) throws {
     if code == SQLITE_BUSY || code == SQLITE_LOCKED { throw ConnectionCoordinationError.busy }

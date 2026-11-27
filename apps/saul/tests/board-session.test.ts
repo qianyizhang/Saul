@@ -7,13 +7,18 @@ const sessions = [
   { session: 'page-a', extensionId: 'test' },
   { session: 'page-b', extensionId: 'test' },
 ];
+const snapshot = { tabs: [], windows: [], groups: [] };
 
-function response(session: string, token: string): CallToolResult {
+function response(
+  session: string,
+  token: string,
+  proposal: WorkspaceState['proposal'] = null,
+): CallToolResult {
   const state: WorkspaceState = {
     sessions,
     session,
-    snapshot: { tabs: [], windows: [], groups: [] },
-    proposal: null,
+    snapshot,
+    proposal,
     revision: token,
   };
   return {
@@ -96,4 +101,50 @@ it('accepts a late host result only for a discovered browser when no browser is 
   board.hostResult(response('page-b', 'fresh'));
   expect(board.state.data?.session).toBe('page-b');
   expect(board.state.approvalToken).toBe('fresh');
+});
+
+it('uses the same approval eligibility for rendering and applying a proposal', async () => {
+  const call = vi.fn(async () => response('page-a', 'applied'));
+  const board = createBoardSession({
+    call,
+    changed: vi.fn(),
+    status: vi.fn(),
+    onSessionChange: vi.fn(),
+    onPreview: vi.fn(),
+    dragActive: () => false,
+    tabDragActive: () => false,
+  });
+  board.setReady(true);
+  const pending = (expiresAt: number) => {
+    board.hostResult(
+      response('page-a', 'approve', {
+        id: 'proposal',
+        status: 'pending',
+        summary: 'Arrange tabs',
+        revision: 'approve',
+        before: snapshot,
+        windows: [],
+        projected: [],
+        duplicates: [],
+        changedTabIds: [],
+        deduplicate: false,
+        expiresAt,
+      }),
+    );
+  };
+
+  pending(Date.now() - 1);
+  expect(board.canApply()).toBe(false);
+  await board.apply();
+  expect(call).not.toHaveBeenCalled();
+
+  pending(Date.now() + 10_000);
+  expect(board.canApply()).toBe(true);
+  await board.apply();
+  expect(call).toHaveBeenCalledOnce();
+  expect(call).toHaveBeenCalledWith('saul_workspace_apply', {
+    session: 'page-a',
+    proposalId: 'proposal',
+    approvalToken: 'approve',
+  });
 });

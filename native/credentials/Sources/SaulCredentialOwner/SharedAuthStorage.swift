@@ -1,4 +1,3 @@
-import Darwin
 import Foundation
 import SaulCredentialClient
 import SaulNativeValues
@@ -55,36 +54,24 @@ package final class SharedAuthStorage: CredentialStore, Sendable {
   }
   private var migrationURL: URL { directory.appendingPathComponent("migration.json") }
   private func migration() throws -> Migration {
-    guard FileManager.default.fileExists(atPath: migrationURL.path) else { return Migration() }
-    let receipt = try JSONDecoder().decode(Migration.self, from: readPrivateFile(migrationURL))
+    let data: Data?
+    do {
+      data = try AtomicFile.readPrivatePrefix(at: migrationURL, count: 2_000_001)
+    } catch {
+      throw CredentialStorageError(
+        "Saul's saved credential policy must be an owner-only regular file.")
+    }
+    guard let data else { return Migration() }
+    guard data.count <= 2_000_000 else {
+      throw CredentialStorageError("Saul's saved credential policy is invalid. It was preserved.")
+    }
+    let receipt = try JSONDecoder().decode(Migration.self, from: data)
     guard receipt.version == 1, Set(receipt.clients).isSubset(of: ["saul", "ez"]) else {
       throw CredentialStorageError("Unsupported Saul credential policy. It was preserved.")
     }
     return receipt
   }
   private func saveMigration(_ receipt: Migration) throws {
-    try JSONEncoder().encode(receipt).write(to: migrationURL, options: .atomic)
-    try FileManager.default.setAttributes(
-      [.posixPermissions: 0o600], ofItemAtPath: migrationURL.path)
-  }
-  private func readPrivateFile(_ url: URL) throws -> Data {
-    let descriptor = open(url.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
-    guard descriptor >= 0 else {
-      throw CredentialStorageError("Cannot read Saul's saved credential policy. It was preserved.")
-    }
-    let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
-    defer { try? handle.close() }
-    var attributes = stat()
-    guard fstat(descriptor, &attributes) == 0, attributes.st_uid == getuid(),
-      attributes.st_mode & S_IFMT == S_IFREG, attributes.st_mode & 0o077 == 0,
-      attributes.st_size <= 2_000_000
-    else {
-      throw CredentialStorageError(
-        "Saul's saved credential policy must be an owner-only regular file.")
-    }
-    guard let data = try handle.read(upToCount: 2_000_001), data.count <= 2_000_000 else {
-      throw CredentialStorageError("Saul's saved credential policy is invalid. It was preserved.")
-    }
-    return data
+    try AtomicFile.write(JSONEncoder().encode(receipt), to: migrationURL)
   }
 }

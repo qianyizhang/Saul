@@ -13,7 +13,6 @@ import type { PlanResults } from '../../../shared/protocol/credential-plan.mts';
 import { useConnectionCatalog } from './useConnectionCatalog';
 import { ConnectionManagement, type ConnectionManagementAction } from './ConnectionManagement';
 import { presetCountLabel, presetsUsingConnection } from '../connection-management';
-import { changeOutsideSetup } from '../../connections/client';
 import { useConnectionSetup } from '../useConnectionSetup';
 import type { Configuration } from '../../configuration/definition';
 import type { ConnectionChange } from '../connection-management';
@@ -268,7 +267,7 @@ export function ConnectionSettings({
   focusConnection,
   onConnectionFocused,
 }: ConnectionSettingsProps) {
-  const setup = useConnectionSetup({ settings, onDirty, commit }, visible);
+  const setup = useConnectionSetup({ settings, onDirty, commit, manageConnection }, visible);
   const { draft, pending, status, plan } = setup;
   const { busy, error, revision, logouts } = status;
   const { accounts, selectedAccount, defaultPlanName, needsPlanPermission, recoveryIntent } = plan;
@@ -463,9 +462,7 @@ export function ConnectionSettings({
           connection={managed}
           settings={settings}
           disabled={disabled || dirty}
-          commit={(change) =>
-            changeOutsideSetup(change.key, managed, () => manageConnection(change))
-          }
+          commit={(change) => setup.manage(managed, change)}
           close={() => {
             setReturnTo(management.key);
             setManagement(undefined);

@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { isRecord } from '../model/value.mts';
 const actionCapabilities = ['write', 'draw', 'speak'] as const;
 export type ActionCapability = (typeof actionCapabilities)[number];
@@ -59,15 +60,30 @@ export interface SharedPreset {
   imageOptions?: SharedImageOptions;
   speechOptions?: SharedSpeechOptions;
 }
-export interface ConnectionDefinition {
-  key: string;
-  name: string;
-  kind: 'chatgpt-plan' | 'openai-api';
-  /** A connection pins its account. Missing means setup has not yet bound an account. */
-  accountId?: string;
-  /** Absent is the official OpenAI endpoint. Secrets never enter this document. */
-  baseUrl?: string;
-}
+const connectionDefinition = z
+  .strictObject({
+    key: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
+    kind: z.enum(['chatgpt-plan', 'openai-api']),
+    // These limits count UTF-16 units in both runtimes.
+    name: z.string().refine((name) => !!name.trim() && name.length <= 80),
+    // Missing account means setup has not yet bound one. Missing URL means the official API.
+    accountId: z
+      .string()
+      .refine((id) => id.length > 0 && id.length <= 256)
+      .optional(),
+    baseUrl: z.string().refine(validConnectionEndpoint).optional(),
+  })
+  .refine(({ kind, accountId, baseUrl }) =>
+    kind === 'chatgpt-plan' ? baseUrl === undefined : accountId === undefined,
+  );
+export type ConnectionDefinition = z.infer<typeof connectionDefinition>;
+const connections = z
+  .array(connectionDefinition)
+  .refine(
+    (items) =>
+      new Set(items.map((p) => p.key)).size === items.length &&
+      new Set(items.map((p) => p.name.trim().toLowerCase())).size === items.length,
+  );
 export const DEFAULT_CONNECTIONS: readonly ConnectionDefinition[] = [
   { key: 'gpt-plan', name: 'ChatGPT plan', kind: 'chatgpt-plan' },
   { key: 'openai-api', name: 'OpenAI API', kind: 'openai-api' },
@@ -115,32 +131,7 @@ export function validateConnectionChanges(
   }
 }
 export function validateConnections(value: unknown): asserts value is ConnectionDefinition[] {
-  if (
-    !Array.isArray(value) ||
-    value.length > 32 ||
-    !value.every(
-      (p) =>
-        isRecord(p) &&
-        Object.keys(p).every((key) =>
-          ['key', 'name', 'kind', 'accountId', 'baseUrl'].includes(key),
-        ) &&
-        typeof p.key === 'string' &&
-        /^[a-z][a-z0-9-]{0,63}$/.test(p.key) &&
-        typeof p.name === 'string' &&
-        !!p.name.trim() &&
-        p.name.length <= 80 &&
-        (p.kind === 'chatgpt-plan' || p.kind === 'openai-api') &&
-        (p.accountId === undefined ||
-          (p.kind === 'chatgpt-plan' &&
-            typeof p.accountId === 'string' &&
-            p.accountId.length > 0 &&
-            p.accountId.length <= 256)) &&
-        (p.baseUrl === undefined ||
-          (p.kind === 'openai-api' && validConnectionEndpoint(p.baseUrl))),
-    ) ||
-    new Set(value.map((p) => p.key)).size !== value.length ||
-    new Set(value.map((p) => p.name.trim().toLowerCase())).size !== value.length
-  )
+  if (!Array.isArray(value) || value.length > 32 || !connections.safeParse(value).success)
     throw new Error('Connections need unique keys and names and a supported kind.');
 }
 export interface SharedPresets {

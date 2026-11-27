@@ -20,20 +20,10 @@ struct ConnectionCatalogCache {
   func load() throws -> [String: Entry] {
     let data: Data
     do {
-      let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-      guard attributes[.type] as? FileAttributeType == .typeRegular else {
-        throw CredentialStorageError(
-          "The model cache path is not a regular file. It was preserved.")
+      guard let bytes = try AtomicFile.readPrivatePrefix(at: url, count: Self.maxBytes + 1) else {
+        return [:]
       }
-      let handle = try FileHandle(forReadingFrom: url)
-      defer { try? handle.close() }
-      data = try handle.read(upToCount: Self.maxBytes + 1) ?? Data()
-    } catch let error as CocoaError
-      where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile
-    {
-      return [:]
-    } catch let error as CredentialStorageError {
-      throw error
+      data = bytes
     } catch {
       throw CredentialStorageError("Couldn’t read the model cache. Check its file permissions.")
     }

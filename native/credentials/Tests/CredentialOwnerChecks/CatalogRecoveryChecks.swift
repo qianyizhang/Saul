@@ -49,7 +49,7 @@ private func savedCatalogs(_ path: URL) throws -> [String: Any] {
       defer { http.close() }
       let client = try credentialConnection(directory: directory, http: http)
       let path = directory.appendingPathComponent("connection-catalogs.json")
-      try Data("broken cache".utf8).write(to: path)
+      try AtomicFile.write(Data("broken cache".utf8), to: path)
       _ = try await client.call(["action": "api-key-save", "key": "replacement"])
       try expect(try savedCatalogs(path).isEmpty, "Key replacement did not discard broken cache")
       let catalog = try await apiCatalog(client)
@@ -95,6 +95,25 @@ private func savedCatalogs(_ path: URL) throws -> [String: Any] {
       _ = try await apiCatalog(client)
       try expectEqual(http.requests.count, 1, "Explicit retry did not recover")
     },
+    CheckCase("catalog repair: a linked cache fails closed") { directory in
+      let http = HTTPFixture { _ in HTTPReply(#"{"data":[{"id":"gpt-original"}]}"#) }
+      defer { http.close() }
+      let client = try credentialConnection(directory: directory, http: http)
+      let target = directory.appendingPathComponent("unrelated.json")
+      let data = Data("unrelated contents".utf8)
+      try AtomicFile.write(data, to: target)
+      let path = directory.appendingPathComponent("connection-catalogs.json")
+      try FileManager.default.createSymbolicLink(at: path, withDestinationURL: target)
+      try await expectAsyncThrows(
+        CredentialStorageError.self,
+        matching: { $0.localizedDescription.contains("read the model cache") }
+      ) {
+        _ = try await client.call(["action": "api-key-save", "key": "replacement"])
+      }
+      try expectEqual(
+        try Data(contentsOf: target), data, "Catalog repair replaced an unrelated file")
+      try expect(http.requests.isEmpty, "The invalid cache reached the provider")
+    },
     CheckCase("catalog repair: plan display preserves registration and pause") { directory in
       let http = HTTPFixture { _ in
         HTTPReply(#"{"models":[{"visibility":"list","slug":"preferred"}]}"#)
@@ -103,7 +122,7 @@ private func savedCatalogs(_ path: URL) throws -> [String: Any] {
       let fixture = try PlanCatalogFixture(directory, http: http)
       try fixture.storage.pause("a", value: true)
       let path = directory.appendingPathComponent("connection-catalogs.json")
-      try Data("broken cache".utf8).write(to: path)
+      try AtomicFile.write(Data("broken cache".utf8), to: path)
       let catalog = try await fixture.catalog("plan-a", intent: "display")
       try expectEqual(catalog.models.map(\.id), ["preferred"], "Corruption blocked plan display")
       try expect(try fixture.storage.isPaused("a"), "Display cleared a usage pause")

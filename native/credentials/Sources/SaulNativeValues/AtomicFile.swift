@@ -23,6 +23,21 @@ public enum AtomicFile {
     guard Darwin.rename(staged.path, url.path) == 0 else { throw Failure.replacing(posixError()) }
   }
 
+  /// Reads a bounded prefix from an owner-only regular file. A missing file returns nil.
+  public static func readPrivatePrefix(at url: URL, count: Int) throws -> Data? {
+    let descriptor = Darwin.open(url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+    if descriptor < 0 && errno == ENOENT { return nil }
+    guard descriptor >= 0 else { throw posixError() }
+    let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+    defer { try? handle.close() }
+    var info = stat()
+    guard fstat(descriptor, &info) == 0 else { throw posixError() }
+    guard info.st_uid == getuid(), info.st_mode & S_IFMT == S_IFREG,
+      info.st_mode & 0o077 == 0
+    else { throw POSIXError(.EACCES) }
+    return try handle.read(upToCount: count) ?? Data()
+  }
+
   private static func posixError() -> NSError {
     NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
   }

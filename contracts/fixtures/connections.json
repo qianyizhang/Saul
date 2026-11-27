@@ -61,6 +61,22 @@
     [
       {
         "key": "api",
+        "name": "API",
+        "kind": "openai-api",
+        "accountId": "plan-only"
+      }
+    ],
+    [
+      {
+        "key": "plan",
+        "name": "Plan",
+        "kind": "chatgpt-plan",
+        "baseUrl": "https://api.example.test/v1"
+      }
+    ],
+    [
+      {
+        "key": "api",
         "name": "🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳",
         "kind": "openai-api"
       }

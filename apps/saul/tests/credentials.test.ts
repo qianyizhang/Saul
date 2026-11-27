@@ -173,6 +173,24 @@ it('checks a correlated credential reply against the requested operation', async
   next.emit({ id: nextId, event: { type: 'result', connectionCoordination: 1 } });
   await expect(mismatch).rejects.toThrow('invalid credential result for this operation');
 });
+it('keeps the control deadline and rejects streaming events on the control route', async () => {
+  vi.useFakeTimers();
+  const h = harness();
+  const timedOut = expect(nativeCredentialCall({ action: 'status' })).rejects.toThrow(
+    'credential operation timed out',
+  );
+  await vi.advanceTimersByTimeAsync(190_000);
+  await timedOut;
+  expect(h.native.disconnect).toHaveBeenCalledOnce();
+
+  const next = harness();
+  const unexpected = expect(nativeCredentialCall({ action: 'status' })).rejects.toThrow(
+    'Unexpected credential control reply',
+  );
+  const [{ id }] = next.native.postMessage.mock.calls[0]!;
+  next.emit({ id, event: { type: 'delta', text: 'unexpected' } });
+  await unexpected;
+});
 it('denies page callers and credential operations from the offscreen runner', () => {
   const h = harness();
   expect(h.connect('https://example.test', true).port.disconnect).toHaveBeenCalled();

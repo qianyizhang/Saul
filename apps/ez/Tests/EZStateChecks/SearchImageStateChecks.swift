@@ -10,6 +10,19 @@ import SaulTestSupport
 
 @MainActor func searchImageStateChecks() -> [CheckCase] {
     [
+        CheckCase("lookup observation: an application error invalidates each owner once") { directory in
+            let fixture = try StateFixture(directory: directory)
+            defer { fixture.model.shutdown() }
+            let model = fixture.model
+            var appChanges = 0
+            var lookupChanges = 0
+            let app = model.objectWillChange.sink { appChanges += 1 }
+            let lookup = model.lookup.objectWillChange.sink { lookupChanges += 1 }
+            defer { withExtendedLifetime((app, lookup)) {} }
+            model.error = "Fixture error"
+            try expectEqual(appChanges, 1, "The lookup observation echoed an app change")
+            try expectEqual(lookupChanges, 1, "The lookup observation missed an app change")
+        },
         CheckCase("image retry: paused attachment I/O leaves controls responsive and stopped work inert") {
             directory in
             let store = try HistoryStore(directory: directory)

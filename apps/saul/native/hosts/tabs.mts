@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { chmodSync, rmSync } from 'node:fs';
 import {
   encodeNative,
-  nativeDecoder,
+  chromeNativeHostId,
+  listenForNativeMessages,
   lineDecoder,
   runtimeDirectory,
   secureDirectory,
@@ -15,12 +16,7 @@ import {
 import { validateCall } from '../../shared/protocol/protocol.mts';
 import { MAX_MESSAGE } from '../../shared/protocol/native-messaging.mts';
 
-const origin = process.argv[2];
-if (!/^chrome-extension:\/\/[a-p]{32}\/$/.test(origin ?? '')) {
-  console.error('This host must be launched by Chrome native messaging.');
-  process.exit(1);
-}
-process.umask(0o077);
+const extensionId = chromeNativeHostId('This host must be launched by Chrome native messaging.');
 const directory = runtimeDirectory();
 secureDirectory(directory);
 const session = randomBytes(8).toString('hex');
@@ -67,7 +63,7 @@ const server = net.createServer((socket) => {
         id: request.id,
         result: {
           session,
-          extensionId: origin.split('/')[2],
+          extensionId,
           pid: process.pid,
           browserPid: process.ppid,
           connectedAt,
@@ -102,14 +98,6 @@ const server = net.createServer((socket) => {
     }
   });
 });
-const decode = nativeDecoder((message) => {
-  if (!isRecord(message) || typeof message.id !== 'string') return;
-  const item = pending.get(message.id);
-  if (!item) return;
-  pending.delete(message.id);
-  clearTimeout(item.timer);
-  send(item.socket, { ...message, id: item.clientId });
-});
 let stopping = false;
 function shutdown(code = 0) {
   if (stopping) return;
@@ -120,19 +108,22 @@ function shutdown(code = 0) {
   rmSync(socketPath, { force: true });
   process.exit(code);
 }
-process.stdin.on('data', (chunk) => {
-  try {
-    decode(chunk);
-  } catch (error) {
+listenForNativeMessages(
+  (message) => {
+    if (!isRecord(message) || typeof message.id !== 'string') return;
+    const item = pending.get(message.id);
+    if (!item) return;
+    pending.delete(message.id);
+    clearTimeout(item.timer);
+    send(item.socket, { ...message, id: item.clientId });
+  },
+  () => shutdown(),
+  () => shutdown(1),
+  (error) => {
     console.error(errorMessage(error));
     shutdown(1);
-  }
-});
-process.stdin.on('end', () => shutdown());
-process.stdin.on('error', () => shutdown(1));
-process.stdout.on('error', () => shutdown(1));
-process.on('SIGTERM', () => shutdown());
-process.on('SIGINT', () => shutdown());
+  },
+);
 server.on('error', (error) => {
   console.error(errorMessage(error));
   shutdown(1);

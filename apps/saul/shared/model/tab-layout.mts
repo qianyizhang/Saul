@@ -1,4 +1,6 @@
-import type { TabSnapshot } from '../protocol/protocol.mts';
+import type { TabSnapshot, TabView } from '../protocol/protocol.mts';
+
+export const fixedInProposal = (tab: TabView) => tab.pinned || tab.groupId >= 0;
 // Navigation and focus do not invalidate an edit or Undo. Changed membership,
 // order, pins and groups do. This identity is shared by both surfaces.
 export function tabLayoutRevision(

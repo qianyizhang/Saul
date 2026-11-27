@@ -12,7 +12,7 @@ import {
   type CredentialEvent,
 } from '../../shared/protocol/credentials-contract.mts';
 import { Fragments } from '../../shared/protocol/fragments.mts';
-import { workspaceSender } from '../platform/chrome/sender';
+import { offscreenSender, workspaceSender } from '../platform/chrome/sender';
 
 export class CredentialRequestError extends Error {
   constructor(
@@ -23,6 +23,43 @@ export class CredentialRequestError extends Error {
   }
 }
 
+function openCredentialPort() {
+  const id = crypto.randomUUID();
+  const port = chrome.runtime.connectNative(CREDENTIALS_HOST);
+  const fragments = new Fragments();
+  return {
+    port,
+    send(request: CredentialRequest) {
+      port.postMessage({
+        version: CREDENTIALS_VERSION,
+        id,
+        request,
+      } satisfies NativeCredentialEnvelope);
+    },
+    cancel() {
+      port.postMessage({
+        version: CREDENTIALS_VERSION,
+        id,
+        cancel: true,
+      } satisfies NativeCredentialEnvelope);
+    },
+    read(packet: unknown): CredentialEvent | undefined {
+      const reply = fragments.accept(packet);
+      if (reply === undefined) return undefined;
+      if (
+        !reply ||
+        typeof reply !== 'object' ||
+        !('id' in reply) ||
+        reply.id !== id ||
+        !('event' in reply)
+      )
+        throw new Error('Invalid credential reply.');
+      validateCredentialEvent(reply.event);
+      return reply.event;
+    },
+  };
+}
+
 export async function* credentialEvents(
   request: CredentialRequest,
   signal?: AbortSignal,
@@ -30,11 +67,8 @@ export async function* credentialEvents(
 ): AsyncGenerator<CredentialEvent> {
   validateCredentialRequest(request);
   signal?.throwIfAborted();
-  const port = direct
-    ? chrome.runtime.connectNative(CREDENTIALS_HOST)
-    : chrome.runtime.connect({ name: CREDENTIALS_PORT });
-  const id = direct ? crypto.randomUUID() : undefined;
-  const packets = direct ? new Fragments() : undefined;
+  const native = direct ? openCredentialPort() : undefined;
+  const port = native?.port ?? chrome.runtime.connect({ name: CREDENTIALS_PORT });
   const queue: CredentialEvent[] = [];
   let ended = false,
     wake = () => {};
@@ -42,11 +76,8 @@ export async function* credentialEvents(
     ended = true;
     wake();
     try {
-      port.postMessage(
-        id
-          ? ({ version: CREDENTIALS_VERSION, id, cancel: true } satisfies NativeCredentialEnvelope)
-          : { cancel: true },
-      );
+      if (native) native.cancel();
+      else port.postMessage({ cancel: true });
     } catch {
       /* Disconnected. */
     }
@@ -54,22 +85,14 @@ export async function* credentialEvents(
   };
   port.onMessage.addListener((packet: unknown) => {
     try {
-      let event = packet;
-      if (packets) {
-        const reply = packets.accept(packet);
-        if (reply === undefined) return;
-        if (
-          !reply ||
-          typeof reply !== 'object' ||
-          !('id' in reply) ||
-          reply.id !== id ||
-          !('event' in reply)
-        )
-          throw new Error('Invalid credential reply.');
-        event = reply.event;
+      if (native) {
+        const event = native.read(packet);
+        if (event === undefined) return;
+        queue.push(event);
+      } else {
+        validateCredentialEvent(packet);
+        queue.push(packet);
       }
-      validateCredentialEvent(event);
-      queue.push(event);
     } catch {
       queue.push({ type: 'error', message: 'Saul returned an invalid credential reply.' });
     }
@@ -86,11 +109,8 @@ export async function* credentialEvents(
   });
   signal?.addEventListener('abort', abort, { once: true });
   try {
-    port.postMessage(
-      id
-        ? ({ version: CREDENTIALS_VERSION, id, request } satisfies NativeCredentialEnvelope)
-        : request,
-    );
+    if (native) native.send(request);
+    else port.postMessage(request);
     while (!ended) {
       if (!queue.length)
         await new Promise<void>((resolve) => {
@@ -133,11 +153,10 @@ export async function nativeCredentialCall<T extends NativeCredentialRequest>(
   request: T,
 ): Promise<CredentialResult<T>> {
   validateCredentialRequest(request);
-  const id = crypto.randomUUID();
-  const port = chrome.runtime.connectNative(CREDENTIALS_HOST);
+  const native = openCredentialPort();
+  const { port } = native;
   return new Promise((resolve, reject) => {
     let ended = false;
-    const fragments = new Fragments();
     const finish = (error?: Error, value?: CredentialResult<T>) => {
       if (ended) return;
       ended = true;
@@ -157,33 +176,19 @@ export async function nativeCredentialCall<T extends NativeCredentialRequest>(
     });
     port.onMessage.addListener((packet: unknown) => {
       try {
-        const reply: unknown = fragments.accept(packet);
-        if (reply === undefined) return;
-        if (
-          !reply ||
-          typeof reply !== 'object' ||
-          !('id' in reply) ||
-          reply.id !== id ||
-          !('event' in reply)
-        )
-          throw new Error('Invalid credential reply.');
-        validateCredentialEvent(reply.event);
-        if (reply.event.type === 'error')
-          finish(new CredentialRequestError(reply.event.message, reply.event.reason));
-        else if (reply.event.type === 'result') {
-          validateCredentialResult(request, reply.event);
-          finish(undefined, reply.event);
+        const event = native.read(packet);
+        if (event === undefined) return;
+        if (event.type === 'error') finish(new CredentialRequestError(event.message, event.reason));
+        else if (event.type === 'result') {
+          validateCredentialResult(request, event);
+          finish(undefined, event);
         } else finish(new Error('Unexpected credential control reply.'));
       } catch (error) {
         finish(error instanceof Error ? error : new Error('Invalid credential reply.'));
       }
     });
     try {
-      port.postMessage({
-        version: CREDENTIALS_VERSION,
-        id,
-        request,
-      } satisfies NativeCredentialEnvelope);
+      native.send(request);
     } catch (error) {
       finish(error instanceof Error ? error : new Error('Cannot connect to Saul credentials.'));
     }
@@ -195,17 +200,13 @@ export function initCredentialBridge() {
     if (port.name !== CREDENTIALS_PORT) return;
     const sender = port.sender;
     const workspace = !!sender && workspaceSender(sender);
-    const offscreen =
-      sender?.id === chrome.runtime.id &&
-      !sender.tab &&
-      sender.url === chrome.runtime.getURL('offscreen.html');
+    const offscreen = offscreenSender(sender);
     if (!workspace && !offscreen) {
       port.disconnect();
       return;
     }
-    let native: chrome.runtime.Port | undefined,
-      id = '',
-      timer: ReturnType<typeof setTimeout> | undefined;
+    let native: ReturnType<typeof openCredentialPort> | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     let started = false,
       login = false,
       closed = false;
@@ -220,16 +221,12 @@ export function initCredentialBridge() {
           /* The settings view may have closed. */
         }
       }
-      native?.disconnect();
+      native?.port.disconnect();
     };
     const cancel = () => {
       if (closed) return;
       try {
-        native?.postMessage({
-          version: CREDENTIALS_VERSION,
-          id,
-          cancel: true,
-        } satisfies NativeCredentialEnvelope);
+        native?.cancel();
       } catch {
         /* Disconnected. */
       }
@@ -259,24 +256,13 @@ export function initCredentialBridge() {
         )
           throw new Error('The runner may only generate text or images.');
         login = message.action === 'login';
-        id = crypto.randomUUID();
-        native = chrome.runtime.connectNative(CREDENTIALS_HOST);
-        const fragments = new Fragments();
-        native.onMessage.addListener((packet: unknown) => {
+        const channel = openCredentialPort();
+        native = channel;
+        channel.port.onMessage.addListener((packet: unknown) => {
           if (closed) return;
           try {
-            const reply: unknown = fragments.accept(packet);
-            if (reply === undefined) return;
-            if (
-              !reply ||
-              typeof reply !== 'object' ||
-              !('id' in reply) ||
-              reply.id !== id ||
-              !('event' in reply)
-            )
-              throw new Error();
-            validateCredentialEvent(reply.event);
-            const event = reply.event;
+            const event = channel.read(packet);
+            if (event === undefined) return;
             if (event.type === 'authorize') {
               const url = new URL(event.url);
               if (
@@ -297,7 +283,7 @@ export function initCredentialBridge() {
             finish({ type: 'error', message: 'Saul returned an invalid credential reply.' });
           }
         });
-        native.onDisconnect.addListener(() => {
+        channel.port.onDisconnect.addListener(() => {
           void chrome.runtime.lastError;
           finish({
             type: 'error',
@@ -312,11 +298,7 @@ export function initCredentialBridge() {
           timer = setTimeout(
             () => {
               try {
-                native?.postMessage({
-                  version: CREDENTIALS_VERSION,
-                  id,
-                  cancel: true,
-                } satisfies NativeCredentialEnvelope);
+                channel.cancel();
               } catch {
                 /* Disconnected. */
               }
@@ -328,11 +310,7 @@ export function initCredentialBridge() {
             login ? 320_000 : 190_000,
           );
         }
-        native.postMessage({
-          version: CREDENTIALS_VERSION,
-          id,
-          request: message,
-        } satisfies NativeCredentialEnvelope);
+        channel.send(message);
       } catch (error) {
         finish({
           type: 'error',

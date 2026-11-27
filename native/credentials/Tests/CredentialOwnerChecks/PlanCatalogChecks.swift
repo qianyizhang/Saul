@@ -152,13 +152,14 @@ private let planUsageLimit = """
         models: [ConnectionModel(id: "preferred", efforts: ["medium"], fastTier: "fast")],
         fetchedAt: 5)
       // This is the cache format deployed by the prior owner: no default marker or route prefix.
-      try JSONSerialization.data(withJSONObject: [
+      let oldCache = try JSONSerialization.data(withJSONObject: [
         "plan-a": [
           "identity": "a",
           "catalog": try JSONSerialization.jsonObject(
             with: JSONEncoder().encode(prior)),
         ]
-      ]).write(to: cacheURL)
+      ])
+      try AtomicFile.write(oldCache, to: cacheURL)
       response = "invalid reply"
       let stale = try await fixture.catalog("plan-a", intent: "display")
       try expectEqual(stale.models, prior.models, "Old cache could not be decoded for display")
