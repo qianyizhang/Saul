@@ -60,11 +60,9 @@ calls or browser mutations are supported. Use these capabilities:
 | `ctx.progress(text)`                   | Show a short progress message (at most 500 characters)                       |
 | `ctx.signal`                           | Cancellation signal; use `throwIfAborted()` in longer workflows              |
 
-Omitting `input` supplies the captured page input. A PDF URL remains attached even
-when the Call supplies additional input text. URL attachments require a ChatGPT
-plan preset. Choose Local PDF processing explicitly to use extracted text with
-another provider. Existing PDF capture validation, limits and retry semantics
-live in [source capture and PDFs](calls.md#source-capture-and-pdfs).
+Omitting `input` supplies the captured page input. A PDF URL stays attached
+when the Call supplies explicit input. See [source capture and PDFs](calls.md#source-capture-and-pdfs)
+for provider eligibility, local extraction and Retry.
 
 Return nonempty plain text or Markdown, at most 60,000 characters. The reader
 renders Markdown through React nodes; raw HTML is literal text, images are not
@@ -84,16 +82,14 @@ A custom Call can clean `ctx.source.text` locally, pass the prepared text to
 `ctx.generate`, then use the answer as input to a later request. This is one
 page run with shared cancellation and one final result; intermediate model
 requests remain available in inspection. Cleanup does not change the live page
-or overwrite the saved capture. A PDF URL is not locally available text and stays
-attached when explicit input is supplied.
+or overwrite the saved capture.
 
 The Call execution module owns these results and transcripts behind detached
 progress snapshots; the runner owns scheduling and persistence. See
 [Call runtime owners](calls.md#runtime-owners) for the implementation seam.
-Site-specific Call selection (for example Hacker News versus Reddit) is a future
-admission feature. Site-specific DOM extraction belongs to capture. This refactor
-adds neither automatic site rules nor a separate workflow language, cross-page
-chains or resumable steps. Existing scripts can branch on the captured URL.
+Scripts can branch on the captured URL. Site-specific DOM extraction belongs to
+capture. Automatic site rules, a separate workflow language, cross-page chains
+and resumable steps are outside the Call contract.
 
 ## Local files, reload and recovery
 
@@ -107,22 +103,18 @@ The helper starts on demand and exits after 60 seconds without requests, loading
 or active runs. Its next connection reloads the exact approved revision only when
 requested. An idle restart is not a retry of any job.
 
-The unified JSON `apps.saul.calls` scope owns saved custom Call choices and the
-current Write preset reference for Summarize when the configuration helper is
-available. The [Custom Actions store](../src/custom-actions/store.ts) writes
-that scope and supplies approved revisions to Calls and Annotations. Browser-only
-installations keep these choices locally. The Call editor
-owns selection commands and the active build. Chrome's trusted extension storage
+The [Custom Actions store](../src/custom-actions/store.ts) supplies approved
+revisions to Calls and Annotations. The [configuration contract](../../../contracts/configuration.md#unified-configuration-scopes)
+defines the saved Calls scope. Browser-only installations keep these choices
+locally. The Call editor owns selection commands and the active build. Chrome's trusted extension storage
 holds its draft separately from saved choices, through validated background messages.
 Draft saves never rewrite selection. A failed or uncertain selection save is reported
 without a compensating write; the next read reports the persistent owner's state.
 The helper owns immutable revision files under `~/.saul/actions/revisions`, outside
 installed runtime generations. History saves the exact Call source, revision,
-frozen preset and model-call input/output. Reuse includes the Call revision and
-preset ID as well as ordered URLs, so different Calls cannot reuse each other's
-answers. Model-option edits under the same preset retain the saved result.
-[Run again](calls.md#reuse-retry-and-run-again) freezes the current choices
-after any required launch review.
+frozen preset and model-call input/output. See the
+[Call reader contract](calls.md#reuse-retry-and-run-again) for matching saved answers
+and running with current choices.
 
 Demand-driven cleanup during Call editing protects history-referenced revisions,
 all saved call presets, the selected and previous revisions, the current candidate and live workers. Other
@@ -130,6 +122,8 @@ revisions older than seven days are removed. This is separate from disposable
 developer artifacts; no permanent janitor runs.
 
 ## Optional installation and trust
+
+Run from the repository root.
 
 ```sh
 node scripts/setup.mts --components actions --extension-id YOUR_EXTENSION_ID

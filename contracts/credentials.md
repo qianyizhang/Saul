@@ -83,8 +83,9 @@ for the earlier migration baseline.
 Implementation: [the native credentials package](../native/credentials/Package.swift)
 owns the signed executable. Its client target owns the public pipe and framing;
 its owner target owns authentication, catalog admission, Keychain access and
-provider operations. Both the owner and EZ consume the same native settings
-values; only EZ adapts and writes its app scope. See the
+provider operations. The owner and the EZ settings writer share
+`SaulNativeValues` and `SaulConnectionCoordination`, which uses `CSQLite` for
+local reservation and lease state. EZ adapts and writes its app scope. See the
 [independent build decision](../docs/adr/0004-build-credential-owner-independently.md).
 The signed
 `com.saul.credentials` host is separate from `com.saul.chatgpt`, which keeps

@@ -56,7 +56,7 @@
 - **Binding, migration and model choices** — [Configuration](../contracts/configuration.md#connections-and-presets).
 - **Catalogs and identity** — [Credential contract](../contracts/credentials.md#connection-identity-and-catalogs).
 - **Setup, active runs and recovery** — [Shared admission rules](../contracts/credentials.md#shared-connection-setup-and-execution) and [coordination decision](adr/0008-coordinate-shared-connection-work.md).
-- **Module ownership across apps** — [Architecture consolidation inventory](architecture-consolidation.md#implemented-ownership).
+- **Module ownership across apps** — [Saul architecture](../apps/saul/docs/architecture.md) and [EZ architecture](../apps/ez/docs/architecture.md).
 
 ### Provider, connection and protocol
 

@@ -1,28 +1,14 @@
 # Native design
 
-[DESIGN.md](../../../DESIGN.md) owns shared presentation. Native system surfaces
-stay native. `AppStyle.swift` uses `DesignTokens.swift`, generated from the
-[canonical tokens](../../../design/tokens.md). Edit the source, not the generated Swift.
+[DESIGN.md](../../../DESIGN.md) owns shared presentation. EZ uses native semantic
+controls and `AppStyle` roles backed by generated `DesignTokens.swift`. Use the
+[shared generator](../../../design/SKILL.md#generate) to change those roles.
 
 ## Feature UI review
 
 Follow the shared [feature UI review](../../../design/SKILL.md#feature-ui-review).
-Map the task and information hierarchy before editing; use [surfaces](surfaces.md)
-for placement and [UI journeys](ui-qa.md) for acceptance. Review affected main,
-Quick Lookup and Settings states, including long/missing values, errors,
-Min/Standard and light/dark. Shared token changes need rendered review in both apps.
-
-From the monorepo root, with Node 24 and pinned dependencies:
-
-```sh
-pnpm design:generate
-pnpm design:check
-```
-
-Then run EZ's `make format`, `make check` and native review. Ordinary Swift builds
-need no JavaScript runtime or sibling checkout. Move/version the generator with
-the contract. Keep captures outside Git under root `.artifacts/ez/`; record material
-acceptance limits in [verification](verification.md).
+Use [surfaces](surfaces.md) for placement, [UI journeys](ui-qa.md) for acceptance
+and [verification](verification.md) for evidence and limits.
 
 ## Offline previews
 
@@ -32,6 +18,7 @@ views and stages/verifies its bundle before replacement.
 | Command                | Use                                                                                                                |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `make design-preview`  | **EZ Design Preview.app**: disabled production controls, main/Settings and appearance comparison                   |
+| `make configuration-preview` | **EZ Configuration Preview.app**: editable Settings and synthetic connections, catalogs and recovery |
 | `make surface-preview` | **EZ Surface Preview.app**: interactive fixtures, synthetic Write/Draw providers, main/panel and Settings journeys |
 
 Previews use disposable history, no real accounts/Keychain/network, and no global
@@ -45,10 +32,8 @@ reading/writing the personal preference. Fixture names and actions live in
 Follow the shared [Min Mode policy](../../../DESIGN.md#min-mode). Both lookup surfaces share the local preference. The Standard metrics footer
 and routine guidance stay out of Min Mode.
 
-Settings has Overview, Presets, Actions, Preferences, Connections and Shortcuts.
-Show one editor at a time, preserving drafts across sections and guarding item
-changes/dismissal. Overview routes current choices to their editor. Use the shared connection-row layout; put History's title and Reveal action together.
-[Surfaces](surfaces.md) owns reading/editing and action placement.
+**Reveal history** sits in **Settings → Preferences**. See [surfaces](surfaces.md)
+for the Settings sections, reading and editing journeys.
 
 ## Controls and metadata
 
@@ -73,10 +58,10 @@ changes/dismissal. Overview routes current choices to their editor. Use the shar
 
 ## Activity and answer presentation
 
-`ThinkingDivider` uses yellow while waiting and green after a reasoning-item event.
-Its 3.2-second round trip spans at most 84 points, with a 2-point core and 3-point
-glow. Reduce Motion uses a stationary light. The light stops permanently at first
-answer/refusal text or termination; hidden panels remove it. Do not add a second spinner.
+[`ThinkingDivider`](../Sources/EZ/ThinkingDivider.swift) uses yellow while waiting,
+green after a reasoning-item event and a stationary light with Reduce Motion.
+The light ends at first answer/refusal text or termination. Hidden panels remove it.
+Keep one activity indicator.
 
 Long passages use body typography. Recognized completed Spell Check answers show
 Original/Corrected: removed text has warm tint/strikethrough; additions green/underline.
@@ -90,14 +75,12 @@ inputs keep readable fallback text. It removes Markdown decoration only for the
 comparison, aligns unchanged-word anchors across paragraphs/lists and leaves a
 cell empty where no matching block exists. Copy and export retain literal output.
 
-Show **Searching…** only from observed search-tool activity; search/API charges
-stay beside Run. Citations are clickable in both readers. Generic image fields show preview,
-Choose/Replace, Paste and Remove above instructions. Make meme uses a square
-Sketch canvas in the main window, with Draw, Select, Add text, undo and redo.
-The selected image shows a resize handle; the selected text shows its editor.
-Quick Lookup has a compact preview, Paste and Edit sketch. Errors stay beside the
-image; Run and API charges stay reachable. Details records search
-required/completed and source name. Reuse prepares a draft without sending.
+Show **Searching…** only from observed search-tool activity. Generic image fields
+place preview, Choose/Replace, Paste and Remove above instructions. Keep errors
+beside the image and Run and API charges reachable. Make meme's square Sketch
+canvas shows a resize handle for a selected image or an editor for selected text.
+See [image and search actions](surfaces.md#image-and-search-actions) for the
+journeys in both lookup surfaces.
 
 [Shared control symbols](../../../design/symbols.html) defines the glyphs and
 meanings used by both apps. Symbol-only controls retain full accessible names and

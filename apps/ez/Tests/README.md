@@ -18,6 +18,7 @@ make test
 make test-credentials CHECK_ARGS='--filter "auth: overlapping"'
 make test-state CHECK_ARGS='--filter "deletion"'
 make test-core CHECK_ARGS='--list'
+make test-state CHECK_ARGS='--list'
 make test CHECK_ARGS='--reverse'
 make test-install
 make test-services  # Host-native callback/pasteboard checks, separate from the offline gate
@@ -69,12 +70,11 @@ unknown options fail rather than pretending to run checks. Cases run serially;
 its executable once with the case name: a non-cooperative task cannot safely be
 abandoned and allowed to leak into later cases.
 
-`scripts/check.sh state` builds the normal app and compiles its app-owned lifecycle
-modules alongside the state cases, linking SwiftPM's core/support objects. The
-script's `state_sources` array owns the source list. This keeps
-app-only state out of EZCore and requires no Xcode test host. These checks do not
-launch the native interface or prove focus, layout, shortcuts, or live inference;
-those remain separate acceptance checks in `docs/verification.md`.
+`scripts/check.sh state` runs `./scripts/swift.sh run EZStateChecks`.
+[Package.swift](../Package.swift) declares the app and state-check targets and
+their dependencies. The checks run without an Xcode test host. See
+[verification](../docs/verification.md#native-and-live-acceptance) for separate
+UI and live acceptance.
 
 Native layout and keyboard regression journeys are maintained in
 [docs/ui-qa.md](../docs/ui-qa.md). They run against the disposable surface preview,
@@ -94,11 +94,6 @@ pasteboard and clipboard change counts, and reported errors. It needs access to
 the macOS pasteboard server; request specific approved execution if the outer
 agent sandbox blocks it. It does not launch EZ, read clipboard contents, or prove
 Services menu discovery, cold launch, focus return, or live inference.
-
-Typed-action checks cover legacy Write defaults, shared Draw preset preservation,
-exact compiled prompts, explicit API tiers, owner-only PNG persistence/deletion,
-path/symlink rejection, unavailable provider/type/key blockers, Stop/late-result
-isolation and honest terminal-save failure without another request.
 
 ## Tooling and previews
 

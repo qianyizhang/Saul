@@ -7,8 +7,8 @@ description: Extract, refine, or apply a portable DESIGN.md visual identity to a
 
 Read the target views, styles and current design guidance. Little Clarity's
 [design guide](../DESIGN.md) owns presentation rules; [tokens.md](tokens.md)
-is the only authored source of generated values. Review rendered screens before
-changing visual behavior.
+owns platform style values and [symbols.json](symbols.json) owns shared control
+symbols. Review rendered screens before changing visual behavior.
 
 A portable design can also carry its tokens as YAML frontmatter or fenced
 YAML in a Google Labs DESIGN.md document. Use that document's guidance to
@@ -43,6 +43,12 @@ a separate design document is needed only for a new reusable decision.
 
 ## Generate
 
+From the repository root, run `pnpm design:generate` to regenerate tokens and
+symbols, then `pnpm design:check` to verify them. After a symbol-only edit,
+`pnpm symbols:generate` runs [generate-symbols.mts](generate-symbols.mts) on
+[symbols.json](symbols.json). It emits the web and Swift mappings and the
+[symbol sheet](symbols.html). The main generator includes this step via `--symbols`.
+
 `generate.mts` uses the pinned `@google/design.md@0.4.0` parser/linter and
 Prettier version pinned in the owning project's `package.json`. Native output also needs
 `xcrun swift-format` (Apple Command Line Tools). It can run from here against another project:
@@ -74,13 +80,10 @@ Use `:host` for shadow-root overlays and inline generated tokens in isolated MCP
 documents. Preserve host-provided theme choices, native semantic controls, product
 vocabulary, keyboard behavior, honest loading/errors, and persisted state.
 
-Allow reading, compact, and dense layouts while retaining typography/action hierarchy.
-Apply motion guidance and reduced-motion handling; VFX require an actual use case.
-Compare populated light/dark screens at compact and wide sizes against the source
-identity; exercise focus, selection, tooltips, streaming, notices, and error recovery.
-Check accessibility and overflow, then run the target's behavior checks. Respect
-its browser-launch and disposable-profile requirements. A token/lint pass alone
-does not establish visual consistency; record the inspected surfaces and limitations.
+Allow reading, compact and dense layouts while retaining typography and action
+hierarchy. Apply reduced-motion guidance. Run the target's behavior checks and
+follow steps 3–4 of the [feature UI review](#feature-ui-review), using its
+browser-launch and disposable-profile requirements.
 
 Carry the contract and generator as a versioned unit. Link `DESIGN.md` and this
 workflow from the target's `AGENTS.md`, and pin/check generated outputs during builds.

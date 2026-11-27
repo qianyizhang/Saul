@@ -48,7 +48,7 @@
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Discover operations and inputs | `~/.saul/bin/saul help` lists command groups. `saul tabs` lists tab commands. `saul help tabs list` shows the input schema and permissions. `saul tools` lists canonical `command` strings, `access` policies and MCP tool schemas. |
 | Identify targets               | Run `saul sessions` to find a session ID and `saul tabs list '{"windowId":123}'` to list tabs in a known window. Session IDs change on reconnect.                                                                                   |
-| Preview or apply a change      | Tab and page changes preview by default. Use `--apply` or JSON `"dryRun":false` to apply with Write. Use the Tab Board to review and apply visual organization proposals. Annotation writes take effect immediately.                |
+| Preview or apply a change      | Tab and page changes preview by default. Use `--apply` or JSON `"dryRun":false` to apply with Write. Use the Tab board to review and apply visual organization proposals. Annotation writes take effect immediately.                |
 | Preserve browser structure     | Sort keeps pins fixed and groups intact. Moves refuse insertion inside a group. `index: -1` appends. Duplicate closure requires exact reviewed IDs and a surviving match.                                                           |
 | Recover from failure           | Preview makes no reservation. User and Chrome edits can race an operation. On error or timeout, list again to discover partial effects before an explicit retry. The bridge never replays a mutation.                               |
 
@@ -103,11 +103,11 @@ new permission contract across the browser and native client.
 
 ## Page reading and browser actions
 
-| Tool                 | Outcome                                                                                                                                      |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `saul_page_read`     | Return visible main-frame text up to 40,000 characters and up to 100 controls, with truncation flags and document, snapshot and element IDs. |
-| `saul_page_act`      | Click or fill a control from the latest read. Supply `tabId`, `documentId`, `snapshotId`, `elementId`, `action` and `value` for fill.        |
-| `saul_page_navigate` | Navigate an existing HTTP(S) tab using `expectedUrl` from a fresh read/list and a destination `url`. Returns before load completes.          |
+| CLI             | MCP                  | Outcome                                                                                                                                                                  |
+| --------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `page read`     | `saul_page_read`     | Return visible main-frame text up to 40,000 characters and up to 100 controls, with truncation flags and document, snapshot and element IDs.                             |
+| `page act`      | `saul_page_act`      | Preview or apply a click or fill from the latest read. Supply `tabId`, `documentId`, `snapshotId`, `elementId`, `action` and `value` for fill.                           |
+| `page navigate` | `saul_page_navigate` | Preview or apply navigation in an existing HTTP(S) tab. Supply `expectedUrl` from a fresh read or list, plus the destination `url`. Apply returns before load completes. |
 
 - **Authorization and evidence** — Clicks can submit forms, purchase or change data. Apply only the authorized action. DOM dispatch does not prove a site outcome. Read again to verify it.
 - **Boundaries** — Normal HTTP(S) main frames only. Excludes incognito, URL credentials, iframes and shadow DOM. Reads omit values. Fill supports ordinary text fields and textareas, with password and file inputs excluded. Some sites require trusted physical input.

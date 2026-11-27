@@ -100,11 +100,11 @@ node scripts/setup.mts --components ez --verify
 - **Built** — A current prepared artifact exists. This does not check the copy on disk at the install path.
 - **Installed** — The commands above compare the installed payload with the current prepared build. Include `tabs` or `actions` in the helper check only if you installed them. The checks do not inspect running app versions.
 - **Connected** — Check the path you intend to use: [Local tool access](../apps/saul/docs/native-messaging.md#connect-and-verify) or [plan account and model access](../apps/saul/docs/chatgpt-plan.md#setup). Neither check runs inference.
-- **Live request completed** — For Saul, use the [live digest check](../apps/saul/docs/testing.md#explicit-live-digest-check). For EZ, use [native and live acceptance](../apps/ez/docs/verification.md#native-and-live-acceptance). These checks use a live provider and can consume plan allowance or incur API charges.
+- **Live request completed** — For Saul, use the [live summary check](../apps/saul/docs/testing.md#explicit-live-summary-check). For EZ, use [native and live acceptance](../apps/ez/docs/verification.md#native-and-live-acceptance). These checks use a live provider and can consume plan allowance or incur API charges.
 
 ## Shared Saul credentials on macOS
 
-- **Installation and update order** — Stop active shared runs and finish or review pending setup. Install the [Apple-signed owner](../apps/ez/docs/releasing.md#local-signing-and-installation) and update the Node settings helper, extension and EZ before relying on cross-app setup protection. Reload the extension and relaunch EZ. [Mixed-version guarantees](../contracts/credentials.md#shared-connection-setup-and-execution)
+- **Installation and update order** — Stop active shared runs and finish or review pending setup. Follow the [coordinated upgrade requirements](../contracts/credentials.md#shared-connection-setup-and-execution) and [Apple signing setup](../apps/ez/docs/releasing.md#local-signing-and-installation). Reload the extension and relaunch EZ.
 - **Binding** — Chrome uses **Settings → Preferences → Integrations → Connect to Saul** with its existing extension ID. EZ uses the same owner. Either UI can run alone.
 - **Migration** — Shared registrations and pauses stay available. Old credential records remain untouched. For a standalone-only registration, sign in through Connections and choose the account explicitly.
 - **Ownership** — [Credential compatibility and retry](../contracts/credentials.md#retirement-and-removal).

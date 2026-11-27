@@ -1,5 +1,9 @@
 # Architecture consolidation
 
+> **Historical record through `4cf42ec`.** The inventory, measurements and
+> checks describe that change set. See [Saul architecture](../apps/saul/docs/architecture.md)
+> and [EZ architecture](../apps/ez/docs/architecture.md) for current ownership.
+
 ## Baseline and accepted scope
 
 At `e741632`, a Call batch and an EZ lookup can run through the same signed

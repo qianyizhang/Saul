@@ -54,7 +54,5 @@ notarization without the user's direction and supporting evidence.
 ## Shared agent skills
 
 Shared skills install from repo-kit at user scope. Use `gui-review` for
-screenshot annotations and `ui-discussion` for maps and journeys. Follow the
-[artifact policy](../../docs/artifacts.md) for captures and the
-[verification guide](docs/verification.md) to report offline, native and live
-checks separately.
+screenshot annotations and `ui-discussion` for maps and journeys. Report
+offline, native and live checks separately using [verification](docs/verification.md).

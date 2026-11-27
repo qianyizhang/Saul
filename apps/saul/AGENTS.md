@@ -5,9 +5,8 @@ and [product contracts](docs/product.md); use the existing modules and harness.
 
 For feature UI, forms, metadata, actions, or disclosure changes, read the
 [design contract](../../DESIGN.md) and follow the [feature UI review](../../design/SKILL.md#feature-ui-review)
-before implementation and completion. Edit the [shared tokens](../../design/tokens.md)
-when changing values, then run `pnpm design:generate`. Adapt layout density
-to the surface while preserving the shared identity and motion guidance.
+before implementation and completion. Adapt layout density to the surface
+while preserving the shared identity and motion guidance.
 
 ## Changes
 

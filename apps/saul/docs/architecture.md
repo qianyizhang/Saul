@@ -6,12 +6,12 @@ describe what users can do.
 
 ## Runtime map
 
-| Context            | Entry point                                   | Responsibility                                                                   |
-| ------------------ | --------------------------------------------- | -------------------------------------------------------------------------------- |
-| Content script     | [Content](../entrypoints/content.tsx)         | Capture the main-frame selection, render the shadow-root UI and restore markers. |
-| Service worker     | [Background](../entrypoints/background.ts)    | Compose feature hosts and route application-wide settings and native access.     |
-| Offscreen document | [Offscreen](../entrypoints/offscreen/main.ts) | Run reading, Calls and annotation replies independently of views.                |
-| Native helper      | [History](../native/storage/history.mts)      | Access the shared SQLite History store through native messaging.                 |
+| Context             | Entry point                                   | Responsibility                                                                   |
+| ------------------- | --------------------------------------------- | -------------------------------------------------------------------------------- |
+| Content script      | [Content](../entrypoints/content.tsx)         | Capture the main-frame selection, render the shadow-root UI and restore markers. |
+| Service worker      | [Background](../entrypoints/background.ts)    | Compose feature hosts and route application-wide settings and native access.     |
+| Offscreen document  | [Offscreen](../entrypoints/offscreen/main.ts) | Run reading, Calls and annotation replies independently of views.                |
+| Native storage host | [Storage](../native/hosts/storage.mts)        | Serve shared SQLite History, settings and presets over native messaging.         |
 
 ### Source and build ownership
 
@@ -19,7 +19,7 @@ describe what users can do.
 without Chrome or Node globals. The [Node storage owner](../native/storage)
 implements SQLite history, annotations, Call persistence, settings and presets.
 The [entrypoints](../native/hosts) bind those services to native messaging.
-The [Tab Board](../board) runs in a browser, with its own compiler project.
+The [Tab board](../board) runs in a browser, with its own compiler project.
 [Browser presentation helpers](../browser) can be used by both the extension and
 board. Shared modules cannot import either browser implementation or use
 host-only globals, including through `globalThis`. Shared imports are static so
@@ -95,8 +95,8 @@ instruction, context and prompt fields, not credentials, account identifiers or
 raw HTTP/SSE traffic.
 
 The runner owns the queue, up to two concurrent jobs, cancellation, restart
-reconciliation and database checkpoints. Text checkpoints flush within 500 ms
-even after a silent stream. Transient activity is separate from persisted run
+reconciliation and database checkpoints. A timer flushes pending text even
+when the stream goes quiet. Transient activity is separate from persisted run
 status; explicit reasoning-item events can show thinking without exposing
 reasoning payloads. Answer/refusal text ends the indicator. See the [attempt
 contract](../../../contracts/actions-and-attempts.md#execution) for completion and
@@ -104,8 +104,8 @@ save failure.
 
 Draw freezes the chosen PNG/GIF format and sends one Images request. The
 credential boundary accepts bounded generation without input images or arbitrary
-URLs. The runner bounds results to 20 MB decoded and 4,096 pixels per edge,
-then saves idempotent 200,000-character base64 chunks at explicit offsets.
+URLs. The runner bounds decoded size and dimensions, then writes idempotent
+chunks at explicit offsets.
 A complete image is required before success. Lists fetch metadata; byte reads
 are on demand. Deletion invalidates late writes and cascades saved output.
 

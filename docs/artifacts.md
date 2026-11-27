@@ -12,7 +12,7 @@
 | Hosted CI                    | [Workflows](ci.md)                                        | Failure diagnostics for seven days, installable bundles for fourteen |
 
 - **Disposable outputs** — Root `.artifacts/` only. Git and formatting ignore it. Keep source, credentials, user data, signing state and sole durable copies outside it.
-- **Major outcomes** — One bundle per outcome under `practices/artifacts.md`. Its README owns source revision, final checks, limits and retention. Routine passing checks need no saved logs or checksum receipts.
+- **Major outcomes** — Keep one bundle per outcome. Its README records the result, source revision, final checks, limits and retention. Routine passing checks need no saved logs or checksum receipts.
 - **Durable evidence** — Promote the minimum result, command, conditions, source and limitations into the owning tracked doc. Scrub private content and identifiers.
 - **Browser runs** — `latest` is replaced on rerun. Set `SAUL_TEST_RUN=<scope>` to isolate results and reports. [Test commands](../apps/saul/docs/testing.md#commands)
 - **Review at 30 days** — Keep older bundles only for a named use and next review date. Check readers and preserve evidence supporting live claims before removing spent material.
@@ -22,6 +22,7 @@
 | Reference                                                                                                                                                   | Evidence                                                                                                                                     |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | [Behavior Atlas](../design/behavior-atlas/README.md)                                                                                                        | Point-in-time maps and accepted comparisons                                                                                                  |
+| [Architecture consolidation](architecture-consolidation.md)                                                                                                 | Ownership decisions, import measurements and delivery checks from `e741632` through `4cf42ec`                                                |
 | [Archived runtime explainer](https://github.com/qianyizhang/Saul/blob/57a4558bd1d0427754ca0b93fef054561f5a8e05/docs/explainers/runtime-lifecycle/README.md) | Provenance and checks at `57a4558bd1d0427754ca0b93fef054561f5a8e05`. Open `docs/explainers/runtime-lifecycle/index.html` from that revision. |
 
 - **Keep** — Unique evidence, original baseline, checks and limits. Compact routine records in their owning doc.

@@ -4,9 +4,10 @@
 
 Little Clarity is quiet and reading-first. Saul and EZ share vocabulary, visual
 roles and interaction rules; keep native controls and the host's appearance.
-[Design tokens](design/tokens.md) own the values used to generate platform
-assets. This guide owns visual and interaction rules. Use the
-[design workflow](design/SKILL.md) to change tokens and verify the outputs.
+[Design tokens](design/tokens.md) own platform style values and the
+[symbol registry](design/symbols.json) owns shared control symbols. This guide
+owns visual and interaction rules. Use the [design workflow](design/SKILL.md)
+to change those inputs and verify the outputs.
 
 ## Colors and typography
 
@@ -78,14 +79,9 @@ names, tooltips and focus cues.
 
 ## Language, actions and symbols
 
-Use sentence case and concrete names from the [glossary](GLOSSARY.md). Keep
-**History**, **Settings**, **Details**, **More**, **Save**, **Cancel** and **Stop**
-consistent. Show status only when observed. **Reuse** restores an editable draft.
-**Run again**, **Regenerate** and **Retry** start attempts with the input defined
-in the glossary. **Refresh** reads current
-state; **Reload** reads saved settings and guards dirty drafts. Closing a view
-does not Stop. Fast requests a speed tier; it does not promise latency or prove
-the returned tier.
+Use sentence case and the names and action meanings in the [glossary](GLOSSARY.md).
+Show status only when observed. Keep dirty drafts behind an explicit confirmation
+when Reload would replace them.
 
 Use one clear word or familiar symbol. Copy, Send, Refresh and sidebar toggles
 use symbols in both modes with accessible names. Keep text when consequential

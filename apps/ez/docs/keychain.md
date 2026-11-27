@@ -13,6 +13,7 @@ retirement, caller checks and failure handling.
 | ------------------------------ | ---------- | ------------------------------------------------------------------------ |
 | `com.saul.credentials.chatgpt` | `accounts` | Shared Saul registrations, host ID, identity and rotating OAuth tokens |
 | `com.saul.credentials.openai`  | `api-key`  | Official OpenAI API key                                                  |
+| `com.saul.credentials.connections` | `api-key` | Keys bound to managed custom connections |
 
 Availability checks read attributes, not unused secrets. OAuth secret reads run off
 the UI actor; a kernel lock serializes refresh/writes across owner processes.
@@ -42,23 +43,19 @@ Do not allow all applications or bypass partition checks to suppress prompts.
 Ad-hoc signatures can change identity with the executable hash. Filename/bundle ID
 alone does not preserve access. Legacy self-signed builds also encountered a
 separate file-based Keychain partition policy: `cdhash:` changes even with the same
-certificate/designated requirement. The Oct 16 upgrade reproduced a prompt;
-read-only inspection found the current hash partition and five trusted-app records.
-No permissions or credentials were changed. Always Allow for that build did not
-prove future-build recognition.
+certificate/designated requirement. Accepting one build's prompt gives evidence
+for that build only.
 
 Recognized Apple-issued developer signing uses a stable `teamid:` partition.
 Use the [Apple Development signing setup](releasing.md#local-signing-and-installation)
 and pinned `make install` upgrades. Legacy self-signing is for old/offline builds.
 Same-build restart, standalone probe and installed changed-build acceptance are
-separate checks. Two changed probes passed on 2026-11-04; installed results and
-certificate/OS limits live in [verification](verification.md).
+separate checks. See the [dated installed baseline](verification.md#installed-baseline--2026-11-04).
 See [Apple's requirements](https://developer.apple.com/library/archive/technotes/tn2206/)
 and [partition selection](https://github.com/apple-oss-distributions/Security/blob/main/securityd/src/clientid.cpp).
 
 ## History and sign-out
 
-History/image blobs live in shared `Little Clarity/history.sqlite3`, outside
-Keychain. Sign-out attempts revocation, clears the selected account's tokens and
-affects both apps; unconfirmed revocation is shown. Registration/host metadata and
-history remain. Disconnect app removes only that app's binding to the owner.
+See the [credential contract](../../../contracts/credentials.md#retirement-and-removal)
+for the scope of Sign out and Disconnect app. The [shared History store](../../../contracts/history.md)
+holds history and image blobs separately from the Keychain.

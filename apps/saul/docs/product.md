@@ -1,6 +1,9 @@
 # Product behavior
 
 - [Saul terms and surfaces](../GLOSSARY.md)
+- [Calls and summaries](calls.md) covers page capture, the reader, PDFs and retry.
+- [Browser annotations](annotations.md) covers capture, replies, evidence and retention.
+- Saul targets Google Chrome MV3. See [native bridge support](native-messaging.md) and [testing](testing.md) for platform coverage and evidence limits.
 
 ## Reading
 
@@ -80,6 +83,9 @@ Chrome profile. Removing the saved entry in Saul leaves the chat in ChatGPT.
 | Retry a saved attempt           | Frozen choices remain bound. Changed credential owner or endpoint preserves output and asks for a new preset and attempt. [Retry rules](../../../contracts/actions-and-attempts.md#execution)                                                                                                                                                                                                                 |
 | Replace retired Chrome AI       | Saved selections stay readable. Explicitly select ChatGPT plan or OpenAI compatible before new work.                                                                                                                                                                                                                                                                                                          |
 
+[Shared presets](../../../contracts/configuration.md#connections-and-presets) and
+[Speak preview](chatgpt-plan.md#speech-preview) cover capability rules.
+
 ## Window and Tab board
 
 | Goal                      | Outcome                                                                                                                                                                                                            |
@@ -94,19 +100,3 @@ Chrome profile. Removing the saved entry in Saul leaves the chat in ChatGPT.
 
 - **Rows** — Readable titles with hostname fallback and full original title/URL on hover. Standard view shows window counts above the list. Display labels preserve source metadata.
 - **Refresh** — Preserve focus, scroll and surviving choices.
-
-### Summaries
-
-- [Calls and summaries](calls.md) owns page capture, the reader, PDFs and retry.
-
-## Compatibility
-
-- Saul targets Google Chrome MV3 only.
-- [Native bridge support](native-messaging.md) covers tested browsers and platforms.
-- See [testing](testing.md) for covered behavior and evidence limits.
-
-- [Shared presets](../../../contracts/configuration.md) and [Speak preview](chatgpt-plan.md#speech-preview) own capability rules.
-
-## Browser annotations
-
-- [Annotation guide](annotations.md) owns capture, replies, evidence and retention.

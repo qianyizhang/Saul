@@ -2,14 +2,16 @@
 
 These files are retained measurement evidence, not product guarantees.
 
-| File                                   | Scope                                                                             |
-| -------------------------------------- | --------------------------------------------------------------------------------- |
-| `reading-scale.json`                   | SQLite-WASM/OPFS history, search, export, and query-plan samples at 50k/100k runs |
-| `reading-rendering.json`               | Anchor restoration and unchanged-status refresh for 100/1,000 passages            |
-| `rendering-capabilities.json`          | CSS Custom Highlights, underline style, and hit-testing support                   |
-| [ci-speed-trial.md](ci-speed-trial.md) | One-worker versus two-worker local browser-suite trial and export fixture timings |
+| File                                   | Scope                                                                                             |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `reading-scale.json`                   | 2026-09-20 SQLite-WASM/OPFS baseline for history, search, export and query plans at 50k/100k runs |
+| `reading-rendering.json`               | Anchor restoration and unchanged-status refresh for 100/1,000 passages                            |
+| `rendering-capabilities.json`          | CSS Custom Highlights, underline style, and hit-testing support                                   |
+| [ci-speed-trial.md](ci-speed-trial.md) | One-worker versus two-worker local browser-suite trial and export fixture timings                 |
 
 Generate reading/rendering candidate measurements with `pnpm benchmark` from `apps/saul`.
+The [current scale case](../../tests/e2e/measurements.benchmark.ts) uses an isolated
+native SQLite fixture. Record the storage runtime when comparing candidates to the baseline.
 The CI-speed trial has its own reproduction commands. The reading/rendering command expands to:
 
 ```sh
@@ -19,7 +21,7 @@ pnpm exec playwright test --config tests/e2e/playwright.benchmark.config.ts
 
 ## Interpretation of reading/rendering evidence
 
-- Runs use synthetic fixtures in one local Chrome/SQLite-WASM environment.
+- Runs use synthetic fixtures. Each result applies to its recorded local browser and storage runtime.
 - Timings are warm local samples, not cold-start, end-to-end, supported-size, or latency commitments.
 - `reading-scale.json` compares selected query indexes against a reduced query shape; it is not an old-release benchmark.
 - Rendering measurements exclude React, messaging, cold layout, and paint time.

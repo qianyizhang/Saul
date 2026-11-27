@@ -4,7 +4,7 @@ Candidates, not commitments:
 
 - Spotlight query entry alongside Raycast.
 - Language preferences and richer action-field rules.
-- Bulk history deletion, retention controls and larger-history indexing.
+- Multi-select deletion, configurable retention and larger-history indexing.
 - Action chaining.
 - Optional follow-up context selection beyond the saved conversation.
 - Signed/notarized distribution and an update channel.

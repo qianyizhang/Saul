@@ -69,16 +69,11 @@ implementation. The parent maps retain the post-change survey and its source anc
   claims that every control is represented. No native/live usability session was
   run for this review.
 
-## Build and review
+## Recorded comparison checks
 
-The parent [regeneration instructions](../README.md#regenerate) build the snapshot
-maps and these comparisons together. Open one and choose **Comparison**;
-click shared timeline stops to align both views,
-or scrub each branch separately. **Map major** reveals which stops are bypassed;
-**App major** shows the relevant controls and fixed values. The repository catalog
-links all three pages. Accepted scope includes text/image Retry in both EZ windows,
-field-level Settings recovery, and pointer-open / keyboard-quiet behavior for text
-and images.
+Use the parent [regeneration instructions](../README.md#regenerate) to rebuild
+these comparisons from the retained models. In **Comparison**, click a shared
+timeline stop to align both views, or scrub the branches separately.
 
 Validation: all six current/proposed routes replay to matching endpoints. Proposed
 edges stay unavailable in Exploration. Read failure, review cancellation and a

@@ -12,13 +12,6 @@ and [app recovery checks](../Tests/EZStateChecks/ConnectionSetupStateChecks.swif
 The latter consume the [same recovery cases as Saul](../../../contracts/fixtures/connection-setup.json).
 Use `make test-services test-ui` for Services delivery and native keyboard/focus checks.
 
-## Recently deleted · 2026-11-26
-
-The isolated Surface Preview restored a saved lookup with its original answer, moved it back
-to Recently deleted, and permanently removed it after confirmation. The other deleted lookup
-remained available. Dark Standard mode exposed both actions. Down selected a row and Escape
-returned to the Library. [Preview journey](ui-qa.md#recently-deleted)
-
 ## Native and live acceptance
 
 | Goal                                | Evidence                                                                                                                                                                               |
@@ -34,6 +27,13 @@ returned to the Library. [Preview journey](ui-qa.md#recently-deleted)
 ## Dated evidence
 
 - **Scope** — Results apply only to the recorded baseline.
+
+### Recently deleted · 2026-11-26
+
+The isolated Surface Preview restored a saved lookup with its original answer, moved it back
+to Recently deleted, and permanently removed it after confirmation. The other deleted lookup
+remained available. Dark Standard mode exposed both actions. Down selected a row and Escape
+returned to the Library. [Preview journey](ui-qa.md#recently-deleted)
 
 ### Installed baseline — 2026-11-04
 

@@ -9,11 +9,9 @@ Saul supports the direct **Sign in with ChatGPT** preview for local and open-sou
 3. Open **Settings → Connections** in either app. In Chrome’s toolbar popup, choose **Open Connections in a tab** before plan sign-in. Keep that workspace tab open until authorization finishes. Closing it cancels the pending sign-in. For a saved connection, choose **Sign in again**. For a new connection, add **ChatGPT plan** and choose a saved account or **Register a new app**. Select **Copy name and open ChatGPT**, then replace `Saul` with the copied name in ChatGPT before approving. Back in Settings, check **I used … in ChatGPT** if you pasted that name, then save the connection.
 4. In **Presets**, choose the saved connection, an available model, effort and speed, then Save. Catalog checks do not generate. Unavailable saved model options block until explicitly changed.
 
-A connection saved in either app is available to both. Managed connections pin the
-registration, and the signed Saul owner serializes refresh. Signing out affects both
-apps; Disconnect app only removes that app's binding. Account registrations remain
-distinct even when their email labels match. Never merge tokens or change a saved
-connection's account to resolve duplicate labels.
+See the [connection and preset contract](../../../contracts/configuration.md#connections-and-presets)
+for sharing across apps and the [credential contract](../../../contracts/credentials.md#connection-identity-and-catalogs)
+for account identity and refresh.
 
 To switch presets to another saved account, choose **More → Move presets** on
 the old connection. Select the destination, review the presets that will move,
@@ -67,12 +65,9 @@ the public API docs is not proof that it is available on a given plan account.
 
 ## PDF URL attachments
 
-The [Call guide](calls.md#source-capture-and-pdfs) owns PDF behavior.
-The native allowlist admits one bounded HTTP(S) attachment, without URL
-userinfo, arbitrary content parts, bytes, credentials or caller-supplied
-endpoint. The helper maps it to `input_file.file_url` beside `input_text` and
-uses the existing OAuth/Responses path, never the Files upload API. Text-only
-callers retain their request shape. Update the signed owner before the extension.
+See the [Call guide](calls.md#source-capture-and-pdfs) for PDF capture, eligibility
+and fallback. The [credential contract](../../../contracts/credentials.md) owns
+the signed owner's request boundary. Update the signed owner before the extension.
 
 The [direct-flow limits](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)
 support file input for accepting models but exclude the Files upload API. The

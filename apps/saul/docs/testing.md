@@ -18,7 +18,7 @@
 | Reproduce Chromium PR smoke                     | `pnpm test:e2e --grep @smoke`. [PR gate](../../../docs/ci.md)   |
 | Run a fixture-only change against a known build | `pnpm test:e2e:reuse tests/e2e/<spec>`                          |
 | Open an isolated browser for hands-on review    | `pnpm test:user`. Use `--smoke` for setup acceptance.           |
-| Check fixture types                             | `pnpm exec tsc -p tests/e2e/tsconfig.json`                      |
+| Check fixture types                             | `pnpm exec tsc --noEmit -p tests/e2e/tsconfig.json`             |
 | Run optional live GitHub fixture                | `SAUL_LIVE_GITHUB=1 pnpm exec playwright test -g 'live GitHub'` |
 | Reproduce performance evidence                  | `pnpm benchmark`. [Benchmarks](benchmarks/README.md)            |
 
@@ -91,7 +91,7 @@ pnpm exec playwright show-trace ../../.artifacts/saul/e2e/latest/results/<case>/
 - **Linux CI** — Skips “shared window labels load initially and duplicate removals stay editable until Apply” because native pointer delivery remains unverified there. Other board and summary journeys stay enabled.
 - **Harness guidance** — [Browser-testing skill](../../../.agents/skills/saul-browser-testing/SKILL.md).
 
-## Explicit live digest check
+## Explicit live summary check
 
 - **Prerequisites** — Verified installed Chrome client, signed owner and a saved plan preset. This check uses plan allowance.
 - **Outcome** — Summarize public pages. Confirm terminal completion, saved reopen and English–Chinese HTML export.
@@ -145,7 +145,6 @@ the [shared recovery fixture](../../../contracts/fixtures/connection-setup.json)
 | 1024×1024 low-quality image (`gpt-image-2.5-flare`)                                                      | HTTP 401 `hardened_oauth_rule_missing` |
 
 - **Conditions** — One refreshed, plan-enabled token across all routes. Realtime/private routes and live playback were outside verification. No audio or image resulted.
-- **Removed speech UI** — Synthetic playback, rejection, input validation, cancellation, draft and layout checks. Personal Chrome/helper were outside verification.
 
 ### Tab board timing — 2026-10-19
 

@@ -55,7 +55,7 @@ revocation warning stays on that row after its status refresh.
 
 ## Draw, search and source images
 
-Use Draw / Draw result / Draw waiting / Draw error. Run, inspect PNG and animated GIF output in both
+Use Draw / Draw result / Draw GIF / Draw waiting / Draw error. Run, inspect PNG and animated GIF output in both
 surfaces, Download/Cancel and Stop; late output must not replace another run.
 Connections owns credentials; Presets owns model/image options; Actions owns type,
 template and default preset. Draw launcher drafts always wait for Run.
@@ -134,11 +134,6 @@ Settings. Check cold launch (main window may appear) and signed-out delivery
 completion/metrics, then restart for account/history restoration.
 `make test-services` uses disposable pasteboards; it does not prove cross-app delivery.
 
-[Verification](verification.md) owns dated results and remaining acceptance gaps.
-Run `make check` for offline regression, then only affected native journeys for
-layout/focus/interaction changes. These journeys are manual, not an unattended suite.
-
-
 ## Recently deleted
 
 The Surface Preview seeds two masked synthetic lookups. Open **Recently deleted**
@@ -150,3 +145,7 @@ For an active local lookup, use **Stop and delete** from its History row and
 check that the request settles before the row moves. Restore prepares no provider
 work. Check the sheet with Min Mode, dark appearance, keyboard selection and a
 long title.
+
+[Verification](verification.md) owns dated results and remaining acceptance gaps.
+Run `make check` for offline regression, then only affected native journeys for
+layout, focus or interaction changes. These journeys are manual.

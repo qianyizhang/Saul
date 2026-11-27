@@ -8,27 +8,16 @@ See [selective setup](setup.md) for signing prerequisites and other components.
 
 ## Publication decision
 
-EZ was private and Saul public on GitHub when inspected on 2026-10-20. The initial
-decision held the migration locally until destination visibility was chosen.
-On 2026-11-02, the user confirmed the current public `qianyizhang/Saul` remote as
-the destination and authorized syncing the integrated main there. The earlier
-publication hold is resolved; normal repository checks still govern pushes.
-The original EZ checkout remains intact for recovery; this decision does not
-authorize archiving or deleting it.
+On 2026-11-02, the user approved syncing the integrated `main` to the public
+`qianyizhang/Saul` repository. Keep the original EZ checkout for recovery.
 
 ## Installed identities and artifacts
 
-The source move did not replace installed applications, move credentials or change
-bundle/extension identities. EZ's ignored signing fingerprint is retained at
-`apps/ez/.local/signing-identity`; its private key remains in Keychain.
-
-The existing root `.output/chrome-mv3` is deliberately retained at its loaded
-extension path. It is an installed artifact, not a source compatibility layer;
-remove it only after an explicit identity/data-preserving Chrome upgrade. New
-browser builds belong under `apps/saul`; native builds belong under `apps/ez`.
-Disposable diagnostics use root `.artifacts/` under the [artifact policy](artifacts.md).
-Obsolete root WXT metadata and disposable test reports are removed.
-Benchmark measurements remain under `apps/saul/docs/benchmarks`.
+The source move left installed apps and credentials in place. The root
+`.output/chrome-mv3` is the retained installation from before the move. Follow
+the [installation invariants](setup.md#existing-installations-and-repository-migration)
+before replacing it. The [artifact policy](artifacts.md) covers build paths,
+disposable diagnostics and retained benchmarks.
 
 ## Verification — 2026-10-20
 

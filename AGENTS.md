@@ -37,8 +37,6 @@ source, credentials or durable evidence there.
 Installed extension identity, bundle/signing identity and credential-store IDs are migration contracts,
 not branding strings. See [setup](docs/setup.md) before changing installed paths.
 
-Before any push, read the [publication decision](docs/migration.md#publication-decision).
-
 ## Architecture decisions
 
 Read linked architecture decision records (ADRs) before changing an established

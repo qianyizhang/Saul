@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- History deletion moves items to Recently deleted for up to 365 days. Clear
+  History permanently clears the shared Library.
+
 - Connections identifies setup started in Saul. An inactive reservation can be
   explicitly released while preserving the saved credential and definition.
 

@@ -128,6 +128,15 @@ Narrow windows show the correction first; long originals sit behind Original tex
 Other response formats use the ordinary reader. Copy/Export retain the full
 response. See the [comparison presentation](design.md#activity-and-answer-presentation).
 
+### History loading
+
+History loads the newest 100 list rows first and adds pages as you scroll.
+Search covers all saved query and answer text. The count in Standard view is the
+total matching history. Load more retries a failed page without changing the
+selection. Opening a row loads its complete saved input and output; a loading
+indicator or Retry keeps unavailable details distinct from an empty answer.
+Filtering and refreshing retain the selected answer, even outside loaded pages.
+
 ## Image and search actions
 
 **Research** searches on each Run and returns clickable citations. **Settings →
@@ -192,12 +201,3 @@ its default preset. Previous/Next wraps and numbered/Last commands follow
 configured order. One app-local monitor handles both surfaces without repeating
 actions on key repeat. Conflicts, reserved keys and unsupported binding versions
 are validated before atomic save; defaults remain available for explicit repair.
-
-### History loading
-
-History loads the newest 100 list rows first and adds pages as you scroll.
-Search covers all saved query and answer text. The count in Standard view is the
-total matching history. Load more retries a failed page without changing the
-selection. Opening a row loads its complete saved input and output; a loading
-indicator or Retry keeps unavailable details distinct from an empty answer.
-Filtering and refreshing retain the selected answer, even outside loaded pages.

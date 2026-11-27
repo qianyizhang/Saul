@@ -51,10 +51,9 @@ The editor sends one manual reply at a time. You can type the next reply while
 the first saves; confirmation clears only the submitted draft.
 **Open** is the current default list; Done is explicit and reversible, never a
 side effect of replying. Both survive restart. **Recently deleted** offers
-Restore for 365 days from deletion and Delete permanently for immediate removal.
-The shared store applies the [History retention contract](../../../contracts/history.md#deletion-and-retention). Cleanup runs on
-annotation access and offscreen startup recovery without reading pages or
-calling models. Removing a record removes its owned images.
+Restore and Delete permanently under the [History retention contract](../../../contracts/history.md#deletion-and-retention).
+Cleanup runs on annotation access and offscreen startup recovery without
+reading pages or calling models.
 
 **Respond to annotations** reviews count, Call, model preset, image inclusion
 and optional live page read before Run. Freeze reviewed revisions and choices.
